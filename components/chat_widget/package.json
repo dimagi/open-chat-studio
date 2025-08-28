@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@stencil-community/postcss": "^2.2.0",
+    "@tailwindcss/postcss": "^4.1.12",
     "@tailwindcss/typography": "^0.5.16",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.13.4",

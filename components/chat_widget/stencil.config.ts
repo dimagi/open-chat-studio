@@ -1,6 +1,7 @@
 import { Config } from '@stencil/core';
 import { postcss } from '@stencil-community/postcss';
 import autoprefixer from 'autoprefixer';
+import tailwind from '@tailwindcss/postcss'
 
 export const config: Config = {
   namespace: 'open-chat-studio-widget',
@@ -31,7 +32,7 @@ export const config: Config = {
     postcss({
       plugins: [
         require("postcss-import"),
-        require("tailwindcss")("./tailwind.config.js"),
+        tailwind(),
         autoprefixer()
       ]
     })

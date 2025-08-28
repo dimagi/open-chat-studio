@@ -1,11 +1,8 @@
-@import 'tailwindcss';
-
 @plugin '@tailwindcss/typography';
 
 @theme {
   --animate-progress: progress 3s infinite linear;
   --animate-dots: dots 1s steps(5, end) infinite;
-
   --transform-origin-left-right: 0% 50%;
 
   @keyframes progress {
