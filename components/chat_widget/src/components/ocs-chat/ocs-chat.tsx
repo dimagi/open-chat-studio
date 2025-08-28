@@ -1361,7 +1361,7 @@ export class OcsChat {
                       </div>
                       <div class="typing-text">
                         <span>{this.typingIndicatorText}</span>
-                        <span class="typing-dots"></span>
+                        <span class="typing-dots loading"></span>
                       </div>
                     </div>
                   )}

@@ -504,7 +504,7 @@
   }
 
   .typing-dots {
-    @apply loading animate-dots;
+    @apply animate-dots;
   }
 
   /* Starter questions */
