@@ -1,0 +1,60 @@
+{% load i18n %}
+{% comment %}
+Reusable message pair form component for both add/edit scenarios
+
+Parameters:
+- human_value: initial value for human message textarea
+- ai_value: initial value for AI message textarea
+- context_value: initial value for context JSON field
+- context_field_id: ID for hidden context field (required for unique IDs)
+- errors: dict with validation errors
+- disable_button_id: ID of button to disable when JSON is invalid (optional)
+{% endcomment %}
+
+<!-- Human Message -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "Human Message" %}</span>
+  </label>
+  <textarea
+    name="human_message"
+    class="textarea textarea-bordered w-full min-h-[100px]{% if errors.human %} textarea-error{% endif %}"
+    placeholder="{% trans 'Enter human message...' %}"
+    required
+  >{{ human_value|default:'' }}</textarea>
+  {% if errors.human %}
+  <div class="text-error text-sm mt-1">{{ errors.human }}</div>
+  {% endif %}
+</div>
+
+<!-- AI Message -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "AI Response" %}</span>
+  </label>
+  <textarea
+    name="ai_message"
+    class="textarea textarea-bordered w-full min-h-[100px]{% if errors.ai %} textarea-error{% endif %}"
+    placeholder="{% trans 'Enter AI response...' %}"
+    required
+  >{{ ai_value|default:'' }}</textarea>
+  {% if errors.ai %}
+  <div class="text-error text-sm mt-1">{{ errors.ai }}</div>
+  {% endif %}
+</div>
+
+<!-- Context -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "Context (JSON)" %}</span>
+    <span class="label-text-alt text-gray-500">{% trans "Optional additional context data" %}</span>
+  </label>
+  <input type="hidden" name="context" id="{{ context_field_id }}" value="{{ context_value|default:'{}' }}">
+  <div class="json-editor w-full h-32 resize-y overflow-auto"
+       data-target-field="#{{ context_field_id }}"
+       {% if disable_button_id %}data-disable-elt="#{{ disable_button_id }}"{% endif %}>
+  </div>
+  {% if errors.context %}
+  <div class="text-error text-sm mt-1">{{ errors.context }}</div>
+  {% endif %}
+</div>

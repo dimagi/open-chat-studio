@@ -299,8 +299,8 @@ def update_message(request, team_slug, message_id):
     """Handle form submission to update message"""
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
 
-    human_content = request.POST.get("human_content", "").strip()
-    ai_content = request.POST.get("ai_content", "").strip()
+    human_content = request.POST.get("human_message", "").strip()
+    ai_content = request.POST.get("ai_message", "").strip()
     context_str = request.POST.get("context", "").strip()
 
     errors = {}

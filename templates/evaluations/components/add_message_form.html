@@ -12,42 +12,7 @@
   >
     {% csrf_token %}
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <label class="label">
-          <span class="label-text font-medium">{% trans "Human Message" %}</span>
-        </label>
-        <textarea
-          name="human_message"
-          class="textarea textarea-bordered w-full"
-          rows="4"
-          placeholder="Enter human message..."
-          required
-        ></textarea>
-      </div>
-
-      <div>
-        <label class="label">
-          <span class="label-text font-medium">{% trans "AI Response" %}</span>
-        </label>
-        <textarea
-          name="ai_message"
-          class="textarea textarea-bordered w-full"
-          rows="4"
-          placeholder="Enter AI response..."
-          required
-        ></textarea>
-      </div>
-    </div>
-
-    <div>
-      <label class="label">
-        <span class="label-text font-medium">{% trans "Context (JSON)" %}</span>
-        <span class="label-text-alt text-gray-500">{% trans "Optional - leave empty for default" %}</span>
-      </label>
-      <input type="hidden" name="context" id="add-context-field" value="{}">
-      <div class="json-editor w-full h-24 resize-y overflow-auto" data-target-field="#add-context-field" data-disable-elt="#add-message-button"></div>
-    </div>
+    {% include "evaluations/components/message_pair_form.html" with context_field_id="add-context-field" disable_button_id="add-message-button" %}
 
     <div class="flex gap-2">
       <button type="submit" class="btn btn-primary" id="add-message-button">
