@@ -40,7 +40,7 @@
     </div>
     {% if allow_new|default_if_none:True or actions %}
       <div class="justify-self-end join">
-        {% if allow_new|default_if_none:True %}
+        {% if new_object_url %}
           <a class="btn btn-sm {{ button_style|default:"btn-primary" }}"
              href="{{ new_object_url }}">Add new
           </a>

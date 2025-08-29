@@ -36,6 +36,7 @@ from apps.experiments.views.experiment import (
     start_session_public_embed,
     version_create_status,
 )
+from apps.generics import actions
 from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -134,7 +135,15 @@ def cancel_edit_mode(request, team_slug, experiment_id):
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def chatbots_home(request, team_slug: str):
-    return generic_home(request, team_slug, "Chatbots", "chatbots:table", "chatbots:new")
+    actions_ = [
+        actions.Action(
+            "chatbots:new",
+            label="Add New",
+            button_style="btn-primary",
+            required_permissions=["experiments.add_experiment"],
+        )
+    ]
+    return generic_home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_)
 
 
 class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
