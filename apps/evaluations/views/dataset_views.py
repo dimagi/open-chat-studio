@@ -51,12 +51,10 @@ class DatasetTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        from django.db.models import Count
-
         return (
             EvaluationDataset.objects.filter(team=self.request.team)
             .annotate(message_count=Count("messages"))
-            .order_by("name")
+            .order_by("-created_at")
         )
 
 
