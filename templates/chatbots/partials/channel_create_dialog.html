@@ -4,7 +4,7 @@
     <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
     <form method="post"
           action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
-          hx-post="{% url "experiments:create_channel" request.team.slug experiment.id %}"
+          hx-post="{% url "experiments:create_channel" request.team.slug experiment.id %}?origin=chatbots"
           hx-target="body"
           hx-swap="beforeend"
           x-data="{ buttonDisabled: false }"

@@ -3,11 +3,10 @@
   <div class="modal-box">
     <h3 class="font-bold text-lg">Edit {{ channel.platform_enum.label }} Channel</h3>
     <form method="post"
-      action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}"
+      action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}?origin=chatbots"
       x-data="{ buttonDisabled: false }"
       x-on:submit.debounce="buttonDisabled = true">
       {% csrf_token %}
-
       {% render_form_fields form %}
 
       {% if extra_form %}
