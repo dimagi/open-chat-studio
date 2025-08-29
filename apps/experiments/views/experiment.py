@@ -466,11 +466,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     ).all()
     used_platforms = {channel.platform_enum for channel in channels}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
-    platform_forms = {}
-    form_kwargs = {"experiment": experiment}
-    for platform in available_platforms:
-        if platform.form(**form_kwargs):
-            platform_forms[platform] = platform.form(**form_kwargs)
 
     deployed_version = None
     if experiment != experiment.default_version:
@@ -490,7 +485,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "experiment": experiment,
         "user_sessions": user_sessions,
         "platforms": available_platforms,
-        "platform_forms": platform_forms,
         "channels": channels,
         "available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
         "experiment_versions": experiment.get_version_name_list(),
