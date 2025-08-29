@@ -21,6 +21,7 @@ from apps.channels.serializers import (
     CommCareConnectMessageSerializer,
 )
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.teams.decorators import login_and_team_required
 
 
 @csrf_exempt
@@ -191,6 +192,7 @@ def new_connect_message(request: HttpRequest):
     return HttpResponse()
 
 
+@login_and_team_required
 @require_GET
 def channel_edit_dialog(request, team_slug, experiment_id, channel_id):
     channel = get_object_or_404(
@@ -210,6 +212,7 @@ def channel_edit_dialog(request, team_slug, experiment_id, channel_id):
     return render(request, "chatbots/partials/channel_edit_dialog.html", context)
 
 
+@login_and_team_required
 @require_GET
 def channel_create_dialog(request, team_slug, experiment_id, platform_value):
     experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
