@@ -19,7 +19,7 @@
       <div class="modal-action">
         <button class="btn btn-primary" type="submit" name="action" value="update" x-bind:disabled="buttonDisabled">Update</button>
         <button class="btn btn-error" type="submit" name="action" value="delete" x-bind:disabled="buttonDisabled">Delete</button>
-        <button class="btn" type="button" onclick="document.getElementById('channel_edit_modal_{{ channel.id }}').close()" x-bind:disabled="buttonDisabled">Close</button>
+        <button class="btn" type="button" onclick="document.getElementById('channel_edit_modal_{{ channel.id }}').removeAttribute('open')" x-bind:disabled="buttonDisabled">Close</button>
       </div>
     </form>
   </div>
