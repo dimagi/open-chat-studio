@@ -249,6 +249,15 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
         }
 
 
+@require_POST
+@login_and_team_required
+@permission_required("experiments.delete_experiment", raise_exception=True)
+def archive_chatbot(request, team_slug: str, pk: int):
+    chatbot = get_object_or_404(Experiment, id=pk, team=request.team)
+    chatbot.archive()
+    return HttpResponse(headers={"hx-redirect": reverse("chatbots:chatbots_home", kwargs={"team_slug": team_slug})})
+
+
 class CreateChatbotVersion(CreateExperimentVersion):
     permission_required = "experiments.add_experiment"
     template_name = "experiments/create_version_form.html"
