@@ -24,6 +24,7 @@ from .experiment import (  # noqa: F401
     experiment_chat_embed,
     experiment_chat_session,
     experiment_complete,
+    experiment_error_trend,
     experiment_invitations,
     experiment_pre_survey,
     experiment_review,
