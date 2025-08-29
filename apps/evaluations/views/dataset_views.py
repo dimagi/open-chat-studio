@@ -96,7 +96,7 @@ class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMix
 
 class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     permission_required = "evaluations.add_evaluationdataset"
-    template_name = "evaluations/dataset_from_sessions_form.html"
+    template_name = "evaluations/dataset_create_form.html"
     model = EvaluationDataset
     form_class = EvaluationDatasetForm
     extra_context = {
