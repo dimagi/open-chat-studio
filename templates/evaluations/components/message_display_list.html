@@ -17,9 +17,10 @@
     <table class="table w-full">
       <thead class="bg-base-200 base-content uppercase text-sm leading-normal">
         <tr>
-          <th class="w-1/4 px-3 py-3 text-left">{% trans "Human Message" %}</th>
-          <th class="w-1/4 px-3 py-3 text-left">{% trans "AI Message" %}</th>
+          <th class="w-1/5 px-3 py-3 text-left">{% trans "Human Message" %}</th>
+          <th class="w-1/5 px-3 py-3 text-left">{% trans "AI Message" %}</th>
           <th class="w-1/6 px-3 py-3 text-left">{% trans "Context" %}</th>
+          <th class="w-1/6 px-3 py-3 text-left">{% trans "History" %}</th>
           <th class="w-1/6 px-3 py-3 text-left">{% trans "Actions" %}</th>
         </tr>
       </thead>
@@ -70,6 +71,32 @@
                   </template>
                   <template x-if="contextPairs.length === 0">
                     <div class="text-gray-400 font-mono" x-text="message.context.length > 50 ? message.context.substring(0, 50) + '...' : message.context" :title="message.context"></div>
+                  </template>
+                </div>
+              </div>
+            </td>
+
+            <!-- History -->
+            <td class="px-3 py-4 align-top">
+              <div class="text-xs">
+                <div x-show="!message.history_text || message.history_text.trim() === ''" class="text-gray-400">
+                  {% trans "No history" %}
+                </div>
+                <div x-show="message.history_text && message.history_text.trim() !== ''" class="space-y-1" x-data="{
+                  get parsedHistory() {
+                    return parseHistoryTextMessages(message.history_text);
+                  }
+                }">
+                  <div x-show="parsedHistory.length > 5" class="text-gray-500">
+                    <span x-text="`... ${parsedHistory.length - 5} more messages`"></span>
+                  </div>
+                  <template x-for="historyMessage in parsedHistory.slice(-5)">
+                    <div class="text-xs" :title="historyMessage.content">
+                      <span class="font-medium">
+                        <span x-text="historyMessage.message_type.charAt(0).toUpperCase() + historyMessage.message_type.slice(1)"></span>:
+                      </span>
+                      <span class="text-gray-500" x-text="historyMessage.content.split(' ').slice(0, 15).join(' ') + (historyMessage.content.split(' ').length > 15 ? '...' : '')"></span>
+                    </div>
                   </template>
                 </div>
               </div>

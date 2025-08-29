@@ -21,7 +21,7 @@ from apps.evaluations.tables import (
     EvaluationSessionsSelectionTable,
 )
 from apps.evaluations.tasks import upload_dataset_csv_task
-from apps.evaluations.utils import generate_csv_column_suggestions
+from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
 from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.decorators import login_and_team_required
@@ -233,6 +233,7 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
         human_message = request.POST.get("human_message", "").strip()
         ai_message = request.POST.get("ai_message", "").strip()
         context_json = request.POST.get("context", "{}")
+        history_text = request.POST.get("history_text", "").strip()
 
         if not human_message or not ai_message:
             return HttpResponse("Both human and AI messages are required", status=400)
@@ -245,10 +246,19 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
         else:
             context = {}
 
+        # Parse history text if provided
+        history = []
+        if history_text:
+            try:
+                history = parse_history_text(history_text)
+            except Exception:
+                return HttpResponse("Invalid history format", status=400)
+
         message = EvaluationMessage.objects.create(
             input=EvaluationMessageContent(content=human_message, role="human").model_dump(),
             output=EvaluationMessageContent(content=ai_message, role="ai").model_dump(),
             context=context,
+            history=history,
             metadata={"created_mode": "manual"},
         )
 
@@ -277,6 +287,7 @@ def edit_message_modal(request, team_slug, message_id):
         "human": message.input.get("content", ""),
         "ai": message.output.get("content", ""),
         "context": json.dumps(message.context, indent=2) if message.context else "{}",
+        "history_text": message.full_history,
     }
 
     update_url = reverse("evaluations:update_message", args=[team_slug, message_id])
@@ -301,6 +312,7 @@ def update_message(request, team_slug, message_id):
     human_content = request.POST.get("human_message", "").strip()
     ai_content = request.POST.get("ai_message", "").strip()
     context_str = request.POST.get("context", "").strip()
+    history_text = request.POST.get("history_text", "").strip()
 
     errors = {}
     if not human_content:
@@ -315,8 +327,16 @@ def update_message(request, team_slug, message_id):
         except json.JSONDecodeError:
             errors["context"] = "Invalid JSON format"
 
+    # Parse history text if provided
+    history_data = []
+    if history_text:
+        try:
+            history_data = parse_history_text(history_text)
+        except Exception:
+            errors["history_text"] = "Invalid history format"
+
     if errors:
-        form_data = {"human": human_content, "ai": ai_content, "context": context_str}
+        form_data = {"human": human_content, "ai": ai_content, "context": context_str, "history_text": history_text}
         update_url = reverse("evaluations:update_message", args=[team_slug, message_id])
 
         return render(
@@ -334,6 +354,7 @@ def update_message(request, team_slug, message_id):
     message.input = EvaluationMessageContent(content=human_content, role="human").model_dump()
     message.output = EvaluationMessageContent(content=ai_content, role="ai").model_dump()
     message.context = context_data
+    message.history = history_data
 
     # Clear chat message references since this is now manually edited
     message.input_chat_message = None

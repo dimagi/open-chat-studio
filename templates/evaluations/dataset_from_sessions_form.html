@@ -280,6 +280,7 @@
           <div x-show="editingMessageErrors.human" class="text-error text-sm mt-1" x-text="editingMessageErrors.human"></div>
           <div x-show="editingMessageErrors.ai" class="text-error text-sm mt-1" x-text="editingMessageErrors.ai"></div>
           <div x-show="editingMessageErrors.context" class="text-error text-sm mt-1" x-text="editingMessageErrors.context"></div>
+          <div x-show="editingMessageErrors.history_text" class="text-error text-sm mt-1" x-text="editingMessageErrors.history_text"></div>
 
           <!-- Actions -->
           <div class="modal-action">
@@ -322,7 +323,8 @@
         editingMessage: {
           human: '',
           ai: '',
-          context: '{}'
+          context: '{}',
+          history_text: ''
         },
         editingMessageIndex: -1,
         editingMessageErrors: {},
@@ -425,6 +427,18 @@
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                   return;
                 }
+
+                // Validate history text format if present
+                if (msg.history_text && msg.history_text.trim()) {
+                  const parsedHistory = this.parseHistoryText(msg.history_text);
+                  if (parsedHistory.length === 0) {
+                    e.preventDefault();
+                    this.showError = true;
+                    this.errorMessage = `Message pair ${i + 1} has invalid history format. History should contain lines starting with "user:" or "assistant:".`;
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                  }
+                }
               }
             }
           } else if (this.mode === 'csv') {
@@ -490,6 +504,7 @@
           const humanMessage = document.querySelector('textarea[name="human_message"]').value.trim();
           const aiMessage = document.querySelector('textarea[name="ai_message"]').value.trim();
           const contextValue = document.querySelector('#manual-context-field').value || '{}';
+          const historyText = document.querySelector('textarea[name="history_text"]').value.trim();
 
           // Validate required fields
           if (!humanMessage || !aiMessage) {
@@ -510,11 +525,22 @@
             }
           }
 
+          // Validate history text format if present
+          if (historyText && historyText.trim()) {
+            const parsedHistory = this.parseHistoryText(historyText);
+            if (parsedHistory.length === 0) {
+              this.showError = true;
+              this.errorMessage = 'Invalid history format. History should contain lines starting with "user:" or "assistant:".';
+              return;
+            }
+          }
+
           // Add message to array
           this.messages.push({
             human: humanMessage,
             ai: aiMessage,
-            context: contextValue
+            context: contextValue,
+            history_text: historyText
           });
 
           this.updateMessagesJson();
@@ -526,6 +552,7 @@
           // Clear form fields
           document.querySelector('textarea[name="human_message"]').value = '';
           document.querySelector('textarea[name="ai_message"]').value = '';
+          document.querySelector('textarea[name="history_text"]').value = '';
           document.querySelector('#manual-context-field').value = '{}';
         },
 
@@ -568,6 +595,17 @@
             }
           }
 
+          // Validate history text format if present
+          if (this.editingMessage.history_text && this.editingMessage.history_text.trim()) {
+            const parsedHistory = this.parseHistoryText(this.editingMessage.history_text);
+            if (parsedHistory.length === 0) {
+              this.editingMessageErrors = {
+                history_text: 'Invalid history format. History should contain lines starting with "user:" or "assistant:".'
+              };
+              return;
+            }
+          }
+
           // Update the message in the array
           this.messages[this.editingMessageIndex] = { ...this.editingMessage };
           this.updateMessagesJson();
@@ -580,7 +618,8 @@
           this.editingMessage = {
             human: '',
             ai: '',
-            context: '{}'
+            context: '{}',
+            history_text: ''
           };
           this.editingMessageIndex = -1;
           this.editingMessageErrors = {};
@@ -752,6 +791,50 @@
           if (this.csvData) {
             this.csvDataJson = JSON.stringify(this.csvData.all_rows || []);
           }
+        },
+
+        parseHistoryText(text) {
+          if (!text || text.trim() === '') return [];
+          const trimmedText = text.trim().toLowerCase();
+          if (!trimmedText.startsWith('user:') && !trimmedText.startsWith('assistant:')) {
+            // The first line must start with either user or assistant, otherwise the history is invalid
+            return [];
+          }
+
+          const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+          const parsedMessages = [];
+          let currentMessage = null;
+
+          for (const line of lines) {
+            const lineStripped = line.trim();
+            if (!lineStripped) {
+              continue;
+            }
+            // Match patterns like 'user: content', 'assistant: content'
+            const match = line.match(/^(user|assistant):\s*(.+)$/i);
+            if (match) {
+              if (currentMessage) {
+                parsedMessages.push(currentMessage);
+              }
+              let messageType = match[1].toLowerCase();
+              const content = match[2];
+              currentMessage = {
+                message_type: messageType,
+                content: content
+              };
+            } else if (currentMessage) {
+              currentMessage.content += "\n" + lineStripped;
+            }
+          }
+          if (currentMessage) {
+            parsedMessages.push(currentMessage);
+          }
+          return parsedMessages;
+        },
+
+        // Helper function for backward compatibility in templates
+        parseHistoryTextMessages(text) {
+          return this.parseHistoryText(text);
         }
       };
     }

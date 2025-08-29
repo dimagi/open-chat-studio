@@ -361,11 +361,25 @@ class EvaluationDatasetForm(forms.ModelForm):
                 except json.JSONDecodeError as err:
                     raise forms.ValidationError(f"Context for pair {i + 1} has malformed JSON") from err
 
+            # Parse history text if provided
+            history = []
+            history_text = pair.get("history_text", "").strip()
+            if history_text:
+                try:
+                    history = parse_history_text(history_text)
+                except Exception as err:
+                    raise forms.ValidationError(f"History for pair {i + 1} has invalid format") from err
+
+                if not history:
+                    # There was history text, but nothing came out after parsing
+                    raise forms.ValidationError(f"History for pair {i + 1} has invalid format")
+
             validated_pairs.append(
                 {
                     "human": EvaluationMessageContent(content=pair.get("human", "").strip(), role="human").model_dump(),
                     "ai": EvaluationMessageContent(content=pair.get("ai", "").strip(), role="ai").model_dump(),
                     "context": json.loads(pair.get("context", "{}")) if pair.get("context") else {},
+                    "history": history,
                 }
             )
         return validated_pairs
@@ -474,6 +488,7 @@ class EvaluationDatasetForm(forms.ModelForm):
                 input=pair["human"],
                 output=pair["ai"],
                 context=pair["context"],
+                history=pair.get("history", []),
                 metadata={"created_mode": "manual"},
             )
             for pair in self.cleaned_data.get("message_pairs", [])

@@ -81,6 +81,11 @@ def parse_history_text(history_text: str) -> list:
     if not history_text.strip():
         return history
 
+    # Validate that history text starts with user: or assistant:
+    first_line = history_text.strip().lower()
+    if not (first_line.startswith("user:") or first_line.startswith("assistant:")):
+        return history
+
     current_message = None
 
     for line in history_text.split("\n"):

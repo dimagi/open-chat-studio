@@ -47,6 +47,25 @@ Parameters:
   {% endif %}
 </div>
 
+<!-- History -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "History" %}</span>
+    <span class="label-text-alt text-gray-500">{% trans "Optional conversation history (format: user: message or assistant: message on separate lines)" %}</span>
+  </label>
+  <textarea
+    name="history_text"
+    class="textarea textarea-bordered w-full min-h-[100px]{% if errors.history_text %} textarea-error{% endif %}"
+    placeholder="{% blocktrans %}user: Hello, how are you?
+assistant: I am doing well, thank you for asking!
+{% endblocktrans %}"
+    {% if use_alpine_model %}x-model="editingMessage.history_text"{% endif %}
+  >{% if not use_alpine_model %}{{ history_text_value|default:'' }}{% endif %}</textarea>
+  {% if errors.history_text %}
+  <div class="text-error text-sm mt-1">{{ errors.history_text }}</div>
+  {% endif %}
+</div>
+
 <!-- Context -->
 <div class="form-control">
   <label class="label">
