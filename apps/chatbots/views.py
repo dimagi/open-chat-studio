@@ -24,7 +24,6 @@ from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
 from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
-    BaseExperimentView,
     CreateExperimentVersion,
     base_single_experiment_view,
     experiment_chat,
@@ -136,11 +135,17 @@ def cancel_edit_mode(request, team_slug, experiment_id):
 @permission_required("experiments.view_experiment", raise_exception=True)
 def chatbots_home(request, team_slug: str):
     actions_ = [
-        actions.Action(
+        actions.ModalAction(
             "chatbots:new",
             label="Add New",
             button_style="btn-primary",
             required_permissions=["experiments.add_experiment"],
+            modal_template="chatbots/components/new_modal.html",
+            modal_context={
+                "form": ChatbotForm(request),
+                "modal_title": "Create a new Chatbot",
+                "form_action": reverse("chatbots:new", args=[team_slug]),
+            },
         )
     ]
     return generic_home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_)
@@ -198,7 +203,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return query_set
 
 
-class CreateChatbot(CreateExperiment, BaseExperimentView):
+class CreateChatbot(CreateExperiment):
     template_name = "chatbots/chatbot_form.html"
     form_class = ChatbotForm
     title = "Create Chatbot"

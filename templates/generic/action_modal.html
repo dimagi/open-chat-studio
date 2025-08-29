@@ -1,0 +1,13 @@
+<button class="btn btn-sm join-item {{ button_style|default_if_none:"btn-ghost" }}"
+        {% if disabled %}disabled="disabled"{% endif %}
+        id="action-{{ action_id }}"
+        title="{{ title }}"
+        type="button"
+        onclick="document.getElementById('{{ modal_id }}').showModal()"
+>
+  {{ label }}
+  {% if icon_class %}
+    <i class="{{ icon_class }} htmx-hide"></i>
+  {% endif %}
+</button>
+{% include modal_template %}
