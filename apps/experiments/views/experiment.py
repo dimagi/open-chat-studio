@@ -97,6 +97,7 @@ from apps.experiments.tasks import (
 )
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.models import File
+from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
@@ -111,8 +112,16 @@ from apps.utils.base_experiment_table_view import BaseExperimentTableView
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
     show_modal = flag_is_active(request, "flag_chatbots")
+    actions_ = [
+        actions.Action(
+            "experiments:new",
+            label="Add New",
+            button_style="btn-primary",
+            required_permissions=["experiments.add_experiment"],
+        )
+    ]
     return generic_home(
-        request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_or_banner=show_modal
+        request, team_slug, "Experiments", "experiments:table", actions=actions_, show_modal_or_banner=show_modal
     )
 
 

@@ -24,18 +24,17 @@ def test_generic_home():
     team_slug = "test-team"
     title = "Chatbots"
     table_url_name = "chatbots:table"
-    new_url = "chatbots:new"
-
-    response = generic_home(None, team_slug, title, table_url_name, new_url)
+    actions = [{"action": "chatbots:new"}]
+    response = generic_home(None, team_slug, title, table_url_name, actions=actions)
 
     assert isinstance(response, TemplateResponse)
 
     assert response.context_data["active_tab"] == title.lower()
     assert response.context_data["title"] == title
-    assert response.context_data["new_object_url"] == reverse(new_url, args=[team_slug])
     assert response.context_data["table_url"] == reverse(table_url_name, args=[team_slug])
     assert response.context_data["enable_search"] is True
     assert response.context_data["toggle_archived"] is True
+    assert response.context_data["actions"] == actions
 
 
 @pytest.mark.django_db()

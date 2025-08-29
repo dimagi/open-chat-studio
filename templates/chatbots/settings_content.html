@@ -26,12 +26,16 @@
     {% else %}
       <div id="edit-buttons-container">
         {% if experiment.is_editable %}
-          <button id="edit-all-button"
-                  class="btn btn-primary btn-sm"
+          <button class="btn btn-primary btn-sm"
                   hx-get="{% url 'chatbots:settings' request.team.slug experiment.id %}"
                   hx-target="#settings-wrapper"
                   hx-swap="outerHTML">
             Edit
+          </button>
+          <button class="btn btn-error btn-sm"
+                  hx-post="{% url 'chatbots:archive' request.team.slug experiment.id %}"
+                  hx-confirm="Are you sure you wish to archive this chatbot?">
+            Archive
           </button>
         {% endif %}
       </div>

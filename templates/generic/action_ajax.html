@@ -1,4 +1,5 @@
-<button @click.stop="" class="btn btn-sm join-item {{ button_style|default_if_none:"btn-ghost" }}" {% if disabled %}disabled="disabled"{% endif %}
+<button @click.stop="" class="btn btn-sm join-item {{ button_style|default_if_none:"btn-ghost" }}"
+        {% if disabled %}disabled="disabled"{% endif %}
         id="action-{{ action_id }}"
         title="{{ title }}"
         hx-{{ hx_method|lower }}="{{ action_url }}"
@@ -6,19 +7,22 @@
         hx-swap="outerHTML"
         type="button"
         hx-disabled-elt="this"
-        {% if confirm_message %}
-          hx-trigger="confirmed"
-          onClick="alertify.confirm().setting({
-                   title: 'Confirm',
-                   message: '{{ confirm_message|escapejs }}',
-                   transition: 'fade',
-                   onok: function() {
-                   htmx.trigger('#action-{{ action_id }}', 'confirmed');
-                   },
-                   }).show();
-                  "
-        {% endif %}
+    {% if confirm_message %}
+        hx-trigger="confirmed"
+        onClick="alertify.confirm().setting({
+            title: 'Confirm',
+            message: '{{ confirm_message|escapejs }}',
+            transition: 'fade',
+            onok: function() {
+            htmx.trigger('#action-{{ action_id }}', 'confirmed');
+            },
+            }).show();
+            "
+    {% endif %}
 >
-  <i class="{{ icon_class }} htmx-hide"></i>
+  {{ label }}
+  {% if icon_class %}
+    <i class="{{ icon_class }} htmx-hide"></i>
+  {% endif %}
   <span class="loading loading-spinner loading-xs htmx-show"></span>
 </button>
