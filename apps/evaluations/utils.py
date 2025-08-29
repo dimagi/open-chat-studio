@@ -2,6 +2,7 @@ import inspect
 import re
 
 from apps.chat.models import ChatMessageType
+from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import Evaluator
 
 
@@ -84,7 +85,7 @@ def parse_history_text(history_text: str) -> list:
     # Validate that history text starts with user: or assistant:
     first_line = history_text.strip().lower()
     if not (first_line.startswith("user:") or first_line.startswith("assistant:")):
-        return history
+        raise HistoryParseException
 
     current_message = None
 
@@ -112,6 +113,8 @@ def parse_history_text(history_text: str) -> list:
     if current_message:
         history.append(current_message)
 
+    if not history:
+        raise HistoryParseException
     return history
 
 

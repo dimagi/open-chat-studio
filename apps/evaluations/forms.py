@@ -5,6 +5,7 @@ from django import forms
 from django.forms.widgets import RadioSelect
 from pydantic import ValidationError as PydanticValidationError
 
+from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     EvaluationConfig,
     EvaluationDataset,
@@ -370,10 +371,6 @@ class EvaluationDatasetForm(forms.ModelForm):
                 except Exception as err:
                     raise forms.ValidationError(f"History for pair {i + 1} has invalid format") from err
 
-                if not history:
-                    # There was history text, but nothing came out after parsing
-                    raise forms.ValidationError(f"History for pair {i + 1} has invalid format")
-
             validated_pairs.append(
                 {
                     "human": EvaluationMessageContent(content=pair.get("human", "").strip(), role="human").model_dump(),
@@ -434,11 +431,19 @@ class EvaluationDatasetForm(forms.ModelForm):
                     )
 
         valid_rows = 0
-        for row in csv_data:
+        for i, row in enumerate(csv_data):
             input_content = row.get(column_mapping.get("input", ""), "").strip()
             output_content = row.get(column_mapping.get("output", ""), "").strip()
             if input_content and output_content:
                 valid_rows += 1
+
+            if history_column and history_column in row:
+                history_text = row[history_column].strip()
+                if history_text:
+                    try:
+                        parse_history_text(history_text)
+                    except HistoryParseException as exc:
+                        raise forms.ValidationError(f"Invalid history in row: {i}") from exc
 
         if valid_rows == 0:
             raise forms.ValidationError("No valid message pairs found in CSV data.")

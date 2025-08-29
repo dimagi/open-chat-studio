@@ -1,3 +1,6 @@
+import pytest
+
+from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.utils import parse_history_text
 
 
@@ -51,15 +54,15 @@ def test_parse_history_functionality():
     assert result[2]["message_type"] == "human"
     assert result[2]["content"] == "lowercase again"
 
-    # Test validation: history text that doesn't start with user: or assistant: returns empty list
+    # Test validation: history text that doesn't start with user: or assistant: raises exception
     invalid_history_text = "This is just random text\nuser: without proper formatting"
-    result = parse_history_text(invalid_history_text)
-    assert result == []
+    with pytest.raises(HistoryParseException):
+        parse_history_text(invalid_history_text)
 
-    # Test validation: history text starting with other roles returns empty list
+    # Test validation: history text starting with other roles raises exception
     invalid_history_text2 = "system: This is a system message\nuser: Hello"
-    result = parse_history_text(invalid_history_text2)
-    assert result == []
+    with pytest.raises(HistoryParseException):
+        parse_history_text(invalid_history_text2)
 
     # Test validation: empty lines and whitespace should still work if first line is valid
     history_text_with_whitespace = "\n\n  user: Hello with whitespace  \n\n  assistant: Response  \n\n"
