@@ -239,17 +239,6 @@
         });
 
         this.loadFiltersFromUrl();
-        const urlParams = new URLSearchParams(window.location.search);
-        const showAllCheckbox = document.querySelector('input[name="show-all"]');
-        if (urlParams.has('show-all') && showAllCheckbox) {
-          showAllCheckbox.checked = true;
-        }
-        if (showAllCheckbox) {
-          showAllCheckbox.addEventListener('change', () => {
-            this.triggerFilterChange();
-          });
-        }
-
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {
           this.triggerFilterChange(false); // Don't update URL again since we just loaded from it
@@ -493,13 +482,6 @@
           }
         });
 
-        const showAllCheckbox = document.querySelector('input[name="show-all"]');
-        if (showAllCheckbox && showAllCheckbox.checked) {
-          params.set('show-all', 'on');
-        } else {
-          params.delete('show-all');
-        }
-
         const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
         window.history.replaceState({}, '', newUrl);
       },
@@ -529,10 +511,6 @@
           }
         });
         const sessionsTableUrl = document.getElementById('sessions-table').dataset.url;
-        const showAllCheckbox = document.querySelector('input[name="show-all"]');
-        if (showAllCheckbox && showAllCheckbox.checked) {
-          filterParams['show-all'] = 'on';
-        }
         if (updateUrl) {
           this.updateUrlWithFilters(activeFilters);
         }
