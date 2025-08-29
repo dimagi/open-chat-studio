@@ -227,7 +227,6 @@
                   <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
                         x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
                     {% csrf_token %}
-                    {% render_form_fields platform_forms|dict_lookup:platform %}
                     {% if platform.extra_form %}
                       <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
                         {% render_form_fields platform.extra_form %}
