@@ -581,6 +581,8 @@ class AgentTools(models.TextChoices):
     ATTACH_MEDIA = "attach-media", gettext("Attach Media")
     END_SESSION = "end-session", gettext("End Session")
     SEARCH_INDEX = "file-search", gettext("File Search")
+    SET_SESSION_STATE = "set-session-state", gettext("Set Session State")
+    GET_SESSION_STATE = "get-session-state", gettext("Get Session State")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:

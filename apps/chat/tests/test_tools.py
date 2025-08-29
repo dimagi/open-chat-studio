@@ -577,3 +577,74 @@ def test_get_mcp_tool_instances(fetch_tools, team):
     )
     tools = get_mcp_tool_instances(node, team)
     assert len(tools) == 1
+
+
+@pytest.mark.django_db()
+class TestSetSessionStateTool(BaseTestAgentTool):
+    tool_cls = tools.SetSessionStateTool
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "string",
+            1,
+            1.0,
+            True,
+            False,
+            None,
+            ["hi", "there"],
+            {"key": "value"},
+            [{"key": "value"}],
+        ],
+    )
+    def test_set_value(self, session, value):
+        self._invoke_tool(session, key="test_key", value=value)
+
+        session.refresh_from_db()
+        assert session.state["test_key"] == value
+
+    def test_overwrite_existing_session_state(self, session):
+        session.state = {"existing_key": "old_value"}
+        session.save()
+
+        # Update with new value
+        self._invoke_tool(session, key="existing_key", value="new_value")
+
+        session.refresh_from_db()
+        assert session.state["existing_key"] == "new_value"
+
+    def test_preserve_other_session_state(self, session):
+        session.state = {"key1": "value1", "key2": "value2"}
+        session.save()
+
+        self._invoke_tool(session, key="key1", value="updated_value")
+
+        session.refresh_from_db()
+        assert session.state["key1"] == "updated_value"
+        assert session.state["key2"] == "value2"  # Should be unchanged
+
+
+@pytest.mark.django_db()
+class TestGetSessionStateTool(BaseTestAgentTool):
+    tool_cls = tools.GetSessionStateTool
+
+    def test_retrieve_session_state(self, session):
+        test_data = {"user_preference": "dark_mode", "page": "home"}
+        session.state = test_data
+        session.save()
+
+        response = self._invoke_tool(session, key="user_preference")
+        assert "dark_mode" in response
+
+    def test_get_nonexistent_key_from_populated_state(self, session):
+        session.state = {"existing_key": "existing_value"}
+        session.save()
+
+        response = self._invoke_tool(session, key="missing_key")
+        assert "No value found" in response
+
+    def test_get_from_empty_session_state(self, session):
+        assert session.state == {}
+
+        response = self._invoke_tool(session, key="any_key")
+        assert "No value found" in response
