@@ -1,8 +1,9 @@
 from apps.documents.models import SourceType
 from apps.documents.source_loaders.base import BaseDocumentLoader
+from apps.documents.source_loaders.confluence import ConfluenceDocumentLoader
 from apps.documents.source_loaders.github import GitHubDocumentLoader
 
-LOADERS = {SourceType.GITHUB: GitHubDocumentLoader}
+LOADERS = {SourceType.GITHUB: GitHubDocumentLoader, SourceType.CONFLUENCE: ConfluenceDocumentLoader}
 
 
 def create_loader(collection, document_source) -> BaseDocumentLoader:

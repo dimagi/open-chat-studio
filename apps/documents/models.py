@@ -344,7 +344,7 @@ class Collection(BaseTeamModel, VersionsMixin):
 
 class SourceType(models.TextChoices):
     GITHUB = "github", _("GitHub Repository")
-    CONFLUENCE = "confluence", _("Confluence Space")
+    CONFLUENCE = "confluence", _("Confluence")
 
     @property
     def css_logo(self):
