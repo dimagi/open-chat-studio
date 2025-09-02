@@ -191,13 +191,18 @@
   </div>
 </div>
 
-{{ field_type_filters|json_script:"field-type-filters" }}
-{{ date_range_options|json_script:"date-range-options" }}
-{{ filter_columns|json_script:"filter-columns-data" }}
-{{ state_list|json_script:"state-data" }}
-{% if experiment_list %}{{ experiment_list|json_script:"experiment-list-data" }}{% else %}<script id="experiment-list-data" type="application/json">[]</script>{% endif %}
+{{ df_field_type_filters|json_script:"field-type-filters" }}
+{{ df_date_range_options|json_script:"date-range-options" }}
+{{ df_filter_columns|json_script:"filter-columns-data" }}
+{{ df_state_list|json_script:"state-data" }}
+{{ df_available_tags|default:""|json_script:"available-tags-data" }}
+{{ df_experiment_versions|default:""|json_script:"experiment-versions-data" }}
+{{ df_channel_list|default:"[]"|json_script:"channel-list-data" }}
+{{ df_span_names|default:"[]"|json_script:"available-span-names-data" }}
+{% if df_experiment_list %}{{ df_experiment_list|json_script:"experiment-list-data" }}{% else %}<script id="experiment-list-data" type="application/json">[]</script>{% endif %}
 <script>
   const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
+  const span_names = JSON.parse(document.getElementById('available-span-names-data').textContent);
   const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
   const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
   const channelsList = JSON.parse(document.getElementById('channel-list-data').textContent);
@@ -228,6 +233,9 @@
           'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'},
           'state': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: stateOptions, label: 'State'},
           'remote_id': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), label: 'Remote Id'},
+          'timestamp': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Timestamp',  options: dateRangeOptions},
+          'span_name': {type: 'choice', operators: fieldTypeFilters.choice, options: span_names, label: 'Span Name' },
+          'status': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: stateOptions, label: 'Status'},
         };
 
         // Only include columns that are in the filterColumns list
@@ -510,12 +518,13 @@
             filterParams[`filter_${i}_value`] = filter.value;
           }
         });
-        const sessionsTableUrl = document.getElementById('sessions-table').dataset.url;
+        const dataSourceUrl = "{{df_filter_data_source_url}}";
+        const dataSourceContainerId = "{{df_filter_data_source_container_id}}";
         if (updateUrl) {
           this.updateUrlWithFilters(activeFilters);
         }
-        htmx.ajax('GET', sessionsTableUrl, {
-          target: '#sessions-table',
+        htmx.ajax('GET', dataSourceUrl, {
+          target: "#" + dataSourceContainerId,
           swap: 'innerHTML',
           values: filterParams
         }).finally(() => {
@@ -543,9 +552,9 @@
 
       selectOption(option) {
         this.selectedLabel = option.label;
-        this.filterData.filters = this.filterData.filters.filter(f => f.column !== 'last_message');
+        this.filterData.filters = this.filterData.filters.filter(f => f.column !== '{{ df_date_range_column_name }}');
         this.filterData.filters.push({
-          column: 'last_message',
+          column: '{{ df_date_range_column_name }}',
           operator: 'range',
           value: option.value,
           availableOperators: fieldTypeFilters.timestamp,

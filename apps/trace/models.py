@@ -5,6 +5,7 @@ import uuid
 from django.db import models
 from django.urls import reverse
 
+from apps.annotations.models import TaggedModelMixin
 from apps.teams.models import BaseTeamModel
 
 
@@ -63,7 +64,7 @@ class Trace(models.Model):
         )
 
 
-class Span(BaseTeamModel):
+class Span(BaseTeamModel, TaggedModelMixin):
     """
     Represents a segment or operation within a trace, allowing for detailed
     tracking of sub-operations with their own metrics and data.

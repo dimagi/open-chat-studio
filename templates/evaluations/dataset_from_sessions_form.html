@@ -19,10 +19,6 @@
           </p>
 
           <div class="mb-4">
-            {{ available_tags|default:""|json_script:"available-tags-data" }}
-            {{ experiment_versions|default:""|json_script:"experiment-versions-data" }}
-            {{ channel_list|default:"[]"|json_script:"channel-list-data" }}
-
             <div class="flex items-center justify-between">
               <div>
                 {% include "experiments/filters.html" %}
