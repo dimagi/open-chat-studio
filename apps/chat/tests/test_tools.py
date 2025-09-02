@@ -598,10 +598,11 @@ class TestSetSessionStateTool(BaseTestAgentTool):
         ],
     )
     def test_set_value(self, session, value):
-        self._invoke_tool(session, key="test_key", value=value)
+        response = self._invoke_tool(session, key="test_key", value=value)
 
         session.refresh_from_db()
         assert session.state["test_key"] == value
+        assert "The value has been set in session state for key 'test_key'" in response
 
     def test_overwrite_existing_session_state(self, session):
         session.state = {"existing_key": "old_value"}

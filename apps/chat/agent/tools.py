@@ -1,4 +1,5 @@
 import functools
+import json
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
@@ -417,7 +418,12 @@ class SetSessionStateTool(CustomBaseTool):
 
         self.experiment_session.state[key] = value
         self.experiment_session.save(update_fields=["state"])
-        return f"The value has been set in session state for key '{key}'."
+
+        try:
+            json_value = json.dumps(value, indent=2)
+            return f"The value has been set in session state for key '{key}':\n{json_value}"
+        except (TypeError, ValueError):
+            return f"The value has been set in session state for key '{key}': {value}"
 
 
 class GetSessionStateTool(CustomBaseTool):
