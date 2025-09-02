@@ -348,7 +348,7 @@ def update_message(request, team_slug, message_id):
                 "update_url": update_url,
                 "errors": errors,
             },
-            status=400,
+            status=200,
         )
 
     message.input = EvaluationMessageContent(content=human_content, role="human").model_dump()

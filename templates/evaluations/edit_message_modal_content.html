@@ -1,5 +1,5 @@
 {% load i18n %}
-<div class="modal-box max-w-none w-1/2">
+<div class="modal-box max-w-none w-1/2"{% if errors %} data-has-errors="true"{% endif %}>
   <h3 class="font-bold text-lg mb-4">{% trans "Edit Message Pair" %}</h3>
   <form method="dialog">
     <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onclick="document.getElementById('editMessageModal').close()">✕</button>

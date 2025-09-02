@@ -161,6 +161,17 @@
 
     document.addEventListener('htmx:afterRequest', function(event) {
       if (event.detail.xhr.status === 200 && (event.detail.target.id === 'editMessageModal' || event.detail.requestConfig.verb === 'delete')) {
+        // Check if the response contains validation errors
+        if (event.detail.target.id === 'editMessageModal') {
+          const modalBox = event.detail.target.querySelector('.modal-box');
+          const hasErrors = modalBox && modalBox.hasAttribute('data-has-errors');
+
+          if (hasErrors) {
+            // Don't close modal or refresh table if there are validation errors
+            return;
+          }
+        }
+
         const tableContainer = document.getElementById('dataset-messages-table');
         if (tableContainer) {
           const tableUrl = tableContainer.getAttribute('hx-get');
