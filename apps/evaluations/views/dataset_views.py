@@ -160,6 +160,10 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
             "df_date_range_options": DATE_RANGE_OPTIONS,
             "df_filter_columns": DynamicExperimentSessionFilter.columns,
             "df_date_range_column_name": "last_message",
+            "df_filter_data_source_url": reverse(
+                "evaluations:dataset_sessions_selection_list", args=[self.request.team.slug]
+            ),
+            "df_filter_data_source_container_id": "sessions-table",
         }
 
     def get_context_data(self, **kwargs):
