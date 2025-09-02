@@ -7,7 +7,9 @@ from uuid import UUID
 
 from django.utils import timezone
 
+from apps.annotations.models import TagCategories
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
+from apps.trace.error_parser import get_tags_from_error
 from apps.trace.models import Span, Trace, TraceStatus
 
 from .base import Tracer
@@ -32,6 +34,8 @@ class OCSTracer(Tracer):
         self.trace = None
         self.spans: dict[UUID, Span] = {}
         self.error_detected = False
+        # error_span_id is used to track the span in which an error occurred
+        self.error_span_id = None
 
     @property
     def ready(self) -> bool:
@@ -128,9 +132,16 @@ class OCSTracer(Tracer):
         span.output = outputs or {}
         span.end_time = timezone.now()
         if error:
-            span.error = str(error)
             self.error_detected = True
             span.status = TraceStatus.ERROR
+            span.error = str(error)
+
+            if self.error_span_id is None:
+                # Only tag the span in which the error occured
+                self.error_span_id = span_id
+                tags = get_tags_from_error(error)
+                for tag in tags:
+                    span.create_and_add_tag(tag=tag, team=span.team, tag_category=TagCategories.ERROR)
         else:
             span.status = TraceStatus.SUCCESS
         span.save()

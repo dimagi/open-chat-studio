@@ -2,9 +2,6 @@
 <div class="my-3">
   <div class="relative">
     <div class="flex items-center gap-1">
-      {{ available_tags|default:""|json_script:"available-tags-data" }}
-      {{ experiment_versions|default:""|json_script:"experiment-versions-data" }}
-      {{ channel_list|default:"[]"|json_script:"channel-list-data" }}
       {% if perms.experiments.download_chats %}
         {% include "experiments/components/exports.html" %}
       {% endif %}

@@ -40,7 +40,7 @@
     </div>
     {% if allow_new|default_if_none:True or actions %}
       <div class="justify-self-end join">
-        {% if allow_new|default_if_none:True %}
+        {% if new_object_url %}
           <a class="btn btn-sm {{ button_style|default:"btn-primary" }}"
              href="{{ new_object_url }}">Add new
           </a>
@@ -106,13 +106,19 @@
         </div>
       </div>
     </form>
+  {% elif use_dynamic_filters %}
+    <div class="my-2">
+      {% include "experiments/filters.html" %}
+    </div>
   {% else %}
     <hr class="my-2">
   {% endif %}
 
-  <div hx-get="{{ table_url }}{% querystring %}"
-       hx-trigger="load" hx-swap="outerHTML">
-    {% include "table/table_placeholder.html" %}
+    <div id="data-table">
+      <div hx-get="{{ table_url }}{% querystring %}"
+        hx-trigger="load" hx-swap="outerHTML">
+      {% include "table/table_placeholder.html" %}
+    </div>
   </div>
 </div>
 

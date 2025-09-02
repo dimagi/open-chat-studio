@@ -168,8 +168,10 @@ class LlmProviderModelManager(models.Manager):
                 max_token_limit=max_token_limit,
             ), True
 
-    def for_team(self, team):
-        return super().get_queryset().filter(models.Q(team=team) | models.Q(team__isnull=True))
+    def for_team(self, team: int | Team):
+        if isinstance(team, Team):
+            team = team.id
+        return super().get_queryset().filter(models.Q(team_id=team) | models.Q(team__isnull=True))
 
 
 class LlmProviderModel(BaseTeamModel):

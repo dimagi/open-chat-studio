@@ -22,7 +22,7 @@ from apps.evaluations.tables import (
 )
 from apps.evaluations.tasks import upload_dataset_csv_task
 from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
-from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
+from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, DynamicExperimentSessionFilter
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -125,7 +125,8 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 .select_related("participant__user")
             )
             timezone = self.request.session.get("detected_tz", None)
-            filtered_queryset = apply_dynamic_filters(queryset, self.request.GET, timezone)
+            session_filter = DynamicExperimentSessionFilter(queryset, self.request.GET, timezone)
+            filtered_queryset = session_filter.apply()
             filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
             if filtered_session_ids:
                 initial["session_ids"] = filtered_session_ids
@@ -150,22 +151,14 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         experiment_versions = list(set(experiment_versions))
 
         return {
-            "available_tags": available_tags,
-            "experiment_versions": experiment_versions,
-            "experiment_list": experiment_list,
-            "field_type_filters": FIELD_TYPE_FILTERS,
-            "channel_list": channel_list,
-            "date_range_options": DATE_RANGE_OPTIONS,
-            "filter_columns": [
-                "experiment",
-                "participant",
-                "last_message",
-                "first_message",
-                "tags",
-                "versions",
-                "channels",
-                "remote_id",
-            ],
+            "df_available_tags": available_tags,
+            "df_experiment_versions": experiment_versions,
+            "df_experiment_list": experiment_list,
+            "df_field_type_filters": FIELD_TYPE_FILTERS,
+            "df_channel_list": channel_list,
+            "df_date_range_options": DATE_RANGE_OPTIONS,
+            "df_filter_columns": DynamicExperimentSessionFilter.columns,
+            "df_date_range_column_name": "last_message",
         }
 
     def get_context_data(self, **kwargs):
@@ -200,7 +193,8 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .order_by("experiment__name")
         )
         timezone = self.request.session.get("detected_tz", None)
-        query_set = apply_dynamic_filters(query_set, self.request.GET, timezone)
+        session_filter = DynamicExperimentSessionFilter(query_set, self.request.GET, timezone)
+        query_set = session_filter.apply()
         return query_set
 
 

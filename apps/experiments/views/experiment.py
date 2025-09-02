@@ -61,7 +61,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
+from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, DynamicExperimentSessionFilter
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -97,6 +97,7 @@ from apps.experiments.tasks import (
 )
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.files.models import File
+from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
@@ -111,8 +112,16 @@ from apps.utils.base_experiment_table_view import BaseExperimentTableView
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
     show_modal = flag_is_active(request, "flag_chatbots")
+    actions_ = [
+        actions.Action(
+            "experiments:new",
+            label="Add New",
+            button_style="btn-primary",
+            required_permissions=["experiments.add_experiment"],
+        )
+    ]
     return generic_home(
-        request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_or_banner=show_modal
+        request, team_slug, "Experiments", "experiments:table", actions=actions_, show_modal_or_banner=show_modal
     )
 
 
@@ -150,7 +159,8 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             parsed_url = urlparse(hx_url)
             filters = parse_qs(parsed_url.query)
 
-        query_set = apply_dynamic_filters(query_set, filters, timezone)
+        session_filter = DynamicExperimentSessionFilter(query_set, filters, timezone)
+        query_set = session_filter.apply()
         return query_set
 
 
@@ -492,24 +502,18 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "platforms": available_platforms,
         "platform_forms": platform_forms,
         "channels": channels,
-        "available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
-        "experiment_versions": experiment.get_version_name_list(),
+        "df_available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
+        "df_experiment_versions": experiment.get_version_name_list(),
         "deployed_version": deployed_version,
-        "field_type_filters": FIELD_TYPE_FILTERS,
-        "channel_list": channel_list,
+        "df_field_type_filters": FIELD_TYPE_FILTERS,
+        "df_channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
-        "date_range_options": DATE_RANGE_OPTIONS,
-        "filter_columns": [
-            "participant",
-            "last_message",
-            "first_message",
-            "tags",
-            "versions",
-            "channels",
-            "state",
-            "remote_id",
-        ],
-        "state_list": SessionStatus.for_chatbots(),
+        "df_date_range_options": DATE_RANGE_OPTIONS,
+        "df_filter_columns": DynamicExperimentSessionFilter.columns,
+        "df_state_list": SessionStatus.for_chatbots(),
+        "df_filter_data_source_container_id": "sessions-table",
+        "df_filter_data_source_url": reverse("experiments:sessions-list", args=(team_slug, experiment_id)),
+        "df_date_range_column_name": "last_message",
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
