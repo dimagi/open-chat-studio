@@ -98,7 +98,25 @@ HELP_TEXT_KEYS = {
 }
 
 
-def generic_home(request, team_slug: str, title: str, table_url_name: str, new_url: str, show_modal_or_banner=False):
+def generic_home(
+    request,
+    team_slug: str,
+    title: str,
+    table_url_name: str,
+    actions=None,
+    show_modal_or_banner=False,
+):
+    """
+    Generate a template response using the generic 'object_home.html' template.
+
+    Arguments:
+        request: The current request.
+        team_slug: The slug of the team.
+        title: The title of the page.
+        table_url_name: The url name of the table.
+        actions: List of `apps.generics.actions.Action` objects to display in the title.
+        show_modal_or_banner: Temporary flag for experiment deprecation notice.
+    """
     help_key = HELP_TEXT_KEYS.get(title, title.lower())  # Default to lowercase if missing
     return TemplateResponse(
         request,
@@ -107,11 +125,11 @@ def generic_home(request, team_slug: str, title: str, table_url_name: str, new_u
             "active_tab": title.lower(),
             "title": title,
             "title_help_content": render_help_with_link("", help_key),
-            "new_object_url": reverse(new_url, args=[team_slug]),
             "table_url": reverse(table_url_name, args=[team_slug]),
             "enable_search": True,
             "toggle_archived": True,
             "show_modal_or_banner": show_modal_or_banner,
+            "actions": actions,
         },
     )
 

@@ -12,6 +12,7 @@ from django_tables2 import tables
 from apps.generics.type_select_form import TypeSelectForm
 
 from . import const
+from .llm_service.default_models import get_default_model
 from .models import (
     AuthProvider,
     AuthProviderType,
@@ -176,8 +177,11 @@ def get_first_llm_provider_by_team(team_id):
 def get_first_llm_provider_model(llm_provider, team_id):
     try:
         if llm_provider:
-            model = LlmProviderModel.objects.filter(type=llm_provider.type, team_id=team_id).order_by("id").first()
-            return model
+            provider_models = LlmProviderModel.objects.for_team(team_id).filter(type=llm_provider.type).order_by("id")
+            if default_model := get_default_model(llm_provider.type):
+                provider_models = provider_models.filter(name=default_model.name)
+            return provider_models.first()
+        return None
     except LlmProviderModel.DoesNotExist:
         return None
 
