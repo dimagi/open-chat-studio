@@ -4,10 +4,9 @@ import pytest
 
 from apps.channels.forms import (
     EmbeddedWidgetChannelForm,
-    match_domain_pattern,
-    validate_embedded_widget_request,
 )
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.utils import match_domain_pattern, validate_embedded_widget_request
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
