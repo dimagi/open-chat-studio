@@ -1,0 +1,47 @@
+{% load form_tags %}
+<dialog id="{% if channel %}channel_edit_modal_{{ channel.id }}{% else %}channel_create_modal{% endif %}" class="modal" open>
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">
+      {% if channel %}
+        Edit {{ channel.platform_enum.label }} Channel
+      {% else %}
+        Link with {{ platform.label }}
+      {% endif %}
+    </h3>
+    <form method="post"
+      {% if channel %}
+        action="{% url "channels:channel_edit_dialog" request.team.slug experiment.id channel.id %}?origin={{ request.GET.origin|default:'chatbots' }}"
+      {% else %}
+        action="{% url "channels:channel_create_dialog" request.team.slug experiment.id platform.value %}?origin={{ request.GET.origin|default:'chatbots' }}"
+      {% endif %}
+      x-data="{ buttonDisabled: false }"
+      x-on:submit.debounce="buttonDisabled = true">
+      {% csrf_token %}
+      {% if channel %}
+        {% render_form_fields form %}
+      {% else %}
+        {% render_form_fields platform_form %}
+      {% endif %}
+      {% if extra_form %}
+        <div {% include "generic/attrs.html" with attrs=extra_form.form_attrs %}>
+          {% render_form_fields extra_form %}
+        </div>
+      {% endif %}
+      <div class="modal-action">
+        {% if channel %}
+          <button class="btn btn-primary" type="submit" name="action" value="update" x-bind:disabled="buttonDisabled">Update</button>
+          <button class="btn btn-error" type="submit" name="action" value="delete" x-bind:disabled="buttonDisabled">Delete</button>
+        {% else %}
+          <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
+          <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
+        {% endif %}
+        <form method="dialog">
+          <button class="btn" x-bind:disabled="buttonDisabled">Close</button>
+        </form>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
