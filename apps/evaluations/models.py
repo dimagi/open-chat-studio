@@ -212,6 +212,16 @@ class EvaluationMessage(BaseModel):
 
         return "\n".join(history_lines)
 
+    def as_result_dict(self) -> dict:
+        """Returns a dict representation to be stored in any evaluator result"""
+        return {
+            "input": self.input,
+            "output": self.output,
+            "context": self.context,
+            "history": self.history,
+            "metadata": self.metadata,
+        }
+
 
 class EvaluationDataset(BaseTeamModel):
     name = models.CharField(max_length=255)
