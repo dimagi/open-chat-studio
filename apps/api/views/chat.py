@@ -1,4 +1,5 @@
 import pathlib
+import uuid
 
 from django.conf import settings
 from django.http import Http404
@@ -9,6 +10,7 @@ from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schem
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
@@ -22,6 +24,11 @@ from apps.api.serializers import (
 )
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.utils import (
+    extract_domain_from_headers,
+    validate_embed_key_for_experiment,
+    validate_embedded_widget_request,
+)
 from apps.chat.channels import ApiChannel, WebChannel
 from apps.chat.models import Chat, ChatAttachment
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
@@ -55,13 +62,63 @@ def check_experiment_access(experiment, participant_id):
     return None
 
 
-def check_session_access(session):
+def handle_embedded_widget_auth(request, experiment_id=None, session=None):
+    embed_key = request.headers.get("X-Embed-Key")
+    if not embed_key:
+        return False, None, None
+
+    # Extract origin domain from headers
+    origin_domain = extract_domain_from_headers(request)
+    if not origin_domain:
+        raise PermissionDenied("Origin or Referer header required for embedded widgets")
+
+    if experiment_id:
+        is_valid, experiment_channel = validate_embed_key_for_experiment(
+            token=embed_key, origin_domain=origin_domain, experiment_id=experiment_id
+        )
+    elif session:
+        is_valid, experiment_channel = validate_embedded_widget_request(
+            token=embed_key, origin_domain=origin_domain, team=session.team
+        )
+        if is_valid and session.experiment_channel.platform != ChannelPlatform.EMBEDDED_WIDGET:
+            raise PermissionDenied("Session does not belong to an embedded widget channel")
+    else:
+        raise ValueError("Either experiment_id or session must be provided")
+
+    if not is_valid:
+        raise PermissionDenied("Invalid embed key or domain not allowed")
+
+    # Generate id for anon widget users
+    participant_remote_id = None
+    if hasattr(request, "data") and request.data:
+        participant_remote_id = request.data.get("participant_remote_id")
+
+    if not participant_remote_id:
+        participant_remote_id = f"embed_{uuid.uuid4()}"
+
+    return True, experiment_channel, participant_remote_id
+
+
+def check_session_access(session, request=None):
     """
-    Check if the request has access to the session based on experiment's public API settings.
+    Check if the request has access to the session.
+    Now handles both authenticated users and embedded widgets.
 
     Returns:
         Response object if access denied, None if access allowed
     """
+    if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
+        if not request:
+            return Response(
+                {"error": "Request context required for embedded widgets"}, status=status.HTTP_403_FORBIDDEN
+            )
+        try:
+            handle_embedded_widget_auth(request, session=session)
+            return None  # Access allowed
+        except PermissionDenied as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except Exception:
+            return Response({"error": "Embedded widget authentication failed"}, status=status.HTTP_403_FORBIDDEN)
     return check_experiment_access(session.experiment, session.participant.identifier)
 
 
