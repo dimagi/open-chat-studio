@@ -44,6 +44,10 @@ export namespace Components {
          */
         "iconUrl"?: string;
         /**
+          * Authentication key for embedded channels
+         */
+        "key"?: string;
+        /**
           * The message to display in the new chat confirmation dialog.
           * @default "Starting a new chat will clear your current conversation. Continue?"
          */
@@ -140,6 +144,11 @@ declare namespace LocalJSX {
           * URL of the icon to display on the button. If not provided, uses the default OCS logo.
          */
         "iconUrl"?: string;
+        /**
+          * Authentication key for embedded channels
+          */
+        "key"?: string;
+        /**
         /**
           * The message to display in the new chat confirmation dialog.
           * @default "Starting a new chat will clear your current conversation. Continue?"

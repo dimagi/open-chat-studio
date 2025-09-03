@@ -116,6 +116,11 @@ export class OcsChat {
   @Prop() iconUrl?: string;
 
   /**
+   * Authentication key for embedded channels
+   */
+  @Prop() key?: string;
+
+  /**
    * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
    */
   @Prop() buttonShape: 'round' | 'square' = 'square';
@@ -329,6 +334,9 @@ export class OcsChat {
     const csrfToken = getCSRFToken(this.getApiBaseUrl());
     if (csrfToken) {
       headers['X-CSRFToken'] = csrfToken;
+    }
+    if (this.key) {
+      headers['X-Embed-Key'] = this.key;
     }
 
     return headers;
