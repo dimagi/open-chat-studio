@@ -26,6 +26,7 @@ class EvaluationRunStatus(models.TextChoices):
     PROCESSING = "processing", "Processing"
     COMPLETED = "completed", "Completed"
     FAILED = "failed", "Failed"
+    MODIFIED = "modified", "Modified"
 
 
 class EvaluationRunType(models.TextChoices):
@@ -201,6 +202,16 @@ class EvaluationMessage(BaseModel):
             history_lines.append(f"{display_type}: {content}")
 
         return "\n".join(history_lines)
+
+    def as_result_dict(self) -> dict:
+        """Returns a dict representation to be stored in any evaluator result"""
+        return {
+            "input": self.input,
+            "output": self.output,
+            "context": self.context,
+            "history": self.history,
+            "metadata": self.metadata,
+        }
 
 
 class EvaluationDataset(BaseTeamModel):
