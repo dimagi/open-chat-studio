@@ -1,4 +1,5 @@
 import functools
+import json
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
@@ -404,6 +405,40 @@ def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new
     return date.replace(hour=new_hour, minute=new_minute, second=0) + timedelta(days=day_diff)
 
 
+class SetSessionStateTool(CustomBaseTool):
+    name: str = AgentTools.SET_SESSION_STATE
+    description: str = "Set a value in the session state that persists across the entire experiment session"
+    requires_session: bool = True
+    args_schema: type[schemas.SetSessionStateSchema] = schemas.SetSessionStateSchema
+
+    @transaction.atomic
+    def action(self, key: str, value: Any):
+        if key in {"user_input", "outputs", "attachments"}:
+            return f"Cannot set the '{key}' key in session state - this is read-only"
+
+        self.experiment_session.state[key] = value
+        self.experiment_session.save(update_fields=["state"])
+
+        try:
+            json_value = json.dumps(value, indent=2)
+            return f"The value has been set in session state for key '{key}':\n{json_value}"
+        except (TypeError, ValueError):
+            return f"The value has been set in session state for key '{key}': {value}"
+
+
+class GetSessionStateTool(CustomBaseTool):
+    name: str = AgentTools.GET_SESSION_STATE
+    description: str = "Get a value from the session state that persists across the entire experiment session"
+    requires_session: bool = True
+    args_schema: type[schemas.GetSessionStateSchema] = schemas.GetSessionStateSchema
+
+    def action(self, key: str):
+        value = self.experiment_session.state.get(key)
+        if value is None:
+            return f"No value found for key '{key}' in session state."
+        return f"The value for key '{key}' is: {value}"
+
+
 def create_schedule_message(
     experiment_session: ExperimentSession,
     message: str,
@@ -462,6 +497,8 @@ TOOL_CLASS_MAP = {
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
     AgentTools.SEARCH_INDEX: SearchIndexTool,
+    AgentTools.SET_SESSION_STATE: SetSessionStateTool,
+    AgentTools.GET_SESSION_STATE: GetSessionStateTool,
 }
 
 
