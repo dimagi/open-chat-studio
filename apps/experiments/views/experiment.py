@@ -40,9 +40,7 @@ from apps.analysis.const import LANGUAGE_CHOICES
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
-from apps.channels.exceptions import ExperimentChannelException
-from apps.channels.forms import ChannelForm
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
@@ -60,7 +58,6 @@ from apps.experiments.decorators import (
     verify_session_access_cookie,
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
-from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
 from apps.experiments.forms import (
     ConsentForm,
@@ -576,99 +573,6 @@ def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
             experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
         ),
     }
-
-
-@login_and_team_required
-@permission_required("bot_channels.add_experimentchannel", raise_exception=True)
-def create_channel(request, team_slug: str, experiment_id: int):
-    origin = request.GET.get("origin")
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
-    form = ChannelForm(experiment=experiment, data=request.POST)
-    if not form.is_valid():
-        messages.error(request, "Form has errors: " + form.errors.as_text())
-    else:
-        platform = ChannelPlatform(form.cleaned_data["platform"])
-        if platform in existing_platforms:
-            messages.error(request, f"Channel for {platform.label} already exists")
-            return _redirect_based_on_origin(origin, team_slug, experiment_id)
-
-        extra_form = platform.extra_form(data=request.POST)
-        config_data = {}
-        if extra_form:
-            if extra_form.is_valid():
-                config_data = extra_form.cleaned_data
-            else:
-                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
-                return _redirect_based_on_origin(origin, team_slug, experiment_id)
-
-        try:
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=config_data[platform.channel_identifier_key], new_experiment=experiment
-            )
-        except ChannelAlreadyUtilizedException as exception:
-            messages.error(request, exception.html_message)
-            return _redirect_based_on_origin(origin, team_slug, experiment_id)
-
-        form.save(experiment, config_data)
-        if extra_form:
-            try:
-                extra_form.post_save(channel=form.instance)
-            except ExperimentChannelException as e:
-                messages.error(request, "Error saving channel: " + str(e))
-            else:
-                if extra_form.success_message:
-                    messages.info(request, extra_form.success_message)
-
-                if extra_form.warning_message:
-                    messages.warning(request, extra_form.warning_message)
-    return _redirect_based_on_origin(origin, team_slug, experiment_id)
-
-
-@login_and_team_required
-def update_delete_channel(request, team_slug: str, experiment_id: int, channel_id: int):
-    origin = request.GET.get("origin")
-    channel = get_object_or_404(ExperimentChannel, id=channel_id, experiment_id=experiment_id, team__slug=team_slug)
-    if request.POST.get("action") == "delete":
-        if not request.user.has_perm("bot_channels.delete_experimentchannel"):
-            raise PermissionDenied
-
-        channel.soft_delete()
-        return _redirect_based_on_origin(origin, team_slug, experiment_id)
-
-    if not request.user.has_perm("bot_channels.change_experimentchannel"):
-        raise PermissionDenied
-
-    form = channel.form(data=request.POST)
-    if not form.is_valid():
-        messages.error(request, "Form has errors: " + form.errors.as_text())
-    else:
-        extra_form = channel.extra_form(data=request.POST)
-        config_data = {}
-        if extra_form:
-            if extra_form.is_valid():
-                config_data = extra_form.cleaned_data
-            else:
-                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
-                return _redirect_based_on_origin(origin, team_slug, experiment_id)
-
-        platform = ChannelPlatform(form.cleaned_data["platform"])
-        channel_identifier = config_data[platform.channel_identifier_key]
-        try:
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=channel_identifier, new_experiment=channel.experiment
-            )
-        except ChannelAlreadyUtilizedException as exception:
-            messages.error(request, exception.html_message)
-            return _redirect_based_on_origin(origin, team_slug, experiment_id)
-
-        form.save(channel.experiment, config_data)
-    return _redirect_based_on_origin(origin, team_slug, experiment_id)
-
-def _redirect_based_on_origin(origin: str, team_slug: str, experiment_id: int):
-    if origin == "chatbots":
-        return redirect("chatbots:single_chatbot_home", team_slug, experiment_id)
-    return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
 @require_POST
