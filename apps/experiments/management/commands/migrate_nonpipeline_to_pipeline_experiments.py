@@ -7,6 +7,7 @@ from apps.pipelines.helper import (
     convert_non_pipeline_experiment_to_pipeline,
 )
 from apps.teams.models import Flag
+from apps.teams.utils import current_team
 
 
 class Command(BaseCommand):
@@ -124,7 +125,7 @@ class Command(BaseCommand):
     def _process_experiment(self, experiment, converted_count, failed_count):
         self._log_experiment_info(experiment)
         try:
-            with transaction.atomic():
+            with transaction.atomic(), current_team(experiment.team):
                 convert_non_pipeline_experiment_to_pipeline(experiment)
                 converted_count += 1
                 self.stdout.write(self.style.SUCCESS(f"Success: {experiment.name}"))
