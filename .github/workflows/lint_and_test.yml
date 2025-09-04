@@ -10,6 +10,7 @@ on:
     paths-ignore:
       - 'components/**'
       - 'docs/**'
+      - 'mkdocs.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

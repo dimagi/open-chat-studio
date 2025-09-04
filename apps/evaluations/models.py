@@ -319,7 +319,7 @@ class EvaluationRun(BaseTeamModel):
         if save:
             self.save(update_fields=["finished_at", "status"])
 
-    def get_table_data(self):
+    def get_table_data(self, include_ids: bool = False):
         results = self.results.select_related("message", "evaluator", "session").all()
         table_by_message = defaultdict(dict)
         for result in results:
@@ -329,6 +329,9 @@ class EvaluationRun(BaseTeamModel):
                 for key, value in result.message.context.items()
                 if key != "current_datetime"
             }
+            if include_ids is True:
+                table_by_message[result.message.id].update({"id": result.message.id})
+
             table_by_message[result.message.id].update(
                 {
                     "Dataset Input": result.message.input.get("content", ""),
