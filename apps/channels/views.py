@@ -3,6 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.decorators import permission_required
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -29,6 +30,7 @@ from apps.channels.serializers import (
 )
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.teams.decorators import login_and_team_required
 
 
 @csrf_exempt
@@ -251,24 +253,13 @@ class ChannelEditDialogView(BaseChannelDialogView):
         return render(request, self.template_name, context)
 
     def post(self, request, team_slug, experiment_id, channel_id):
-        """Handle channel update/delete"""
+        """Handle channel update"""
         channel = get_object_or_404(
             ExperimentChannel, id=channel_id, experiment__id=experiment_id, experiment__team__slug=team_slug
         )
         origin = request.GET.get("origin")
 
-        if request.POST.get("action") == "delete":
-            return self._handle_delete(channel, origin, team_slug, experiment_id)
-
         return self._handle_update(channel, origin, team_slug, experiment_id)
-
-    def _handle_delete(self, channel, origin, team_slug, experiment_id):
-        """Handle channel deletion"""
-        if not self.request.user.has_perm("bot_channels.delete_experimentchannel"):
-            raise PermissionDenied
-
-        channel.soft_delete()
-        return self._redirect_based_on_origin(origin, team_slug, experiment_id)
 
     def _handle_update(self, channel, origin, team_slug, experiment_id):
         """Handle channel update"""
@@ -378,3 +369,22 @@ class ChannelCreateDialogView(BaseChannelDialogView):
                     messages.warning(request, extra_form.warning_message)
 
         return self._redirect_based_on_origin(origin, team_slug, experiment_id)
+
+def _redirect_based_on_origin(origin: str, team_slug: str, experiment_id: int):
+    """Helper function for redirecting based on origin"""
+    if origin == "chatbots":
+        return reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
+    else:
+        return reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
+
+
+@login_and_team_required
+@permission_required("bot_channels.delete_experimentchannel")
+def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
+    channel = get_object_or_404(
+        ExperimentChannel, id=channel_id, experiment__id=experiment_id, experiment__team__slug=team_slug
+    )
+    origin = request.GET.get("origin")
+    channel.soft_delete()
+    redirect_url = _redirect_based_on_origin(origin, team_slug, experiment_id)
+    return HttpResponse(headers={"hx-redirect": redirect_url})
