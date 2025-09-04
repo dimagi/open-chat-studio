@@ -1,5 +1,6 @@
 import uuid
 
+from anymail.utils import EmailAddress
 from django.conf import settings
 from django.contrib import messages
 from django.http import HttpResponseRedirect
@@ -22,6 +23,14 @@ def accept_invitation(request, invitation_id: uuid.UUID):
     user_email_matches = False
     if request.user.is_authenticated:
         user_email_matches = request.user.email.lower() == invitation.email.lower()
+        if not user_email_matches:
+            # If the current user's email doesn't match the invitation,
+            # check if they have an email that does match.
+            # We don't check verified emails since email verification has the
+            # same level of security as invitations.
+            user_email_matches = EmailAddress.objects.filter(
+                email__iexact=invitation.email, user__id=request.user.id
+            ).exists()
     if user_email_matches and is_member(request.user, invitation.team):
         messages.info(
             request,
