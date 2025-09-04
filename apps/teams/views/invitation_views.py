@@ -40,7 +40,7 @@ def accept_invitation(request, invitation_id: uuid.UUID):
             if invitation.is_accepted:
                 messages.error(request, _("Sorry, it looks like that invitation link has expired."))
                 return HttpResponseRedirect(reverse("web:home"))
-            else:
+            elif user_email_matches:
                 process_invitation(invitation, request.user)
                 clear_invite_from_session(request)
                 messages.success(request, _("You successfully joined {}").format(invitation.team.name))
