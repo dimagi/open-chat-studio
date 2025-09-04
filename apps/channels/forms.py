@@ -173,15 +173,15 @@ class SlackChannelForm(ExtraFormBase):
         label="Where should this bot operate?",
         choices=[
             ("specific", "Specific channel"),
-            ("all", "All unassigned channels"),
+            ("all", "All channels"),
         ],
         widget=forms.RadioSelect(attrs={"x-model": "channelScope"}),
     )
     routing_method = forms.ChoiceField(
-        label="How should this bot receive messages in unassigned channels?",
+        label="How should this bot receive messages?",
         choices=[
             ("keywords", "Respond to specific keywords"),
-            ("default", "Default fallback (unmatched messages)"),
+            ("default", "Default fallback (no matched keywords)"),
         ],
         widget=forms.RadioSelect(attrs={"control_attrs": {"x-show": "channelScope === 'all'"}}),
         required=False,
@@ -212,6 +212,11 @@ class SlackChannelForm(ExtraFormBase):
     )
 
     def __init__(self, *args, **kwargs):
+        # Handle channel parameter for editing existing channels
+        channel = kwargs.pop("channel", None)
+        if channel:
+            self.instance = channel
+
         initial = kwargs.setdefault("initial", {})
 
         # Set channel scope based on existing data
@@ -335,49 +340,52 @@ class SlackChannelForm(ExtraFormBase):
         return cleaned_data
 
     def _validate_unique_keywords(self, keywords):
-        """Check that keywords are not already used by other channels in this team"""
+        """Check that keywords are not already used by other channels system-wide"""
 
-        # Get all other Slack channels for this team (excluding current instance if editing)
+        current_channel_id = self._get_current_channel_id()
+
+        if not self.messaging_provider:
+            return  # Can't validate without messaging provider context
+
+        # Get all other Slack channels using the same messaging provider (system-wide)
+        # Keywords must be unique across the entire Slack workspace
         queryset = ExperimentChannel.objects.filter(
-            team=self.channel.team if hasattr(self, "channel") else self.messaging_provider.team,
+            messaging_provider=self.messaging_provider,
             platform=ChannelPlatform.SLACK,
             deleted=False,
         )
 
-        # Exclude current instance if we're editing
-        if hasattr(self, "channel") and self.channel.pk:
-            queryset = queryset.exclude(pk=self.channel.pk)
+        if current_channel_id:
+            queryset = queryset.exclude(pk=current_channel_id)
 
-        # Fetch all channels with their extra_data in a single query to avoid N+1
-        channels_with_keywords = queryset.exclude(extra_data__keywords__isnull=True).values(
-            "name", "extra_data__keywords"
-        )
-
-        # Check for keyword conflicts
-        keywords_set = set(keywords)
-        for channel_data in channels_with_keywords:
-            existing_keywords = channel_data.get("extra_data__keywords", [])
+        # Check each existing channel's keywords
+        for channel in queryset:
+            existing_keywords = channel.extra_data.get("keywords", [])
             if existing_keywords:
-                existing_keywords_set = set(existing_keywords)
-                conflicts = keywords_set & existing_keywords_set
+                conflicts = set(keywords) & set(existing_keywords)
                 if conflicts:
                     conflict_list = ", ".join(sorted(conflicts))
-                    raise forms.ValidationError(f"Keywords already in use by '{channel_data['name']}': {conflict_list}")
+                    raise forms.ValidationError(f"Keywords already in use by '{channel.name}': {conflict_list}")
 
     def _validate_unique_default(self):
-        """Check that there isn't already a default bot for this team"""
+        """Check that there isn't already a default bot for this messaging provider"""
 
-        # Get all other Slack channels for this team (excluding current instance if editing)
+        current_channel_id = self._get_current_channel_id()
+
+        if not self.messaging_provider:
+            return  # Can't validate without messaging provider context
+
+        # Get all other Slack channels using the same messaging provider (system-wide)
+        # Default bots must be unique across the entire Slack workspace
         queryset = ExperimentChannel.objects.filter(
-            team=self.channel.team if hasattr(self, "channel") else self.messaging_provider.team,
+            messaging_provider=self.messaging_provider,
             platform=ChannelPlatform.SLACK,
             deleted=False,
             extra_data__is_default=True,
         )
 
-        # Exclude current instance if we're editing
-        if hasattr(self, "channel") and self.channel.pk:
-            queryset = queryset.exclude(pk=self.channel.pk)
+        if current_channel_id:
+            queryset = queryset.exclude(pk=current_channel_id)
 
         if queryset.exists():
             existing_default = queryset.first()
@@ -385,6 +393,37 @@ class SlackChannelForm(ExtraFormBase):
                 f"There is already a default bot: '{existing_default.name}'. "
                 f"Please remove the default setting from that bot first."
             )
+
+    def _get_current_channel_id(self):
+        """Get current channel ID, with fallback logic for missing instance"""
+        # Try instance first
+        if hasattr(self, "instance") and self.instance and hasattr(self.instance, "pk") and self.instance.pk:
+            return self.instance.pk
+
+        # Fallback: try to find existing channel by name and messaging provider
+        # Note: We don't use team here because multiple teams can have channels with the same name
+        # If there are multiple matches, we'll skip the fallback to avoid ambiguity
+        if self.messaging_provider:
+            channel_name = self.data.get("name") or self.initial.get("name")
+            if channel_name:
+                try:
+                    # Look for channels with matching name and messaging provider
+                    matching_channels = ExperimentChannel.objects.filter(
+                        name=channel_name,
+                        platform=ChannelPlatform.SLACK,
+                        messaging_provider=self.messaging_provider,
+                        deleted=False,
+                    )
+
+                    # If exactly one match, use it. If multiple matches, skip fallback to avoid confusion
+                    if matching_channels.count() == 1:
+                        existing_channel = matching_channels.first()
+                        # Set instance for consistency
+                        self.instance = existing_channel
+                        return existing_channel.pk
+                except ExperimentChannel.DoesNotExist:
+                    pass  # New channel
+        return None
 
     def post_save(self, channel: ExperimentChannel):
         channel_id = self.cleaned_data["slack_channel_id"]
