@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 
 from apps.experiments.models import Experiment
 from apps.pipelines.helper import (
@@ -85,10 +85,17 @@ class Command(BaseCommand):
             experiments_to_convert = [experiment]
             experiment_count = 1
         else:
-            default_experiments = Experiment.objects.filter(
-                query & Q(is_default_version=True, working_version__isnull=False)
+            # ignore 'child' experiments since they will get migrated with their parent
+            default_experiments = (
+                Experiment.objects.filter(query & Q(is_default_version=True, working_version__isnull=False))
+                .annotate(parent_count=Count("parents"))
+                .filter(parent_count=0)
             )
-            working_experiments = Experiment.objects.filter(query & Q(working_version__isnull=True))
+            working_experiments = (
+                Experiment.objects.filter(query & Q(working_version__isnull=True))
+                .annotate(parent_count=Count("parents"))
+                .filter(parent_count=0)
+            )
             combined_ids = list(default_experiments.union(working_experiments).values_list("id", flat=True))
             experiments_queryset = Experiment.objects.filter(id__in=combined_ids).select_related(
                 "team", "assistant", "llm_provider", "llm_provider_model"
