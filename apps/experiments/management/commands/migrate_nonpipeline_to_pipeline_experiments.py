@@ -84,20 +84,16 @@ class Command(BaseCommand):
             experiments_to_convert = [experiment]
             experiment_count = 1
         else:
-            default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
-            default_working_version_ids = default_experiments.exclude(working_version__isnull=True).values_list(
-                "working_version_id", flat=True
+            default_experiments = Experiment.objects.filter(
+                query & Q(is_default_version=True, working_version__isnull=False)
             )
-            working_experiments = Experiment.objects.filter(query & Q(working_version__isnull=True)).exclude(
-                id__in=default_working_version_ids
-            )
+            working_experiments = Experiment.objects.filter(query & Q(working_version__isnull=True))
             combined_ids = list(default_experiments.union(working_experiments).values_list("id", flat=True))
-            experiments_to_convert = (
-                Experiment.objects.filter(id__in=combined_ids)
-                .select_related("team", "assistant", "llm_provider", "llm_provider_model")
-                .iterator(20)
+            experiments_queryset = Experiment.objects.filter(id__in=combined_ids).select_related(
+                "team", "assistant", "llm_provider", "llm_provider_model"
             )
-            experiment_count = experiments_to_convert.count()
+            experiment_count = experiments_queryset.count()
+            experiments_to_convert = experiments_queryset.iterator(20)
 
         if not experiment_count:
             self.stdout.write(self.style.WARNING("No matching experiments found."))
