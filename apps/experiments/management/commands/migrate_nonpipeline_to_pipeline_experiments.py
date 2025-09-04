@@ -63,7 +63,8 @@ class Command(BaseCommand):
         if experiment_id:
             query &= Q(id=experiment_id)
             experiment = (
-                Experiment.objects.filter(query)
+                Experiment.objects.get_all()
+                .filter(query)
                 .select_related("team", "assistant", "llm_provider", "llm_provider_model")
                 .first()
             )
@@ -81,6 +82,10 @@ class Command(BaseCommand):
                     )
                 )
                 return
+
+            if experiment.is_archived:
+                self.stdout.write(self.style.WARNING(f"Experiment {experiment_id} is archived."))
+                skip_confirmation = False  # force confirmation
 
             experiments_to_convert = [experiment]
             experiment_count = 1
