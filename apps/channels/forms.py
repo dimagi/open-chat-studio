@@ -1,4 +1,5 @@
 import logging
+import re
 from functools import cached_property
 
 import phonenumbers
@@ -168,20 +169,29 @@ class FacebookChannelForm(WebhookUrlFormBase):
 
 
 class SlackChannelForm(ExtraFormBase):
-    channel_mode = forms.ChoiceField(
-        label="Channel Mode",
+    channel_scope = forms.ChoiceField(
+        label="Where should this bot operate?",
         choices=[
-            ("channel", "Listen on a specific channel"),
-            ("all", "Listen on all unassigned channels"),
-            ("keywords", "Listen for specific keywords in messages"),
+            ("specific", "Specific channel"),
+            ("all", "All unassigned channels"),
         ],
-        widget=forms.RadioSelect(attrs={"x-model": "channelMode"}),
+        widget=forms.RadioSelect(attrs={"x-model": "channelScope"}),
+    )
+    routing_method = forms.ChoiceField(
+        label="How should this bot receive messages in unassigned channels?",
+        choices=[
+            ("keywords", "Respond to specific keywords"),
+            ("default", "Default fallback (unmatched messages)"),
+        ],
+        widget=forms.RadioSelect(attrs={"control_attrs": {"x-show": "channelScope === 'all'"}}),
+        required=False,
     )
     slack_channel_name = forms.CharField(
-        label="Slack Channel",
+        label="Channel Name",
         max_length=100,
-        widget=forms.TextInput(attrs={"control_attrs": {"x-show": "channelMode === 'channel'"}}),
+        widget=forms.TextInput(attrs={"control_attrs": {"x-show": "channelScope === 'specific'"}}),
         required=False,
+        help_text="Enter the channel name (e.g., general, support)",
     )
     slack_channel_id = forms.CharField(widget=forms.HiddenInput(), required=False)
     keywords = forms.CharField(
@@ -189,35 +199,44 @@ class SlackChannelForm(ExtraFormBase):
         max_length=500,
         widget=forms.TextInput(
             attrs={
-                "control_attrs": {"x-show": "channelMode === 'keywords'"},
-                "placeholder": "health, benefits, medical (comma-separated)",
+                "control_attrs": {"x-show": "routingMethod === 'keywords'"},
+                "placeholder": "health, benefits, hr-support (comma-separated)",
             }
         ),
         required=False,
-        help_text="Comma-separated keywords that will route messages to this bot. Example: health, benefits, medical",
-    )
-    is_default = forms.BooleanField(
-        label="Default Bot",
-        required=False,
-        widget=forms.CheckboxInput(attrs={"control_attrs": {"x-show": "channelMode === 'keywords'"}}),
-        help_text="This bot will handle messages that don't match any other keywords",
+        help_text=(
+            "Comma-separated keywords that will route messages to this bot when used as the first word after "
+            "@mention (max 5 keywords, 25 chars each). Only letters, numbers, and hyphens allowed. "
+            "Example: health, benefits, hr-support"
+        ),
     )
 
     def __init__(self, *args, **kwargs):
         initial = kwargs.setdefault("initial", {})
+
+        # Set channel scope based on existing data
         if initial.get("slack_channel_id") == SLACK_ALL_CHANNELS:
-            if initial.get("keywords") or initial.get("is_default"):
-                initial["channel_mode"] = "keywords"
+            initial["channel_scope"] = "all"
+            # Set routing method for "all channels"
+            if initial.get("is_default"):
+                initial["routing_method"] = "default"
+            elif initial.get("keywords"):
+                initial["routing_method"] = "keywords"
             else:
-                initial["channel_mode"] = "all"
+                initial["routing_method"] = "default"
         else:
-            initial["channel_mode"] = "channel"
+            initial["channel_scope"] = "specific"
+            # routing_method not needed for specific channels
 
         # Set keywords field from extra_data
         if "keywords" in initial and isinstance(initial["keywords"], list):
             initial["keywords"] = ", ".join(initial["keywords"])
 
-        self.form_attrs = {"x-data": '{{"channelMode": "{}"}}'.format(initial["channel_mode"])}
+        self.form_attrs = {
+            "x-data": '{{"channelScope": "{}", "routingMethod": "{}"}}'.format(
+                initial.get("channel_scope", "specific"), initial.get("routing_method", "default")
+            )
+        }
         super().__init__(*args, **kwargs)
 
     def clean_slack_channel_name(self):
@@ -234,58 +253,84 @@ class SlackChannelForm(ExtraFormBase):
         # Parse comma-separated keywords and clean them
         keywords = [kw.strip().lower() for kw in keywords_str.split(",") if kw.strip()]
 
+        # Validate keyword count
+        if len(keywords) > 5:
+            raise forms.ValidationError("Too many keywords (maximum 5 allowed)")
+
+        # Validate and sanitize each keyword
+        sanitized_keywords = []
+        for kw in keywords:
+            # Check length
+            if len(kw) > 25:
+                raise forms.ValidationError(f"Keyword '{kw}' is too long (maximum 25 characters)")
+
+            # Check for empty keywords after cleaning
+            if not kw:
+                raise forms.ValidationError("Keywords cannot be empty")
+
+            # Sanitize: allow only alphanumeric and hyphens (no spaces for single-word matching)
+            if not re.match(r"^[a-zA-Z0-9\-]+$", kw):
+                raise forms.ValidationError(
+                    f"Keyword '{kw}' contains invalid characters. Only letters, numbers, and hyphens are allowed."
+                )
+
+            sanitized_keywords.append(kw)
+
         # Remove duplicates while preserving order
         seen = set()
         unique_keywords = []
-        for kw in keywords:
+        for kw in sanitized_keywords:
             if kw not in seen:
                 seen.add(kw)
                 unique_keywords.append(kw)
+
+        # Check if duplicates were removed
+        if len(unique_keywords) != len(sanitized_keywords):
+            raise forms.ValidationError("Duplicate keywords are not allowed")
 
         return unique_keywords
 
     def clean(self):
         cleaned_data = super().clean()
-        channel_mode = cleaned_data.get("channel_mode")
+        channel_scope = cleaned_data.get("channel_scope")
+        routing_method = cleaned_data.get("routing_method")
 
-        if channel_mode == "all":
-            cleaned_data["slack_channel_id"] = SLACK_ALL_CHANNELS
-            cleaned_data["slack_channel_name"] = SLACK_ALL_CHANNELS
+        if channel_scope == "specific":
+            # Specific channel - validate channel exists
+            if self.messaging_provider:
+                service = self.messaging_provider.get_messaging_service()
+                channel_name = cleaned_data.get("slack_channel_name", "").strip()
+                if not channel_name:
+                    raise forms.ValidationError("Channel name is required for specific channels.")
+
+                channel = service.get_channel_by_name(channel_name)
+                if not channel:
+                    raise forms.ValidationError(f"No channel found with name {channel_name}")
+                cleaned_data["slack_channel_id"] = channel["id"]
+
+            # Specific channels don't use keywords or default routing
             cleaned_data["keywords"] = []
             cleaned_data["is_default"] = False
 
-        elif channel_mode == "keywords":
+        elif channel_scope == "all":
+            # All channels - set up based on routing method
             cleaned_data["slack_channel_id"] = SLACK_ALL_CHANNELS
             cleaned_data["slack_channel_name"] = SLACK_ALL_CHANNELS
 
-            keywords = cleaned_data.get("keywords", [])
-            is_default = cleaned_data.get("is_default", False)
+            if routing_method == "keywords":
+                keywords = cleaned_data.get("keywords", [])
+                if not keywords:
+                    raise forms.ValidationError("Keywords are required when using keyword routing.")
 
-            # Validate that either keywords or is_default is set
-            if not keywords and not is_default:
-                raise forms.ValidationError("You must either specify keywords or mark this as the default bot.")
-
-            # Validate that keywords and is_default are not both set
-            if keywords and is_default:
-                raise forms.ValidationError("A bot cannot have both keywords and be the default bot.")
-
-            # Check for duplicate keywords across other channels
-            if keywords:
+                # Check for duplicate keywords across other channels
                 self._validate_unique_keywords(keywords)
+                cleaned_data["is_default"] = False
 
-            # Check for duplicate default bot
-            if is_default:
+            elif routing_method == "default":
+                # Check for duplicate default bot
                 self._validate_unique_default()
-
-        elif self.messaging_provider:
-            service = self.messaging_provider.get_messaging_service()
-            channel_name = cleaned_data["slack_channel_name"]
-            channel = service.get_channel_by_name(channel_name)
-            if not channel:
-                raise forms.ValidationError(f"No channel found with name {channel_name}")
-            cleaned_data["slack_channel_id"] = channel["id"]
-            cleaned_data["keywords"] = []
-            cleaned_data["is_default"] = False
+                cleaned_data["keywords"] = []
+                cleaned_data["is_default"] = True
 
         return cleaned_data
 
@@ -303,14 +348,21 @@ class SlackChannelForm(ExtraFormBase):
         if hasattr(self, "channel") and self.channel.pk:
             queryset = queryset.exclude(pk=self.channel.pk)
 
-        # Check each existing channel's keywords
-        for channel in queryset:
-            existing_keywords = channel.extra_data.get("keywords", [])
+        # Fetch all channels with their extra_data in a single query to avoid N+1
+        channels_with_keywords = queryset.exclude(extra_data__keywords__isnull=True).values(
+            "name", "extra_data__keywords"
+        )
+
+        # Check for keyword conflicts
+        keywords_set = set(keywords)
+        for channel_data in channels_with_keywords:
+            existing_keywords = channel_data.get("extra_data__keywords", [])
             if existing_keywords:
-                conflicts = set(keywords) & set(existing_keywords)
+                existing_keywords_set = set(existing_keywords)
+                conflicts = keywords_set & existing_keywords_set
                 if conflicts:
                     conflict_list = ", ".join(sorted(conflicts))
-                    raise forms.ValidationError(f"Keywords already in use by '{channel.name}': {conflict_list}")
+                    raise forms.ValidationError(f"Keywords already in use by '{channel_data['name']}': {conflict_list}")
 
     def _validate_unique_default(self):
         """Check that there isn't already a default bot for this team"""

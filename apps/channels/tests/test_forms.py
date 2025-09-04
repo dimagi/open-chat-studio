@@ -1,9 +1,10 @@
 from unittest.mock import PropertyMock, patch
 
 import pytest
+from django import forms
 from django.forms.widgets import HiddenInput, Select
 
-from apps.channels.forms import ChannelForm, WhatsappChannelForm
+from apps.channels.forms import ChannelForm, SlackChannelForm, WhatsappChannelForm
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
@@ -77,3 +78,70 @@ def test_whatsapp_form_checks_number(
         assert form.warning_message == (
             f"{number} was not found at the provider. Please make sure it is there before proceeding"
         )
+
+
+# Slack form validation tests - focusing on keyword parsing only
+@pytest.mark.parametrize(
+    ("keywords_input", "is_valid", "expected_count"),
+    [
+        ("health, benefits, medical", True, 3),
+        ("health,benefits,medical", True, 3),  # No spaces
+        ("health, benefits, medical, support, hr", True, 5),  # Max allowed
+        ("health, benefits, medical, support, hr, extra", False, 0),  # Too many
+        ("health", True, 1),  # Single keyword
+    ],
+)
+def test_slack_form_keyword_parsing(keywords_input, is_valid, expected_count):
+    """Test keyword parsing and count validation (max 5)"""
+    form = SlackChannelForm()
+    form.cleaned_data = {"keywords": keywords_input}
+
+    if is_valid:
+        result = form.clean_keywords()
+        assert len(result) == expected_count
+    else:
+        with pytest.raises(forms.ValidationError) as exc_info:
+            form.clean_keywords()
+        assert "Too many keywords" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("keyword", "is_valid"),
+    [
+        ("health", True),
+        ("health-care", True),  # Hyphens allowed
+        ("health-care2", True),  # Hyphens and numbers allowed
+        ("health123", True),  # Numbers allowed
+        ("health_care", False),  # Underscores not allowed
+        ("health care", False),  # Spaces not allowed (single-word keywords only)
+        ("health@care", False),  # Special chars not allowed
+        ("a" * 25, True),  # Max length
+        ("a" * 26, False),  # Too long
+        ("   ", True),  # Empty after strip becomes empty list
+    ],
+)
+def test_slack_form_keyword_character_validation(keyword, is_valid):
+    """Test keyword character and length validation"""
+    form = SlackChannelForm()
+    form.cleaned_data = {"keywords": keyword}
+
+    if is_valid:
+        result = form.clean_keywords()
+        if keyword.strip():  # Non-empty keyword
+            assert len(result) == 1
+            assert result[0] == keyword.lower()
+        else:  # Empty keyword becomes empty list
+            assert len(result) == 0
+    else:
+        with pytest.raises(forms.ValidationError):
+            form.clean_keywords()
+
+
+def test_slack_form_duplicate_keywords_validation():
+    """Test that duplicate keywords are rejected"""
+    form = SlackChannelForm()
+    form.cleaned_data = {"keywords": "health, benefits, health"}  # Duplicate "health"
+
+    with pytest.raises(forms.ValidationError) as exc_info:
+        form.clean_keywords()
+    assert "Duplicate keywords are not allowed" in str(exc_info.value)

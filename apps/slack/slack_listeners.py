@@ -174,16 +174,28 @@ def _is_dm_channel(channel_id: str) -> bool:
 
 
 def _find_keyword_match(channels: list[ExperimentChannel], message_text: str) -> ExperimentChannel | None:
-    """Find a channel that matches keywords in the message text"""
-    message_lower = message_text.lower()
+    """Find a channel that matches the first word after bot mention"""
+    if not message_text:
+        return None
 
-    # Look for channels with keywords that match the message
+    # Extract first word after bot mention (remove <@USERID> and get first word)
+    # Pattern: <@U123456> keyword rest of message
+    # Allow letters, numbers, and hyphens in keywords
+    bot_mention_pattern = r"<@[A-Z0-9]+>\s*([a-zA-Z0-9\-]+)"
+    match = re.search(bot_mention_pattern, message_text)
+
+    if not match:
+        return None
+
+    first_word = match.group(1).lower()
+
+    # Look for channels with keywords that match the first word
     for channel in channels:
         keywords = channel.extra_data.get("keywords", [])
         if keywords:
-            # Check if any keyword appears in the message
+            # Check if first word matches any keyword for this channel
             for keyword in keywords:
-                if keyword.lower() in message_lower:
+                if keyword.lower() == first_word:
                     return channel
 
     return None

@@ -193,3 +193,120 @@ def experiment_channel(experiment):
     return ExperimentChannelFactory(
         experiment=experiment, platform=ChannelPlatform.SLACK, extra_data={"slack_channel_id": SLACK_CHANNEL_ID}
     )
+
+
+@pytest.fixture()
+def keyword_channel(experiment):
+    return ExperimentChannelFactory(
+        experiment=experiment,
+        platform=ChannelPlatform.SLACK,
+        extra_data={"slack_channel_id": "*", "keywords": ["health", "benefits"]},
+    )
+
+
+@pytest.fixture()
+def default_channel(experiment):
+    return ExperimentChannelFactory(
+        experiment=experiment, platform=ChannelPlatform.SLACK, extra_data={"slack_channel_id": "*", "is_default": True}
+    )
+
+
+# Keyword routing tests
+@pytest.mark.django_db()
+def test_keyword_routing_matches_first_word(keyword_channel, bolt_context):
+    """Test that keyword matching works when keyword is first word"""
+    bolt_context.client.chat_postMessage = MagicMock()
+
+    # Should match "health" as first word after mention
+    health_event = BOT_MENTION_EVENT.copy()
+    health_event["text"] = f"<@{BOT_USER_ID}> health what are my options?"
+
+    with mock_llm(responses=["Health info response"]):
+        new_message(health_event, bolt_context)
+
+    bolt_context.client.chat_postMessage.assert_called_once()
+    assert ExperimentSession.objects.count() == 1
+
+
+@pytest.mark.django_db()
+def test_keyword_routing_first_word_only():
+    """Test that only the first word after bot mention is used for routing"""
+    from unittest.mock import Mock
+
+    from apps.slack.slack_listeners import _find_keyword_match
+
+    # Create channels with keywords
+    channels = [
+        Mock(extra_data={"keywords": ["health", "benefits"]}),
+        Mock(extra_data={"keywords": ["support", "help"]}),
+    ]
+
+    # Test messages that should NOT match (keyword not first word)
+    assert _find_keyword_match(channels, "<@U123456> I need health information") is None  # "health" not first
+    assert _find_keyword_match(channels, "<@U123456> What are my benefits?") is None  # "benefits" not first
+    assert _find_keyword_match(channels, "<@U123456> Can you help me?") is None  # "help" not first
+
+    # Test messages that SHOULD match (keyword is first word)
+    assert _find_keyword_match(channels, "<@U123456> health what are my options?") is not None  # "health" first
+    assert _find_keyword_match(channels, "<@U123456> benefits information please") is not None  # "benefits" first
+    assert _find_keyword_match(channels, "<@U123456> support I need help") is not None  # "support" first
+
+
+@pytest.mark.django_db()
+def test_keyword_routing_case_insensitive(keyword_channel, bolt_context):
+    """Test that keyword matching is case insensitive"""
+    bolt_context.client.chat_postMessage = MagicMock()
+
+    case_event = BOT_MENTION_EVENT.copy()
+    case_event["text"] = f"<@{BOT_USER_ID}> HEALTH what about coverage?"
+
+    with mock_llm(responses=["Coverage info"]):
+        new_message(case_event, bolt_context)
+
+    bolt_context.client.chat_postMessage.assert_called_once()
+
+
+@pytest.mark.django_db()
+def test_channel_routing_priority(experiment, bolt_context):
+    """Test routing priority: specific channel > keywords > default"""
+    # Create channels with different priorities
+    specific_channel = ExperimentChannelFactory(
+        experiment=experiment, platform=ChannelPlatform.SLACK, extra_data={"slack_channel_id": SLACK_CHANNEL_ID}
+    )
+    ExperimentChannelFactory(
+        experiment=experiment,
+        platform=ChannelPlatform.SLACK,
+        extra_data={"slack_channel_id": "*", "keywords": ["help"]},
+    )
+    ExperimentChannelFactory(
+        experiment=experiment, platform=ChannelPlatform.SLACK, extra_data={"slack_channel_id": "*", "is_default": True}
+    )
+
+    bolt_context.client.chat_postMessage = MagicMock()
+
+    # Message with keyword should go to specific channel (highest priority)
+    priority_event = BOT_MENTION_EVENT.copy()
+    priority_event["text"] = f"<@{BOT_USER_ID}> I need help"
+
+    with mock_llm(responses=["Specific channel response"]):
+        new_message(priority_event, bolt_context)
+
+    # Verify session was created with specific channel
+    session = ExperimentSession.objects.get()
+    assert session.experiment_channel == specific_channel
+
+
+@pytest.mark.django_db()
+def test_default_bot_fallback(default_channel, bolt_context):
+    """Test that default bot handles unmatched messages"""
+    bolt_context.client.chat_postMessage = MagicMock()
+
+    fallback_event = BOT_MENTION_EVENT.copy()
+    fallback_event["text"] = f"<@{BOT_USER_ID}> random question"
+
+    with mock_llm(responses=["Default response"]):
+        new_message(fallback_event, bolt_context)
+
+    bolt_context.client.chat_postMessage.assert_called_once()
+    session = ExperimentSession.objects.get()
+    assert session.experiment_channel == default_channel
