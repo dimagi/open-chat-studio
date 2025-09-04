@@ -81,7 +81,7 @@ class Command(BaseCommand):
                 )
                 return
 
-            experiments_to_convert = experiment
+            experiments_to_convert = [experiment]
             experiment_count = 1
         else:
             default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
@@ -92,8 +92,10 @@ class Command(BaseCommand):
                 id__in=default_working_version_ids
             )
             combined_ids = list(default_experiments.union(working_experiments).values_list("id", flat=True))
-            experiments_to_convert = Experiment.objects.filter(id__in=combined_ids).select_related(
-                "team", "assistant", "llm_provider", "llm_provider_model"
+            experiments_to_convert = (
+                Experiment.objects.filter(id__in=combined_ids)
+                .select_related("team", "assistant", "llm_provider", "llm_provider_model")
+                .iterator(20)
             )
             experiment_count = experiments_to_convert.count()
 
@@ -104,11 +106,8 @@ class Command(BaseCommand):
         self.stdout.write(f"Found {experiment_count} experiments to migrate:")
 
         if dry_run:
-            if experiment_count == 1:
-                self._log_experiment_info(experiments_to_convert)
-            else:
-                for experiment in experiments_to_convert.iterator(20):
-                    self._log_experiment_info(experiment)
+            for experiment in experiments_to_convert:
+                self._log_experiment_info(experiment)
             self.stdout.write(self.style.WARNING("\nDry run - no changes will be made."))
             return
 
@@ -120,13 +119,8 @@ class Command(BaseCommand):
 
         converted_count = 0
         failed_count = 0
-        if experiment_count == 1:
-            converted_count, failed_count = self._process_expriment(
-                experiments_to_convert, converted_count, failed_count
-            )
-        else:
-            for experiment in experiments_to_convert.iterator(20):
-                converted_count, failed_count = self._process_experiment(experiment, converted_count, failed_count)
+        for experiment in experiments_to_convert:
+            converted_count, failed_count = self._process_experiment(experiment, converted_count, failed_count)
         self.stdout.write(
             self.style.SUCCESS(f"\nMigration is complete!: {converted_count} succeeded, {failed_count} failed")
         )
