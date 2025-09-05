@@ -214,11 +214,7 @@ class BaseChannelDialogView(View):
         origin = self.request.GET.get("origin", "experiments")
         team_slug = self.kwargs["team_slug"]
         experiment_id = self.kwargs["experiment_id"]
-
-        if origin == "chatbots":
-            return reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
-        else:
-            return reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
+        return get_redirect_url(origin, team_slug, experiment_id)
 
     def form_valid(self, form):
         try:
@@ -367,13 +363,11 @@ class ChannelCreateDialogView(BaseChannelDialogView, CreateView):
         return super().dispatch(request, *args, **kwargs)
 
 
-def redirect_based_on_origin(origin: str, team_slug: str, experiment_id: int):
-    """Helper method for getting redirect URL based on origin"""
+def get_redirect_url(origin: str, team_slug: str, experiment_id: int) -> str:
+    """Return the URL to redirect to based on origin"""
     if origin == "chatbots":
         return reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
-    else:
-        return reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
-
+    return reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
 
 @login_and_team_required
 @permission_required("bot_channels.delete_experimentchannel")
@@ -383,5 +377,5 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
     )
     origin = request.GET.get("origin")
     channel.soft_delete()
-    redirect_url = redirect_based_on_origin(origin, team_slug, experiment_id)
+    redirect_url = get_redirect_url(origin, team_slug, experiment_id)
     return HttpResponse(headers={"hx-redirect": redirect_url})
