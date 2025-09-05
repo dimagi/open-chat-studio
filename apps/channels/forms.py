@@ -10,6 +10,7 @@ from telebot import TeleBot, apihelper, types
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.utils import validate_platform_availability
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
@@ -66,37 +67,32 @@ class ChannelFormWrapper(forms.Form):
             for field_name, field in self.extra_form.fields.items():
                 self.fields[field_name] = field
 
-    def clean(self):
-        cleaned_data = super().clean()
-
-        # Run cleaning on both forms
-        self.channel_form.full_clean()
-        if self.extra_form:
-            self.extra_form.full_clean()
-
-        # Merge cleaned data
-        if hasattr(self.channel_form, "cleaned_data"):
-            cleaned_data.update(self.channel_form.cleaned_data)
-        if self.extra_form and hasattr(self.extra_form, "cleaned_data"):
-            cleaned_data.update(self.extra_form.cleaned_data)
-
-        platform = ChannelPlatform(cleaned_data["platform"])
-        channel_identifier = cleaned_data.get(platform.channel_identifier_key, "")
-
-        try:
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=channel_identifier, new_experiment=self.channel.experiment
-            )
-        except ChannelAlreadyUtilizedException as e:
-            self.channel_form.add_error(None, e.html_message)
-
-        return cleaned_data
-
     def is_valid(self):
         """Validate both forms"""
         channel_valid = self.channel_form.is_valid()
         extra_valid = self.extra_form.is_valid() if self.extra_form else True
-        return channel_valid and extra_valid
+        if channel_valid and extra_valid:
+            self.validate_platform()
+            self.validate_channel_config(self.channel_form.cleaned_data["platform"], self.extra_form.cleaned_data)
+
+        return not self.channel_form.errors and extra_valid
+
+    def validate_platform(self):
+        try:
+            validate_platform_availability(self.experiment, self.platform)
+        except ExperimentChannelException as e:
+            self.channel_form.add_error(None, str(e))
+
+    def validate_channel_config(self, platform_slug: str, config_data: dict):
+        platform = ChannelPlatform(platform_slug)
+        channel_identifier = config_data.get(platform.channel_identifier_key, "")
+
+        try:
+            ExperimentChannel.check_usage_by_another_experiment(
+                platform, identifier=channel_identifier, new_experiment=self.experiment
+            )
+        except ChannelAlreadyUtilizedException as e:
+            self.channel_form.add_error(None, e.html_message)
 
     @property
     def errors(self):
