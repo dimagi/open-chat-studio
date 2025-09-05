@@ -22,6 +22,7 @@ class ChannelFormWrapper(forms.Form):
     A wrapper class that combines ChannelForm and platform-specific extra forms
     to work with Django's built-in CreateView and UpdateView.
     """
+
     def __init__(self, *args, **kwargs):
         self.experiment = kwargs.pop("experiment", None)
         self.channel = kwargs.pop("channel", None)
@@ -96,15 +97,9 @@ class ChannelFormWrapper(forms.Form):
             platform = ChannelPlatform(self.channel_form.cleaned_data["platform"])
             channel_identifier = config_data.get(platform.channel_identifier_key, "")
 
-            from apps.channels.models import ExperimentChannel
-            from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-
-            try:
-                ExperimentChannel.check_usage_by_another_experiment(
-                    platform, identifier=channel_identifier, new_experiment=self.channel.experiment
-                )
-            except ChannelAlreadyUtilizedException:
-                raise
+            ExperimentChannel.check_usage_by_another_experiment(
+                platform, identifier=channel_identifier, new_experiment=self.channel.experiment
+            )
 
             instance = self.channel_form.save(self.channel.experiment, config_data)
         else:
