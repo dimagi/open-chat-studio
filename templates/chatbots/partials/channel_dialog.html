@@ -10,35 +10,40 @@
     </h3>
     <form method="post"
       {% if channel %}
-        action="{% url "channels:channel_edit_dialog" request.team.slug experiment.id channel.id %}?origin={{ request.GET.origin|default:'chatbots' }}"
+        hx-post="{% url "channels:channel_edit_dialog" request.team.slug experiment.id channel.id %}?origin={{ request.GET.origin|default:'chatbots' }}"
       {% else %}
-        action="{% url "channels:channel_create_dialog" request.team.slug experiment.id platform.value %}?origin={{ request.GET.origin|default:'chatbots' }}"
+        hx-post="{% url "channels:channel_create_dialog" request.team.slug experiment.id platform.value %}?origin={{ request.GET.origin|default:'chatbots' }}"
       {% endif %}
-      x-data="{ buttonDisabled: false }"
-      x-on:submit.debounce="buttonDisabled = true">
+      hx-target="#{% if channel %}channel_edit_modal_{{ channel.id }}{% else %}channel_create_modal{% endif %}"
+      hx-disabled-elt="input, select, button"
+{#      hx-indicator="#form_saving_indicator"#}
+      hx-swap="outerHTML"
+    >
       {% csrf_token %}
-      {% if channel %}
-        {% render_form_fields form %}
-      {% else %}
-        {% render_form_fields platform_form %}
-      {% endif %}
+      {{ form.non_field_errors }}
+      {% render_form_fields form %}
       {% if extra_form %}
         <div {% include "generic/attrs.html" with attrs=extra_form.form_attrs %}>
           {% render_form_fields extra_form %}
         </div>
       {% endif %}
+      {% if success_message %}
+      {{ success_message }}
+      {% endif %}
+      {% if warning_message %}
+      {{ warning_message }}
+      {% endif %}
       <div class="modal-action">
         {% if channel %}
-          <button class="btn btn-primary" type="submit" name="action" value="update" x-bind:disabled="buttonDisabled">Update</button>
+          <button class="btn btn-primary" type="submit">Update</button>
           <button class="btn btn-error" 
-                  hx-post="{% url 'channels:delete_channel' request.team.slug experiment.id channel.id %}?origin={{ request.GET.origin|default:'chatbots' }}"
-                  x-bind:disabled="buttonDisabled">Delete</button>
+                  hx-post="{% url 'channels:delete_channel' request.team.slug experiment.id channel.id %}?origin={{ request.GET.origin|default:'chatbots' }}">Delete</button>
         {% else %}
-          <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
-          <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
+          <span class="loading loading-spinner loading-sm p-3 ml-4 htmx-indicator"></span>
+          <button class="btn btn-primary" type="submit">Create</button>
         {% endif %}
         <form method="dialog">
-          <button class="btn" x-bind:disabled="buttonDisabled">Close</button>
+          <button class="btn">Close</button>
         </form>
       </div>
     </form>

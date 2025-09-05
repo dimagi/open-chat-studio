@@ -10,6 +10,7 @@ from telebot import TeleBot, apihelper, types
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
 from apps.web.meta import absolute_url
@@ -23,10 +24,10 @@ class ChannelFormWrapper(forms.Form):
     to work with Django's built-in CreateView and UpdateView.
     """
 
-    def __init__(self, *args, **kwargs):
-        self.experiment = kwargs.pop("experiment", None)
-        self.channel = kwargs.pop("channel", None)
-        self.platform = kwargs.pop("platform", None)
+    def __init__(self, experiment, platform, channel=None, *args, **kwargs):
+        self.experiment = experiment
+        self.platform = platform
+        self.channel = channel
 
         super().__init__(*args, **kwargs)
 
@@ -64,6 +65,32 @@ class ChannelFormWrapper(forms.Form):
         if self.extra_form:
             for field_name, field in self.extra_form.fields.items():
                 self.fields[field_name] = field
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        # Run cleaning on both forms
+        self.channel_form.full_clean()
+        if self.extra_form:
+            self.extra_form.full_clean()
+
+        # Merge cleaned data
+        if hasattr(self.channel_form, "cleaned_data"):
+            cleaned_data.update(self.channel_form.cleaned_data)
+        if self.extra_form and hasattr(self.extra_form, "cleaned_data"):
+            cleaned_data.update(self.extra_form.cleaned_data)
+
+        platform = ChannelPlatform(cleaned_data["platform"])
+        channel_identifier = cleaned_data.get(platform.channel_identifier_key, "")
+
+        try:
+            ExperimentChannel.check_usage_by_another_experiment(
+                platform, identifier=channel_identifier, new_experiment=self.channel.experiment
+            )
+        except ChannelAlreadyUtilizedException as e:
+            self.channel_form.add_error(None, e.html_message)
+
+        return cleaned_data
 
     def is_valid(self):
         """Validate both forms"""
@@ -134,8 +161,6 @@ class ChannelForm(forms.ModelForm):
         initial: dict = kwargs.get("initial", {})
         initial.setdefault("name", experiment.name)
         super().__init__(*args, **kwargs)
-        if self.is_bound:
-            return
         platform = self.initial["platform"]
         self._populate_available_message_providers(experiment.team, platform)
 

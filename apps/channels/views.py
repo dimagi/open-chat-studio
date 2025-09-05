@@ -28,7 +28,6 @@ from apps.channels.serializers import (
     ApiResponseMessageSerializer,
     CommCareConnectMessageSerializer,
 )
-from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.teams.decorators import login_and_team_required
 
@@ -217,7 +216,10 @@ class BaseChannelDialogView(View):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["experiment"] = self.experiment
-        kwargs["channel"] = kwargs.pop("instance", None)
+        channel = kwargs.pop("instance", None)
+        kwargs["channel"] = channel
+        if channel:
+            kwargs["platform"] = channel.platform_enum
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -234,6 +236,10 @@ class BaseChannelDialogView(View):
                 "extra_form": extra_form,
             }
         )
+        if form.success_message:
+            context["success_message"] = form.success_message
+        if form.warning_message:
+            context["warning_message"] = form.warning_message
         return context
 
     def get_success_url(self):
@@ -243,28 +249,10 @@ class BaseChannelDialogView(View):
         return get_redirect_url(origin, team_slug, experiment_id)
 
     def form_valid(self, form):
-        try:
-            form.save()
-            if form.success_message:
-                messages.info(self.request, form.success_message)
-
-            if form.warning_message:
-                messages.warning(self.request, form.warning_message)
-
-            return redirect(self.get_success_url())
-        except ChannelAlreadyUtilizedException as e:
-            messages.error(self.request, e.html_message)
-            return redirect(self.get_success_url())
-        except Exception as e:
-            messages.error(self.request, f"Error saving channel: {str(e)}")
-            return redirect(self.get_success_url())
-
-    def form_invalid(self, form):
-        if form.errors:
-            for field, errors in form.errors.items():
-                for error in errors:
-                    messages.error(self.request, f"{field}: {error}")
-        return redirect(self.get_success_url())
+        form.save()
+        if form.success_message or form.warning_message:
+            return self.render_to_response(self.get_context_data(form=form))
+        return HttpResponse(headers={"hx-redirect": self.get_success_url()})
 
 
 class ChannelEditDialogView(BaseChannelDialogView, PermissionRequiredMixin, UpdateView):
