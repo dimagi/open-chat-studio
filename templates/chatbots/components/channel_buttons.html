@@ -4,8 +4,8 @@
 {% for channel in channels %}
   <button class="btn btn-ghost btn-sm normal-case!"
           hx-get="{% url 'channels:channel_edit_dialog' request.team.slug experiment.id channel.id %}?origin={{ origin }}"
-          hx-target="body"
-          hx-swap="beforeend">
+          hx-target="#channel_create_edit_modal_placeholder"
+          hx-swap="innerHTML">
     <span class="tooltip" data-tip="{{ channel.name }}"><i
         class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
   </button>
@@ -25,8 +25,8 @@
               data-tip="You need to configure your {{ platform|capfirst }} provider to use this channel"
               {% else %}
               hx-get="{% url 'channels:channel_create_dialog' request.team.slug experiment.id platform.value %}?origin={{ origin }}"
-              hx-target="body"
-              hx-swap="beforeend"
+              hx-target="#channel_create_edit_modal_placeholder"
+              hx-swap="innerHTML"
               {% endif %}
           >
             {{ platform.label }} {% if not available %}
