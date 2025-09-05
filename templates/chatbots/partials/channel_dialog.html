@@ -30,10 +30,14 @@
         </div>
       {% endif %}
       {% if success_message %}
-      {{ success_message }}
+        <div role="alert" class="alert alert-success">
+          <span>{{ success_message }}</span>
+        </div>
       {% endif %}
       {% if warning_message %}
-      {{ warning_message }}
+        <div role="alert" class="alert alert-warning">
+          <span>{{ warning_message }}</span>
+        </div>
       {% endif %}
       <div class="modal-action">
         <span class="loading loading-spinner loading-sm p-3 ml-4 htmx-indicator"></span>
