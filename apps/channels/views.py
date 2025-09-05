@@ -206,6 +206,36 @@ class BaseChannelDialogView(View):
     form_class = ChannelFormWrapper
     template_name = "chatbots/partials/channel_dialog.html"
 
+    @cached_property
+    def experiment(self):
+        return get_object_or_404(
+            Experiment.objects.select_related("team"),
+            id=self.kwargs["experiment_id"],
+            team__slug=self.kwargs["team_slug"],
+        )
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["experiment"] = self.experiment
+        kwargs["channel"] = kwargs.pop("instance", None)
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        form = context.get("form")
+
+        platform_form = form.channel_form
+        extra_form = form.extra_form if hasattr(form, "extra_form") else None
+
+        context.update(
+            {
+                "experiment": self.experiment,
+                "form": platform_form,
+                "extra_form": extra_form,
+            }
+        )
+        return context
+
     def get_success_url(self):
         origin = self.request.GET.get("origin", "experiments")
         team_slug = self.kwargs["team_slug"]
@@ -251,31 +281,9 @@ class ChannelEditDialogView(BaseChannelDialogView, PermissionRequiredMixin, Upda
             team__slug=self.kwargs["team_slug"],
         )
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["channel"] = kwargs.pop("instance", None)
-        return kwargs
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        channel = self.get_object()
-        form = context.get("form")
-
-        if form and form.channel_form:
-            main_form = form.channel_form
-            extra_form = form.extra_form
-        else:
-            main_form = channel.form
-            extra_form = channel.extra_form
-
-        context.update(
-            {
-                "experiment": channel.experiment,
-                "channel": channel,
-                "form": main_form,
-                "extra_form": extra_form,
-            }
-        )
+        context["channel"] = self.object
         return context
 
 
@@ -283,14 +291,6 @@ class ChannelCreateDialogView(BaseChannelDialogView, PermissionRequiredMixin, Cr
     """View for creating new channels using CreateView"""
 
     permission_required = "bot_channels.add_experimentchannel"
-
-    @cached_property
-    def experiment(self):
-        return get_object_or_404(
-            Experiment.objects.select_related("team"),
-            id=self.kwargs["experiment_id"],
-            team__slug=self.kwargs["team_slug"],
-        )
 
     def get_platform(self):
         try:
@@ -300,32 +300,12 @@ class ChannelCreateDialogView(BaseChannelDialogView, PermissionRequiredMixin, Cr
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["experiment"] = self.experiment
         kwargs["platform"] = self.get_platform()
-        kwargs.pop("instance", None)
         return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        experiment = self.experiment
-        platform = self.get_platform()
-        form = context.get("form")
-
-        if form and form.channel_form:
-            platform_form = form.channel_form
-            extra_form = form.extra_form if hasattr(form, "extra_form") else None
-        else:
-            platform_form = platform.form(experiment=experiment)
-            extra_form = platform.extra_form()
-
-        context.update(
-            {
-                "experiment": experiment,
-                "platform": platform,
-                "platform_form": platform_form,
-                "extra_form": extra_form,
-            }
-        )
+        context["platform"] = self.get_platform()
         return context
 
     def get(self, request, *args, **kwargs):
