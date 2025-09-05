@@ -253,7 +253,7 @@ class ChannelEditDialogView(BaseChannelDialogView, UpdateView):
             ExperimentChannel,
             id=self.kwargs["channel_id"],
             experiment__id=self.kwargs["experiment_id"],
-            experiment__team__slug=self.kwargs["team_slug"],
+            team__slug=self.kwargs["team_slug"],
         )
 
     def get_form_kwargs(self):
