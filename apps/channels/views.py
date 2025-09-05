@@ -252,7 +252,7 @@ class BaseChannelDialogView(View):
         return get_redirect_url(origin, team_slug, experiment_id)
 
     def form_valid(self, form):
-        form.save()
+        channel = form.save()
         if form.success_message or form.warning_message:
             origin = self.request.GET.get("origin", "experiments")
             channels, available_platforms = get_channels_context(self.experiment)
@@ -261,6 +261,8 @@ class BaseChannelDialogView(View):
                 "save_successful": True,
                 "channels": channels,
                 "platforms": available_platforms,
+                "channel": channel,
+                "extra_form": channel.extra_form(),  # override extra form to get 'update' rendering
             }
             return self.render_to_response({**self.get_context_data(form=form), **additional_context})
         return HttpResponse(headers={"hx-redirect": self.get_success_url()})
