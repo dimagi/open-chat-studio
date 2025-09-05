@@ -27,6 +27,7 @@ from apps.channels.serializers import (
     ApiResponseMessageSerializer,
     CommCareConnectMessageSerializer,
 )
+from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.teams.decorators import login_and_team_required
 
@@ -220,11 +221,11 @@ class BaseChannelDialogView(View):
                 messages.warning(self.request, form.warning_message)
 
             return redirect(self.get_success_url())
+        except ChannelAlreadyUtilizedException as e:
+            messages.error(self.request, e.html_message)
+            return redirect(self.get_success_url())
         except Exception as e:
-            if "ChannelAlreadyUtilizedException" in str(type(e)):
-                messages.error(self.request, getattr(e, "html_message", str(e)))
-            else:
-                messages.error(self.request, f"Error saving channel: {str(e)}")
+            messages.error(self.request, f"Error saving channel: {str(e)}")
             return redirect(self.get_success_url())
 
     def form_invalid(self, form):
