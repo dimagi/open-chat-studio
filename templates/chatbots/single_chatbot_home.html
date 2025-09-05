@@ -122,7 +122,9 @@
         {% if experiment.is_public %}
           {% include "experiments/share/dialog.html" with origin="chatbots" %}
         {% endif %}
-        {% include "chatbots/components/channel_buttons.html" with origin="chatbots" %}
+        <div id="dynamic-channels" class="inline">
+          {% include "chatbots/components/channel_buttons.html" with origin="chatbots" %}
+        </div>
       </div>
     {% endif %}
   </div>

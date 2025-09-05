@@ -1,4 +1,5 @@
 import uuid
+from typing import Self
 
 from django.conf import settings
 from django.db import models
@@ -39,7 +40,7 @@ class ChannelPlatform(models.TextChoices):
         return [cls.API, cls.WEB, cls.EVALUATIONS]
 
     @classmethod
-    def for_dropdown(cls, used_platforms, team) -> dict:
+    def for_dropdown(cls, used_platforms, team) -> dict[Self, bool]:
         """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
         from apps.service_providers.models import MessagingProvider
 

@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -29,6 +29,7 @@ from apps.channels.serializers import (
     CommCareConnectMessageSerializer,
 )
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.experiments.views.utils import get_channels_context
 from apps.teams.decorators import login_and_team_required
 
 
@@ -251,7 +252,15 @@ class BaseChannelDialogView(View):
     def form_valid(self, form):
         form.save()
         if form.success_message or form.warning_message:
-            return self.render_to_response(self.get_context_data(form=form))
+            origin = self.request.GET.get("origin", "experiments")
+            channels, available_platforms = get_channels_context(self.experiment)
+            additional_context = {
+                "origin": origin,
+                "save_successful": True,
+                "channels": channels,
+                "platforms": available_platforms,
+            }
+            return self.render_to_response({**self.get_context_data(form=form), **additional_context})
         return HttpResponse(headers={"hx-redirect": self.get_success_url()})
 
 
@@ -328,9 +337,21 @@ def get_redirect_url(origin: str, team_slug: str, experiment_id: int) -> str:
 @permission_required("bot_channels.delete_experimentchannel")
 def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
     channel = get_object_or_404(
-        ExperimentChannel, id=channel_id, experiment__id=experiment_id, experiment__team__slug=team_slug
+        ExperimentChannel.objects.select_related("experiment"),
+        id=channel_id,
+        experiment__id=experiment_id,
+        team__slug=team_slug,
     )
     origin = request.GET.get("origin")
     channel.soft_delete()
-    redirect_url = get_redirect_url(origin, team_slug, experiment_id)
-    return HttpResponse(headers={"hx-redirect": redirect_url})
+    channels, available_platforms = get_channels_context(channel.experiment)
+    return render(
+        request,
+        "chatbots/partials/channel_buttons_oob.html",
+        {
+            "origin": origin,
+            "channels": channels,
+            "platforms": available_platforms,
+            "experiment": channel.experiment,
+        },
+    )

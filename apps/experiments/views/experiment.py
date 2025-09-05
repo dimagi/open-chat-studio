@@ -93,6 +93,7 @@ from apps.experiments.tasks import (
     get_response_for_webchat_task,
 )
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
+from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
@@ -458,11 +459,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         .filter(participant__user=request.user, experiment=experiment)
         .exclude(experiment_channel__platform__in=[ChannelPlatform.API, ChannelPlatform.EVALUATIONS])
     )
-    channels = experiment.experimentchannel_set.exclude(
-        platform__in=[ChannelPlatform.WEB, ChannelPlatform.API, ChannelPlatform.EVALUATIONS]
-    ).all()
-    used_platforms = {channel.platform_enum for channel in channels}
-    available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
+    channels, available_platforms = get_channels_context(experiment)
 
     deployed_version = None
     if experiment != experiment.default_version:
