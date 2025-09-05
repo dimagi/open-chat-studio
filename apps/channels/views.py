@@ -6,12 +6,12 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from django.utils.html import format_html
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.views.generic import CreateView, UpdateView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -20,15 +20,13 @@ from rest_framework.response import Response
 
 from apps.api.permissions import verify_hmac
 from apps.channels import tasks
-from apps.channels.exceptions import ExperimentChannelException
-from apps.channels.forms import ChannelForm
+from apps.channels.forms import ChannelFormWrapper
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.serializers import (
     ApiMessageSerializer,
     ApiResponseMessageSerializer,
     CommCareConnectMessageSerializer,
 )
-from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.teams.decorators import login_and_team_required
 
@@ -212,94 +210,140 @@ class BaseChannelDialogView(View):
         context.update(kwargs)
         return context
 
-    def _redirect_based_on_origin(self, origin: str, team_slug: str, experiment_id: int):
-        """Helper method for redirecting based on origin"""
+    def get_success_url(self):
+        origin = self.request.GET.get("origin", "experiments")
+        team_slug = self.kwargs["team_slug"]
+        experiment_id = self.kwargs["experiment_id"]
+
         if origin == "chatbots":
-            return redirect(reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id]))
+            return reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
         else:
-            return redirect(reverse("experiments:single_experiment_home", args=[team_slug, experiment_id]))
+            return reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
 
-    def _handle_form_errors(self, form, extra_form=None):
-        """Handle form validation errors"""
-        if form and not form.is_valid():
-            messages.error(self.request, "Form has errors: " + form.errors.as_text())
-            return True
+    def form_valid(self, form):
+        try:
+            instance = form.save()
+            if form.success_message:
+                messages.info(self.request, form.success_message)
 
-        if extra_form and not extra_form.is_valid():
-            messages.error(self.request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
-            return True
+            if form.warning_message:
+                messages.warning(self.request, form.warning_message)
 
-        return False
+            return redirect(self.get_success_url())
+        except Exception as e:
+            if "ChannelAlreadyUtilizedException" in str(type(e)):
+                messages.error(self.request, getattr(e, "html_message", str(e)))
+            else:
+                messages.error(self.request, f"Error saving channel: {str(e)}")
+            return redirect(self.get_success_url())
+
+    def form_invalid(self, form):
+        if form.errors:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(self.request, f"{field}: {error}")
+        return redirect(self.get_success_url())
 
 
-class ChannelEditDialogView(BaseChannelDialogView):
-    """View for editing existing channels"""
+class ChannelEditDialogView(BaseChannelDialogView, UpdateView):
+    """View for editing existing channels using UpdateView"""
 
-    def get(self, request, team_slug, experiment_id, channel_id):
-        """Show the edit dialog"""
-        channel = get_object_or_404(
-            ExperimentChannel, id=channel_id, experiment__id=experiment_id, experiment__team__slug=team_slug
+    model = ExperimentChannel
+    form_class = ChannelFormWrapper
+    pk_url_kwarg = "channel_id"
+
+    def get_object(self, queryset=None):
+        return get_object_or_404(
+            ExperimentChannel,
+            id=self.kwargs["channel_id"],
+            experiment__id=self.kwargs["experiment_id"],
+            experiment__team__slug=self.kwargs["team_slug"],
         )
-        form = channel.form
-        extra_form = channel.extra_form
 
-        context = self.get_context_data(
-            experiment=channel.experiment,
-            channel=channel,
-            form=form,
-            extra_form=extra_form,
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["channel"] = self.get_object()
+        kwargs.pop("instance", None)
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        channel = self.get_object()
+        form = context.get("form")
+
+        if form and form.channel_form:
+            main_form = form.channel_form
+            extra_form = form.extra_form
+        else:
+            main_form = channel.form
+            extra_form = channel.extra_form
+
+        context.update(
+            {
+                "experiment": channel.experiment,
+                "channel": channel,
+                "form": main_form,
+                "extra_form": extra_form,
+            }
         )
+        return context
 
-        return render(request, self.template_name, context)
-
-    def post(self, request, team_slug, experiment_id, channel_id):
-        """Handle channel update"""
-        channel = get_object_or_404(
-            ExperimentChannel, id=channel_id, experiment__id=experiment_id, experiment__team__slug=team_slug
-        )
-        origin = request.GET.get("origin")
-
-        return self._handle_update(channel, origin, team_slug, experiment_id)
-
-    def _handle_update(self, channel, origin, team_slug, experiment_id):
-        """Handle channel update"""
-        if not self.request.user.has_perm("bot_channels.change_experimentchannel"):
+    def dispatch(self, request, *args, **kwargs):
+        """Check permissions"""
+        if request.method == "POST" and not request.user.has_perm("bot_channels.change_experimentchannel"):
             raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
 
-        form = channel.form(data=self.request.POST)
-        extra_form = channel.extra_form(data=self.request.POST)
 
-        if self._handle_form_errors(form, extra_form):
-            return self._redirect_based_on_origin(origin, team_slug, experiment_id)
+class ChannelCreateDialogView(BaseChannelDialogView, CreateView):
+    """View for creating new channels using CreateView"""
 
-        config_data = {}
-        if extra_form:
-            config_data = extra_form.cleaned_data
+    model = ExperimentChannel
+    form_class = ChannelFormWrapper
 
-        platform = ChannelPlatform(form.cleaned_data["platform"])
-        channel_identifier = config_data[platform.channel_identifier_key]
+    def get_experiment(self):
+        return get_object_or_404(Experiment, id=self.kwargs["experiment_id"], team__slug=self.kwargs["team_slug"])
 
+    def get_platform(self):
         try:
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=channel_identifier, new_experiment=channel.experiment
-            )
-        except ChannelAlreadyUtilizedException as exception:
-            messages.error(self.request, exception.html_message)
-            return self._redirect_based_on_origin(origin, team_slug, experiment_id)
-
-        form.save(channel.experiment, config_data)
-        return self._redirect_based_on_origin(origin, team_slug, experiment_id)
-
-
-class ChannelCreateDialogView(BaseChannelDialogView):
-    def get(self, request, team_slug, experiment_id, platform_value):
-        """Show the create dialog"""
-        experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
-
-        try:
-            platform_enum = ChannelPlatform(platform_value)
+            return ChannelPlatform(self.kwargs["platform_value"])
         except ValueError:
             raise Http404("Platform not found.")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["experiment"] = self.get_experiment()
+        kwargs["platform"] = self.get_platform()
+        kwargs.pop("instance", None)
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        experiment = self.get_experiment()
+        platform = self.get_platform()
+        form = context.get("form")
+
+        if form and form.channel_form:
+            platform_form = form.channel_form
+            extra_form = form.extra_form if hasattr(form, "extra_form") else None
+        else:
+            platform_form = platform.form(experiment=experiment)
+            extra_form = platform.extra_form()
+
+        context.update(
+            {
+                "experiment": experiment,
+                "platform": platform,
+                "platform_form": platform_form,
+                "extra_form": extra_form,
+            }
+        )
+        return context
+
+    def get(self, request, *args, **kwargs):
+        """Handle GET request with validation"""
+        experiment = self.get_experiment()
+        platform_enum = self.get_platform()
 
         channels = experiment.experimentchannel_set.exclude(
             platform__in=[ChannelPlatform.WEB, ChannelPlatform.API, ChannelPlatform.EVALUATIONS]
@@ -310,68 +354,21 @@ class ChannelCreateDialogView(BaseChannelDialogView):
         if not available_platforms.get(platform_enum):
             return HttpResponse("Invalid or unavailable platform.", status=400)
 
-        platform_form = platform_enum.form(experiment=experiment)
-        extra_form = platform_enum.extra_form()
-        context = self.get_context_data(
-            experiment=experiment,
-            platform=platform_enum,
-            platform_form=platform_form,
-            extra_form=extra_form,
-        )
-        return render(request, self.template_name, context)
-
-    def post(self, request, team_slug, experiment_id, platform_value):
-        """Handle channel creation"""
-        if not self.request.user.has_perm("bot_channels.add_experimentchannel"):
-            raise PermissionDenied
-
-        experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
-        origin = request.GET.get("origin")
-
         existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
-        form = ChannelForm(experiment=experiment, data=request.POST)
+        if platform_enum in existing_platforms:
+            messages.error(request, f"Channel for {platform_enum.label} already exists")
+            return redirect(self.get_success_url())
 
-        if self._handle_form_errors(form):
-            return self._redirect_based_on_origin(origin, team_slug, experiment_id)
+        return super().get(request, *args, **kwargs)
 
-        platform = ChannelPlatform(form.cleaned_data["platform"])
-        if platform in existing_platforms:
-            messages.error(request, f"Channel for {platform.label} already exists")
-            return self._redirect_based_on_origin(origin, team_slug, experiment_id)
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == "POST" and not request.user.has_perm("bot_channels.add_experimentchannel"):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
 
-        extra_form = platform.extra_form(data=request.POST)
-        config_data = {}
-        if extra_form:
-            if self._handle_form_errors(None, extra_form):
-                return self._redirect_based_on_origin(origin, team_slug, experiment_id)
-            config_data = extra_form.cleaned_data
 
-        try:
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=config_data[platform.channel_identifier_key], new_experiment=experiment
-            )
-        except ChannelAlreadyUtilizedException as exception:
-            messages.error(request, exception.html_message)
-            return self._redirect_based_on_origin(origin, team_slug, experiment_id)
-
-        form.save(experiment, config_data)
-
-        if extra_form:
-            try:
-                extra_form.post_save(channel=form.instance)
-            except ExperimentChannelException as e:
-                messages.error(request, "Error saving channel: " + str(e))
-            else:
-                if extra_form.success_message:
-                    messages.info(request, extra_form.success_message)
-
-                if extra_form.warning_message:
-                    messages.warning(request, extra_form.warning_message)
-
-        return self._redirect_based_on_origin(origin, team_slug, experiment_id)
-
-def _redirect_based_on_origin(origin: str, team_slug: str, experiment_id: int):
-    """Helper function for redirecting based on origin"""
+def redirect_based_on_origin(origin: str, team_slug: str, experiment_id: int):
+    """Helper method for getting redirect URL based on origin"""
     if origin == "chatbots":
         return reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
     else:
@@ -386,5 +383,5 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
     )
     origin = request.GET.get("origin")
     channel.soft_delete()
-    redirect_url = _redirect_based_on_origin(origin, team_slug, experiment_id)
+    redirect_url = redirect_based_on_origin(origin, team_slug, experiment_id)
     return HttpResponse(headers={"hx-redirect": redirect_url})
