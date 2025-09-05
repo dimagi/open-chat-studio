@@ -1,5 +1,6 @@
 import json
 import uuid
+from functools import cached_property
 
 from django.conf import settings
 from django.contrib import messages
@@ -283,8 +284,13 @@ class ChannelCreateDialogView(BaseChannelDialogView, PermissionRequiredMixin, Cr
 
     permission_required = "bot_channels.add_experimentchannel"
 
-    def get_experiment(self):
-        return get_object_or_404(Experiment, id=self.kwargs["experiment_id"], team__slug=self.kwargs["team_slug"])
+    @cached_property
+    def experiment(self):
+        return get_object_or_404(
+            Experiment.objects.select_related("team"),
+            id=self.kwargs["experiment_id"],
+            team__slug=self.kwargs["team_slug"],
+        )
 
     def get_platform(self):
         try:
@@ -294,14 +300,14 @@ class ChannelCreateDialogView(BaseChannelDialogView, PermissionRequiredMixin, Cr
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["experiment"] = self.get_experiment()
+        kwargs["experiment"] = self.experiment
         kwargs["platform"] = self.get_platform()
         kwargs.pop("instance", None)
         return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        experiment = self.get_experiment()
+        experiment = self.experiment
         platform = self.get_platform()
         form = context.get("form")
 
@@ -324,19 +330,18 @@ class ChannelCreateDialogView(BaseChannelDialogView, PermissionRequiredMixin, Cr
 
     def get(self, request, *args, **kwargs):
         """Handle GET request with validation"""
-        experiment = self.get_experiment()
         platform_enum = self.get_platform()
 
-        channels = experiment.experimentchannel_set.exclude(
+        channels = self.experiment.experimentchannel_set.exclude(
             platform__in=[ChannelPlatform.WEB, ChannelPlatform.API, ChannelPlatform.EVALUATIONS]
         ).all()
         used_platforms = {channel.platform_enum for channel in channels}
-        available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
+        available_platforms = ChannelPlatform.for_dropdown(used_platforms, self.experiment.team)
 
         if not available_platforms.get(platform_enum):
             return HttpResponse("Invalid or unavailable platform.", status=400)
 
-        existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
+        existing_platforms = {channel.platform_enum for channel in self.experiment.experimentchannel_set.all()}
         if platform_enum in existing_platforms:
             messages.error(request, f"Channel for {platform_enum.label} already exists")
             return redirect(self.get_success_url())
