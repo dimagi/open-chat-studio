@@ -251,8 +251,7 @@ class ChannelEditDialogView(BaseChannelDialogView, UpdateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["channel"] = self.get_object()
-        kwargs.pop("instance", None)
+        kwargs["channel"] = kwargs.pop("instance", None)
         return kwargs
 
     def get_context_data(self, **kwargs):
