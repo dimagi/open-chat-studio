@@ -17,6 +17,115 @@ from apps.web.meta import absolute_url
 logger = logging.getLogger("ocs.channels")
 
 
+class ChannelFormWrapper(forms.Form):
+    """
+    A wrapper class that combines ChannelForm and platform-specific extra forms
+    to work with Django's built-in CreateView and UpdateView.
+    """
+    def __init__(self, *args, **kwargs):
+        self.experiment = kwargs.pop("experiment", None)
+        self.channel = kwargs.pop("channel", None)
+        self.platform = kwargs.pop("platform", None)
+
+        super().__init__(*args, **kwargs)
+
+        try:
+            self._init_forms(*args, **kwargs)
+            self._combine_form_fields()
+        except Exception as e:
+            logger.warning(f"Form initialization failed: {e}")
+            self.channel_form = None
+            self.extra_form = None
+
+    def _init_forms(self, *args, **kwargs):
+        """Initialize the main channel form and extra form"""
+        if self.channel:
+            self.channel_form = self.channel.form(data=kwargs.get("data"))
+            self.extra_form = self.channel.extra_form(data=kwargs.get("data"))
+        else:
+            if not self.platform:
+                raise ValueError("Platform must be provided when creating a new channel")
+
+            form_kwargs = {
+                "experiment": self.experiment,
+                "data": kwargs.get("data"),
+                "initial": kwargs.get("initial", {}),
+            }
+            form_kwargs["initial"]["platform"] = self.platform.value
+
+            self.channel_form = ChannelForm(**form_kwargs)
+            self.extra_form = self.platform.extra_form(data=kwargs.get("data"))
+
+    def _combine_form_fields(self):
+        """Combine fields from both forms into this wrapper"""
+        for field_name, field in self.channel_form.fields.items():
+            self.fields[field_name] = field
+        if self.extra_form:
+            for field_name, field in self.extra_form.fields.items():
+                self.fields[field_name] = field
+
+    def is_valid(self):
+        """Validate both forms"""
+        channel_valid = self.channel_form.is_valid()
+        extra_valid = self.extra_form.is_valid() if self.extra_form else True
+        return channel_valid and extra_valid
+
+    @property
+    def errors(self):
+        """Combine errors from both forms"""
+        combined_errors = self.channel_form.errors.copy()
+        if self.extra_form and self.extra_form.errors:
+            combined_errors.update(self.extra_form.errors)
+        return combined_errors
+
+    @property
+    def form_attrs(self):
+        """Get form attributes from extra form if available"""
+        return getattr(self.extra_form, "form_attrs", {})
+
+    def save(self, commit=True):
+        """Save both forms"""
+        # Prepare config data from extra form
+        config_data = {}
+        if self.extra_form and self.extra_form.is_valid():
+            config_data = self.extra_form.cleaned_data
+
+        # Save the main channel form
+        if self.channel:
+            # Update existing channel
+            platform = ChannelPlatform(self.channel_form.cleaned_data["platform"])
+            channel_identifier = config_data.get(platform.channel_identifier_key, "")
+
+            from apps.channels.models import ExperimentChannel
+            from apps.experiments.exceptions import ChannelAlreadyUtilizedException
+
+            try:
+                ExperimentChannel.check_usage_by_another_experiment(
+                    platform, identifier=channel_identifier, new_experiment=self.channel.experiment
+                )
+            except ChannelAlreadyUtilizedException:
+                raise
+
+            instance = self.channel_form.save(self.channel.experiment, config_data)
+        else:
+            instance = self.channel_form.save(self.experiment, config_data)
+
+        if self.extra_form and hasattr(self.extra_form, "post_save"):
+            self.extra_form.post_save(channel=instance)
+
+        return instance
+
+    @property
+    def success_message(self):
+        """Get success message from extra form if available"""
+        return getattr(self.extra_form, "success_message", "")
+
+    @property
+    def warning_message(self):
+        """Get warning message from extra form if available"""
+        return getattr(self.extra_form, "warning_message", "")
+
+
 class ChannelForm(forms.ModelForm):
     name = forms.CharField(required=False, help_text="If you leave this blank, it will default to the experiment name")
 
