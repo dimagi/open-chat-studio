@@ -61,7 +61,9 @@ class ChannelFormWrapper:
         channel_valid = self.channel_form.is_valid()
         extra_valid = self.extra_form.is_valid() if self.extra_form else True
         if channel_valid and extra_valid:
-            self.validate_platform()
+            if not self.channel:
+                # skip platform validation when updating an existing channel
+                self.validate_platform()
             self.validate_channel_config(self.channel_form.cleaned_data["platform"], self.extra_form.cleaned_data)
 
         return not self.channel_form.errors and extra_valid
