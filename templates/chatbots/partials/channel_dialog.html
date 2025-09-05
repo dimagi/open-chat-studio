@@ -30,7 +30,9 @@
       <div class="modal-action">
         {% if channel %}
           <button class="btn btn-primary" type="submit" name="action" value="update" x-bind:disabled="buttonDisabled">Update</button>
-          <button class="btn btn-error" type="submit" name="action" value="delete" x-bind:disabled="buttonDisabled">Delete</button>
+          <button class="btn btn-error" 
+                  hx-post="{% url 'channels:delete_channel' request.team.slug experiment.id channel.id %}?origin={{ request.GET.origin|default:'chatbots' }}"
+                  x-bind:disabled="buttonDisabled">Delete</button>
         {% else %}
           <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
           <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
