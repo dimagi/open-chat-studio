@@ -200,6 +200,8 @@ def new_connect_message(request: HttpRequest):
 
 
 class BaseChannelDialogView(View):
+    model = ExperimentChannel
+    form_class = ChannelFormWrapper
     template_name = "chatbots/partials/channel_dialog.html"
 
     def get_context_data(self, **kwargs):
@@ -244,8 +246,6 @@ class BaseChannelDialogView(View):
 class ChannelEditDialogView(BaseChannelDialogView, UpdateView):
     """View for editing existing channels using UpdateView"""
 
-    model = ExperimentChannel
-    form_class = ChannelFormWrapper
     pk_url_kwarg = "channel_id"
 
     def get_object(self, queryset=None):
@@ -293,9 +293,6 @@ class ChannelEditDialogView(BaseChannelDialogView, UpdateView):
 
 class ChannelCreateDialogView(BaseChannelDialogView, CreateView):
     """View for creating new channels using CreateView"""
-
-    model = ExperimentChannel
-    form_class = ChannelFormWrapper
 
     def get_experiment(self):
         return get_object_or_404(Experiment, id=self.kwargs["experiment_id"], team__slug=self.kwargs["team_slug"])
