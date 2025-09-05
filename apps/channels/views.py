@@ -204,14 +204,6 @@ class BaseChannelDialogView(View):
     form_class = ChannelFormWrapper
     template_name = "chatbots/partials/channel_dialog.html"
 
-    def get_context_data(self, **kwargs):
-        context = {
-            "request": self.request,
-            "team": self.request.team,
-        }
-        context.update(kwargs)
-        return context
-
     def get_success_url(self):
         origin = self.request.GET.get("origin", "experiments")
         team_slug = self.kwargs["team_slug"]
