@@ -122,44 +122,7 @@
         {% if experiment.is_public %}
           {% include "experiments/share/dialog.html" with origin="chatbots" %}
         {% endif %}
-      {#  Commented elements included for Tailwind processing #}
-      {#  <i class="fa-brands fa-telegram"></i> #}
-      {#  <i class="fa-brands fa-whatsapp"></i> #}
-        {% for channel in channels %}
-          <button class="btn btn-ghost btn-sm normal-case!"
-                  hx-get="{% url 'channels:channel_edit_dialog' request.team.slug experiment.id channel.id %}"
-                  hx-target="body"
-                  hx-swap="beforeend">
-            <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
-          </button>
-        {% endfor %}
-        {% if platforms %}
-          <div class="dropdown">
-            <button tabindex="0" class="btn btn-ghost btn-sm">
-              <i class="fa-regular fa-plus"></i>
-            </button>
-            <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow-sm bg-base-100 rounded-box w-52 border">
-              {% for platform, available in platforms.items %}
-                <li>
-                  <button
-                    class="disabled:text-gray-600 tooltip tooltip-right"
-                    {% if not available %}
-                      disabled
-                      data-tip="You need to configure your {{ platform|capfirst }} provider to use this channel"
-                    {% else %}
-                      hx-get="{% url 'channels:channel_create_dialog' request.team.slug experiment.id platform.value %}"
-                      hx-target="body"
-                      hx-swap="beforeend"
-                    {% endif %}
-                  >
-                    {{ platform.label }} {% if not available %}
-                    {% endif %}
-                  </button>
-                </li>
-              {% endfor %}
-            </ul>
-          </div>
-        {% endif %}
+        {% include "chatbots/components/channel_buttons.html" with origin="chatbots" %}
       </div>
     {% endif %}
   </div>
@@ -267,4 +230,5 @@
       });
       window.addEventListener('hashchange', selectTabFromHash);
     </script>
+  </div>
 {% endblock app %}
