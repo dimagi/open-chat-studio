@@ -19,7 +19,7 @@ from apps.web.meta import absolute_url
 logger = logging.getLogger("ocs.channels")
 
 
-class ChannelFormWrapper(forms.Form):
+class ChannelFormWrapper:
     """
     A wrapper class that combines ChannelForm and platform-specific extra forms
     to work with Django's built-in CreateView and UpdateView.
@@ -30,11 +30,8 @@ class ChannelFormWrapper(forms.Form):
         self.platform = platform
         self.channel = channel
 
-        super().__init__(*args, **kwargs)
-
         try:
             self._init_forms(*args, **kwargs)
-            self._combine_form_fields()
         except Exception as e:
             logger.warning(f"Form initialization failed: {e}")
             self.channel_form = None
@@ -58,14 +55,6 @@ class ChannelFormWrapper(forms.Form):
 
             self.channel_form = ChannelForm(**form_kwargs)
             self.extra_form = self.platform.extra_form(data=kwargs.get("data"))
-
-    def _combine_form_fields(self):
-        """Combine fields from both forms into this wrapper"""
-        for field_name, field in self.channel_form.fields.items():
-            self.fields[field_name] = field
-        if self.extra_form:
-            for field_name, field in self.extra_form.fields.items():
-                self.fields[field_name] = field
 
     def is_valid(self):
         """Validate both forms"""
@@ -94,22 +83,8 @@ class ChannelFormWrapper(forms.Form):
         except ChannelAlreadyUtilizedException as e:
             self.channel_form.add_error(None, e.html_message)
 
-    @property
-    def errors(self):
-        """Combine errors from both forms"""
-        combined_errors = self.channel_form.errors.copy()
-        if self.extra_form and self.extra_form.errors:
-            combined_errors.update(self.extra_form.errors)
-        return combined_errors
-
-    @property
-    def form_attrs(self):
-        """Get form attributes from extra form if available"""
-        return getattr(self.extra_form, "form_attrs", {})
-
     def save(self, commit=True):
         """Save both forms"""
-        # Prepare config data from extra form
         config_data = {}
         if self.extra_form and self.extra_form.is_valid():
             config_data = self.extra_form.cleaned_data
