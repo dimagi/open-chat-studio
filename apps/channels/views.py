@@ -21,6 +21,7 @@ from rest_framework.response import Response
 
 from apps.api.permissions import verify_hmac
 from apps.channels import tasks
+from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.serializers import (
@@ -28,6 +29,7 @@ from apps.channels.serializers import (
     ApiResponseMessageSerializer,
     CommCareConnectMessageSerializer,
 )
+from apps.channels.utils import validate_platform_availability
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.experiments.views.utils import get_channels_context
 from apps.teams.decorators import login_and_team_required
@@ -309,18 +311,10 @@ class ChannelCreateDialogView(BaseChannelDialogView, PermissionRequiredMixin, Cr
         """Handle GET request with validation"""
         platform_enum = self.get_platform()
 
-        channels = self.experiment.experimentchannel_set.exclude(
-            platform__in=[ChannelPlatform.WEB, ChannelPlatform.API, ChannelPlatform.EVALUATIONS]
-        ).all()
-        used_platforms = {channel.platform_enum for channel in channels}
-        available_platforms = ChannelPlatform.for_dropdown(used_platforms, self.experiment.team)
-
-        if not available_platforms.get(platform_enum):
-            return HttpResponse("Invalid or unavailable platform.", status=400)
-
-        existing_platforms = {channel.platform_enum for channel in self.experiment.experimentchannel_set.all()}
-        if platform_enum in existing_platforms:
-            messages.error(request, f"Channel for {platform_enum.label} already exists")
+        try:
+            validate_platform_availability(self.experiment, platform_enum)
+        except ExperimentChannelException as e:
+            messages.error(self.request, str(e))
             return redirect(self.get_success_url())
 
         return super().get(request, *args, **kwargs)
