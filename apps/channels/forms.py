@@ -118,19 +118,7 @@ class ChannelFormWrapper(forms.Form):
         if self.extra_form and self.extra_form.is_valid():
             config_data = self.extra_form.cleaned_data
 
-        # Save the main channel form
-        if self.channel:
-            # Update existing channel
-            platform = ChannelPlatform(self.channel_form.cleaned_data["platform"])
-            channel_identifier = config_data.get(platform.channel_identifier_key, "")
-
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=channel_identifier, new_experiment=self.channel.experiment
-            )
-
-            instance = self.channel_form.save(self.channel.experiment, config_data)
-        else:
-            instance = self.channel_form.save(self.experiment, config_data)
+        instance = self.channel_form.save(self.experiment, config_data)
 
         if self.extra_form and hasattr(self.extra_form, "post_save"):
             self.extra_form.post_save(channel=instance)
