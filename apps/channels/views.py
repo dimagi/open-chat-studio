@@ -4,7 +4,7 @@ import uuid
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
-from django.core.exceptions import PermissionDenied
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -236,10 +236,11 @@ class BaseChannelDialogView(View):
         return redirect(self.get_success_url())
 
 
-class ChannelEditDialogView(BaseChannelDialogView, UpdateView):
+class ChannelEditDialogView(BaseChannelDialogView, PermissionRequiredMixin, UpdateView):
     """View for editing existing channels using UpdateView"""
 
     pk_url_kwarg = "channel_id"
+    permission_required = "bot_channels.change_experimentchannel"
 
     def get_object(self, queryset=None):
         return get_object_or_404(
@@ -276,15 +277,11 @@ class ChannelEditDialogView(BaseChannelDialogView, UpdateView):
         )
         return context
 
-    def dispatch(self, request, *args, **kwargs):
-        """Check permissions"""
-        if request.method == "POST" and not request.user.has_perm("bot_channels.change_experimentchannel"):
-            raise PermissionDenied
-        return super().dispatch(request, *args, **kwargs)
 
-
-class ChannelCreateDialogView(BaseChannelDialogView, CreateView):
+class ChannelCreateDialogView(BaseChannelDialogView, PermissionRequiredMixin, CreateView):
     """View for creating new channels using CreateView"""
+
+    permission_required = "bot_channels.add_experimentchannel"
 
     def get_experiment(self):
         return get_object_or_404(Experiment, id=self.kwargs["experiment_id"], team__slug=self.kwargs["team_slug"])
@@ -345,11 +342,6 @@ class ChannelCreateDialogView(BaseChannelDialogView, CreateView):
             return redirect(self.get_success_url())
 
         return super().get(request, *args, **kwargs)
-
-    def dispatch(self, request, *args, **kwargs):
-        if request.method == "POST" and not request.user.has_perm("bot_channels.add_experimentchannel"):
-            raise PermissionDenied
-        return super().dispatch(request, *args, **kwargs)
 
 
 def get_redirect_url(origin: str, team_slug: str, experiment_id: int) -> str:
