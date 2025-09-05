@@ -218,7 +218,7 @@ class BaseChannelDialogView(View):
 
     def form_valid(self, form):
         try:
-            instance = form.save()
+            form.save()
             if form.success_message:
                 messages.info(self.request, form.success_message)
 
@@ -304,7 +304,7 @@ class ChannelCreateDialogView(BaseChannelDialogView, CreateView):
         try:
             return ChannelPlatform(self.kwargs["platform_value"])
         except ValueError:
-            raise Http404("Platform not found.")
+            raise Http404("Platform not found.") from None
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -368,6 +368,7 @@ def get_redirect_url(origin: str, team_slug: str, experiment_id: int) -> str:
     if origin == "chatbots":
         return reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
     return reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
+
 
 @login_and_team_required
 @permission_required("bot_channels.delete_experimentchannel")
