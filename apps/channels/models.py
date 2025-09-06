@@ -207,16 +207,44 @@ class ExperimentChannel(BaseTeamModel):
         return self.platform_enum.extra_form(*args, **kwargs)
 
     @staticmethod
-    def check_usage_by_another_experiment(platform: ChannelPlatform, identifier: str, new_experiment: Experiment):
+    def check_usage_by_another_experiment(
+        platform: ChannelPlatform, identifier: str, new_experiment: Experiment, messaging_provider=None
+    ):
         """
         Checks if another experiment (one that is not the same as `new_experiment`) already uses the channel specified
         by its `identifier` and `platform`. Raises `ChannelAlreadyUtilizedException` error when another
         experiment uses it.
+
+        For Slack channels with identifier "*" (all channels), multiple experiments are allowed if they use
+        keyword-based routing with different keywords.
+
+        Args:
+            messaging_provider: Optional messaging provider to scope Slack lookups to the same workspace
         """
+        from apps.channels.const import SLACK_ALL_CHANNELS
 
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
-        channel = ExperimentChannel.objects.filter(**filter_params).first()
-        if channel and channel.experiment != new_experiment:
+        existing_channels = ExperimentChannel.objects.filter(**filter_params, deleted=False).exclude(
+            experiment=new_experiment
+        )
+
+        # For Slack channels, scope to the same workspace if messaging_provider is provided
+        if platform == ChannelPlatform.SLACK and messaging_provider:
+            # Filter by the specific messaging provider to ensure workspace scoping
+            # (can't filter by encrypted config field directly)
+            existing_channels = existing_channels.filter(messaging_provider=messaging_provider)
+
+        if not existing_channels:
+            return  # No conflicts
+
+        # For Slack "all channels" (*), allow multiple experiments with keyword-based routing
+        if platform == ChannelPlatform.SLACK and identifier == SLACK_ALL_CHANNELS:
+            # This is allowed - keyword conflicts will be handled by form validation
+            return
+
+        # For other cases, raise the conflict error
+        channel = existing_channels.first()
+        if channel:
             # TODO: check if it's in a different team and if the user has access to that team
             url = reverse(
                 "experiments:single_experiment_home",

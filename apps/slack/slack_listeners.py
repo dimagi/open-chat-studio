@@ -36,7 +36,8 @@ def new_message(event, context: BoltContext):
         session = get_session_for_thread(channel_id, thread_ts)
 
     is_bot_mention = context.bot_user_id in event.get("text", "")
-    if is_bot_mention or session:
+    is_dm = _is_dm_channel(channel_id)
+    if is_bot_mention or session or is_dm:
         respond_to_message(event, context, session)
 
 
@@ -45,7 +46,14 @@ def respond_to_message(event, context: BoltContext, session=None):
 
     channel_id = event.get("channel")
     thread_ts = event.get("thread_ts", None) or event["ts"]
-    experiment_channel = get_experiment_channel(channel_id)
+    message_text = event.get("text", "")
+
+    # For new sessions, use message text for keyword routing
+    # For existing sessions, the experiment_channel is already determined
+    if session:
+        experiment_channel = session.experiment_channel
+    else:
+        experiment_channel = get_experiment_channel(channel_id, message_text, context.team_id)
 
     if not experiment_channel:
         context.say("There are no bots associated with this channel.", thread_ts=thread_ts)
@@ -112,23 +120,99 @@ def get_session_for_thread(channel_id: str, thread_ts: str):
         pass
 
 
-def get_experiment_channel(channel_id) -> ExperimentChannel | None:
+def get_experiment_channel(channel_id, message_text=None, team_id=None) -> ExperimentChannel | None:
     """Get the experiment channel for the given team and channel_id. This searches for exact matches
-    on the channel ID and also for the special case of bots that are listening in all channels."""
-    channel_filter = Q(extra_data__contains={"slack_channel_id": channel_id}) | Q(
-        extra_data__contains={"slack_channel_id": SLACK_ALL_CHANNELS}
-    )
-    channels = (
-        ExperimentChannel.objects.filter(channel_filter)
-        .filter(platform=ChannelPlatform.SLACK)
+    on the channel ID and also for the special case of bots that are listening in all channels.
+    For DM channels, it also supports keyword-based routing."""
+
+    # First, try to find exact channel match (specific channel assignment)
+    exact_channel_filter = Q(extra_data__contains={"slack_channel_id": channel_id})
+    exact_channels_qs = (
+        ExperimentChannel.objects.filter(exact_channel_filter)
+        .filter(platform=ChannelPlatform.SLACK, deleted=False)
         .select_related("experiment", "messaging_provider")
-        .all()
     )
-    if not channels:
-        return
 
-    if len(channels) == 1:
-        return channels[0]
+    # Note: Workspace scoping would require filtering by encrypted config field
+    # which is not supported. For now, we rely on proper messaging provider setup
+    # to ensure channels are properly scoped to their workspaces.
 
-    # if there are multiple channels, we need to find the one that matches the channel_id
-    return [channel for channel in channels if channel.extra_data.get("slack_channel_id") == channel_id][0]
+    exact_channels = exact_channels_qs.all()
+
+    if exact_channels:
+        return exact_channels[0]
+
+    # If no exact match, check for "all channels" bots (including keyword-based routing)
+    all_channels_filter = Q(extra_data__contains={"slack_channel_id": SLACK_ALL_CHANNELS})
+    all_channels_qs = (
+        ExperimentChannel.objects.filter(all_channels_filter)
+        .filter(platform=ChannelPlatform.SLACK, deleted=False)
+        .select_related("experiment", "messaging_provider")
+    )
+
+    # Note: Workspace scoping would require filtering by encrypted config field
+    # which is not supported. For now, we rely on proper messaging provider setup
+    # to ensure channels are properly scoped to their workspaces.
+
+    all_channels = all_channels_qs.all()
+
+    if not all_channels:
+        return None
+
+    # If we have message text, try keyword-based routing for all channels
+    if message_text:
+        keyword_match = _find_keyword_match(all_channels, message_text)
+        if keyword_match:
+            return keyword_match
+
+    # Fall back to default bot or first "all channels" bot
+    default_bot = _find_default_bot(all_channels)
+    if default_bot:
+        return default_bot
+
+    # If no default bot, return the first "all channels" bot without keywords
+    for channel in all_channels:
+        if not channel.extra_data.get("keywords") and not channel.extra_data.get("is_default"):
+            return channel
+
+    # Last resort: return any "all channels" bot
+    return all_channels[0] if all_channels else None
+
+
+def _is_dm_channel(channel_id: str) -> bool:
+    """Check if this is a DM channel (starts with 'D' in Slack)"""
+    return channel_id.startswith("D")
+
+
+def _find_keyword_match(channels: list[ExperimentChannel], message_text: str) -> ExperimentChannel | None:
+    """Find a channel that matches the first word after bot mention"""
+    if not message_text:
+        return None
+
+    # Match first token optionally preceded by a mention. Allows letters, numbers, and hyphens.
+    bot_mention_pattern = r"^(?:<@[A-Z0-9]+>\s*)?([a-zA-Z0-9\-]+)"
+    match = re.search(bot_mention_pattern, message_text)
+
+    if not match:
+        return None
+
+    first_word = match.group(1).lower()
+
+    # Look for channels with keywords that match the first word
+    for channel in channels:
+        keywords = channel.extra_data.get("keywords", [])
+        if keywords:
+            # Check if first word matches any keyword for this channel
+            for keyword in keywords:
+                if keyword.lower() == first_word:
+                    return channel
+
+    return None
+
+
+def _find_default_bot(channels: list[ExperimentChannel]) -> ExperimentChannel | None:
+    """Find the default bot among the channels"""
+    for channel in channels:
+        if channel.extra_data.get("is_default"):
+            return channel
+    return None

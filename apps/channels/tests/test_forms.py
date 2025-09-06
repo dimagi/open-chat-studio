@@ -1,12 +1,14 @@
-from unittest.mock import PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 from django.forms.widgets import HiddenInput, Select
 
-from apps.channels.forms import ChannelForm, WhatsappChannelForm
+from apps.channels.forms import ChannelForm, SlackChannelForm, WhatsappChannelForm
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @pytest.mark.parametrize(
@@ -77,3 +79,210 @@ def test_whatsapp_form_checks_number(
         assert form.warning_message == (
             f"{number} was not found at the provider. Please make sure it is there before proceeding"
         )
+
+
+# Slack channel keyword uniqueness tests
+@pytest.mark.django_db()
+def test_slack_channel_new_with_keywords_succeeds(team_with_users):
+    """Test creating a new Slack channel with keywords succeeds"""
+
+    # Create messaging provider
+    provider = MessagingProviderFactory(type=MessagingProviderType.slack, team=team_with_users)
+
+    # Mock the messaging service
+    mock_service = Mock()
+    mock_service.get_channel_by_name.return_value = None  # Not using specific channel
+
+    with patch.object(provider, "get_messaging_service", return_value=mock_service):
+        form_data = {
+            "channel_scope": "all",
+            "routing_method": "keywords",
+            "keywords": "health, benefits, support",
+            "messaging_provider": provider.id,
+        }
+
+        form = SlackChannelForm(form_data)
+        form.messaging_provider = provider
+
+        assert form.is_valid(), f"Form errors: {form.errors}"
+
+        cleaned_data = form.cleaned_data
+        assert cleaned_data["keywords"] == ["health", "benefits", "support"]
+        assert cleaned_data["slack_channel_id"] == "*"
+        assert not cleaned_data["is_default"]
+
+
+@pytest.mark.django_db()
+def test_slack_channel_edit_keeping_some_keywords_succeeds(team_with_users):
+    """Test editing existing channel keeping some keywords succeeds"""
+
+    # Create messaging provider
+    provider = MessagingProviderFactory(type=MessagingProviderType.slack, team=team_with_users)
+
+    # Create the channel we want to edit - this simulates the Health Bot from browser
+    health_bot = ExperimentChannelFactory(
+        team=team_with_users,
+        platform=ChannelPlatform.SLACK,
+        messaging_provider=provider,
+        name="Health Bot",
+        extra_data={
+            "slack_channel_id": "*",
+            "keywords": ["health", "benefits", "medical", "insurance", "deductible", "copay", "coverage"],
+            "is_default": False,
+        },
+    )
+
+    # Create another channel that would conflict if the exclusion logic is broken
+    # This simulates having other channels with overlapping keywords
+    ExperimentChannelFactory(
+        team=team_with_users,
+        platform=ChannelPlatform.SLACK,
+        messaging_provider=provider,
+        name="Other Bot",
+        extra_data={"slack_channel_id": "*", "keywords": ["wellness", "fitness"], "is_default": False},
+    )
+
+    # Mock the messaging service
+    mock_service = Mock()
+    mock_service.get_channel_by_name.return_value = None
+
+    with patch.object(provider, "get_messaging_service", return_value=mock_service):
+        # Simulate editing the Health Bot to reduce keywords but keep some existing ones
+        form_data = {
+            "channel_scope": "all",
+            "routing_method": "keywords",
+            "keywords": "health, benefits, nutrition",  # Keep "health" and "benefits", add "nutrition" (no conflict)
+            "messaging_provider": provider.id,
+        }
+
+        # This simulates the browser scenario - editing an existing channel
+        form = SlackChannelForm(form_data, initial=health_bot.extra_data, channel=health_bot)
+        form.messaging_provider = provider
+        form.instance = health_bot  # This should be set by the channel parameter
+
+        # This should succeed - editing a channel should allow keeping its own existing keywords
+        assert form.is_valid(), f"Form errors: {form.errors}"
+
+        cleaned_data = form.cleaned_data
+        assert cleaned_data["keywords"] == ["health", "benefits", "nutrition"]
+
+
+@pytest.mark.django_db()
+def test_slack_channel_edit_with_missing_instance_uses_fallback(team_with_users):
+    """Test that form can handle missing instance by using fallback logic"""
+
+    # Create messaging provider
+    provider = MessagingProviderFactory(type=MessagingProviderType.slack, team=team_with_users)
+
+    # Create existing channel
+    existing_channel = ExperimentChannelFactory(
+        team=team_with_users,
+        platform=ChannelPlatform.SLACK,
+        messaging_provider=provider,
+        name="Health Bot",
+        extra_data={"slack_channel_id": "*", "keywords": ["health", "benefits"], "is_default": False},
+    )
+
+    # Mock the messaging service
+    mock_service = Mock()
+    mock_service.get_channel_by_name.return_value = None
+
+    with patch.object(provider, "get_messaging_service", return_value=mock_service):
+        form_data = {
+            "name": "Health Bot",  # This should help identify the existing channel
+            "channel_scope": "all",
+            "routing_method": "keywords",
+            "keywords": "health, benefits, wellness",  # Keep existing keywords, add new one
+            "messaging_provider": provider.id,
+        }
+
+        # Simulate browser scenario where instance might not be set properly
+        form = SlackChannelForm(form_data, initial=existing_channel.extra_data)
+        form.messaging_provider = provider
+        # Don't set instance - let the fallback logic handle it
+
+        # This should succeed due to our fallback logic that identifies the channel by name
+        assert form.is_valid(), f"Form errors: {form.errors}"
+
+        # Verify the fallback logic set the instance
+        assert hasattr(form, "instance")
+        assert form.instance.pk == existing_channel.pk
+
+
+@pytest.mark.django_db()
+def test_slack_channel_duplicate_keywords_fails(team_with_users):
+    """Test creating new channel with existing keywords fails"""
+
+    # Create messaging provider
+    provider = MessagingProviderFactory(type=MessagingProviderType.slack, team=team_with_users)
+
+    # Create existing channel with keywords
+    ExperimentChannelFactory(
+        team=team_with_users,
+        platform=ChannelPlatform.SLACK,
+        messaging_provider=provider,
+        name="Existing Bot",
+        extra_data={"slack_channel_id": "*", "keywords": ["health", "benefits"], "is_default": False},
+    )
+
+    # Mock the messaging service
+    mock_service = Mock()
+    mock_service.get_channel_by_name.return_value = None
+
+    with patch.object(provider, "get_messaging_service", return_value=mock_service):
+        # Try to create new channel with overlapping keywords
+        form_data = {
+            "channel_scope": "all",
+            "routing_method": "keywords",
+            "keywords": "health, medical",  # "health" conflicts
+            "messaging_provider": provider.id,
+        }
+
+        form = SlackChannelForm(form_data)
+        form.messaging_provider = provider
+
+        assert not form.is_valid()
+
+
+@pytest.mark.django_db()
+def test_slack_channel_cross_team_keyword_conflicts(team_with_users):
+    """Test that keyword conflicts are validated system-wide across teams"""
+
+    # Create messaging provider
+    provider = MessagingProviderFactory(type=MessagingProviderType.slack, team=team_with_users)
+
+    # Create a different team that shares the same Slack workspace (same messaging provider)
+    other_team = TeamWithUsersFactory.create()
+
+    # Create existing channel in the OTHER team with keywords
+    ExperimentChannelFactory(
+        team=other_team,  # Different team!
+        platform=ChannelPlatform.SLACK,
+        messaging_provider=provider,  # Same messaging provider (same Slack workspace)
+        name="Other Team Bot",
+        extra_data={"slack_channel_id": "*", "keywords": ["health", "benefits"], "is_default": False},
+    )
+
+    # Mock the messaging service
+    mock_service = Mock()
+    mock_service.get_channel_by_name.return_value = None
+
+    with patch.object(provider, "get_messaging_service", return_value=mock_service):
+        # Try to create new channel in current team with conflicting keywords
+        form_data = {
+            "channel_scope": "all",
+            "routing_method": "keywords",
+            "keywords": "health, wellness",  # "health" conflicts with other team's bot
+            "messaging_provider": provider.id,
+        }
+
+        form = SlackChannelForm(form_data)
+        form.messaging_provider = provider
+
+        # Should fail because keywords must be unique across ALL teams using the same Slack workspace
+        assert not form.is_valid()
+
+        # Error message should indicate which bot has the conflicting keywords
+        error_message = str(form.errors)
+        assert "Other Team Bot" in error_message
+        assert "health" in error_message
