@@ -286,7 +286,8 @@ def test_channel_routing_priority(experiment, bolt_context):
 
     # Message with keyword should go to specific channel (highest priority)
     priority_event = BOT_MENTION_EVENT.copy()
-    priority_event["text"] = f"<@{BOT_USER_ID}> I need help"
+    # Start with the keyword to force a keyword match, then confirm specific-channel wins.
+    priority_event["text"] = f"<@{BOT_USER_ID}> help I need assistance"
 
     with mock_llm(responses=["Specific channel response"]):
         new_message(priority_event, bolt_context)
