@@ -612,8 +612,12 @@ def create_channel(request, team_slug: str, experiment_id: int):
                 return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
         try:
+            messaging_provider = form.cleaned_data.get("messaging_provider")
             ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=config_data[platform.channel_identifier_key], new_experiment=experiment
+                platform,
+                identifier=config_data[platform.channel_identifier_key],
+                new_experiment=experiment,
+                messaging_provider=messaging_provider,
             )
         except ChannelAlreadyUtilizedException as exception:
             messages.error(request, exception.html_message)
@@ -663,8 +667,12 @@ def update_delete_channel(request, team_slug: str, experiment_id: int, channel_i
         platform = ChannelPlatform(form.cleaned_data["platform"])
         channel_identifier = config_data[platform.channel_identifier_key]
         try:
+            messaging_provider = form.cleaned_data.get("messaging_provider")
             ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=channel_identifier, new_experiment=channel.experiment
+                platform,
+                identifier=channel_identifier,
+                new_experiment=channel.experiment,
+                messaging_provider=messaging_provider,
             )
         except ChannelAlreadyUtilizedException as exception:
             messages.error(request, exception.html_message)

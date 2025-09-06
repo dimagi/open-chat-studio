@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from functools import cached_property
@@ -183,7 +184,9 @@ class SlackChannelForm(ExtraFormBase):
             ("keywords", "Respond to specific keywords"),
             ("default", "Default fallback (no matched keywords)"),
         ],
-        widget=forms.RadioSelect(attrs={"control_attrs": {"x-show": "channelScope === 'all'"}}),
+        widget=forms.RadioSelect(
+            attrs={"x-model": "routingMethod", "control_attrs": {"x-show": "channelScope === 'all'"}}
+        ),
         required=False,
     )
     slack_channel_name = forms.CharField(
@@ -214,10 +217,11 @@ class SlackChannelForm(ExtraFormBase):
     def __init__(self, *args, **kwargs):
         # Handle channel parameter for editing existing channels
         channel = kwargs.pop("channel", None)
+        initial = kwargs.setdefault("initial", {})
         if channel:
             self.instance = channel
-
-        initial = kwargs.setdefault("initial", {})
+            # Merge stored config to drive scope/routing init logic and field values
+            initial.update(channel.extra_data or {})
 
         # Set channel scope based on existing data
         if initial.get("slack_channel_id") == SLACK_ALL_CHANNELS:
@@ -238,8 +242,11 @@ class SlackChannelForm(ExtraFormBase):
             initial["keywords"] = ", ".join(initial["keywords"])
 
         self.form_attrs = {
-            "x-data": '{{"channelScope": "{}", "routingMethod": "{}"}}'.format(
-                initial.get("channel_scope", "specific"), initial.get("routing_method", "default")
+            "x-data": json.dumps(
+                {
+                    "channelScope": initial.get("channel_scope", "specific"),
+                    "routingMethod": initial.get("routing_method", "default"),
+                }
             )
         }
         super().__init__(*args, **kwargs)
@@ -336,6 +343,8 @@ class SlackChannelForm(ExtraFormBase):
                 self._validate_unique_default()
                 cleaned_data["keywords"] = []
                 cleaned_data["is_default"] = True
+            else:
+                raise forms.ValidationError("Select a routing method for 'All channels' (keywords or default).")
 
         return cleaned_data
 
@@ -346,6 +355,9 @@ class SlackChannelForm(ExtraFormBase):
 
         if not self.messaging_provider:
             return  # Can't validate without messaging provider context
+
+        # Normalize input keywords to lowercase for case-insensitive comparison
+        keywords = [kw.lower() for kw in keywords]
 
         # Get all other Slack channels using the same messaging provider (system-wide)
         # Keywords must be unique across the entire Slack workspace
@@ -360,7 +372,7 @@ class SlackChannelForm(ExtraFormBase):
 
         # Check each existing channel's keywords
         for channel in queryset:
-            existing_keywords = channel.extra_data.get("keywords", [])
+            existing_keywords = [kw.lower() for kw in channel.extra_data.get("keywords", [])]
             if existing_keywords:
                 conflicts = set(keywords) & set(existing_keywords)
                 if conflicts:

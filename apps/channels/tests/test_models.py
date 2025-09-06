@@ -18,7 +18,7 @@ def test_new_integration_does_not_raise_exception():
     new_experiment = ExperimentFactory()
 
     ExperimentChannel.check_usage_by_another_experiment(
-        channel.platform, identifier="321", new_experiment=new_experiment
+        channel.platform, identifier="321", new_experiment=new_experiment, messaging_provider=channel.messaging_provider
     )
 
 
@@ -29,7 +29,10 @@ def test_duplicate_integration_raises_exception():
 
     with pytest.raises(ChannelAlreadyUtilizedException):
         ExperimentChannel.check_usage_by_another_experiment(
-            channel.platform, identifier=channel.extra_data["bot_token"], new_experiment=new_experiment
+            channel.platform,
+            identifier=channel.extra_data["bot_token"],
+            new_experiment=new_experiment,
+            messaging_provider=channel.messaging_provider,
         )
 
 
