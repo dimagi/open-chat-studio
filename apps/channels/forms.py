@@ -1,5 +1,4 @@
 import logging
-import re
 import secrets
 from functools import cached_property
 
@@ -248,26 +247,15 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         required=False,
     )
 
-    def clean_allowed_domains(self):
-        domains_text = self.cleaned_data.get("allowed_domains", "").strip()
-        if not domains_text:
-            return []
-
-        domains = []
-        for line in domains_text.split("\n"):
-            domain = line.strip()
-            if domain:
-                if not re.match(r"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", domain):
-                    raise forms.ValidationError(f"Invalid domain format: {domain}")
-                domains.append(domain)
-
-        return domains
+    def clean(self):
+        """Generate the widget token so it's available in cleaned_data"""
+        cleaned_data = super().clean()
+        # Generate token here so it's available when check_usage_by_another_experiment is called
+        cleaned_data["widget_token"] = secrets.token_urlsafe(32)
+        return cleaned_data
 
     def post_save(self, channel: ExperimentChannel):
-        """Generate widget token and create success message"""
-        # Generate secure token for the widget
-        widget_token = secrets.token_urlsafe(32)
-
+        widget_token = self.cleaned_data["widget_token"]
         channel.extra_data.update(
             {
                 "widget_token": widget_token,
@@ -275,6 +263,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             }
         )
         channel.save()
+
         embed_code = self._generate_embed_code(channel, widget_token)
         self.success_message = mark_safe(
             render_to_string(
