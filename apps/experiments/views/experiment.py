@@ -40,9 +40,7 @@ from apps.analysis.const import LANGUAGE_CHOICES
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
-from apps.channels.exceptions import ExperimentChannelException
-from apps.channels.forms import ChannelForm
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
@@ -60,7 +58,6 @@ from apps.experiments.decorators import (
     verify_session_access_cookie,
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
-from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, DynamicExperimentSessionFilter
 from apps.experiments.forms import (
     ConsentForm,
@@ -96,6 +93,7 @@ from apps.experiments.tasks import (
     get_response_for_webchat_task,
 )
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
+from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
 from apps.generics import actions
 from apps.generics.chips import Chip
@@ -471,16 +469,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         .filter(participant__user=request.user, experiment=experiment)
         .exclude(experiment_channel__platform__in=[ChannelPlatform.API, ChannelPlatform.EVALUATIONS])
     )
-    channels = experiment.experimentchannel_set.exclude(
-        platform__in=[ChannelPlatform.WEB, ChannelPlatform.API, ChannelPlatform.EVALUATIONS]
-    ).all()
-    used_platforms = {channel.platform_enum for channel in channels}
-    available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
-    platform_forms = {}
-    form_kwargs = {"experiment": experiment}
-    for platform in available_platforms:
-        if platform.form(**form_kwargs):
-            platform_forms[platform] = platform.form(**form_kwargs)
+    channels, available_platforms = get_channels_context(experiment)
 
     deployed_version = None
     if experiment != experiment.default_version:
@@ -500,7 +489,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "experiment": experiment,
         "user_sessions": user_sessions,
         "platforms": available_platforms,
-        "platform_forms": platform_forms,
         "channels": channels,
         "df_available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
         "df_experiment_versions": experiment.get_version_name_list(),
@@ -586,92 +574,6 @@ def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
             experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
         ),
     }
-
-
-@login_and_team_required
-@permission_required("bot_channels.add_experimentchannel", raise_exception=True)
-def create_channel(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
-    form = ChannelForm(experiment=experiment, data=request.POST)
-    if not form.is_valid():
-        messages.error(request, "Form has errors: " + form.errors.as_text())
-    else:
-        platform = ChannelPlatform(form.cleaned_data["platform"])
-        if platform in existing_platforms:
-            messages.error(request, f"Channel for {platform.label} already exists")
-            return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-        extra_form = platform.extra_form(data=request.POST)
-        config_data = {}
-        if extra_form:
-            if extra_form.is_valid():
-                config_data = extra_form.cleaned_data
-            else:
-                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
-                return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-        try:
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=config_data[platform.channel_identifier_key], new_experiment=experiment
-            )
-        except ChannelAlreadyUtilizedException as exception:
-            messages.error(request, exception.html_message)
-            return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-        form.save(experiment, config_data)
-        if extra_form:
-            try:
-                extra_form.post_save(channel=form.instance)
-            except ExperimentChannelException as e:
-                messages.error(request, "Error saving channel: " + str(e))
-            else:
-                if extra_form.success_message:
-                    messages.info(request, extra_form.success_message)
-
-                if extra_form.warning_message:
-                    messages.warning(request, extra_form.warning_message)
-    return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-
-@login_and_team_required
-def update_delete_channel(request, team_slug: str, experiment_id: int, channel_id: int):
-    channel = get_object_or_404(ExperimentChannel, id=channel_id, experiment_id=experiment_id, team__slug=team_slug)
-    if request.POST.get("action") == "delete":
-        if not request.user.has_perm("bot_channels.delete_experimentchannel"):
-            raise PermissionDenied
-
-        channel.soft_delete()
-        return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-    if not request.user.has_perm("bot_channels.change_experimentchannel"):
-        raise PermissionDenied
-
-    form = channel.form(data=request.POST)
-    if not form.is_valid():
-        messages.error(request, "Form has errors: " + form.errors.as_text())
-    else:
-        extra_form = channel.extra_form(data=request.POST)
-        config_data = {}
-        if extra_form:
-            if extra_form.is_valid():
-                config_data = extra_form.cleaned_data
-            else:
-                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
-                return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-        platform = ChannelPlatform(form.cleaned_data["platform"])
-        channel_identifier = config_data[platform.channel_identifier_key]
-        try:
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=channel_identifier, new_experiment=channel.experiment
-            )
-        except ChannelAlreadyUtilizedException as exception:
-            messages.error(request, exception.html_message)
-            return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-        form.save(channel.experiment, config_data)
-    return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
 @require_POST

@@ -10,11 +10,88 @@ from telebot import TeleBot, apihelper, types
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.utils import validate_platform_availability
+from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
 from apps.web.meta import absolute_url
 
 logger = logging.getLogger("ocs.channels")
+
+
+class ChannelFormWrapper:
+    """
+    A wrapper class that combines ChannelForm and platform-specific extra forms
+    to work with Django's built-in CreateView and UpdateView.
+    """
+
+    def __init__(
+        self, experiment, platform, channel=None, data: dict | None = None, initial: dict | None = None, **kwargs
+    ):
+        self.experiment = experiment
+        self.platform = platform
+        self.channel = channel
+
+        if self.channel:
+            self.channel_form = ChannelForm(instance=channel, experiment=experiment, data=data)
+            self.extra_form = self.channel.extra_form(data=data)
+        else:
+            initial = initial or {}
+            initial["platform"] = self.platform.value
+
+            self.channel_form = ChannelForm(experiment=self.experiment, data=data, initial=initial)
+            self.extra_form = self.platform.extra_form(data=data)
+
+    def is_valid(self):
+        """Validate both forms"""
+        channel_valid = self.channel_form.is_valid()
+        extra_valid = self.extra_form.is_valid() if self.extra_form else True
+        if channel_valid and extra_valid:
+            if not self.channel:
+                # skip platform validation when updating an existing channel
+                self.validate_platform()
+            self.validate_channel_config(self.channel_form.cleaned_data["platform"], self.extra_form.cleaned_data)
+            channel_valid = not self.channel_form.errors
+
+        return channel_valid and extra_valid
+
+    def validate_platform(self):
+        try:
+            validate_platform_availability(self.experiment, self.platform)
+        except ExperimentChannelException as e:
+            self.channel_form.add_error(None, str(e))
+
+    def validate_channel_config(self, platform_slug: str, config_data: dict):
+        platform = ChannelPlatform(platform_slug)
+        channel_identifier = config_data.get(platform.channel_identifier_key, "")
+
+        try:
+            ExperimentChannel.check_usage_by_another_experiment(
+                platform, identifier=channel_identifier, new_experiment=self.experiment
+            )
+        except ChannelAlreadyUtilizedException as e:
+            self.channel_form.add_error(None, e.html_message)
+
+    def save(self, commit=True):
+        """Save both forms"""
+        config_data = {}
+        if self.extra_form and self.extra_form.is_valid():
+            config_data = self.extra_form.cleaned_data
+
+        instance = self.channel_form.save(self.experiment, config_data)
+
+        if self.extra_form and hasattr(self.extra_form, "post_save"):
+            self.extra_form.post_save(channel=instance)
+
+        return instance
+
+    @property
+    def success_message(self):
+        return getattr(self.extra_form, "success_message", "")
+
+    @property
+    def warning_message(self):
+        return getattr(self.extra_form, "warning_message", "")
 
 
 class ChannelForm(forms.ModelForm):
@@ -25,13 +102,10 @@ class ChannelForm(forms.ModelForm):
         fields = ["name", "platform", "messaging_provider"]
         widgets = {"platform": forms.HiddenInput()}
 
-    def __init__(self, *args, **kwargs):
-        experiment = kwargs.pop("experiment", None)
+    def __init__(self, experiment, *args, **kwargs):
         initial: dict = kwargs.get("initial", {})
         initial.setdefault("name", experiment.name)
         super().__init__(*args, **kwargs)
-        if self.is_bound:
-            return
         platform = self.initial["platform"]
         self._populate_available_message_providers(experiment.team, platform)
 

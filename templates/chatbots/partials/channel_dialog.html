@@ -1,0 +1,64 @@
+{% load form_tags %}
+{% if save_successful %}
+  {% include "chatbots/partials/channel_buttons_oob.html" %}
+{% endif %}
+<dialog class="modal" open>
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">
+      {% if channel %}
+        Edit {{ channel.platform_enum.label }} Channel
+      {% else %}
+        Link with {{ platform.label }}
+      {% endif %}
+    </h3>
+    <form method="post"
+      {% if channel %}
+        hx-post="{% url "channels:channel_edit_dialog" request.team.slug experiment.id channel.id %}?origin={{ request.GET.origin|default:'chatbots' }}"
+      {% else %}
+        hx-post="{% url "channels:channel_create_dialog" request.team.slug experiment.id platform.value %}?origin={{ request.GET.origin|default:'chatbots' }}"
+      {% endif %}
+      hx-target="#channel_create_edit_modal_placeholder"
+      hx-disabled-elt="input, select, button"
+      hx-swap="innerHTML"
+    >
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% render_form_fields form %}
+      {% if extra_form %}
+        <div {% include "generic/attrs.html" with attrs=extra_form.form_attrs %}>
+          {% render_form_fields extra_form %}
+        </div>
+      {% endif %}
+      {% if success_message %}
+        <div role="alert" class="alert alert-success">
+          <span>{{ success_message }}</span>
+        </div>
+      {% endif %}
+      {% if warning_message %}
+        <div role="alert" class="alert alert-warning">
+          <span>{{ warning_message }}</span>
+        </div>
+      {% endif %}
+      <div class="modal-action">
+        <span class="loading loading-spinner loading-sm p-3 ml-4 htmx-indicator"></span>
+        {% if channel %}
+          <button class="btn btn-primary" type="submit">Update</button>
+          <button class="btn btn-error"
+                  hx-post="{% url 'channels:delete_channel' request.team.slug experiment.id channel.id %}?origin={{ request.GET.origin|default:'chatbots' }}"
+                  hx-target="#channel_create_edit_modal_placeholder"
+                  hx-disabled-elt="input, select, button"
+                  hx-swap="innerHTML"
+          >Delete</button>
+        {% else %}
+          <button class="btn btn-primary" type="submit">Create</button>
+        {% endif %}
+        <form method="dialog">
+          <button class="btn">Close</button>
+        </form>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
