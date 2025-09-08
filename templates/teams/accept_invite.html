@@ -17,18 +17,18 @@
               {% endblocktranslate %}
             </h2>
             <p>
-              {% blocktranslate with invite_email=invitation.email %}
+              {% blocktranslate with invite_email=invitation.email.lower %}
                 The invitation is for {{ invite_email }}.
               {% endblocktranslate %}
             </p>
             {% if request.user.is_authenticated %}
               <form method="post" class="mt-2">
                 {% csrf_token %}
-                {% if request.user.email == invitation.email %}
+                {% if user_email_matches %}
                   <input type="submit" class="btn btn-primary" value="Accept Invitation"/>
                 {% else %}
                   <p>
-                    {% blocktranslate with invite_email=invitation.email user_email=request.user.email  %}
+                    {% blocktranslate with invite_email=invitation.email.lower user_email=request.user.email.lower  %}
                       You're logged in as {{ user_email }}. Please sign out and click the link in the invitation email sent to {{ invite_email }}.
                     {% endblocktranslate %}
                   </p>
@@ -47,7 +47,7 @@
               </p>
               <p>
                 <a href="{% url login_url_name|default:"account_login" %}{% querystring next=invitation_url %}" class="link">
-                  {% blocktranslate with invite_email=invitation.email %}
+                  {% blocktranslate with invite_email=invitation.email.lower %}
                     Already have an account as {{ invite_email }}? Sign in.
                   {% endblocktranslate %}
                 </a>

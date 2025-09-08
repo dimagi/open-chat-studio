@@ -1,4 +1,5 @@
 {% extends "generic/object_form.html" %}
+{% load static %}
 {% load form_tags %}
 {% load i18n %}
 
@@ -19,10 +20,6 @@
           </p>
 
           <div class="mb-4">
-            {{ available_tags|default:""|json_script:"available-tags-data" }}
-            {{ experiment_versions|default:""|json_script:"experiment-versions-data" }}
-            {{ channel_list|default:"[]"|json_script:"channel-list-data" }}
-
             <div class="flex items-center justify-between">
               <div>
                 {% include "experiments/filters.html" %}
@@ -54,71 +51,28 @@
 
           <input type="hidden" name="messages_json" x-model="messagesJsonString">
 
-        <!-- Add message button -->
-          <div class="flex items-center justify-between mb-4">
-            <h4 class="font-medium">{% trans "Message Pairs" %}</h4>
-            <button type="button" class="btn btn-primary btn-sm" @click="addMessage()">
-              <i class="fa-solid fa-plus"></i> {% trans "Add Message Pair" %}
-            </button>
-          </div>
+        <!-- Messages display -->
+          {% include "evaluations/components/message_display_list.html" %}
 
-        <!-- Messages table -->
-          <div x-show="messages.length === 0" class="text-center py-8 text-gray-500">
-            <i class="fa-solid fa-comments text-2xl mb-2"></i>
-            <p>{% trans "No message pairs added yet. Click 'Add Message Pair' to get started." %}</p>
-          </div>
+          <!-- Add new message form -->
+          <div class="mt-6 pt-6">
+            <div class="app-card">
+              <h4 class="text-lg font-semibold mb-4">{% trans "Add New Message Pair" %}</h4>
+              <div id="manual-message-form">
+                {% include "evaluations/components/message_pair_form.html" with context_field_id="manual-context-field" disable_button_id="manual-add-button" %}
 
-          <div x-show="messages.length > 0" class="table-responsive">
-            <table class="table w-full table-fixed">
-              <thead class="bg-base-200 base-content uppercase text-sm leading-normal">
-                <tr>
-                  <th class="w-2/5 px-3 py-3 text-left">{% trans "Human Message" %}</th>
-                  <th class="w-2/5 px-3 py-3 text-left">{% trans "AI Message" %}</th>
-                  <th class="w-1/6 px-3 py-3 text-left">{% trans "Context (JSON)" %}</th>
-                  <th class="w-16 px-3 py-3 text-left">{% trans "Actions" %}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template x-for="(message, index) in messages" :key="index">
-                  <tr>
-                    <td class="align-top">
-                      <textarea
-                        x-model="message.human"
-                        @input="updateMessagesJson()"
-                        class="w-full min-h-[80px] p-0 text-sm bg-transparent border-none resize-none focus:outline-none focus:ring-0"
-                        placeholder="Enter human message..."
-                        required
-                      ></textarea>
-                    </td>
-                    <td class="align-top">
-                      <textarea
-                        x-model="message.ai"
-                        @input="updateMessagesJson()"
-                        class="w-full min-h-[80px] p-0 text-sm bg-transparent border-none resize-none focus:outline-none focus:ring-0"
-                        placeholder="Enter AI response..."
-                        required
-                      ></textarea>
-                    </td>
-                    <td class="align-top">
-                      <textarea
-                        x-model="message.context"
-                        @input="updateMessagesJson()"
-                        class="w-full min-h-[80px] p-0 text-xs font-mono bg-transparent border-none resize-none focus:outline-none focus:ring-0"
-                        placeholder='{"key": "value"}'
-                      ></textarea>
-                    </td>
-                    <td class="text-center align-top">
-                      <button type="button"
-                              class="btn btn-xs"
-                              @click="removeMessage(index)"
-                              title="Remove message pair">
-                        <i class="fa-solid fa-trash"></i>
-                      </button>
-                    </td>
-                  </tr>
-                </template>
-              </tbody>
-            </table>
+                <div class="flex gap-2 mt-4">
+                  <button type="button" class="btn btn-primary" id="manual-add-button" @click="addMessageFromForm()">
+                    <i class="fa-solid fa-plus mr-2"></i>
+                    {% trans "Add Message Pair" %}
+                  </button>
+                  <button type="reset" class="btn btn-ghost" @click="clearMessageForm()">
+                    <i class="fa-solid fa-times mr-2"></i>
+                    {% trans "Clear Form" %}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -307,10 +261,49 @@
         <span x-text="errorMessage"></span>
       </div>
     </div> <!-- End of loaded content div -->
+
+    <!-- Edit Message Modal - Inside Alpine context, no form nesting -->
+    <dialog id="editMessageModal" class="modal">
+      <div x-show="isEditingMessage" class="modal-box max-w-none w-1/2">
+        <h3 class="font-bold text-lg mb-4">{% trans "Edit Message Pair" %}</h3>
+        <button type="button" class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" @click="cancelEditingMessage()">✕</button>
+
+        <!-- Modal content - no form tags to avoid nesting -->
+        <div class="space-y-6">
+          {% include "evaluations/components/message_pair_form.html" with context_field_id="edit-modal-context-field" disable_button_id="modal-save-button" use_alpine_model=True %}
+
+          <!-- Error messages -->
+          <div x-show="editingMessageErrors.human" class="text-error text-sm mt-1" x-text="editingMessageErrors.human"></div>
+          <div x-show="editingMessageErrors.ai" class="text-error text-sm mt-1" x-text="editingMessageErrors.ai"></div>
+          <div x-show="editingMessageErrors.context" class="text-error text-sm mt-1" x-text="editingMessageErrors.context"></div>
+          <div x-show="editingMessageErrors.history_text" class="text-error text-sm mt-1" x-text="editingMessageErrors.history_text"></div>
+
+          <!-- Actions -->
+          <div class="modal-action">
+            <button
+              type="button"
+              class="btn btn-ghost"
+              @click="cancelEditingMessage()"
+            >
+              {% trans "Cancel" %}
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="modal-save-button"
+              @click="updateEditingMessage()"
+            >
+              {% trans "Save Changes" %}
+            </button>
+          </div>
+        </div>
+      </div>
+    </dialog>
   </div> <!-- End of datasetBuilder div -->
 {% endblock form %}
 
 {% block page_js %}
+  <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
     function datasetBuilder() {
       return {
@@ -321,6 +314,17 @@
         messagesJsonString: '[]',
         showError: false,
         errorMessage: '',
+
+        // Modal editing state
+        editingMessage: {
+          human: '',
+          ai: '',
+          context: '{}',
+          history_text: ''
+        },
+        editingMessageIndex: -1,
+        editingMessageErrors: {},
+        isEditingMessage: false,
 
         // CSV mode properties
         csvParsed: false,
@@ -374,13 +378,21 @@
           }
 
           // Form submission validation
-          const form = document.querySelector('form');
-          form.addEventListener('submit', (e) => {
+          const mainForm = document.getElementById('dataset-create-form');
+          mainForm.addEventListener('submit', (e) => {
             this.validateForm(e);
           });
 
           // Set loaded to true after everything is initialized
           this.loaded = true;
+
+          // Initialize JSON editor for manual message form after DOM is ready
+          this.$nextTick(() => {
+            const jsonEditorElement = document.querySelector('#manual-message-form .json-editor');
+            if (jsonEditorElement && window.SiteJS && window.SiteJS.editors) {
+              window.SiteJS.editors.createJsonEditor(jsonEditorElement);
+            }
+          });
         },
 
         validateForm(e) {
@@ -410,6 +422,18 @@
                   this.errorMessage = `Message pair ${i + 1} is missing required content.`;
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                   return;
+                }
+
+                // Validate history text format if present
+                if (msg.history_text && msg.history_text.trim()) {
+                  const parsedHistory = this.parseHistoryText(msg.history_text);
+                  if (parsedHistory.length === 0) {
+                    e.preventDefault();
+                    this.showError = true;
+                    this.errorMessage = `Message pair ${i + 1} has invalid history format. History should contain lines starting with "user:" or "assistant:".`;
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                  }
                 }
               }
             }
@@ -471,13 +495,143 @@
         },
 
         // Manual message methods (for manual mode)
-        addMessage() {
+        addMessageFromForm() {
+          // Get values from the form
+          const humanMessage = document.querySelector('textarea[name="human_message"]').value.trim();
+          const aiMessage = document.querySelector('textarea[name="ai_message"]').value.trim();
+          const contextValue = document.querySelector('#manual-context-field').value || '{}';
+          const historyText = document.querySelector('textarea[name="history_text"]').value.trim();
+
+          // Validate required fields
+          if (!humanMessage || !aiMessage) {
+            this.showError = true;
+            this.errorMessage = 'Both human and AI messages are required.';
+            return;
+          }
+
+          // Validate JSON context
+          let contextObj = {};
+          if (contextValue.trim() && contextValue !== '{}') {
+            try {
+              contextObj = JSON.parse(contextValue);
+            } catch (e) {
+              this.showError = true;
+              this.errorMessage = 'Invalid JSON format in context field.';
+              return;
+            }
+          }
+
+          // Validate history text format if present
+          if (historyText && historyText.trim()) {
+            const parsedHistory = this.parseHistoryText(historyText);
+            if (parsedHistory.length === 0) {
+              this.showError = true;
+              this.errorMessage = 'Invalid history format. History should contain lines starting with "user:" or "assistant:".';
+              return;
+            }
+          }
+
+          // Add message to array
           this.messages.push({
+            human: humanMessage,
+            ai: aiMessage,
+            context: contextValue,
+            history_text: historyText
+          });
+
+          this.updateMessagesJson();
+          this.clearMessageForm();
+          this.showError = false;
+        },
+
+        clearMessageForm() {
+          // Clear form fields
+          document.querySelector('textarea[name="human_message"]').value = '';
+          document.querySelector('textarea[name="ai_message"]').value = '';
+          document.querySelector('textarea[name="history_text"]').value = '';
+          document.querySelector('#manual-context-field').value = '{}';
+        },
+
+        editMessage(index) {
+          // Set up modal editing state
+          this.editingMessage = { ...this.messages[index] };
+          this.editingMessageIndex = index;
+          this.editingMessageErrors = {};
+          this.isEditingMessage = true;
+
+          // Show modal and initialize JSON editor
+          this.$nextTick(() => {
+            document.getElementById('editMessageModal').showModal();
+
+            // Initialize JSON editor for modal
+            const jsonEditorElement = document.querySelector('#edit-modal-context-field').parentElement.querySelector('.json-editor');
+            if (jsonEditorElement && window.SiteJS && window.SiteJS.editors) {
+              window.SiteJS.editors.createJsonEditor(jsonEditorElement);
+            }
+          });
+        },
+
+        updateEditingMessage() {
+          // Validate required fields
+          if (!this.editingMessage.human.trim() || !this.editingMessage.ai.trim()) {
+            this.editingMessageErrors = {
+              human: !this.editingMessage.human.trim() ? 'Human message is required' : '',
+              ai: !this.editingMessage.ai.trim() ? 'AI message is required' : ''
+            };
+            return;
+          }
+
+          // Validate JSON context
+          if (this.editingMessage.context.trim() && this.editingMessage.context !== '{}') {
+            try {
+              JSON.parse(this.editingMessage.context);
+            } catch (e) {
+              this.editingMessageErrors = { context: 'Invalid JSON format' };
+              return;
+            }
+          }
+
+          // Validate history text format if present
+          if (this.editingMessage.history_text && this.editingMessage.history_text.trim()) {
+            const parsedHistory = this.parseHistoryText(this.editingMessage.history_text);
+            if (parsedHistory.length === 0) {
+              this.editingMessageErrors = {
+                history_text: 'Invalid history format. History should contain lines starting with "user:" or "assistant:".'
+              };
+              return;
+            }
+          }
+
+          // Update the message in the array
+          this.messages[this.editingMessageIndex] = { ...this.editingMessage };
+          this.updateMessagesJson();
+
+          // Close modal and reset state
+          this.cancelEditingMessage();
+        },
+
+        cancelEditingMessage() {
+          this.editingMessage = {
             human: '',
             ai: '',
-            context: ''
-          });
-          this.updateMessagesJson();
+            context: '{}',
+            history_text: ''
+          };
+          this.editingMessageIndex = -1;
+          this.editingMessageErrors = {};
+          this.isEditingMessage = false;
+          document.getElementById('editMessageModal').close();
+        },
+
+        confirmDelete(index) {
+          alertify.confirm().setting({
+            title: 'Confirm',
+            message: 'Are you sure you want to delete this message? This action cannot be undone.',
+            transition: 'fade',
+            onok: () => {
+              this.removeMessage(index);
+            },
+          }).show();
         },
 
         removeMessage(index) {
@@ -633,6 +787,50 @@
           if (this.csvData) {
             this.csvDataJson = JSON.stringify(this.csvData.all_rows || []);
           }
+        },
+
+        parseHistoryText(text) {
+          if (!text || text.trim() === '') return [];
+          const trimmedText = text.trim().toLowerCase();
+          if (!trimmedText.startsWith('user:') && !trimmedText.startsWith('assistant:')) {
+            // The first line must start with either user or assistant, otherwise the history is invalid
+            return [];
+          }
+
+          const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+          const parsedMessages = [];
+          let currentMessage = null;
+
+          for (const line of lines) {
+            const lineStripped = line.trim();
+            if (!lineStripped) {
+              continue;
+            }
+            // Match patterns like 'user: content', 'assistant: content'
+            const match = line.match(/^(user|assistant):\s*(.+)$/i);
+            if (match) {
+              if (currentMessage) {
+                parsedMessages.push(currentMessage);
+              }
+              let messageType = match[1].toLowerCase();
+              const content = match[2];
+              currentMessage = {
+                message_type: messageType,
+                content: content
+              };
+            } else if (currentMessage) {
+              currentMessage.content += "\n" + lineStripped;
+            }
+          }
+          if (currentMessage) {
+            parsedMessages.push(currentMessage);
+          }
+          return parsedMessages;
+        },
+
+        // Helper function for backward compatibility in templates
+        parseHistoryTextMessages(text) {
+          return this.parseHistoryText(text);
         }
       };
     }

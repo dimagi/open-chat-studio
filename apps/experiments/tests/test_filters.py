@@ -10,7 +10,7 @@ from time_machine import travel
 
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.filters import Operators, apply_dynamic_filters
+from apps.experiments.filters import DynamicExperimentSessionFilter, Operators
 from apps.experiments.models import SessionStatus
 from apps.teams.models import Team
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -33,7 +33,7 @@ def attach_session_middleware_to_request(request):
 
 
 @pytest.mark.django_db()
-class TestDynamicFilters:
+class TestExperimentSessionFilters:
     @pytest.fixture()
     def base_session(self):
         """Create a base experiment session with participant"""
@@ -119,38 +119,45 @@ class TestDynamicFilters:
         attach_session_middleware_to_request(request)
         timezone = request.session.get("detected_tz", None)
 
-        filtered = apply_dynamic_filters(session.experiment.sessions.all(), params, timezone)
+        queryset = session.experiment.sessions.all()
+        session_filter = DynamicExperimentSessionFilter(queryset, params, timezone)
+        filtered = session_filter.apply()
         assert filtered.count() == 1
         assert filtered.first() == session
 
         # Test CONTAINS
         params["filter_0_operator"] = Operators.CONTAINS
         params["filter_0_value"] = "user@"
-        filtered = apply_dynamic_filters(session.experiment.sessions.all(), params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert filtered.count() == 1
 
         # Test DOES_NOT_CONTAIN
         params["filter_0_operator"] = Operators.DOES_NOT_CONTAIN
         params["filter_0_value"] = "nonexistent"
-        filtered = apply_dynamic_filters(session.experiment.sessions.all(), params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert filtered.count() == 1
 
         # Test STARTS_WITH
         params["filter_0_operator"] = Operators.STARTS_WITH
         params["filter_0_value"] = "test"
-        filtered = apply_dynamic_filters(session.experiment.sessions.all(), params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert filtered.count() == 1
 
         # Test ENDS_WITH
         params["filter_0_operator"] = Operators.ENDS_WITH
         params["filter_0_value"] = "@example.com"
-        filtered = apply_dynamic_filters(session.experiment.sessions.all(), params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert filtered.count() == 1
 
         # Test ANY_OF
         params["filter_0_operator"] = Operators.ANY_OF
         params["filter_0_value"] = json.dumps(["test.user@example.com", "another@example.com"])
-        filtered = apply_dynamic_filters(session.experiment.sessions.all(), params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert filtered.count() == 1
         assert filtered.first() == session
 
@@ -189,7 +196,8 @@ class TestDynamicFilters:
         # Test ON first message
         sessions_queryset = session1.experiment.sessions.all()
         params = {"filter_0_column": "first_message", "filter_0_operator": Operators.ON, "filter_0_value": "2025-01-01"}
-        filtered = apply_dynamic_filters(sessions_queryset, params, time_zone)
+        session_filter = DynamicExperimentSessionFilter(sessions_queryset, params, time_zone)
+        filtered = session_filter.apply()
         assert filtered.count() == 1
         assert filtered.first() == session1
 
@@ -199,7 +207,8 @@ class TestDynamicFilters:
             "filter_0_operator": Operators.BEFORE,
             "filter_0_value": "2025-01-02",
         }
-        filtered = apply_dynamic_filters(sessions_queryset, params, time_zone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert filtered.count() == 1
         assert filtered.first() == session1
 
@@ -209,7 +218,8 @@ class TestDynamicFilters:
             "filter_0_operator": Operators.AFTER,
             "filter_0_value": "2025-01-01",
         }
-        filtered = apply_dynamic_filters(sessions_queryset, params, time_zone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert filtered.count() == 1
         assert filtered.first() == session2
 
@@ -229,17 +239,20 @@ class TestDynamicFilters:
         attach_session_middleware_to_request(request)
         timezone = request.session.get("detected_tz", None)
 
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter = DynamicExperimentSessionFilter(session_queryset, params, timezone)
+        filtered = session_filter.apply()
         assert filtered.count() == 2
 
         # Test ANY_OF with multiple tags
         params["filter_0_value"] = json.dumps(["important", "follow-up"])
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter = DynamicExperimentSessionFilter(session_queryset, params, timezone)
+        filtered = session_filter.apply()
         assert filtered.count() == 2
 
         # Test ALL_OF with multiple tags
         params["filter_0_operator"] = Operators.ALL_OF
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter = DynamicExperimentSessionFilter(session_queryset, params, timezone)
+        filtered = session_filter.apply()
         assert filtered.count() == 1
         assert filtered.first() == sessions[1]
 
@@ -259,13 +272,15 @@ class TestDynamicFilters:
         attach_session_middleware_to_request(request)
         timezone = request.session.get("detected_tz", None)
 
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter = DynamicExperimentSessionFilter(session_queryset, params, timezone)
+        filtered = session_filter.apply()
         assert filtered.count() == 2
 
         # Test ALL_OF with both versions
         params["filter_0_operator"] = Operators.ALL_OF
         params["filter_0_value"] = json.dumps(["v1", "v2"])
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert filtered.count() == 1
         assert filtered.first() == sessions[1]
 
@@ -291,7 +306,8 @@ class TestDynamicFilters:
         attach_session_middleware_to_request(request)
         timezone = request.session.get("detected_tz", None)
 
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter = DynamicExperimentSessionFilter(session_queryset, params, timezone)
+        filtered = session_filter.apply()
         assert filtered.count() == 1
         assert filtered.first() == sessions[0]
 
@@ -304,13 +320,15 @@ class TestDynamicFilters:
         attach_session_middleware_to_request(request)
         timezone = request.session.get("detected_tz", None)
 
-        filtered = apply_dynamic_filters(base_session.experiment.sessions.all(), params, timezone)
+        session_filter = DynamicExperimentSessionFilter(base_session.experiment.sessions.all(), params, timezone)
+        filtered = session_filter.apply()
         assert filtered.count() == base_session.experiment.sessions.count()
 
         # Invalid filter column should be ignored
         params["filter_0_column"] = "invalid_column"
         params["filter_0_value"] = "test"
-        filtered = apply_dynamic_filters(base_session.experiment.sessions.all(), params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert filtered.count() == base_session.experiment.sessions.count()
 
     def test_messages_tag_filters(self, sessions_with_messages_tags):
@@ -329,24 +347,29 @@ class TestDynamicFilters:
         attach_session_middleware_to_request(request)
         timezone = request.session.get("detected_tz", None)
 
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter = DynamicExperimentSessionFilter(session_queryset, params, timezone)
+        filtered = session_filter.apply()
         assert set(filtered) == set(sessions), f"Expected both sessions with 'important', got {filtered}"
 
         params["filter_0_value"] = json.dumps(["follow-up"])
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert set(filtered) == {sessions[1]}, f"Expected session2 with 'follow-up', got {filtered}"
 
         params["filter_0_value"] = json.dumps(["important", "follow-up"])
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert set(filtered) == set(sessions), f"Expected both sessions with either tag, got {filtered}"
 
         params["filter_0_operator"] = Operators.ALL_OF
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert list(filtered) == [sessions[1]], f"Expected only session2 with both tags, got {list(filtered)}"
 
         params["filter_0_operator"] = Operators.EXCLUDES
         params["filter_0_value"] = json.dumps(["important"])
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert list(filtered) == [], f"Expected no sessions to exclude 'important', got {list(filtered)}"
 
     def test_state_filters(self, sessions_with_statuses):
@@ -367,12 +390,14 @@ class TestDynamicFilters:
         attach_session_middleware_to_request(request)
         timezone = request.session.get("detected_tz", None)
 
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter = DynamicExperimentSessionFilter(session_queryset, params, timezone)
+        filtered = session_filter.apply()
         assert all(s.status == SessionStatus.ACTIVE for s in filtered)
 
         params["filter_0_operator"] = Operators.EXCLUDES
         params["filter_0_value"] = json.dumps([SessionStatus.ACTIVE.value])
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert all(s.status != SessionStatus.ACTIVE for s in filtered)
 
     def test_remote_id_filters(self, sessions_with_statuses):
@@ -396,9 +421,11 @@ class TestDynamicFilters:
         attach_session_middleware_to_request(request)
         timezone = request.session.get("detected_tz", None)
 
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter = DynamicExperimentSessionFilter(session_queryset, params, timezone)
+        filtered = session_filter.apply()
         assert all(s.participant.remote_id == test_id for s in filtered)
 
         params["filter_0_operator"] = Operators.EXCLUDES
-        filtered = apply_dynamic_filters(session_queryset, params, timezone)
+        session_filter.parsed_params = params
+        filtered = session_filter.apply()
         assert all(s.participant.remote_id != test_id for s in filtered)

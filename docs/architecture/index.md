@@ -70,6 +70,7 @@ The `assets` folder contains JavaScript, CSS. The `assets/styles` folder contain
 Open Chat Studio uses Celery for asynchronous task processing, which is critical for handling LLM interactions, scheduled messages, and other background operations.
 
 **Key Files**:
+
 - `gpt_playground/celery.py`: Celery configuration
 - Various `tasks.py` files in different apps
 
@@ -78,6 +79,7 @@ Open Chat Studio uses Celery for asynchronous task processing, which is critical
 The system uses Django's authentication system along with custom middleware and decorators to ensure proper access control.
 
 **Key Files**:
+
 - `teams/middleware.py`: Team-based access control
 - `teams/decorators.py`: Permission decorators
 
@@ -86,6 +88,25 @@ The system uses Django's authentication system along with custom middleware and 
 The frontend uses a combination of Django templates, Tailwind CSS, and JavaScript to create a responsive and interactive user interface.
 
 **Key Files**:
+
 - `templates/`: HTML templates
 - `assets/styles/`: CSS and Tailwind configurations
 - `assets/javascript/`: JavaScript modules
+
+## External services
+
+**[Sentry](https://sentry.io/)**
+
+- Purpose: Error reporting and tracking  
+- Used for: Identifying and debugging production issues
+
+**[Task Badger](https://taskbadger.net/)**  
+- 
+- Purpose: Celery task monitoring  
+- Used for: Monitoring asynchronous task execution and performance
+
+**[BetterStack](https://betterstack.com/)**
+
+- Purpose: Uptime monitoring and status page  
+- Status Page: [status.openchatstudio.com](https://status.openchatstudio.com/)  
+- Used for: Monitoring system availability and communicating status to users

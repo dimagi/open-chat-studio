@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from django.db import models
 from django.urls import reverse
 
+from apps.annotations.models import TaggedModelMixin
 from apps.teams.models import BaseTeamModel
 
 
@@ -49,8 +51,8 @@ class Trace(models.Model):
         self,
         span_id: uuid.UUID,
         span_name: str,
-        inputs: dict[str, any],
-        metadata: dict[str, any] | None = None,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
     ) -> Span:
         return _create_span(
             trace_id=self.id,
@@ -63,7 +65,7 @@ class Trace(models.Model):
         )
 
 
-class Span(BaseTeamModel):
+class Span(BaseTeamModel, TaggedModelMixin):
     """
     Represents a segment or operation within a trace, allowing for detailed
     tracking of sub-operations with their own metrics and data.
@@ -103,8 +105,8 @@ class Span(BaseTeamModel):
         self,
         span_id: uuid.UUID,
         span_name: str,
-        inputs: dict[str, any],
-        metadata: dict[str, any] | None = None,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
     ) -> Span:
         return _create_span(
             trace_id=self.trace_id,
@@ -123,8 +125,8 @@ def _create_span(
     team_id: int,
     span_id: uuid.UUID,
     span_name: str,
-    inputs: dict[str, any],
-    metadata: dict[str, any] | None = None,
+    inputs: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
 ) -> Span:
     return Span.objects.create(
         trace_id=trace_id,
