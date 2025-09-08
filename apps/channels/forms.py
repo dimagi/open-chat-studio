@@ -25,36 +25,22 @@ class ChannelFormWrapper:
     to work with Django's built-in CreateView and UpdateView.
     """
 
-    def __init__(self, experiment, platform, channel=None, *args, **kwargs):
+    def __init__(
+        self, experiment, platform, channel=None, data: dict | None = None, initial: dict | None = None, **kwargs
+    ):
         self.experiment = experiment
         self.platform = platform
         self.channel = channel
 
-        try:
-            self._init_forms(*args, **kwargs)
-        except Exception as e:
-            logger.warning(f"Form initialization failed: {e}")
-            self.channel_form = None
-            self.extra_form = None
-
-    def _init_forms(self, *args, **kwargs):
-        """Initialize the main channel form and extra form"""
         if self.channel:
-            self.channel_form = self.channel.form(data=kwargs.get("data"))
-            self.extra_form = self.channel.extra_form(data=kwargs.get("data"))
+            self.channel_form = ChannelForm(instance=channel, experiment=experiment, data=data)
+            self.extra_form = self.channel.extra_form(data=data)
         else:
-            if not self.platform:
-                raise ValueError("Platform must be provided when creating a new channel")
+            initial = initial or {}
+            initial["platform"] = self.platform.value
 
-            form_kwargs = {
-                "experiment": self.experiment,
-                "data": kwargs.get("data"),
-                "initial": kwargs.get("initial", {}),
-            }
-            form_kwargs["initial"]["platform"] = self.platform.value
-
-            self.channel_form = ChannelForm(**form_kwargs)
-            self.extra_form = self.platform.extra_form(data=kwargs.get("data"))
+            self.channel_form = ChannelForm(experiment=self.experiment, data=data, initial=initial)
+            self.extra_form = self.platform.extra_form(data=data)
 
     def is_valid(self):
         """Validate both forms"""
@@ -65,8 +51,9 @@ class ChannelFormWrapper:
                 # skip platform validation when updating an existing channel
                 self.validate_platform()
             self.validate_channel_config(self.channel_form.cleaned_data["platform"], self.extra_form.cleaned_data)
+            channel_valid = not self.channel_form.errors
 
-        return not self.channel_form.errors and extra_valid
+        return channel_valid and extra_valid
 
     def validate_platform(self):
         try:
@@ -100,12 +87,10 @@ class ChannelFormWrapper:
 
     @property
     def success_message(self):
-        """Get success message from extra form if available"""
         return getattr(self.extra_form, "success_message", "")
 
     @property
     def warning_message(self):
-        """Get warning message from extra form if available"""
         return getattr(self.extra_form, "warning_message", "")
 
 
@@ -117,8 +102,7 @@ class ChannelForm(forms.ModelForm):
         fields = ["name", "platform", "messaging_provider"]
         widgets = {"platform": forms.HiddenInput()}
 
-    def __init__(self, *args, **kwargs):
-        experiment = kwargs.pop("experiment", None)
+    def __init__(self, experiment, *args, **kwargs):
         initial: dict = kwargs.get("initial", {})
         initial.setdefault("name", experiment.name)
         super().__init__(*args, **kwargs)
