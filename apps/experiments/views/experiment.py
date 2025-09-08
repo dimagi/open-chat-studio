@@ -20,7 +20,7 @@ from django.db import transaction
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -597,7 +597,6 @@ def create_channel(request, team_slug: str, experiment_id: int):
         if platform in existing_platforms:
             messages.error(request, f"Channel for {platform.label} already exists")
             return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
         extra_form = platform.extra_form(data=request.POST)
         config_data = {}
         if extra_form:
@@ -622,12 +621,29 @@ def create_channel(request, team_slug: str, experiment_id: int):
             except ExperimentChannelException as e:
                 messages.error(request, "Error saving channel: " + str(e))
             else:
-                if extra_form.success_message:
-                    messages.info(request, extra_form.success_message)
-
-                if extra_form.warning_message:
-                    messages.warning(request, extra_form.warning_message)
+                if platform == ChannelPlatform.EMBEDDED_WIDGET:
+                    request.session["embedded_widget_success"] = {
+                        "widget_token": config_data["widget_token"],
+                        "allowed_domains": config_data.get("allowed_domains", []),
+                        "embed_code": extra_form._generate_embed_code(form.instance, config_data["widget_token"]),
+                    }
+                    request.session.save()
+                else:
+                    if extra_form.success_message:
+                        messages.info(request, extra_form.success_message)
+                    if extra_form.warning_message:
+                        messages.warning(request, extra_form.warning_message)
     return redirect("experiments:single_experiment_home", team_slug, experiment_id)
+
+
+@require_POST
+@login_and_team_required
+def clear_widget_success_session(request, team_slug: str, experiment_id: int):
+    print("we are clearing the session")
+    """Clear the embedded widget success data from session"""
+    if "embedded_widget_success" in request.session:
+        del request.session["embedded_widget_success"]
+    return JsonResponse({"status": "success"})
 
 
 @login_and_team_required

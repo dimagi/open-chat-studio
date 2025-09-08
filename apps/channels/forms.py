@@ -1,13 +1,12 @@
 import logging
+import re
 import secrets
 from functools import cached_property
 
 import phonenumbers
 from django import forms
 from django.conf import settings
-from django.template.loader import render_to_string
 from django.urls import reverse
-from django.utils.safestring import mark_safe
 from telebot import TeleBot, apihelper, types
 
 from apps.channels.const import SLACK_ALL_CHANNELS
@@ -242,10 +241,25 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
                 "placeholder": "Enter one domain per line, e.g.:\nexample.com\nwww.mysite.org\nsubdomain.example.com",
             }
         ),
-        help_text="Enter the domains where this widget is allowed to be embedded (one per line). \
-        Leave blank to allow all domains.",
+        help_text="Enter the domains where this widget is allowed to be embedded (one per line). "
+        "Leave blank to allow all domains.",
         required=False,
     )
+
+    def clean_allowed_domains(self):
+        """Validate and clean the allowed domains"""
+        domains_text = self.cleaned_data.get("allowed_domains", "").strip()
+        if not domains_text:
+            return []
+
+        domains = []
+        for line in domains_text.split("\n"):
+            domain = line.strip()
+            if domain:
+                if not re.match(r"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", domain):
+                    raise forms.ValidationError(f"Invalid domain format: {domain}")
+                domains.append(domain)
+        return domains
 
     def clean(self):
         """Generate the widget token so it's available in cleaned_data"""
@@ -255,6 +269,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         return cleaned_data
 
     def post_save(self, channel: ExperimentChannel):
+        """Save widget data - success message will be handled by the view"""
         widget_token = self.cleaned_data["widget_token"]
         channel.extra_data.update(
             {
@@ -264,25 +279,12 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         )
         channel.save()
 
-        embed_code = self._generate_embed_code(channel, widget_token)
-        self.success_message = mark_safe(
-            render_to_string(
-                "channels/embedded_widget_success.html",
-                {
-                    "channel": channel,
-                    "widget_token": widget_token,
-                    "allowed_domains": self.cleaned_data["allowed_domains"],
-                    "embed_code": embed_code,
-                },
-            )
-        )
-
     def _generate_embed_code(self, channel: ExperimentChannel, token: str) -> str:
+        """Generate the embed code for the widget"""
         base_url = getattr(settings, "SITE_URL", "https://chatbots.dimagi.com")
         embed_code = f'''<!-- Open Chat Studio Embedded Widget -->
 <script type="module" src="{base_url}/static/js/open-chat-studio-widget.esm.js"></script>
 <script nomodule src="{base_url}/static/js/open-chat-studio-widget.js"></script>
-
 <open-chat-studio-widget
     chatbot-id="{channel.experiment.public_id}"
     api-base-url="{base_url}"
