@@ -202,7 +202,8 @@
         {% endif %}
       </div>
     {% endif %}
-    {% if request.session.embedded_widget_success %}
+  </div>
+  {% if request.session.embedded_widget_success %}
       <dialog id="embedded_widget_success_modal" class="modal" x-data="{ autoShow: true }" x-init="if (autoShow) $el.showModal()">
         <div class="modal-box max-w-4xl">
           <h3 class="font-bold text-lg text-success mb-4">
@@ -232,6 +233,7 @@
               </div>
             </div>
           </div>
+
           <div class="card bg-base-200 mb-4">
             <div class="card-body">
               <h2 class="card-title text-base">
@@ -258,6 +260,7 @@
               </div>
             </div>
           </div>
+
           <div class="card bg-base-200 mb-4">
             <div class="card-body">
               <div class="flex justify-between items-center mb-3">
@@ -281,6 +284,7 @@
             </div>
           </div>
           {% endwith %}
+
           <div class="modal-action">
             <button class="btn btn-primary" type="button" onclick="closeSuccessModal()">
               <i class="fa-solid fa-check me-1"></i>
@@ -289,31 +293,30 @@
           </div>
         </div>
       </dialog>
-  </div>
 
-    <script>
-      async function clearSessionData() {
-        try {
-          await fetch("{% url 'experiments:clear_widget_success_session' request.team.slug experiment.id %}", {
-            method: 'POST',
-            headers: {
-              'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-              'Content-Type': 'application/json',
-            }
-          });
-        } catch (error) {
-          console.warn('Failed to clear session data:', error);
+      <script>
+        async function clearSessionData() {
+          try {
+            await fetch("{% url 'experiments:clear_widget_success_session' request.team.slug experiment.id %}", {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json',
+              }
+            });
+          } catch (error) {
+            console.warn('Failed to clear session data:', error);
+          }
         }
-      }
-      function closeSuccessModal() {
-        document.getElementById('embedded_widget_success_modal').close();
+
+        function closeSuccessModal() {
+          document.getElementById('embedded_widget_success_modal').close();
+          clearSessionData();
+        }
+
         clearSessionData();
-      }
-      clearSessionData();
-    </script>
-  {% endif %}
-
-
+      </script>
+    {% endif %}
   <div class="tabs-container">
     <div role="tablist" class="tabs tabs-border flex justify-start">
       {% if perms.chat.view_chat %}
