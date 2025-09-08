@@ -19,7 +19,7 @@
       {% for platform, available in platforms.items %}
         <li>
           <button
-              class="disabled:text-gray-600 tooltip tooltip-right"
+              class="disabled:text-gray-600{% if not available %} tooltip tooltip-right{% endif %}"
               {% if not available %}
               disabled
               data-tip="You need to configure your {{ platform|capfirst }} provider to use this channel"
