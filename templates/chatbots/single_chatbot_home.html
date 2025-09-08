@@ -202,94 +202,94 @@
         {% endif %}
       </div>
     {% endif %}
-  </div>
-  {% if request.session.embedded_widget_success %}
-    <dialog id="embedded_widget_success_modal" class="modal" x-data="{ autoShow: true }" x-init="if (autoShow) $el.showModal()">
-      <div class="modal-box max-w-4xl">
-        <h3 class="font-bold text-lg text-success mb-4">
-          <i class="fa-solid fa-check-circle me-2"></i>
-          Embedded Chat Widget Created Successfully!
-        </h3>
+    {% if request.session.embedded_widget_success %}
+      <dialog id="embedded_widget_success_modal" class="modal" x-data="{ autoShow: true }" x-init="if (autoShow) $el.showModal()">
+        <div class="modal-box max-w-4xl">
+          <h3 class="font-bold text-lg text-success mb-4">
+            <i class="fa-solid fa-check-circle me-2"></i>
+            Embedded Chat Widget Created Successfully!
+          </h3>
 
-        {% with success_data=request.session.embedded_widget_success %}
-        <div class="card bg-base-200 mb-4">
-          <div class="card-body">
-            <h2 class="card-title text-base">
-              <i class="fa-solid fa-key me-1"></i>
-              Widget Authentication Token
-            </h2>
-            <div class="join w-full">
-              <input type="text" class="input input-bordered join-item flex-1 font-mono text-sm"
-                     id="widget-token-copy" value="{{ success_data.widget_token }}" readonly>
-              <button class="btn btn-outline join-item" type="button"
-                      onclick="SiteJS.app.copyToClipboard(this, 'widget-token-copy')"
-                      title="Copy token to clipboard">
-                  <i class="fa-solid fa-copy"></i> Copy
-              </button>
-            </div>
-            <div class="text-sm text-warning mt-2">
-              <i class="fa-solid fa-shield-alt me-1"></i>
-              This token authenticates your widget. Keep it secure and don't share it publicly.
-            </div>
-          </div>
-        </div>
-        <div class="card bg-base-200 mb-4">
-          <div class="card-body">
-            <h2 class="card-title text-base">
-              <i class="fa-solid fa-globe me-1"></i>
-              Allowed Domains
-            </h2>
-            {% if success_data.allowed_domains %}
-              <ul class="list-none space-y-1">
-              {% for domain in success_data.allowed_domains %}
-                <li class="flex items-center">
-                  <i class="fa-solid fa-check text-success me-2"></i>
-                  <span class="font-mono">{{ domain }}</span>
-                </li>
-              {% endfor %}
-              </ul>
-            {% else %}
-              <div class="alert alert-warning">
-                <i class="fa-solid fa-exclamation-triangle"></i>
-                <span><strong>All domains allowed</strong> - Consider restricting to specific domains for security.</span>
+          {% with success_data=request.session.embedded_widget_success %}
+          <div class="card bg-base-200 mb-4">
+            <div class="card-body">
+              <h2 class="card-title text-base">
+                <i class="fa-solid fa-key me-1"></i>
+                Widget Authentication Token
+              </h2>
+              <div class="join w-full">
+                <input type="text" class="input input-bordered join-item flex-1 font-mono text-sm"
+                       id="widget-token-copy" value="{{ success_data.widget_token }}" readonly>
+                <button class="btn btn-outline join-item" type="button"
+                        onclick="SiteJS.app.copyToClipboard(this, 'widget-token-copy')"
+                        title="Copy token to clipboard">
+                    <i class="fa-solid fa-copy"></i> Copy
+                </button>
               </div>
-            {% endif %}
-            <div class="text-sm opacity-70 mt-2">
-              The widget will only work on these authorized domains.
+              <div class="text-sm text-warning mt-2">
+                <i class="fa-solid fa-shield-alt me-1"></i>
+                This token authenticates your widget. Keep it secure and don't share it publicly.
+              </div>
             </div>
           </div>
-        </div>
-        <div class="card bg-base-200 mb-4">
-          <div class="card-body">
-            <div class="flex justify-between items-center mb-3">
-              <h4 class="card-title text-base mb-0">
-                <i class="fa-solid fa-code me-1"></i>
-                Embed Code
-              </h4>
-              <button class="btn btn-sm btn-outline" type="button"
-                      onclick="SiteJS.app.copyToClipboard(this, 'embed-code-display')"
-                      title="Copy embed code to clipboard">
-                  <i class="fa-solid fa-copy"></i> Copy All Code
-              </button>
-            </div>
-            <div class="mockup-code">
-              <pre id="embed-code-display" class="text-sm overflow-x-auto">{{ success_data.embed_code }}</pre>
-            </div>
-            <div class="text-sm opacity-70 mt-2">
-              <i class="fa-solid fa-info-circle me-1"></i>
-              Copy this code and paste it into your website's HTML where you want the chat widget to appear.
+          <div class="card bg-base-200 mb-4">
+            <div class="card-body">
+              <h2 class="card-title text-base">
+                <i class="fa-solid fa-globe me-1"></i>
+                Allowed Domains
+              </h2>
+              {% if success_data.allowed_domains %}
+                <ul class="list-none space-y-1">
+                {% for domain in success_data.allowed_domains %}
+                  <li class="flex items-center">
+                    <i class="fa-solid fa-check text-success me-2"></i>
+                    <span class="font-mono">{{ domain }}</span>
+                  </li>
+                {% endfor %}
+                </ul>
+              {% else %}
+                <div class="alert alert-warning">
+                  <i class="fa-solid fa-exclamation-triangle"></i>
+                  <span><strong>All domains allowed</strong> - Consider restricting to specific domains for security.</span>
+                </div>
+              {% endif %}
+              <div class="text-sm opacity-70 mt-2">
+                The widget will only work on these authorized domains.
+              </div>
             </div>
           </div>
+          <div class="card bg-base-200 mb-4">
+            <div class="card-body">
+              <div class="flex justify-between items-center mb-3">
+                <h4 class="card-title text-base mb-0">
+                  <i class="fa-solid fa-code me-1"></i>
+                  Embed Code
+                </h4>
+                <button class="btn btn-sm btn-outline" type="button"
+                        onclick="SiteJS.app.copyToClipboard(this, 'embed-code-display')"
+                        title="Copy embed code to clipboard">
+                    <i class="fa-solid fa-copy"></i> Copy All Code
+                </button>
+              </div>
+              <div class="mockup-code">
+                <pre id="embed-code-display" class="text-sm overflow-x-auto">{{ success_data.embed_code }}</pre>
+              </div>
+              <div class="text-sm opacity-70 mt-2">
+                <i class="fa-solid fa-info-circle me-1"></i>
+                Copy this code and paste it into your website's HTML where you want the chat widget to appear.
+              </div>
+            </div>
+          </div>
+          {% endwith %}
+          <div class="modal-action">
+            <button class="btn btn-primary" type="button" onclick="closeSuccessModal()">
+              <i class="fa-solid fa-check me-1"></i>
+              Got it!
+            </button>
+          </div>
         </div>
-        {% endwith %}
-        <div class="modal-action">
-          <button class="btn btn-primary" type="button" onclick="closeSuccessModal()">
-            <i class="fa-solid fa-check me-1"></i>
-            Got it!
-          </button>
-        </div>
-      </div>
-    </dialog>
+      </dialog>
+  </div>
 
     <script>
       async function clearSessionData() {
