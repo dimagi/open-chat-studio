@@ -1,12 +1,14 @@
 import logging
 import re
+import secrets
 from functools import cached_property
 
 import phonenumbers
 from django import forms
 from django.conf import settings
+from django.template.loader import render_to_string
 from django.urls import reverse
-from django.utils.crypto import get_random_string
+from django.utils.safestring import mark_safe
 from telebot import TeleBot, apihelper, types
 
 from apps.channels.const import SLACK_ALL_CHANNELS
@@ -230,86 +232,71 @@ class CommCareConnectChannelForm(ExtraFormBase):
 
 
 class EmbeddedWidgetChannelForm(ExtraFormBase):
-    widget_token = forms.CharField(
-        label="Widget Token",
-        max_length=32,
-        disabled=True,
-        required=False,
-        help_text="Auto-generated secure token for widget authentication.",
-        widget=forms.TextInput(attrs={"readonly": "readonly"}),
-    )
+    """Form for creating embedded chat widget channels"""
 
     allowed_domains = forms.CharField(
         label="Allowed Domains",
         widget=forms.Textarea(
-            attrs={"rows": 5, "placeholder": "example.com\n*.subdomain.com\nlocalhost:3000\n127.0.0.1:8000"}
+            attrs={
+                "rows": 4,
+                "class": "textarea textarea-bordered w-full",
+                "placeholder": "Enter one domain per line, e.g.:\nexample.com\nwww.mysite.org\nsubdomain.example.com",
+            }
         ),
-        help_text=(
-            "Enter allowed domains one per line. Supports:<br>"
-            "• Exact domains: <code>example.com</code><br>"
-            "• Wildcard subdomains: <code>*.example.com</code><br>"
-            "• With ports: <code>localhost:3000</code>"
-        ),
-        required=True,
+        help_text="Enter the domains where this widget is allowed to be embedded (one per line). \
+        Leave blank to allow all domains.",
+        required=False,
     )
 
-    def __init__(self, *args, **kwargs):
-        channel: ExperimentChannel = kwargs.pop("channel", None)
-
-        # Set up initial data properly
-        initial = kwargs.get("initial", {})
-
-        # If editing existing channel, populate with existing data
-        if channel and channel.extra_data.get("widget_token"):
-            initial["widget_token"] = channel.extra_data.get("widget_token")
-            initial["allowed_domains"] = "\n".join(channel.extra_data.get("allowed_domains", []))
-        # If creating new channel, generate token with get_random_string(32)
-        elif not initial.get("widget_token"):
-            initial["widget_token"] = get_random_string(32)  # TOKEN AUTO-GENERATION
-
-        kwargs["initial"] = initial
-        super().__init__(*args, **kwargs)
-
     def clean_allowed_domains(self):
-        domains_text = self.cleaned_data.get("allowed_domains", "")
-        domains = [domain.strip() for domain in domains_text.split("\n") if domain.strip()]
+        domains_text = self.cleaned_data.get("allowed_domains", "").strip()
+        if not domains_text:
+            return []
 
-        if not domains:
-            raise forms.ValidationError("At least one domain must be specified.")
+        domains = []
+        for line in domains_text.split("\n"):
+            domain = line.strip()
+            if domain:
+                if not re.match(r"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", domain):
+                    raise forms.ValidationError(f"Invalid domain format: {domain}")
+                domains.append(domain)
 
-        validated_domains = []
-        for domain in domains:
-            if self._is_valid_domain_pattern(domain):
-                validated_domains.append(domain)
-            else:
-                raise forms.ValidationError(f"Invalid domain format: '{domain}'")
-
-        return validated_domains
-
-    def _is_valid_domain_pattern(self, domain: str) -> bool:
-        dev_patterns = ["localhost", "127.0.0.1", "0.0.0.0", "::1"]
-        if any(domain.startswith(pattern) for pattern in dev_patterns):
-            return True
-
-        if domain.startswith("*."):
-            domain = domain[2:]
-        domain_without_port = domain.split(":")[0]
-        domain_regex = re.compile(
-            r"^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$"
-        )
-
-        return bool(domain_regex.match(domain_without_port))
+        return domains
 
     def post_save(self, channel: ExperimentChannel):
-        token = channel.extra_data.get("widget_token")
-        domains = channel.extra_data.get("allowed_domains", [])
-        domains_text = ", ".join(domains[:3])  # Show first 3 domains
-        if len(domains) > 3:
-            domains_text += f" (and {len(domains) - 3} more)"
+        """Generate widget token and create success message"""
+        # Generate secure token for the widget
+        widget_token = secrets.token_urlsafe(32)
 
-        self.success_message = (
-            f"Embedded widget channel created successfully!<br><br>"
-            f"<strong>Token:</strong> <code>{token}</code><br>"
-            f"<strong>Allowed domains:</strong> {domains_text}<br><br>"
-            f"Use this token in your widget's x-embed-key header."
+        channel.extra_data.update(
+            {
+                "widget_token": widget_token,
+                "allowed_domains": self.cleaned_data["allowed_domains"],
+            }
         )
+        channel.save()
+        embed_code = self._generate_embed_code(channel, widget_token)
+        self.success_message = mark_safe(
+            render_to_string(
+                "channels/embedded_widget_success.html",
+                {
+                    "channel": channel,
+                    "widget_token": widget_token,
+                    "allowed_domains": self.cleaned_data["allowed_domains"],
+                    "embed_code": embed_code,
+                },
+            )
+        )
+
+    def _generate_embed_code(self, channel: ExperimentChannel, token: str) -> str:
+        base_url = getattr(settings, "SITE_URL", "https://chatbots.dimagi.com")
+        embed_code = f'''<!-- Open Chat Studio Embedded Widget -->
+<script type="module" src="{base_url}/static/js/open-chat-studio-widget.esm.js"></script>
+<script nomodule src="{base_url}/static/js/open-chat-studio-widget.js"></script>
+
+<open-chat-studio-widget
+    chatbot-id="{channel.experiment.public_id}"
+    api-base-url="{base_url}"
+    key="{token}">
+</open-chat-studio-widget>'''
+        return embed_code
