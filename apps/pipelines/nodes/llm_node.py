@@ -1,15 +1,13 @@
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt.chat_agent_executor import AgentState, create_react_agent
 
 from apps.chat.agent.tools import get_node_tools
-from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeRunError
-from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
@@ -23,7 +21,7 @@ from apps.service_providers.llm_service.utils import (
 def execute_sub_agent(node, state: PipelineState, user_input: str):
     session: ExperimentSession | None = state.get("experiment_session")
     tool_callbacks = ToolCallbacks()
-    agent = build_node_agent(node, state, session, tool_callbacks)
+    agent = build_node_agent(node, state, session, tool_callbacks, user_input)
 
     attachments = [att for att in state.get("temp_state", {}).get("attachments", [])]
     formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
@@ -32,6 +30,8 @@ def execute_sub_agent(node, state: PipelineState, user_input: str):
     final_message = result["messages"][-1]
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)
+
+    node._save_history(session, node.node_id, user_input, ai_message)
 
     voice_kwargs = {}
     if node.synthetic_voice_id is not None:
@@ -63,16 +63,11 @@ def _process_agent_output(node, session, message):
     else:
         ai_message = remove_citations_from_text(parsed_output.text)
 
-    _save_history(node, session, ai_message)
-
     return ai_message, ai_message_metadata
 
 
 def build_node_agent(
-    node,
-    state: PipelineState,
-    session: ExperimentSession,
-    tool_callbacks: ToolCallbacks,
+    node, state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks, user_input: str
 ):
     prompt_context = _get_prompt_context(node, session, state)
 
@@ -87,7 +82,7 @@ def build_node_agent(
         except KeyError as e:
             raise PipelineNodeRunError(str(e)) from e
 
-        history = _get_chat_history(node, session, [prompt, HumanMessage(content=input)])
+        history = node._get_history(session, node.node_id, [prompt, HumanMessage(content=user_input)])
         return history + state["messages"]
 
     return create_react_agent(
@@ -95,45 +90,6 @@ def build_node_agent(
         model=node.get_chat_model(),
         tools=tools,
         prompt=prompt_callable,
-    )
-
-
-def _save_history(node, session, ai_message):
-    if node.history_type in (PipelineChatHistoryTypes.NAMED, PipelineChatHistoryTypes.NODE):
-        history_name = _get_history_name(node)
-        history, _ = session.pipeline_chat_history.get_or_create(type=node.history_type, name=history_name)
-        history.messages.create(human_message=input, ai_message=ai_message or "", node_id=node.node_id)
-
-
-def _get_history_name(node):
-    history_name = node.history_name if node.history_type == PipelineChatHistoryTypes.NAMED else node.node_id
-    return history_name
-
-
-def _get_chat_history(node, session, input_messages: list) -> list[BaseMessage]:
-    if node.history_type == PipelineChatHistoryTypes.NONE or session is None:
-        return []
-
-    if node.history_type == PipelineChatHistoryTypes.GLOBAL:
-        return compress_chat_history(
-            chat=session.chat,
-            llm=node.get_chat_model(),
-            max_token_limit=node.max_token_limit,
-            input_messages=input_messages,
-        )
-
-    try:
-        history: PipelineChatHistory = session.pipeline_chat_history.get(
-            type=node.history_type, name=_get_history_name(node)
-        )
-    except PipelineChatHistory.DoesNotExist:
-        return []
-
-    return compress_pipeline_chat_history(
-        pipeline_chat_history=history,
-        max_token_limit=node.max_token_limit,
-        llm=node.get_chat_model(),
-        input_messages=input_messages,
     )
 
 
