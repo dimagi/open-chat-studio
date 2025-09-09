@@ -77,9 +77,6 @@ def build_node_agent(
     prompt_context = _get_prompt_context(node, session, state)
 
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
-    if node.disabled_tools:
-        # Model builtin tools doesn't have a name attribute and are dicts
-        tools = [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
 
     def prompt_callable(state: AgentState):
         prompt_template = PromptTemplate.from_template(node.prompt)
@@ -177,4 +174,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
             collection.get_search_tool(max_results=node.max_results, generate_citations=node.generate_citations)
         )
 
+    if node.disabled_tools:
+        # Model builtin tools doesn't have a name attribute and are dicts
+        return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
     return tools
