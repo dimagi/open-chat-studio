@@ -975,7 +975,7 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
         return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession):
-        history_manager = PipelineHistoryManager.for_assistant()
+        history_manager = PipelineHistoryManager.for_assistant()  # TODO: create fake history manager
         adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 
         if adapter.get_allowed_tools():
