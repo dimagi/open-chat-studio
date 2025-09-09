@@ -1,8 +1,28 @@
 import json
 
 from django.db.models import Count, Q
+from django.urls import reverse
 
-from apps.experiments.filters import DynamicFilter, Operators
+from apps.experiments.filters import DynamicFilter, Operators, get_experiment_filter_options, get_filter_context_data
+from apps.trace.models import TraceStatus
+
+
+def get_trace_filter_context_data(team):
+    span_tags = list(
+        team.span_set.filter(tags__is_system_tag=True).distinct("tags__name").values_list("tags__name", flat=True)
+    )
+
+    table_url = reverse("trace:table", args=[team.slug])
+    context = get_filter_context_data(team, DynamicTraceFilter.columns, "timestamp", table_url, "data-table")
+    context.update(
+        {
+            "df_span_names": list(team.span_set.values_list("name", flat=True).distinct()),
+            "df_state_list": TraceStatus.values,
+            "df_experiment_list": get_experiment_filter_options(team),
+            "df_available_tags": span_tags,
+        }
+    )
+    return context
 
 
 class DynamicTraceFilter(DynamicFilter):

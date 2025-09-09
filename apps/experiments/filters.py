@@ -9,6 +9,7 @@ from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
 from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage
+from apps.experiments.models import Experiment, SessionStatus
 
 
 class Operators(StrEnum):
@@ -48,6 +49,46 @@ DATE_RANGE_OPTIONS = [
     {"label": "Last 15 Days", "value": "15d"},
     {"label": "Last 30 Days", "value": "30d"},
 ]
+
+
+def get_experiment_filter_context_data(team, table_url: str, single_experiment=None):
+    context = get_filter_context_data(
+        team, DynamicExperimentSessionFilter.columns, "last_message", table_url, "sessions-table"
+    )
+    context.update(
+        {
+            "df_state_list": SessionStatus.for_chatbots(),
+            "df_available_tags": [tag.name for tag in team.tag_set.filter(is_system_tag=False)],
+        }
+    )
+
+    if not single_experiment:
+        context["df_experiment_list"] = get_experiment_filter_options(team)
+        experiment_versions = []
+        for experiment in Experiment.objects.filter(team=team):
+            experiment_versions.extend(experiment.get_version_name_list())
+        experiment_versions = list(set(experiment_versions))
+        context["df_experiment_versions"] = experiment_versions
+    else:
+        context["df_experiment_versions"] = single_experiment.get_version_name_list()
+    return context
+
+
+def get_filter_context_data(team, columns, date_range_column: str, table_url: str, table_container_id: str):
+    return {
+        "df_field_type_filters": FIELD_TYPE_FILTERS,
+        "df_date_range_options": DATE_RANGE_OPTIONS,
+        "df_channel_list": ChannelPlatform.for_filter(team),
+        "df_filter_columns": columns,
+        "df_date_range_column_name": date_range_column,
+        "df_filter_data_source_url": table_url,
+        "df_filter_data_source_container_id": table_container_id,
+    }
+
+
+def get_experiment_filter_options(team):
+    experiments = Experiment.objects.working_versions_queryset().filter(team=team).values("id", "name").order_by("name")
+    return [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
 
 
 # TODO: Add Readme on how to use the filter component
