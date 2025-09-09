@@ -82,7 +82,7 @@ def build_node_agent(
         except KeyError as e:
             raise PipelineNodeRunError(str(e)) from e
 
-        history = node._get_history(session, node.node_id, [prompt, HumanMessage(content=user_input)])
+        history = node._get_history(session, [prompt, HumanMessage(content=user_input)])
         return [prompt] + history + state["messages"]
 
     return create_react_agent(

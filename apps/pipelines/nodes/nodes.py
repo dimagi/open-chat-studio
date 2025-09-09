@@ -219,12 +219,12 @@ class HistoryMixin(LLMResponseMixin):
             raise PydanticCustomError("invalid_history_name", "A history name is required for named history")
         return value
 
-    def _get_history_name(self, node_id):
+    def _get_history_name(self):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
             return self.history_name
-        return node_id
+        return self.node_id
 
-    def _get_history(self, session: ExperimentSession, node_id: str, input_messages: list) -> list[BaseMessage]:
+    def _get_history(self, session: ExperimentSession, input_messages: list) -> list[BaseMessage]:
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return []
 
@@ -243,7 +243,7 @@ class HistoryMixin(LLMResponseMixin):
 
         try:
             history: PipelineChatHistory = session.pipeline_chat_history.get(
-                type=self.history_type, name=self._get_history_name(node_id)
+                type=self.history_type, name=self._get_history_name()
             )
         except PipelineChatHistory.DoesNotExist:
             return []
@@ -268,9 +268,7 @@ class HistoryMixin(LLMResponseMixin):
             # Global History is saved outside of the node
             return
 
-        history, _ = session.pipeline_chat_history.get_or_create(
-            type=self.history_type, name=self._get_history_name(node_id)
-        )
+        history, _ = session.pipeline_chat_history.get_or_create(type=self.history_type, name=self._get_history_name())
         message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=node_id)
         return message
 
@@ -635,7 +633,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.format_messages(**context)
-            context["history"] = self._get_history(session, self.node_id, input_messages)
+            context["history"] = self._get_history(session, input_messages)
 
         llm = self.get_chat_model()
         router_schema = self._create_router_schema()
