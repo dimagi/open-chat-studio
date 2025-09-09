@@ -27,7 +27,10 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
-from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
+from apps.service_providers.llm_service.history_managers import (
+    AssistantPipelineHistoryManager,
+    ExperimentHistoryManager,
+)
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.parsers import custom_parse_ai_message
 from apps.service_providers.llm_service.utils import format_multimodal_input
@@ -113,7 +116,7 @@ class ChainOutput(Serializable):
 
 class LLMChat(RunnableSerializable[str, ChainOutput]):
     adapter: ChatAdapter
-    history_manager: ExperimentHistoryManager | PipelineHistoryManager
+    history_manager: ExperimentHistoryManager
     experiment: Experiment | None = None
     history: list[BaseMessage] = []
     cancelled: bool = False
@@ -276,7 +279,7 @@ class AgentLLMChat(LLMChat):
 
 class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     adapter: AssistantAdapter
-    history_manager: ExperimentHistoryManager | PipelineHistoryManager
+    history_manager: ExperimentHistoryManager | AssistantPipelineHistoryManager
     experiment: Experiment | None = None
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)

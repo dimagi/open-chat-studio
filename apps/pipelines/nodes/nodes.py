@@ -51,7 +51,7 @@ from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter
-from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
+from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -973,7 +973,7 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
         return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession):
-        history_manager = PipelineHistoryManager.for_assistant()  # TODO: create fake history manager
+        history_manager = AssistantPipelineHistoryManager()
         adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 
         if adapter.get_allowed_tools():
