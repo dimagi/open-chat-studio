@@ -1,4 +1,4 @@
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import SystemMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt.chat_agent_executor import AgentState, create_react_agent
@@ -21,12 +21,12 @@ from apps.service_providers.llm_service.utils import (
 def execute_sub_agent(node, state: PipelineState, user_input: str):
     session: ExperimentSession | None = state.get("experiment_session")
     tool_callbacks = ToolCallbacks()
-    agent = build_node_agent(node, state, session, tool_callbacks, user_input)
+    agent = build_node_agent(node, state, session, tool_callbacks)
 
     attachments = [att for att in state.get("temp_state", {}).get("attachments", [])]
     formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
 
-    result = agent.invoke({"messages": [("human", formatted_input)]})
+    result = agent.invoke({"messages": [formatted_input]})
     final_message = result["messages"][-1]
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)
@@ -66,9 +66,7 @@ def _process_agent_output(node, session, message):
     return ai_message, ai_message_metadata
 
 
-def build_node_agent(
-    node, state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks, user_input: str
-):
+def build_node_agent(node, state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
     prompt_context = _get_prompt_context(node, session, state)
 
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
@@ -82,7 +80,7 @@ def build_node_agent(
         except KeyError as e:
             raise PipelineNodeRunError(str(e)) from e
 
-        history = node.get_history(session, [prompt, HumanMessage(content=user_input)])
+        history = node.get_history(session, [prompt] + state["messages"])
         return [prompt] + history + state["messages"]
 
     return create_react_agent(

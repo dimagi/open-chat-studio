@@ -11,6 +11,7 @@ from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.pipelines.tests.utils import (
     assistant_node,
+    create_pipeline_model,
     create_runnable,
     end_node,
     llm_response_with_prompt_node,
@@ -98,8 +99,12 @@ def test_tool_filtering(disabled_tools, provider, provider_model):
         tools=tools,
         prompt="Be useful: {current_datetime} {participant_data}",
     )
-    node = LLMResponseWithPrompt.model_validate(node_data)
+    pipeline = create_pipeline_model(None, [start_node(), node_data, end_node()])
+    django_node = pipeline.node_set.get(flow_id=node_data["id"])
+    node = LLMResponseWithPrompt.model_validate(
+        {**node_data["params"], "node_id": node_data["id"], "django_node": django_node}
+    )
     node._config = ensure_config({"configurable": {"disabled_tools": disabled_tools}})
     tools = _get_configured_tools(node, ExperimentSessionFactory(), ToolCallbacks())
     tool_names = {getattr(tool, "name", "") for tool in tools}
-    assert not disabled_tools & tool_names
+    assert not set(disabled_tools) & tool_names

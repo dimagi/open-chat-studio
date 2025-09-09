@@ -2,6 +2,7 @@ import re
 from io import BytesIO
 
 import httpx
+from langchain_core.messages import HumanMessage
 
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
@@ -125,7 +126,7 @@ def get_openai_container_file_contents(
         return BytesIO(response.read())
 
 
-def format_multimodal_input(message: str, attachments: list) -> list[dict]:
+def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
     parts = [{"type": "text", "text": message}]
     for att in attachments:
         download_url = att.download_link
@@ -138,4 +139,4 @@ def format_multimodal_input(message: str, attachments: list) -> list[dict]:
                 "mime_type": mime_type,
             }
         )
-    return parts
+    return HumanMessage(content=parts)
