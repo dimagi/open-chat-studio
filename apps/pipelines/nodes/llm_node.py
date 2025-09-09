@@ -83,7 +83,7 @@ def build_node_agent(
             raise PipelineNodeRunError(str(e)) from e
 
         history = node._get_history(session, node.node_id, [prompt, HumanMessage(content=user_input)])
-        return history + state["messages"]
+        return [prompt] + history + state["messages"]
 
     return create_react_agent(
         # TODO: I think this will fail with google builtin tools
