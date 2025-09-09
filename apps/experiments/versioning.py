@@ -10,14 +10,10 @@ from django.db import transaction
 from django.db.models import (
     BooleanField,
     Case,
-    CharField,
-    F,
     Q,
     QuerySet,
-    Value,
     When,
 )
-from django.db.models.functions import Cast, Concat
 
 from apps.utils.models import VersioningMixin
 
@@ -360,16 +356,6 @@ class VersionsMixin:
         if self.is_working_version:
             return "unreleased"
         return f"v{self.version_number}"
-
-    def get_version_name_list(self):
-        """Returns list of version names in form of v + version number including working version."""
-        versions_list = list(
-            self.versions.annotate(
-                friendly_name=Concat(Value("v"), Cast(F("version_number"), output_field=CharField()))
-            ).values_list("friendly_name", flat=True)
-        )
-        versions_list.append(f"v{self.version_number}")
-        return versions_list
 
     def compare_with_latest(self) -> bool:
         """
