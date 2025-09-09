@@ -3,11 +3,12 @@ import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
-  PaperClipIcon, CheckDocumentIcon, XIcon
+  PaperClipIcon, CheckDocumentIcon, XIcon, LanguageIcon, ArrowUpTrayIcon
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { getCSRFToken } from '../../utils/cookies';
 import { varToPixels } from '../../utils/utils';
+import {TranslationStrings, TranslationManager, defaultTranslations} from '../../utils/translations';
 
 interface ChatMessage {
   created_at: string;
@@ -184,6 +185,31 @@ export class OcsChat {
    */
   @Prop() typingIndicatorText?: string = "Preparing response";
 
+  /**
+   * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to browser language.
+   */
+  @Prop() language?: string;
+
+  /**
+   * Custom translations JSON string to override default translations.
+   */
+  @Prop() customTranslations?: string;
+
+  /**
+   * Enable the language selector in the chat widget header.
+   */
+  @Prop() enableLanguageSelector: boolean = true;
+
+  /**
+   * Enable translation upload functionality in the chat widget header.
+   */
+  @Prop() enableTranslationUpload: boolean = true;
+
+  /**
+   * Available languages for the language selector (JSON array of {code, name} objects).
+   */
+  @Prop() availableLanguages?: string = '[{"code":"en","name":"English"},{"code":"es","name":"Español"},{"code":"fr","name":"Français"}]';
+
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -204,6 +230,12 @@ export class OcsChat {
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
 
+  @State() currentLanguage: string = 'en';
+  @State() translationManager: TranslationManager = new TranslationManager();
+  @State() showLanguageSelector: boolean = false;
+  @State() showTranslationUpload: boolean = false;
+  @State() parsedAvailableLanguages: Array<{code: string, name: string}> = [];
+
   private pollingIntervalRef?: any;
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
@@ -221,6 +253,9 @@ export class OcsChat {
       this.error = 'Chatbot ID is required';
       return;
     }
+
+    this.initializeTranslations();
+
     // Always try to load existing session if localStorage is available
     if (this.persistentSession && this.isLocalStorageAvailable()) {
       const { sessionId, messages } = this.loadSessionFromStorage();
@@ -245,6 +280,8 @@ export class OcsChat {
       this.initializePosition();
     }
 
+    document.addEventListener('click', this.handleClickOutside);
+
     // Only auto-start session if we don't have an existing one
     if (this.visible && !this.sessionId) {
       this.startSession();
@@ -256,6 +293,7 @@ export class OcsChat {
   }
 
   disconnectedCallback() {
+    document.removeEventListener('click', this.handleClickOutside);
     this.cleanup();
     this.removeEventListeners();
     window.removeEventListener('resize', this.handleWindowResize);
@@ -308,6 +346,92 @@ export class OcsChat {
   private parseStarterQuestions() {
     this.parsedStarterQuestions = this.parseJSONProp(this.starterQuestions, 'starter questions');
   }
+
+  private async initializeTranslations() {
+    this.parsedAvailableLanguages = this.availableLanguages ? JSON.parse(this.availableLanguages) : [];
+    // Parse custom translations if provided
+    let customTranslationsObj: Partial<TranslationStrings> | undefined;
+    if (this.customTranslations) {
+      try {
+        customTranslationsObj = JSON.parse(this.customTranslations);
+      } catch (error) {
+        console.warn('Failed to parse custom translations:', error);
+      }
+    }
+    // Initialize translation manager with language and custom translations
+    this.currentLanguage = this.language || 'en';
+    this.translationManager = new TranslationManager(this.currentLanguage, customTranslationsObj);
+  }
+
+  private async changeLanguage(languageCode: string) {
+    try {
+      let customTranslationsObj: Partial<TranslationStrings> | undefined;
+      if (this.customTranslations) {
+        try {
+          customTranslationsObj = JSON.parse(this.customTranslations);
+        } catch (error) {
+          console.warn('Failed to parse custom translations:', error);
+        }
+      }
+      this.translationManager = new TranslationManager(languageCode, customTranslationsObj);
+      this.currentLanguage = languageCode;
+      this.showLanguageSelector = false;
+    } catch (error) {
+      console.error('Failed to change language:', error);
+    }
+  }
+
+  private handleTranslationUpload = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (!file) return;
+
+    if (file.type !== 'application/json') {
+      alert('Please select a JSON file');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const translations = JSON.parse(e.target?.result as string);
+
+        if (typeof translations !== 'object' || translations === null) {
+          throw new Error('Invalid translation file format');
+        }
+        this.translationManager = new TranslationManager(this.currentLanguage, translations);
+        this.showTranslationUpload = false;
+        alert('Translations uploaded successfully!');
+      } catch (error) {
+        console.error('Failed to parse translation file:', error);
+        alert('Failed to parse translation file. Please check the format.');
+      }
+    };
+    reader.readAsText(file);
+    input.value = '';
+  };
+
+  private downloadTranslationTemplate = () => {
+    const template = JSON.stringify(defaultTranslations, null, 2);
+    const blob = new Blob([template], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat-widget-translations-${this.currentLanguage}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  private handleClickOutside = (event: MouseEvent) => {
+    const target = event.target as Element;
+    if (!this.host.contains(target)) {
+      this.showLanguageSelector = false;
+      this.showTranslationUpload = false;
+    }
+  };
 
   private cleanup() {
     if (this.pollingIntervalRef) {
@@ -1230,8 +1354,8 @@ export class OcsChat {
                   <button
                     class="header-button"
                     onClick={() => this.showConfirmationDialog()}
-                    title="Start new chat"
-                    aria-label="Start new chat"
+                    title={this.translationManager.get('startNewChat')}
+                    aria-label={this.translationManager.get('startNewChat')}
                   >
                     <PlusWithCircleIcon/>
                   </button>
@@ -1240,15 +1364,79 @@ export class OcsChat {
                 {this.allowFullScreen && <button
                   class="header-button fullscreen-button"
                   onClick={() => this.toggleFullscreen()}
-                  title={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                  aria-label={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  title={this.isFullscreen ? this.translationManager.get('exitFullscreen') : this.translationManager.get('enterFullscreen')}
+                  aria-label={this.isFullscreen ? this.translationManager.get('exitFullscreen') : this.translationManager.get('enterFullscreen')}
                 >
                   {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
                 </button>}
+
+                {/* Language selector button */}
+                {this.enableLanguageSelector && (
+                  <div class="header-dropdown-container">
+                    <button
+                      class="header-button"
+                      onClick={() => this.showLanguageSelector = !this.showLanguageSelector}
+                      title="Select language"
+                      aria-label="Select language"
+                    >
+                      <LanguageIcon/>
+                    </button>
+                    {this.showLanguageSelector && (
+                      <div class="dropdown-menu">
+                        {this.parsedAvailableLanguages.map(lang => (
+                          <button
+                            key={lang.code}
+                            class={`dropdown-item ${lang.code === this.currentLanguage ? 'active' : ''}`}
+                            onClick={() => this.changeLanguage(lang.code)}
+                          >
+                            {lang.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Translation upload button */}
+                {this.enableTranslationUpload && (
+                  <div class="header-dropdown-container">
+                    <button
+                      class="header-button"
+                      onClick={() => this.showTranslationUpload = !this.showTranslationUpload}
+                      title="Upload translations"
+                      aria-label="Upload translations"
+                    >
+                      <ArrowUpTrayIcon/>
+                    </button>
+                    {this.showTranslationUpload && (
+                      <div class="dropdown-menu">
+                        <button
+                          class="dropdown-item"
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = '.json';
+                            input.onchange = this.handleTranslationUpload;
+                            input.click();
+                          }}
+                        >
+                          Upload JSON
+                        </button>
+                        <button
+                          class="dropdown-item"
+                          onClick={this.downloadTranslationTemplate}
+                        >
+                          Download Template
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <button
                   class="header-button"
                   onClick={() => this.visible = false}
-                  aria-label="Close"
+                  aria-label={this.translationManager.get('close')}
                 >
                   <XMarkIcon/>
                 </button>
@@ -1259,22 +1447,22 @@ export class OcsChat {
               <div class="confirmation-overlay">
                 <div class="confirmation-dialog">
                   <div class="confirmation-content">
-                    <h3 class="confirmation-title">Start New Chat</h3>
+                    <h3 class="confirmation-title">{this.translationManager.get('startNewChatTitle')}</h3>
                     <p class="confirmation-message">
-                      {this.newChatConfirmationMessage}
+                      {this.newChatConfirmationMessage || this.translationManager.get('startNewChatMessage')}
                     </p>
                     <div class="confirmation-buttons">
                       <button
                         class="confirmation-button confirmation-button-cancel"
                         onClick={() => this.hideConfirmationDialog()}
                       >
-                        Cancel
+                        {this.translationManager.get('cancel')}
                       </button>
                       <button
                         class="confirmation-button confirmation-button-confirm"
                         onClick={() => this.confirmNewChat()}
                       >
-                        Continue
+                        {this.translationManager.get('confirm')}
                       </button>
                     </div>
                   </div>
@@ -1422,7 +1610,7 @@ export class OcsChat {
                       ref={(el) => this.textareaRef = el}
                       class="message-textarea"
                       rows={1}
-                      placeholder="Type your message..."
+                      placeholder={this.translationManager.get('typeMessage')}
                       value={this.messageInput}
                       onInput={(e) => this.handleInputChange(e)}
                       onKeyPress={(e) => this.handleKeyPress(e)}
@@ -1449,8 +1637,8 @@ export class OcsChat {
                         class="file-attachment-button"
                         onClick={() => this.fileInputRef?.click()}
                         disabled={this.isTyping || this.isUploadingFiles}
-                        title="Attach files"
-                        aria-label="Attach files"
+                        title={this.translationManager.get('attachFiles')}
+                        aria-label={this.translationManager.get('attachFiles')}
                       >
                         <PaperClipIcon />
                       </button>
@@ -1464,7 +1652,7 @@ export class OcsChat {
                       onClick={() => this.sendMessage(this.messageInput)}
                       disabled={this.isTyping || this.isUploadingFiles || !this.messageInput.trim()}
                     >
-                      {this.isUploadingFiles ? 'Uploading...' : 'Send'}
+                      {this.isUploadingFiles ? 'Uploading...' : this.translationManager.get('sendMessage')}
                     </button>
                   </div>
                 </div>
