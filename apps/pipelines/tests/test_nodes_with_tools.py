@@ -99,7 +99,7 @@ def test_tool_filtering(disabled_tools, provider, provider_model):
         tools=tools,
         prompt="Be useful: {current_datetime} {participant_data}",
     )
-    pipeline = create_pipeline_model(None, [start_node(), node_data, end_node()])
+    pipeline = create_pipeline_model([start_node(), node_data, end_node()])
     django_node = pipeline.node_set.get(flow_id=node_data["id"])
     node = LLMResponseWithPrompt.model_validate(
         {**node_data["params"], "node_id": node_data["id"], "django_node": django_node}

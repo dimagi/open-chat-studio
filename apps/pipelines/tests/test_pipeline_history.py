@@ -64,7 +64,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
         [("system", "Node 2:"), ("human", f"Node 1: {user_input}")],
     ]
     assert [
-        [(message.type, message.content) for message in call] for call in llm.get_call_messages()
+        [(message.type, message.text()) for message in call] for call in llm.get_call_messages()
     ] == expected_call_messages
 
     history = PipelineChatHistory.objects.get(session=experiment_session.id, name=llm_1["id"])
@@ -101,7 +101,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
         [("system", "Node 2:"), ("human", f"Node 1: {user_input_2}")],
     ]
     assert [
-        [(message.type, message.content) for message in call] for call in llm.get_call_messages()
+        [(message.type, message.text()) for message in call] for call in llm.get_call_messages()
     ] == expected_call_messages
 
 
@@ -177,7 +177,7 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
         ],  # History from node 2 is inserted
     ]
     assert [
-        [(message.type, message.content) for message in call] for call in llm.get_call_messages()
+        [(message.type, message.text()) for message in call] for call in llm.get_call_messages()
     ] == expected_call_messages
 
 
@@ -261,7 +261,7 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
         ],
     ]
     assert [
-        [(message.type, message.content) for message in call] for call in llm.get_call_messages()
+        [(message.type, message.text()) for message in call] for call in llm.get_call_messages()
     ] == expected_call_messages
 
 
@@ -338,7 +338,7 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
         ],
     ]
     assert [
-        [(message.type, message.content) for message in call] for call in llm.get_call_messages()
+        [(message.type, message.text()) for message in call] for call in llm.get_call_messages()
     ] == expected_call_messages
 
 
@@ -373,5 +373,5 @@ def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_ses
         ],
     ]
     assert [
-        [(message.type, message.content) for message in call] for call in llm.get_call_messages()
+        [(message.type, message.text()) for message in call] for call in llm.get_call_messages()
     ] == expected_call_messages
