@@ -224,7 +224,7 @@ class HistoryMixin(LLMResponseMixin):
             return self.history_name
         return self.node_id
 
-    def _get_history(self, session: ExperimentSession, input_messages: list) -> list[BaseMessage]:
+    def get_history(self, session: ExperimentSession, input_messages: list) -> list[BaseMessage]:
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return []
 
@@ -260,7 +260,7 @@ class HistoryMixin(LLMResponseMixin):
             history_mode=self.history_mode,
         )
 
-    def _save_history(self, session: ExperimentSession, node_id: str, human_message: str, ai_message: str):
+    def save_history(self, session: ExperimentSession, node_id: str, human_message: str, ai_message: str):
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return
 
@@ -633,7 +633,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.format_messages(**context)
-            context["history"] = self._get_history(session, input_messages)
+            context["history"] = self.get_history(session, input_messages)
 
         llm = self.get_chat_model()
         router_schema = self._create_router_schema()
@@ -652,7 +652,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             is_default_keyword = True
 
         if session:
-            self._save_history(session, self.node_id, node_input, keyword)
+            self.save_history(session, self.node_id, node_input, keyword)
         return keyword, is_default_keyword
 
 

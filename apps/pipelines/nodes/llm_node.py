@@ -31,7 +31,7 @@ def execute_sub_agent(node, state: PipelineState, user_input: str):
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)
 
-    node._save_history(session, node.node_id, user_input, ai_message)
+    node.save_history(session, node.node_id, user_input, ai_message)
 
     voice_kwargs = {}
     if node.synthetic_voice_id is not None:
@@ -82,7 +82,7 @@ def build_node_agent(
         except KeyError as e:
             raise PipelineNodeRunError(str(e)) from e
 
-        history = node._get_history(session, [prompt, HumanMessage(content=user_input)])
+        history = node.get_history(session, [prompt, HumanMessage(content=user_input)])
         return [prompt] + history + state["messages"]
 
     return create_react_agent(
