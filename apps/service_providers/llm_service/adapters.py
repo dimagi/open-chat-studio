@@ -27,7 +27,6 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.main import (
     AnthropicBuiltinTool,
-    LlmService,
     OpenAIAssistantRunnable,
     OpenAIBuiltinTool,
 )
@@ -38,9 +37,7 @@ from apps.service_providers.llm_service.utils import (
 )
 
 if TYPE_CHECKING:
-    from apps.pipelines.nodes.base import PipelineState
-    from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
-    from apps.service_providers.models import LlmProviderModel
+    from apps.pipelines.nodes.nodes import AssistantNode
 
 
 class BaseAdapter:
@@ -123,42 +120,6 @@ class ChatAdapter(BaseAdapter):
             tools=get_tools(session, experiment=experiment),
             disabled_tools=None,  # not supported for simple experiments
             input_formatter=experiment.input_formatter,
-        )
-
-    @classmethod
-    def for_pipeline(
-        cls,
-        session: ExperimentSession,
-        node: LLMResponseWithPrompt,
-        llm_service: LlmService,
-        provider_model: LlmProviderModel,
-        tools: list[BaseTool],
-        pipeline_state: PipelineState,
-        disabled_tools: set[str] = None,
-        expect_citations: bool = True,
-    ) -> Self:
-        extra_prompt_context = {
-            "temp_state": pipeline_state.get("temp_state", {}),
-            "session_state": session.state or {},
-        }
-        return cls(
-            session=session,
-            provider_model_name=provider_model.name,
-            llm_service=llm_service,
-            temperature=node.llm_temperature,
-            prompt_text=node.prompt,
-            max_token_limit=provider_model.max_token_limit,
-            template_context=PromptTemplateContext(
-                session,
-                source_material_id=node.source_material_id,
-                collection_id=node.collection_id,
-                extra=extra_prompt_context,
-            ),
-            tools=tools,
-            disabled_tools=disabled_tools,
-            input_formatter="{input}",
-            save_message_metadata_only=True,
-            expect_citations=expect_citations,
         )
 
     def get_chat_model(self):
