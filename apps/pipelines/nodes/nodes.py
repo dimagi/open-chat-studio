@@ -10,14 +10,12 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
 from jinja2.sandbox import SandboxedEnvironment
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage
 from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
-from langchain_core.tools import BaseTool
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.constants import END
-from langgraph.prebuilt import create_react_agent
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
@@ -27,7 +25,6 @@ from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
@@ -49,11 +46,11 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
-from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
-from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
+from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
@@ -61,7 +58,6 @@ from apps.service_providers.llm_service.runnables import (
     AssistantChat,
     ChainOutput,
 )
-from apps.service_providers.llm_service.utils import format_multimodal_input
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
@@ -447,103 +443,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         return value
 
     def _process(self, input, state: PipelineState) -> PipelineState:
-        session: ExperimentSession | None = state.get("experiment_session")
-        # Get runnable
-        provider_model = self.get_llm_provider_model()
-        chat_model = self.get_chat_model()
-        history_manager = PipelineHistoryManager.for_llm_chat(
-            session=session,
-            node_id=self.node_id,
-            history_type=self.history_type,
-            history_name=self.history_name,
-            max_token_limit=provider_model.max_token_limit,
-            chat_model=chat_model,
-        )
-        tool_callbacks = ToolCallbacks()
-
-        # Tools setup
-        tools = self._get_configured_tools(session=session, tool_callbacks=tool_callbacks)
-        attachments = self._get_attachments(state)
-
-        # Chat setup
-        chat_adapter = ChatAdapter.for_pipeline(
-            session=session,
-            node=self,
-            llm_service=self.get_llm_service(),
-            provider_model=provider_model,
-            tools=tools,
-            pipeline_state=state,
-            disabled_tools=self.disabled_tools,
-            expect_citations=self.generate_citations,
-        )
-
-        prompt_template = PromptTemplate.from_template(self.prompt)
-        context = chat_adapter.get_template_context(prompt_template.input_variables)
-        try:
-            formatted_prompt = prompt_template.format(**context)
-            prompt = SystemMessage(content=formatted_prompt)
-        except KeyError as e:
-            raise PipelineNodeRunError(str(e)) from e
-
-        history = history_manager.get_chat_history([prompt, HumanMessage(content=input)])
-
-        model = chat_adapter.get_chat_model()
-        chat = create_react_agent(
-            # TODO: I think this will fail with google builtin tools
-            model=model,
-            tools=chat_adapter.get_allowed_tools(),
-            prompt=prompt,
-        )
-        formatted_input = format_multimodal_input(message=input, attachments=attachments)
-        result = chat.invoke({"messages": history + [("human", formatted_input)]})
-        final_message = result["messages"][-1]
-        print(final_message)
-        output_parser = self.get_llm_service().get_output_parser()
-        parsed_output = output_parser(final_message.content, session=session, include_citations=self.generate_citations)
-        ai_message_metadata = chat_adapter.get_output_message_metadata(
-            cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
-        )
-        if self.generate_citations:
-            ai_message = chat_adapter.add_citation_section_from_cited_files(
-                parsed_output.text, cited_files=parsed_output.cited_files
-            )
-        else:
-            ai_message = chat_adapter.remove_file_citations(parsed_output.text)
-
-        history_manager.add_messages_to_history(input, {}, ai_message, {})
-
-        voice_kwargs = {}
-        if self.synthetic_voice_id is not None:
-            voice_kwargs["synthetic_voice_id"] = self.synthetic_voice_id
-
-        return PipelineState.from_node_output(
-            node_name=self.name,
-            node_id=self.node_id,
-            output=ai_message,
-            output_message_metadata={
-                **ai_message_metadata,
-                **tool_callbacks.output_message_metadata,
-            },
-            intents=tool_callbacks.intents,
-            **voice_kwargs,
-        )
-
-    def _get_attachments(self, state: PipelineState) -> list:
-        return [att for att in state.get("temp_state", {}).get("attachments", [])]
-
-    def _get_configured_tools(
-        self, session: ExperimentSession | None, tool_callbacks: ToolCallbacks
-    ) -> list[dict | BaseTool]:
-        """Get instantiated tools for the given node configuration."""
-        tools = get_node_tools(self.django_node, session, tool_callbacks=tool_callbacks)
-        tools.extend(self.get_llm_service().attach_built_in_tools(self.built_in_tools, self.tool_config))
-        if self.collection_index_id:
-            collection = Collection.objects.get(id=self.collection_index_id)
-            tools.append(
-                collection.get_search_tool(max_results=self.max_results, generate_citations=self.generate_citations)
-            )
-
-        return tools
+        return execute_sub_agent(self, state, input)
 
 
 class SendEmail(PipelineNode, OutputMessageTagMixin):
