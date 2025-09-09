@@ -208,7 +208,17 @@ export class OcsChat {
   /**
    * Available languages for the language selector (JSON array of {code, name} objects).
    */
-  @Prop() availableLanguages?: string = '[{"code":"en","name":"English"},{"code":"es","name":"Español"},{"code":"fr","name":"Français"}]';
+@Prop() availableLanguages?: string = `[
+  { "code": "en", "name": "English" },
+  { "code": "es", "name": "Español" },
+  { "code": "fr", "name": "Français" },
+  { "code": "ar", "name": "العربية" },
+  { "code": "hi", "name": "हिन्दी" },
+  { "code": "ita", "name": "Italiano" },
+  { "code": "por", "name": "Português" },
+  { "code": "sw", "name": "Kiswahili" },
+  { "code": "uk", "name": "Українська" }
+]`;
 
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
