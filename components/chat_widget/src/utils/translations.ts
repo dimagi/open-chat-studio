@@ -6,40 +6,7 @@ import en from '../translations/en.json';
 import es from '../translations/es.json';
 import fr from '../translations/fr.json';
 
-export interface TranslationStrings {
-  openChat: string;
-  close: string;
-  startNewChat: string;
-  enterFullscreen: string;
-  exitFullscreen: string;
-  attachFiles: string;
-  removeFile: string;
-
-  // Chat interface
-  startingChat: string;
-  preparingResponse: string;
-  startNewChatTitle: string;
-  startNewChatMessage: string;
-  cancel: string;
-  confirm: string;
-
-  // Input and messages
-  typeMessage: string;
-  sendMessage: string;
-
-  // File handling
-  fileAttached: string;
-  fileTooLarge: string;
-  totalSizeTooLarge: string;
-  unsupportedFileType: string;
-
-  // Errors
-  connectionError: string;
-  sessionExpired: string;
-
-  // Footer
-  poweredBy: string;
-}
+export type TranslationStrings = typeof en;
 
 // Default (English) translations
 export const defaultTranslations: TranslationStrings = en as TranslationStrings;
