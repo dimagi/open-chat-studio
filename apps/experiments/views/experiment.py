@@ -467,11 +467,6 @@ def version_create_status(request, team_slug: str, experiment_id: int):
 def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
     experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
 
-    user_sessions = (
-        ExperimentSession.objects.with_last_message_created_at()
-        .filter(participant__user=request.user, experiment=experiment)
-        .exclude(experiment_channel__platform__in=[ChannelPlatform.API, ChannelPlatform.EVALUATIONS])
-    )
     channels, available_platforms = get_channels_context(experiment)
 
     deployed_version = None
@@ -489,7 +484,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "active_tab": active_tab,
         "bot_type_chip": bot_type_chip,
         "experiment": experiment,
-        "user_sessions": user_sessions,
         "platforms": available_platforms,
         "channels": channels,
         "deployed_version": deployed_version,
