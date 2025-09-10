@@ -210,9 +210,6 @@ class ExperimentChannel(BaseTeamModel):
             .select_related("team")
         )
 
-        if not existing_channels:
-            return  # No conflicts
-
         channel = existing_channels.first()
         if channel:
             if channel.team_id == new_experiment.team_id:
