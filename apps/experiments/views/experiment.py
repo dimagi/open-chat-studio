@@ -498,7 +498,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
 
     context.update(
-        **get_experiment_filter_context_data(
+        get_experiment_filter_context_data(
             request.team,
             session_table_url,
             single_experiment=experiment,
