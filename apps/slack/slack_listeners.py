@@ -52,7 +52,7 @@ def respond_to_message(event, context: BoltContext, session=None):
     if session:
         experiment_channel = session.experiment_channel
     else:
-        experiment_channel = get_experiment_channel(channel_id, message_text, context.team_id)
+        experiment_channel = get_experiment_channel(channel_id, message_text, context)
 
     if not experiment_channel:
         context.say("Unable to find a bot to respond to your message.", thread_ts=thread_ts)
@@ -77,8 +77,7 @@ def _respond_to_message(event, channel_id, thread_ts, experiment_channel, experi
             participant_identifier=slack_user,
             session_external_id=external_id,
         )
-    # strip out the mention
-    message_text = re.sub(rf"<@?{context.bot_user_id}>", "", event["text"])
+    message_text = _strip_bot_mention(context, event["text"])
     message = SlackMessage(
         participant_id=slack_user, channel_id=channel_id, thread_ts=thread_ts, message_text=message_text
     )
@@ -92,6 +91,11 @@ def _respond_to_message(event, channel_id, thread_ts, experiment_channel, experi
         messaging_service=messaging_service,
     )
     ocs_channel.new_user_message(message)
+
+
+def _strip_bot_mention(context, text):
+    """Remove the bot mention tag from the message"""
+    return re.sub(rf"<@?{context.bot_user_id}>\s*", "", text)
 
 
 def load_installation(context: BoltContext, next):
@@ -119,7 +123,7 @@ def get_session_for_thread(channel_id: str, thread_ts: str):
         pass
 
 
-def get_experiment_channel(channel_id, message_text=None, team_id=None) -> ExperimentChannel | None:
+def get_experiment_channel(channel_id, message_text, bolt_context) -> ExperimentChannel | None:
     """Get the experiment channel for the given team and channel_id. This searches for exact matches
     on the channel ID and also for the special case of bots that are listening in all channels.
     For DM channels, it also supports keyword-based routing."""
@@ -141,7 +145,7 @@ def get_experiment_channel(channel_id, message_text=None, team_id=None) -> Exper
     all_channels = base_queryset.filter(extra_data__contains={"slack_channel_id": SLACK_ALL_CHANNELS})
 
     # If we have message text, try keyword-based routing for all channels
-    if message_text and (keyword := _get_keyword(message_text)):
+    if message_text and (keyword := _get_keyword(bolt_context, message_text)):
         if keyword_match := all_channels.filter(extra_data__contains={"keywords": [keyword]}).first():
             return keyword_match
 
@@ -153,13 +157,13 @@ def _is_dm_channel(channel_id: str) -> bool:
     return channel_id.startswith("D")
 
 
-def _get_keyword(message_text: str) -> str | None:
-    """Find a channel that matches the first word after bot mention"""
+def _get_keyword(context, message_text: str) -> str | None:
+    """Extract the keyword from the message"""
     if not message_text:
         return None
 
-    # Match first token optionally preceded by a mention. Allows letters, numbers, and hyphens.
-    bot_mention_pattern = r"^(?:<@[A-Z0-9]+>\s*)?([a-zA-Z0-9\-]+)"
+    message_text = _strip_bot_mention(context, message_text)
+    bot_mention_pattern = r"^([a-zA-Z0-9\-]+)"
     match = re.search(bot_mention_pattern, message_text)
 
     if not match:
