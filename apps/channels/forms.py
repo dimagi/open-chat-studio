@@ -492,11 +492,9 @@ class SlackChannelForm(ExtraFormBase):
         queryset = ExperimentChannel.objects.filter(
             platform=ChannelPlatform.SLACK,
             deleted=False,
+            # scope to providers connected to the same slack workspace
+            messaging_provider__config__slack_team_id=self.messaging_provider.config.get("slack_team_id"),
         )
-        if provider_filter := self.messaging_provider.uniqueness_filter():
-            scoped_filter = dict((f"messaging_provider__{key}", value) for key, value in provider_filter.items())
-            queryset = queryset.filter(**scoped_filter)
-
         if current_channel_id := self._get_current_channel_id():
             queryset = queryset.exclude(pk=current_channel_id)
         return queryset

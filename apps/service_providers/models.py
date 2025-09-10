@@ -411,11 +411,6 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
     def get_messaging_service(self) -> messaging_service.MessagingService:
         return self.type_enum.get_messaging_service(self.config)
 
-    def uniqueness_filter(self) -> dict[str, str] | None:
-        if self.type == MessagingProviderType.slack and self.config.get("slack_team_id"):
-            return {"config__slack_team_id": self.config["slack_team_id"]}
-        return None
-
 
 class AuthProviderType(models.TextChoices):
     basic = "basic", _("Basic")
