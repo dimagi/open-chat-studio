@@ -237,7 +237,6 @@ def test_slack_channel_cross_team_keyword_conflicts(team_with_users, experiment)
         # Should fail because keywords must be unique across ALL teams using the same Slack workspace
         assert not form.is_valid(), f"Form errors: {form.errors}"
 
-        # Error message should indicate which bot has the conflicting keywords
         error_message = str(form.errors)
-        assert "Other Team Bot" in error_message
+        assert "Other Team Bot" not in error_message
         assert "health" in error_message

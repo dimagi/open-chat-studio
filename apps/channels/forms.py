@@ -450,7 +450,7 @@ class SlackChannelForm(ExtraFormBase):
         return matching_channels[0] if matching_channels else None
 
     def _channel_matches_slack_team(self, channel) -> bool:
-        # filtering must be done manaully since the data is encrypted in the DB so can't be queried against
+        # filtering must be done manually since the data is encrypted in the DB so can't be queried against
         if self.messaging_provider and (slack_team_id := self.messaging_provider.config.get("slack_team_id")):
             return channel.messaging_provider.config.get("slack_team_id") == slack_team_id
         return False
@@ -477,7 +477,7 @@ class SlackChannelForm(ExtraFormBase):
                     conflict_list = ", ".join(sorted(conflicts))
                     error_message = self._get_error_message(
                         channel,
-                        f"Keywords already in use by another chatbot: {conflict_list}",
+                        f"Some keywords already in use by another chatbot: {conflict_list}",
                         f"Some keywords are already used by {{}}: {conflict_list}",
                     )
                     raise forms.ValidationError({"keywords": error_message})
