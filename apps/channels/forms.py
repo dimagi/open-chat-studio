@@ -52,7 +52,11 @@ class ChannelFormWrapper:
             if not self.channel:
                 # skip platform validation when updating an existing channel
                 self.validate_platform()
-            self.validate_channel_config(self.channel_form.cleaned_data["platform"], self.extra_form.cleaned_data)
+            try:
+                self.extra_form.validate_channel_config(self.experiment, self.channel_form.cleaned_data["platform"])
+            except ChannelAlreadyUtilizedException as e:
+                self.channel_form.add_error(None, e.html_message)
+
             channel_valid = not self.channel_form.errors
 
         return channel_valid and extra_valid
@@ -62,21 +66,6 @@ class ChannelFormWrapper:
             validate_platform_availability(self.experiment, self.platform)
         except ExperimentChannelException as e:
             self.channel_form.add_error(None, str(e))
-
-    def validate_channel_config(self, platform_slug: str, config_data: dict):
-        platform = ChannelPlatform(platform_slug)
-        channel_identifier = config_data.get(platform.channel_identifier_key, "")
-        messaging_provider = self.extra_form.messaging_provider if self.extra_form else None
-
-        try:
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform,
-                identifier=channel_identifier,
-                new_experiment=self.experiment,
-                messaging_provider=messaging_provider,
-            )
-        except ChannelAlreadyUtilizedException as e:
-            self.channel_form.add_error(None, e.html_message)
 
     def save(self, commit=True):
         """Save both forms"""
@@ -142,6 +131,17 @@ class ExtraFormBase(forms.Form):
     def messaging_provider(self) -> MessagingProvider | None:
         if provider_id := self.data.get("messaging_provider"):
             return MessagingProvider.objects.filter(id=provider_id).first()
+
+    def validate_channel_config(self, experiment, platform_slug: str):
+        platform = ChannelPlatform(platform_slug)
+        channel_identifier = self.cleaned_data.get(platform.channel_identifier_key, "")
+
+        ExperimentChannel.check_usage_by_another_experiment(
+            platform,
+            identifier=channel_identifier,
+            new_experiment=experiment,
+            messaging_provider=self.messaging_provider,
+        )
 
     def post_save(self, channel: ExperimentChannel):
         """Override this method to perform any additional actions after the channel has been saved"""
