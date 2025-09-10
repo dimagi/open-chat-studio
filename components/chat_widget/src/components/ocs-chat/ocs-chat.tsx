@@ -260,8 +260,6 @@ export class OcsChat {
       this.initializePosition();
     }
 
-    document.addEventListener('click', this.handleClickOutside);
-
     // Only auto-start session if we don't have an existing one
     if (this.visible && !this.sessionId) {
       this.startSession();
@@ -273,7 +271,6 @@ export class OcsChat {
   }
 
   disconnectedCallback() {
-    document.removeEventListener('click', this.handleClickOutside);
     this.cleanup();
     this.removeEventListeners();
     window.removeEventListener('resize', this.handleWindowResize);
@@ -370,13 +367,6 @@ export class OcsChat {
     }
   return 'en';
   }
-
-  private handleClickOutside = (event: MouseEvent) => {
-    const target = event.target as Element;
-    if (!this.host.contains(target)) {
-      this.showTranslationUpload = false;
-    }
-  };
 
   private cleanup() {
     if (this.pollingIntervalRef) {
