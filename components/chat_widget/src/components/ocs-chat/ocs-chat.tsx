@@ -190,12 +190,6 @@ export class OcsChat {
    */
   @Prop() language?: string;
 
-  /**
-   * Custom translations JSON string to override default translations.
-   */
-  @Prop() customTranslations?: string;
-
-
   @Prop() translationsUrl?: string;
 
   @Prop() enableTranslationUpload: boolean = false;
