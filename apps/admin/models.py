@@ -27,15 +27,21 @@ class ChatWidgetConfig(PydanticBaseModel):
         description="Starter questions to show users",
     )
     position: str = Field(default="right", description="Position of the widget")
+    language: str = Field(default="en", description="Language code for the widget (e.g 'en', 'es', 'fr')")
+    translations_url: str = Field(default="", description="URL to load custom translations from")
 
     def get_widget_attributes(self):
-        return {
+        attrs = {
             "chatbot-id": self.chatbot_id,
             "button-text": self.button_text,
             "welcome-messages": json.dumps(self.welcome_messages),
             "starter-questions": json.dumps(self.starter_questions),
             "position": self.position,
+            "language": self.language,
+            "translation-url": self.translations_url
+
         }
+        return attrs
 
 
 class SiteConfig(PydanticBaseModel):
