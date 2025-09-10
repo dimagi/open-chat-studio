@@ -195,10 +195,10 @@ export class OcsChat {
    */
   @Prop() customTranslations?: string;
 
-  /**
-   * Enable translation upload functionality in the chat widget header.
-   */
-  @Prop() enableTranslationUpload: boolean = true;
+
+  @Prop() translationsUrl?: string;
+
+  @Prop() enableTranslationUpload: boolean = false;
 
 
   @State() error: string = "";
@@ -338,16 +338,31 @@ export class OcsChat {
 
   private async initializeTranslations() {
     let customTranslationsObj: Partial<TranslationStrings> | undefined;
-    if (this.customTranslations) {
+
+    if (this.translationsUrl) {
       try {
-        customTranslationsObj = JSON.parse(this.customTranslations);
+        customTranslationsObj = await this.loadTranslationsFromUrl(this.translationsUrl);
       } catch (error) {
-        console.warn('Failed to parse custom translations:', error);
+        console.warn('Failed to load translations from URL:', this.translationsUrl, error);
       }
     }
 
     this.currentLanguage = this.determineLanguage();
     this.translationManager = new TranslationManager(this.currentLanguage, customTranslationsObj);
+  }
+
+  private async loadTranslationsFromUrl(url: string): Promise<Partial<TranslationStrings>> {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const translations = await response.json();
+      return translations as Partial<TranslationStrings>;
+    } catch (error) {
+      console.error('Error loading translations from URL:', error);
+      throw error;
+    }
   }
 
   private determineLanguage(): string {
