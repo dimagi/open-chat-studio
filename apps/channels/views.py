@@ -262,7 +262,9 @@ class BaseChannelDialogView(View):
                 "channels": channels,
                 "platforms": available_platforms,
                 "channel": channel,
-                "extra_form": channel.extra_form(),  # override extra form to get 'update' rendering
+                "extra_form": channel.extra_form(
+                    experiment=self.experiment
+                ),  # override extra form to get 'update' rendering
             }
             return self.render_to_response({**self.get_context_data(form=form), **additional_context})
         return HttpResponse(headers={"hx-redirect": self.get_success_url()})
