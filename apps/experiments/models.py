@@ -16,17 +16,13 @@ from django.db import models, transaction
 from django.db.models import (
     BooleanField,
     Case,
-    CharField,
     Count,
-    F,
     OuterRef,
     Q,
     Subquery,
     UniqueConstraint,
-    Value,
     When,
 )
-from django.db.models.functions import Cast, Concat
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -174,17 +170,14 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
         return experiment if experiment else family_member
 
     def get_version_names(self, team, working_version=None) -> list[str]:
-        query = self.get_queryset().filter(team=team)
+        qs = self.get_queryset().filter(team=team)
         if working_version:
-            query = query.filter(working_version=working_version)
-        versions_list = list(
-            query.annotate(
-                friendly_name=Concat(Value("v"), Cast(F("version_number"), output_field=CharField()))
-            ).values_list("friendly_name", flat=True)
-        )
-        if working_version:
-            versions_list.append(f"v{working_version.version_number}")
-        return list(set(versions_list))
+            qs = qs.filter(working_version=working_version)
+            nums = qs.order_by("-version_number").values_list("version_number", flat=True).distinct()
+            return [f"v{working_version.version_number}"] + [f"v{n}" for n in nums]
+        # team-wide distinct version numbers (stable, sorted)
+        nums = qs.order_by("-version_number").values_list("version_number", flat=True).distinct()
+        return [f"v{n}" for n in nums]
 
 
 class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
