@@ -186,7 +186,7 @@ export class OcsChat {
   @Prop() typingIndicatorText?: string = "Preparing response";
 
   /**
-   * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to browser language.
+   * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
    */
   @Prop() language?: string;
 
@@ -194,7 +194,6 @@ export class OcsChat {
    * Custom translations JSON string to override default translations.
    */
   @Prop() customTranslations?: string;
-
 
   /**
    * Enable translation upload functionality in the chat widget header.
@@ -338,7 +337,6 @@ export class OcsChat {
   }
 
   private async initializeTranslations() {
-    // Parse custom translations if provided
     let customTranslationsObj: Partial<TranslationStrings> | undefined;
     if (this.customTranslations) {
       try {
@@ -347,9 +345,24 @@ export class OcsChat {
         console.warn('Failed to parse custom translations:', error);
       }
     }
-    // Initialize translation manager with language and custom translations
-    this.currentLanguage = this.language || 'en';
+
+    this.currentLanguage = this.determineLanguage();
     this.translationManager = new TranslationManager(this.currentLanguage, customTranslationsObj);
+  }
+
+  private determineLanguage(): string {
+    if (this.language) {
+      return this.language;
+    }
+
+    if (typeof navigator !== 'undefined') {
+      const browserLang = navigator.language || (navigator as any).userLanguage;
+      if (browserLang) {
+        const langCode = browserLang.split('-')[0].toLowerCase();
+        return langCode;
+      }
+    }
+  return 'en';
   }
 
 
