@@ -62,7 +62,7 @@ def get_experiment_filter_context_data(team, table_url: str, single_experiment=N
         }
     )
 
-    context["df_experiment_versions"] = Experiment.objects.get_version_names(team, working_experiment=single_experiment)
+    context["df_experiment_versions"] = Experiment.objects.get_version_names(team, working_version=single_experiment)
     if not single_experiment:
         context["df_experiment_list"] = get_experiment_filter_options(team)
 
