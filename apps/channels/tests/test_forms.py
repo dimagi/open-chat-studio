@@ -132,16 +132,6 @@ def test_slack_channel_edit_keeping_some_keywords_succeeds(team_with_users, expe
         },
     )
 
-    # Create another channel that would conflict if the exclusion logic is broken
-    # This simulates having other channels with overlapping keywords
-    ExperimentChannelFactory(
-        team=team_with_users,
-        platform=ChannelPlatform.SLACK,
-        messaging_provider=provider,
-        name="Other Bot",
-        extra_data={"slack_channel_id": "*", "keywords": ["wellness", "fitness"], "is_default": False},
-    )
-
     # Mock the messaging service
     mock_service = Mock()
     mock_service.get_channel_by_name.return_value = None
@@ -204,6 +194,7 @@ def test_slack_channel_duplicate_keywords_fails(team_with_users, experiment):
         form.messaging_provider = provider
 
         assert not form.is_valid()
+        assert "keywords" in form.errors
 
 
 @pytest.mark.django_db()

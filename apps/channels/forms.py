@@ -361,6 +361,8 @@ class SlackChannelForm(ExtraFormBase):
             # Check length
             if len(kw) > 25:
                 raise forms.ValidationError(f"Keyword '{kw}' is too long (maximum 25 characters)")
+            if len(kw) < 2:
+                raise forms.ValidationError(f"Keyword '{kw}' is too short (minimum 2 characters)")
 
             # Check for empty keywords after cleaning
             if not kw:

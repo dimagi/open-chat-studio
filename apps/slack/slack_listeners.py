@@ -165,4 +165,5 @@ def _get_keyword(message_text: str) -> str | None:
     if not match:
         return None
 
-    return match.group(1).lower()
+    keyword = match.group(1).lower()
+    return keyword if len(keyword) > 1 else None
