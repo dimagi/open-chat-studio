@@ -448,9 +448,11 @@ class SlackChannelForm(ExtraFormBase):
         # Normalize input keywords to lowercase for case-insensitive comparison
         keywords = [kw.lower() for kw in keywords]
 
-        # Get all other Slack channels using the same messaging provider (system-wide)
         # Keywords must be unique across the entire Slack workspace
-        queryset = self._get_channel_queryset().filter(config__is_default=False)
+        queryset = self._get_channel_queryset().filter(
+            extra_data__is_default=False,
+            extra_data__slack_channel_id=SLACK_ALL_CHANNELS,
+        )
 
         # Check each existing channel's keywords
         for channel in queryset:
