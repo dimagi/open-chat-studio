@@ -493,7 +493,7 @@ class SlackChannelForm(ExtraFormBase):
             platform=ChannelPlatform.SLACK,
             deleted=False,
         )
-        if provider_filter := self.messaging_provider.uniqeness_filter():
+        if provider_filter := self.messaging_provider.uniqueness_filter():
             scoped_filter = dict((f"messaging_provider__{key}", value) for key, value in provider_filter.items())
             queryset = queryset.filter(**scoped_filter)
 
