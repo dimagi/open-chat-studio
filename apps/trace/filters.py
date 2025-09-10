@@ -87,7 +87,7 @@ class DynamicTraceFilter(DynamicFilter):
 
         return queryset
 
-    def build_filter_condition(self, column, operator, value):
+    def build_filter_condition(self, column, operator, value) -> Q | None:
         if column == "participant":
             return self.build_participant_filter(operator, value)
         elif column == "tags":
