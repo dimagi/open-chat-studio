@@ -387,7 +387,7 @@ class DynamicExperimentSessionFilter(DynamicFilter):
                 for tag in version_tags:
                     tag_exists = ChatMessage.objects.filter(
                         chat=OuterRef("chat"),
-                        tags__namek=tag,
+                        tags__name=tag,
                         tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
                     ).values("id")
                     q_objects &= Q(Exists(tag_exists))
