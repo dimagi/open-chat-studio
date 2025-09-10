@@ -405,7 +405,7 @@ class SlackChannelForm(ExtraFormBase):
             # Specific channels don't use keywords or default routing
             cleaned_data["keywords"] = []
             cleaned_data["is_default"] = False
-            self._validate_unique_channel(channel_name, channel["id"])
+            self._validate_unique_channel(channel["id"])
 
         elif channel_scope == "all":
             # All channels - set up based on routing method
@@ -431,7 +431,7 @@ class SlackChannelForm(ExtraFormBase):
 
         return cleaned_data
 
-    def _validate_unique_channel(self, slack_channel_name, slack_channel_id):
+    def _validate_unique_channel(self, slack_channel_id):
         queryset = self._get_channel_queryset().select_related("experiment").only("experiment__name")
         if existing_channel := queryset.filter(extra_data__slack_channel_id=slack_channel_id).first():
             # TODO: only show name if same team
@@ -471,11 +471,8 @@ class SlackChannelForm(ExtraFormBase):
             )
 
     def _get_current_channel_id(self):
-        """Get current channel ID, with fallback logic for missing instance"""
-        # Try instance first
-        if hasattr(self, "instance") and self.channel and hasattr(self.channel, "pk") and self.channel.pk is not None:
+        if self.channel and self.channel.pk is not None:
             return self.channel.pk
-
         return None
 
     def _get_channel_queryset(self):
