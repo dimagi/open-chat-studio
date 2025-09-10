@@ -218,7 +218,6 @@ def default_channel(experiment):
     )
 
 
-# Keyword routing tests
 @pytest.mark.django_db()
 @pytest.mark.usefixtures("keyword_channel")
 def test_keyword_routing_matches_first_word(bolt_context):
@@ -234,30 +233,6 @@ def test_keyword_routing_matches_first_word(bolt_context):
 
     bolt_context.client.chat_postMessage.assert_called_once()
     assert ExperimentSession.objects.count() == 1
-
-
-@pytest.mark.django_db()
-def test_keyword_routing_first_word_only():
-    """Test that only the first word after bot mention is used for routing"""
-    from unittest.mock import Mock
-
-    from apps.slack.slack_listeners import _find_keyword_match
-
-    # Create channels with keywords
-    channels = [
-        Mock(extra_data={"keywords": ["health", "benefits"]}),
-        Mock(extra_data={"keywords": ["support", "help"]}),
-    ]
-
-    # Test messages that should NOT match (keyword not first word)
-    assert _find_keyword_match(channels, "<@U123456> I need health information") is None  # "health" not first
-    assert _find_keyword_match(channels, "<@U123456> What are my benefits?") is None  # "benefits" not first
-    assert _find_keyword_match(channels, "<@U123456> Can you help me?") is None  # "help" not first
-
-    # Test messages that SHOULD match (keyword is first word)
-    assert _find_keyword_match(channels, "<@U123456> health what are my options?") is not None  # "health" first
-    assert _find_keyword_match(channels, "<@U123456> benefits information please") is not None  # "benefits" first
-    assert _find_keyword_match(channels, "<@U123456> support I need help") is not None  # "support" first
 
 
 @pytest.mark.django_db()

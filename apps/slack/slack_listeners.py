@@ -138,18 +138,14 @@ def get_experiment_channel(channel_id, message_text=None, team_id=None) -> Exper
         return exact_channel
 
     # If no exact match, check for "all channels" bots (including keyword-based routing)
-    all_channels = base_queryset.filter(extra_data__contains={"slack_channel_id": SLACK_ALL_CHANNELS}).all()
-    if not all_channels:
-        return None
+    all_channels = base_queryset.filter(extra_data__contains={"slack_channel_id": SLACK_ALL_CHANNELS})
 
     # If we have message text, try keyword-based routing for all channels
-    if message_text:
-        keyword_match = _find_keyword_match(all_channels, message_text)
-        if keyword_match:
+    if message_text and (keyword := _get_keyword(message_text)):
+        if keyword_match := all_channels.filter(extra_data__contains={"keywords": [keyword]}).first():
             return keyword_match
 
-    # Fall back to default bot
-    return _find_default_bot(all_channels)
+    return all_channels.filter(extra_data__is_default=True).first()
 
 
 def _is_dm_channel(channel_id: str) -> bool:
@@ -157,7 +153,7 @@ def _is_dm_channel(channel_id: str) -> bool:
     return channel_id.startswith("D")
 
 
-def _find_keyword_match(channels: list[ExperimentChannel], message_text: str) -> ExperimentChannel | None:
+def _get_keyword(message_text: str) -> str | None:
     """Find a channel that matches the first word after bot mention"""
     if not message_text:
         return None
@@ -169,23 +165,4 @@ def _find_keyword_match(channels: list[ExperimentChannel], message_text: str) ->
     if not match:
         return None
 
-    first_word = match.group(1).lower()
-
-    # Look for channels with keywords that match the first word
-    for channel in channels:
-        keywords = channel.extra_data.get("keywords", [])
-        if keywords:
-            # Check if first word matches any keyword for this channel
-            for keyword in keywords:
-                if keyword.lower() == first_word:
-                    return channel
-
-    return None
-
-
-def _find_default_bot(channels: list[ExperimentChannel]) -> ExperimentChannel | None:
-    """Find the default bot among the channels"""
-    for channel in channels:
-        if channel.extra_data.get("is_default"):
-            return channel
-    return None
+    return match.group(1).lower()
