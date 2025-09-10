@@ -3,7 +3,7 @@ import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
-  PaperClipIcon, CheckDocumentIcon, XIcon, LanguageIcon, ArrowUpTrayIcon
+  PaperClipIcon, CheckDocumentIcon, XIcon, ArrowUpTrayIcon
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { getCSRFToken } from '../../utils/cookies';
@@ -195,30 +195,12 @@ export class OcsChat {
    */
   @Prop() customTranslations?: string;
 
-  /**
-   * Enable the language selector in the chat widget header.
-   */
-  @Prop() enableLanguageSelector: boolean = true;
 
   /**
    * Enable translation upload functionality in the chat widget header.
    */
   @Prop() enableTranslationUpload: boolean = true;
 
-  /**
-   * Available languages for the language selector (JSON array of {code, name} objects).
-   */
-@Prop() availableLanguages?: string = `[
-  { "code": "en", "name": "English" },
-  { "code": "es", "name": "Español" },
-  { "code": "fr", "name": "Français" },
-  { "code": "ar", "name": "العربية" },
-  { "code": "hi", "name": "हिन्दी" },
-  { "code": "ita", "name": "Italiano" },
-  { "code": "por", "name": "Português" },
-  { "code": "sw", "name": "Kiswahili" },
-  { "code": "uk", "name": "Українська" }
-]`;
 
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
@@ -242,9 +224,7 @@ export class OcsChat {
 
   @State() currentLanguage: string = 'en';
   @State() translationManager: TranslationManager = new TranslationManager();
-  @State() showLanguageSelector: boolean = false;
   @State() showTranslationUpload: boolean = false;
-  @State() parsedAvailableLanguages: Array<{code: string, name: string}> = [];
 
   private pollingIntervalRef?: any;
   private messageListRef?: HTMLDivElement;
@@ -358,7 +338,6 @@ export class OcsChat {
   }
 
   private async initializeTranslations() {
-    this.parsedAvailableLanguages = this.availableLanguages ? JSON.parse(this.availableLanguages) : [];
     // Parse custom translations if provided
     let customTranslationsObj: Partial<TranslationStrings> | undefined;
     if (this.customTranslations) {
@@ -373,23 +352,6 @@ export class OcsChat {
     this.translationManager = new TranslationManager(this.currentLanguage, customTranslationsObj);
   }
 
-  private async changeLanguage(languageCode: string) {
-    try {
-      let customTranslationsObj: Partial<TranslationStrings> | undefined;
-      if (this.customTranslations) {
-        try {
-          customTranslationsObj = JSON.parse(this.customTranslations);
-        } catch (error) {
-          console.warn('Failed to parse custom translations:', error);
-        }
-      }
-      this.translationManager = new TranslationManager(languageCode, customTranslationsObj);
-      this.currentLanguage = languageCode;
-      this.showLanguageSelector = false;
-    } catch (error) {
-      console.error('Failed to change language:', error);
-    }
-  }
 
   private handleTranslationUpload = (event: Event) => {
     const input = event.target as HTMLInputElement;
@@ -438,7 +400,6 @@ export class OcsChat {
   private handleClickOutside = (event: MouseEvent) => {
     const target = event.target as Element;
     if (!this.host.contains(target)) {
-      this.showLanguageSelector = false;
       this.showTranslationUpload = false;
     }
   };
@@ -1380,32 +1341,6 @@ export class OcsChat {
                   {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
                 </button>}
 
-                {/* Language selector button */}
-                {this.enableLanguageSelector && (
-                  <div class="header-dropdown-container">
-                    <button
-                      class="header-button"
-                      onClick={() => this.showLanguageSelector = !this.showLanguageSelector}
-                      title="Select language"
-                      aria-label="Select language"
-                    >
-                      <LanguageIcon/>
-                    </button>
-                    {this.showLanguageSelector && (
-                      <div class="dropdown-menu">
-                        {this.parsedAvailableLanguages.map(lang => (
-                          <button
-                            key={lang.code}
-                            class={`dropdown-item ${lang.code === this.currentLanguage ? 'active' : ''}`}
-                            onClick={() => this.changeLanguage(lang.code)}
-                          >
-                            {lang.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Translation upload button */}
                 {this.enableTranslationUpload && (
