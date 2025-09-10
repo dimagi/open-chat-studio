@@ -144,11 +144,11 @@ class ExtraFormBase(forms.Form):
                         platform,
                         identifier=channel_identifier,
                         new_experiment=self.experiment,
-                        messaging_provider=self.messaging_provider,
                     )
                 except ChannelAlreadyUtilizedException as e:
                     field = platform.channel_identifier_key if platform.channel_identifier_key in self.fields else None
                     self.add_error(field, e.html_message)
+        return self.cleaned_data
 
     def post_save(self, channel: ExperimentChannel):
         """Override this method to perform any additional actions after the channel has been saved"""
@@ -432,11 +432,23 @@ class SlackChannelForm(ExtraFormBase):
         return cleaned_data
 
     def _validate_unique_channel(self, slack_channel_id):
-        queryset = self._get_channel_queryset().select_related("experiment").only("experiment__name")
-        if existing_channel := queryset.filter(extra_data__slack_channel_id=slack_channel_id).first():
+        queryset = self._get_channel_queryset().filter(extra_data__slack_channel_id=slack_channel_id)
+        if existing_channel := self._filter_channels_by_slack_team(queryset):
             # TODO: only show name if same team
             experiment_name = existing_channel.experiment.name
             raise forms.ValidationError(f"This channel is already being used by the '{experiment_name}' chatbot.")
+
+    def _filter_channels_by_slack_team(self, channels_queryset) -> ExperimentChannel | None:
+        matching_channels = [
+            channel for channel in channels_queryset.all() if self._channel_matches_slack_team(channel)
+        ]
+        return matching_channels[0] if matching_channels else None
+
+    def _channel_matches_slack_team(self, channel) -> bool:
+        # filtering must be done manaully since the data is encrypted in the DB so can't be queried against
+        if self.messaging_provider and (slack_team_id := self.messaging_provider.config.get("slack_team_id")):
+            return channel.messaging_provider.config.get("slack_team_id") == slack_team_id
+        return False
 
     def _validate_unique_keywords(self, keywords):
         """Check that keywords are not already used by other channels system-wide"""
@@ -451,6 +463,8 @@ class SlackChannelForm(ExtraFormBase):
 
         # Check each existing channel's keywords
         for channel in queryset:
+            if not self._channel_matches_slack_team(channel):
+                continue
             existing_keywords = [kw.lower() for kw in channel.extra_data.get("keywords", [])]
             if existing_keywords:
                 conflicts = set(keywords) & set(existing_keywords)
@@ -464,7 +478,7 @@ class SlackChannelForm(ExtraFormBase):
         queryset = self._get_channel_queryset().filter(
             extra_data__is_default=True, extra_data__slack_channel_id=SLACK_ALL_CHANNELS
         )
-        if existing_default := queryset.first():
+        if existing_default := self._filter_channels_by_slack_team(queryset):
             raise forms.ValidationError(
                 f"There is already a default bot: '{existing_default.name}'. "
                 f"Please remove the default setting from that bot first."
@@ -479,9 +493,7 @@ class SlackChannelForm(ExtraFormBase):
         queryset = ExperimentChannel.objects.filter(
             platform=ChannelPlatform.SLACK,
             deleted=False,
-            # scope to providers connected to the same slack workspace
-            messaging_provider__config__slack_team_id=self.messaging_provider.config.get("slack_team_id"),
-        )
+        ).select_related("experiment", "messaging_provider")
         if current_channel_id := self._get_current_channel_id():
             queryset = queryset.exclude(pk=current_channel_id)
         return queryset

@@ -47,8 +47,8 @@ def test_channel_form_reveals_provider_types(experiment, platform, expected_widg
     ],
 )
 @patch("apps.channels.forms.WhatsappChannelForm.messaging_provider")
-def test_whatsapp_form_validates_number_format(messaging_provider, number, is_valid):
-    form = WhatsappChannelForm({"number": number})
+def test_whatsapp_form_validates_number_format(experiment, number, is_valid):
+    form = WhatsappChannelForm(experiment=experiment, data={"number": number})
     assert form.is_valid() == is_valid
     if not is_valid:
         assert form.errors["number"] == ["Enter a valid phone number (e.g. +12125552368)."]
@@ -68,13 +68,13 @@ def test_whatsapp_form_validates_number_format(messaging_provider, number, is_va
 @patch("apps.channels.forms.ExtraFormBase.messaging_provider", new_callable=PropertyMock)
 @patch("apps.service_providers.messaging_service.TwilioService._get_account_numbers")
 def test_whatsapp_form_checks_number(
-    _get_account_numbers, messaging_provider, provider_type, number, number_found_at_provider
+    _get_account_numbers, messaging_provider, provider_type, number, number_found_at_provider, experiment
 ):
     _get_account_numbers.return_value = ["+12125552368"]
     provider = MessagingProviderFactory(type=provider_type, config={"account_sid": "123", "auth_token": "123"})
     messaging_provider.return_value = provider
-    form = WhatsappChannelForm({"number": number, "messaging_provider": provider.id})
-    assert form.is_valid()
+    form = WhatsappChannelForm(experiment=experiment, data={"number": number, "messaging_provider": provider.id})
+    assert form.is_valid(), f"Form errors: {form.errors}"
     if not number_found_at_provider:
         assert form.warning_message == (
             f"{number} was not found at the provider. Please make sure it is there before proceeding"
@@ -83,7 +83,7 @@ def test_whatsapp_form_checks_number(
 
 # Slack channel keyword uniqueness tests
 @pytest.mark.django_db()
-def test_slack_channel_new_with_keywords_succeeds(team_with_users):
+def test_slack_channel_new_with_keywords_succeeds(team_with_users, experiment):
     """Test creating a new Slack channel with keywords succeeds"""
 
     # Create messaging provider
@@ -101,7 +101,7 @@ def test_slack_channel_new_with_keywords_succeeds(team_with_users):
             "messaging_provider": provider.id,
         }
 
-        form = SlackChannelForm(form_data)
+        form = SlackChannelForm(experiment=experiment, data=form_data)
         form.messaging_provider = provider
 
         assert form.is_valid(), f"Form errors: {form.errors}"
@@ -113,7 +113,7 @@ def test_slack_channel_new_with_keywords_succeeds(team_with_users):
 
 
 @pytest.mark.django_db()
-def test_slack_channel_edit_keeping_some_keywords_succeeds(team_with_users):
+def test_slack_channel_edit_keeping_some_keywords_succeeds(team_with_users, experiment):
     """Test editing existing channel keeping some keywords succeeds"""
 
     # Create messaging provider
@@ -156,7 +156,9 @@ def test_slack_channel_edit_keeping_some_keywords_succeeds(team_with_users):
         }
 
         # This simulates the browser scenario - editing an existing channel
-        form = SlackChannelForm(form_data, initial=health_bot.extra_data, channel=health_bot)
+        form = SlackChannelForm(
+            experiment=experiment, data=form_data, initial=health_bot.extra_data, channel=health_bot
+        )
         form.messaging_provider = provider
         form.instance = health_bot  # This should be set by the channel parameter
 
@@ -168,11 +170,13 @@ def test_slack_channel_edit_keeping_some_keywords_succeeds(team_with_users):
 
 
 @pytest.mark.django_db()
-def test_slack_channel_duplicate_keywords_fails(team_with_users):
+def test_slack_channel_duplicate_keywords_fails(team_with_users, experiment):
     """Test creating new channel with existing keywords fails"""
 
     # Create messaging provider
-    provider = MessagingProviderFactory(type=MessagingProviderType.slack, team=team_with_users)
+    provider = MessagingProviderFactory(
+        type=MessagingProviderType.slack, team=team_with_users, config={"slack_team_id": "123"}
+    )
 
     # Create existing channel with keywords
     ExperimentChannelFactory(
@@ -196,18 +200,20 @@ def test_slack_channel_duplicate_keywords_fails(team_with_users):
             "messaging_provider": provider.id,
         }
 
-        form = SlackChannelForm(form_data)
+        form = SlackChannelForm(experiment=experiment, data=form_data)
         form.messaging_provider = provider
 
         assert not form.is_valid()
 
 
 @pytest.mark.django_db()
-def test_slack_channel_cross_team_keyword_conflicts(team_with_users):
+def test_slack_channel_cross_team_keyword_conflicts(team_with_users, experiment):
     """Test that keyword conflicts are validated system-wide across teams"""
 
     # Create messaging provider
-    provider = MessagingProviderFactory(type=MessagingProviderType.slack, team=team_with_users)
+    provider = MessagingProviderFactory(
+        type=MessagingProviderType.slack, team=team_with_users, config={"slack_team_id": "123"}
+    )
 
     # Create a different team that shares the same Slack workspace (same messaging provider)
     other_team = TeamWithUsersFactory.create()
@@ -234,11 +240,11 @@ def test_slack_channel_cross_team_keyword_conflicts(team_with_users):
             "messaging_provider": provider.id,
         }
 
-        form = SlackChannelForm(form_data)
+        form = SlackChannelForm(experiment=experiment, data=form_data)
         form.messaging_provider = provider
 
         # Should fail because keywords must be unique across ALL teams using the same Slack workspace
-        assert not form.is_valid()
+        assert not form.is_valid(), f"Form errors: {form.errors}"
 
         # Error message should indicate which bot has the conflicting keywords
         error_message = str(form.errors)
