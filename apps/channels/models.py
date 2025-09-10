@@ -5,8 +5,6 @@ from django.conf import settings
 from django.db import models
 from django.db.models import JSONField, Q
 from django.urls import reverse
-from django.utils.html import format_html
-from django.utils.translation import gettext as _
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
@@ -206,8 +204,10 @@ class ExperimentChannel(BaseTeamModel):
         experiment uses it.
         """
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
-        existing_channels = ExperimentChannel.objects.filter(**filter_params, platform=platform, deleted=False).exclude(
-            experiment=new_experiment
+        existing_channels = (
+            ExperimentChannel.objects.filter(**filter_params, platform=platform, deleted=False)
+            .exclude(experiment=new_experiment)
+            .select_related("team")
         )
 
         if not existing_channels:
@@ -215,14 +215,9 @@ class ExperimentChannel(BaseTeamModel):
 
         channel = existing_channels.first()
         if channel:
-            # TODO: check if it's in a different team and if the user has access to that team
-            url = reverse(
-                "experiments:single_experiment_home",
-                kwargs={"team_slug": channel.experiment.team.slug, "experiment_id": channel.experiment.id},
-            )
-            raise ChannelAlreadyUtilizedException(
-                format_html(_("This channel is already used in <a href={}><u>another experiment</u></a>"), url)
-            )
+            if channel.team_id == new_experiment.team_id:
+                raise ChannelAlreadyUtilizedException(ChannelAlreadyUtilizedException.get_message_for_channel(channel))
+            raise ChannelAlreadyUtilizedException()
 
     @property
     def webhook_url(self) -> str:

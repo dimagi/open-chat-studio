@@ -436,11 +436,12 @@ class SlackChannelForm(ExtraFormBase):
     def _validate_unique_channel(self, slack_channel_id):
         queryset = self._get_channel_queryset().filter(extra_data__slack_channel_id=slack_channel_id)
         if existing_channel := self._filter_channels_by_slack_team(queryset):
-            # TODO: only show name if same team
-            experiment_name = existing_channel.experiment.name
-            raise forms.ValidationError(
-                {"slack_channel_name": f"This channel is already being used by the '{experiment_name}' chatbot."}
+            error_message = self._get_error_message(
+                existing_channel,
+                "This channel is already being used by another bot.",
+                "This channel is already being used by {}",
             )
+            raise forms.ValidationError({"slack_channel_name": error_message})
 
     def _filter_channels_by_slack_team(self, channels_queryset) -> ExperimentChannel | None:
         matching_channels = [
@@ -474,9 +475,12 @@ class SlackChannelForm(ExtraFormBase):
                 conflicts = set(keywords) & set(existing_keywords)
                 if conflicts:
                     conflict_list = ", ".join(sorted(conflicts))
-                    raise forms.ValidationError(
-                        {"keywords": f"Keywords already in use by '{channel.name}': {conflict_list}"}
+                    error_message = self._get_error_message(
+                        channel,
+                        f"Keywords already in use by another chatbot: {conflict_list}",
+                        f"Some keywords are already used by {{}}: {conflict_list}",
                     )
+                    raise forms.ValidationError({"keywords": error_message})
 
     def _validate_unique_default(self):
         """Check that there isn't already a default bot for this messaging provider"""
@@ -485,12 +489,18 @@ class SlackChannelForm(ExtraFormBase):
             extra_data__is_default=True, extra_data__slack_channel_id=SLACK_ALL_CHANNELS
         )
         if existing_default := self._filter_channels_by_slack_team(queryset):
-            raise forms.ValidationError(
-                {
-                    "routing_method": f"There is already a default bot: '{existing_default.name}'. "
-                    f"Please remove the default setting from that bot first."
-                }
+            suffix = " Please remove the default setting from that bot first."
+            error_message = self._get_error_message(
+                existing_default,
+                f"There is already a default bot registered.{suffix}",
+                f"There is already {{}} configured as the default bot.{suffix}",
             )
+            raise forms.ValidationError({"routing_method": error_message})
+
+    def _get_error_message(self, channel, other_team_message, this_team_message):
+        if channel.team_id == self.experiment.team_id:
+            return ChannelAlreadyUtilizedException.get_message_for_channel(channel, message_template=this_team_message)
+        return other_team_message
 
     def _get_current_channel_id(self):
         if self.channel and self.channel.pk is not None:
