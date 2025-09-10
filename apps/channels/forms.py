@@ -295,11 +295,6 @@ class SlackChannelForm(ExtraFormBase):
             if kw not in seen:
                 seen.add(kw)
                 unique_keywords.append(kw)
-
-        # Check if duplicates were removed
-        if len(unique_keywords) != len(sanitized_keywords):
-            raise forms.ValidationError("Duplicate keywords are not allowed")
-
         return unique_keywords
 
     def clean(self):
