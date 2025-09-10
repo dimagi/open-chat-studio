@@ -7,9 +7,11 @@ from slack_bolt import BoltContext
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession
+from apps.service_providers.models import MessagingProviderType
 from apps.slack.models import SlackInstallation
 from apps.slack.slack_listeners import new_message
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 from apps.utils.langchain import mock_llm
 
 SLACK_TEAM_ID = "SLACK_TEAM_ID"
@@ -185,7 +187,7 @@ def slack_install():
 def bolt_context(slack_install):
     return BoltContext(
         {
-            "team_id": "SLACK_TEAM_ID",
+            "team_id": SLACK_TEAM_ID,
             "slack_install": slack_install,
             "bot_user_id": BOT_USER_ID,
             "say": Mock(),
@@ -194,27 +196,37 @@ def bolt_context(slack_install):
 
 
 @pytest.fixture()
-def experiment_channel(experiment):
+def messaging_provider(team_with_users):
+    return MessagingProviderFactory(type=MessagingProviderType.slack, config={"slack_team_id": SLACK_TEAM_ID})
+
+
+@pytest.fixture()
+def experiment_channel(experiment, messaging_provider):
     return ExperimentChannelFactory(
-        experiment=experiment, platform=ChannelPlatform.SLACK, extra_data={"slack_channel_id": SLACK_CHANNEL_ID}
+        experiment=experiment,
+        platform=ChannelPlatform.SLACK,
+        extra_data={"slack_channel_id": SLACK_CHANNEL_ID},
+        messaging_provider=messaging_provider,
     )
 
 
 @pytest.fixture()
-def keyword_channel(experiment):
+def keyword_channel(experiment, messaging_provider):
     return ExperimentChannelFactory(
         experiment=experiment,
         platform=ChannelPlatform.SLACK,
         extra_data={"slack_channel_id": SLACK_ALL_CHANNELS, "keywords": ["health", "benefits"]},
+        messaging_provider=messaging_provider,
     )
 
 
 @pytest.fixture()
-def default_channel(experiment):
+def default_channel(experiment, messaging_provider):
     return ExperimentChannelFactory(
         experiment=experiment,
         platform=ChannelPlatform.SLACK,
         extra_data={"slack_channel_id": SLACK_ALL_CHANNELS, "is_default": True},
+        messaging_provider=messaging_provider,
     )
 
 

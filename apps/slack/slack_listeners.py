@@ -10,6 +10,7 @@ Manage event subscriptions at:
 import logging
 import re
 
+from django.db.models import Q
 from slack_bolt import BoltContext, BoltResponse
 
 from apps.channels.const import SLACK_ALL_CHANNELS
@@ -132,24 +133,26 @@ def get_experiment_channel(channel_id, message_text, bolt_context) -> Experiment
         "experiment", "messaging_provider"
     )
 
-    # Note: Workspace scoping would require filtering by encrypted config field
-    # which is not supported. For now, we rely on proper messaging provider setup
-    # to ensure channels are properly scoped to their workspaces.
-
     # First, try to find exact channel match (specific channel assignment)
     exact_channels_qs = base_queryset.filter(extra_data__contains={"slack_channel_id": channel_id})
-    if exact_channel := exact_channels_qs.first():
+    if exact_channel := _get_first_channel_for_slack_team(exact_channels_qs, bolt_context.team_id):
         return exact_channel
 
     # If no exact match, check for "all channels" bots (including keyword-based routing)
     all_channels = base_queryset.filter(extra_data__contains={"slack_channel_id": SLACK_ALL_CHANNELS})
+    default_filter = Q(extra_data__is_default=True)
+    keyword = _get_keyword(bolt_context, message_text)
+    if not keyword:
+        return all_channels.filter(default_filter).first()
 
-    # If we have message text, try keyword-based routing for all channels
-    if message_text and (keyword := _get_keyword(bolt_context, message_text)):
-        if keyword_match := all_channels.filter(extra_data__contains={"keywords": [keyword]}).first():
-            return keyword_match
-
-    return all_channels.filter(extra_data__is_default=True).first()
+    # handle keywords and default channel together to avoid another DB query
+    default_keyword_channels = all_channels.filter(default_filter | Q(extra_data__contains={"keywords": [keyword]}))
+    matching_channels = _filter_channels_for_slack_team(default_keyword_channels, bolt_context.team_id)
+    for channel in matching_channels:
+        if not channel.extra_data.get("is_default") and channel.extra_data.get("keywords"):
+            return channel
+    default_channel = [channel for channel in matching_channels if channel.extra_data.get("is_default")]
+    return default_channel[0] if default_channel else None
 
 
 def _is_dm_channel(channel_id: str) -> bool:
@@ -171,3 +174,12 @@ def _get_keyword(context, message_text: str) -> str | None:
 
     keyword = match.group(1).lower()
     return keyword if len(keyword) > 1 else None
+
+
+def _get_first_channel_for_slack_team(channels, slack_team_id):
+    matches = _filter_channels_for_slack_team(channels, slack_team_id)
+    return matches[0] if matches else None
+
+
+def _filter_channels_for_slack_team(channels, slack_team_id):
+    return [channel for channel in channels if channel.messaging_provider.config.get("slack_team_id") == slack_team_id]
