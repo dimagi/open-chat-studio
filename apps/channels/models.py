@@ -216,7 +216,7 @@ class ExperimentChannel(BaseTeamModel):
         from apps.channels.const import SLACK_ALL_CHANNELS
 
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
-        existing_channels = ExperimentChannel.objects.filter(**filter_params, deleted=False).exclude(
+        existing_channels = ExperimentChannel.objects.filter(**filter_params, platform=platform, deleted=False).exclude(
             experiment=new_experiment
         )
 
