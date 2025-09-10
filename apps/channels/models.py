@@ -220,11 +220,10 @@ class ExperimentChannel(BaseTeamModel):
             experiment=new_experiment
         )
 
-        # For Slack channels, scope to the same workspace if messaging_provider is provided
-        if platform == ChannelPlatform.SLACK and messaging_provider:
-            # Filter by the specific messaging provider to ensure workspace scoping
-            # (can't filter by encrypted config field directly)
-            existing_channels = existing_channels.filter(messaging_provider=messaging_provider)
+        # restrict the check to a subset of messaging providers
+        if messaging_provider and (provider_filter := messaging_provider.uniqeness_filter()):
+            scoped_filter = dict((f"messaging_provider__{key}", value) for key, value in provider_filter.items())
+            existing_channels = existing_channels.filter(**scoped_filter)
 
         if not existing_channels:
             return  # No conflicts
