@@ -302,18 +302,19 @@ class SlackChannelForm(ExtraFormBase):
         channel_scope = cleaned_data.get("channel_scope")
         routing_method = cleaned_data.get("routing_method")
 
-        if channel_scope == "specific":
-            # Specific channel - validate channel exists
-            if self.messaging_provider:
-                service = self.messaging_provider.get_messaging_service()
-                channel_name = cleaned_data.get("slack_channel_name", "").strip()
-                if not channel_name:
-                    raise forms.ValidationError("Channel name is required for specific channels.")
+        if not self.messaging_provider:
+            raise forms.ValidationError("Messaging provider is required.")
 
-                channel = service.get_channel_by_name(channel_name)
-                if not channel:
-                    raise forms.ValidationError(f"No channel found with name {channel_name}")
-                cleaned_data["slack_channel_id"] = channel["id"]
+        if channel_scope == "specific":
+            channel_name = cleaned_data.get("slack_channel_name", "").strip()
+            if not channel_name:
+                raise forms.ValidationError("Channel name is required for specific channels.")
+
+            service = self.messaging_provider.get_messaging_service()
+            channel = service.get_channel_by_name(channel_name)
+            if not channel:
+                raise forms.ValidationError(f"No channel found with name {channel_name}")
+            cleaned_data["slack_channel_id"] = channel["id"]
 
             # Specific channels don't use keywords or default routing
             cleaned_data["keywords"] = []
