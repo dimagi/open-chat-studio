@@ -466,7 +466,9 @@ class SlackChannelForm(ExtraFormBase):
     def _validate_unique_default(self):
         """Check that there isn't already a default bot for this messaging provider"""
         # Default bots must be unique across the entire Slack workspace
-        queryset = self._get_channel_queryset().filter(config__is_default=True)
+        queryset = self._get_channel_queryset().filter(
+            extra_data__is_default=True, extra_data__slack_channel_id=SLACK_ALL_CHANNELS
+        )
         if existing_default := queryset.first():
             raise forms.ValidationError(
                 f"There is already a default bot: '{existing_default.name}'. "
