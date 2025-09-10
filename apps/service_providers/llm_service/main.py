@@ -168,10 +168,18 @@ class LlmService(pydantic.BaseModel):
     ) -> LlmChatResponse:
         if isinstance(llm_output, dict):
             llm_outputs = llm_output.get("output", "")
-        elif isinstance(llm_output, str | list):
+        elif isinstance(llm_output, str):
             llm_outputs = llm_output
+        elif isinstance(llm_output, list):
+            # Normalize list outputs: support list[dict] and list[str]
+            if all(isinstance(o, dict) for o in llm_output):
+                llm_outputs = llm_output
+            elif all(isinstance(o, str) for o in llm_output):
+                llm_outputs = "\n".join(llm_output)
+            else:
+                raise TypeError("Unexpected mixed or unsupported list element types in llm_output")
         else:
-            raise ValueError(f"Unexpected type {type(llm_output)}")
+            raise TypeError(f"Unexpected llm_output type: {type(llm_output).__name__}")
 
         final_text = ""
         cited_file_ids_remote = []
