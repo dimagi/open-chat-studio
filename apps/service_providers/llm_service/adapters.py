@@ -72,7 +72,7 @@ class BaseAdapter:
         return [
             t
             for t in self.get_allowed_tools()
-            if not isinstance(t, (OpenAIBuiltinTool | GenAITool | AnthropicBuiltinTool))
+            if not isinstance(t, OpenAIBuiltinTool | GenAITool | AnthropicBuiltinTool)
         ]
 
 
