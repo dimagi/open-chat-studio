@@ -2,9 +2,9 @@
  * Translation utilities for the chat widget
  */
 
-import en from '../translations/en.json';
-import es from '../translations/es.json';
-import fr from '../translations/fr.json';
+import en from '../assets/translations/en.json';
+import es from '../assets/translations/es.json';
+import fr from '../assets/translations/fr.json';
 
 export type TranslationStrings = typeof en;
 
