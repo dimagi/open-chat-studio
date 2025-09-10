@@ -131,6 +131,7 @@ class ExtraFormBase(forms.Form):
     def messaging_provider(self) -> MessagingProvider | None:
         if provider_id := self.data.get("messaging_provider"):
             return MessagingProvider.objects.filter(id=provider_id).first()
+        return None
 
     def validate_channel_config(self, experiment, platform_slug: str):
         platform = ChannelPlatform(platform_slug)
@@ -427,19 +428,18 @@ class SlackChannelForm(ExtraFormBase):
 
         current_channel_id = self._get_current_channel_id()
 
-        if not self.messaging_provider:
-            return  # Can't validate without messaging provider context
-
         # Normalize input keywords to lowercase for case-insensitive comparison
         keywords = [kw.lower() for kw in keywords]
 
         # Get all other Slack channels using the same messaging provider (system-wide)
         # Keywords must be unique across the entire Slack workspace
         queryset = ExperimentChannel.objects.filter(
-            messaging_provider=self.messaging_provider,
             platform=ChannelPlatform.SLACK,
             deleted=False,
         )
+        if provider_filter := self.messaging_provider.uniqeness_filter():
+            scoped_filter = dict((f"messaging_provider__{key}", value) for key, value in provider_filter.items())
+            queryset = queryset.filter(**scoped_filter)
 
         if current_channel_id:
             queryset = queryset.exclude(pk=current_channel_id)
