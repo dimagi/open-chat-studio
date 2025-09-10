@@ -36,13 +36,13 @@ class ChannelFormWrapper:
 
         if self.channel:
             self.channel_form = ChannelForm(instance=channel, experiment=experiment, data=data)
-            self.extra_form = self.channel.extra_form(data=data)
+            self.extra_form = self.channel.extra_form(experiment=experiment, data=data)
         else:
             initial = initial or {}
             initial["platform"] = self.platform.value
 
             self.channel_form = ChannelForm(experiment=self.experiment, data=data, initial=initial)
-            self.extra_form = self.platform.extra_form(data=data)
+            self.extra_form = self.platform.extra_form(experiment=experiment, data=data)
 
     def is_valid(self):
         """Validate both forms"""
@@ -127,6 +127,11 @@ class ExtraFormBase(forms.Form):
     form_attrs = {}
     """Additional HTML attributes to be added to the form element"""
 
+    def __init__(self, experiment, channel=None, **kwargs):
+        self.experiment = experiment
+        self.channel = channel
+        super().__init__(**kwargs)
+
     @cached_property
     def messaging_provider(self) -> MessagingProvider | None:
         if provider_id := self.data.get("messaging_provider"):
@@ -159,14 +164,11 @@ class WebhookUrlFormBase(ExtraFormBase):
     )
 
     def __init__(self, *args, **kwargs):
-        initial = kwargs.get("initial", {})
-        channel: ExperimentChannel = kwargs.pop("channel", None)
-        if channel:
-            initial["webook_url"] = channel.webhook_url
-            kwargs["initial"] = initial
-
         super().__init__(*args, **kwargs)
-        if not channel:
+        if self.channel:
+            self.initial["webook_url"] = self.channel.webhook_url
+
+        if not self.channel:
             # We only show the webhook URL field when there is something to show
             self.fields["webook_url"].widget = forms.HiddenInput()
 
@@ -306,41 +308,33 @@ class SlackChannelForm(ExtraFormBase):
     )
 
     def __init__(self, *args, **kwargs):
-        # Handle channel parameter for editing existing channels
-        channel = kwargs.pop("channel", None)
-        initial = kwargs.setdefault("initial", {})
-        if channel:
-            self.instance = channel
-            # Merge stored config to drive scope/routing init logic and field values
-            initial.update(channel.extra_data or {})
-
+        super().__init__(*args, **kwargs)
         # Set channel scope based on existing data
-        if initial.get("slack_channel_id") == SLACK_ALL_CHANNELS:
-            initial["channel_scope"] = "all"
+        if self.initial.get("slack_channel_id") == SLACK_ALL_CHANNELS:
+            self.initial["channel_scope"] = "all"
             # Set routing method for "all channels"
-            if initial.get("is_default"):
-                initial["routing_method"] = "default"
-            elif initial.get("keywords"):
-                initial["routing_method"] = "keywords"
+            if self.initial.get("is_default"):
+                self.initial["routing_method"] = "default"
+            elif self.initial.get("keywords"):
+                self.initial["routing_method"] = "keywords"
             else:
-                initial["routing_method"] = "default"
+                self.initial["routing_method"] = "default"
         else:
-            initial["channel_scope"] = "specific"
+            self.initial["channel_scope"] = "specific"
             # routing_method not needed for specific channels
 
         # Set keywords field from extra_data
-        if "keywords" in initial and isinstance(initial["keywords"], list):
-            initial["keywords"] = ", ".join(initial["keywords"])
+        if "keywords" in self.initial and isinstance(self.initial["keywords"], list):
+            self.initial["keywords"] = ", ".join(self.initial["keywords"])
 
         self.form_attrs = {
             "x-data": json.dumps(
                 {
-                    "channelScope": initial.get("channel_scope", "specific"),
-                    "routingMethod": initial.get("routing_method", "default"),
+                    "channelScope": self.initial.get("channel_scope", "specific"),
+                    "routingMethod": self.initial.get("routing_method", "default"),
                 }
             )
         }
-        super().__init__(*args, **kwargs)
 
     def clean_slack_channel_name(self):
         name = self.cleaned_data["slack_channel_name"].strip()
@@ -478,13 +472,8 @@ class SlackChannelForm(ExtraFormBase):
     def _get_current_channel_id(self):
         """Get current channel ID, with fallback logic for missing instance"""
         # Try instance first
-        if (
-            hasattr(self, "instance")
-            and self.instance
-            and hasattr(self.instance, "pk")
-            and self.instance.pk is not None
-        ):
-            return self.instance.pk
+        if hasattr(self, "instance") and self.channel and hasattr(self.channel, "pk") and self.channel.pk is not None:
+            return self.channel.pk
 
         return None
 

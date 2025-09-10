@@ -78,7 +78,6 @@ class ChannelPlatform(models.TextChoices):
 
         match self:
             case self.TELEGRAM:
-                kwargs.pop("channel", None)
                 return forms.TelegramChannelForm(**kwargs)
             case self.WHATSAPP:
                 return forms.WhatsappChannelForm(**kwargs)
@@ -87,10 +86,8 @@ class ChannelPlatform(models.TextChoices):
             case self.SUREADHERE:
                 return forms.SureAdhereChannelForm(**kwargs)
             case self.SLACK:
-                kwargs.pop("channel", None)
                 return forms.SlackChannelForm(**kwargs)
             case self.COMMCARE_CONNECT:
-                kwargs.pop("channel", None)
                 return forms.CommCareConnectChannelForm(**kwargs)
         return None
 
@@ -195,8 +192,10 @@ class ExperimentChannel(BaseTeamModel):
     def platform_enum(self):
         return ChannelPlatform(self.platform)
 
-    def extra_form(self, data: dict = None):
-        return self.platform_enum.extra_form(channel=self, initial=self.extra_data, data=data)
+    def extra_form(self, experiment, data: dict = None):
+        if not experiment.id == self.experiment_id:
+            raise ValueError("Experiment ID does not match channel experiment ID")
+        return self.platform_enum.extra_form(experiment=experiment, channel=self, initial=self.extra_data, data=data)
 
     @staticmethod
     def check_usage_by_another_experiment(
