@@ -435,6 +435,7 @@ class SlackChannelForm(ExtraFormBase):
         # Keywords must be unique across the entire Slack workspace
         queryset = ExperimentChannel.objects.filter(
             platform=ChannelPlatform.SLACK,
+            config__is_default=False,
             deleted=False,
         )
         if provider_filter := self.messaging_provider.uniqeness_filter():
