@@ -1,4 +1,5 @@
 import uuid
+from typing import Self
 
 from django.conf import settings
 from django.db import models
@@ -39,7 +40,7 @@ class ChannelPlatform(models.TextChoices):
         return [cls.API, cls.WEB, cls.EVALUATIONS]
 
     @classmethod
-    def for_dropdown(cls, used_platforms, team) -> dict:
+    def for_dropdown(cls, used_platforms, team) -> dict[Self, bool]:
         """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
         from apps.service_providers.models import MessagingProvider
 
@@ -72,25 +73,25 @@ class ChannelPlatform(models.TextChoices):
 
         return ChannelForm(initial={"platform": self}, experiment=experiment)
 
-    def extra_form(self, *args, **kwargs):
+    def extra_form(self, **kwargs):
         from apps.channels import forms
 
         match self:
             case self.TELEGRAM:
                 kwargs.pop("channel", None)
-                return forms.TelegramChannelForm(*args, **kwargs)
+                return forms.TelegramChannelForm(**kwargs)
             case self.WHATSAPP:
-                return forms.WhatsappChannelForm(*args, **kwargs)
+                return forms.WhatsappChannelForm(**kwargs)
             case self.FACEBOOK:
-                return forms.FacebookChannelForm(*args, **kwargs)
+                return forms.FacebookChannelForm(**kwargs)
             case self.SUREADHERE:
-                return forms.SureAdhereChannelForm(*args, **kwargs)
+                return forms.SureAdhereChannelForm(**kwargs)
             case self.SLACK:
                 kwargs.pop("channel", None)
-                return forms.SlackChannelForm(*args, **kwargs)
+                return forms.SlackChannelForm(**kwargs)
             case self.COMMCARE_CONNECT:
                 kwargs.pop("channel", None)
-                return forms.CommCareConnectChannelForm(*args, **kwargs)
+                return forms.CommCareConnectChannelForm(**kwargs)
         return None
 
     @property
@@ -194,17 +195,8 @@ class ExperimentChannel(BaseTeamModel):
     def platform_enum(self):
         return ChannelPlatform(self.platform)
 
-    def form(self, *args, **kwargs):
-        from apps.channels.forms import ChannelForm
-
-        kwargs["instance"] = self
-        kwargs["experiment"] = self.experiment
-        return ChannelForm(*args, **kwargs)
-
-    def extra_form(self, *args, **kwargs):
-        kwargs["initial"] = self.extra_data
-        kwargs["channel"] = self
-        return self.platform_enum.extra_form(*args, **kwargs)
+    def extra_form(self, data: dict = None):
+        return self.platform_enum.extra_form(channel=self, initial=self.extra_data, data=data)
 
     @staticmethod
     def check_usage_by_another_experiment(
