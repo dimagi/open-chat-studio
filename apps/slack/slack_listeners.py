@@ -148,18 +148,8 @@ def get_experiment_channel(channel_id, message_text=None, team_id=None) -> Exper
         if keyword_match:
             return keyword_match
 
-    # Fall back to default bot or first "all channels" bot
-    default_bot = _find_default_bot(all_channels)
-    if default_bot:
-        return default_bot
-
-    # If no default bot, return the first "all channels" bot without keywords
-    for channel in all_channels:
-        if not channel.extra_data.get("keywords") and not channel.extra_data.get("is_default"):
-            return channel
-
-    # Last resort: return any "all channels" bot
-    return all_channels[0] if all_channels else None
+    # Fall back to default bot
+    return _find_default_bot(all_channels)
 
 
 def _is_dm_channel(channel_id: str) -> bool:
