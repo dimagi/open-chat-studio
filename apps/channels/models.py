@@ -213,27 +213,14 @@ class ExperimentChannel(BaseTeamModel):
         Args:
             messaging_provider: Optional messaging provider to scope Slack lookups to the same workspace
         """
-        from apps.channels.const import SLACK_ALL_CHANNELS
-
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
         existing_channels = ExperimentChannel.objects.filter(**filter_params, platform=platform, deleted=False).exclude(
             experiment=new_experiment
         )
 
-        # restrict the check to a subset of messaging providers
-        if messaging_provider and (provider_filter := messaging_provider.uniqeness_filter()):
-            scoped_filter = dict((f"messaging_provider__{key}", value) for key, value in provider_filter.items())
-            existing_channels = existing_channels.filter(**scoped_filter)
-
         if not existing_channels:
             return  # No conflicts
 
-        # For Slack "all channels" (*), allow multiple experiments with keyword-based routing
-        if platform == ChannelPlatform.SLACK and identifier == SLACK_ALL_CHANNELS:
-            # This is allowed - keyword conflicts will be handled by form validation
-            return
-
-        # For other cases, raise the conflict error
         channel = existing_channels.first()
         if channel:
             # TODO: check if it's in a different team and if the user has access to that team
