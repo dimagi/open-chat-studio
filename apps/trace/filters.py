@@ -9,14 +9,17 @@ from apps.trace.models import TraceStatus
 
 def get_trace_filter_context_data(team):
     span_tags = list(
-        team.span_set.filter(tags__is_system_tag=True).distinct("tags__name").values_list("tags__name", flat=True)
+        team.span_set.filter(tags__is_system_tag=True)
+        .values_list("tags__name", flat=True)
+        .order_by("tags__name")
+        .distinct("tags__name")
     )
 
     table_url = reverse("trace:table", args=[team.slug])
     context = get_filter_context_data(team, DynamicTraceFilter.columns, "timestamp", table_url, "data-table")
     context.update(
         {
-            "df_span_names": list(team.span_set.values_list("name", flat=True).distinct()),
+            "df_span_names": list(team.span_set.values_list("name", flat=True).order_by("name").distinct()),
             "df_state_list": TraceStatus.values,
             "df_experiment_list": get_experiment_filter_options(team),
             "df_available_tags": span_tags,
