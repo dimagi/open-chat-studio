@@ -194,6 +194,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .filter(team=self.request.team)
             .select_related("participant__user", "chat", "experiment")
             .annotate(message_count=Count("chat__messages"))
+            .filter(message_count__gt=0)
             .order_by("experiment__name")
         )
         timezone = self.request.session.get("detected_tz", None)
