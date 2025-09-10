@@ -92,7 +92,7 @@ class ChannelPlatform(models.TextChoices):
         return None
 
     @property
-    def channel_identifier_key(self) -> str:
+    def channel_identifier_key(self) -> str | None:
         match self:
             case self.TELEGRAM:
                 return "bot_token"
@@ -103,7 +103,8 @@ class ChannelPlatform(models.TextChoices):
             case self.SUREADHERE:
                 return "sureadhere_tenant_id"
             case self.SLACK:
-                return "slack_channel_id"
+                # handled by the slack form directly
+                return None
             case self.COMMCARE_CONNECT:
                 # The bot_name will be shown to the user, which is how they'll know which bot it is. We use the bot name
                 # here to prevent other bots from using the same name in order to mitigate confusion.
@@ -198,19 +199,11 @@ class ExperimentChannel(BaseTeamModel):
         return self.platform_enum.extra_form(experiment=experiment, channel=self, initial=self.extra_data, data=data)
 
     @staticmethod
-    def check_usage_by_another_experiment(
-        platform: ChannelPlatform, identifier: str, new_experiment: Experiment, messaging_provider=None
-    ):
+    def check_usage_by_another_experiment(platform: ChannelPlatform, identifier: str, new_experiment: Experiment):
         """
         Checks if another experiment (one that is not the same as `new_experiment`) already uses the channel specified
         by its `identifier` and `platform`. Raises `ChannelAlreadyUtilizedException` error when another
         experiment uses it.
-
-        For Slack channels with identifier "*" (all channels), multiple experiments are allowed if they use
-        keyword-based routing with different keywords.
-
-        Args:
-            messaging_provider: Optional messaging provider to scope Slack lookups to the same workspace
         """
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
         existing_channels = ExperimentChannel.objects.filter(**filter_params, platform=platform, deleted=False).exclude(

@@ -52,10 +52,6 @@ class ChannelFormWrapper:
             if not self.channel:
                 # skip platform validation when updating an existing channel
                 self.validate_platform()
-            try:
-                self.extra_form.validate_channel_config(self.experiment, self.channel_form.cleaned_data["platform"])
-            except ChannelAlreadyUtilizedException as e:
-                self.channel_form.add_error(None, e.html_message)
 
             channel_valid = not self.channel_form.errors
 
@@ -138,16 +134,21 @@ class ExtraFormBase(forms.Form):
             return MessagingProvider.objects.filter(id=provider_id).first()
         return None
 
-    def validate_channel_config(self, experiment, platform_slug: str):
-        platform = ChannelPlatform(platform_slug)
-        channel_identifier = self.cleaned_data.get(platform.channel_identifier_key, "")
-
-        ExperimentChannel.check_usage_by_another_experiment(
-            platform,
-            identifier=channel_identifier,
-            new_experiment=experiment,
-            messaging_provider=self.messaging_provider,
-        )
+    def clean(self):
+        if platform_slug := self.data.get("platform"):
+            platform = ChannelPlatform(platform_slug)
+            if platform.channel_identifier_key:
+                channel_identifier = self.cleaned_data.get(platform.channel_identifier_key, "")
+                try:
+                    ExperimentChannel.check_usage_by_another_experiment(
+                        platform,
+                        identifier=channel_identifier,
+                        new_experiment=self.experiment,
+                        messaging_provider=self.messaging_provider,
+                    )
+                except ChannelAlreadyUtilizedException as e:
+                    field = platform.channel_identifier_key if platform.channel_identifier_key in self.fields else None
+                    self.add_error(field, e.html_message)
 
     def post_save(self, channel: ExperimentChannel):
         """Override this method to perform any additional actions after the channel has been saved"""
