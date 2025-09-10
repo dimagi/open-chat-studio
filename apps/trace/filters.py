@@ -51,7 +51,7 @@ class DynamicTraceFilter(DynamicFilter):
             filter_value = param_source.get(f"filter_{i}_value")
 
             if not all([filter_column, filter_operator, filter_value]):
-                break
+                continue
 
             filter_column = filter_column[0] if isinstance(filter_column, list) else filter_column
             filter_operator = filter_operator[0] if isinstance(filter_operator, list) else filter_operator
