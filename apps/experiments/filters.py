@@ -409,11 +409,6 @@ class DynamicExperimentSessionFilter(DynamicFilter):
                 return None
             if operator == Operators.ANY_OF:
                 return Q(experiment_channel__platform__in=selected_values)
-            elif operator == Operators.ALL_OF:
-                conditions = Q()
-                for channel in selected_values:
-                    conditions &= Q(experiment_channel__platform__iexact=channel)
-                return conditions
             elif operator == Operators.EXCLUDES:
                 return ~Q(experiment_channel__platform__in=selected_values)
         except json.JSONDecodeError:
