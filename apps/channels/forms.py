@@ -249,6 +249,18 @@ class FacebookChannelForm(WebhookUrlFormBase):
 
 
 class SlackChannelForm(ExtraFormBase):
+    """Slack messaging channels can be configured as follows (in increasing order of specificity):
+    * scope: all, is_default: True, keywords: []
+        * Will be the fallback handler if no other channels match. There can only be one per Slack workspace
+    * scope: all, is_default: False, keywords: [...]
+        * Will match messages from any channel based on the keywords. Keywords must be unique.
+    * scope: <channel>, is_default: False, keywords: []
+        * Will match all messages on the given channel, regardless of keywords.
+
+    This mode is not currently supported:
+    * scope: <channel>, is_default: False, keywords: [...]
+    """
+
     channel_scope = forms.ChoiceField(
         label="Where should this bot operate?",
         choices=[
@@ -398,6 +410,7 @@ class SlackChannelForm(ExtraFormBase):
             # Specific channels don't use keywords or default routing
             cleaned_data["keywords"] = []
             cleaned_data["is_default"] = False
+            self._validate_unique_channel(channel_name, channel["id"])
 
         elif channel_scope == "all":
             # All channels - set up based on routing method
@@ -423,27 +436,21 @@ class SlackChannelForm(ExtraFormBase):
 
         return cleaned_data
 
+    def _validate_unique_channel(self, slack_channel_name, slack_channel_id):
+        queryset = self._get_channel_queryset().select_related("experiment").only("experiment__name")
+        if existing_channel := queryset.filter(extra_data__slack_channel_id=slack_channel_id).first():
+            # TODO: only show name if same team
+            experiment_name = existing_channel.experiment.name
+            raise forms.ValidationError(f"This channel is already being used by the '{experiment_name}' chatbot.")
+
     def _validate_unique_keywords(self, keywords):
         """Check that keywords are not already used by other channels system-wide"""
-
-        current_channel_id = self._get_current_channel_id()
-
         # Normalize input keywords to lowercase for case-insensitive comparison
         keywords = [kw.lower() for kw in keywords]
 
         # Get all other Slack channels using the same messaging provider (system-wide)
         # Keywords must be unique across the entire Slack workspace
-        queryset = ExperimentChannel.objects.filter(
-            platform=ChannelPlatform.SLACK,
-            config__is_default=False,
-            deleted=False,
-        )
-        if provider_filter := self.messaging_provider.uniqeness_filter():
-            scoped_filter = dict((f"messaging_provider__{key}", value) for key, value in provider_filter.items())
-            queryset = queryset.filter(**scoped_filter)
-
-        if current_channel_id:
-            queryset = queryset.exclude(pk=current_channel_id)
+        queryset = self._get_channel_queryset().filter(config__is_default=False)
 
         # Check each existing channel's keywords
         for channel in queryset:
@@ -456,26 +463,9 @@ class SlackChannelForm(ExtraFormBase):
 
     def _validate_unique_default(self):
         """Check that there isn't already a default bot for this messaging provider"""
-
-        current_channel_id = self._get_current_channel_id()
-
-        if not self.messaging_provider:
-            return  # Can't validate without messaging provider context
-
-        # Get all other Slack channels using the same messaging provider (system-wide)
         # Default bots must be unique across the entire Slack workspace
-        queryset = ExperimentChannel.objects.filter(
-            messaging_provider=self.messaging_provider,
-            platform=ChannelPlatform.SLACK,
-            deleted=False,
-            extra_data__is_default=True,
-        )
-
-        if current_channel_id:
-            queryset = queryset.exclude(pk=current_channel_id)
-
-        if queryset.exists():
-            existing_default = queryset.first()
+        queryset = self._get_channel_queryset().filter(config__is_default=True)
+        if existing_default := queryset.first():
             raise forms.ValidationError(
                 f"There is already a default bot: '{existing_default.name}'. "
                 f"Please remove the default setting from that bot first."
@@ -511,6 +501,19 @@ class SlackChannelForm(ExtraFormBase):
                 except ExperimentChannel.DoesNotExist:
                     pass  # New channel
         return None
+
+    def _get_channel_queryset(self):
+        queryset = ExperimentChannel.objects.filter(
+            platform=ChannelPlatform.SLACK,
+            deleted=False,
+        )
+        if provider_filter := self.messaging_provider.uniqeness_filter():
+            scoped_filter = dict((f"messaging_provider__{key}", value) for key, value in provider_filter.items())
+            queryset = queryset.filter(**scoped_filter)
+
+        if current_channel_id := self._get_current_channel_id():
+            queryset = queryset.exclude(pk=current_channel_id)
+        return queryset
 
     def post_save(self, channel: ExperimentChannel):
         channel_id = self.cleaned_data["slack_channel_id"]
