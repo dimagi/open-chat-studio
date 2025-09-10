@@ -66,10 +66,14 @@ class ChannelFormWrapper:
     def validate_channel_config(self, platform_slug: str, config_data: dict):
         platform = ChannelPlatform(platform_slug)
         channel_identifier = config_data.get(platform.channel_identifier_key, "")
+        messaging_provider = self.extra_form.messaging_provider if self.extra_form else None
 
         try:
             ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=channel_identifier, new_experiment=self.experiment
+                platform,
+                identifier=channel_identifier,
+                new_experiment=self.experiment,
+                messaging_provider=messaging_provider,
             )
         except ChannelAlreadyUtilizedException as e:
             self.channel_form.add_error(None, e.html_message)
