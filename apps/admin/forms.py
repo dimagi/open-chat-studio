@@ -123,6 +123,22 @@ class OcsConfigurationForm(forms.Form):
         help_text="Position of the chat widget on the page",
     )
 
+    language = forms.CharField(
+        max_length=10,
+        required=False,
+        label="Language",
+        initial="en",
+        help_text="Language code for the widget (e.g., 'en', 'es', 'fr'). Defaults to 'en'.",
+        widget=forms.TextInput(attrs={"placeholder": "en"}),
+    )
+
+    translations_url = forms.URLField(
+        required=False,
+        label="Translations URL",
+        help_text="URL to load custom translations from.",
+        widget=forms.URLInput(attrs={"placeholder": "https://example.com/translations/en.json"}),
+    )
+
     def __init__(self, *args, **kwargs):
         self.instance = kwargs.pop("instance", None)
         super().__init__(*args, **kwargs)
@@ -137,6 +153,8 @@ class OcsConfigurationForm(forms.Form):
             self.fields["welcome_messages"].initial = "\n".join(chat_widget.welcome_messages)
             self.fields["starter_questions"].initial = "\n".join(chat_widget.starter_questions)
             self.fields["position"].initial = chat_widget.position
+            self.fields["language"].initial = chat_widget.language
+            self.fields["translations_url"].initial = chat_widget.translations_url
 
     def save(self):
         welcome_messages = [msg.strip() for msg in self.cleaned_data["welcome_messages"].split("\n") if msg.strip()]
@@ -149,6 +167,8 @@ class OcsConfigurationForm(forms.Form):
             welcome_messages=welcome_messages,
             starter_questions=starter_questions,
             position=self.cleaned_data["position"],
+            language=self.cleaned_data["language"],
+            translations_url=self.cleaned_data["translations_url"],
         )
 
         site_config = SiteConfig(chat_widget=chat_widget_config)
