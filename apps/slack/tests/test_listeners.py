@@ -63,7 +63,7 @@ def test_response_to_bot_mention_in_assigned_channel(bolt_context):
 def test_response_to_bot_mention_in_unassigned_channel(bolt_context):
     new_message(BOT_MENTION_EVENT, bolt_context)
     assert bolt_context.say.call_args_list == [
-        (("There are no bots associated with this channel.",), {"thread_ts": BOT_MENTION_EVENT["ts"]})
+        (("Unable to find a bot to respond to your message.",), {"thread_ts": BOT_MENTION_EVENT["ts"]})
     ]
 
 

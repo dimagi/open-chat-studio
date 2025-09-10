@@ -10,7 +10,6 @@ Manage event subscriptions at:
 import logging
 import re
 
-from django.db.models import Q
 from slack_bolt import BoltContext, BoltResponse
 
 from apps.channels.const import SLACK_ALL_CHANNELS
@@ -56,7 +55,7 @@ def respond_to_message(event, context: BoltContext, session=None):
         experiment_channel = get_experiment_channel(channel_id, message_text, context.team_id)
 
     if not experiment_channel:
-        context.say("There are no bots associated with this channel.", thread_ts=thread_ts)
+        context.say("Unable to find a bot to respond to your message.", thread_ts=thread_ts)
         return
 
     experiment = experiment_channel.experiment
@@ -125,37 +124,21 @@ def get_experiment_channel(channel_id, message_text=None, team_id=None) -> Exper
     on the channel ID and also for the special case of bots that are listening in all channels.
     For DM channels, it also supports keyword-based routing."""
 
-    # First, try to find exact channel match (specific channel assignment)
-    exact_channel_filter = Q(extra_data__contains={"slack_channel_id": channel_id})
-    exact_channels_qs = (
-        ExperimentChannel.objects.filter(exact_channel_filter)
-        .filter(platform=ChannelPlatform.SLACK, deleted=False)
-        .select_related("experiment", "messaging_provider")
+    base_queryset = ExperimentChannel.objects.filter(platform=ChannelPlatform.SLACK, deleted=False).select_related(
+        "experiment", "messaging_provider"
     )
 
     # Note: Workspace scoping would require filtering by encrypted config field
     # which is not supported. For now, we rely on proper messaging provider setup
     # to ensure channels are properly scoped to their workspaces.
 
-    exact_channels = exact_channels_qs.all()
-
-    if exact_channels:
-        return exact_channels[0]
+    # First, try to find exact channel match (specific channel assignment)
+    exact_channels_qs = base_queryset.filter(extra_data__contains={"slack_channel_id": channel_id})
+    if exact_channel := exact_channels_qs.first():
+        return exact_channel
 
     # If no exact match, check for "all channels" bots (including keyword-based routing)
-    all_channels_filter = Q(extra_data__contains={"slack_channel_id": SLACK_ALL_CHANNELS})
-    all_channels_qs = (
-        ExperimentChannel.objects.filter(all_channels_filter)
-        .filter(platform=ChannelPlatform.SLACK, deleted=False)
-        .select_related("experiment", "messaging_provider")
-    )
-
-    # Note: Workspace scoping would require filtering by encrypted config field
-    # which is not supported. For now, we rely on proper messaging provider setup
-    # to ensure channels are properly scoped to their workspaces.
-
-    all_channels = all_channels_qs.all()
-
+    all_channels = base_queryset.filter(extra_data__contains={"slack_channel_id": SLACK_ALL_CHANNELS}).all()
     if not all_channels:
         return None
 
