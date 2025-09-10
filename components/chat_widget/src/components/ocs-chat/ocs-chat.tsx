@@ -192,9 +192,6 @@ export class OcsChat {
 
   @Prop() translationsUrl?: string;
 
-  @Prop() enableTranslationUpload: boolean = false;
-
-
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -1362,43 +1359,6 @@ export class OcsChat {
                 >
                   {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
                 </button>}
-
-
-                {/* Translation upload button */}
-                {this.enableTranslationUpload && (
-                  <div class="header-dropdown-container">
-                    <button
-                      class="header-button"
-                      onClick={() => this.showTranslationUpload = !this.showTranslationUpload}
-                      title="Upload translations"
-                      aria-label="Upload translations"
-                    >
-                      <ArrowUpTrayIcon/>
-                    </button>
-                    {this.showTranslationUpload && (
-                      <div class="dropdown-menu">
-                        <button
-                          class="dropdown-item"
-                          onClick={() => {
-                            const input = document.createElement('input');
-                            input.type = 'file';
-                            input.accept = '.json';
-                            input.onchange = this.handleTranslationUpload;
-                            input.click();
-                          }}
-                        >
-                          Upload JSON
-                        </button>
-                        <button
-                          class="dropdown-item"
-                          onClick={this.downloadTranslationTemplate}
-                        >
-                          Download Template
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 <button
                   class="header-button"
