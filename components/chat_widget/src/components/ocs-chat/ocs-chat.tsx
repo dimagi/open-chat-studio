@@ -371,51 +371,6 @@ export class OcsChat {
   return 'en';
   }
 
-
-  private handleTranslationUpload = (event: Event) => {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-
-    if (!file) return;
-
-    if (file.type !== 'application/json') {
-      alert('Please select a JSON file');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const translations = JSON.parse(e.target?.result as string);
-
-        if (typeof translations !== 'object' || translations === null) {
-          throw new Error('Invalid translation file format');
-        }
-        this.translationManager = new TranslationManager(this.currentLanguage, translations);
-        this.showTranslationUpload = false;
-        alert('Translations uploaded successfully!');
-      } catch (error) {
-        console.error('Failed to parse translation file:', error);
-        alert('Failed to parse translation file. Please check the format.');
-      }
-    };
-    reader.readAsText(file);
-    input.value = '';
-  };
-
-  private downloadTranslationTemplate = () => {
-    const template = JSON.stringify(defaultTranslations, null, 2);
-    const blob = new Blob([template], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `chat-widget-translations-${this.currentLanguage}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   private handleClickOutside = (event: MouseEvent) => {
     const target = event.target as Element;
     if (!this.host.contains(target)) {
