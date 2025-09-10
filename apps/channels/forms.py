@@ -478,32 +478,14 @@ class SlackChannelForm(ExtraFormBase):
     def _get_current_channel_id(self):
         """Get current channel ID, with fallback logic for missing instance"""
         # Try instance first
-        if hasattr(self, "instance") and self.instance and hasattr(self.instance, "pk") and self.instance.pk:
+        if (
+            hasattr(self, "instance")
+            and self.instance
+            and hasattr(self.instance, "pk")
+            and self.instance.pk is not None
+        ):
             return self.instance.pk
 
-        # Fallback: try to find existing channel by name and messaging provider
-        # Note: We don't use team here because multiple teams can have channels with the same name
-        # If there are multiple matches, we'll skip the fallback to avoid ambiguity
-        if self.messaging_provider:
-            channel_name = self.data.get("name") or self.initial.get("name")
-            if channel_name:
-                try:
-                    # Look for channels with matching name and messaging provider
-                    matching_channels = ExperimentChannel.objects.filter(
-                        name=channel_name,
-                        platform=ChannelPlatform.SLACK,
-                        messaging_provider=self.messaging_provider,
-                        deleted=False,
-                    )
-
-                    # If exactly one match, use it. If multiple matches, skip fallback to avoid confusion
-                    if matching_channels.count() == 1:
-                        existing_channel = matching_channels.first()
-                        # Set instance for consistency
-                        self.instance = existing_channel
-                        return existing_channel.pk
-                except ExperimentChannel.DoesNotExist:
-                    pass  # New channel
         return None
 
     def _get_channel_queryset(self):

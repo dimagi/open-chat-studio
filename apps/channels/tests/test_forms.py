@@ -168,48 +168,6 @@ def test_slack_channel_edit_keeping_some_keywords_succeeds(team_with_users):
 
 
 @pytest.mark.django_db()
-def test_slack_channel_edit_with_missing_instance_uses_fallback(team_with_users):
-    """Test that form can handle missing instance by using fallback logic"""
-
-    # Create messaging provider
-    provider = MessagingProviderFactory(type=MessagingProviderType.slack, team=team_with_users)
-
-    # Create existing channel
-    existing_channel = ExperimentChannelFactory(
-        team=team_with_users,
-        platform=ChannelPlatform.SLACK,
-        messaging_provider=provider,
-        name="Health Bot",
-        extra_data={"slack_channel_id": "*", "keywords": ["health", "benefits"], "is_default": False},
-    )
-
-    # Mock the messaging service
-    mock_service = Mock()
-    mock_service.get_channel_by_name.return_value = None
-
-    with patch.object(provider, "get_messaging_service", return_value=mock_service):
-        form_data = {
-            "name": "Health Bot",  # This should help identify the existing channel
-            "channel_scope": "all",
-            "routing_method": "keywords",
-            "keywords": "health, benefits, wellness",  # Keep existing keywords, add new one
-            "messaging_provider": provider.id,
-        }
-
-        # Simulate browser scenario where instance might not be set properly
-        form = SlackChannelForm(form_data, initial=existing_channel.extra_data)
-        form.messaging_provider = provider
-        # Don't set instance - let the fallback logic handle it
-
-        # This should succeed due to our fallback logic that identifies the channel by name
-        assert form.is_valid(), f"Form errors: {form.errors}"
-
-        # Verify the fallback logic set the instance
-        assert hasattr(form, "instance")
-        assert form.instance.pk == existing_channel.pk
-
-
-@pytest.mark.django_db()
 def test_slack_channel_duplicate_keywords_fails(team_with_users):
     """Test creating new channel with existing keywords fails"""
 
