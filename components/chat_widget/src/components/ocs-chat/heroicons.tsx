@@ -77,14 +77,6 @@ export const XIcon = () => {
   )
 }
 
-export const LanguageIcon = () => {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.61 0 3.176.06 4.686.169l1.437.01M9 5.25V3a2.25 2.25 0 0 1 4.5 0v.793c.926.048 1.852.103 2.777.165M9 5.25a48.454 48.454 0 0 1-1.437-.01M9 5.25c-1.61 0-3.176.06-4.686.169L3 5.621M9 5.25V3a2.25 2.25 0 0 1 4.5 0v.793c.926.048 1.852.103 2.777.165" />
-    </svg>
-  )
-}
-
 export const ArrowUpTrayIcon = () => {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
