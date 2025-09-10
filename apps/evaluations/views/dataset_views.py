@@ -21,8 +21,8 @@ from apps.evaluations.tables import (
     EvaluationSessionsSelectionTable,
 )
 from apps.evaluations.tasks import upload_dataset_csv_task
-from apps.evaluations.utils import generate_csv_column_suggestions
-from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
+from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
+from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, DynamicExperimentSessionFilter
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -51,12 +51,10 @@ class DatasetTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        from django.db.models import Count
-
         return (
             EvaluationDataset.objects.filter(team=self.request.team)
             .annotate(message_count=Count("messages"))
-            .order_by("name")
+            .order_by("-created_at")
         )
 
 
@@ -98,13 +96,14 @@ class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMix
 
 class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     permission_required = "evaluations.add_evaluationdataset"
-    template_name = "evaluations/dataset_from_sessions_form.html"
+    template_name = "evaluations/dataset_create_form.html"
     model = EvaluationDataset
     form_class = EvaluationDatasetForm
     extra_context = {
         "title": "Create Dataset",
         "button_text": "Create Dataset",
         "active_tab": "evaluation_datasets",
+        "form_attrs": {"id": "dataset-create-form"},
     }
 
     def get_form_kwargs(self):
@@ -126,7 +125,8 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 .select_related("participant__user")
             )
             timezone = self.request.session.get("detected_tz", None)
-            filtered_queryset = apply_dynamic_filters(queryset, self.request.GET, timezone)
+            session_filter = DynamicExperimentSessionFilter(queryset, self.request.GET, timezone)
+            filtered_queryset = session_filter.apply()
             filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
             if filtered_session_ids:
                 initial["session_ids"] = filtered_session_ids
@@ -151,22 +151,18 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         experiment_versions = list(set(experiment_versions))
 
         return {
-            "available_tags": available_tags,
-            "experiment_versions": experiment_versions,
-            "experiment_list": experiment_list,
-            "field_type_filters": FIELD_TYPE_FILTERS,
-            "channel_list": channel_list,
-            "date_range_options": DATE_RANGE_OPTIONS,
-            "filter_columns": [
-                "experiment",
-                "participant",
-                "last_message",
-                "first_message",
-                "tags",
-                "versions",
-                "channels",
-                "remote_id",
-            ],
+            "df_available_tags": available_tags,
+            "df_experiment_versions": experiment_versions,
+            "df_experiment_list": experiment_list,
+            "df_field_type_filters": FIELD_TYPE_FILTERS,
+            "df_channel_list": channel_list,
+            "df_date_range_options": DATE_RANGE_OPTIONS,
+            "df_filter_columns": DynamicExperimentSessionFilter.columns,
+            "df_date_range_column_name": "last_message",
+            "df_filter_data_source_url": reverse(
+                "evaluations:dataset_sessions_selection_list", args=[self.request.team.slug]
+            ),
+            "df_filter_data_source_container_id": "sessions-table",
         }
 
     def get_context_data(self, **kwargs):
@@ -198,10 +194,12 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .filter(team=self.request.team)
             .select_related("participant__user", "chat", "experiment")
             .annotate(message_count=Count("chat__messages"))
+            .filter(message_count__gt=0)
             .order_by("experiment__name")
         )
         timezone = self.request.session.get("detected_tz", None)
-        query_set = apply_dynamic_filters(query_set, self.request.GET, timezone)
+        session_filter = DynamicExperimentSessionFilter(query_set, self.request.GET, timezone)
+        query_set = session_filter.apply()
         return query_set
 
 
@@ -234,6 +232,7 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
         human_message = request.POST.get("human_message", "").strip()
         ai_message = request.POST.get("ai_message", "").strip()
         context_json = request.POST.get("context", "{}")
+        history_text = request.POST.get("history_text", "").strip()
 
         if not human_message or not ai_message:
             return HttpResponse("Both human and AI messages are required", status=400)
@@ -246,10 +245,19 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
         else:
             context = {}
 
+        # Parse history text if provided
+        history = []
+        if history_text:
+            try:
+                history = parse_history_text(history_text)
+            except Exception:
+                return HttpResponse("Invalid history format", status=400)
+
         message = EvaluationMessage.objects.create(
             input=EvaluationMessageContent(content=human_message, role="human").model_dump(),
             output=EvaluationMessageContent(content=ai_message, role="ai").model_dump(),
             context=context,
+            history=history,
             metadata={"created_mode": "manual"},
         )
 
@@ -278,6 +286,7 @@ def edit_message_modal(request, team_slug, message_id):
         "human": message.input.get("content", ""),
         "ai": message.output.get("content", ""),
         "context": json.dumps(message.context, indent=2) if message.context else "{}",
+        "history_text": message.full_history,
     }
 
     update_url = reverse("evaluations:update_message", args=[team_slug, message_id])
@@ -299,9 +308,10 @@ def update_message(request, team_slug, message_id):
     """Handle form submission to update message"""
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
 
-    human_content = request.POST.get("human_content", "").strip()
-    ai_content = request.POST.get("ai_content", "").strip()
+    human_content = request.POST.get("human_message", "").strip()
+    ai_content = request.POST.get("ai_message", "").strip()
     context_str = request.POST.get("context", "").strip()
+    history_text = request.POST.get("history_text", "").strip()
 
     errors = {}
     if not human_content:
@@ -316,8 +326,16 @@ def update_message(request, team_slug, message_id):
         except json.JSONDecodeError:
             errors["context"] = "Invalid JSON format"
 
+    # Parse history text if provided
+    history_data = []
+    if history_text:
+        try:
+            history_data = parse_history_text(history_text)
+        except Exception:
+            errors["history_text"] = "Invalid history format"
+
     if errors:
-        form_data = {"human": human_content, "ai": ai_content, "context": context_str}
+        form_data = {"human": human_content, "ai": ai_content, "context": context_str, "history_text": history_text}
         update_url = reverse("evaluations:update_message", args=[team_slug, message_id])
 
         return render(
@@ -329,12 +347,13 @@ def update_message(request, team_slug, message_id):
                 "update_url": update_url,
                 "errors": errors,
             },
-            status=400,
+            status=200,
         )
 
     message.input = EvaluationMessageContent(content=human_content, role="human").model_dump()
     message.output = EvaluationMessageContent(content=ai_content, role="ai").model_dump()
     message.context = context_data
+    message.history = history_data
 
     # Clear chat message references since this is now manually edited
     message.input_chat_message = None

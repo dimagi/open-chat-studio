@@ -20,7 +20,7 @@ from django.db import transaction
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -40,9 +40,7 @@ from apps.analysis.const import LANGUAGE_CHOICES
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
-from apps.channels.exceptions import ExperimentChannelException
-from apps.channels.forms import ChannelForm
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
@@ -60,8 +58,7 @@ from apps.experiments.decorators import (
     verify_session_access_cookie,
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
-from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, apply_dynamic_filters
+from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, DynamicExperimentSessionFilter
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -96,7 +93,9 @@ from apps.experiments.tasks import (
     get_response_for_webchat_task,
 )
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
+from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
+from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
@@ -111,8 +110,16 @@ from apps.utils.base_experiment_table_view import BaseExperimentTableView
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
     show_modal = flag_is_active(request, "flag_chatbots")
+    actions_ = [
+        actions.Action(
+            "experiments:new",
+            label="Add New",
+            button_style="btn-primary",
+            required_permissions=["experiments.add_experiment"],
+        )
+    ]
     return generic_home(
-        request, team_slug, "Experiments", "experiments:table", "experiments:new", show_modal_or_banner=show_modal
+        request, team_slug, "Experiments", "experiments:table", actions=actions_, show_modal_or_banner=show_modal
     )
 
 
@@ -150,7 +157,8 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             parsed_url = urlparse(hx_url)
             filters = parse_qs(parsed_url.query)
 
-        query_set = apply_dynamic_filters(query_set, filters, timezone)
+        session_filter = DynamicExperimentSessionFilter(query_set, filters, timezone)
+        query_set = session_filter.apply()
         return query_set
 
 
@@ -461,16 +469,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         .filter(participant__user=request.user, experiment=experiment)
         .exclude(experiment_channel__platform__in=[ChannelPlatform.API, ChannelPlatform.EVALUATIONS])
     )
-    channels = experiment.experimentchannel_set.exclude(
-        platform__in=[ChannelPlatform.WEB, ChannelPlatform.API, ChannelPlatform.EVALUATIONS]
-    ).all()
-    used_platforms = {channel.platform_enum for channel in channels}
-    available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
-    platform_forms = {}
-    form_kwargs = {"experiment": experiment}
-    for platform in available_platforms:
-        if platform.form(**form_kwargs):
-            platform_forms[platform] = platform.form(**form_kwargs)
+    channels, available_platforms = get_channels_context(experiment)
 
     deployed_version = None
     if experiment != experiment.default_version:
@@ -490,26 +489,19 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         "experiment": experiment,
         "user_sessions": user_sessions,
         "platforms": available_platforms,
-        "platform_forms": platform_forms,
         "channels": channels,
-        "available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
-        "experiment_versions": experiment.get_version_name_list(),
+        "df_available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
+        "df_experiment_versions": experiment.get_version_name_list(),
         "deployed_version": deployed_version,
-        "field_type_filters": FIELD_TYPE_FILTERS,
-        "channel_list": channel_list,
+        "df_field_type_filters": FIELD_TYPE_FILTERS,
+        "df_channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
-        "date_range_options": DATE_RANGE_OPTIONS,
-        "filter_columns": [
-            "participant",
-            "last_message",
-            "first_message",
-            "tags",
-            "versions",
-            "channels",
-            "state",
-            "remote_id",
-        ],
-        "state_list": SessionStatus.for_chatbots(),
+        "df_date_range_options": DATE_RANGE_OPTIONS,
+        "df_filter_columns": DynamicExperimentSessionFilter.columns,
+        "df_state_list": SessionStatus.for_chatbots(),
+        "df_filter_data_source_container_id": "sessions-table",
+        "df_filter_data_source_url": reverse("experiments:sessions-list", args=(team_slug, experiment_id)),
+        "df_date_range_column_name": "last_message",
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
@@ -582,108 +574,6 @@ def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
             experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
         ),
     }
-
-
-@login_and_team_required
-@permission_required("bot_channels.add_experimentchannel", raise_exception=True)
-def create_channel(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
-    form = ChannelForm(experiment=experiment, data=request.POST)
-    if not form.is_valid():
-        messages.error(request, "Form has errors: " + form.errors.as_text())
-    else:
-        platform = ChannelPlatform(form.cleaned_data["platform"])
-        if platform in existing_platforms:
-            messages.error(request, f"Channel for {platform.label} already exists")
-            return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-        extra_form = platform.extra_form(data=request.POST)
-        config_data = {}
-        if extra_form:
-            if extra_form.is_valid():
-                config_data = extra_form.cleaned_data
-            else:
-                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
-                return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-        try:
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=config_data[platform.channel_identifier_key], new_experiment=experiment
-            )
-        except ChannelAlreadyUtilizedException as exception:
-            messages.error(request, exception.html_message)
-            return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-        form.save(experiment, config_data)
-        if extra_form:
-            try:
-                extra_form.post_save(channel=form.instance)
-            except ExperimentChannelException as e:
-                messages.error(request, "Error saving channel: " + str(e))
-            else:
-                if platform == ChannelPlatform.EMBEDDED_WIDGET:
-                    request.session["embedded_widget_success"] = {
-                        "widget_token": config_data["widget_token"],
-                        "allowed_domains": config_data.get("allowed_domains", []),
-                        "embed_code": extra_form._generate_embed_code(form.instance, config_data["widget_token"]),
-                    }
-                    request.session.save()
-                else:
-                    if extra_form.success_message:
-                        messages.info(request, extra_form.success_message)
-                    if extra_form.warning_message:
-                        messages.warning(request, extra_form.warning_message)
-    return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-
-@require_POST
-@login_and_team_required
-def clear_widget_success_session(request, team_slug: str, experiment_id: int):
-    print("we are clearing the session")
-    """Clear the embedded widget success data from session"""
-    if "embedded_widget_success" in request.session:
-        del request.session["embedded_widget_success"]
-    return JsonResponse({"status": "success"})
-
-
-@login_and_team_required
-def update_delete_channel(request, team_slug: str, experiment_id: int, channel_id: int):
-    channel = get_object_or_404(ExperimentChannel, id=channel_id, experiment_id=experiment_id, team__slug=team_slug)
-    if request.POST.get("action") == "delete":
-        if not request.user.has_perm("bot_channels.delete_experimentchannel"):
-            raise PermissionDenied
-
-        channel.soft_delete()
-        return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-    if not request.user.has_perm("bot_channels.change_experimentchannel"):
-        raise PermissionDenied
-
-    form = channel.form(data=request.POST)
-    if not form.is_valid():
-        messages.error(request, "Form has errors: " + form.errors.as_text())
-    else:
-        extra_form = channel.extra_form(data=request.POST)
-        config_data = {}
-        if extra_form:
-            if extra_form.is_valid():
-                config_data = extra_form.cleaned_data
-            else:
-                messages.error(request, format_html("Channel data has errors: " + extra_form.errors.as_ul()))
-                return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-        platform = ChannelPlatform(form.cleaned_data["platform"])
-        channel_identifier = config_data[platform.channel_identifier_key]
-        try:
-            ExperimentChannel.check_usage_by_another_experiment(
-                platform, identifier=channel_identifier, new_experiment=channel.experiment
-            )
-        except ChannelAlreadyUtilizedException as exception:
-            messages.error(request, exception.html_message)
-            return redirect("experiments:single_experiment_home", team_slug, experiment_id)
-
-        form.save(channel.experiment, config_data)
-    return redirect("experiments:single_experiment_home", team_slug, experiment_id)
 
 
 @require_POST

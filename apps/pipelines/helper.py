@@ -98,11 +98,11 @@ def create_llm_pipeline(experiment):
     )
 
 
-def _get_params_generic(experiment, name):
+def _get_params_generic(experiment, name, configure_voice=False):
     if experiment.assistant:
         return _get_assistant_node_params(experiment, name)
     elif experiment.llm_provider:
-        return _get_llm_params_for_experiment(experiment, name)
+        return _get_llm_params_for_experiment(experiment, name, configure_voice)
     else:
         raise ValueError(f"Unknown experiment type for experiment {experiment.id}")
 
@@ -116,7 +116,7 @@ def _get_node_type(experiment):
         raise ValueError(f"Unknown experiment type for experiment {experiment.id}")
 
 
-def _get_llm_params_for_experiment(experiment, name="llm"):
+def _get_llm_params_for_experiment(experiment, name="llm", configure_voice=False):
     llm_params = {
         "name": name,
         "llm_provider_id": experiment.llm_provider.id,
@@ -136,6 +136,8 @@ def _get_llm_params_for_experiment(experiment, name="llm"):
         "built_in_tools": [],
         "tool_config": {},
     }
+    if configure_voice and experiment.voice_provider_id and experiment.synthetic_voice_id:
+        llm_params["synthetic_voice_id"] = experiment.synthetic_voice_id
     return llm_params
 
 
@@ -156,6 +158,10 @@ def create_router_pipeline(experiment):
 
     from apps.experiments.models import ExperimentRouteType
     from apps.pipelines.nodes.nodes import RouterNode
+
+    has_voice = experiment.voice_provider_id
+    use_child_bot_voice = experiment.use_processor_bot_voice
+    configure_child_voice = has_voice and use_child_bot_voice
 
     children_links = experiment.child_links.select_related("child").all()
     child_links = [link for link in children_links if link.type == ExperimentRouteType.PROCESSOR]
@@ -187,7 +193,7 @@ def create_router_pipeline(experiment):
         _make_node(
             _get_node_type(child_link.child),
             "LLM",
-            _get_params_generic(child_link.child, name=child_link.child.name),
+            _get_params_generic(child_link.child, child_link.child.name, configure_child_voice),
             x=700,
             y=(-200 + 400 * i),
         )

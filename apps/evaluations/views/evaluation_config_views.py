@@ -235,7 +235,7 @@ def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_ru
         EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
     )
     filename = f"{evaluation_run.config.name}_results_{evaluation_run.id}.csv"
-    table_data = list(evaluation_run.get_table_data())
+    table_data = list(evaluation_run.get_table_data(include_ids=True))
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f"attachment; filename={filename}"
     writer = csv.writer(response)

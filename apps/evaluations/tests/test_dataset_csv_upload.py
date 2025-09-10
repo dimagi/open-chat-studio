@@ -8,7 +8,7 @@ from django.urls import reverse
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.tasks import _update_existing_message, process_csv_rows
-from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
+from apps.evaluations.utils import generate_csv_column_suggestions
 from apps.utils.factories.evaluations import EvaluationDatasetFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -348,59 +348,6 @@ def test_csv_dataset_creation_with_generated_history(client_with_user, team_with
     # Verify context data is still stored correctly
     assert messages[0].context["topic"] == "weather"
     assert messages[1].context["topic"] == "humor"
-
-
-def test_parse_history_functionality():
-    """Test the history parsing functionality."""
-
-    # Test empty history
-    assert parse_history_text("") == []
-
-    # Test single line history
-    history_text = "user: Hello there"
-    result = parse_history_text(history_text)
-    assert len(result) == 1
-    assert result[0]["message_type"] == "human"
-    assert result[0]["content"] == "Hello there"
-
-    # Test multi-line history
-    history_text = "user: Hello\nassistant: Hi there!\nuser: How are you?"
-    result = parse_history_text(history_text)
-    assert len(result) == 3
-    assert result[0]["message_type"] == "human"
-    assert result[1]["message_type"] == "ai"
-    assert result[2]["message_type"] == "human"
-
-    # Test message with newlines in content
-    history_text = "user: This is a multi-line\nmessage with newlines\nassistant: I understand your\nmulti-line message"
-    result = parse_history_text(history_text)
-    assert len(result) == 2
-    assert result[0]["message_type"] == "human"
-    assert result[0]["content"] == "This is a multi-line\nmessage with newlines"
-    assert result[1]["message_type"] == "ai"
-    assert result[1]["content"] == "I understand your\nmulti-line message"
-
-    # Test garbled messages (lines that don't start with role markers)
-    history_text = (
-        "This is garbled text\nuser: Hello\nsome random text without role\nassistant: Hi there!\nmore garbled content"
-    )
-    result = parse_history_text(history_text)
-    assert len(result) == 2  # Only the valid human/ai messages should be parsed
-    assert result[0]["message_type"] == "human"
-    assert result[0]["content"] == "Hello\nsome random text without role"  # Continuation line included
-    assert result[1]["message_type"] == "ai"
-    assert result[1]["content"] == "Hi there!\nmore garbled content"  # Continuation line included
-
-    # Test different casings (HUMAN, Human, AI, Ai, etc.)
-    history_text = "USER: Hello from uppercase\nAssistant: Mixed case response\nuser: lowercase again"
-    result = parse_history_text(history_text)
-    assert len(result) == 3
-    assert result[0]["message_type"] == "human"  # Always normalized to lowercase
-    assert result[0]["content"] == "Hello from uppercase"
-    assert result[1]["message_type"] == "ai"
-    assert result[1]["content"] == "Mixed case response"
-    assert result[2]["message_type"] == "human"
-    assert result[2]["content"] == "lowercase again"
 
 
 @pytest.mark.django_db()

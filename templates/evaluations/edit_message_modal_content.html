@@ -1,5 +1,5 @@
 {% load i18n %}
-<div class="modal-box max-w-none w-1/2">
+<div class="modal-box max-w-none w-1/2"{% if errors %} data-has-errors="true"{% endif %}>
   <h3 class="font-bold text-lg mb-4">{% trans "Edit Message Pair" %}</h3>
   <form method="dialog">
     <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onclick="document.getElementById('editMessageModal').close()">✕</button>
@@ -14,52 +14,7 @@
   >
     {% csrf_token %}
 
-    <!-- Human Message -->
-    <div class="form-control">
-      <label class="label">
-        <span class="label-text font-semibold">{% trans "Human Message" %}</span>
-      </label>
-      <textarea
-        name="human_content"
-        class="textarea textarea-bordered w-full min-h-[100px]"
-        {% if errors.human %}class="textarea textarea-bordered textarea-error w-full min-h-[100px]"{% endif %}
-        placeholder="{% trans 'Enter human message...' %}"
-        required
-      >{{ form_data.human }}</textarea>
-      {% if errors.human %}
-        <div class="text-error text-sm mt-1">{{ errors.human }}</div>
-      {% endif %}
-    </div>
-
-    <!-- AI Message -->
-    <div class="form-control">
-      <label class="label">
-        <span class="label-text font-semibold">{% trans "AI Message" %}</span>
-      </label>
-      <textarea
-        name="ai_content"
-        class="textarea textarea-bordered w-full min-h-[100px]"
-        {% if errors.ai %}class="textarea textarea-bordered textarea-error w-full min-h-[100px]"{% endif %}
-        placeholder="{% trans 'Enter AI response...' %}"
-        required
-      >{{ form_data.ai }}</textarea>
-      {% if errors.ai %}
-        <div class="text-error text-sm mt-1">{{ errors.ai }}</div>
-      {% endif %}
-    </div>
-
-    <!-- Context -->
-    <div class="form-control">
-      <label class="label">
-        <span class="label-text font-semibold">{% trans "Context (JSON)" %}</span>
-        <span class="label-text-alt">{% trans "Optional additional context data" %}</span>
-      </label>
-      <input type="hidden" name="context" id="context-field" value="{{ form_data.context }}">
-      <div class="json-editor w-full h-32 resize-y overflow-auto" data-target-field="#context-field" data-disable-elt="#save-button"></div>
-      {% if errors.context %}
-        <div class="text-error text-sm mt-1">{{ errors.context }}</div>
-      {% endif %}
-    </div>
+    {% include "evaluations/components/message_pair_form.html" with human_value=form_data.human ai_value=form_data.ai context_value=form_data.context history_text_value=form_data.history_text context_field_id="context-field" disable_button_id="save-button" errors=errors %}
 
     <!-- Actions -->
     <div class="modal-action">
