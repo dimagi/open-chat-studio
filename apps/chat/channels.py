@@ -1324,9 +1324,9 @@ class EvaluationChannel(ChannelBase):
 
 
 class EmbeddedWidgetChannel(ChannelBase):
-    def new_user_message(self, text: str, message_type: ChatMessage.MessageType = ChatMessage.MessageType.TEXT):
+    def new_user_message(self, text: str, message_type: ChatMessageType = ChatMessageType.TEXT):
         """Handle new user message from embedded widget"""
-        return self._create_new_user_message(text, message_type)
+        return self.send_message_to_user(text, message_type)
 
     def send_message(self, message: ChatMessage):
         """Embedded widgets use polling, so no direct sending needed"""
