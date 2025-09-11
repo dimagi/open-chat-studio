@@ -22,14 +22,19 @@ class ExperimentTable(tables.Table):
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     type = columns.Column(orderable=False, empty_values=())
-    error_trend = columns.TemplateColumn(
-        verbose_name="Error Trend (last 48h)",
-        template_name="table/sparkline.html",
-    )
+    error_trend = columns.Column(empty_values=(), verbose_name="Error Trend (last 48h)")
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
         extra_context={"type": "experiments"},
     )
+
+    def render_error_trend(self, record):
+        # We're not using a TemplateColumn for error_trend because we need to access the annotated published_version_id
+        url = reverse(
+            "experiments:experiment_error_trend",
+            kwargs={"team_slug": record.team.slug, "experiment_id": record.published_version_id},
+        )
+        return get_template("table/sparkline.html").render(context={"record": record, "sparkline_data_url": url})
 
     class Meta:
         model = Experiment

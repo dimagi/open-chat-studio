@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, F, Max, Q
+from django.db.models import Count, F, Max, OuterRef, Q, Subquery
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
@@ -161,10 +161,15 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
     def get_queryset(self):
         end_date = timezone.now()
         start_date = end_date - timedelta(days=30)
+
+        published_version_id = self.model.objects.filter(
+            working_version_id=OuterRef("id"), is_default_version=True
+        ).values("id")[:1]
         query_set = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
             .annotate(session_count=Count("sessions"))
+            .annotate(published_version_id=Subquery(published_version_id))
             .annotate(
                 participant_count=Count(
                     "sessions__participant",
