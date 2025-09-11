@@ -78,6 +78,7 @@ dependencies = [
     "markitdown[pdf, docx, xlsx, xls, outlook, pptx]",
     "langchain-mcp-adapters",
     "atlassian-python-api>=4.0.7",
+    "audioop-lts>=0.2.2",
 ]
 
 [project.urls]
