@@ -1251,6 +1251,8 @@ export class OcsChat {
   }
 
   render() {
+  const welcomeMessages: string[] = this.translationManager.getArray("welcomeMessages") || [];
+  const starterQuestions: string[] = this.translationManager.getArray("starterQuestions") || [];
     // Only show error state for critical errors that prevent the widget from functioning
     if (this.error && !this.sessionId) {
       return (
@@ -1358,10 +1360,9 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
                 >
-                  {this.messages.length === 0 && this.parsedWelcomeMessages.length > 0 && (
+                  {this.messages.length === 0 && welcomeMessages.length > 0 && (
                     <div class="welcome-messages">
-                      {/* Welcome Messages */}
-                      {this.parsedWelcomeMessages.map((message, index) => (
+                      {welcomeMessages.map((message, index) => (
                         <div key={`welcome-${index}`} class="message-row message-row-assistant">
                           <div class="message-bubble message-bubble-assistant">
                             <div
@@ -1428,9 +1429,9 @@ export class OcsChat {
               )}
 
               {/* Starter Questions */}
-              {this.messages.length === 0 && this.parsedStarterQuestions.length > 0 && (
+              {this.messages.length === 0 && starterQuestions.length > 0 && (
                 <div class="starter-questions">
-                  {this.parsedStarterQuestions.map((question, index) => (
+                  {starterQuestions.map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
                       <button
                         class="starter-question"

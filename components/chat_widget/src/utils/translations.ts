@@ -85,11 +85,26 @@ export class TranslationManager {
   }
 
   get(key: keyof TranslationStrings): string {
-    return this.translations[key] || defaultTranslations[key] || key;
+    const value = this.translations[key] || defaultTranslations[key];
+    if (Array.isArray(value)) {
+      return value[0] || '';
+    }
+    return value || key;
   }
 
   getAll(): TranslationStrings {
     return this.translations;
+  }
+
+  getArray(key: keyof TranslationStrings): string[] {
+    const value = this.translations[key] || defaultTranslations[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      return [value];
+    }
+    return [];
   }
 
   getLanguage(): string {

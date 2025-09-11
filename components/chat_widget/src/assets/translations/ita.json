@@ -22,6 +22,13 @@
   "sessionExpired": "Session expired. Please start a new chat.",
   "poweredBy": "Powered by",
   "buttonText": "Let's Chat",
-  "headerText": "Regular, light mode"
-
+  "headerText": "Regular, light mode",
+   "welcomeMessages": [
+    "Hi there! Welcome to OpenChatStudio! This is a very long welcome message used to illustrate the max message width.",
+    "How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n"
+  ],
+  "starterQuestions": [
+    "I would like a OpenChatStudio demo",
+    "How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n"
+  ]
 }
