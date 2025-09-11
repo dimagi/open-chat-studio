@@ -44,6 +44,10 @@ export namespace Components {
          */
         "iconUrl"?: string;
         /**
+          * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
+         */
+        "language"?: string;
+        /**
           * The message to display in the new chat confirmation dialog.
           * @default "Starting a new chat will clear your current conversation. Continue?"
          */
@@ -67,6 +71,7 @@ export namespace Components {
           * Array of starter questions that users can click to send (JSON array of strings)
          */
         "starterQuestions"?: string;
+        "translationsUrl"?: string;
         /**
           * The text to display while the assistant is typing/preparing a response.
           * @default "Preparing response"
@@ -141,6 +146,10 @@ declare namespace LocalJSX {
          */
         "iconUrl"?: string;
         /**
+          * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
+         */
+        "language"?: string;
+        /**
           * The message to display in the new chat confirmation dialog.
           * @default "Starting a new chat will clear your current conversation. Continue?"
          */
@@ -164,6 +173,7 @@ declare namespace LocalJSX {
           * Array of starter questions that users can click to send (JSON array of strings)
          */
         "starterQuestions"?: string;
+        "translationsUrl"?: string;
         /**
           * The text to display while the assistant is typing/preparing a response.
           * @default "Preparing response"
