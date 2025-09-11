@@ -74,8 +74,6 @@ urlpatterns = [
         views.start_authed_web_session,
         name="start_authed_web_session",
     ),
-    path("e/<int:experiment_id>/create_channel/", views.create_channel, name="create_channel"),
-    path("e/<int:experiment_id>/update_channel/<int:channel_id>/", views.update_delete_channel, name="update_channel"),
     path(
         "e/<int:experiment_id>/v/<int:version_number>/session/<int:session_id>/",
         views.experiment_chat_session,

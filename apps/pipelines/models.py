@@ -136,7 +136,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                         "llm_provider_id": llm_provider_id,
                         "llm_provider_model_id": llm_provider_model.id,
                         "llm_temperature": 0.7,
-                        "history_type": "none",
+                        "history_type": "global",
                         "history_name": None,
                         "history_mode": "summarize",
                         "user_max_token_limit": llm_provider_model.max_token_limit,

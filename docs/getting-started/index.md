@@ -151,7 +151,3 @@ uv add <package-name>
 # for dev / prod dependencies
 uv add <package-name> --group [dev|prod]
 ```
-
-## Next Steps
-
-- Learn how to [Contribute](../contributing/index.md) to the project

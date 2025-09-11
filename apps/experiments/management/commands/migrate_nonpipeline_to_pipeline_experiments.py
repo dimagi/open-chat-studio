@@ -1,12 +1,13 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 
 from apps.experiments.models import Experiment
 from apps.pipelines.helper import (
     convert_non_pipeline_experiment_to_pipeline,
 )
 from apps.teams.models import Flag
+from apps.teams.utils import current_team
 
 
 class Command(BaseCommand):
@@ -62,7 +63,8 @@ class Command(BaseCommand):
         if experiment_id:
             query &= Q(id=experiment_id)
             experiment = (
-                Experiment.objects.filter(query)
+                Experiment.objects.get_all()
+                .filter(query)
                 .select_related("team", "assistant", "llm_provider", "llm_provider_model")
                 .first()
             )
@@ -81,21 +83,30 @@ class Command(BaseCommand):
                 )
                 return
 
-            experiments_to_convert = experiment
+            if experiment.is_archived:
+                self.stdout.write(self.style.WARNING(f"Experiment {experiment_id} is archived."))
+                skip_confirmation = False  # force confirmation
+
+            experiments_to_convert = [experiment]
             experiment_count = 1
         else:
-            default_experiments = Experiment.objects.filter(query & Q(is_default_version=True))
-            default_working_version_ids = default_experiments.exclude(working_version__isnull=True).values_list(
-                "working_version_id", flat=True
+            # ignore 'child' experiments since they will get migrated with their parent
+            default_experiments = (
+                Experiment.objects.filter(query & Q(is_default_version=True, working_version__isnull=False))
+                .annotate(parent_count=Count("parents"))
+                .filter(parent_count=0)
             )
-            working_experiments = Experiment.objects.filter(query & Q(working_version__isnull=True)).exclude(
-                id__in=default_working_version_ids
+            working_experiments = (
+                Experiment.objects.filter(query & Q(working_version__isnull=True))
+                .annotate(parent_count=Count("parents"))
+                .filter(parent_count=0)
             )
             combined_ids = list(default_experiments.union(working_experiments).values_list("id", flat=True))
-            experiments_to_convert = Experiment.objects.filter(id__in=combined_ids).select_related(
+            experiments_queryset = Experiment.objects.filter(id__in=combined_ids).select_related(
                 "team", "assistant", "llm_provider", "llm_provider_model"
             )
-            experiment_count = experiments_to_convert.count()
+            experiment_count = experiments_queryset.count()
+            experiments_to_convert = experiments_queryset.iterator(20)
 
         if not experiment_count:
             self.stdout.write(self.style.WARNING("No matching experiments found."))
@@ -104,11 +115,8 @@ class Command(BaseCommand):
         self.stdout.write(f"Found {experiment_count} experiments to migrate:")
 
         if dry_run:
-            if experiment_count == 1:
-                self._log_experiment_info(experiments_to_convert)
-            else:
-                for experiment in experiments_to_convert.iterator(20):
-                    self._log_experiment_info(experiment)
+            for experiment in experiments_to_convert:
+                self._log_experiment_info(experiment)
             self.stdout.write(self.style.WARNING("\nDry run - no changes will be made."))
             return
 
@@ -120,13 +128,8 @@ class Command(BaseCommand):
 
         converted_count = 0
         failed_count = 0
-        if experiment_count == 1:
-            converted_count, failed_count = self._process_expriment(
-                experiments_to_convert, converted_count, failed_count
-            )
-        else:
-            for experiment in experiments_to_convert.iterator(20):
-                converted_count, failed_count = self._process_experiment(experiment, converted_count, failed_count)
+        for experiment in experiments_to_convert:
+            converted_count, failed_count = self._process_experiment(experiment, converted_count, failed_count)
         self.stdout.write(
             self.style.SUCCESS(f"\nMigration is complete!: {converted_count} succeeded, {failed_count} failed")
         )
@@ -134,7 +137,7 @@ class Command(BaseCommand):
     def _process_experiment(self, experiment, converted_count, failed_count):
         self._log_experiment_info(experiment)
         try:
-            with transaction.atomic():
+            with transaction.atomic(), current_team(experiment.team):
                 convert_non_pipeline_experiment_to_pipeline(experiment)
                 converted_count += 1
                 self.stdout.write(self.style.SUCCESS(f"Success: {experiment.name}"))

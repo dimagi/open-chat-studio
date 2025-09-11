@@ -166,84 +166,10 @@
         {% if experiment.is_public %}
           {% include "experiments/share/dialog.html" %}
         {% endif %}
-      {#  Commented elements included for Tailwind processing #}
-      {#  <i class="fa-brands fa-telegram"></i> #}
-      {#  <i class="fa-brands fa-whatsapp"></i> #}
-        {% for channel in channels %}
-          <div class="btn btn-ghost btn-sm normal-case!" onclick="channel_{{ channel.id }}_modal.showModal()">
-            <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
-          </div>
-          <dialog id="channel_{{ channel.id }}_modal" class="modal">
-            <div class="modal-box">
-              <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
-              <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}"
-                    {# debounce the submit event handler so that disabling the button only happens after submit and the 'action' param is submitted #}
-                    x-data="{ buttonDisabled: false }" x-on:submit.debounce="buttonDisabled = true">
-                {% csrf_token %}
-                {% render_form_fields channel.form %}
-                {% if channel.extra_form %}
-                  <div {% include "generic/attrs.html" with attrs=channel.extra_form.form_attrs %}>
-                    {% render_form_fields channel.extra_form %}
-                  </div>
-                {% endif %}
-                <div class="modal-action">
-                  <button class="btn btn-primary" type="submit" name="action" value="update" x-bind:disabled="buttonDisabled">Update</button>
-                  <button class="btn btn-error" type="submit" name="action" value="delete" x-bind:disabled="buttonDisabled">Delete</button>
-                  <button class="btn" type="button" onclick="channel_{{ channel.id }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
-                </div>
-              </form>
-            </div>
-          </dialog>
-        {% endfor %}
-        {% if platforms %}
-          <div class="dropdown">
-            <button tabindex="0" class="btn btn-ghost btn-sm">
-              <i class="fa-regular fa-plus"></i>
-            </button>
-            <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow-sm bg-base-100 rounded-box w-52 border">
-              {% for platform, available in platforms.items %}
-                <li>
-                  <button
-                    class="disabled:text-gray-600 tooltip tooltip-right"
-                    {% if not available %}
-                      disabled
-                      data-tip="You need to configure your {{ platform|capfirst }} provider to use this channel"
-                    {% endif %}
-                    onclick="{{ platform.value }}_modal.showModal()"
-
-                  >
-                    {{ platform.label }} {% if not available %}
-                    {% endif %}
-                  </button>
-                </li>
-              {% endfor %}
-            </ul>
-          </div>
-          {% for platform, available in platforms.items %}
-            {% if available %}
-              <dialog id="{{ platform.value }}_modal" class="modal">
-                <div class="modal-box">
-                  <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
-                  <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
-                        x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
-                    {% csrf_token %}
-                    {% render_form_fields platform_forms|dict_lookup:platform %}
-                    {% if platform.extra_form %}
-                      <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
-                        {% render_form_fields platform.extra_form %}
-                      </div>
-                    {% endif %}
-                    <div class="modal-action">
-                      <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
-                      <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
-                      <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
-                    </div>
-                  </form>
-                </div>
-              </dialog>
-            {% endif %}
-          {% endfor %}
-        {% endif %}
+        <div id="dynamic-channels" class="inline">
+        {% include "chatbots/components/channel_buttons.html" with origin="experiments" %}
+        </div>
+        <div id="channel_create_edit_modal_placeholder"></div>
       </div>
     {% endif %}
     {% if bot_type_chip %}

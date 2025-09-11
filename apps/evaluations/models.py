@@ -109,9 +109,18 @@ class EvaluationMessage(BaseModel):
                 "chat__experiment_session__participant",
                 "chat__experiment_session__experiment",
             )
+            .prefetch_related("comments", "tags")
             .order_by("chat__experiment_session__created_at", "created_at")
             .all()
         )
+
+        def _add_additional_context(msg, existing_context):
+            if comments := list(msg.comments.all()):
+                existing_context.setdefault("comments", []).extend([comment.comment for comment in comments])
+            if tags := list(msg.tags.all()):
+                context_tags = existing_context.get("tags", [])
+                context_tags.extend([tag.name for tag in tags if not tag.is_system_tag])
+                existing_context["tags"] = list(dict.fromkeys(context_tags))  # dedupe preserving order
 
         messages_by_session = defaultdict(list)
         for message in all_messages:
@@ -126,14 +135,15 @@ class EvaluationMessage(BaseModel):
                 next_msg = messages[i + 1]
                 if current_msg.message_type == ChatMessageType.HUMAN and next_msg.message_type == ChatMessageType.AI:
                     session = current_msg.chat.experiment_session
+                    context = {"current_datetime": current_msg.created_at.isoformat()}
+                    _add_additional_context(current_msg, context)
+                    _add_additional_context(next_msg, context)
                     evaluation_message = EvaluationMessage(
                         input_chat_message=current_msg,
                         input=EvaluationMessageContent(content=current_msg.content, role="human").model_dump(),
                         expected_output_chat_message=next_msg,
                         output=EvaluationMessageContent(content=next_msg.content, role="ai").model_dump(),
-                        context={
-                            "current_datetime": current_msg.created_at.isoformat(),
-                        },
+                        context=context,
                         history=[msg.copy() for msg in history],  # Store as JSON list
                         metadata={
                             "session_id": session_id,
@@ -319,7 +329,7 @@ class EvaluationRun(BaseTeamModel):
         if save:
             self.save(update_fields=["finished_at", "status"])
 
-    def get_table_data(self):
+    def get_table_data(self, include_ids: bool = False):
         results = self.results.select_related("message", "evaluator", "session").all()
         table_by_message = defaultdict(dict)
         for result in results:
@@ -329,6 +339,9 @@ class EvaluationRun(BaseTeamModel):
                 for key, value in result.message.context.items()
                 if key != "current_datetime"
             }
+            if include_ids is True:
+                table_by_message[result.message.id].update({"id": result.message.id})
+
             table_by_message[result.message.id].update(
                 {
                     "Dataset Input": result.message.input.get("content", ""),

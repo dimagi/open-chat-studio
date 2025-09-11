@@ -29,7 +29,9 @@ def test_duplicate_integration_raises_exception():
 
     with pytest.raises(ChannelAlreadyUtilizedException):
         ExperimentChannel.check_usage_by_another_experiment(
-            channel.platform, identifier=channel.extra_data["bot_token"], new_experiment=new_experiment
+            channel.platform,
+            identifier=channel.extra_data["bot_token"],
+            new_experiment=new_experiment,
         )
 
 

@@ -89,7 +89,11 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "pipeline_name": pipeline.name,
             "node_schemas": _pipeline_node_schemas(),
             "parameter_values": _pipeline_node_parameter_values(
-                self.request.team, llm_providers, llm_provider_models, include_versions=pipeline.is_a_version
+                team=self.request.team,
+                llm_providers=llm_providers,
+                llm_provider_models=llm_provider_models,
+                synthetic_voices=[],
+                include_versions=pipeline.is_a_version,
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
@@ -129,7 +133,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
 
 
-def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, include_versions=False):
+def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, synthetic_voices, include_versions=False):
     """Returns the possible values for each input type"""
     common_filters = {"team": team}
     if not include_versions:
@@ -226,6 +230,13 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, in
         OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
         OptionsSource.text_editor_autocomplete_vars_llm_node: PromptVars.get_all_prompt_vars(),
         OptionsSource.text_editor_autocomplete_vars_router_node: PromptVars.get_router_prompt_vars(),
+        OptionsSource.synthetic_voice_id: sorted(
+            [
+                _option(voice.id, str(voice), voice.service.lower()) | {"provider_id": voice.voice_provider_id}
+                for voice in synthetic_voices
+            ],
+            key=lambda v: v["label"],
+        ),
     }
 
 

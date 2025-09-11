@@ -577,10 +577,12 @@ class AgentTools(models.TextChoices):
     MOVE_SCHEDULED_MESSAGE_DATE = "move-scheduled-message-date", gettext("Move Reminder Date")
     UPDATE_PARTICIPANT_DATA = "update-user-data", gettext("Update Participant Data")
     APPEND_TO_PARTICIPANT_DATA = "append-to-participant-data", gettext("Append to Participant Data")
-    INCREMENT_PARTICIPANT_DATA = "increment-participant-data", gettext("Increment Participant Data")
+    INCREMENT_COUNTER = "increment-counter", gettext("Increment Counter")
     ATTACH_MEDIA = "attach-media", gettext("Attach Media")
     END_SESSION = "end-session", gettext("End Session")
     SEARCH_INDEX = "file-search", gettext("File Search")
+    SET_SESSION_STATE = "set-session-state", gettext("Set Session State")
+    GET_SESSION_STATE = "get-session-state", gettext("Get Session State")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:

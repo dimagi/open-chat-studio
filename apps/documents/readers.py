@@ -74,4 +74,4 @@ def plaintext_reader(file_obj) -> Document:
         raise FileReadException("Unable to decode file contents to text") from e
 
 
-READERS = {None: markitdown_read, "text/markdown": plaintext_reader}
+READERS = {None: markitdown_read, "text/markdown": plaintext_reader, "text/plain": plaintext_reader}
