@@ -1,5 +1,5 @@
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Q
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
@@ -14,12 +14,8 @@ class BaseExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Permis
     def get_queryset(self):
         chatbots_enabled = flag_is_active(self.request, "flag_chatbots")
         is_experiment = self.kwargs.get("is_experiment", False)
-        published_version_id = self.model.objects.filter(
-            working_version_id=OuterRef("id"), is_default_version=True
-        ).values("id")[:1]
         query_set = (
             self.model.objects.get_all()
-            .annotate(published_version_id=Subquery(published_version_id))
             .filter(team=self.request.team, working_version__isnull=True)
             .order_by("is_archived", "name")
         )

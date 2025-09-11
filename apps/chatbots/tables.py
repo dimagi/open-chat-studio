@@ -1,7 +1,6 @@
 import django_tables2 as tables
 from django.conf import settings
 from django.db.models import F
-from django.template.loader import get_template
 from django.urls import reverse
 from django_tables2 import columns
 
@@ -47,20 +46,14 @@ class ChatbotTable(tables.Table):
     messages_count = ColumnWithHelp(
         verbose_name="Messages", orderable=True, help_text="Messages sent and received in the last 30 days"
     )
-    error_trend = columns.Column(empty_values=(), verbose_name="Error Trend (last 48h)")
-
+    error_trend = columns.TemplateColumn(
+        verbose_name="Error Trend (last 48h)",
+        template_name="table/sparkline.html",
+    )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
         extra_context={"type": "chatbots"},
     )
-
-    def render_error_trend(self, record):
-        # We're not using a TemplateColumn for error_trend because we need to access the annotated published_version_id
-        url = reverse(
-            "experiments:experiment_error_trend",
-            kwargs={"team_slug": record.team.slug, "experiment_id": record.published_version_id},
-        )
-        return get_template("table/sparkline.html").render(context={"record": record, "sparkline_data_url": url})
 
     class Meta:
         model = Experiment

@@ -11,6 +11,6 @@
         
         const chartContext = canvasElement.getContext('2d');
         // Store chart reference on canvas for future cleanup
-        canvasElement.chart = SiteJS.sparkline.sparklineChart(chartContext, "{{ sparkline_data_url }}");
+        canvasElement.chart = SiteJS.sparkline.sparklineChart(chartContext, "{% url 'experiments:experiment_error_trend' record.team.slug record.id %}");
     })();
 </script>
