@@ -223,7 +223,7 @@ db_options = DATABASES["default"].setdefault("OPTIONS", {})
 db_options.pop("CONN_MAX_AGE", None)  # remove connection age since it's not compatible with connection pooling
 db_options["pool"] = {
     "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
-    "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=10),
+    "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=20),
     "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
 }
 
