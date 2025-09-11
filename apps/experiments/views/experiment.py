@@ -1579,7 +1579,7 @@ def experiment_error_trend(request, team_slug: str, experiment_id: int):
     """
     try:
         experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
-        return JsonResponse({"data": get_experiment_error_trend_data(experiment)})
+        return JsonResponse({"data": get_experiment_error_trend_data(experiment.default_version)})
     except Exception:
         logging.exception(f"Error loading sparkline data for experiment {experiment_id}")
         return JsonResponse({"error": "Failed to load sparkline data", "data": []}, status=500)
