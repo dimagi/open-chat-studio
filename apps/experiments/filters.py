@@ -18,7 +18,7 @@ from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
     ParticipantFilter,
     RemoteIdFilter,
-    StateFilter,
+    StatusFilter,
     TimestampFilter,
 )
 from apps.web.dynamic_filters.datastructures import ColumnFilter
@@ -200,7 +200,7 @@ class DynamicExperimentSessionFilter(DynamicFilter):
         VersionsFilter(),
         ChannelsFilter(),
         ExperimentFilter(),
-        StateFilter(query_param="state"),
+        StatusFilter(query_param="state"),
         RemoteIdFilter(),
     ]
 

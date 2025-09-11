@@ -57,9 +57,8 @@ class ExperimentFilter(ColumnFilterMixin):
         return queryset
 
 
-class StateFilter(ColumnFilterMixin):
-    # TODO: Change to StatusFilter
-    def __init__(self, query_param: str = "state"):
+class StatusFilter(ColumnFilterMixin):
+    def __init__(self, query_param: str):
         self.query_param = query_param
 
     def apply(self, queryset, column_filter: ColumnFilter, timezone=None):

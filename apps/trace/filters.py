@@ -12,7 +12,7 @@ from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
     ParticipantFilter,
     RemoteIdFilter,
-    StateFilter,
+    StatusFilter,
     TimestampFilter,
 )
 from apps.web.dynamic_filters.datastructures import ColumnFilter
@@ -101,5 +101,5 @@ class DynamicTraceFilter(DynamicFilter):
         SpanTagsFilter(),
         RemoteIdFilter(),
         ExperimentFilter(),
-        StateFilter(query_param="status"),
+        StatusFilter(query_param="status"),
     ]
