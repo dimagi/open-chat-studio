@@ -58,7 +58,10 @@ from apps.experiments.decorators import (
     verify_session_access_cookie,
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
-from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, DynamicExperimentSessionFilter
+from apps.experiments.filters import (
+    DynamicExperimentSessionFilter,
+    get_experiment_filter_context_data,
+)
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -464,11 +467,6 @@ def version_create_status(request, team_slug: str, experiment_id: int):
 def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
     experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
 
-    user_sessions = (
-        ExperimentSession.objects.with_last_message_created_at()
-        .filter(participant__user=request.user, experiment=experiment)
-        .exclude(experiment_channel__platform__in=[ChannelPlatform.API, ChannelPlatform.EVALUATIONS])
-    )
     channels, available_platforms = get_channels_context(experiment)
 
     deployed_version = None
@@ -482,31 +480,30 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         elif assistant := experiment.assistant:
             bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
 
-    channel_list = ChannelPlatform.for_filter(experiment.team)
     context = {
         "active_tab": active_tab,
         "bot_type_chip": bot_type_chip,
         "experiment": experiment,
-        "user_sessions": user_sessions,
         "platforms": available_platforms,
         "channels": channels,
-        "df_available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
-        "df_experiment_versions": experiment.get_version_name_list(),
         "deployed_version": deployed_version,
-        "df_field_type_filters": FIELD_TYPE_FILTERS,
-        "df_channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
-        "df_date_range_options": DATE_RANGE_OPTIONS,
-        "df_filter_columns": DynamicExperimentSessionFilter.columns,
-        "df_state_list": SessionStatus.for_chatbots(),
-        "df_filter_data_source_container_id": "sessions-table",
-        "df_filter_data_source_url": reverse("experiments:sessions-list", args=(team_slug, experiment_id)),
-        "df_date_range_column_name": "last_message",
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
         context.update(**_get_terminal_bots_context(experiment, team_slug))
         context.update(**_get_routes_context(experiment, team_slug))
+        session_table_url = reverse("experiments:sessions-list", args=(team_slug, experiment_id))
+    else:
+        session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
+
+    context.update(
+        get_experiment_filter_context_data(
+            request.team,
+            session_table_url,
+            single_experiment=experiment,
+        )
+    )
 
     return TemplateResponse(request, template_name, context)
 

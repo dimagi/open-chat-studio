@@ -1,8 +1,31 @@
 import json
 
 from django.db.models import Count, Q
+from django.urls import reverse
 
-from apps.experiments.filters import DynamicFilter, Operators
+from apps.experiments.filters import DynamicFilter, Operators, get_experiment_filter_options, get_filter_context_data
+from apps.trace.models import TraceStatus
+
+
+def get_trace_filter_context_data(team):
+    span_tags = list(
+        team.span_set.filter(tags__is_system_tag=True)
+        .values_list("tags__name", flat=True)
+        .order_by("tags__name")
+        .distinct("tags__name")
+    )
+
+    table_url = reverse("trace:table", args=[team.slug])
+    context = get_filter_context_data(team, DynamicTraceFilter.columns, "timestamp", table_url, "data-table")
+    context.update(
+        {
+            "df_span_names": list(team.span_set.values_list("name", flat=True).order_by("name").distinct()),
+            "df_state_list": TraceStatus.values,
+            "df_experiment_list": get_experiment_filter_options(team),
+            "df_available_tags": span_tags,
+        }
+    )
+    return context
 
 
 class DynamicTraceFilter(DynamicFilter):
@@ -31,7 +54,7 @@ class DynamicTraceFilter(DynamicFilter):
             filter_value = param_source.get(f"filter_{i}_value")
 
             if not all([filter_column, filter_operator, filter_value]):
-                break
+                continue
 
             filter_column = filter_column[0] if isinstance(filter_column, list) else filter_column
             filter_operator = filter_operator[0] if isinstance(filter_operator, list) else filter_operator
