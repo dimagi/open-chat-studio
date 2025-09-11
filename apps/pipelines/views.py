@@ -62,7 +62,9 @@ class PipelineTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return Pipeline.objects.filter(team=self.request.team, is_version=False, is_archived=False).order_by("name")
+        return Pipeline.objects.filter(
+            team=self.request.team, working_version=None, is_archived=False, experiment=None
+        ).order_by("name")
 
 
 class CreatePipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
