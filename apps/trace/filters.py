@@ -40,6 +40,8 @@ def get_trace_filter_context_data(team):
 
 
 class SpanNameFilter(ColumnFilter):
+    query_param = "span_name"
+
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
         try:
             selected_names = json.loads(column_filter.value)
@@ -85,20 +87,11 @@ class SpanTagsFilter(ColumnFilter):
 
 
 class TraceFilter(MultiColumnFilter):
-    columns = [
-        "participant",
-        "tags",
-        "remote_id",
-        "timestamp",
-        "span_name",
-        "experiment",
-        "status",
-    ]
-
     filters = [
         ParticipantFilter(),
         TimestampFilter(accessor="timestamp", query_param="timestamp"),
         SpanTagsFilter(),
+        SpanNameFilter(),
         RemoteIdFilter(),
         ExperimentFilter(),
         StatusFilter(query_param="status"),

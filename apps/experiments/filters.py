@@ -26,7 +26,7 @@ from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 def get_experiment_filter_context_data(team, table_url: str, single_experiment=None):
     context = get_filter_context_data(
-        team, ExperimentSessionFilter.columns, "last_message", table_url, "sessions-table"
+        team, ExperimentSessionFilter.columns(), "last_message", table_url, "sessions-table"
     )
     context.update(
         {
@@ -179,18 +179,6 @@ class ChannelsFilter(ColumnFilter):
 
 class ExperimentSessionFilter(MultiColumnFilter):
     """Filter for experiment sessions using the new ColumnFilter pattern."""
-
-    columns = [
-        "participant",
-        "last_message",
-        "first_message",
-        "tags",
-        "versions",
-        "channels",
-        "experiment",
-        "state",
-        "remote_id",
-    ]
 
     filters: list[ColumnFilter] = [
         ParticipantFilter(),

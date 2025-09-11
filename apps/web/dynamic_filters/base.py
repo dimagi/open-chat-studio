@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
 from enum import StrEnum
 
 from .datastructures import ColumnFilterData, FilterParams
@@ -43,8 +46,14 @@ DATE_RANGE_OPTIONS = [
 
 
 class MultiColumnFilter:
+    filters: list[ColumnFilter] = []
+
     def __init__(self, filter_params: FilterParams):
         self.filter_params = filter_params
+
+    @classmethod
+    def columns(cls) -> list[str]:
+        return [filter_component.query_param for filter_component in cls.filters]
 
     def prepare_queryset(self, queryset):
         return queryset
@@ -54,20 +63,15 @@ class MultiColumnFilter:
         queryset = self.prepare_queryset(queryset)
 
         for filter_component in self.filters:
-            queryset = filter_component.apply_filter(queryset, self.filter_params, timezone)
+            if column_filter := self.filter_params.get(filter_component.query_param):
+                queryset = filter_component.apply(queryset, column_filter, timezone)
 
         return queryset.distinct()
 
 
-class ColumnFilter:
+class ColumnFilter(ABC):
     query_param: str = None
 
-    def apply_filter(self, queryset, filter_params: FilterParams, timezone=None):
-        column_filter = filter_params.get(self.query_param)
-        if not column_filter:
-            return queryset
-
-        return self.apply(queryset, column_filter, timezone)
-
+    @abstractmethod
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
-        return queryset
+        pass
