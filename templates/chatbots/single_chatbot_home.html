@@ -223,8 +223,7 @@
       <script>
         async function clearSessionData() {
           try {
-            // TODO: fix url and placement of success modal
-            await fetch("{% url 'experiments:clear_widget_success_session' request.team.slug experiment.id %}", {
+            await fetch("{% url 'channels:clear_widget_success' request.team.slug experiment.id %}", {
               method: 'POST',
               headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,

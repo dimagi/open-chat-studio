@@ -77,5 +77,4 @@ urlpatterns = [
         name="settings",
     ),
     path("<int:pk>/copy/", views.copy_chatbot, name="copy"),
-    # TODO: add clear_widget_success_session url
 ]
