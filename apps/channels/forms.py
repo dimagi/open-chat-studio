@@ -562,20 +562,26 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         for line in domains_text.split("\n"):
             domain = line.strip()
             if domain:
-                if not re.match(r"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", domain):
+                if not re.match(r"^(\*\.)?[a-zA-Z0-9.-]+(:\d+)?$", domain):
                     raise forms.ValidationError(f"Invalid domain format: {domain}")
                 domains.append(domain)
         return domains
 
     def clean(self):
-        """Generate the widget token so it's available in cleaned_data"""
+        """Generate or preserve the widget token"""
         cleaned_data = super().clean()
-        # Generate token here so it's available when check_usage_by_another_experiment is called
-        cleaned_data["widget_token"] = secrets.token_urlsafe(32)
+
+        # If editing existing channel, preserve the token
+        if self.channel and self.channel.extra_data.get("widget_token"):
+            cleaned_data["widget_token"] = self.channel.extra_data["widget_token"]
+        else:
+            # Generate token here so it's available when check_usage_by_another_experiment is called
+            cleaned_data["widget_token"] = secrets.token_urlsafe(24)
+
         return cleaned_data
 
     def post_save(self, channel: ExperimentChannel):
-        """Save widget data - success message will be handled by the view"""
+        """Save widget data and set success message"""
         widget_token = self.cleaned_data["widget_token"]
         channel.extra_data.update(
             {
@@ -584,6 +590,8 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             }
         )
         channel.save()
+
+        self.success_message = f"Embedded widget channel created successfully! Widget token: {widget_token}"
 
     def _generate_embed_code(self, channel: ExperimentChannel, token: str) -> str:
         """Generate the embed code for the widget"""
