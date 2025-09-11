@@ -1068,6 +1068,20 @@ export class OcsChat {
     return `${this.getApiBaseUrl()}/static/images/favicons/favicon.svg`;
   }
 
+  private getWelcomeMessages(): string[] {
+    const translated = this.translationManager.getArray("welcomeMessages");
+    return translated && translated.length > 0
+      ? translated
+      : this.parsedWelcomeMessages;
+  }
+
+  private getStarterQuestions(): string[] {
+    const translated = this.translationManager.getArray("starterQuestions");
+    return translated && translated.length > 0
+      ? translated
+      : this.parsedStarterQuestions;
+  }
+
   private getButtonClasses(): string {
     const hasText = this.buttonText && this.buttonText.trim();
     const baseClass = hasText ? 'chat-btn-text' : 'chat-btn-icon';
@@ -1080,7 +1094,7 @@ export class OcsChat {
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
     const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
-    const translatedButtonText = this.translationManager.get('buttonText')
+    const translatedButtonText = this.translationManager.get('buttonText') || this.buttonText
     if (hasText) {
       return (
         <button
@@ -1251,8 +1265,6 @@ export class OcsChat {
   }
 
   render() {
-  const welcomeMessages: string[] = this.translationManager.getArray("welcomeMessages") || [];
-  const starterQuestions: string[] = this.translationManager.getArray("starterQuestions") || [];
     // Only show error state for critical errors that prevent the widget from functioning
     if (this.error && !this.sessionId) {
       return (
@@ -1284,7 +1296,7 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="header-text">{this.translationManager.get('headerText')}</div>
+              <div class="header-text">{this.translationManager.get('headerText') || this.headerText}</div>
               <div class="header-buttons">
                 {/* New Chat button */}
                 {this.messages.length > 0 && (
@@ -1360,9 +1372,9 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
                 >
-                  {this.messages.length === 0 && welcomeMessages.length > 0 && (
+                  {this.messages.length === 0 && this.parsedWelcomeMessages.length > 0 && (
                     <div class="welcome-messages">
-                      {welcomeMessages.map((message, index) => (
+                      {this.getWelcomeMessages().map((message, index) => (
                         <div key={`welcome-${index}`} class="message-row message-row-assistant">
                           <div class="message-bubble message-bubble-assistant">
                             <div
@@ -1429,9 +1441,9 @@ export class OcsChat {
               )}
 
               {/* Starter Questions */}
-              {this.messages.length === 0 && starterQuestions.length > 0 && (
+              {this.messages.length === 0 && this.parsedStarterQuestions.length > 0 && (
                 <div class="starter-questions">
-                  {starterQuestions.map((question, index) => (
+                  {this.getStarterQuestions().map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
                       <button
                         class="starter-question"
