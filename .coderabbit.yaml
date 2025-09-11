@@ -9,7 +9,7 @@ reviews:
   path_instructions:
     - path: "**/*.py"
       instructions: |
-        Do not review for Python compatibility below 3.11
+        Do not review for Python compatibility below 3.13
   abort_on_close: true
   auto_review:
     enabled: false

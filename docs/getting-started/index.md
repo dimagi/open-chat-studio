@@ -12,7 +12,7 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
 
 ### Prerequisites
 
-- Python 3.11 (recommended)
+- Python 3.13 (recommended)
 - Node.js >= 22.14.0
 - Docker and Docker Compose
 - Git
@@ -29,7 +29,7 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
 2. **Install dependencies**
 
     ```bash
-    uv venv --python 3.11
+    uv venv --python 3.13
     source .venv/bin/activate
     uv sync
     ```

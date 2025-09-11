@@ -1,11 +1,11 @@
 import platform
 import textwrap
 import time
-from distutils.version import LooseVersion
 from pathlib import Path
 
 import requests
 from invoke import Context, Exit, call, task
+from packaging.version import Version
 from termcolor import cprint
 
 MIN_NODE_VERSION = "18"
@@ -135,8 +135,8 @@ def _check_node_version(c: Context):
     version = res.stdout.strip()
     if version.startswith("v"):
         version = version[1:]
-    ver = LooseVersion(version)
-    return ver >= LooseVersion(MIN_NODE_VERSION)
+    ver = Version(version)
+    return ver >= Version(MIN_NODE_VERSION)
 
 
 @task

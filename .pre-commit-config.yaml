@@ -1,6 +1,6 @@
 exclude: ^static/.*|/migrations/.*|\.min\.js$|\.min\.css$|\.css\.map$|\.min\.js$|\.js\.map$|\.svg$
 default_language_version:
-  python: python3.11
+  python: python3.13
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.7

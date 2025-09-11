@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      PYTHON_VERSION: '3.11'
+      PYTHON_VERSION: '3.13'
     services:
       postgres:
         image: pgvector/pgvector:pg16
