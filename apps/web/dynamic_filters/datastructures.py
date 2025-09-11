@@ -6,7 +6,7 @@ from django.conf import settings
 
 
 @dataclass
-class ColumnFilter:
+class ColumnFilterData:
     column: str
     operator: str
     value: str
@@ -21,11 +21,11 @@ class FilterParams:
             filter_operator = query_params.get(f"filter_{i}_operator")
             filter_value = query_params.get(f"filter_{i}_value")
 
-            self._filters[filter_column] = ColumnFilter(
+            self._filters[filter_column] = ColumnFilterData(
                 column=filter_column, operator=filter_operator, value=filter_value
             )
 
-    def get(self, column: str) -> ColumnFilter | None:
+    def get(self, column: str) -> ColumnFilterData | None:
         return self._filters.get(column)
 
     @staticmethod

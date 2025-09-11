@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from .datastructures import ColumnFilter, FilterParams
+from .datastructures import ColumnFilterData, FilterParams
 
 
 class Operators(StrEnum):
@@ -69,5 +69,5 @@ class ColumnFilterMixin:
 
         return self.apply(queryset, column_filter, timezone)
 
-    def apply(self, queryset, column_filter: ColumnFilter, timezone=None):
+    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
         return queryset

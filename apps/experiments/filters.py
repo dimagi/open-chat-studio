@@ -21,7 +21,7 @@ from apps.web.dynamic_filters.column_filters import (
     StatusFilter,
     TimestampFilter,
 )
-from apps.web.dynamic_filters.datastructures import ColumnFilter
+from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
 def get_experiment_filter_context_data(team, table_url: str, single_experiment=None):
@@ -61,7 +61,7 @@ def get_experiment_filter_options(team):
 class ChatMessageTagsFilter(ColumnFilterMixin):
     query_param = "tags"
 
-    def apply(self, queryset, column_filter: ColumnFilter, timezone=None):
+    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
         """Build filter condition for tags"""
         try:
             selected_tags = json.loads(column_filter.value)
@@ -111,7 +111,7 @@ class ChatMessageTagsFilter(ColumnFilterMixin):
 class VersionsFilter(ColumnFilterMixin):
     query_param = "versions"
 
-    def apply(self, queryset, column_filter: ColumnFilter, timezone=None):
+    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
         """Build filter condition for versions"""
         try:
             version_strings = json.loads(column_filter.value)
@@ -155,7 +155,7 @@ class VersionsFilter(ColumnFilterMixin):
 class ChannelsFilter(ColumnFilterMixin):
     query_param = "channels"
 
-    def apply(self, queryset, column_filter: ColumnFilter, timezone=None):
+    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
         """Build filter condition for channels"""
         try:
             selected_display_names = json.loads(column_filter.value)

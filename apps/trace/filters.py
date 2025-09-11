@@ -15,7 +15,7 @@ from apps.web.dynamic_filters.column_filters import (
     StatusFilter,
     TimestampFilter,
 )
-from apps.web.dynamic_filters.datastructures import ColumnFilter
+from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
 def get_trace_filter_context_data(team):
@@ -40,7 +40,7 @@ def get_trace_filter_context_data(team):
 
 
 class SpanNameFilter(ColumnFilterMixin):
-    def apply(self, queryset, column_filter: ColumnFilter, timezone=None):
+    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
         try:
             selected_names = json.loads(column_filter.value)
         except json.JSONDecodeError:
@@ -63,7 +63,7 @@ class SpanNameFilter(ColumnFilterMixin):
 class SpanTagsFilter(ColumnFilterMixin):
     query_param = "tags"
 
-    def apply(self, queryset, column_filter: ColumnFilter, timezone=None):
+    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
         try:
             selected_tags = json.loads(column_filter.value)
         except json.JSONDecodeError:
