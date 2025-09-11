@@ -7,6 +7,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.filters import DynamicTraceFilter, get_trace_filter_context_data
 from apps.trace.models import Span, Trace, TraceStatus
 from apps.trace.tables import TraceTable
+from apps.web.dynamic_filters import FilterParams
 
 
 class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -38,8 +39,8 @@ class TraceTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequi
         )
 
         timezone = self.request.session.get("detected_tz", None)
-        trace_filter = DynamicTraceFilter(queryset, self.request.GET, timezone)
-        return trace_filter.apply()
+        trace_filter = DynamicTraceFilter(FilterParams.from_request(self.request))
+        return trace_filter.apply(queryset, timezone)
 
 
 class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):

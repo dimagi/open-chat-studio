@@ -107,6 +107,7 @@ from apps.service_providers.utils import get_llm_provider_choices, get_models_by
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
+from apps.web.dynamic_filters import FilterParams
 
 
 @login_and_team_required
@@ -155,13 +156,9 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             )
         )
         timezone = self.request.session.get("detected_tz", None)
-        filters = self.request.GET
-        if not filters and (hx_url := self.request.headers.get("HX-Current-URL")):
-            parsed_url = urlparse(hx_url)
-            filters = parse_qs(parsed_url.query)
 
-        session_filter = DynamicExperimentSessionFilter(query_set, filters, timezone)
-        query_set = session_filter.apply()
+        session_filter = DynamicExperimentSessionFilter(FilterParams.from_request(self.request))
+        query_set = session_filter.apply(query_set, timezone)
         return query_set
 
 
