@@ -214,7 +214,6 @@ export class OcsChat {
 
   @State() currentLanguage: string = 'en';
   @State() translationManager: TranslationManager = new TranslationManager();
-  @State() showTranslationUpload: boolean = false;
 
   private pollingIntervalRef?: any;
   private messageListRef?: HTMLDivElement;
