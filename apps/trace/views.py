@@ -7,7 +7,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.filters import DynamicTraceFilter, get_trace_filter_context_data
 from apps.trace.models import Span, Trace, TraceStatus
 from apps.trace.tables import TraceTable
-from apps.web.dynamic_filters import FilterParams
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 class TracesHome(LoginAndTeamRequiredMixin, TemplateView):

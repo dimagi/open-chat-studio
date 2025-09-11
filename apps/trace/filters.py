@@ -3,19 +3,19 @@ import json
 from django.urls import reverse
 
 from apps.experiments.filters import (
-    ColumnFilterMixin,
-    DynamicFilter,
-    ExperimentFilter,
-    Operators,
-    ParticipantFilter,
-    RemoteIdFilter,
-    StateFilter,
-    TimestampFilter,
     get_experiment_filter_options,
     get_filter_context_data,
 )
 from apps.trace.models import TraceStatus
-from apps.web.dynamic_filters import ColumnFilter, ColumnFilterMixin, DynamicFilter
+from apps.web.dynamic_filters.base import ColumnFilterMixin, DynamicFilter, Operators
+from apps.web.dynamic_filters.column_filters import (
+    ExperimentFilter,
+    ParticipantFilter,
+    RemoteIdFilter,
+    StateFilter,
+    TimestampFilter,
+)
+from apps.web.dynamic_filters.datastructures import ColumnFilter
 
 
 def get_trace_filter_context_data(team):
