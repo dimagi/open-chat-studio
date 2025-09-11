@@ -634,9 +634,10 @@ class ChannelBase(ABC):
                 {"response": ai_message.content, "attachments": [file.name for file in files]}
             )
 
-            kwargs = {"bot_message": ai_message.content, "files": files}
-            with self.trace_service.span("Send message to user", inputs=kwargs):
-                self.send_message_to_user(**kwargs)
+            with self.trace_service.span(
+                "Send message to user", inputs={"bot_message": ai_message.content, "files": [str(f) for f in files]}
+            ):
+                self.send_message_to_user(bot_message=ai_message.content, files=files)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
