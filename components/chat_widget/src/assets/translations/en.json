@@ -20,5 +20,6 @@
   "unsupportedFileType": "Unsupported file type",
   "connectionError": "Connection error. Please try again.",
   "sessionExpired": "Session expired. Please start a new chat.",
-  "poweredBy": "Powered by"
+  "poweredBy": "Powered by",
+  "buttonText": "Let's Chat"
 }

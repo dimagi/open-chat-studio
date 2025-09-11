@@ -20,5 +20,7 @@
   "unsupportedFileType": "Tipo de archivo no soportado",
   "connectionError": "Error de conexión. Por favor, inténtalo de nuevo.",
   "sessionExpired": "Sesión expirada. Por favor, inicia un nuevo chat.",
-  "poweredBy": "Desarrollado por"
+  "poweredBy": "Desarrollado por",
+  "buttonText": "Charlemos"
+
 }

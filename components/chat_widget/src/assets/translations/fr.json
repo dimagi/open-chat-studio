@@ -20,5 +20,7 @@
   "unsupportedFileType": "Type de fichier non pris en charge",
   "connectionError": "Erreur de connexion. Veuillez réessayer.",
   "sessionExpired": "Session expirée. Veuillez démarrer un nouveau chat.",
-  "poweredBy": "Propulsé par"
+  "poweredBy": "Propulsé par",
+  "buttonText": "Discutons"
+
 }

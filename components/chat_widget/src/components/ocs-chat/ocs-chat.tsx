@@ -1080,17 +1080,17 @@ export class OcsChat {
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
     const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
-
+    const translatedButtonText = this.translationManager.get('buttonText')
     if (hasText) {
       return (
         <button
           class={buttonClasses}
           onClick={() => this.toggleWindowVisibility()}
-          aria-label={`Open chat - ${this.buttonText}`}
-          title={this.buttonText}
+          aria-label={`Open chat - ${translatedButtonText}`}
+          title={translatedButtonText}
         >
           <img src={iconSrc} alt="" />
-          <span>{this.buttonText}</span>
+          <span>{translatedButtonText}</span>
         </button>
       );
     } else {
