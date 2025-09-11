@@ -169,6 +169,16 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
         ).first()
         return experiment if experiment else family_member
 
+    def get_version_names(self, team, working_version=None) -> list[str]:
+        qs = self.get_queryset().filter(team=team)
+        if working_version:
+            qs = qs.filter(working_version=working_version)
+            nums = qs.order_by("-version_number").values_list("version_number", flat=True).distinct()
+            return [f"v{working_version.version_number}"] + [f"v{n}" for n in nums]
+        # team-wide distinct version numbers (stable, sorted)
+        nums = qs.order_by("-version_number").values_list("version_number", flat=True).distinct()
+        return [f"v{n}" for n in nums]
+
 
 class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
     pass
