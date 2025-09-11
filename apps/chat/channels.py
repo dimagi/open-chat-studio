@@ -312,6 +312,8 @@ class ChannelBase(ABC):
             channel_cls = CommCareConnectChannel
         elif platform == "evaluations":
             channel_cls = EvaluationChannel
+        elif platform == "embedded_widget":
+            channel_cls = EmbeddedWidgetChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return channel_cls
@@ -1318,4 +1320,14 @@ class EvaluationChannel(ChannelBase):
 
     def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since evaluations are run internally
+        pass
+
+
+class EmbeddedWidgetChannel(ChannelBase):
+    def new_user_message(self, text: str, message_type: ChatMessage.MessageType = ChatMessage.MessageType.TEXT):
+        """Handle new user message from embedded widget"""
+        return self._create_new_user_message(text, message_type)
+
+    def send_message(self, message: ChatMessage):
+        """Embedded widgets use polling, so no direct sending needed"""
         pass
