@@ -44,7 +44,7 @@ All dynamic filter template variables use the `df_` prefix. Here are all availab
 |----------|------|-------------|---------|
 | `df_filter_data_source_url` | string | AJAX endpoint for fetching filtered data | `reverse("experiments:sessions-list", args=(team_slug, experiment_id))` |
 | `df_filter_data_source_container_id` | string | DOM element ID to update with filtered results | `"sessions-table"` |
-| `df_filter_columns` | list | Available columns for filtering | `DynamicExperimentSessionFilter.columns` |
+| `df_filter_columns` | list | Available columns for filtering | `ExperimentSessionFilter.columns` |
 | `df_field_type_filters` | dict | Mapping of field types to available operators | `FIELD_TYPE_FILTERS` |
 
 ### Data Options Variables

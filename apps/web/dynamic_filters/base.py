@@ -42,7 +42,7 @@ DATE_RANGE_OPTIONS = [
 ]
 
 
-class DynamicFilter:
+class MultiColumnFilter:
     def __init__(self, filter_params: FilterParams):
         self.filter_params = filter_params
 
@@ -60,6 +60,8 @@ class DynamicFilter:
 
 
 class ColumnFilterMixin:
+    query_param: str = None
+
     def apply_filter(self, queryset, filter_params: FilterParams, timezone=None):
         column_filter = filter_params.get(self.query_param)
         if not column_filter:

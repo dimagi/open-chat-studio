@@ -7,7 +7,7 @@ from apps.experiments.filters import (
     get_filter_context_data,
 )
 from apps.trace.models import TraceStatus
-from apps.web.dynamic_filters.base import ColumnFilterMixin, DynamicFilter, Operators
+from apps.web.dynamic_filters.base import ColumnFilterMixin, MultiColumnFilter, Operators
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
     ParticipantFilter,
@@ -27,7 +27,7 @@ def get_trace_filter_context_data(team):
     )
 
     table_url = reverse("trace:table", args=[team.slug])
-    context = get_filter_context_data(team, DynamicTraceFilter.columns, "timestamp", table_url, "data-table")
+    context = get_filter_context_data(team, TraceFilter.columns, "timestamp", table_url, "data-table")
     context.update(
         {
             "df_span_names": list(team.span_set.values_list("name", flat=True).order_by("name").distinct()),
@@ -84,7 +84,7 @@ class SpanTagsFilter(ColumnFilterMixin):
             return queryset.exclude(spans__tags__name__in=selected_tags)
 
 
-class DynamicTraceFilter(DynamicFilter):
+class TraceFilter(MultiColumnFilter):
     columns = [
         "participant",
         "tags",

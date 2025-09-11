@@ -59,7 +59,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.filters import (
-    DynamicExperimentSessionFilter,
+    ExperimentSessionFilter,
     get_experiment_filter_context_data,
 )
 from apps.experiments.forms import (
@@ -157,7 +157,7 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         )
         timezone = self.request.session.get("detected_tz", None)
 
-        session_filter = DynamicExperimentSessionFilter(FilterParams.from_request(self.request))
+        session_filter = ExperimentSessionFilter(FilterParams.from_request(self.request))
         query_set = session_filter.apply(query_set, timezone)
         return query_set
 

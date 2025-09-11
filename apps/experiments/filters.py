@@ -11,7 +11,7 @@ from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
     FIELD_TYPE_FILTERS,
     ColumnFilterMixin,
-    DynamicFilter,
+    MultiColumnFilter,
     Operators,
 )
 from apps.web.dynamic_filters.column_filters import (
@@ -26,7 +26,7 @@ from apps.web.dynamic_filters.datastructures import ColumnFilter
 
 def get_experiment_filter_context_data(team, table_url: str, single_experiment=None):
     context = get_filter_context_data(
-        team, DynamicExperimentSessionFilter.columns, "last_message", table_url, "sessions-table"
+        team, ExperimentSessionFilter.columns, "last_message", table_url, "sessions-table"
     )
     context.update(
         {
@@ -177,7 +177,7 @@ class ChannelsFilter(ColumnFilterMixin):
         return queryset
 
 
-class DynamicExperimentSessionFilter(DynamicFilter):
+class ExperimentSessionFilter(MultiColumnFilter):
     """Filter for experiment sessions using the new ColumnFilterMixin pattern."""
 
     columns = [

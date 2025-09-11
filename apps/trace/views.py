@@ -4,7 +4,7 @@ from django.views.generic import DetailView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.trace.filters import DynamicTraceFilter, get_trace_filter_context_data
+from apps.trace.filters import TraceFilter, get_trace_filter_context_data
 from apps.trace.models import Span, Trace, TraceStatus
 from apps.trace.tables import TraceTable
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -39,7 +39,7 @@ class TraceTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequi
         )
 
         timezone = self.request.session.get("detected_tz", None)
-        trace_filter = DynamicTraceFilter(FilterParams.from_request(self.request))
+        trace_filter = TraceFilter(FilterParams.from_request(self.request))
         return trace_filter.apply(queryset, timezone)
 
 
