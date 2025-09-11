@@ -3,10 +3,10 @@ from datetime import datetime, timedelta
 
 import pytz
 
-from .base import ColumnFilterData, ColumnFilterMixin, Operators
+from .base import ColumnFilter, ColumnFilterData, Operators
 
 
-class ParticipantFilter(ColumnFilterMixin):
+class ParticipantFilter(ColumnFilter):
     query_param = "participant"
 
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
@@ -27,7 +27,7 @@ class ParticipantFilter(ColumnFilterMixin):
         return None
 
 
-class ExperimentFilter(ColumnFilterMixin):
+class ExperimentFilter(ColumnFilter):
     query_param = "experiment"
 
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
@@ -57,7 +57,7 @@ class ExperimentFilter(ColumnFilterMixin):
         return queryset
 
 
-class StatusFilter(ColumnFilterMixin):
+class StatusFilter(ColumnFilter):
     def __init__(self, query_param: str):
         self.query_param = query_param
 
@@ -79,7 +79,7 @@ class StatusFilter(ColumnFilterMixin):
         return queryset
 
 
-class RemoteIdFilter(ColumnFilterMixin):
+class RemoteIdFilter(ColumnFilter):
     query_param = "remote_id"
 
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
@@ -100,7 +100,7 @@ class RemoteIdFilter(ColumnFilterMixin):
         return queryset
 
 
-class TimestampFilter(ColumnFilterMixin):
+class TimestampFilter(ColumnFilter):
     def __init__(self, accessor: str, query_param: str):
         self.accessor = accessor
         self.query_param = query_param

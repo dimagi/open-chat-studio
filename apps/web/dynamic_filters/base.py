@@ -59,7 +59,7 @@ class MultiColumnFilter:
         return queryset.distinct()
 
 
-class ColumnFilterMixin:
+class ColumnFilter:
     query_param: str = None
 
     def apply_filter(self, queryset, filter_params: FilterParams, timezone=None):

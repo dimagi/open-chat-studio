@@ -7,7 +7,7 @@ from apps.experiments.filters import (
     get_filter_context_data,
 )
 from apps.trace.models import TraceStatus
-from apps.web.dynamic_filters.base import ColumnFilterMixin, MultiColumnFilter, Operators
+from apps.web.dynamic_filters.base import ColumnFilter, MultiColumnFilter, Operators
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
     ParticipantFilter,
@@ -39,7 +39,7 @@ def get_trace_filter_context_data(team):
     return context
 
 
-class SpanNameFilter(ColumnFilterMixin):
+class SpanNameFilter(ColumnFilter):
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
         try:
             selected_names = json.loads(column_filter.value)
@@ -60,7 +60,7 @@ class SpanNameFilter(ColumnFilterMixin):
             return queryset.exclude(spans__name__in=selected_names)
 
 
-class SpanTagsFilter(ColumnFilterMixin):
+class SpanTagsFilter(ColumnFilter):
     query_param = "tags"
 
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):

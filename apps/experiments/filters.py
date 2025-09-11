@@ -10,7 +10,7 @@ from apps.experiments.models import Experiment, SessionStatus
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
     FIELD_TYPE_FILTERS,
-    ColumnFilterMixin,
+    ColumnFilter,
     MultiColumnFilter,
     Operators,
 )
@@ -58,7 +58,7 @@ def get_experiment_filter_options(team):
     return [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
 
 
-class ChatMessageTagsFilter(ColumnFilterMixin):
+class ChatMessageTagsFilter(ColumnFilter):
     query_param = "tags"
 
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
@@ -108,7 +108,7 @@ class ChatMessageTagsFilter(ColumnFilterMixin):
         return queryset
 
 
-class VersionsFilter(ColumnFilterMixin):
+class VersionsFilter(ColumnFilter):
     query_param = "versions"
 
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
@@ -152,7 +152,7 @@ class VersionsFilter(ColumnFilterMixin):
         return queryset
 
 
-class ChannelsFilter(ColumnFilterMixin):
+class ChannelsFilter(ColumnFilter):
     query_param = "channels"
 
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
@@ -178,7 +178,7 @@ class ChannelsFilter(ColumnFilterMixin):
 
 
 class ExperimentSessionFilter(MultiColumnFilter):
-    """Filter for experiment sessions using the new ColumnFilterMixin pattern."""
+    """Filter for experiment sessions using the new ColumnFilter pattern."""
 
     columns = [
         "participant",
@@ -192,7 +192,7 @@ class ExperimentSessionFilter(MultiColumnFilter):
         "remote_id",
     ]
 
-    filters: list[ColumnFilterMixin] = [
+    filters: list[ColumnFilter] = [
         ParticipantFilter(),
         TimestampFilter(accessor="last_message_created_at", query_param="last_message"),
         TimestampFilter(accessor="first_message_created_at", query_param="first_message"),
