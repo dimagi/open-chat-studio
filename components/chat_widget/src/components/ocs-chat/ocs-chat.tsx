@@ -1282,7 +1282,7 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="header-text">{this.headerText}</div>
+              <div class="header-text">{this.translationManager.get('headerText')}</div>
               <div class="header-buttons">
                 {/* New Chat button */}
                 {this.messages.length > 0 && (

@@ -21,6 +21,7 @@
   "connectionError": "Connection error. Please try again.",
   "sessionExpired": "Session expired. Please start a new chat.",
   "poweredBy": "Powered by",
-  "buttonText": "Let's Chat"
+  "buttonText": "Let's Chat",
+  "headerText": "Regular, light mode"
 
 }

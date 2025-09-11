@@ -21,6 +21,7 @@
   "connectionError": "Error de conexión. Por favor, inténtalo de nuevo.",
   "sessionExpired": "Sesión expirada. Por favor, inicia un nuevo chat.",
   "poweredBy": "Desarrollado por",
-  "buttonText": "Charlemos"
+  "buttonText": "Charlemos",
+  "headerText": "Regular, light mode"
 
 }

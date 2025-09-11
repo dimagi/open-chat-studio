@@ -21,6 +21,7 @@
   "connectionError": "Erreur de connexion. Veuillez réessayer.",
   "sessionExpired": "Session expirée. Veuillez démarrer un nouveau chat.",
   "poweredBy": "Propulsé par",
-  "buttonText": "Discutons"
+  "buttonText": "Discutons",
+  "headerText": "Regular, light mode"
 
 }
