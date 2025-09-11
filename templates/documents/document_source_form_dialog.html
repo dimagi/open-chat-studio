@@ -20,7 +20,11 @@
     >
       {% csrf_token %}
       {{ form.non_field_errors }}
-      {% render_form_fields form %}
+      {% if form.custom_template %}
+        {% include form.custom_template with form=form %}
+      {% else %}
+        {% render_form_fields form %}
+      {% endif %}
     </form>
 
     <div class="modal-action">

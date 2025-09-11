@@ -105,6 +105,25 @@ class AjaxAction(Action):
         return ctxt
 
 
+@dataclasses.dataclass
+class ModalAction(Action):
+    """Action that will open a modal."""
+
+    template: str = "generic/action_modal.html"
+    modal_template: str = "generic/modal.html"
+    modal_context: dict = None
+
+    def get_context(self, request, record, value):
+        ctxt = super().get_context(request, record, value)
+        action_id = uuid.uuid4().hex
+        modal_id = f"modal_{action_id}"
+        ctxt.update(
+            **{"action_id": action_id, "modal_id": modal_id, "modal_template": self.modal_template},
+            **(self.modal_context or {}),
+        )
+        return ctxt
+
+
 def edit_action(
     url_name: str,
     url_factory: Callable[[str, Any, Any, Any], str] = None,

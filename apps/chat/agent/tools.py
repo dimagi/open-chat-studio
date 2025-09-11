@@ -1,4 +1,5 @@
 import functools
+import json
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
@@ -212,7 +213,7 @@ class MoveScheduledMessageDateTool(CustomBaseTool):
             )
         message.save()
 
-        return f"The new datetime is {pretty_date(message.next_trigger_date)}"
+        return f"The schedule has been moved. The updated schedule datetime is {pretty_date(message.next_trigger_date)}"
 
 
 class DeleteReminderTool(CustomBaseTool):
@@ -231,7 +232,7 @@ class DeleteReminderTool(CustomBaseTool):
             return "Could not find this reminder"
 
         scheduled_message.cancel()
-        return "Success"
+        return "The reminder has been successfully deleted."
 
 
 class UpdateParticipantDataTool(CustomBaseTool):
@@ -244,33 +245,42 @@ class UpdateParticipantDataTool(CustomBaseTool):
     def action(self, key: str, value: Any):
         data_proxy = ParticipantDataProxy(self.experiment_session)
         data_proxy.set_key(key, value)
-        return "Success"
+        return "The new value has been set in user data."
 
 
 class AppendToParticipantDataTool(CustomBaseTool):
     name: str = AgentTools.APPEND_TO_PARTICIPANT_DATA
-    description: str = "Update user data at a specific key"
+    description: str = (
+        "Append a value to user data at a specific key. This will convert any existing "
+        "value to a list and append the new value to the end of the list. Use this tool to "
+        "track lists of items e.g. questions asked."
+    )
     requires_session: bool = True
     args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
 
     @transaction.atomic
     def action(self, key: str, value: str | int | list):
         data_proxy = ParticipantDataProxy(self.experiment_session)
-        data_proxy.append_to_key(key, value)
-        return "Success"
+        new_value = data_proxy.append_to_key(key, value)
+        if len(new_value) > 10:
+            new_value_msg = f"The last 10 items in the list are: {new_value[-10:]}"
+        else:
+            new_value_msg = f"The new list is: {new_value}"
+        return f"The value was appended to the end of the list. {new_value_msg}"
 
 
-class IncrementParticipantDataTool(CustomBaseTool):
-    name: str = AgentTools.INCREMENT_PARTICIPANT_DATA
-    description: str = "Increment a value in the user data"
+class IncrementCounterTool(CustomBaseTool):
+    name: str = AgentTools.INCREMENT_COUNTER
+    description: str = "Increment the value of a counter."
     requires_session: bool = True
-    args_schema: type[schemas.IncrementParticipantDataSchema] = schemas.IncrementParticipantDataSchema
+    args_schema: type[schemas.IncrementCounterSchema] = schemas.IncrementCounterSchema
 
     @transaction.atomic
-    def action(self, key: str, value: int):
+    def action(self, counter: str, value: int):
+        namespaced_key = f"_counter_{counter}"
         data_proxy = ParticipantDataProxy(self.experiment_session)
-        data_proxy.increment_key(key, value)
-        return "Success"
+        new_value = data_proxy.increment_key(namespaced_key, value)
+        return f"The '{counter}' counter has been successfully incremented. The new value is {new_value}."
 
 
 class EndSessionTool(CustomBaseTool):
@@ -395,6 +405,40 @@ def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new
     return date.replace(hour=new_hour, minute=new_minute, second=0) + timedelta(days=day_diff)
 
 
+class SetSessionStateTool(CustomBaseTool):
+    name: str = AgentTools.SET_SESSION_STATE
+    description: str = "Set a value in the session state that persists across the entire experiment session"
+    requires_session: bool = True
+    args_schema: type[schemas.SetSessionStateSchema] = schemas.SetSessionStateSchema
+
+    @transaction.atomic
+    def action(self, key: str, value: Any):
+        if key in {"user_input", "outputs", "attachments"}:
+            return f"Cannot set the '{key}' key in session state - this is read-only"
+
+        self.experiment_session.state[key] = value
+        self.experiment_session.save(update_fields=["state"])
+
+        try:
+            json_value = json.dumps(value, indent=2)
+            return f"The value has been set in session state for key '{key}':\n{json_value}"
+        except (TypeError, ValueError):
+            return f"The value has been set in session state for key '{key}': {value}"
+
+
+class GetSessionStateTool(CustomBaseTool):
+    name: str = AgentTools.GET_SESSION_STATE
+    description: str = "Get a value from the session state that persists across the entire experiment session"
+    requires_session: bool = True
+    args_schema: type[schemas.GetSessionStateSchema] = schemas.GetSessionStateSchema
+
+    def action(self, key: str):
+        value = self.experiment_session.state.get(key)
+        if value is None:
+            return f"No value found for key '{key}' in session state."
+        return f"The value for key '{key}' is: {value}"
+
+
 def create_schedule_message(
     experiment_session: ExperimentSession,
     message: str,
@@ -437,7 +481,7 @@ def create_schedule_message(
                 )
             return "Success: scheduled message created"
         except Experiment.DoesNotExist:
-            return "Experiment does not exist! Could not create scheduled message"
+            return "Could not create scheduled message"
     logging.exception(f"Could not create one-off reminder. Form errors: {form.errors}")
     return "Could not create scheduled message"
 
@@ -449,10 +493,12 @@ TOOL_CLASS_MAP = {
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
     AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
     AgentTools.APPEND_TO_PARTICIPANT_DATA: AppendToParticipantDataTool,
-    AgentTools.INCREMENT_PARTICIPANT_DATA: IncrementParticipantDataTool,
+    AgentTools.INCREMENT_COUNTER: IncrementCounterTool,
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
     AgentTools.SEARCH_INDEX: SearchIndexTool,
+    AgentTools.SET_SESSION_STATE: SetSessionStateTool,
+    AgentTools.GET_SESSION_STATE: GetSessionStateTool,
 }
 
 

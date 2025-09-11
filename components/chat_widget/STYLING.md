@@ -20,9 +20,9 @@ on the font size of the root element (`--chat-window-font-size`).
   * ❌ `width: 100vw`
   * ✔ `w-screen`
 * Never use custom Tailwind classes with vars except for media classes.
-  * ❌ `w-[var(--width)]` 
+  * ❌ `w-(--width)` 
   * ✔️ `width: var(--width)` 
-  * ✔️ `md:w-[var(--width)]`
+  * ✔️ `md:w-(--width)`
     * Media query with custom Tailwind class is acceptable to avoid having to have a separate media query section.
 * Use other vars as default values instead of repeating values.
   * ✔️ `--element-bg-color: var(--chat-window-bg-color)`

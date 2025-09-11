@@ -8,7 +8,7 @@
       {% for message in record.history|slice:"-5:" %}
         <div class="text-xs" title="{{ message.content }}">
           <span class="font-medium">
-            {% if message.message_type == "human" %}Human{% elif message.message_type == "ai" %}AI{% else %}{{ message.message_type|title }}{% endif %}:
+            {% if message.message_type == "human" %}User{% elif message.message_type == "ai" %}Assistant{% else %}{{ message.message_type|title }}{% endif %}:
           </span>
           <span class="text-gray-500">{{ message.content|truncatewords:15 }}</span>
         </div>

@@ -1,11 +1,18 @@
 import json
 import uuid
+from functools import cached_property
 
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.views.generic import CreateView, UpdateView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -14,13 +21,18 @@ from rest_framework.response import Response
 
 from apps.api.permissions import verify_hmac
 from apps.channels import tasks
+from apps.channels.exceptions import ExperimentChannelException
+from apps.channels.forms import ChannelFormWrapper
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.serializers import (
     ApiMessageSerializer,
     ApiResponseMessageSerializer,
     CommCareConnectMessageSerializer,
 )
+from apps.channels.utils import validate_platform_availability
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.experiments.views.utils import get_channels_context
+from apps.teams.decorators import login_and_team_required
 
 
 @csrf_exempt
@@ -189,3 +201,155 @@ def new_connect_message(request: HttpRequest):
         experiment_channel_id=channel.id, participant_data_id=participant_data.id, messages=serializer.data["messages"]
     )
     return HttpResponse()
+
+
+class BaseChannelDialogView(View):
+    model = ExperimentChannel
+    form_class = ChannelFormWrapper
+    template_name = "chatbots/partials/channel_dialog.html"
+
+    @cached_property
+    def experiment(self):
+        return get_object_or_404(
+            Experiment.objects.select_related("team"),
+            id=self.kwargs["experiment_id"],
+            team__slug=self.kwargs["team_slug"],
+        )
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["experiment"] = self.experiment
+        channel = kwargs.pop("instance", None)
+        kwargs["channel"] = channel
+        if channel:
+            kwargs["platform"] = channel.platform_enum
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        form = context.get("form")
+
+        platform_form = form.channel_form
+        extra_form = form.extra_form if hasattr(form, "extra_form") else None
+
+        context.update(
+            {
+                "experiment": self.experiment,
+                "form": platform_form,
+                "extra_form": extra_form,
+            }
+        )
+        if form.success_message:
+            context["success_message"] = form.success_message
+        if form.warning_message:
+            context["warning_message"] = form.warning_message
+        return context
+
+    def get_success_url(self):
+        origin = self.request.GET.get("origin", "experiments")
+        team_slug = self.kwargs["team_slug"]
+        experiment_id = self.kwargs["experiment_id"]
+        return get_redirect_url(origin, team_slug, experiment_id)
+
+    def form_valid(self, form):
+        channel = form.save()
+        if form.success_message or form.warning_message:
+            origin = self.request.GET.get("origin", "experiments")
+            channels, available_platforms = get_channels_context(self.experiment)
+            additional_context = {
+                "origin": origin,
+                "save_successful": True,
+                "channels": channels,
+                "platforms": available_platforms,
+                "channel": channel,
+                "extra_form": channel.extra_form(
+                    experiment=self.experiment
+                ),  # override extra form to get 'update' rendering
+            }
+            return self.render_to_response({**self.get_context_data(form=form), **additional_context})
+        return HttpResponse(headers={"hx-redirect": self.get_success_url()})
+
+
+class ChannelEditDialogView(BaseChannelDialogView, PermissionRequiredMixin, UpdateView):
+    """View for editing existing channels using UpdateView"""
+
+    pk_url_kwarg = "channel_id"
+    permission_required = "bot_channels.change_experimentchannel"
+
+    def get_object(self, queryset=None):
+        return get_object_or_404(
+            ExperimentChannel,
+            id=self.kwargs["channel_id"],
+            experiment__id=self.kwargs["experiment_id"],
+            team__slug=self.kwargs["team_slug"],
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["channel"] = self.object
+        return context
+
+
+class ChannelCreateDialogView(BaseChannelDialogView, PermissionRequiredMixin, CreateView):
+    """View for creating new channels using CreateView"""
+
+    permission_required = "bot_channels.add_experimentchannel"
+
+    def get_platform(self):
+        try:
+            return ChannelPlatform(self.kwargs["platform_value"])
+        except ValueError:
+            raise Http404("Platform not found.") from None
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["platform"] = self.get_platform()
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["platform"] = self.get_platform()
+        return context
+
+    def get(self, request, *args, **kwargs):
+        """Handle GET request with validation"""
+        platform_enum = self.get_platform()
+
+        try:
+            validate_platform_availability(self.experiment, platform_enum)
+        except ExperimentChannelException as e:
+            messages.error(self.request, str(e))
+            return redirect(self.get_success_url())
+
+        return super().get(request, *args, **kwargs)
+
+
+def get_redirect_url(origin: str, team_slug: str, experiment_id: int) -> str:
+    """Return the URL to redirect to based on origin"""
+    if origin == "chatbots":
+        return reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
+    return reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
+
+
+@login_and_team_required
+@permission_required("bot_channels.delete_experimentchannel")
+def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
+    channel = get_object_or_404(
+        ExperimentChannel.objects.select_related("experiment"),
+        id=channel_id,
+        experiment__id=experiment_id,
+        team__slug=team_slug,
+    )
+    origin = request.GET.get("origin")
+    channel.soft_delete()
+    channels, available_platforms = get_channels_context(channel.experiment)
+    return render(
+        request,
+        "chatbots/partials/channel_buttons_oob.html",
+        {
+            "origin": origin,
+            "channels": channels,
+            "platforms": available_platforms,
+            "experiment": channel.experiment,
+        },
+    )

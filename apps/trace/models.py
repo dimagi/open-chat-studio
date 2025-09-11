@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from django.db import models
 from django.urls import reverse
@@ -50,8 +51,8 @@ class Trace(models.Model):
         self,
         span_id: uuid.UUID,
         span_name: str,
-        inputs: dict[str, any],
-        metadata: dict[str, any] | None = None,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
     ) -> Span:
         return _create_span(
             trace_id=self.id,
@@ -104,8 +105,8 @@ class Span(BaseTeamModel, TaggedModelMixin):
         self,
         span_id: uuid.UUID,
         span_name: str,
-        inputs: dict[str, any],
-        metadata: dict[str, any] | None = None,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
     ) -> Span:
         return _create_span(
             trace_id=self.trace_id,
@@ -124,8 +125,8 @@ def _create_span(
     team_id: int,
     span_id: uuid.UUID,
     span_name: str,
-    inputs: dict[str, any],
-    metadata: dict[str, any] | None = None,
+    inputs: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
 ) -> Span:
     return Span.objects.create(
         trace_id=trace_id,

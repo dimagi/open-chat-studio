@@ -212,7 +212,7 @@ class TestMoveScheduledMessageDateTool(BaseTestAgentTool):
             message.refresh_from_db()
             expected_date = pretty_date(message.next_trigger_date)
             assert expected_date == "Friday, 05 January 2024 08:00:00 UTC"
-            assert response == f"The new datetime is {expected_date}"
+            assert response == f"The schedule has been moved. The updated schedule datetime is {expected_date}"
 
 
 @pytest.mark.django_db()
@@ -250,7 +250,7 @@ class TestDeleteReminderTool:
             custom_schedule_params=self.schedule_params(),
         )
         response = self._invoke_tool(session, message_id=scheduled_message.external_id)
-        assert response == "Success"
+        assert response == "The reminder has been successfully deleted."
         scheduled_message.refresh_from_db()
         assert scheduled_message.cancelled_at is not None
 
@@ -353,7 +353,7 @@ def test_create_schedule_message_experiment_does_not_exist():
         response = create_schedule_message(
             experiment_session, message, name="Test", start_date=None, is_recurring=True, **kwargs
         )
-        assert response == "Experiment does not exist! Could not create scheduled message"
+        assert response == "Could not create scheduled message"
 
         scheduled_message_count = ScheduledMessage.objects.filter(
             experiment=experiment_session.experiment,
@@ -390,7 +390,7 @@ class TestUpdateParticipantDataTool:
     )
     def test_update(self, session, value):
         response = self._invoke_tool(session, key="test", value=value)
-        assert response == "Success"
+        assert response == "The new value has been set in user data."
 
         assert session.participant_data_from_experiment == {"test": value}
 
@@ -401,7 +401,7 @@ class TestAppendToParticipantDataTool(BaseTestAgentTool):
 
     def test_append_when_data_does_not_exist(self, session):
         response = self._invoke_tool(session, key="test", value="new_value")
-        assert response == "Success"
+        assert response == "The value was appended to the end of the list. The new list is: ['new_value']"
         assert session.participant_data_from_experiment == {"test": ["new_value"]}
 
     def test_append_when_data_exists(self, session):
@@ -409,7 +409,10 @@ class TestAppendToParticipantDataTool(BaseTestAgentTool):
         self._invoke_tool(session, key="test", value="first_value")
         # Second call to append to the existing data
         response = self._invoke_tool(session, key="test", value="second_value")
-        assert response == "Success"
+        assert (
+            response
+            == "The value was appended to the end of the list. The new list is: ['first_value', 'second_value']"
+        )
         assert session.participant_data_from_experiment == {"test": ["first_value", "second_value"]}
 
     @pytest.mark.parametrize(
@@ -428,19 +431,19 @@ class TestAppendToParticipantDataTool(BaseTestAgentTool):
 
         # Then append to it using AppendToParticipantDataTool
         response = self._invoke_tool(session, key="test", value=new_value)
-        assert response == "Success"
+        assert response == f"The value was appended to the end of the list. The new list is: {expected_result}"
         assert session.participant_data_from_experiment == {"test": expected_result}
 
 
 @pytest.mark.django_db()
 class TestIncrementParticipantDataTool(BaseTestAgentTool):
-    tool_cls = tools.IncrementParticipantDataTool
+    tool_cls = tools.IncrementCounterTool
 
     def test_increment(self, session):
-        response = self._invoke_tool(session, key="test", value=1)
-        assert response == "Success"
+        response = self._invoke_tool(session, counter="test", value=1)
+        assert response == "The 'test' counter has been successfully incremented. The new value is 1."
 
-        assert session.participant_data_from_experiment == {"test": 1}
+        assert session.participant_data_from_experiment == {"_counter_test": 1}
 
 
 @pytest.mark.django_db()
@@ -574,3 +577,75 @@ def test_get_mcp_tool_instances(fetch_tools, team):
     )
     tools = get_mcp_tool_instances(node, team)
     assert len(tools) == 1
+
+
+@pytest.mark.django_db()
+class TestSetSessionStateTool(BaseTestAgentTool):
+    tool_cls = tools.SetSessionStateTool
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "string",
+            1,
+            1.0,
+            True,
+            False,
+            None,
+            ["hi", "there"],
+            {"key": "value"},
+            [{"key": "value"}],
+        ],
+    )
+    def test_set_value(self, session, value):
+        response = self._invoke_tool(session, key="test_key", value=value)
+
+        session.refresh_from_db()
+        assert session.state["test_key"] == value
+        assert "The value has been set in session state for key 'test_key'" in response
+
+    def test_overwrite_existing_session_state(self, session):
+        session.state = {"existing_key": "old_value"}
+        session.save()
+
+        # Update with new value
+        self._invoke_tool(session, key="existing_key", value="new_value")
+
+        session.refresh_from_db()
+        assert session.state["existing_key"] == "new_value"
+
+    def test_preserve_other_session_state(self, session):
+        session.state = {"key1": "value1", "key2": "value2"}
+        session.save()
+
+        self._invoke_tool(session, key="key1", value="updated_value")
+
+        session.refresh_from_db()
+        assert session.state["key1"] == "updated_value"
+        assert session.state["key2"] == "value2"  # Should be unchanged
+
+
+@pytest.mark.django_db()
+class TestGetSessionStateTool(BaseTestAgentTool):
+    tool_cls = tools.GetSessionStateTool
+
+    def test_retrieve_session_state(self, session):
+        test_data = {"user_preference": "dark_mode", "page": "home"}
+        session.state = test_data
+        session.save()
+
+        response = self._invoke_tool(session, key="user_preference")
+        assert "dark_mode" in response
+
+    def test_get_nonexistent_key_from_populated_state(self, session):
+        session.state = {"existing_key": "existing_value"}
+        session.save()
+
+        response = self._invoke_tool(session, key="missing_key")
+        assert "No value found" in response
+
+    def test_get_from_empty_session_state(self, session):
+        assert session.state == {}
+
+        response = self._invoke_tool(session, key="any_key")
+        assert "No value found" in response

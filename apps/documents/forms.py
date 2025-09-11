@@ -4,7 +4,7 @@ from django.conf import settings
 from django.db.models import Q, Subquery
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig
+from apps.documents.datamodels import ConfluenceSourceConfig, DocumentSourceConfig, GitHubSourceConfig
 from apps.documents.models import Collection, DocumentSource, SourceType
 from apps.service_providers.models import AuthProvider, AuthProviderType, EmbeddingProviderModel
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
@@ -222,6 +222,117 @@ class GithubDocumentSourceForm(DocumentSourceForm):
             raise forms.ValidationError("Invalid config") from None
 
         cleaned_data["config"] = DocumentSourceConfig(github=github_config)
+        return cleaned_data
+
+
+class ConfluenceDocumentSourceForm(DocumentSourceForm):
+    requires_auth = True
+    allowed_auth_types = [AuthProviderType.basic]
+    auth_provider_help = "Confluence requires a 'Basic' authentication provider"
+    custom_template = "documents/partials/confluence_form.html"
+
+    base_url = forms.URLField(
+        label="Confluence Site URL",
+        help_text="Confluence Site URL (e.g., https://yoursite.atlassian.com/wiki)",
+        widget=forms.URLInput(attrs={"placeholder": "https://yoursite.atlassian.com/wiki"}),
+    )
+
+    # Loading options - only one should be filled
+    space_key = forms.CharField(
+        required=False,
+        label="Space Key",
+        help_text="Confluence Space Key (e.g., 'DOCS')",
+        widget=forms.TextInput(attrs={"placeholder": "DOCS"}),
+    )
+    label = forms.CharField(
+        required=False,
+        label="Label",
+        help_text="Confluence label to filter pages",
+        widget=forms.TextInput(attrs={"placeholder": "documentation"}),
+    )
+    cql = forms.CharField(
+        required=False,
+        label="CQL Query",
+        help_text="Confluence Query Language query",
+        widget=forms.Textarea(attrs={"placeholder": "space = IDEAS or label = idea", "rows": 3}),
+    )
+    page_ids = forms.CharField(
+        required=False,
+        label="Page IDs",
+        help_text="Comma-separated list of specific page IDs",
+        widget=forms.TextInput(attrs={"placeholder": "12345, 67890, 11223"}),
+    )
+
+    # Additional options
+    max_pages = forms.IntegerField(
+        initial=1000,
+        min_value=1,
+        max_value=10000,
+        label="Max Pages",
+        help_text="Maximum number of pages to load (1-10000)",
+    )
+
+    def _get_config_from_instance(self, instance):
+        return instance.config.confluence
+
+    def clean_base_url(self):
+        base_url = self.cleaned_data["base_url"]
+        try:
+            validate_user_input_url(base_url, strict=not settings.DEBUG)
+        except InvalidURL as e:
+            raise forms.ValidationError(f"The URL is invalid: {str(e)}") from None
+
+        return base_url
+
+    def clean_source_type(self):
+        source_type = self.cleaned_data.get("source_type")
+        if source_type != SourceType.CONFLUENCE:
+            raise forms.ValidationError(f"Expected Confluence source type, got {source_type}")
+        return source_type
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.errors:
+            return cleaned_data
+
+        base_url = cleaned_data.get("base_url")
+        space_key = cleaned_data.get("space_key", "")
+        label = cleaned_data.get("label", "")
+        cql = cleaned_data.get("cql", "")
+        page_ids = cleaned_data.get("page_ids", "")
+        max_pages = cleaned_data.get("max_pages", 1000)
+
+        # Validate that exactly one loading option is specified
+        options = [space_key, label, cql, page_ids]
+        non_empty_options = [opt for opt in options if opt and opt.strip()]
+
+        if len(non_empty_options) == 0:
+            raise forms.ValidationError(
+                "At least one loading option must be specified: Space Key, Label, CQL Query, or Page IDs"
+            )
+        if len(non_empty_options) > 1:
+            raise forms.ValidationError("Only one loading option can be specified at a time")
+
+        # Validate page_ids format if specified
+        if page_ids.strip():
+            try:
+                [int(pid.strip()) for pid in page_ids.split(",") if pid.strip()]
+            except ValueError:
+                raise forms.ValidationError({"page_ids": "Page IDs must be comma-separated integers"}) from None
+
+        try:
+            config = ConfluenceSourceConfig(
+                base_url=base_url,
+                space_key=space_key,
+                label=label,
+                cql=cql,
+                page_ids=page_ids,
+                max_pages=max_pages,
+            )
+        except pydantic.ValidationError as e:
+            raise forms.ValidationError(f"Invalid config: {str(e)}") from None
+
+        cleaned_data["config"] = DocumentSourceConfig(confluence=config)
         return cleaned_data
 
 

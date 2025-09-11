@@ -22,4 +22,19 @@ urlpatterns = [
         name="new_api_message_versioned",
     ),
     path("commcare_connect/incoming_message", views.new_connect_message, name="new_connect_message"),
+    path(
+        "<slug:team_slug>/chatbots/<int:experiment_id>/channels/<int:channel_id>/edit-dialog/",
+        views.ChannelEditDialogView.as_view(),
+        name="channel_edit_dialog",
+    ),
+    path(
+        "<slug:team_slug>/chatbots/<int:experiment_id>/channels/<int:channel_id>/delete/",
+        views.delete_channel,
+        name="delete_channel",
+    ),
+    path(
+        "<slug:team_slug>/chatbots/<int:experiment_id>/channels/create-dialog/<str:platform_value>/",
+        views.ChannelCreateDialogView.as_view(),
+        name="channel_create_dialog",
+    ),
 ]

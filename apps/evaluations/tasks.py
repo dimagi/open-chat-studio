@@ -13,6 +13,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
+from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     EvaluationDataset,
     EvaluationMessage,
@@ -299,7 +300,10 @@ def _extract_row_data(row):
     history = []
     history_text = row.get("history", "").strip()
     if history_text:
-        history = parse_history_text(history_text)
+        try:
+            history = parse_history_text(history_text)
+        except HistoryParseException as exc:
+            raise ValueError("The history column could not be parsed") from exc
 
     return {
         "input_content": input_content,
@@ -386,9 +390,7 @@ def process_csv_rows(dataset, rows, columns, progress_recorder, team):
                     if _update_existing_message(dataset, message_id, row_data, team):
                         stats["updated_count"] += 1
                 except EvaluationMessage.DoesNotExist:
-                    stats["error_messages"].append(
-                        f"Row {row_index + 1}: Message with ID {message_id} not found"
-                    )
+                    stats["error_messages"].append(f"Row {row_index + 1}: Message with ID {message_id} not found")
                     continue
             else:
                 _create_new_message(dataset, row_data)

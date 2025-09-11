@@ -232,6 +232,16 @@ class TopicBot:
     def _save_message_to_history(self, message: str, message_type: ChatMessageType) -> ChatMessage:
         return self.chain.history_manager.save_message_to_history(message, type_=message_type)
 
+    def synthesize_voice(self):
+        synthetic_voice = None
+        if (
+            self.experiment.use_processor_bot_voice
+            and self.processor_experiment
+            and self.processor_experiment.voice_provider
+        ):
+            synthetic_voice = self.processor_experiment.synthetic_voice
+        return synthetic_voice
+
 
 class SafetyBot:
     def __init__(self, safety_layer: SafetyLayer, llm: BaseChatModel, source_material: str | None):
@@ -275,6 +285,7 @@ class PipelineBot:
         self.session = session
         self.trace_service = trace_service
         self.disable_reminder_tools = disable_reminder_tools
+        self.synthetic_voice_id = None
 
     def process_input(
         self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None
@@ -305,6 +316,7 @@ class PipelineBot:
         else:
             result = ChatMessage(content=output)
         self._process_intents(output)
+        self.synthetic_voice_id = output.get("synthetic_voice_id", None)
         return result
 
     def _get_input_state(self, attachments: list["Attachment"], user_input: str):
@@ -416,6 +428,15 @@ class PipelineBot:
             for tag_value, category in tags:
                 chat_message.create_and_add_tag(tag_value, self.session.team, category or "")
         return chat_message
+
+    def synthesize_voice(self) -> tuple["SyntheticVoice"] | None:
+        from apps.experiments.models import SyntheticVoice
+
+        if self.synthetic_voice_id is None:
+            return None
+        return SyntheticVoice.objects.filter(
+            id=self.synthetic_voice_id, service__iexact=self.experiment.voice_provider.type
+        ).first()
 
 
 class PipelineTestBot:

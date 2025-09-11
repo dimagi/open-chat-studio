@@ -101,7 +101,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "deepseek": [
         Model("deepseek-chat", 128000, is_default=True),
-        Model("deepseek-reaoner", 128000, is_translation_default=True),
+        Model("deepseek-reasoner", 128000, is_translation_default=True),
     ],
     "google": [
         Model("gemini-2.5-flash", 1048576, is_default=True),

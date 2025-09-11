@@ -24,7 +24,6 @@ from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
 from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
-    BaseExperimentView,
     CreateExperimentVersion,
     base_single_experiment_view,
     experiment_chat,
@@ -36,6 +35,7 @@ from apps.experiments.views.experiment import (
     start_session_public_embed,
     version_create_status,
 )
+from apps.generics import actions
 from apps.generics.views import generic_home, paginate_session, render_session_details
 from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -134,7 +134,21 @@ def cancel_edit_mode(request, team_slug, experiment_id):
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def chatbots_home(request, team_slug: str):
-    return generic_home(request, team_slug, "Chatbots", "chatbots:table", "chatbots:new")
+    actions_ = [
+        actions.ModalAction(
+            "chatbots:new",
+            label="Add New",
+            button_style="btn-primary",
+            required_permissions=["experiments.add_experiment"],
+            modal_template="chatbots/components/new_modal.html",
+            modal_context={
+                "form": ChatbotForm(request),
+                "modal_title": "Create a new Chatbot",
+                "form_action": reverse("chatbots:new", args=[team_slug]),
+            },
+        )
+    ]
+    return generic_home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_)
 
 
 class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -189,7 +203,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return query_set
 
 
-class CreateChatbot(CreateExperiment, BaseExperimentView):
+class CreateChatbot(CreateExperiment):
     template_name = "chatbots/chatbot_form.html"
     form_class = ChatbotForm
     title = "Create Chatbot"
@@ -222,18 +236,40 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
         data = super().get_context_data(**kwargs)
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
-        experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=self.request.team)
-
+        experiment = get_object_or_404(
+            Experiment.objects.get_all().select_related("voice_provider"), id=kwargs["pk"], team=self.request.team
+        )
+        synthetic_voices = []
+        if experiment.voice_provider:
+            exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
+            if flag_is_active(self.request, "flag_open_ai_voice_engine"):
+                exclude_services = []
+            synthetic_voices = SyntheticVoice.get_for_team(self.request.team, exclude_services=exclude_services)
+            synthetic_voices = synthetic_voices.filter(service__iexact=experiment.voice_provider.type)
         return {
             **data,
             "pipeline_id": experiment.pipeline_id,
             "node_schemas": _pipeline_node_schemas(),
             "experiment": experiment,
-            "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
+            "parameter_values": _pipeline_node_parameter_values(
+                team=self.request.team,
+                llm_providers=llm_providers,
+                llm_provider_models=llm_provider_models,
+                synthetic_voices=synthetic_voices,
+            ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "origin": "chatbots",
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
         }
+
+
+@require_POST
+@login_and_team_required
+@permission_required("experiments.delete_experiment", raise_exception=True)
+def archive_chatbot(request, team_slug: str, pk: int):
+    chatbot = get_object_or_404(Experiment, id=pk, team=request.team)
+    chatbot.archive()
+    return HttpResponse(headers={"hx-redirect": reverse("chatbots:chatbots_home", kwargs={"team_slug": team_slug})})
 
 
 class CreateChatbotVersion(CreateExperimentVersion):

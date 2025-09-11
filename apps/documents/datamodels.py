@@ -47,8 +47,61 @@ class GitHubSourceConfig(pydantic.BaseModel):
 
 class ConfluenceSourceConfig(pydantic.BaseModel):
     base_url: str = pydantic.Field(description="Confluence base URL")
-    space_key: str = pydantic.Field(description="Confluence space key")
-    page_filter: str = pydantic.Field(default="", description="Optional page title filter")
+
+    # Loading options - only one should be specified
+    space_key: str = pydantic.Field(default="", description="Confluence space key")
+    label: str = pydantic.Field(default="", description="Confluence label to filter pages")
+    cql: str = pydantic.Field(default="", description="Confluence Query Language (CQL) query")
+    page_ids: str = pydantic.Field(default="", description="Comma-separated list of page IDs")
+
+    # Additional options
+    max_pages: int = pydantic.Field(default=1000, description="Maximum number of pages to load")
+
+    @pydantic.model_validator(mode="after")
+    def validate_loading_options(self):
+        options = [self.space_key, self.label, self.cql, self.page_ids]
+        non_empty_options = [opt for opt in options if opt.strip()]
+
+        if len(non_empty_options) == 0:
+            raise ValueError("At least one loading option must be specified: space_key, label, cql, or page_ids")
+        if len(non_empty_options) > 1:
+            raise ValueError("Only one loading option can be specified at a time")
+
+        return self
+
+    def get_loader_kwargs(self) -> dict:
+        """Get the appropriate kwargs for ConfluenceLoader based on the specified option"""
+        kwargs = {
+            "url": self.base_url,
+            "max_pages": self.max_pages,
+        }
+
+        if self.space_key.strip():
+            kwargs["space_key"] = self.space_key.strip()
+        elif self.label.strip():
+            kwargs["label"] = self.label.strip()
+        elif self.cql.strip():
+            kwargs["cql"] = self.cql.strip()
+        elif self.page_ids.strip():
+            # Convert comma-separated string to list of integers
+            try:
+                page_id_list = [int(pid.strip()) for pid in self.page_ids.split(",") if pid.strip()]
+                kwargs["page_ids"] = page_id_list
+            except ValueError:
+                raise ValueError("Page IDs must be comma-separated integers") from None
+
+        return kwargs
+
+    def __str__(self):
+        if self.space_key.strip():
+            return f"{self.base_url}/spaces/{self.space_key}/"
+        elif self.label.strip():
+            return f"{self.base_url} (label: {self.label})"
+        elif self.cql.strip():
+            return f"{self.base_url} (CQL: {self.cql[:50]}...)"
+        elif self.page_ids.strip():
+            return f"{self.base_url} (pages: {self.page_ids})"
+        return self.base_url
 
 
 class DocumentSourceConfig(pydantic.BaseModel):
