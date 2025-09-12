@@ -53,7 +53,7 @@ class ProductCategoryFilter(ColumnFilter):
     """Filter products by category name."""
     query_param = "category"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None):
         """Apply category filtering to the queryset."""
         if not column_filter.value:
             return queryset

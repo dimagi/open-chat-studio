@@ -46,7 +46,7 @@ def get_trace_filter_context_data(team):
 class SpanNameFilter(ColumnFilter):
     query_param = "span_name"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         try:
             selected_names = json.loads(column_filter.value)
         except json.JSONDecodeError:
@@ -72,7 +72,7 @@ class SpanNameFilter(ColumnFilter):
 class SpanTagsFilter(ColumnFilter):
     query_param = "tags"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         try:
             selected_tags = json.loads(column_filter.value)
         except json.JSONDecodeError:

@@ -157,8 +157,10 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         )
         timezone = self.request.session.get("detected_tz", None)
 
-        session_filter = ExperimentSessionFilter(FilterParams.from_request(self.request))
-        query_set = session_filter.apply(query_set, timezone)
+        session_filter = ExperimentSessionFilter()
+        query_set = session_filter.apply(
+            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
+        )
         return query_set
 
 

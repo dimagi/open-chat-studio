@@ -23,8 +23,10 @@ def _format_comments(user_comments: list[UserComment]) -> str:
 
 def get_filtered_sessions(experiment, query_params, timezone):
     sessions_queryset = ExperimentSession.objects.filter(experiment=experiment).select_related("participant__user")
-    session_filter = ExperimentSessionFilter(FilterParams(query_params))
-    sessions_queryset = session_filter.apply(sessions_queryset, timezone)
+    session_filter = ExperimentSessionFilter()
+    sessions_queryset = session_filter.apply(
+        sessions_queryset, filter_params=FilterParams(query_params), timezone=timezone
+    )
 
     return sessions_queryset
 

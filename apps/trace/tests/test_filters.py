@@ -42,8 +42,8 @@ class TestTraceFilter:
         }
         query_params = QueryDict("", mutable=True)
         query_params.update(params)
-        filter_instance = TraceFilter(FilterParams(query_params))
-        return filter_instance.apply(queryset, timezone)
+        filter_instance = TraceFilter()
+        return filter_instance.apply(queryset, FilterParams(query_params), timezone)
 
     def test_participant_filter_equals(self, trace, team):
         queryset = Trace.objects.filter(team=team)
@@ -365,8 +365,8 @@ class TestTraceFilter:
         query_params = QueryDict("", mutable=True)
         query_params.update(params)
         queryset = Trace.objects.filter(team=team)
-        filter_instance = TraceFilter(FilterParams(query_params))
-        result = filter_instance.apply(queryset, "UTC")
+        filter_instance = TraceFilter()
+        result = filter_instance.apply(queryset, FilterParams(query_params), "UTC")
 
         assert trace in result
 
@@ -374,7 +374,7 @@ class TestTraceFilter:
         params["filter_1_value"] = json.dumps(["tag2"])
         query_params = QueryDict("", mutable=True)
         query_params.update(params)
-        filter_instance = TraceFilter(FilterParams(query_params))
-        result = filter_instance.apply(queryset, "UTC")
+        filter_instance = TraceFilter()
+        result = filter_instance.apply(queryset, FilterParams(query_params), "UTC")
 
         assert trace not in result

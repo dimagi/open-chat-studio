@@ -4,13 +4,14 @@ from datetime import datetime, timedelta
 import pytz
 from django.db.models import QuerySet
 
-from .base import ColumnFilter, ColumnFilterData, Operators
+from .base import ColumnFilter, Operators
+from .datastructures import ColumnFilterData
 
 
 class ParticipantFilter(ColumnFilter):
     query_param = "participant"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None):
         """Build filter condition for participant"""
         if not column_filter.value:
             return queryset
@@ -34,7 +35,7 @@ class ParticipantFilter(ColumnFilter):
 class ExperimentFilter(ColumnFilter):
     query_param = "experiment"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for experiment"""
         try:
             selected_experiment_ids = json.loads(column_filter.value)
@@ -65,7 +66,7 @@ class StatusFilter(ColumnFilter):
     def __init__(self, query_param: str):
         self.query_param = query_param
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for state"""
         try:
             selected_values = json.loads(column_filter.value)
@@ -86,7 +87,7 @@ class StatusFilter(ColumnFilter):
 class RemoteIdFilter(ColumnFilter):
     query_param = "remote_id"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for remote_id"""
         try:
             selected_values = json.loads(column_filter.value)
@@ -109,7 +110,7 @@ class TimestampFilter(ColumnFilter):
         self.db_column = db_column
         self.query_param = query_param
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for timestamp, supporting date and relative ranges like '1h', '7d'.
         For 1d 24h are subtracted i.e sessions in the range of 24h are shown not based on the date"""
 

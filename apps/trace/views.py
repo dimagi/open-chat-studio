@@ -39,8 +39,8 @@ class TraceTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequi
         )
 
         timezone = self.request.session.get("detected_tz", None)
-        trace_filter = TraceFilter(FilterParams.from_request(self.request))
-        return trace_filter.apply(queryset, timezone)
+        trace_filter = TraceFilter()
+        return trace_filter.apply(queryset, filter_params=FilterParams.from_request(self.request), timezone=timezone)
 
 
 class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):

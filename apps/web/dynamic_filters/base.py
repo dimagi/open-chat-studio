@@ -3,7 +3,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import StrEnum
 
-from .datastructures import ColumnFilterData, FilterParams
+from django.db.models import QuerySet
+
+from .datastructures import FilterParams
 
 
 class Operators(StrEnum):
@@ -59,9 +61,6 @@ class MultiColumnFilter:
 
     filters: list[ColumnFilter] = []
 
-    def __init__(self, filter_params: FilterParams):
-        self.filter_params = filter_params
-
     @classmethod
     def columns(cls) -> list[str]:
         return [filter_component.query_param for filter_component in cls.filters]
@@ -70,13 +69,12 @@ class MultiColumnFilter:
         """Hook for subclasses to modify the queryset before applying filters."""
         return queryset
 
-    def apply(self, queryset, timezone):
+    def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone) -> QuerySet:
         """Applies the filters to the given queryset based on the `self.filter_params`."""
         queryset = self.prepare_queryset(queryset)
 
         for filter_component in self.filters:
-            if column_filter := self.filter_params.get(filter_component.query_param):
-                queryset = filter_component.apply(queryset, column_filter, timezone)
+            queryset = filter_component.apply(queryset, filter_params, timezone)
 
         return queryset.distinct()
 
@@ -96,7 +94,12 @@ class ColumnFilter(ABC):
 
     query_param: str = None
 
+    def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None) -> QuerySet:
+        if column_filter := filter_params.get(self.query_param):
+            return self.apply_filter(queryset, column_filter, timezone)
+        return queryset
+
     @abstractmethod
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
+    def apply_filter(self, queryset: QuerySet, column_filter: ColumnFilter, timezone=None) -> QuerySet:
         """Applies the filter to the given queryset based on the `column_filter` data."""
         pass

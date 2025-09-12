@@ -64,7 +64,7 @@ def get_experiment_filter_options(team):
 class ChatMessageTagsFilter(ColumnFilter):
     query_param = "tags"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for tags"""
         try:
             selected_tags = json.loads(column_filter.value)
@@ -114,7 +114,7 @@ class ChatMessageTagsFilter(ColumnFilter):
 class VersionsFilter(ColumnFilter):
     query_param = "versions"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for versions"""
         try:
             version_strings = json.loads(column_filter.value)
@@ -158,7 +158,7 @@ class VersionsFilter(ColumnFilter):
 class ChannelsFilter(ColumnFilter):
     query_param = "channels"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for channels"""
         try:
             selected_display_names = json.loads(column_filter.value)

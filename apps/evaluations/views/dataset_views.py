@@ -128,8 +128,10 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 .select_related("participant__user")
             )
             timezone = self.request.session.get("detected_tz", None)
-            session_filter = ExperimentSessionFilter(FilterParams.from_request(self.request))
-            filtered_queryset = session_filter.apply(queryset, timezone)
+            session_filter = ExperimentSessionFilter()
+            filtered_queryset = session_filter.apply(
+                queryset, filter_params=FilterParams.from_request(self.request), timezone=timezone
+            )
             filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
             if filtered_session_ids:
                 initial["session_ids"] = filtered_session_ids
@@ -173,8 +175,10 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .order_by("experiment__name")
         )
         timezone = self.request.session.get("detected_tz", None)
-        session_filter = ExperimentSessionFilter(FilterParams.from_request(self.request))
-        query_set = session_filter.apply(query_set, timezone)
+        session_filter = ExperimentSessionFilter()
+        query_set = session_filter.apply(
+            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
+        )
         return query_set
 
 
