@@ -268,23 +268,10 @@ def load_experiment_versions(request, team_slug: str):
         return render(request, "evaluations/partials/version_select.html", context)
 
     try:
-        experiment = Experiment.objects.working_versions_queryset().get(
+        Experiment.objects.working_versions_queryset().exists(
             id=experiment_id,
             team=request.team,
         )
-        versions = Experiment.objects.all_versions_queryset(experiment).filter(team=request.team)
-        choices = get_experiment_version_choices(versions)
-        version_choices = [{"value": value, "label": label} for value, label in choices]
-
-        context = {
-            "empty_message": "Select a version...",
-            "field_name": "experiment_version",
-            "field_id": "id_experiment_version",
-            "versions": version_choices,
-            "help_text": "Specific chatbot version to use for evaluation.",
-        }
-        return render(request, "evaluations/partials/version_select.html", context)
-
     except Experiment.DoesNotExist:
         context = {
             "empty_message": "Chatbot not found",
@@ -293,3 +280,16 @@ def load_experiment_versions(request, team_slug: str):
             "versions": [],
         }
         return render(request, "evaluations/partials/version_select.html", context)
+
+    versions = Experiment.objects.all_versions_queryset(experiment_id).filter(team=request.team)
+    choices = get_experiment_version_choices(versions)
+    version_choices = [{"value": value, "label": label} for value, label in choices]
+
+    context = {
+        "empty_message": "Select a version...",
+        "field_name": "experiment_version",
+        "field_id": "id_experiment_version",
+        "versions": version_choices,
+        "help_text": "Specific chatbot version to use for evaluation.",
+    }
+    return render(request, "evaluations/partials/version_select.html", context)
