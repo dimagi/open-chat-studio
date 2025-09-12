@@ -11,9 +11,6 @@ export type TranslationStrings = typeof en;
 // Default (English) translations
 export const defaultTranslations: TranslationStrings = en as TranslationStrings;
 
-// Store for loaded translations
-const translationCache: Map<string, TranslationStrings> = new Map();
-
 // Available translations map
 const translationFiles: Record<string, TranslationStrings> = {
   en: en as TranslationStrings,
@@ -40,15 +37,7 @@ export function resolveLanguage(langProp?: string): string {
 }
 
 export async function loadTranslations(language: string): Promise<TranslationStrings> {
-  if (translationCache.has(language)) {
-    return translationCache.get(language)!;
-  }
-
-  const base = translationFiles[language] || defaultTranslations;
-  const merged = { ...defaultTranslations, ...base };
-
-  translationCache.set(language, merged);
-  return merged;
+  return translationFiles[language] || defaultTranslations;
 }
 
 /**
