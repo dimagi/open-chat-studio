@@ -22,12 +22,13 @@ from apps.evaluations.tables import (
 from apps.evaluations.tasks import upload_dataset_csv_task
 from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
 from apps.experiments.filters import (
-    DynamicExperimentSessionFilter,
+    ExperimentSessionFilter,
     get_experiment_filter_context_data,
 )
 from apps.experiments.models import ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -127,8 +128,10 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 .select_related("participant__user")
             )
             timezone = self.request.session.get("detected_tz", None)
-            session_filter = DynamicExperimentSessionFilter(queryset, self.request.GET, timezone)
-            filtered_queryset = session_filter.apply()
+            session_filter = ExperimentSessionFilter()
+            filtered_queryset = session_filter.apply(
+                queryset, filter_params=FilterParams.from_request(self.request), timezone=timezone
+            )
             filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
             if filtered_session_ids:
                 initial["session_ids"] = filtered_session_ids
@@ -172,8 +175,10 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .order_by("experiment__name")
         )
         timezone = self.request.session.get("detected_tz", None)
-        session_filter = DynamicExperimentSessionFilter(query_set, self.request.GET, timezone)
-        query_set = session_filter.apply()
+        session_filter = ExperimentSessionFilter()
+        query_set = session_filter.apply(
+            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
+        )
         return query_set
 
 

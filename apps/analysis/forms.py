@@ -1,9 +1,10 @@
 import csv
 import io
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 from django import forms
 from django.conf import settings
+from django.http import QueryDict
 from django.urls import reverse
 from django.utils.html import format_html
 
@@ -35,7 +36,7 @@ class TranscriptAnalysisForm(forms.ModelForm):
         timezone = self.request.session.get("detected_tz", None)
         referer = self.request.headers.get("referer") or ""
         parsed_url = urlparse(referer)
-        query_params = parse_qs(parsed_url.query)
+        query_params = QueryDict(parsed_url.query)
         sessions = get_filtered_sessions(self.experiment, query_params, timezone)
         session_ids = sessions.values_list("id", flat=True)[: settings.ANALYTICS_MAX_SESSIONS]
 
