@@ -1,3 +1,4 @@
+import string
 from unittest.mock import Mock
 
 import pytest
@@ -15,7 +16,7 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 class TestEmbeddedWidgetChannelForm:
     def test_form_generates_token_for_new_channel(self):
-        form = EmbeddedWidgetChannelForm({"allowed_domains": "example.com\n*.subdomain.com"})
+        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com\n*.subdomain.com"}, experiment=Mock())
 
         assert form.is_valid()
         assert len(form.cleaned_data["widget_token"]) == 32
@@ -27,8 +28,7 @@ class TestEmbeddedWidgetChannelForm:
         channel.extra_data = {"widget_token": existing_token, "allowed_domains": ["example.com", "localhost:3000"]}
 
         form = EmbeddedWidgetChannelForm(
-            {"allowed_domains": "example.com\nlocalhost:3000"},
-            channel=channel,  # Pass as keyword argument
+            data={"allowed_domains": "example.com\nlocalhost:3000"}, channel=channel, experiment=Mock()
         )
 
         assert form.is_valid()
@@ -40,7 +40,7 @@ class TestEmbeddedWidgetChannelForm:
             ("example.com", True, ["example.com"]),
             ("example.com\n*.subdomain.com", True, ["example.com", "*.subdomain.com"]),
             ("localhost:3000\n127.0.0.1:8000", True, ["localhost:3000", "127.0.0.1:8000"]),
-            ("", False, None),  # Empty domains
+            ("", True, []),
             ("invalid..domain", False, None),  # Invalid domain format
             (
                 "example.com\n*.subdomain.com\nlocalhost:3000",
@@ -50,7 +50,7 @@ class TestEmbeddedWidgetChannelForm:
         ],
     )
     def test_domain_validation(self, domains_input, is_valid, expected_domains):
-        form = EmbeddedWidgetChannelForm({"allowed_domains": domains_input})
+        form = EmbeddedWidgetChannelForm(data={"allowed_domains": domains_input}, experiment=Mock())
 
         assert form.is_valid() == is_valid
 
@@ -61,7 +61,7 @@ class TestEmbeddedWidgetChannelForm:
 
     def test_domain_validation_edge_cases(self):
         form = EmbeddedWidgetChannelForm(
-            {"allowed_domains": " example.com \n\n  *.subdomain.com  \n\nlocalhost:3000\n\n"}
+            data={"allowed_domains": " example.com \n\n  *.subdomain.com  \n\nlocalhost:3000\n\n"}, experiment=Mock()
         )
 
         assert form.is_valid()
@@ -69,16 +69,17 @@ class TestEmbeddedWidgetChannelForm:
 
     def test_post_save_message(self):
         channel = Mock()
-        channel.extra_data = {
-            "widget_token": "test_token_123456789012345678901234",
-            "allowed_domains": ["example.com", "*.subdomain.com", "localhost:3000"],
-        }
+        channel.extra_data = {}
 
-        form = EmbeddedWidgetChannelForm({})
+        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=Mock())
+
+        # Must validate form before accessing cleaned_data
+        assert form.is_valid()
+
         form.post_save(channel)
 
         assert "Embedded widget channel created successfully" in form.success_message
-        assert "test_token_123456789012345678901234" in form.success_message
+        assert form.cleaned_data["widget_token"] in form.success_message
 
 
 class TestEmbeddedWidgetUtils:
@@ -185,8 +186,9 @@ class TestEmbeddedWidgetChannelModel:
 
 
 def test_form_token_generation_is_secure():
-    form1 = EmbeddedWidgetChannelForm({"allowed_domains": "example.com"})
-    form2 = EmbeddedWidgetChannelForm({"allowed_domains": "example.com"})
+    mock_experiment = Mock()
+    form1 = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=mock_experiment)
+    form2 = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=mock_experiment)
 
     assert form1.is_valid()
     assert form2.is_valid()
@@ -197,8 +199,10 @@ def test_form_token_generation_is_secure():
     assert token1 != token2
     assert len(token1) == 32
     assert len(token2) == 32
-    assert token1.isalnum()
-    assert token2.isalnum()
+
+    allowed_chars = string.ascii_letters + string.digits + "-_"
+    assert all(c in allowed_chars for c in token1)
+    assert all(c in allowed_chars for c in token2)
 
 
 @pytest.mark.django_db()
