@@ -1,5 +1,3 @@
-import json
-import logging
 from collections.abc import Sequence
 from typing import ClassVar
 
@@ -20,8 +18,6 @@ from apps.web.dynamic_filters.column_filters import (
     TimestampFilter,
 )
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
-
-logger = logging.getLogger("ocs.filters")
 
 
 def get_trace_filter_context_data(team):
@@ -49,12 +45,7 @@ class SpanNameFilter(ColumnFilter):
     query_param = "span_name"
 
     def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
-        try:
-            selected_names = json.loads(column_filter.value)
-        except json.JSONDecodeError:
-            logger.error("Failed to decode JSON for span name filter", exc_info=True)
-            return queryset
-
+        selected_names = self.values_list(column_filter)
         if not selected_names:
             return queryset
 
@@ -75,11 +66,7 @@ class SpanTagsFilter(ColumnFilter):
     query_param = "tags"
 
     def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
-        try:
-            selected_tags = json.loads(column_filter.value)
-        except json.JSONDecodeError:
-            return queryset
-
+        selected_tags = self.values_list(column_filter)
         if not selected_tags:
             return queryset
 

@@ -40,28 +40,25 @@ class ExperimentFilter(ColumnFilter):
 
     def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for experiment"""
-        try:
-            selected_experiment_ids = json.loads(column_filter.value)
-            if not selected_experiment_ids:
-                return queryset
+        selected_experiment_ids = self.values_list(column_filter)
+        if not selected_experiment_ids:
+            return queryset
 
-            # Convert to integers if they're strings
-            experiment_ids = []
-            for exp_id in selected_experiment_ids:
-                try:
-                    experiment_ids.append(int(exp_id))
-                except (ValueError, TypeError):
-                    continue
+        # Convert to integers if they're strings
+        experiment_ids = []
+        for exp_id in selected_experiment_ids:
+            try:
+                experiment_ids.append(int(exp_id))
+            except (ValueError, TypeError):
+                continue
 
-            if not experiment_ids:
-                return queryset
+        if not experiment_ids:
+            return queryset
 
-            if column_filter.operator == Operators.ANY_OF:
-                return queryset.filter(experiment_id__in=experiment_ids)
-            elif column_filter.operator == Operators.EXCLUDES:
-                return queryset.exclude(experiment_id__in=experiment_ids)
-        except json.JSONDecodeError:
-            pass
+        if column_filter.operator == Operators.ANY_OF:
+            return queryset.filter(experiment_id__in=experiment_ids)
+        elif column_filter.operator == Operators.EXCLUDES:
+            return queryset.exclude(experiment_id__in=experiment_ids)
         return queryset
 
 
@@ -71,11 +68,7 @@ class StatusFilter(ColumnFilter):
 
     def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for state"""
-        try:
-            selected_values = json.loads(column_filter.value)
-        except json.JSONDecodeError:
-            return queryset
-
+        selected_values = self.values_list(column_filter)
         if not selected_values:
             return queryset
 
@@ -92,11 +85,7 @@ class RemoteIdFilter(ColumnFilter):
 
     def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for remote_id"""
-        try:
-            selected_values = json.loads(column_filter.value)
-        except json.JSONDecodeError:
-            return queryset
-
+        selected_values = self.values_list(column_filter)
         if not selected_values:
             return queryset
 

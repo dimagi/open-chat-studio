@@ -25,10 +25,10 @@ class FilterParams:
             filter_column = query_params.get(f"filter_{i}_column")
             filter_operator = query_params.get(f"filter_{i}_operator")
             filter_value = query_params.get(f"filter_{i}_value")
-
-            self._filters[filter_column] = ColumnFilterData(
-                column=filter_column, operator=filter_operator, value=filter_value
-            )
+            if filter_column and filter_operator and filter_value:
+                self._filters[filter_column] = ColumnFilterData(
+                    column=filter_column, operator=filter_operator, value=filter_value
+                )
 
     def get(self, column: str) -> ColumnFilterData | None:
         return self._filters.get(column)

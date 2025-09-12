@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from enum import StrEnum
@@ -8,6 +10,8 @@ from typing import ClassVar
 from django.db.models import QuerySet
 
 from .datastructures import ColumnFilterData, FilterParams
+
+logger = logging.getLogger("ocs.filters")
 
 
 class Operators(StrEnum):
@@ -95,6 +99,12 @@ class ColumnFilter(ABC):
     """
 
     query_param: str = None
+
+    def values_list(self, column_filter: ColumnFilterData) -> list[str]:
+        try:
+            return json.loads(column_filter.value)
+        except json.JSONDecodeError:
+            logger.error("Failed to decode JSON for chat message tag filter", exc_info=True)
 
     def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None) -> QuerySet:
         if column_filter := filter_params.get(self.query_param):

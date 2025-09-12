@@ -157,11 +157,11 @@ class ProductInventoryView(SingleTableView):
         queryset = super().get_queryset()
         
         # Create filter instance and apply it
-        filter_params = FilterParams.from_request(self.request)
-        product_filter = ProductInventoryFilter(filter_params)
+        product_filter = ProductInventoryFilter()
         timezone = self.request.session.get("detected_tz")
         
-        return product_filter.apply(queryset, timezone)
+        filter_params = FilterParams.from_request(self.request)
+        return product_filter.apply(queryset, filter_params, timezone)
 
     def get_context_data(self, **kwargs):
         """Add filter configuration to the template context."""
@@ -212,19 +212,19 @@ In templates/experiments/filters.html, add the following:
         'category': {
             type: 'string', 
             operators: fieldTypeFilters.string,
-            options: categories
+            options: categories,
             label: 'Product Category'
         },
         'created_date': {
             type: 'timestamp', 
             operators: fieldTypeFilters.timestamp, 
-            options: dateRangeOptions
+            options: dateRangeOptions,
             label: 'Created Date'
         },
         'last_updated': {
             type: 'timestamp', 
             operators: fieldTypeFilters.timestamp, 
-            options: dateRangeOptions
+            options: dateRangeOptions,
             label: 'Last Updated'
         }
     }
