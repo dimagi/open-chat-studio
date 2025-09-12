@@ -139,8 +139,9 @@ class TimestampFilter(ColumnFilter):
                 return queryset.filter(**{f"{self.db_column}__gte": range_starting_utc_time})
 
             else:
-                # No need to convert the date as it is in client's timezone
                 date_value = datetime.fromisoformat(column_filter.value)
+                # Convert date to UTC to compare it correctly with stored timestamps
+                date_value = date_value.astimezone(pytz.UTC)
                 if column_filter.operator == Operators.ON:
                     queryset = queryset.filter(**{f"{self.db_column}__date": date_value})
                 elif column_filter.operator == Operators.BEFORE:
