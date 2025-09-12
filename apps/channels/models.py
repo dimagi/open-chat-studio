@@ -90,7 +90,7 @@ class ChannelPlatform(models.TextChoices):
             case self.COMMCARE_CONNECT:
                 return forms.CommCareConnectChannelForm(**kwargs)
             case self.EMBEDDED_WIDGET:
-                return forms.EmbeddedWidgetChannelForm(**kwargs)
+                return forms.EmbeddedWidgetChannelForm(experiment=kwargs.get("experiment"), **kwargs)
         return None
 
     @property
