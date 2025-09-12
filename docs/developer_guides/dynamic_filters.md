@@ -1,196 +1,234 @@
-# Dynamic Filters Developer Guide
 
-## Overview
+# Dynamic Filters
 
-The Dynamic Filters system provides a flexible way to filter data across different views in Open Chat Studio. It's implemented using a reusable filter component that can be configured with different data sources and filter options.
+Dynamic filters provide a flexible way to filter data on the frontend and backend. This guide explains how to use and create new dynamic filters.
 
-## How Dynamic Filters Work
+## How it Works
 
-Dynamic filters use a JavaScript-based frontend component combined with a Python backend filter system. The system supports:
+The dynamic filtering system is composed of two main parts: a backend that defines the filtering logic and a frontend that provides the user interface.
 
-- Multiple filter conditions with AND logic
-- Various operators (equals, contains, range, etc.)
-- Different field types (string, timestamp, choice)
-- Date range presets
-- Real-time filtering with AJAX updates
+### Backend
 
-## Backend Implementation
+The backend is responsible for defining the filters and applying them to the database queries. The core components are:
 
-### Filter Classes
+- **`ColumnFilter`**: An abstract base class that defines the interface for a single column filter. Each `ColumnFilter` implementation is responsible for applying a specific filter to a queryset. See `apps/web/dynamic_filters/base.py` for the definition of this class.
+- **`MultiColumnFilter`**: A class that holds a list of `ColumnFilter`s and applies them to a queryset. This class is used to combine multiple filters into a single filter that can be applied to a table. See `apps/web/dynamic_filters/base.py` for the definition of this class.
+- **Filter Implementations**: Concrete implementations of `ColumnFilter` can be found in `apps/web/dynamic_filters/column_filters.py` and other `filters.py` files throughout the project. For example, `apps/experiments/filters.py` contains filters specific to experiments.
 
-The system is built around the `DynamicFilter` base class:
+### Frontend
 
-```python
-from django.db.models import Q
+The frontend is built using [Alpine.js](https://alpinejs.dev/) and HTMX. It dynamically generates the filter UI based on the configuration provided by the backend.
 
-class DynamicFilter:
-    columns: list = []
-    
-    def apply(self):
-        # Apply filters to queryset
-        
-    def build_filter_condition(self, column, operator, value) -> Q:
-        """Returns a Q object that is used to filter the queryset with"""
-        # Override in subclasses. 
-```
+- **Filter Template**: The main filter template is `templates/experiments/filters.html`. This template contains the Alpine.js component that manages the filter state and UI.
+- **Filter Configuration**: The backend provides the filter configuration to the frontend through a set of `df_*` context variables. These variables are passed as JSON scripts in the HTML and then used to initialize the Alpine.js component. See `apps/experiments/views/experiment.py` for an example of how this data is provided to the template.
 
-## Template Variables (df_ prefix)
+## Linking query parameters to ORM operations
 
-All dynamic filter template variables use the `df_` prefix. Here are all available variables:
+### Query Parameters
+Filter values are passed through URL query parameters using a structured naming convention:
 
-### Core Configuration Variables
+- **`filter_{i}_column`** - Specifies which column to filter on
+- **`filter_{i}_operator`** - Defines the filter operation (e.g., equals, contains, greater than)
+- **`filter_{i}_value`** - Contains the actual filter value
 
-| Variable | Type | Description | Example |
-|----------|------|-------------|---------|
-| `df_filter_data_source_url` | string | AJAX endpoint for fetching filtered data | `reverse("experiments:sessions-list", args=(team_slug, experiment_id))` |
-| `df_filter_data_source_container_id` | string | DOM element ID to update with filtered results | `"sessions-table"` |
-| `df_filter_columns` | list | Available columns for filtering | `ExperimentSessionFilter.columns` |
-| `df_field_type_filters` | dict | Mapping of field types to available operators | `FIELD_TYPE_FILTERS` |
+The `{i}` represents the filter index, allowing multiple filters to be applied simultaneously (e.g., `filter_0_column`, `filter_1_column`, etc.).
 
-### Data Options Variables
+### Column Filter
+The `ColumnFilter` class acts as a bridge between query parameters and ORM filters. Each filter defines a `query_param` attribute that corresponds to the column name in the query parameters. When a request contains `filter_{i}_column` matching this `query_param`, the filter processes the associated operator and value to generate the appropriate database query.
 
-These variables are only required if they pertain to a column that you configured.
+## Step-by-Step Walkthrough: Creating a Product Inventory Filter
 
-| Variable | Type | Description | Example |
-|----------|------|-------------|---------|
-| `df_date_range_options` | list | Predefined date range options | `[{"label": "Last 1 Hour", "value": "1h"}, ...]` |
-| `df_available_tags` | list | Available tags for filtering | `["tag1", "tag2", "tag3"]` |
-| `df_experiment_versions` | list | Available experiment versions | `["v1.0", "v1.1", "v2.0"]` |
-| `df_experiment_list` | list | Available experiments | `[{"id": 1, "label": "Experiment 1"}, ...]` |
-| `df_channel_list` | list | Available channels | `[{"value": "web", "label": "Web"}, ...]` |
-| `df_state_list` | list | Available states/statuses | `["active", "completed", "pending"]` |
-| `df_span_names` | list | Available span names (for traces) | `["span1", "span2", "span3"]` |
+This walkthrough will guide you through creating a complete filtering system for a hypothetical product inventory feature. We'll create a custom filter column, integrate it into a multi-column filter, and wire it up to a view.
 
-### Special Configuration Variables
+### Step 1: Create a Custom Column Filter
 
-| Variable | Type | Description | Example |
-|----------|------|-------------|---------|
-| `df_date_range_column_name` | string | Column name for date range filtering | `"last_message"` or `"timestamp"` |
-
-## Frontend Integration
-
-### Including the Filter Component
-
-Add the filter component to your template:
-
-```html
-{% include 'experiments/filters.html' %}
-```
-
-### Required JavaScript Data
-
-The template automatically includes JSON script tags for configuration:
-
-```html
-{{ df_field_type_filters|json_script:"field-type-filters" }}
-{{ df_date_range_options|json_script:"date-range-options" }}
-{{ df_filter_columns|json_script:"filter-columns-data" }}
-<!-- ... other data scripts ... -->
-```
-
-### JavaScript Configuration
-
-The filter component uses Alpine.js and expects these global variables:
-
-```javascript
-const dataSourceUrl = "{{df_filter_data_source_url}}";
-const dataSourceContainerId = "{{df_filter_data_source_container_id}}";
-```
-
-## Implementation Example
-
-### 1. View Setup
-
-In your view, provide the required template variables:
+First, let's create a filter for product categories. Create a new file for your app's filters:
 
 ```python
-class MyFilterableView(LoginAndTeamRequiredMixin, TemplateView):
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+# apps/inventory/filters.py
+import json
+from apps.web.dynamic_filters.base import ColumnFilter, ColumnFilterData, Operators
+
+class ProductCategoryFilter(ColumnFilter):
+    """Filter products by category name."""
+    query_param = "category"
+
+    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
+        """Apply category filtering to the queryset."""
+        if not column_filter.value:
+            return queryset
+
+        if column_filter.operator == Operators.EQUALS:
+            return queryset.filter(category__name=column_filter.value)
+        elif column_filter.operator == Operators.CONTAINS:
+            return queryset.filter(category__name__icontains=column_filter.value)
+        elif column_filter.operator == Operators.DOES_NOT_CONTAIN:
+            return queryset.exclude(category__name__icontains=column_filter.value)
+        elif column_filter.operator == Operators.STARTS_WITH:
+            return queryset.filter(category__name__istartswith=column_filter.value)
+        elif column_filter.operator == Operators.ENDS_WITH:
+            return queryset.filter(category__name__iendswith=column_filter.value)
+        elif column_filter.operator == Operators.ANY_OF:
+            # Parse JSON array of values
+            categories = json.loads(column_filter.value)
+            return queryset.filter(category__name__in=categories)
         
-        # Required core configuration
-        context.update({
-            "df_filter_data_source_url": reverse("my_app:data_endpoint"),
-            "df_filter_data_source_container_id": "my-data-table",
-            "df_filter_columns": MyDynamicFilter.columns,
-            "df_field_type_filters": FIELD_TYPE_FILTERS,
-            
-            # Date range support
-            "df_date_range_options": DATE_RANGE_OPTIONS,
-            "df_date_range_column_name": "created_at",
-            
-            # Optional data sources
-            "df_available_tags": ["tag1", "tag2"],
-            "df_experiment_list": [{"id": 1, "label": "Exp 1"}],
-            "df_state_list": ["active", "inactive"],
-        })
-        
-        return context
-```
-
-### 2. Custom Filter Class
-
-Create a filter class for your model:
-
-```python
-class MyDynamicFilter(DynamicFilter):
-    columns = [
-        "name",
-        "created_at", 
-        "status",
-        "tags"
-    ]
-    
-    def build_filter_condition(self, column, operator, value):
-        if column == "name":
-            return self.build_string_filter("name", operator, value)
-        elif column == "created_at":
-            return self.build_timestamp_filter(operator, value, "created_at", self.timezone)
-        elif column == "status":
-            return self.build_choice_filter("status", operator, value)
-        elif column == "tags":
-            return self.build_tags_filter(operator, value)
-        return None
-```
-
-### 3. AJAX Endpoint
-
-Create an endpoint that handles filtering:
-
-```python
-class MyDataTableView(SingleTableView):
-    def get_queryset(self):
-        queryset = MyModel.objects.filter(team=self.request.team)
-        
-        # Apply dynamic filters
-        if filters := self.request.GET:
-            timezone = self.request.session.get("detected_tz", None)
-            filter_instance = MyDynamicFilter(queryset, filters, timezone)
-            queryset = filter_instance.apply()
-            
         return queryset
 ```
 
-### 4. Template Integration
+### Step 2: Create a Multi-Column Filter
 
-In your template:
+Now let's create a multi-column filter that combines our new category filter with existing filters:
 
-```html
-<div class="space-y-4">
-    {% include 'experiments/filters.html' %}
+```python
+# apps/inventory/filters.py (continued)
+from apps.web.dynamic_filters.base import MultiColumnFilter
+from apps.web.dynamic_filters.column_filters import TimestampFilter
+
+class ProductInventoryFilter(MultiColumnFilter):
+    """Filter for product inventory using multiple column filters."""
     
-    <div id="my-data-table">
-        {% include 'table/single_table.html' %}
-    </div>
-</div>
+    filters: list[ColumnFilter] = [
+        ProductCategoryFilter(),
+        TimestampFilter(db_column="created_at", query_param="created_date"),
+        TimestampFilter(db_column="updated_at", query_param="last_updated"),
+        # Add more filters as needed
+    ]
+
+    def prepare_queryset(self, queryset):
+        """Prepare the queryset with any necessary annotations or select_related calls."""
+        return queryset.select_related('category')
 ```
 
-## Filter URL Parameters
+### Step 3: Create the Model and Table (for completeness)
 
-Filters are passed as URL parameters with this pattern:
+```python
+# apps/inventory/models.py
+from django.db import models
 
-- `filter_{index}_column` - The column to filter on
-- `filter_{index}_operator` - The operator to use
-- `filter_{index}_value` - The value to filter by
+class Category(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
 
-Example: `?filter_0_column=name&filter_0_operator=contains&filter_0_value=test`
+class Product(models.Model):
+    name = models.CharField(max_length=200)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    stock_quantity = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+```
+
+```python
+# apps/inventory/tables.py
+import django_tables2 as tables
+from .models import Product
+
+class ProductTable(tables.Table):
+    class Meta:
+        model = Product
+        fields = ('name', 'category', 'price', 'stock_quantity', 'created_at', 'updated_at')
+        attrs = {'class': 'table table-striped'}
+```
+
+### Step 4: Create the View
+
+Create a view that uses our new filter system:
+
+```python
+# apps/inventory/views.py
+from django.views.generic import TemplateView
+from django_tables2 import SingleTableView
+from apps.web.dynamic_filters.datastructures import FilterParams
+from apps.experiments.filters import get_filter_context_data
+from .models import Product
+from .tables import ProductTable
+from .filters import ProductInventoryFilter
+
+class ProductInventoryView(SingleTableView):
+    """View for displaying filtered product inventory."""
+    model = Product
+    table_class = ProductTable
+    template_name = "inventory/product_list.html"
+    paginate_by = 25
+
+    def get_queryset(self):
+        """Apply filters to the queryset."""
+        queryset = super().get_queryset()
+        
+        # Create filter instance and apply it
+        filter_params = FilterParams.from_request(self.request)
+        product_filter = ProductInventoryFilter(filter_params)
+        timezone = self.request.session.get("detected_tz")
+        
+        return product_filter.apply(queryset, timezone)
+
+    def get_context_data(self, **kwargs):
+        """Add filter configuration to the template context."""
+        context = super().get_context_data(**kwargs)
+        
+        # Add filter context data
+        filter_context = {
+            "df_product_categories": ... # the available categories
+        }
+        context.update(filter_context)
+        return context
+```
+
+### Step 5: Create the Template and Update Filters
+
+Create the template that includes the filter interface:
+
+```html
+<!-- apps/inventory/templates/inventory/product_list.html -->
+{% extends "base.html" %}
+{% load django_tables2 %}
+
+{% block title %}Product Inventory{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-6">Product Inventory</h1>
+    <!-- Include the dynamic filters -->
+    {% include "experiments/filters.html" %}
+    <!-- Rest of the page -->
+</div>
+
+{% endblock %}
+```
+
+**Update the Shared Filter Template**
+
+Since the filter template is shared across the application, you'll need to update `templates/experiments/filters.html` to include your new filter columns. Add your custom columns to the `allColumns` object in the Alpine.js component:
+
+In templates/experiments/filters.html, add the following:
+```javascript
+{{ df_product_categories|default:"[]"|json_script:"product-categories" }}
+<script>
+    const categories = JSON.parse(document.getElementById('product-categories').textContent);
+    ...
+    const allColumns = {
+        ...
+        'category': {
+            type: 'string', 
+            operators: fieldTypeFilters.string,
+            options: categories
+            label: 'Product Category'
+        },
+        'created_date': {
+            type: 'timestamp', 
+            operators: fieldTypeFilters.timestamp, 
+            options: dateRangeOptions
+            label: 'Created Date'
+        },
+        'last_updated': {
+            type: 'timestamp', 
+            operators: fieldTypeFilters.timestamp, 
+            options: dateRangeOptions
+            label: 'Last Updated'
+        }
+    }
+    ...
+</script>
+
+```

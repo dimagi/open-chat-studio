@@ -8,12 +8,16 @@ from django.http import QueryDict
 
 @dataclass
 class ColumnFilterData:
+    """Data class representing a single column's filter data."""
+
     column: str
     operator: str
     value: str
 
 
 class FilterParams:
+    """A container for filter parameters extracted from a request's query parameters."""
+
     def __init__(self, query_params: QueryDict):
         self._filters = {}
 
