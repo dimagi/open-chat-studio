@@ -8,7 +8,7 @@ import {
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { getCSRFToken } from '../../utils/cookies';
 import { varToPixels } from '../../utils/utils';
-import {TranslationStrings, TranslationManager} from '../../utils/translations';
+import {TranslationStrings, TranslationManager, getBrowserLanguage} from '../../utils/translations';
 
 interface ChatMessage {
   created_at: string;
@@ -330,7 +330,7 @@ export class OcsChat {
         customTranslationsObj = await this.loadTranslationsFromUrl(this.translationsUrl);
     }
 
-    this.currentLanguage = this.determineLanguage();
+    this.currentLanguage = this.language || getBrowserLanguage();
     this.translationManager = new TranslationManager(this.currentLanguage, customTranslationsObj);
   }
 
@@ -347,20 +347,6 @@ export class OcsChat {
       throw error;
     }
   }
-
-  private determineLanguage(): string {
-    if (this.language) {
-      return this.language;
-    }
-
-    if (typeof navigator !== 'undefined') {
-      const browserLang = navigator.language || (navigator as any).userLanguage;
-      if (browserLang) {
-        const langCode = browserLang.split('-')[0].toLowerCase();
-        return langCode;
-      }
-      return 'en';
-    }
 
   private cleanup() {
     if (this.pollingIntervalRef) {
