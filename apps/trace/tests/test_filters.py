@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta
 
 import pytest
+from django.http import QueryDict
 
 from apps.annotations.models import Tag
 from apps.experiments.filters import Operators
@@ -9,6 +10,7 @@ from apps.trace.filters import TraceFilter
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.traces import SpanFactory, TraceFactory
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 @pytest.mark.django_db()
@@ -38,8 +40,10 @@ class TestTraceFilter:
             "filter_0_operator": operator,
             "filter_0_value": value,
         }
-        filter_instance = TraceFilter(queryset, params, timezone)
-        return filter_instance.apply()
+        query_params = QueryDict("", mutable=True)
+        query_params.update(params)
+        filter_instance = TraceFilter(FilterParams(query_params))
+        return filter_instance.apply(queryset, timezone)
 
     def test_participant_filter_equals(self, trace, team):
         queryset = Trace.objects.filter(team=team)
@@ -358,16 +362,19 @@ class TestTraceFilter:
             "filter_1_operator": Operators.ANY_OF,
             "filter_1_value": json.dumps(["tag1"]),
         }
-
+        query_params = QueryDict("", mutable=True)
+        query_params.update(params)
         queryset = Trace.objects.filter(team=team)
-        filter_instance = TraceFilter(queryset, params, "UTC")
-        result = filter_instance.apply()
+        filter_instance = TraceFilter(FilterParams(query_params))
+        result = filter_instance.apply(queryset, "UTC")
 
         assert trace in result
 
         # Test with one filter not matching
         params["filter_1_value"] = json.dumps(["tag2"])
-        filter_instance = TraceFilter(queryset, params, "UTC")
-        result = filter_instance.apply()
+        query_params = QueryDict("", mutable=True)
+        query_params.update(params)
+        filter_instance = TraceFilter(FilterParams(query_params))
+        result = filter_instance.apply(queryset, "UTC")
 
         assert trace not in result

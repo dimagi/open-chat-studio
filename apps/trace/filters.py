@@ -1,5 +1,6 @@
 import json
 
+from django.db.models import QuerySet
 from django.urls import reverse
 
 from apps.experiments.filters import (
@@ -42,7 +43,7 @@ def get_trace_filter_context_data(team):
 class SpanNameFilter(ColumnFilter):
     query_param = "span_name"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
+    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         try:
             selected_names = json.loads(column_filter.value)
         except json.JSONDecodeError:
@@ -56,7 +57,9 @@ class SpanNameFilter(ColumnFilter):
 
         elif column_filter.operator == Operators.ALL_OF:
             # Use a special approach for ALL_OF that requires count-based filtering
-            return queryset.filter("span_names_all_of", selected_names)
+            for name in selected_names:
+                queryset = queryset.filter(spans__name=name)
+            return queryset
 
         elif column_filter.operator == Operators.EXCLUDES:
             return queryset.exclude(spans__name__in=selected_names)
@@ -65,14 +68,14 @@ class SpanNameFilter(ColumnFilter):
 class SpanTagsFilter(ColumnFilter):
     query_param = "tags"
 
-    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
+    def apply(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         try:
             selected_tags = json.loads(column_filter.value)
         except json.JSONDecodeError:
-            return None
+            return queryset
 
         if not selected_tags:
-            return None
+            return queryset
 
         if column_filter.operator == Operators.ANY_OF:
             return queryset.filter(spans__tags__name__in=selected_tags)
@@ -80,8 +83,9 @@ class SpanTagsFilter(ColumnFilter):
         elif column_filter.operator == Operators.ALL_OF:
             # Use a special approach for ALL_OF that requires count-based filtering
             # We'll mark this as needing special handling by returning a special Q object
-            return ("tags_all_of", selected_tags)
-
+            for tag in selected_tags:
+                queryset = queryset.filter(spans__tags__name=tag)
+            return queryset
         elif column_filter.operator == Operators.EXCLUDES:
             return queryset.exclude(spans__tags__name__in=selected_tags)
 
