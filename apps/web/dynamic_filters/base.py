@@ -69,7 +69,7 @@ class MultiColumnFilter:
         """Hook for subclasses to modify the queryset before applying filters."""
         return queryset
 
-    def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone) -> QuerySet:
+    def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None) -> QuerySet:
         """Applies the filters to the given queryset based on the `self.filter_params`."""
         queryset = self.prepare_queryset(queryset)
 
