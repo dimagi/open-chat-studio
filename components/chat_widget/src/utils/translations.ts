@@ -110,9 +110,4 @@ export class TranslationManager {
   getLanguage(): string {
     return this.language;
   }
-
-  async updateLanguage(language: string, customTranslations?: Partial<TranslationStrings>) {
-    this.language = resolveLanguage(language);
-    await this.loadTranslations(customTranslations);
-  }
 }
