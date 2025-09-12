@@ -71,17 +71,17 @@ export class TranslationManager {
   }
 
   private async loadTranslations(customTranslations?: Partial<TranslationStrings>) {
+    let baseTranslations: TranslationStrings;
     try {
-      const baseTranslations = await loadTranslations(this.language);
-      this.translations = customTranslations
-        ? mergeTranslations(baseTranslations, customTranslations)
-        : baseTranslations;
+      baseTranslations = await loadTranslations(this.language);
     } catch (error) {
       console.error('Failed to load translations:', error);
-      this.translations = customTranslations
-        ? mergeTranslations(defaultTranslations, customTranslations)
-        : defaultTranslations;
+      baseTranslations = defaultTranslations;
     }
+
+    this.translations = customTranslations
+      ? mergeTranslations(baseTranslations, customTranslations)
+      : baseTranslations;
   }
 
   get(key: keyof TranslationStrings): string {
