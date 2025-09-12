@@ -991,6 +991,7 @@ class ExtractParticipantData(
             )
 
 
+@deprecated_node(message="Use the 'LLM' node instead.", docs_link="migrate_from_assistant")
 class AssistantNode(PipelineNode, OutputMessageTagMixin):
     """Calls an OpenAI assistant"""
 

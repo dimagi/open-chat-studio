@@ -635,7 +635,7 @@ DOCUMENTATION_LINKS = {
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
-    "migrate_from_assistant": "/how-to/migrate_from_assistant_to_collection/",
+    "migrate_from_assistant": "/how-to/assistants_migration/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
