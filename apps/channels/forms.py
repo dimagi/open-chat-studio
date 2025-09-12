@@ -562,7 +562,10 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         for line in domains_text.split("\n"):
             domain = line.strip()
             if domain:
-                if not re.match(r"^(\*\.)?[a-zA-Z0-9.-]+(:\d+)?$", domain):
+                if not re.match(
+                    r"^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*(:\d+)?$",
+                    domain,
+                ):
                     raise forms.ValidationError(f"Invalid domain format: {domain}")
                 domains.append(domain)
         return domains
