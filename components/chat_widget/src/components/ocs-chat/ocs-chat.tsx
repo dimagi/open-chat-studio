@@ -227,7 +227,7 @@ export class OcsChat {
   @Element() host: HTMLElement;
 
 
-  componentWillLoad() {
+  async componentWillLoad() {
     if (!this.chatbotId) {
       this.error = 'Chatbot ID is required';
       return;
