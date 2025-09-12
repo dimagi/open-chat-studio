@@ -101,9 +101,9 @@ export class OcsChat {
   @Prop() chatbotId!: string;
 
   /**
-   * The base URL for the API (defaults to current origin).
+   * The base URL for the API.
    */
-  @Prop() apiBaseUrl?: string = "https://chatbots.dimagi.com";
+  @Prop() apiBaseUrl?: string = "https://www.openchatstudio.com";
 
   /**
    * The text to display on the button.
