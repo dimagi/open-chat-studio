@@ -363,9 +363,9 @@ export class OcsChat {
         const langCode = browserLang.split('-')[0].toLowerCase();
         return langCode;
       }
+      return 'en';
     }
-  return 'en';
-  }
+
 
   private cleanup() {
     if (this.pollingIntervalRef) {
