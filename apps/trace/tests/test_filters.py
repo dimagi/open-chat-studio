@@ -5,11 +5,11 @@ import pytest
 from django.http import QueryDict
 
 from apps.annotations.models import Tag
-from apps.experiments.filters import Operators
 from apps.trace.filters import TraceFilter
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.traces import SpanFactory, TraceFactory
+from apps.web.dynamic_filters.base import Operators
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 

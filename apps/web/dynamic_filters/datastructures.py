@@ -14,6 +14,9 @@ class ColumnFilterData:
     operator: str
     value: str
 
+    def __bool__(self):
+        return bool(self.column and self.operator and self.value)
+
 
 class FilterParams:
     """A container for filter parameters extracted from a request's query parameters."""

@@ -11,10 +11,11 @@ from time_machine import travel
 
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.filters import ExperimentSessionFilter, Operators
+from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import SessionStatus
 from apps.teams.models import Team
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.web.dynamic_filters.base import Operators
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 
