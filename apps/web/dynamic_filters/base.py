@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import json
 import logging
-from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from enum import StrEnum
 from typing import ClassVar
 
 from django.db.models import QuerySet
 
-from .datastructures import ColumnFilterData, FilterParams
+from .datastructures import FilterParams
 
 logger = logging.getLogger("ocs.filters")
 
@@ -85,7 +84,7 @@ class MultiColumnFilter:
         return queryset.distinct()
 
 
-class ColumnFilter(ABC):
+class ColumnFilter:
     """
     Abstract base class for a single column filter.
 
@@ -100,18 +99,65 @@ class ColumnFilter(ABC):
 
     query_param: str = None
 
-    def values_list(self, column_filter: ColumnFilterData) -> list[str]:
+    def values_list(self, json_value: str) -> list[str]:
         try:
-            return json.loads(column_filter.value)
+            return json.loads(json_value)
         except json.JSONDecodeError:
             logger.error("Failed to decode JSON for chat message tag filter", exc_info=True)
 
+    def parse_query_value(self, query_value) -> any:
+        """Parses the query value from the URL into a format suitable for filtering."""
+        return query_value
+
     def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None) -> QuerySet:
-        if column_filter := filter_params.get(self.query_param):
-            return self.apply_filter(queryset, column_filter, timezone)
+        column_filter = filter_params.get(self.query_param)
+        if not column_filter:
+            return queryset
+
+        operator = column_filter.operator.replace(" ", "_").lower()
+        if method := getattr(self, f"apply_{operator}", None):
+            if parsed_value := self.parse_query_value(column_filter.value):
+                return method(queryset, parsed_value, timezone)
         return queryset
 
-    @abstractmethod
-    def apply_filter(self, queryset: QuerySet, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
-        """Applies the filter to the given queryset based on the `column_filter` data."""
-        pass
+
+class ChoiceFilterMixin:
+    column: ClassVar[str]
+
+    def parse_query_value(self, query_value) -> any:
+        return self.values_list(query_value)
+
+    def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
+        return queryset.filter(**{f"{self.column}__in": value})
+
+    def apply_all_of(self, queryset, value, timezone=None) -> QuerySet:
+        for val in value:
+            queryset = queryset.filter(**{f"{self.column}": val})
+        return queryset
+
+    def apply_excludes(self, queryset, value, timezone=None) -> QuerySet:
+        return queryset.exclude(**{f"{self.column}__in": value})
+
+
+class StringFilterMixin:
+    column: ClassVar[str]
+
+    def apply_equals(self, queryset, value, timezone=None) -> QuerySet:
+        return queryset.filter(**{f"{self.column}": value})
+
+    def apply_contains(self, queryset, value, timezone=None) -> QuerySet:
+        return queryset.filter(**{f"{self.column}__icontains": value})
+
+    def apply_does_not_contain(self, queryset, value, timezone=None) -> QuerySet:
+        return queryset.exclude(**{f"{self.column}__icontains": value})
+
+    def apply_starts_with(self, queryset, value, timezone=None) -> QuerySet:
+        return queryset.filter(**{f"{self.column}__istartswith": value})
+
+    def apply_ends_with(self, queryset, value, timezone=None) -> QuerySet:
+        return queryset.filter(**{f"{self.column}__iendswith": value})
+
+    def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
+        if values := self.values_list(value):
+            return queryset.filter(**{f"{self.column}__in": values})
+        return queryset

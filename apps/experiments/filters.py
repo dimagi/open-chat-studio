@@ -1,9 +1,8 @@
-import json
 from collections.abc import Sequence
 from typing import ClassVar
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
+from django.db.models import Exists, OuterRef, Q, Subquery
 
 from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
@@ -12,9 +11,9 @@ from apps.experiments.models import Experiment, SessionStatus
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
     FIELD_TYPE_FILTERS,
+    ChoiceFilterMixin,
     ColumnFilter,
     MultiColumnFilter,
-    Operators,
 )
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
@@ -23,7 +22,6 @@ from apps.web.dynamic_filters.column_filters import (
     StatusFilter,
     TimestampFilter,
 )
-from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
 def get_experiment_filter_context_data(team, table_url: str, single_experiment=None):
@@ -60,111 +58,100 @@ def get_experiment_filter_options(team):
     return [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
 
 
-class ChatMessageTagsFilter(ColumnFilter):
+class ChatMessageTagsFilter(ChoiceFilterMixin, ColumnFilter):
     query_param = "tags"
 
-    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
-        """Build filter condition for tags"""
-        selected_values = self.values_list(column_filter)
-        if not selected_values:
-            return queryset
+    def apply_any_of(self, queryset, value, timezone=None):
+        chat_tags_condition = Q(chat__tags__name__in=value)
+        message_tags_condition = Q(chat__messages__tags__name__in=value)
+        return queryset.filter(chat_tags_condition | message_tags_condition)
 
-        if column_filter.operator == Operators.ANY_OF:
-            chat_tags_condition = Q(chat__tags__name__in=selected_values)
-            message_tags_condition = Q(chat__messages__tags__name__in=selected_values)
-            return queryset.filter(chat_tags_condition | message_tags_condition)
+    def apply_all_of(self, queryset, value, timezone=None):
+        conditions = Q()
+        chat_content_type = ContentType.objects.get_for_model(Chat)
+        chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
 
-        elif column_filter.operator == Operators.ALL_OF:
-            conditions = Q()
-            chat_content_type = ContentType.objects.get_for_model(Chat)
-            chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
-
-            for tag in selected_values:
-                chat_tag_exists = Exists(
-                    CustomTaggedItem.objects.filter(
-                        object_id=OuterRef("chat_id"),
-                        content_type_id=chat_content_type.id,
-                        tag__name=tag,
-                    )
+        for tag in value:
+            chat_tag_exists = Exists(
+                CustomTaggedItem.objects.filter(
+                    object_id=OuterRef("chat_id"),
+                    content_type_id=chat_content_type.id,
+                    tag__name=tag,
                 )
-                message_tag_exists = Exists(
-                    CustomTaggedItem.objects.filter(
-                        content_type_id=chat_message_content_type.id,
-                        tag__name=tag,
-                        object_id__in=Subquery(
-                            ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")
-                        ),
-                    )
+            )
+            message_tag_exists = Exists(
+                CustomTaggedItem.objects.filter(
+                    content_type_id=chat_message_content_type.id,
+                    tag__name=tag,
+                    object_id__in=Subquery(
+                        ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")
+                    ),
                 )
-                conditions &= chat_tag_exists | message_tag_exists
-            return queryset.filter(conditions)
+            )
+            conditions &= chat_tag_exists | message_tag_exists
+        return queryset.filter(conditions)
 
-        elif column_filter.operator == Operators.EXCLUDES:
-            chat_tags_condition = Q(chat__tags__name__in=selected_values)
-            message_tags_condition = Q(chat__messages__tags__name__in=selected_values)
-            return queryset.exclude(chat_tags_condition | message_tags_condition)
+    def apply_excludes(self, queryset, value, timezone=None):
+        chat_tags_condition = Q(chat__tags__name__in=value)
+        message_tags_condition = Q(chat__messages__tags__name__in=value)
+        return queryset.exclude(chat_tags_condition | message_tags_condition)
 
 
-class VersionsFilter(ColumnFilter):
+class VersionsFilter(ChoiceFilterMixin, ColumnFilter):
     query_param = "versions"
 
-    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
-        """Build filter condition for versions"""
-        version_strings = self.values_list(column_filter)
-        if not version_strings:
-            return queryset
+    def apply_any_of(self, queryset, value, timezone=None):
+        tag_exists = [
+            ChatMessage.objects.filter(
+                chat=OuterRef("chat"),
+                tags__name=tag,
+                tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+            ).values("id")
+            for tag in value
+        ]
+        combined_query = Q()
+        for query in tag_exists:
+            combined_query |= Q(Exists(query))
+        return queryset.filter(combined_query)
 
-        version_tags = [v for v in version_strings if v]
-        if column_filter.operator in [Operators.ANY_OF, Operators.EXCLUDES]:
-            tag_exists = [
-                ChatMessage.objects.filter(
-                    chat=OuterRef("chat"),
-                    tags__name=tag,
-                    tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-                ).values("id")
-                for tag in version_tags
-            ]
-            combined_query = Q()
-            for query in tag_exists:
-                combined_query |= Q(Exists(query))
+    def apply_excludes(self, queryset, value, timezone=None):
+        tag_exists = [
+            ChatMessage.objects.filter(
+                chat=OuterRef("chat"),
+                tags__name=tag,
+                tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+            ).values("id")
+            for tag in value
+        ]
+        combined_query = Q()
+        for query in tag_exists:
+            combined_query |= Q(Exists(query))
+        return queryset.exclude(combined_query)
 
-            if column_filter.operator == Operators.EXCLUDES:
-                return queryset.exclude(combined_query)
-            else:
-                return queryset.filter(combined_query)
-
-        elif column_filter.operator == Operators.ALL_OF:
-            q_objects = Q()
-            for tag in version_tags:
-                tag_exists = ChatMessage.objects.filter(
-                    chat=OuterRef("chat"),
-                    tags__name=tag,
-                    tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-                ).values("id")
-                q_objects &= Q(Exists(tag_exists))
-            return queryset.filter(q_objects)
+    def apply_all_of(self, queryset, value, timezone=None):
+        q_objects = Q()
+        for tag in value:
+            tag_exists = ChatMessage.objects.filter(
+                chat=OuterRef("chat"),
+                tags__name=tag,
+                tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+            ).values("id")
+            q_objects &= Q(Exists(tag_exists))
+        return queryset.filter(q_objects)
 
 
-class ChannelsFilter(ColumnFilter):
+class ChannelsFilter(ChoiceFilterMixin, ColumnFilter):
     query_param = "channels"
+    column = "experiment_channel__platform"
 
-    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
-        """Build filter condition for channels"""
-        selected_display_names = json.loads(column_filter.value)
+    def parse_query_value(self, query_value) -> any:
+        selected_display_names = self.values_list(query_value)
         if not selected_display_names:
-            return queryset
+            return None
 
         display_to_value = {label: val for val, label in ChannelPlatform.choices}
         selected_values = [display_to_value.get(name.strip()) for name in selected_display_names]
-        selected_values = [val for val in selected_values if val is not None]
-        if not selected_values:
-            return queryset
-
-        if column_filter.operator == Operators.ANY_OF:
-            return queryset.filter(experiment_channel__platform__in=selected_values)
-        elif column_filter.operator == Operators.EXCLUDES:
-            return queryset.exclude(experiment_channel__platform__in=selected_values)
-        return queryset
+        return [val for val in selected_values if val is not None]
 
 
 class ExperimentSessionFilter(MultiColumnFilter):
