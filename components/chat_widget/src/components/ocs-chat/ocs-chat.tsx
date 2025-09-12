@@ -233,7 +233,7 @@ export class OcsChat {
       return;
     }
 
-    this.initializeTranslations();
+    await this.initializeTranslations();
 
     // Always try to load existing session if localStorage is available
     if (this.persistentSession && this.isLocalStorageAvailable()) {
