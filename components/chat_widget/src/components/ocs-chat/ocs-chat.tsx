@@ -1329,7 +1329,7 @@ export class OcsChat {
                   <div class="confirmation-content">
                     <h3 class="confirmation-title">{this.translationManager.get('startNewChatTitle')}</h3>
                     <p class="confirmation-message">
-                      {this.newChatConfirmationMessage || this.translationManager.get('startNewChatMessage')}
+                      {this.translationManager.get('startNewChatMessage') || this.newChatConfirmationMessage}
                     </p>
                     <div class="confirmation-buttons">
                       <button
