@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
+import {Component, Host, h, Prop, State, Element, Watch, Env} from '@stencil/core';
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
@@ -324,6 +324,7 @@ export class OcsChat {
   private getApiHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'x-ocs-widget-version': Env.version,
     };
 
     const csrfToken = getCSRFToken(this.getApiBaseUrl());
