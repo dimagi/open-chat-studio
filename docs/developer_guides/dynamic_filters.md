@@ -11,9 +11,15 @@ The dynamic filtering system is composed of two main parts: a backend that defin
 
 The backend is responsible for defining the filters and applying them to the database queries. The core components are:
 
-- **`ColumnFilter`**: An abstract base class that defines the interface for a single column filter. Each `ColumnFilter` implementation is responsible for applying a specific filter to a queryset. See `apps/web/dynamic_filters/base.py` for the definition of this class.
-- **`MultiColumnFilter`**: A class that holds a list of `ColumnFilter`s and applies them to a queryset. This class is used to combine multiple filters into a single filter that can be applied to a table. See `apps/web/dynamic_filters/base.py` for the definition of this class.
-- **Filter Implementations**: Concrete implementations of `ColumnFilter` can be found in `apps/web/dynamic_filters/column_filters.py` and other `filters.py` files throughout the project. For example, `apps/experiments/filters.py` contains filters specific to experiments.
+- **`ColumnFilter`**: An abstract base class that defines the interface for a single column filter. Each `ColumnFilter` implementation processes URL parameters and applies the appropriate database filter to a queryset. The base class automatically maps operators to methods (e.g., "equals" → `apply_equals`).
+
+- **`MultiColumnFilter`**: A container class that holds a list of `ColumnFilter` instances and applies them to a queryset. It provides a `columns()` class method to list available filter column names and handles the orchestration of applying multiple filters.
+
+- **Filter Mixins**: `StringFilterMixin` and `ChoiceFilterMixin` provide pre-built implementations for common filtering patterns, reducing boilerplate code.
+
+- **Filter Implementations**: Concrete implementations of `ColumnFilter` can be found in `apps/web/dynamic_filters/column_filters.py` (base filters like `TimestampFilter`, `ParticipantFilter`) and in app-specific `filters.py` files throughout the project (e.g., `apps/experiments/filters.py`).
+
+- **FilterParams & ColumnFilterData**: `FilterParams` extracts and organizes filter data from request query parameters into `ColumnFilterData` objects, which contain the column name, operator, and value for each filter.
 
 ### Frontend
 
@@ -27,14 +33,55 @@ The frontend is built using [Alpine.js](https://alpinejs.dev/) and HTMX. It dyna
 ### Query Parameters
 Filter values are passed through URL query parameters using a structured naming convention:
 
-- **`filter_{i}_column`** - Specifies which column to filter on
-- **`filter_{i}_operator`** - Defines the filter operation (e.g., equals, contains, greater than)
+- **`filter_{i}_column`** - Specifies which column to filter on (matches the `query_param` of a `ColumnFilter`)
+- **`filter_{i}_operator`** - Defines the filter operation (e.g., equals, contains, before, after)
 - **`filter_{i}_value`** - Contains the actual filter value
 
-The `{i}` represents the filter index, allowing multiple filters to be applied simultaneously (e.g., `filter_0_column`, `filter_1_column`, etc.).
+The `{i}` represents the filter index (0 to `MAX_FILTER_PARAMS-1`), allowing multiple filters to be applied simultaneously (e.g., `filter_0_column`, `filter_1_column`, etc.).
+
+### FilterParams and ColumnFilterData
+The `FilterParams` class extracts filter parameters from request query parameters and organizes them into `ColumnFilterData` objects. Each `ColumnFilterData` contains the column name, operator, and value for a single filter.
 
 ### Column Filter
 The `ColumnFilter` class acts as a bridge between query parameters and ORM filters. Each filter defines a `query_param` attribute that corresponds to the column name in the query parameters. When a request contains `filter_{i}_column` matching this `query_param`, the filter processes the associated operator and value to generate the appropriate database query.
+
+The `ColumnFilter.apply()` method:
+1. Retrieves the `ColumnFilterData` for its `query_param` from `FilterParams`
+2. Converts the operator to a method name (e.g., "starts with" → `apply_starts_with`)
+3. Calls the appropriate `apply_*` method with the parsed value
+
+### Available Filter Mixins
+
+The dynamic filter system provides several mixins to implement common filtering patterns:
+
+#### StringFilterMixin
+Provides methods for string-based filtering operations:
+- `apply_equals()` - Exact match
+- `apply_contains()` - Case-insensitive contains
+- `apply_does_not_contain()` - Case-insensitive exclusion
+- `apply_starts_with()` - Case-insensitive starts with
+- `apply_ends_with()` - Case-insensitive ends with
+- `apply_any_of()` - Match any value from a JSON list
+
+Requires setting a `column` class variable with the database field path.
+
+#### ChoiceFilterMixin
+Provides methods for choice-based filtering operations:
+- `apply_any_of()` - Match any value from a list
+- `apply_all_of()` - Match all values from a list (AND logic)
+- `apply_excludes()` - Exclude all values from a list
+
+Requires setting a `column` class variable with the database field path.
+
+### Available Operators
+
+The system supports the following operators defined in the `Operators` enum:
+
+- **String operations**: `equals`, `contains`, `does not contain`, `starts with`, `ends with`, `any of`
+- **Date/time operations**: `on`, `before`, `after`, `range`
+- **Choice operations**: `any of`, `all of`, `excludes`
+
+The frontend automatically shows appropriate operators based on the field type configuration.
 
 ## Step-by-Step Walkthrough: Creating a Product Inventory Filter
 
@@ -42,38 +89,17 @@ This walkthrough will guide you through creating a complete filtering system for
 
 ### Step 1: Create a Custom Column Filter
 
-First, let's create a filter for product categories. Create a new file for your app's filters:
+First, let's create a filter for product categories using the existing mixins:
 
 ```python
 # apps/inventory/filters.py
-import json
-from apps.web.dynamic_filters.base import ColumnFilter, ColumnFilterData, Operators
+from apps.web.dynamic_filters.base import ChoiceFilterMixin, ColumnFilter, StringFilterMixin
+from apps.web.dynamic_filters.column_filters import TimestampFilter
 
-class ProductCategoryFilter(ColumnFilter):
+class ProductCategoryFilter(StringFilterMixin, ColumnFilter):
     """Filter products by category name."""
     query_param = "category"
-
-    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None):
-        """Apply category filtering to the queryset."""
-        if not column_filter.value:
-            return queryset
-
-        if column_filter.operator == Operators.EQUALS:
-            return queryset.filter(category__name=column_filter.value)
-        elif column_filter.operator == Operators.CONTAINS:
-            return queryset.filter(category__name__icontains=column_filter.value)
-        elif column_filter.operator == Operators.DOES_NOT_CONTAIN:
-            return queryset.exclude(category__name__icontains=column_filter.value)
-        elif column_filter.operator == Operators.STARTS_WITH:
-            return queryset.filter(category__name__istartswith=column_filter.value)
-        elif column_filter.operator == Operators.ENDS_WITH:
-            return queryset.filter(category__name__iendswith=column_filter.value)
-        elif column_filter.operator == Operators.ANY_OF:
-            # Parse JSON array of values
-            categories = json.loads(column_filter.value)
-            return queryset.filter(category__name__in=categories)
-        
-        return queryset
+    column = "category__name"  # Database field path
 ```
 
 ### Step 2: Create a Multi-Column Filter
@@ -82,13 +108,14 @@ Now let's create a multi-column filter that combines our new category filter wit
 
 ```python
 # apps/inventory/filters.py (continued)
+from typing import ClassVar
+from collections.abc import Sequence
 from apps.web.dynamic_filters.base import MultiColumnFilter
-from apps.web.dynamic_filters.column_filters import TimestampFilter
 
 class ProductInventoryFilter(MultiColumnFilter):
     """Filter for product inventory using multiple column filters."""
     
-    filters: list[ColumnFilter] = [
+    filters: ClassVar[Sequence[ColumnFilter]] = [
         ProductCategoryFilter(),
         TimestampFilter(db_column="created_at", query_param="created_date"),
         TimestampFilter(db_column="updated_at", query_param="last_updated"),
@@ -167,10 +194,23 @@ class ProductInventoryView(SingleTableView):
         """Add filter configuration to the template context."""
         context = super().get_context_data(**kwargs)
         
-        # Add filter context data
-        filter_context = {
-            "df_product_categories": ... # the available categories
-        }
+        # Add filter context data using the helper function
+        filter_context = get_filter_context_data(
+            team=self.request.team,  # Assuming team is available in request
+            columns=ProductInventoryFilter.columns(),
+            date_range_column="created_date",
+            table_url=reverse("inventory:product_table"),  # Your HTMX table URL
+            table_container_id="product-table"
+        )
+        
+        # Add any additional context specific to your filters
+        filter_context.update({
+            "df_product_categories": [
+                {"id": cat.id, "label": cat.name} 
+                for cat in Category.objects.all()
+            ]
+        })
+        
         context.update(filter_context)
         return context
 ```
@@ -199,19 +239,38 @@ Create the template that includes the filter interface:
 
 **Update the Shared Filter Template**
 
-Since the filter template is shared across the application, you'll need to update `templates/experiments/filters.html` to include your new filter columns. Add your custom columns to the `allColumns` object in the Alpine.js component:
+Since the filter template is shared across the application, you'll need to update `templates/experiments/filters.html` to include your new filter columns. Add your custom columns to the `allColumns` object in the Alpine.js component.
 
-In templates/experiments/filters.html, add the following:
+The frontend configuration maps field types to available operators using the `FIELD_TYPE_FILTERS` constant:
+
+- **`"string"`**: equals, contains, does not contain, starts with, ends with, any of
+- **`"timestamp"`**: on, before, after, range  
+- **`"choice"`**: any of, all of, excludes
+
+The `get_filter_context_data()` helper function provides the necessary context variables:
+
+- `df_field_type_filters`: Maps field types to operators
+- `df_date_range_options`: Predefined date ranges (1h, 1d, 7d, etc.)
+- `df_filter_columns`: List of column names for this filter
+- `df_date_range_column_name`: Default date column for quick range selection
+- `df_filter_data_source_url`: HTMX endpoint for table updates
+- `df_filter_data_source_container_id`: HTML element ID containing the table
+
+In your template, define the column configuration in JavaScript:
+
 ```javascript
+// In templates/experiments/filters.html or your custom template
 {{ df_product_categories|default:"[]"|json_script:"product-categories" }}
 <script>
     const categories = JSON.parse(document.getElementById('product-categories').textContent);
-    ...
+    const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
+    const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
+    
     const allColumns = {
-        ...
+        // Existing columns...
         'category': {
-            type: 'string', 
-            operators: fieldTypeFilters.string,
+            type: 'choice', 
+            operators: fieldTypeFilters.choice,
             options: categories,
             label: 'Product Category'
         },
@@ -228,7 +287,6 @@ In templates/experiments/filters.html, add the following:
             label: 'Last Updated'
         }
     }
-    ...
+    // ...rest of Alpine.js configuration
 </script>
-
 ```
