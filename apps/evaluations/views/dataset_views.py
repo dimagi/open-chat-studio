@@ -28,6 +28,7 @@ from apps.experiments.filters import (
 from apps.experiments.models import ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -127,8 +128,8 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 .select_related("participant__user")
             )
             timezone = self.request.session.get("detected_tz", None)
-            session_filter = ExperimentSessionFilter(queryset, self.request.GET, timezone)
-            filtered_queryset = session_filter.apply()
+            session_filter = ExperimentSessionFilter(FilterParams.from_request(self.request))
+            filtered_queryset = session_filter.apply(queryset, timezone)
             filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
             if filtered_session_ids:
                 initial["session_ids"] = filtered_session_ids
@@ -172,8 +173,8 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .order_by("experiment__name")
         )
         timezone = self.request.session.get("detected_tz", None)
-        session_filter = ExperimentSessionFilter(query_set, self.request.GET, timezone)
-        query_set = session_filter.apply()
+        session_filter = ExperimentSessionFilter(FilterParams.from_request(self.request))
+        query_set = session_filter.apply(query_set, timezone)
         return query_set
 
 

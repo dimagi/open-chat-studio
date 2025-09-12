@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from typing import Self
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 from django.conf import settings
+from django.http import QueryDict
 
 
 @dataclass
@@ -13,7 +14,7 @@ class ColumnFilterData:
 
 
 class FilterParams:
-    def __init__(self, query_params: dict):
+    def __init__(self, query_params: QueryDict):
         self._filters = {}
 
         for i in range(settings.MAX_FILTER_PARAMS):
@@ -33,5 +34,5 @@ class FilterParams:
         query_params = request.GET
         if not query_params and (hx_url := request.headers.get("HX-Current-URL")):
             parsed_url = urlparse(hx_url)
-            query_params = parse_qs(parsed_url.query)
+            query_params = QueryDict(parsed_url.query)
         return FilterParams(query_params)

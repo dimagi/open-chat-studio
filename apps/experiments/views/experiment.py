@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from functools import cached_property
 from typing import cast
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 import jwt
 from celery.result import AsyncResult
@@ -20,7 +20,7 @@ from django.db import transaction
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -979,7 +979,7 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     timezone = request.session.get("detected_tz", None)
     experiment = get_object_or_404(Experiment, id=experiment_id)
     parsed_url = urlparse(request.headers.get("HX-Current-URL"))
-    query_params = parse_qs(parsed_url.query)
+    query_params = QueryDict(parsed_url.query)
     task_id = async_export_chat.delay(experiment_id, query_params, timezone)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}

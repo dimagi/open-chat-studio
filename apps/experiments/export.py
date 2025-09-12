@@ -6,6 +6,7 @@ from apps.annotations.models import Tag, UserComment
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 def _format_tags(tags: list[Tag]) -> str:
@@ -22,8 +23,8 @@ def _format_comments(user_comments: list[UserComment]) -> str:
 
 def get_filtered_sessions(experiment, query_params, timezone):
     sessions_queryset = ExperimentSession.objects.filter(experiment=experiment).select_related("participant__user")
-    session_filter = ExperimentSessionFilter(sessions_queryset, parsed_params=query_params, timezone=timezone)
-    sessions_queryset = session_filter.apply()
+    session_filter = ExperimentSessionFilter(FilterParams(query_params))
+    sessions_queryset = session_filter.apply(sessions_queryset, timezone)
 
     return sessions_queryset
 
