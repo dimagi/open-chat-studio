@@ -101,8 +101,8 @@ class RemoteIdFilter(ColumnFilter):
 
 
 class TimestampFilter(ColumnFilter):
-    def __init__(self, accessor: str, query_param: str):
-        self.accessor = accessor
+    def __init__(self, db_column: str, query_param: str):
+        self.db_column = db_column
         self.query_param = query_param
 
     def apply(self, queryset, column_filter: ColumnFilterData, timezone=None):
@@ -128,17 +128,17 @@ class TimestampFilter(ColumnFilter):
 
                 range_starting_client_time = now_client - delta
                 range_starting_utc_time = range_starting_client_time.astimezone(pytz.UTC)
-                return queryset.filter(**{f"{self.accessor}__gte": range_starting_utc_time})
+                return queryset.filter(**{f"{self.db_column}__gte": range_starting_utc_time})
 
             else:
                 # No need to convert the date as it is in client's timezone
                 date_value = datetime.fromisoformat(column_filter.value)
                 if column_filter.operator == Operators.ON:
-                    queryset = queryset.filter(**{f"{self.accessor}__date": date_value})
+                    queryset = queryset.filter(**{f"{self.db_column}__date": date_value})
                 elif column_filter.operator == Operators.BEFORE:
-                    queryset = queryset.filter(**{f"{self.accessor}__date__lt": date_value})
+                    queryset = queryset.filter(**{f"{self.db_column}__date__lt": date_value})
                 elif column_filter.operator == Operators.AFTER:
-                    queryset = queryset.filter(**{f"{self.accessor}__date__gt": date_value})
+                    queryset = queryset.filter(**{f"{self.db_column}__date__gt": date_value})
         except (ValueError, TypeError, pytz.UnknownTimeZoneError):
             pass
         return queryset

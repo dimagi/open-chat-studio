@@ -89,7 +89,7 @@ class SpanTagsFilter(ColumnFilter):
 class TraceFilter(MultiColumnFilter):
     filters = [
         ParticipantFilter(),
-        TimestampFilter(accessor="timestamp", query_param="timestamp"),
+        TimestampFilter(db_column="timestamp", query_param="timestamp"),
         SpanTagsFilter(),
         SpanNameFilter(),
         RemoteIdFilter(),

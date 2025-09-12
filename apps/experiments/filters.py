@@ -182,8 +182,8 @@ class ExperimentSessionFilter(MultiColumnFilter):
 
     filters: list[ColumnFilter] = [
         ParticipantFilter(),
-        TimestampFilter(accessor="last_message_created_at", query_param="last_message"),
-        TimestampFilter(accessor="first_message_created_at", query_param="first_message"),
+        TimestampFilter(db_column="last_message_created_at", query_param="last_message"),
+        TimestampFilter(db_column="first_message_created_at", query_param="first_message"),
         ChatMessageTagsFilter(),
         VersionsFilter(),
         ChannelsFilter(),
