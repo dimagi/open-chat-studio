@@ -1,4 +1,5 @@
 import json
+import logging
 
 from django.db.models import QuerySet
 from django.urls import reverse
@@ -17,6 +18,8 @@ from apps.web.dynamic_filters.column_filters import (
     TimestampFilter,
 )
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
+
+logger = logging.getLogger("ocs.filters")
 
 
 def get_trace_filter_context_data(team):
@@ -47,6 +50,7 @@ class SpanNameFilter(ColumnFilter):
         try:
             selected_names = json.loads(column_filter.value)
         except json.JSONDecodeError:
+            logger.error("Failed to decode JSON for span name filter", exc_info=True)
             return queryset
 
         if not selected_names:

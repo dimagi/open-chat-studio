@@ -1,4 +1,5 @@
 import json
+import logging
 
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
@@ -22,6 +23,8 @@ from apps.web.dynamic_filters.column_filters import (
     TimestampFilter,
 )
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
+
+logger = logging.getLogger("ocs.filters")
 
 
 def get_experiment_filter_context_data(team, table_url: str, single_experiment=None):
@@ -104,7 +107,7 @@ class ChatMessageTagsFilter(ColumnFilter):
                 return queryset.exclude(chat_tags_condition | message_tags_condition)
 
         except json.JSONDecodeError:
-            pass
+            logger.error("Failed to decode JSON for chat message tag filter", exc_info=True)
         return queryset
 
 
@@ -148,7 +151,7 @@ class VersionsFilter(ColumnFilter):
                     q_objects &= Q(Exists(tag_exists))
                 return queryset.filter(q_objects)
         except json.JSONDecodeError:
-            pass
+            logger.error("Failed to decode JSON for version filter", exc_info=True)
         return queryset
 
 
@@ -173,7 +176,7 @@ class ChannelsFilter(ColumnFilter):
             elif column_filter.operator == Operators.EXCLUDES:
                 return queryset.exclude(experiment_channel__platform__in=selected_values)
         except json.JSONDecodeError:
-            pass
+            logger.error("Failed to decode JSON for channel filter", exc_info=True)
         return queryset
 
 
