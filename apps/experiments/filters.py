@@ -1,5 +1,7 @@
 import json
 import logging
+from collections.abc import Sequence
+from typing import ClassVar
 
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
@@ -183,7 +185,7 @@ class ChannelsFilter(ColumnFilter):
 class ExperimentSessionFilter(MultiColumnFilter):
     """Filter for experiment sessions using the new ColumnFilter pattern."""
 
-    filters: list[ColumnFilter] = [
+    filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
         TimestampFilter(db_column="last_message_created_at", query_param="last_message"),
         TimestampFilter(db_column="first_message_created_at", query_param="first_message"),

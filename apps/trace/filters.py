@@ -1,5 +1,7 @@
 import json
 import logging
+from collections.abc import Sequence
+from typing import ClassVar
 
 from django.db.models import QuerySet
 from django.urls import reverse
@@ -31,7 +33,7 @@ def get_trace_filter_context_data(team):
     )
 
     table_url = reverse("trace:table", args=[team.slug])
-    context = get_filter_context_data(team, TraceFilter.columns, "timestamp", table_url, "data-table")
+    context = get_filter_context_data(team, TraceFilter.columns(), "timestamp", table_url, "data-table")
     context.update(
         {
             "df_span_names": list(team.span_set.values_list("name", flat=True).order_by("name").distinct()),
@@ -95,7 +97,7 @@ class SpanTagsFilter(ColumnFilter):
 
 
 class TraceFilter(MultiColumnFilter):
-    filters = [
+    filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
         TimestampFilter(db_column="timestamp", query_param="timestamp"),
         SpanTagsFilter(),

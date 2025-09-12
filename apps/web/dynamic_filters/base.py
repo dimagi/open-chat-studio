@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from enum import StrEnum
+from typing import ClassVar
 
 from django.db.models import QuerySet
 
-from .datastructures import FilterParams
+from .datastructures import ColumnFilterData, FilterParams
 
 
 class Operators(StrEnum):
@@ -59,7 +61,7 @@ class MultiColumnFilter:
         filters: A list of `ColumnFilter` instances.
     """
 
-    filters: list[ColumnFilter] = []
+    filters: ClassVar[Sequence[ColumnFilter]]
 
     @classmethod
     def columns(cls) -> list[str]:
@@ -100,6 +102,6 @@ class ColumnFilter(ABC):
         return queryset
 
     @abstractmethod
-    def apply_filter(self, queryset: QuerySet, column_filter: ColumnFilter, timezone=None) -> QuerySet:
+    def apply_filter(self, queryset: QuerySet, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Applies the filter to the given queryset based on the `column_filter` data."""
         pass

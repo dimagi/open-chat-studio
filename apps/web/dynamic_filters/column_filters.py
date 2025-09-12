@@ -11,7 +11,7 @@ from .datastructures import ColumnFilterData
 class ParticipantFilter(ColumnFilter):
     query_param = "participant"
 
-    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None):
+    def apply_filter(self, queryset, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         """Build filter condition for participant"""
         if not column_filter.value:
             return queryset
@@ -27,9 +27,12 @@ class ParticipantFilter(ColumnFilter):
         elif column_filter.operator == Operators.ENDS_WITH:
             return queryset.filter(participant__identifier__iendswith=column_filter.value)
         elif column_filter.operator == Operators.ANY_OF:
-            value = json.loads(column_filter.value)
-            return queryset.filter(participant__identifier__in=value)
-        return None
+            try:
+                value = json.loads(column_filter.value)
+                return queryset.filter(participant__identifier__in=value)
+            except json.JSONDecodeError:
+                return queryset
+        return queryset
 
 
 class ExperimentFilter(ColumnFilter):
