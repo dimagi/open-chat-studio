@@ -444,9 +444,9 @@ class ChannelBase(ABC):
         return None
 
     def _send_seed_message(self) -> str:
-        with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}):
+        with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}) as span:
             bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
-            self.trace_service.set_current_span_outputs({"response": bot_response.content})
+            span.set_current_span_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
             return bot_response.content
 
@@ -625,15 +625,19 @@ class ChannelBase(ABC):
                 self.send_text_to_user(download_link)
 
     def _handle_supported_message(self):
-        with self.trace_service.span("process_message", inputs={"input": self.user_query}):
+        with self.trace_service.span("Process Message", inputs={"input": self.user_query}) as span:
             self.submit_input_to_llm()
             ai_message = self._get_bot_response(message=self.user_query)
 
             files = ai_message.get_attached_files() or []
-            self.trace_service.set_current_span_outputs(
+            span.set_current_span_outputs(
                 {"response": ai_message.content, "attachments": [file.name for file in files]}
             )
-            self.send_message_to_user(bot_message=ai_message.content, files=files)
+
+            with self.trace_service.span(
+                "Send message to user", inputs={"bot_message": ai_message.content, "files": [str(f) for f in files]}
+            ):
+                self.send_message_to_user(bot_message=ai_message.content, files=files)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
