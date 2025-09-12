@@ -1,0 +1,34 @@
+{
+  "openChat": "Fungua gumzo",
+  "close": "Funga",
+  "startNewChat": "Anza gumzo jipya",
+  "enterFullscreen": "Ingiza skrini nzima",
+  "exitFullscreen": "Toka kwenye skrini nzima",
+  "attachFiles": "Ambatanisha faili",
+  "removeFile": "Ondoa faili",
+  "startingChat": "Inaanzisha gumzo...",
+  "preparingResponse": "Inatayarisha jibu",
+  "startNewChatTitle": "Anza gumzo jipya",
+  "startNewChatMessage": "Kuanza gumzo jipya kutafuta gumzo lako la sasa. Je, ungependa kuendelea?",
+  "cancel": "Ghairi",
+  "confirm": "Thibitisha",
+  "typeMessage": "Andika ujumbe...",
+  "sendMessage": "Tuma ujumbe",
+  "fileAttached": "Faili limeambatanishwa",
+  "fileTooLarge": "Faili ni kubwa sana",
+  "totalSizeTooLarge": "Jumla ya ukubwa wa faili ni kubwa sana",
+  "unsupportedFileType": "Aina ya faili haitumiki",
+  "connectionError": "Hitilafu ya muunganisho. Tafadhali jaribu tena.",
+  "sessionExpired": "Kipindi kimeisha muda wake. Tafadhali anza gumzo jipya.",
+  "poweredBy": "Inaendeshwa na",
+  "buttonText": "Tuchat",
+  "headerText": "Kawaida, hali nyepesi",
+  "welcomeMessages": [
+    "Hujambo! Karibu OpenChatStudio! Huu ni ujumbe wa makaribisho mrefu sana unaotumika kuonyesha upana wa juu wa ujumbe.",
+    "Tunawezaje kukusaidia [leo](#tonowhere)?\n* orodha\n* orodha\n# Kichwa L1\n\n## Kichwa kidogo L2\n\n```\nbaadhi ya msimbo\nmsimbo zaidi\n```\n"
+  ],
+  "starterQuestions": [
+    "Ningependa maonyesho ya OpenChatStudio",
+    "Tunawezaje kukusaidia [leo](#tonowhere)?\n* orodha\n* orodha\n# Kichwa L1\n\n## Kichwa kidogo L2\n\n```\nbaadhi ya msimbo\nmsimbo zaidi\n```\n"
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "openChat": "Abrir chat",
+  "close": "Cerrar",
+  "startNewChat": "Iniciar nuevo chat",
+  "enterFullscreen": "Pantalla completa",
+  "exitFullscreen": "Salir de pantalla completa",
+  "attachFiles": "Adjuntar archivos",
+  "removeFile": "Eliminar archivo",
+  "startingChat": "Iniciando chat...",
+  "preparingResponse": "Preparando respuesta",
+  "startNewChatTitle": "Iniciar Nuevo Chat",
+  "startNewChatMessage": "Iniciar un nuevo chat borrará tu conversación actual. ¿Continuar?",
+  "cancel": "Cancelar",
+  "confirm": "Confirmar",
+  "typeMessage": "Escribe un mensaje...",
+  "sendMessage": "Enviar mensaje",
+  "fileAttached": "Archivo adjunto",
+  "fileTooLarge": "Archivo demasiado grande",
+  "totalSizeTooLarge": "Tamaño total de archivos demasiado grande",
+  "unsupportedFileType": "Tipo de archivo no soportado",
+  "connectionError": "Error de conexión. Por favor, inténtalo de nuevo.",
+  "sessionExpired": "Sesión expirada. Por favor, inicia un nuevo chat.",
+  "poweredBy": "Desarrollado por",
+  "buttonText": "Charlemos",
+  "headerText": "Normal, modo claro",
+  "welcomeMessages": [
+    "¡Hola! ¡Bienvenido a OpenChatStudio! Este es un mensaje de bienvenida muy largo usado para ilustrar el ancho máximo del mensaje.",
+    "¿Cómo podemos ayudarte [hoy](#aningundado)?\n* lista\n* lista\n# Encabezado L1\n\n## Encabezado L2\n\n```\nalgún código\nmás código\n```\n"
+  ],
+  "starterQuestions": [
+    "Me gustaría una demostración de OpenChatStudio",
+    "¿Cómo podemos ayudarte [hoy](#aningundado)?\n* lista\n* lista\n# Encabezado L1\n\n## Encabezado L2\n\n```\nalgún código\nmás código\n```\n"
+  ]
+}
