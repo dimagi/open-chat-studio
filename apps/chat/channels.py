@@ -1328,6 +1328,10 @@ class EmbeddedWidgetChannel(ChannelBase):
         """Handle new user message from embedded widget"""
         return self.send_message_to_user(text, message_type)
 
+    def send_text_to_user(self, text: str):
+        """Embedded widgets use polling, so no direct sending needed"""
+        pass
+
     def send_message(self, message: ChatMessage):
         """Embedded widgets use polling, so no direct sending needed"""
         pass
