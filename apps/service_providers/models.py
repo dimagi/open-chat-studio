@@ -96,7 +96,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.GoogleGeminiConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_llm_service(self, config: dict):
+    def get_llm_service(self, config: dict) -> llm_service.LlmService:
         config = {**config, **self.additional_config, "_type": self.slug}
         try:
             match self:
@@ -135,7 +135,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     def type_enum(self):
         return LlmProviderTypes[str(self.type)]
 
-    def get_llm_service(self):
+    def get_llm_service(self) -> llm_service.LlmService:
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_llm_service(config)
 

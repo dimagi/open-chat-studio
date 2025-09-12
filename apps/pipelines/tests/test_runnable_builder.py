@@ -31,7 +31,6 @@ from apps.pipelines.tests.utils import (
     start_node,
     state_key_router_node,
 )
-from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -996,26 +995,6 @@ def test_assistant_node_empty_metadata_handling(get_llm_service, pipeline):
     assert output_state["input_message_metadata"] == {}
     assert output_state["output_message_metadata"] == {}
     assert output_state["messages"][-1] == "How are you doing?"
-
-
-@pytest.mark.django_db()
-@patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
-    history_manager = PipelineHistoryManager.for_assistant()
-    input_metadata = {"test": "metatdata", "timestamp": "2025-03-06"}
-    output_metadata = {"test": "metadata", "tokens": 150}
-
-    history_manager.add_messages_to_history(
-        input="Hi Bot",
-        input_message_metadata=input_metadata,
-        output="Hi Human",
-        output_message_metadata=output_metadata,
-        save_input_to_history=True,
-        save_output_to_history=True,
-        experiment_tag=None,
-    )
-    assert history_manager.input_message_metadata == input_metadata
-    assert history_manager.output_message_metadata == output_metadata
 
 
 @pytest.mark.parametrize(

@@ -271,7 +271,10 @@ class TestPipeline:
         bot = PipelineTestBot(pipeline=pipeline, user_id=user.id)
         bot.process_input(user_input)
         expected_call_messages = [
-            [("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: "), ("human", user_input)],
+            [
+                ("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: "),
+                ("human", [{"text": user_input, "type": "text"}]),
+            ],
         ]
         assert [
             [(message.type, message.content) for message in call] for call in llm.get_call_messages()
