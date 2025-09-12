@@ -272,7 +272,7 @@ def load_experiment_versions(request, team_slug: str):
             id=experiment_id,
             team=request.team,
         )
-        versions = Experiment.objects.all_versions_queryset(experiment).filter(team=request.team)
+        versions = Experiment.objects.all_versions_queryset(experiment.id).filter(team=request.team)
         choices = get_experiment_version_choices(versions)
         version_choices = [{"value": value, "label": label} for value, label in choices]
 
