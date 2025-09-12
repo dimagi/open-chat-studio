@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import secrets
 from functools import cached_property
 
 import phonenumbers
@@ -532,3 +533,78 @@ class CommCareConnectChannelForm(ExtraFormBase):
         help_text="This is the name of the chatbot that will be displayed to users on CommCare Connect",
         max_length=100,
     )
+
+
+class EmbeddedWidgetChannelForm(ExtraFormBase):
+    """Form for creating embedded chat widget channels"""
+
+    allowed_domains = forms.CharField(
+        label="Allowed Domains",
+        widget=forms.Textarea(
+            attrs={
+                "rows": 4,
+                "class": "textarea textarea-bordered w-full",
+                "placeholder": "Enter one domain per line, e.g.:\nexample.com\nwww.mysite.org\nsubdomain.example.com",
+            }
+        ),
+        help_text="Enter the domains where this widget is allowed to be embedded (one per line). "
+        "Leave blank to allow all domains.",
+        required=False,
+    )
+
+    def clean_allowed_domains(self):
+        """Validate and clean the allowed domains"""
+        domains_text = self.cleaned_data.get("allowed_domains", "").strip()
+        if not domains_text:
+            return []
+
+        domains = []
+        for line in domains_text.split("\n"):
+            domain = line.strip()
+            if domain:
+                if not re.match(
+                    r"^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*(:\d+)?$",
+                    domain,
+                ):
+                    raise forms.ValidationError(f"Invalid domain format: {domain}")
+                domains.append(domain)
+        return domains
+
+    def clean(self):
+        """Generate or preserve the widget token"""
+        cleaned_data = super().clean()
+
+        # If editing existing channel, preserve the token
+        if self.channel and self.channel.extra_data.get("widget_token"):
+            cleaned_data["widget_token"] = self.channel.extra_data["widget_token"]
+        else:
+            # Generate token here so it's available when check_usage_by_another_experiment is called
+            cleaned_data["widget_token"] = secrets.token_urlsafe(24)
+
+        return cleaned_data
+
+    def post_save(self, channel: ExperimentChannel):
+        """Save widget data and set success message"""
+        widget_token = self.cleaned_data["widget_token"]
+        channel.extra_data.update(
+            {
+                "widget_token": widget_token,
+                "allowed_domains": self.cleaned_data["allowed_domains"],
+            }
+        )
+        channel.save()
+
+        self.success_message = f"Embedded widget channel created successfully! Widget token: {widget_token}"
+
+    def _generate_embed_code(self, channel: ExperimentChannel, token: str) -> str:
+        """Generate the embed code for the widget"""
+        base_url = getattr(settings, "SITE_URL", "https://chatbots.dimagi.com")
+        embed_code = f'''<!-- Open Chat Studio Embedded Widget -->
+<script type="module" src="{base_url}/static/js/open-chat-studio-widget.esm.js"></script>
+<script nomodule src="{base_url}/static/js/open-chat-studio-widget.js"></script>
+<open-chat-studio-widget
+    chatbot-id="{channel.experiment.public_id}"
+    api-base-url="{base_url}"
+    key="{token}">
+</open-chat-studio-widget>'''
+        return embed_code

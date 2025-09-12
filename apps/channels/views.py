@@ -353,3 +353,13 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
             "experiment": channel.experiment,
         },
     )
+
+
+@require_POST
+@login_and_team_required
+def clear_widget_success_session(request, team_slug: str, experiment_id: int):
+    print("we are clearing the session")
+    """Clear the embedded widget success data from session"""
+    if "embedded_widget_success" in request.session:
+        del request.session["embedded_widget_success"]
+    return JsonResponse({"status": "success"})

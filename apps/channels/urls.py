@@ -37,4 +37,9 @@ urlpatterns = [
         views.ChannelCreateDialogView.as_view(),
         name="channel_create_dialog",
     ),
+    path(
+        "<slug:team_slug>/chatbots/<int:experiment_id>/channels/create-success/",
+        views.clear_widget_success_session,
+        name="clear_widget_success",
+    ),
 ]

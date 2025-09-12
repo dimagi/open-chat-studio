@@ -1,4 +1,5 @@
 import pathlib
+import uuid
 
 from django.conf import settings
 from django.http import Http404
@@ -9,6 +10,7 @@ from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schem
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
@@ -22,6 +24,11 @@ from apps.api.serializers import (
 )
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.utils import (
+    extract_domain_from_headers,
+    validate_embed_key_for_experiment,
+    validate_embedded_widget_request,
+)
 from apps.chat.channels import ApiChannel, WebChannel
 from apps.chat.models import Chat, ChatAttachment
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
@@ -55,13 +62,63 @@ def check_experiment_access(experiment, participant_id):
     return None
 
 
-def check_session_access(session):
+def handle_embedded_widget_auth(request, experiment_id=None, session=None):
+    embed_key = request.headers.get("X-Embed-Key")
+    if not embed_key:
+        return False, None, None
+
+    # Extract origin domain from headers
+    origin_domain = extract_domain_from_headers(request)
+    if not origin_domain:
+        raise PermissionDenied("Origin or Referer header required for embedded widgets")
+
+    if experiment_id:
+        is_valid, experiment_channel = validate_embed_key_for_experiment(
+            token=embed_key, origin_domain=origin_domain, experiment_id=experiment_id
+        )
+    elif session:
+        is_valid, experiment_channel = validate_embedded_widget_request(
+            token=embed_key, origin_domain=origin_domain, team=session.team
+        )
+        if is_valid and session.experiment_channel.platform != ChannelPlatform.EMBEDDED_WIDGET:
+            raise PermissionDenied("Session does not belong to an embedded widget channel")
+    else:
+        raise ValueError("Either experiment_id or session must be provided")
+
+    if not is_valid:
+        raise PermissionDenied("Invalid embed key or domain not allowed")
+
+    # Generate id for anon widget users
+    participant_remote_id = None
+    if hasattr(request, "data") and request.data:
+        participant_remote_id = request.data.get("participant_remote_id")
+
+    if not participant_remote_id:
+        participant_remote_id = f"embed_{uuid.uuid4()}"
+
+    return True, experiment_channel, participant_remote_id
+
+
+def check_session_access(session, request=None):
     """
-    Check if the request has access to the session based on experiment's public API settings.
+    Check if the request has access to the session.
+    Now handles both authenticated users and embedded widgets.
 
     Returns:
         Response object if access denied, None if access allowed
     """
+    if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
+        if not request:
+            return Response(
+                {"error": "Request context required for embedded widgets"}, status=status.HTTP_403_FORBIDDEN
+            )
+        try:
+            handle_embedded_widget_auth(request, session=session)
+            return None  # Access allowed
+        except PermissionDenied as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except Exception:
+            return Response({"error": "Embedded widget authentication failed"}, status=status.HTTP_403_FORBIDDEN)
     return check_experiment_access(session.experiment, session.participant.identifier)
 
 
@@ -124,7 +181,7 @@ def validate_file_upload(file):
 @parser_classes([MultiPartParser])
 def chat_upload_file(request, session_id):
     session = get_object_or_404(ExperimentSession, external_id=session_id)
-    access_response = check_session_access(session)
+    access_response = check_session_access(session, request)
     if access_response:
         return access_response
 
@@ -210,9 +267,7 @@ def chat_upload_file(request, session_id):
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([])
 def chat_start_session(request):
-    """
-    Start a new chat session for a widget
-    """
+    """Start a new chat session - supports both authenticated users and embedded widgets"""
     serializer = ChatStartSessionRequest(data=request.data)
     serializer.is_valid(raise_exception=True)
 
@@ -222,7 +277,14 @@ def chat_start_session(request):
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
 
-    # First, check if this is a public experiment
+    try:
+        is_embedded, experiment_channel, embed_participant_id = handle_embedded_widget_auth(
+            request, experiment_id=experiment_id
+        )
+    except PermissionDenied as e:
+        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+    # Get experiment
     experiment = get_object_or_404(Experiment, public_id=experiment_id)
     if not experiment.is_working_version:
         return Response(
@@ -231,32 +293,47 @@ def chat_start_session(request):
         )
 
     team = experiment.team
-    if request.user.is_authenticated:
-        user = request.user
-        participant_id = user.email
-        if remote_id != participant_id:
-            # Enforce this for authenticated users
-            # Currently this only happens if the chat widget is being hosted on the same OCS instance as the bot
-            return Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
-        remote_id = ""
-    else:
-        user = None
-        participant_id = None
 
-    access_response = check_experiment_access(experiment, participant_id)
-    if access_response:
-        return access_response
+    if is_embedded:
+        user = None
+        participant_id = remote_id if remote_id else embed_participant_id
+        platform = ChannelPlatform.EMBEDDED_WIDGET
+        api_channel = experiment_channel
+        # Skip public API access checks for embedded widgets
+
+    else:
+        platform = ChannelPlatform.API
+        api_channel = ExperimentChannel.objects.get_team_api_channel(team)
+
+        if request.user.is_authenticated:
+            user = request.user
+            participant_id = user.email
+            if remote_id != participant_id:
+                return Response(
+                    {"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST
+                )
+            remote_id = ""
+        else:
+            user = None
+            participant_id = None
+
+        access_response = check_experiment_access(experiment, participant_id)
+        if access_response:
+            return access_response
 
     # Create or get participant
     if user is not None:
         participant, created = Participant.objects.get_or_create(
             identifier=participant_id,
             team=team,
-            platform=ChannelPlatform.API,
+            platform=platform,
             defaults={"user": user, "remote_id": remote_id},
         )
     else:
-        participant = Participant.create_anonymous(team, ChannelPlatform.API, remote_id)
+        participant = Participant.create_anonymous(team, platform, remote_id)
+        if is_embedded:
+            participant.identifier = participant_id
+            participant.save(update_fields=["identifier"])
 
     if remote_id and participant.remote_id != remote_id:
         participant.remote_id = remote_id
@@ -272,16 +349,18 @@ def chat_start_session(request):
         if participant_data.data.get("name") != name:
             participant_data.data["name"] = name
             participant_data.save(update_fields=["data"])
-    api_channel = ExperimentChannel.objects.get_team_api_channel(team)
+
+    metadata = {Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)}
+    if is_embedded:
+        metadata["embedded_widget"] = True
+        metadata["origin_domain"] = extract_domain_from_headers(request)
 
     session = ApiChannel.start_new_session(
         working_experiment=experiment,
         experiment_channel=api_channel,
         participant_identifier=participant.identifier,
         participant_user=user,
-        # timezone
-        # session_external_id
-        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
+        metadata=metadata,
     )
     if user is not None and session_data:
         session.state = session_data
@@ -351,7 +430,7 @@ def chat_send_message(request, session_id):
 
     session = get_object_or_404(ExperimentSession, external_id=session_id)
 
-    access_response = check_session_access(session)
+    access_response = check_session_access(session, request)
     if access_response:
         return access_response
 
@@ -433,7 +512,7 @@ def chat_poll_task_response(request, session_id, task_id):
     except ExperimentSession.DoesNotExist:
         raise Http404() from None
 
-    access_response = check_session_access(session)
+    access_response = check_session_access(session, request)
     if access_response:
         return access_response
     task_details = get_message_task_response(session.experiment, task_id)
@@ -492,7 +571,7 @@ def chat_poll_response(request, session_id):
     """
     session = get_object_or_404(ExperimentSession, external_id=session_id)
 
-    access_response = check_session_access(session)
+    access_response = check_session_access(session, request)
     if access_response:
         return access_response
     since_param = request.query_params.get("since")
