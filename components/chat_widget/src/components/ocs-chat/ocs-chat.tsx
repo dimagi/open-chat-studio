@@ -327,11 +327,7 @@ export class OcsChat {
     let customTranslationsObj: Partial<TranslationStrings> | undefined;
 
     if (this.translationsUrl) {
-      try {
         customTranslationsObj = await this.loadTranslationsFromUrl(this.translationsUrl);
-      } catch (error) {
-        console.warn('Failed to load translations from URL:', this.translationsUrl, error);
-      }
     }
 
     this.currentLanguage = this.determineLanguage();
@@ -365,7 +361,6 @@ export class OcsChat {
       }
       return 'en';
     }
-
 
   private cleanup() {
     if (this.pollingIntervalRef) {
