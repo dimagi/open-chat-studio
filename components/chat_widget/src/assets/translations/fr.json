@@ -22,13 +22,5 @@
   "sessionExpired": "Session expirée. Veuillez démarrer un nouveau chat.",
   "poweredBy": "Propulsé par",
   "buttonText": "Discutons",
-  "headerText": "Régulier, mode clair",
-  "welcomeMessages": [
-    "Salut ! Bienvenue sur OpenChatStudio ! Ceci est un message de bienvenue très long utilisé pour illustrer la largeur maximale du message.",
-    "Comment pouvons-nous vous aider [aujourd'hui](#nullepart) ?\n* liste\n* liste\n# En-tête L1\n\n## En-tête L2\n\n```\ndu code\nplus de code\n```\n"
-  ],
-  "starterQuestions": [
-    "J'aimerais une démonstration d'OpenChatStudio",
-    "Comment pouvons-nous vous aider [aujourd'hui](#nullepart) ?\n* liste\n* liste\n# En-tête L1\n\n## En-tête L2\n\n```\ndu code\nplus de code\n```\n"
-  ]
+  "headerText": "Régulier, mode clair"
 }

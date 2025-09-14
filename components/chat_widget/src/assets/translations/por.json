@@ -22,13 +22,5 @@
   "sessionExpired": "Sessão expirada. Por favor, inicie um novo chat.",
   "poweredBy": "Desenvolvido por",
   "buttonText": "Vamos conversar",
-  "headerText": "Normal, modo claro",
-  "welcomeMessages": [
-    "Olá! Bem-vindo ao OpenChatStudio! Esta é uma mensagem de boas-vindas muito longa usada para ilustrar a largura máxima da mensagem.",
-    "Como podemos ajudá-lo [hoje](#tonowhere)?\n* lista\n* lista\n# Cabeçalho L1\n\n## Cabeçalho L2\n\n```\num código\nmais código\n```\n"
-  ],
-  "starterQuestions": [
-    "Gostaria de uma demonstração do OpenChatStudio",
-    "Como podemos ajudá-lo [hoje](#tonowhere)?\n* lista\n* lista\n# Cabeçalho L1\n\n## Cabeçalho L2\n\n```\num código\nmais código\n```\n"
-  ]
+  "headerText": "Normal, modo claro"
 }

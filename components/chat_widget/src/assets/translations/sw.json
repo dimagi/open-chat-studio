@@ -22,13 +22,5 @@
   "sessionExpired": "Kipindi kimeisha muda wake. Tafadhali anza gumzo jipya.",
   "poweredBy": "Inaendeshwa na",
   "buttonText": "Tuchat",
-  "headerText": "Kawaida, hali nyepesi",
-  "welcomeMessages": [
-    "Hujambo! Karibu OpenChatStudio! Huu ni ujumbe wa makaribisho mrefu sana unaotumika kuonyesha upana wa juu wa ujumbe.",
-    "Tunawezaje kukusaidia [leo](#tonowhere)?\n* orodha\n* orodha\n# Kichwa L1\n\n## Kichwa kidogo L2\n\n```\nbaadhi ya msimbo\nmsimbo zaidi\n```\n"
-  ],
-  "starterQuestions": [
-    "Ningependa maonyesho ya OpenChatStudio",
-    "Tunawezaje kukusaidia [leo](#tonowhere)?\n* orodha\n* orodha\n# Kichwa L1\n\n## Kichwa kidogo L2\n\n```\nbaadhi ya msimbo\nmsimbo zaidi\n```\n"
-  ]
+  "headerText": "Kawaida, hali nyepesi"
 }

@@ -22,13 +22,5 @@
   "sessionExpired": "Sesión expirada. Por favor, inicia un nuevo chat.",
   "poweredBy": "Desarrollado por",
   "buttonText": "Charlemos",
-  "headerText": "Normal, modo claro",
-  "welcomeMessages": [
-    "¡Hola! ¡Bienvenido a OpenChatStudio! Este es un mensaje de bienvenida muy largo usado para ilustrar el ancho máximo del mensaje.",
-    "¿Cómo podemos ayudarte [hoy](#aningundado)?\n* lista\n* lista\n# Encabezado L1\n\n## Encabezado L2\n\n```\nalgún código\nmás código\n```\n"
-  ],
-  "starterQuestions": [
-    "Me gustaría una demostración de OpenChatStudio",
-    "¿Cómo podemos ayudarte [hoy](#aningundado)?\n* lista\n* lista\n# Encabezado L1\n\n## Encabezado L2\n\n```\nalgún código\nmás código\n```\n"
-  ]
+  "headerText": "Normal, modo claro"
 }

@@ -22,13 +22,5 @@
   "sessionExpired": "Sessione scaduta. Avvia una nuova chat.",
   "poweredBy": "Offerto da",
   "buttonText": "Iniziamo a chattare",
-  "headerText": "Normale, modalità chiara",
-  "welcomeMessages": [
-    "Ciao! Benvenuto su OpenChatStudio! Questo è un messaggio di benvenuto molto lungo usato per illustrare la larghezza massima del messaggio.",
-    "Come possiamo aiutarti [oggi](#tonowhere)?\n* elenco\n* elenco\n# Titolo L1\n\n## Sottotitolo L2\n\n```\nun po’ di codice\naltro codice\n```\n"
-  ],
-  "starterQuestions": [
-    "Vorrei una demo di OpenChatStudio",
-    "Come possiamo aiutarti [oggi](#tonowhere)?\n* elenco\n* elenco\n# Titolo L1\n\n## Sottotitolo L2\n\n```\nun po’ di codice\naltro codice\n```\n"
-  ]
+  "headerText": "Normale, modalità chiara"
 }
