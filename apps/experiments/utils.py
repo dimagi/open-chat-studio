@@ -1,6 +1,5 @@
 from datetime import UTC
 
-from django.db import connection
 from django.db.models import Case, Count, When, functions
 from django.utils import timezone
 
@@ -14,21 +13,6 @@ def get_experiment_trend_data(experiment) -> tuple[list[int], list[int]]:
     days = 2
     to_date = timezone.now()
     from_date = to_date - timezone.timedelta(days=days)
-
-    # Generate all hour buckets in the range using raw SQL
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT generate_series(
-                date_trunc('hour', %s::timestamptz),
-                date_trunc('hour', %s::timestamptz),
-                interval '1 hour'
-            ) as hour_bucket
-        """,
-            [from_date, to_date],
-        )
-
-        hour_buckets = [row[0] for row in cursor.fetchall()]
 
     # Get error counts for each hour bucket
     error_trend = {}
@@ -48,6 +32,14 @@ def get_experiment_trend_data(experiment) -> tuple[list[int], list[int]]:
         success_trend[trace["hour_bucket"]] = trace["success_count"]
 
     # Create ordered list with zero-filled gaps
+    hour_buckets = []
+    current = from_date.replace(minute=0, second=0, microsecond=0)
+    end = to_date.replace(minute=0, second=0, microsecond=0)
+
+    while current <= end:
+        hour_buckets.append(current)
+        current += timezone.timedelta(hours=1)
+
     successes = [success_trend.get(bucket, 0) for bucket in hour_buckets]
     errors = [error_trend.get(bucket, 0) for bucket in hour_buckets]
     return successes, errors
