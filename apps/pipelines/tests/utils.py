@@ -7,6 +7,7 @@ from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import nodes
 from apps.pipelines.nodes.nodes import ToolConfigModel
+from apps.utils.factories.pipelines import PipelineFactory
 
 
 def _make_edges(nodes) -> list[dict]:
@@ -54,6 +55,16 @@ def _edges_from_strings(edge_strings: list[str], nodes: list[dict]) -> list[dict
 
 
 def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict | str] | None = None) -> CompiledStateGraph:
+    pipeline = create_pipeline_model(nodes, edges, pipeline)
+    graph = PipelineGraph.build_from_pipeline(pipeline)
+    return graph.build_runnable()
+
+
+def create_pipeline_model(
+    nodes: list[dict], edges: list[dict | str] | None = None, pipeline: Pipeline = None
+) -> Pipeline:
+    if not pipeline:
+        pipeline = PipelineFactory()
     if edges is None:
         edges = _make_edges(nodes)
     if edges and isinstance(edges[0], str):
@@ -63,8 +74,7 @@ def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict | st
         flow_nodes.append({"id": node["id"], "data": node})
     pipeline.data = {"edges": edges, "nodes": flow_nodes}
     pipeline.update_nodes_from_data()
-    graph = PipelineGraph.build_from_pipeline(pipeline)
-    return graph.build_runnable()
+    return pipeline
 
 
 def start_node():
