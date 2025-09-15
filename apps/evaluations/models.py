@@ -354,8 +354,8 @@ class EvaluationRun(BaseTeamModel):
 
             table_by_message[result.message.id].update(
                 {
-                    "Dataset Input": result.message.input.get("content", ""),
-                    "Dataset Output": result.message.output.get("content", ""),
+                    "Dataset Input": result.input_message,
+                    "Dataset Output": result.output_message,
                     "Generated Response": result.output.get("generated_response", ""),
                     **{
                         f"{key} ({result.evaluator.name})": value
@@ -379,3 +379,17 @@ class EvaluationResult(BaseTeamModel):
 
     def __str__(self):
         return f"EvaluatorResult for Evaluator {self.evaluator_id}"
+
+    @property
+    def input_message(self) -> str:
+        try:
+            return self.output["message"]["input"]["content"]
+        except KeyError:
+            return ""
+
+    @property
+    def output_message(self) -> str:
+        try:
+            return self.output["message"]["output"]["content"]
+        except KeyError:
+            return ""
