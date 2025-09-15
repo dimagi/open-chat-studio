@@ -92,7 +92,7 @@ from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
-from apps.experiments.utils import get_experiment_error_trend_data
+from apps.experiments.utils import get_experiment_trend_data
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
@@ -1573,8 +1573,6 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         messages.error(request, "There was an error during the migration. Please try again later.")
         return redirect(failed_url)
 
-    return redirect(failed_url)
-
 
 @require_GET
 @login_and_team_required
@@ -1585,19 +1583,9 @@ def trends_data(request, team_slug: str, experiment_id: int):
     """
     try:
         experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
-        datasets = [
-            {
-                "label": "Errors",
-                "data": get_experiment_error_trend_data(experiment.default_version),
-                "backgroundColor": "rgba(155, 0, 0, 0.6)",
-            },
-            {
-                "label": "Success",
-                "data": [1, 2, 3, 5, 0, 1, 1, 1, 4, 2, 0, 3, 2, 1, 4, 2, 0, 3, 2],
-                "backgroundColor": "rgba(0, 255, 0, 0.6)",
-            },
-        ]
-        return JsonResponse({"datasets": datasets})
+        successes, errors = get_experiment_trend_data(experiment.default_version)
+        data = {"successes": successes, "errors": errors}
+        return JsonResponse({"trends": data})
     except Exception:
         logging.exception(f"Error loading barchart data for experiment {experiment_id}")
         return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)

@@ -1,6 +1,6 @@
 {% load static %}
 
-<canvas id="{{ record.id }}-trends" class="mt-2" width="80" height="20"></canvas>
+<canvas id="{{ record.id }}-trends" class="m-2 max-w-20 max-h-20"></canvas>
 <script>
     (function() {
         const canvasElement = document.getElementById('{{ record.id }}-trends');

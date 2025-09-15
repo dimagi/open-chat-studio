@@ -12,12 +12,24 @@ export const barChart = (ctx, dataUrl) => {
     return fetch(dataUrl)
         .then(response => response.json())
         .then(data => {
-            const datasets = data.datasets;
-            console.log("Datasets:", datasets);
-            
-            // Generate labels based on data length
-            const labels = datasets.length > 0 && datasets[0].data ? 
-                datasets[0].data.map(() => "") : [];
+            let datasets = [
+                {
+                    label: "Success",
+                    data: data.trends.successes,
+                    backgroundColor: "green",
+                    barThickness: 1,
+                },
+                {
+                    label: "Errors",
+                    data: data.trends.errors,
+                    backgroundColor: "red",
+                    barThickness: 1,
+                }
+            ]
+
+            // We must specify labels, even if we don't want to display them
+            console.log(datasets)
+            const labels = datasets[0].data.map(() => "");
             
             return new Chart(ctx, {
                 type: 'bar',
@@ -35,7 +47,6 @@ export const barChart = (ctx, dataUrl) => {
                         },
                     },
                     responsive: true,
-                    // indexAxis: 'y',
                     scales: {
                         x: {
                             stacked: true,

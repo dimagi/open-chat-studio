@@ -4,20 +4,20 @@ import pytest
 import time_machine
 from django.utils import timezone
 
-from apps.experiments.utils import get_experiment_error_trend_data
+from apps.experiments.utils import get_experiment_trend_data
 from apps.trace.models import Trace, TraceStatus
 
 
 @pytest.mark.django_db()
 class TestExperimentUtils:
-    def test_get_experiment_error_trend_data_with_no_errors(self, experiment):
+    def test_get_experiment_trend_data_with_no_errors(self, experiment):
         """Test that the function returns an array of zeros when there are no error traces"""
-        data = get_experiment_error_trend_data(experiment)
+        data = get_experiment_trend_data(experiment)
         expected_data = [0] * 49
         assert data == expected_data
 
     @patch("apps.experiments.utils.timezone.now")
-    def test_get_experiment_error_trend_data_with_errors(self, mock_now, experiment):
+    def test_get_experiment_trend_data_with_errors(self, mock_now, experiment):
         """Test that the function returns error counts when there are error traces"""
         # Mock current time
         mock_time = timezone.datetime(2024, 1, 15, 12, 0, 0)
@@ -44,7 +44,7 @@ class TestExperimentUtils:
             experiment=experiment, team=experiment.team, status=TraceStatus.SUCCESS, timestamp=error_time_1, duration=1
         )
 
-        data = get_experiment_error_trend_data(experiment)
+        data = get_experiment_trend_data(experiment)
 
         # Should return actual error counts (2 errors in one hour, 1 in another)
         assert isinstance(data, list)
@@ -52,7 +52,7 @@ class TestExperimentUtils:
         # We expect to find 2 errors in the 2-hour bucket and 1 in the 5-hour bucket
         assert sum(data) == 3
 
-    def test_get_experiment_error_trend_data_only_recent_errors(self, experiment):
+    def test_get_experiment_trend_data_only_recent_errors(self, experiment):
         """Test that only errors within the last 2 days are counted"""
         # Mock current time
         with time_machine.travel("2025-08-15 12:00:00"):
@@ -66,7 +66,7 @@ class TestExperimentUtils:
 
             Trace.objects.create(experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, duration=1)
 
-            data = get_experiment_error_trend_data(experiment)
+            data = get_experiment_trend_data(experiment)
 
             # Should only count the recent error
             assert sum(data) == 2
