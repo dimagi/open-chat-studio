@@ -8,7 +8,7 @@ import Chart from 'chart.js/auto';
  * @param {HTMLCanvasElement} ctx - Canvas element to render the chart
  * @param {string} dataUrl - URL endpoint that returns JSON data with a 'data' array
  */
-export const barChart = (ctx, dataUrl) => {
+export const trendsChart = (ctx, dataUrl) => {
     return fetch(dataUrl)
         .then(response => response.json())
         .then(data => {
@@ -28,7 +28,6 @@ export const barChart = (ctx, dataUrl) => {
             ]
 
             // We must specify labels, even if we don't want to display them
-            console.log(datasets)
             const labels = datasets[0].data.map(() => "");
             
             return new Chart(ctx, {
@@ -66,5 +65,5 @@ export const barChart = (ctx, dataUrl) => {
         });
 };
 
-export default { barChart };
+export default { trendsChart };
 

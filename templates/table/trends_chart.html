@@ -11,6 +11,6 @@
         
         const chartContext = canvasElement.getContext('2d');
         // Store chart reference on canvas for future cleanup
-        canvasElement.chart = SiteJS.barchart.barChart(chartContext, "{% url 'experiments:trends_data' record.team.slug record.id %}");
+        canvasElement.chart = SiteJS.trends.trendsChart(chartContext, "{% url 'experiments:trends_data' record.team.slug record.id %}");
     })();
 </script>

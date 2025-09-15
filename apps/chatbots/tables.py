@@ -48,7 +48,7 @@ class ChatbotTable(tables.Table):
     )
     error_trend = columns.TemplateColumn(
         verbose_name="Error Trend (last 48h)",
-        template_name="table/barchart.html",
+        template_name="table/trends_chart.html",
     )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
