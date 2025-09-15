@@ -5,6 +5,7 @@ from apps.evaluations.models import (
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
+    EvaluationResult,
     EvaluationRun,
     Evaluator,
 )
@@ -97,3 +98,14 @@ class EvaluationRunFactory(DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     config = factory.SubFactory(EvaluationConfigFactory)
+
+
+class EvaluationResultFactory(DjangoModelFactory):
+    class Meta:
+        model = EvaluationResult
+
+    team = factory.SubFactory(TeamFactory)
+    evaluator = factory.SubFactory(EvaluatorFactory)
+    message = factory.SubFactory(EvaluationMessageFactory)
+    run = factory.SubFactory(EvaluationRunFactory)
+    output = {}

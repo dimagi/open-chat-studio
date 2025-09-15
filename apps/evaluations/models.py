@@ -346,7 +346,7 @@ class EvaluationRun(BaseTeamModel):
             context_columns = {
                 # exclude 'current_datetime'
                 f"{key}": value
-                for key, value in result.message.context.items()
+                for key, value in result.message_context.items()
                 if key != "current_datetime"
             }
             if include_ids is True:
@@ -391,5 +391,12 @@ class EvaluationResult(BaseTeamModel):
     def output_message(self) -> str:
         try:
             return self.output["message"]["output"]["content"]
+        except KeyError:
+            return ""
+
+    @property
+    def message_context(self) -> str:
+        try:
+            return self.output["message"]["context"]
         except KeyError:
             return ""
