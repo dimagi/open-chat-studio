@@ -8,32 +8,24 @@ import Chart from 'chart.js/auto';
  * @param {HTMLCanvasElement} ctx - Canvas element to render the chart
  * @param {string} dataUrl - URL endpoint that returns JSON data with a 'data' array
  */
-export const sparklineChart = (ctx, dataUrl) => {
-    let seriesData;
-
-    fetch(dataUrl)
+export const barChart = (ctx, dataUrl) => {
+    return fetch(dataUrl)
         .then(response => response.json())
         .then(data => {
-            seriesData = data.data;
+            const datasets = data.datasets;
+            console.log("Datasets:", datasets);
+            
+            // Generate labels based on data length
+            const labels = datasets.length > 0 && datasets[0].data ? 
+                datasets[0].data.map(() => "") : [];
+            
             return new Chart(ctx, {
-                type: "line",
+                type: 'bar',
                 data: {
-                    labels: seriesData,
-                    datasets: [
-                        {
-                            data: seriesData,
-                            fill: false,
-                            pointRadius: 0,
-                            spanGaps: true,
-                            tension: 0.2,
-                            borderColor: '#3B82F6',
-                            borderWidth: 1.5
-                        },
-                    ],
+                    labels: labels,
+                    datasets: datasets
                 },
                 options: {
-                    events: [],
-                    responsive: false,
                     plugins: {
                         legend: {
                             display: false,
@@ -41,22 +33,27 @@ export const sparklineChart = (ctx, dataUrl) => {
                                 display: false
                             }
                         },
-                        tooltip: {
-                            enabled: false
-                        }
                     },
+                    responsive: true,
+                    // indexAxis: 'y',
                     scales: {
                         x: {
+                            stacked: true,
                             display: false,
                         },
                         y: {
-                            display: false,
+                            stacked: true,
+                            display: false
                         }
-                    },
-                },
-            })
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading chart data:', error);
+            return null;
         });
-    };
+};
 
-export default { sparklineChart };
+export default { barChart };
 

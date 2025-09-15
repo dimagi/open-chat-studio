@@ -1581,11 +1581,23 @@ def migrate_experiment_view(request, team_slug, experiment_id):
 @permission_required("experiments.view_experiment")
 def trends_data(request, team_slug: str, experiment_id: int):
     """
-    Returns JSON data for experiment error trend sparkline chart.
+    Returns JSON data for the experiment's trend barchart chart.
     """
     try:
         experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
-        return JsonResponse({"data": get_experiment_error_trend_data(experiment.default_version)})
+        datasets = [
+            {
+                "label": "Errors",
+                "data": get_experiment_error_trend_data(experiment.default_version),
+                "backgroundColor": "rgba(155, 0, 0, 0.6)",
+            },
+            {
+                "label": "Success",
+                "data": [1, 2, 3, 5, 0, 1, 1, 1, 4, 2, 0, 3, 2, 1, 4, 2, 0, 3, 2],
+                "backgroundColor": "rgba(0, 255, 0, 0.6)",
+            },
+        ]
+        return JsonResponse({"datasets": datasets})
     except Exception:
-        logging.exception(f"Error loading sparkline data for experiment {experiment_id}")
-        return JsonResponse({"error": "Failed to load sparkline data", "data": []}, status=500)
+        logging.exception(f"Error loading barchart data for experiment {experiment_id}")
+        return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)

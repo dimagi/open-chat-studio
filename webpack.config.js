@@ -11,7 +11,7 @@ const config = {
     app: './assets/javascript/app.js',  // logged-in javascript
     'pipeline': './assets/javascript/apps/pipeline.tsx',
     adminDashboard: './assets/javascript/admin-dashboard.js',
-    sparkline: './assets/javascript/sparkline.js',
+    barchart: './assets/javascript/barchart.js',
     dashboard: './assets/javascript/dashboard.js',  // dashboard analytics
     'tagMultiselect': './assets/javascript/tag-multiselect.js',
     'tokenCounter': './assets/javascript/tiktoken.js',

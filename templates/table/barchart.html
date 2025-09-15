@@ -1,6 +1,6 @@
 {% load static %}
 
-<canvas id="{{ record.id }}-trends" class="mt-2" width="100" height="30"></canvas>
+<canvas id="{{ record.id }}-trends" class="mt-2" width="80" height="20"></canvas>
 <script>
     (function() {
         const canvasElement = document.getElementById('{{ record.id }}-trends');
@@ -11,6 +11,6 @@
         
         const chartContext = canvasElement.getContext('2d');
         // Store chart reference on canvas for future cleanup
-        canvasElement.chart = SiteJS.sparkline.sparklineChart(chartContext, "{% url 'experiments:trends_data' record.team.slug record.id %}");
+        canvasElement.chart = SiteJS.barchart.barChart(chartContext, "{% url 'experiments:trends_data' record.team.slug record.id %}");
     })();
 </script>
