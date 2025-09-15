@@ -46,8 +46,8 @@ class ChatbotTable(tables.Table):
     messages_count = ColumnWithHelp(
         verbose_name="Messages", orderable=True, help_text="Messages sent and received in the last 30 days"
     )
-    error_trend = columns.TemplateColumn(
-        verbose_name="Error Trend (last 48h)",
+    trends = columns.TemplateColumn(
+        verbose_name="Trends (last 48h)",
         template_name="table/trends_chart.html",
     )
     actions = columns.TemplateColumn(

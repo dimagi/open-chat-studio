@@ -22,8 +22,8 @@ class ExperimentTable(tables.Table):
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     type = columns.Column(orderable=False, empty_values=())
-    error_trend = columns.TemplateColumn(
-        verbose_name="Error Trend (last 48h)",
+    trends = columns.TemplateColumn(
+        verbose_name="Trends (last 48h)",
         template_name="table/trends_chart.html",
     )
     actions = columns.TemplateColumn(
