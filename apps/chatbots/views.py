@@ -148,7 +148,7 @@ def chatbots_home(request, team_slug: str):
             },
         )
     ]
-    return generic_home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_)
+    return generic_home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_, load_trend_modules=True)
 
 
 class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):

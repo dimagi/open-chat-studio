@@ -120,7 +120,13 @@ def experiments_home(request, team_slug: str):
         )
     ]
     return generic_home(
-        request, team_slug, "Experiments", "experiments:table", actions=actions_, show_modal_or_banner=show_modal
+        request,
+        team_slug,
+        "Experiments",
+        "experiments:table",
+        actions=actions_,
+        show_modal_or_banner=show_modal,
+        load_trend_modules=True,
     )
 
 
