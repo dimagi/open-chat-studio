@@ -22,5 +22,7 @@
   "sessionExpired": "Sessão expirada. Por favor, inicie um novo chat.",
   "poweredBy": "Desenvolvido por",
   "buttonText": "Vamos conversar",
-  "headerText": "Normal, modo claro"
+  "headerText": "Normal, modo claro",
+  "welcomeMessages": [],
+  "starterQuestions": []
 }

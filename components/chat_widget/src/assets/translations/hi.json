@@ -22,5 +22,7 @@
   "sessionExpired": "सत्र समाप्त हो गया है। कृपया नई चैट शुरू करें।",
   "poweredBy": "द्वारा संचालित",
   "buttonText": "आइए चैट करें",
-  "headerText": "सामान्य, हल्का मोड"
+  "headerText": "सामान्य, हल्का मोड",
+  "welcomeMessages": [],
+  "starterQuestions": []
 }

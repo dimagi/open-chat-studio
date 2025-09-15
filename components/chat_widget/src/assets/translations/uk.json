@@ -22,5 +22,7 @@
   "sessionExpired": "Сесія завершилася. Будь ласка, почніть новий чат.",
   "poweredBy": "Працює на",
   "buttonText": "Давайте поспілкуємось",
-  "headerText": "Звичайний, світлий режим"
+  "headerText": "Звичайний, світлий режим",
+  "welcomeMessages": [],
+  "starterQuestions": []
 }

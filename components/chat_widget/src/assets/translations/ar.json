@@ -22,5 +22,7 @@
   "sessionExpired": "انتهت صلاحية الجلسة. يرجى بدء محادثة جديدة.",
   "poweredBy": "مدعوم من",
   "buttonText": "لنبدأ المحادثة",
-  "headerText": "الوضع العادي، الوضع الفاتح"
+  "headerText": "الوضع العادي، الوضع الفاتح",
+  "welcomeMessages": [],
+  "starterQuestions": []
 }

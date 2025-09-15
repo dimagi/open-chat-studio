@@ -22,5 +22,7 @@
   "sessionExpired": "Session expired. Please start a new chat.",
   "poweredBy": "Powered by",
   "buttonText": "Let's Chat",
-  "headerText": "Regular, light mode"
+  "headerText": "Regular, light mode",
+  "welcomeMessages": [],
+  "starterQuestions": []
 }

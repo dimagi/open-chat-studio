@@ -22,5 +22,7 @@
   "sessionExpired": "Kipindi kimeisha muda wake. Tafadhali anza gumzo jipya.",
   "poweredBy": "Inaendeshwa na",
   "buttonText": "Tuchat",
-  "headerText": "Kawaida, hali nyepesi"
+  "headerText": "Kawaida, hali nyepesi",
+  "welcomeMessages": [],
+  "starterQuestions": []
 }
