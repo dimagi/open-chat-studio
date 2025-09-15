@@ -1,9 +1,9 @@
 {% load static %}
 
-<canvas id="{{ record.id }}-sparkline-chart" class="mt-2" width="100" height="30"></canvas>
+<canvas id="{{ record.id }}-trends" class="mt-2" width="100" height="30"></canvas>
 <script>
     (function() {
-        const canvasElement = document.getElementById('{{ record.id }}-sparkline-chart');
+        const canvasElement = document.getElementById('{{ record.id }}-trends');
         if (canvasElement.chart) {
             // Destroy existing chart if it exists
             canvasElement.chart.destroy();
@@ -11,6 +11,6 @@
         
         const chartContext = canvasElement.getContext('2d');
         // Store chart reference on canvas for future cleanup
-        canvasElement.chart = SiteJS.sparkline.sparklineChart(chartContext, "{% url 'experiments:experiment_error_trend' record.team.slug record.id %}");
+        canvasElement.chart = SiteJS.sparkline.sparklineChart(chartContext, "{% url 'experiments:trends_data' record.team.slug record.id %}");
     })();
 </script>

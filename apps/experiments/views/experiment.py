@@ -1579,7 +1579,7 @@ def migrate_experiment_view(request, team_slug, experiment_id):
 @require_GET
 @login_and_team_required
 @permission_required("experiments.view_experiment")
-def experiment_error_trend(request, team_slug: str, experiment_id: int):
+def trends_data(request, team_slug: str, experiment_id: int):
     """
     Returns JSON data for experiment error trend sparkline chart.
     """
