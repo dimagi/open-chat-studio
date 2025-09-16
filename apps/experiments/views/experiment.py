@@ -92,7 +92,6 @@ from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
-from apps.experiments.utils import get_experiment_trend_data
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
@@ -1583,7 +1582,7 @@ def trends_data(request, team_slug: str, experiment_id: int):
     """
     try:
         experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
-        successes, errors = get_experiment_trend_data(experiment.default_version)
+        successes, errors = experiment.default_version.get_trend_data()
         data = {"successes": successes, "errors": errors}
         return JsonResponse({"trends": data})
     except Exception:
