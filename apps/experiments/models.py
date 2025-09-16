@@ -609,6 +609,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     # 0 is a reserved version number, meaning the default version
     DEFAULT_VERSION_NUMBER = 0
+    TREND_CACHE_KEY_TEMPLATE = "experiment_trend_data_{experiment_id}"
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
@@ -809,6 +810,10 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return f"v{self.version_number}"
 
     @property
+    def trends_cache_key(self) -> str:
+        return self.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.id)
+
+    @property
     def max_token_limit(self) -> int:
         if self.assistant:
             return self.assistant.llm_provider_model.max_token_limit
@@ -868,12 +873,12 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         Get the trend data for the experiment from cache. If it is missing from the cache, it is calculated and
         stored in the cache.
         """
-        cache_key = f"experiment_trend_data_{self.id}"
-        if trend_data := cache.get(cache_key):
+
+        if trend_data := cache.get(self.trends_cache_key):
             return trend_data
 
         trend_data = self._calculate_trends()
-        cache.set(cache_key, trend_data, settings.EXPERIMENT_TREND_CACHE_TIMEOUT)
+        cache.set(self.trends_cache_key, trend_data, settings.EXPERIMENT_TREND_CACHE_TIMEOUT)
         return trend_data
 
     def _calculate_trends(self) -> tuple[list, list]:
