@@ -70,8 +70,6 @@
           <i class="fa-solid fa-check-circle me-2"></i>
           Embedded Chat Widget Created Successfully!
         </h3>
-
-        {% with success_data=request.session.embedded_widget_success %}
         <div class="card bg-base-200 mb-4">
           <div class="card-body">
             <h2 class="card-title text-base">
@@ -80,7 +78,7 @@
             </h2>
             <div class="join w-full">
               <input type="text" class="input input-bordered join-item flex-1 font-mono text-sm"
-                     id="widget-token-copy" value="{{ success_data.widget_token }}" readonly>
+                     id="widget-token-copy" value="{{ widget_token }}" readonly>
               <button class="btn btn-outline join-item" type="button"
                       onclick="SiteJS.app.copyToClipboard(this, 'widget-token-copy')"
                       title="Copy token to clipboard">
@@ -100,9 +98,9 @@
               <i class="fa-solid fa-globe me-1"></i>
               Allowed Domains
             </h2>
-            {% if success_data.allowed_domains %}
+            {% if allowed_domains %}
               <ul class="list-none space-y-1">
-              {% for domain in success_data.allowed_domains %}
+              {% for domain in allowed_domains %}
                 <li class="flex items-center">
                   <i class="fa-solid fa-check text-success me-2"></i>
                   <span class="font-mono">{{ domain }}</span>
@@ -135,7 +133,7 @@
               </button>
             </div>
             <div class="mockup-code">
-              <pre id="embed-code-display" class="text-sm overflow-x-auto">{{ success_data.embed_code }}</pre>
+              <pre id="embed-code-display" class="text-sm overflow-x-auto">{{ embed_code }}</pre>
             </div>
             <div class="text-sm opacity-70 mt-2">
               <i class="fa-solid fa-info-circle me-1"></i>
@@ -143,7 +141,6 @@
             </div>
           </div>
         </div>
-        {% endwith %}
 
         <div class="modal-action">
           <button class="btn btn-primary" type="button" onclick="closeSuccessModal()">
