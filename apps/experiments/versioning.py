@@ -413,9 +413,8 @@ class VersionsObjectManagerMixin:
         """Returns a queryset with only working versions"""
         return self.get_queryset().filter(working_version=None)
 
-    def all_versions_queryset(self, source: "VersionsMixin"):
-        working_version_id = source.get_working_version_id()
+    def all_versions_queryset(self, working_version_id: int):
         queryset = self.get_queryset().filter(Q(working_version_id=working_version_id) | Q(id=working_version_id))
-        if hasattr(source, "version_number"):
+        if hasattr(self.model, "version_number"):
             queryset = queryset.order_by("-version_number")
         return queryset

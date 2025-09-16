@@ -18,8 +18,8 @@ export namespace Components {
          */
         "allowFullScreen": boolean;
         /**
-          * The base URL for the API (defaults to current origin).
-          * @default "https://chatbots.dimagi.com"
+          * The base URL for the API.
+          * @default "https://www.openchatstudio.com"
          */
         "apiBaseUrl"?: string;
         /**
@@ -119,8 +119,8 @@ declare namespace LocalJSX {
          */
         "allowFullScreen"?: boolean;
         /**
-          * The base URL for the API (defaults to current origin).
-          * @default "https://chatbots.dimagi.com"
+          * The base URL for the API.
+          * @default "https://www.openchatstudio.com"
          */
         "apiBaseUrl"?: string;
         /**

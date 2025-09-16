@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
+import {Component, Host, h, Prop, State, Element, Watch, Env} from '@stencil/core';
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
@@ -101,9 +101,9 @@ export class OcsChat {
   @Prop() chatbotId!: string;
 
   /**
-   * The base URL for the API (defaults to current origin).
+   * The base URL for the API.
    */
-  @Prop() apiBaseUrl?: string = "https://chatbots.dimagi.com";
+  @Prop() apiBaseUrl?: string = "https://www.openchatstudio.com";
 
   /**
    * The text to display on the button.
@@ -322,16 +322,13 @@ export class OcsChat {
     this.currentPollTaskId = '';
   }
 
-  private getApiBaseUrl(): string {
-    return this.apiBaseUrl || window.location.origin;
-  }
-
   private getApiHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'x-ocs-widget-version': Env.version,
     };
 
-    const csrfToken = getCSRFToken(this.getApiBaseUrl());
+    const csrfToken = getCSRFToken(this.apiBaseUrl);
     if (csrfToken) {
       headers['X-CSRFToken'] = csrfToken;
     }
@@ -361,7 +358,7 @@ export class OcsChat {
         requestBody.participant_name = this.userName;
       }
 
-      const response = await fetch(`${this.getApiBaseUrl()}/api/chat/start/`, {
+      const response = await fetch(`${this.apiBaseUrl}/api/chat/start/`, {
         method: 'POST',
         headers: this.getApiHeaders(),
         body: JSON.stringify(requestBody)
@@ -430,7 +427,7 @@ export class OcsChat {
 
       // Only upload if there are new files
       if (formData.has('files')) {
-        const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/upload/`, {
+        const response = await fetch(`${this.apiBaseUrl}/api/chat/${this.sessionId}/upload/`, {
           method: 'POST',
           body: formData,
         });
@@ -524,7 +521,7 @@ export class OcsChat {
         requestBody.attachment_ids = attachmentIds;
       }
 
-      const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/message/`, {
+      const response = await fetch(`${this.apiBaseUrl}/api/chat/${this.sessionId}/message/`, {
         method: 'POST',
         headers: this.getApiHeaders(),
         body: JSON.stringify(requestBody)
@@ -565,7 +562,7 @@ export class OcsChat {
       if (!this.sessionId || !this.currentPollTaskId) return;
 
       try {
-        const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/${this.currentPollTaskId}/poll/`);
+        const response = await fetch(`${this.apiBaseUrl}/api/chat/${this.sessionId}/${this.currentPollTaskId}/poll/`);
 
         if (!response.ok) {
           throw new Error(`Failed to poll task: ${response.statusText}`);
@@ -649,7 +646,7 @@ export class OcsChat {
     if (!this.sessionId) return;
 
     try {
-      const url = new URL(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/poll/`);
+      const url = new URL(`${this.apiBaseUrl}/api/chat/${this.sessionId}/poll/`);
       if (this.messages && this.messages.length > 0) {
         url.searchParams.set('since', this.messages.at(-1).created_at);
       }
@@ -1014,7 +1011,7 @@ export class OcsChat {
   };
 
   private getDefaultIconUrl(): string {
-    return `${this.getApiBaseUrl()}/static/images/favicons/favicon.svg`;
+    return `${this.apiBaseUrl}/static/images/favicons/favicon.svg`;
   }
 
   private getButtonClasses(): string {
