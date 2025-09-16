@@ -538,6 +538,18 @@ class CommCareConnectChannelForm(ExtraFormBase):
 class EmbeddedWidgetChannelForm(ExtraFormBase):
     """Form for creating embedded chat widget channels"""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Initialize widget data attributes
+        self.widget_token = None
+        self.embed_code = None
+
+        # Convert allowed_domains list back to newline-separated text for editing
+        if self.channel and self.channel.extra_data.get("allowed_domains"):
+            domains_list = self.channel.extra_data.get("allowed_domains", [])
+            if isinstance(domains_list, list) and domains_list:
+                self.fields["allowed_domains"].initial = "\n".join(domains_list)
+
     allowed_domains = forms.CharField(
         label="Allowed Domains",
         widget=forms.Textarea(
