@@ -243,6 +243,14 @@ class BaseChannelDialogView(View):
             context["success_message"] = form.success_message
         if form.warning_message:
             context["warning_message"] = form.warning_message
+        if extra_form:
+            if hasattr(extra_form, "embed_code") and extra_form.embed_code:
+                context["embed_code"] = extra_form.embed_code
+            if hasattr(extra_form, "widget_token") and extra_form.widget_token:
+                context["widget_token"] = extra_form.widget_token
+            if hasattr(extra_form, "cleaned_data") and extra_form.cleaned_data:
+                allowed_domains = extra_form.cleaned_data.get("allowed_domains")
+                context["allowed_domains"] = allowed_domains
         return context
 
     def get_success_url(self):

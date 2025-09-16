@@ -586,6 +586,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
     def post_save(self, channel: ExperimentChannel):
         """Save widget data and set success message"""
         widget_token = self.cleaned_data["widget_token"]
+        embed_code = self._generate_embed_code(channel, widget_token)
         channel.extra_data.update(
             {
                 "widget_token": widget_token,
@@ -593,7 +594,8 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             }
         )
         channel.save()
-
+        self.widget_token = widget_token
+        self.embed_code = embed_code
         self.success_message = f"Embedded widget channel created successfully! Widget token: {widget_token}"
 
     def _generate_embed_code(self, channel: ExperimentChannel, token: str) -> str:
