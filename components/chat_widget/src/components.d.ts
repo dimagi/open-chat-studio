@@ -46,7 +46,7 @@ export namespace Components {
         /**
           * Authentication key for embedded channels
          */
-        "key"?: string;
+        "embedKey"?: string;
         /**
           * The message to display in the new chat confirmation dialog.
           * @default "Starting a new chat will clear your current conversation. Continue?"
@@ -147,7 +147,7 @@ declare namespace LocalJSX {
         /**
           * Authentication key for embedded channels
           */
-        "key"?: string;
+        "embedKey"?: string;
         /**
         /**
           * The message to display in the new chat confirmation dialog.
