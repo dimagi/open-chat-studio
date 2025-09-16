@@ -270,12 +270,24 @@ class BaseChannelDialogView(View):
                 "channels": channels,
                 "platforms": available_platforms,
                 "channel": channel,
-                "extra_form": channel.extra_form(
-                    experiment=self.experiment
-                ),  # override extra form to get 'update' rendering
             }
+            if not self._has_widget_data(form):
+                additional_context["extra_form"] = channel.extra_form(
+                    experiment=self.experiment
+                )  # override extra form to get 'update' rendering
             return self.render_to_response({**self.get_context_data(form=form), **additional_context})
         return HttpResponse(headers={"hx-redirect": self.get_success_url()})
+
+    def _has_widget_data(self, form):
+        """Check if form has widget data that should trigger the success modal"""
+        extra_form = form.extra_form if hasattr(form, "extra_form") else None
+        return (
+            extra_form
+            and hasattr(extra_form, "embed_code")
+            and extra_form.embed_code
+            and hasattr(extra_form, "widget_token")
+            and extra_form.widget_token
+        )
 
 
 class ChannelEditDialogView(BaseChannelDialogView, PermissionRequiredMixin, UpdateView):
