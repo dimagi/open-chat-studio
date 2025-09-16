@@ -1126,6 +1126,26 @@ class TestExperimentTrends:
             assert experiment.traces.filter(status=TraceStatus.ERROR).count() == 3
             assert sum(success) == 0
 
+    @patch("apps.experiments.models.cache")
+    @patch("apps.experiments.models.Experiment._calculate_trends")
+    def test_trend_data_caching(self, _calculate_trends, cache, experiment):
+        trends = ([1, 2, 3], [4, 5, 6])
+
+        # Nothing in the cache
+        _calculate_trends.return_value = trends
+        cache.get.return_value = None
+        _, errors = experiment.get_trend_data()
+        assert errors == [4, 5, 6]
+        _calculate_trends.assert_called()
+        cache.set.assert_called()
+
+        # Simulate cache hit
+        _calculate_trends.reset_mock()
+        cache.get.return_value = trends
+        _, errors = experiment.get_trend_data()
+        assert errors == [4, 5, 6]
+        _calculate_trends.assert_not_called()
+
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:
     field_difference = original.compare_with_model(new, original.get_fields_to_exclude()).difference(
