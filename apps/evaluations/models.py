@@ -122,6 +122,16 @@ class EvaluationMessage(BaseModel):
                 context_tags.extend([tag.name for tag in tags if not tag.is_system_tag])
                 existing_context["tags"] = list(dict.fromkeys(context_tags))  # dedupe preserving order
 
+        def _messages_to_history(messages_):
+            return [
+                {
+                    "message_type": msg.message_type,
+                    "content": msg.content,
+                    "summary": getattr(msg, "summary", None),
+                }
+                for msg in messages_
+            ]
+
         messages_by_session = defaultdict(list)
         for message in all_messages:
             messages_by_session[message.chat.experiment_session.external_id].append(message)
@@ -151,33 +161,12 @@ class EvaluationMessage(BaseModel):
                         },
                     )
                     new_messages.append(evaluation_message)
-
-                    history.append(
-                        {
-                            "message_type": current_msg.message_type,
-                            "content": current_msg.content,
-                            "summary": getattr(current_msg, "summary", None),
-                        }
-                    )
-                    history.append(
-                        {
-                            "message_type": next_msg.message_type,
-                            "content": next_msg.content,
-                            "summary": getattr(next_msg, "summary", None),
-                        }
-                    )
-
+                    history.extend(_messages_to_history([current_msg, next_msg]))
                     i += 2
                 else:
                     # Add AI seed messages to the history
                     if current_msg.message_type == ChatMessageType.AI and not history:
-                        history.append(
-                            {
-                                "message_type": current_msg.message_type,
-                                "content": current_msg.content,
-                                "summary": getattr(current_msg, "summary", None),
-                            }
-                        )
+                        history.extend(_messages_to_history([current_msg]))
                     i += 1
         return new_messages
 
