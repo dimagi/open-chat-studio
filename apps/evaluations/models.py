@@ -169,7 +169,15 @@ class EvaluationMessage(BaseModel):
 
                     i += 2
                 else:
-                    # If there is not a (human, ai) pair, move on.
+                    # Add AI seed messages to the history
+                    if current_msg.message_type == ChatMessageType.AI and not history:
+                        history.append(
+                            {
+                                "message_type": current_msg.message_type,
+                                "content": current_msg.content,
+                                "summary": getattr(current_msg, "summary", None),
+                            }
+                        )
                     i += 1
         return new_messages
 
