@@ -5,6 +5,7 @@ from apps.evaluations.models import (
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
+    EvaluationResult,
     EvaluationRun,
     Evaluator,
 )
@@ -31,7 +32,7 @@ class EvaluationMessageFactory(DjangoModelFactory):
 
     input = {"content": "Hello, how are you?", "role": "human"}
     output = {"content": "I'm doing well, thank you!", "role": "ai"}
-    context = {"current_datetime": "2023-01-01T00:00:00", "history": "test history"}
+    context = {"current_datetime": "2023-01-01T00:00:00"}
 
     @factory.post_generation
     def create_chat_messages(self, create, extracted, **kwargs):
@@ -97,3 +98,14 @@ class EvaluationRunFactory(DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     config = factory.SubFactory(EvaluationConfigFactory)
+
+
+class EvaluationResultFactory(DjangoModelFactory):
+    class Meta:
+        model = EvaluationResult
+
+    team = factory.SubFactory(TeamFactory)
+    evaluator = factory.SubFactory(EvaluatorFactory)
+    message = factory.SubFactory(EvaluationMessageFactory)
+    run = factory.SubFactory(EvaluationRunFactory)
+    output = {}
