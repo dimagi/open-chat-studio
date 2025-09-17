@@ -15,7 +15,7 @@ from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
-from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType, Evaluator
+from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.tasks import upload_evaluation_run_results_task
 from apps.evaluations.utils import get_evaluators_with_schema
@@ -319,7 +319,6 @@ def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, e
             "active_tab": "evaluations",
             "title": "Upload Results",
             "evaluation_run": evaluation_run,
-            "all_team_evaluators": Evaluator.objects.filter(team=request.team),
         }
         return render(request, "evaluations/evaluation_run_update.html", context)
     elif request.method == "POST":
@@ -339,9 +338,12 @@ def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, e
 
 @login_and_team_required
 @require_POST
-def parse_evaluation_results_csv_columns(request, team_slug: str):
+def parse_evaluation_results_csv_columns(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
     """Parse uploaded CSV and return column names and sample data for evaluation results."""
     try:
+        evaluation_run = get_object_or_404(
+            EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
+        )
         csv_file = request.FILES.get("csv_file")
         if not csv_file:
             return JsonResponse({"error": "No CSV file provided"}, status=400)
@@ -357,7 +359,7 @@ def parse_evaluation_results_csv_columns(request, team_slug: str):
         protected_columns = set(EVALUATION_RUN_FIXED_HEADERS) | set(["error"])
 
         result_columns = [col for col in columns if col not in protected_columns]
-        suggestions = generate_evaluation_results_column_suggestions(result_columns, request.team)
+        suggestions = generate_evaluation_results_column_suggestions(result_columns, evaluation_run)
         return JsonResponse(
             {
                 "columns": columns,
@@ -374,9 +376,9 @@ def parse_evaluation_results_csv_columns(request, team_slug: str):
         return JsonResponse({"error": "An error occurred while parsing the CSV file."}, status=400)
 
 
-def generate_evaluation_results_column_suggestions(result_columns, team):
+def generate_evaluation_results_column_suggestions(result_columns, evaluation_run):
     """Generate suggestions for mapping result columns to evaluators."""
-    evaluators = Evaluator.objects.filter(team=team)
+    evaluators = evaluation_run.config.evaluators.all()
     evaluator_name_to_id = {evaluator.name: evaluator.id for evaluator in evaluators}
 
     suggestions = {}

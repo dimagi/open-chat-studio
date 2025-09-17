@@ -449,7 +449,7 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
     columns = list(csv_data[0].keys()) if csv_data else []
     has_id_column = "id" in columns
 
-    evaluators = Evaluator.objects.filter(team=team).all()
+    evaluators = evaluation_run.config.evaluators.all()
     evaluator_by_id = {evaluator.id: evaluator for evaluator in evaluators}
 
     for row_index, row in enumerate(csv_data):

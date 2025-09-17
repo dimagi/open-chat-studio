@@ -88,7 +88,7 @@ urlpatterns = [
         name="parse_csv_columns",
     ),
     path(
-        "parse_evaluation_results_csv_columns/",
+        "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/parse_csv_columns/",
         evaluation_config_views.parse_evaluation_results_csv_columns,
         name="parse_evaluation_results_csv_columns",
     ),

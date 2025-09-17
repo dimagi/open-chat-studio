@@ -166,7 +166,7 @@
         csvParsed: false,
         columnMapping: {},
         evaluators: [
-          {% for evaluator in all_team_evaluators %}
+          {% for evaluator in evaluation_run.config.evaluators.all %}
             { id: {{ evaluator.id }}, name: '{{ evaluator.name|escapejs }}' }{% if not forloop.last %},{% endif %}
           {% endfor %}
         ],
@@ -179,7 +179,7 @@
           formData.append('csv_file', event.target.files[0]);
 
           try {
-            const response = await fetch('{% url 'evaluations:parse_evaluation_results_csv_columns' request.team.slug %}', {
+            const response = await fetch('{% url 'evaluations:parse_evaluation_results_csv_columns' request.team.slug evaluation_run.config_id evaluation_run.id %}', {
               method: 'POST',
               body: formData,
               headers: {
