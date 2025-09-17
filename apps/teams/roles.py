@@ -12,5 +12,6 @@ def is_member(user: CustomUser, team: apps.teams.models.Team) -> bool:
 def is_super_admin(user: CustomUser, team: apps.teams.models.Team) -> bool:
     if not user or not user.is_authenticated or not team:
         return False
-    membership = user.membership_set.get(team=team)
-    return membership.groups.filter(name=SUPER_ADMIN_GROUP).exists()
+    return user.membership_set.filter(
+        team=team, groups__name=SUPER_ADMIN_GROUP
+    ).exists()
