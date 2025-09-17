@@ -109,7 +109,6 @@ from apps.utils.base_experiment_table_view import BaseExperimentTableView
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    show_modal = flag_is_active(request, "flag_chatbots")
     actions_ = [
         actions.Action(
             "experiments:new",
@@ -119,7 +118,7 @@ def experiments_home(request, team_slug: str):
         )
     ]
     return generic_home(
-        request, team_slug, "Experiments", "experiments:table", actions=actions_, show_modal_or_banner=show_modal
+        request, team_slug, "Experiments", "experiments:table", actions=actions_, show_modal_or_banner=True
     )
 
 
@@ -279,7 +278,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
     def dispatch(self, request, *args, **kwargs):
         is_chatbot = kwargs.get("new_chatbot", False)
-        if not is_chatbot and flag_is_active(request, "flag_chatbots"):
+        if not is_chatbot:
             return HttpResponseRedirect(reverse("chatbots:new", args=[request.team.slug]))
         return super().dispatch(request, *args, **kwargs)
 

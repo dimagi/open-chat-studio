@@ -1,7 +1,6 @@
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Q
 from django_tables2 import SingleTableView
-from waffle import flag_is_active
 
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
@@ -12,14 +11,13 @@ class BaseExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Permis
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        chatbots_enabled = flag_is_active(self.request, "flag_chatbots")
         is_experiment = self.kwargs.get("is_experiment", False)
         query_set = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True)
             .order_by("is_archived", "name")
         )
-        if chatbots_enabled and is_experiment:
+        if is_experiment:
             query_set = query_set.filter(pipeline__isnull=True)
         show_archived = self.request.GET.get("show_archived") == "on"
         if not show_archived:
