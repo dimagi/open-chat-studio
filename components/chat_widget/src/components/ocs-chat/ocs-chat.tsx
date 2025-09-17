@@ -8,7 +8,7 @@ import {
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { getCSRFToken } from '../../utils/cookies';
 import { varToPixels } from '../../utils/utils';
-import {TranslationStrings, TranslationManager, getBrowserLanguage} from '../../utils/translations';
+import {TranslationStrings, TranslationManager, getBrowserLanguage, defaultTranslations} from '../../utils/translations';
 
 interface ChatMessage {
   created_at: string;
@@ -344,7 +344,7 @@ export class OcsChat {
       return translations as Partial<TranslationStrings>;
     } catch (error) {
       console.error('Error loading translations from URL:', error);
-      throw error;
+      return defaultTranslations
     }
   }
 
