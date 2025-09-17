@@ -212,8 +212,8 @@ export class OcsChat {
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
 
-  @State() currentLanguage: string = 'en';
-  @State() translationManager: TranslationManager = new TranslationManager();
+  currentLanguage: string = 'en';
+  translationManager: TranslationManager = new TranslationManager();
 
   private pollingIntervalRef?: any;
   private messageListRef?: HTMLDivElement;
