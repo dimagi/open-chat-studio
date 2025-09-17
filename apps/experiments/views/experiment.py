@@ -20,7 +20,15 @@ from django.db import transaction
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect, QueryDict
+from django.http import (
+    FileResponse,
+    Http404,
+    HttpResponse,
+    HttpResponseForbidden,
+    HttpResponseRedirect,
+    JsonResponse,
+    QueryDict,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -123,7 +131,13 @@ def experiments_home(request, team_slug: str):
         )
     ]
     return generic_home(
-        request, team_slug, "Experiments", "experiments:table", actions=actions_, show_modal_or_banner=show_modal
+        request,
+        team_slug,
+        "Experiments",
+        "experiments:table",
+        actions=actions_,
+        show_modal_or_banner=show_modal,
+        load_trend_modules=True,
     )
 
 
@@ -1562,4 +1576,19 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         messages.error(request, "There was an error during the migration. Please try again later.")
         return redirect(failed_url)
 
-    return redirect(failed_url)
+
+@require_GET
+@login_and_team_required
+@permission_required("experiments.view_experiment")
+def trends_data(request, team_slug: str, experiment_id: int):
+    """
+    Returns JSON data for the experiment's trend barchart chart.
+    """
+    try:
+        experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
+        successes, errors = experiment.default_version.get_trend_data()
+        data = {"successes": successes, "errors": errors}
+        return JsonResponse({"trends": data})
+    except Exception:
+        logging.exception(f"Error loading barchart data for experiment {experiment_id}")
+        return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)

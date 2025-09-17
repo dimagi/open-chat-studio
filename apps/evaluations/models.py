@@ -212,6 +212,16 @@ class EvaluationMessage(BaseModel):
 
         return "\n".join(history_lines)
 
+    def as_result_dict(self) -> dict:
+        """Returns a dict representation to be stored in any evaluator result"""
+        return {
+            "input": self.input,
+            "output": self.output,
+            "context": self.context,
+            "history": self.history,
+            "metadata": self.metadata,
+        }
+
 
 class EvaluationDataset(BaseTeamModel):
     name = models.CharField(max_length=255)
@@ -336,7 +346,7 @@ class EvaluationRun(BaseTeamModel):
             context_columns = {
                 # exclude 'current_datetime'
                 f"{key}": value
-                for key, value in result.message.context.items()
+                for key, value in result.message_context.items()
                 if key != "current_datetime"
             }
             if include_ids is True:
@@ -344,8 +354,8 @@ class EvaluationRun(BaseTeamModel):
 
             table_by_message[result.message.id].update(
                 {
-                    "Dataset Input": result.message.input.get("content", ""),
-                    "Dataset Output": result.message.output.get("content", ""),
+                    "Dataset Input": result.input_message,
+                    "Dataset Output": result.output_message,
                     "Generated Response": result.output.get("generated_response", ""),
                     **{
                         f"{key} ({result.evaluator.name})": value
@@ -369,3 +379,24 @@ class EvaluationResult(BaseTeamModel):
 
     def __str__(self):
         return f"EvaluatorResult for Evaluator {self.evaluator_id}"
+
+    @property
+    def input_message(self) -> str:
+        try:
+            return self.output["message"]["input"]["content"]
+        except KeyError:
+            return ""
+
+    @property
+    def output_message(self) -> str:
+        try:
+            return self.output["message"]["output"]["content"]
+        except KeyError:
+            return ""
+
+    @property
+    def message_context(self) -> str:
+        try:
+            return self.output["message"]["context"]
+        except KeyError:
+            return ""

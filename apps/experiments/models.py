@@ -2,7 +2,7 @@ import base64
 import logging
 import secrets
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import cached_property
 from typing import Self
 from uuid import uuid4
@@ -10,6 +10,7 @@ from uuid import uuid4
 import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
@@ -22,6 +23,7 @@ from django.db.models import (
     Subquery,
     UniqueConstraint,
     When,
+    functions,
 )
 from django.template.loader import get_template
 from django.urls import reverse
@@ -39,6 +41,7 @@ from apps.generics.chips import Chip
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team
+from apps.trace.models import TraceStatus
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
 from apps.web.meta import absolute_url
@@ -616,6 +619,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     # 0 is a reserved version number, meaning the default version
     DEFAULT_VERSION_NUMBER = 0
+    TREND_CACHE_KEY_TEMPLATE = "experiment_trend_data_{experiment_id}"
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
@@ -816,6 +820,10 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return f"v{self.version_number}"
 
     @property
+    def trends_cache_key(self) -> str:
+        return self.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.id)
+
+    @property
     def max_token_limit(self) -> int:
         if self.assistant:
             return self.assistant.llm_provider_model.max_token_limit
@@ -869,6 +877,58 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     raise ValueError("llm_provider_model is not set for this Experiment")
                 return None
             return self.llm_provider_model.name
+
+    def get_trend_data(self) -> tuple[list, list]:
+        """
+        Get the trend data for the experiment from cache. If it is missing from the cache, it is calculated and
+        stored in the cache.
+        """
+
+        if trend_data := cache.get(self.trends_cache_key):
+            return trend_data
+
+        trend_data = self._calculate_trends()
+        cache.set(self.trends_cache_key, trend_data, settings.EXPERIMENT_TREND_CACHE_TIMEOUT)
+        return trend_data
+
+    def _calculate_trends(self) -> tuple[list, list]:
+        """
+        Calculate the trend data for the experiment. Returns two lists: successes and errors, each containing the count
+        of successful and error traces for each hour in the last 48 hours.
+        """
+        days = 2
+        to_date = timezone.now()
+        from_date = to_date - timezone.timedelta(days=days)
+
+        # Get error counts for each hour bucket
+        error_trend = {}
+        success_trend = {}
+        trace_counts = (
+            self.traces.filter(timestamp__gte=from_date, timestamp__lte=to_date)
+            .annotate(hour_bucket=functions.TruncHour("timestamp", tzinfo=UTC))
+            .values("hour_bucket")
+            .annotate(
+                error_count=Count(Case(When(status=TraceStatus.ERROR, then=1))),
+                success_count=Count(Case(When(status=TraceStatus.SUCCESS, then=1))),
+            )
+        )
+
+        for trace in trace_counts:
+            error_trend[trace["hour_bucket"]] = trace["error_count"]
+            success_trend[trace["hour_bucket"]] = trace["success_count"]
+
+        # Create ordered list with zero-filled gaps
+        hour_buckets = []
+        current = from_date.replace(minute=0, second=0, microsecond=0)
+        end = to_date.replace(minute=0, second=0, microsecond=0)
+
+        while current <= end:
+            hour_buckets.append(current)
+            current += timezone.timedelta(hours=1)
+
+        successes = [success_trend.get(bucket, 0) for bucket in hour_buckets]
+        errors = [error_trend.get(bucket, 0) for bucket in hour_buckets]
+        return successes, errors
 
     @property
     def trace_service(self):
