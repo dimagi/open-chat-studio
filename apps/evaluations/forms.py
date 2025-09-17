@@ -106,17 +106,19 @@ class EvaluationConfigForm(forms.ModelForm):
                 if working_experiment := self.instance.experiment_version.get_working_version():
                     self.initial["experiment"] = working_experiment
                     # Filter the experiment_version queryset to only show versions for this experiment
-                    experiment_version_queryset = self._get_version_choices(working_experiment)
+                    experiment_version_queryset = self._get_version_choices(working_experiment.id)
 
             elif self.instance.base_experiment:
                 # For sentinel values, set experiment and convert sentinel type to string
                 self.initial["experiment"] = self.instance.base_experiment
                 # Filter the experiment_version queryset to only show versions for this experiment
-                experiment_version_queryset = self._get_version_choices(self.instance.base_experiment)
+                experiment_version_queryset = self._get_version_choices(self.instance.base_experiment.id)
                 if self.instance.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
                     self.initial["experiment_version"] = ExperimentVersionSelection.LATEST_WORKING.value
                 elif self.instance.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
                     self.initial["experiment_version"] = ExperimentVersionSelection.LATEST_PUBLISHED.value
+        elif experiment_id := self.data.get("experiment"):
+            experiment_version_queryset = self._get_version_choices(experiment_id)
 
         self.fields["experiment_version"] = ExperimentChoiceField(
             queryset=experiment_version_queryset,
@@ -126,9 +128,9 @@ class EvaluationConfigForm(forms.ModelForm):
             help_text="Choose a chatbot version",
         )
 
-    def _get_version_choices(self, experiment):
+    def _get_version_choices(self, experiment_id: int):
         """Get all versions for a specific experiment including working version"""
-        return Experiment.objects.all_versions_queryset(experiment).filter(team=self.team)
+        return Experiment.objects.all_versions_queryset(experiment_id).filter(team=self.team)
 
     def clean(self):
         cleaned_data = super().clean()

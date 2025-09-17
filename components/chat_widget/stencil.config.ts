@@ -7,6 +7,9 @@ setPluginConfigurationDefaults({
 
 export const config: Config = {
   namespace: 'open-chat-studio-widget',
+  env: {
+    version: process.env.npm_package_version
+  },
   outputTargets: [
     {
       type: 'dist',
