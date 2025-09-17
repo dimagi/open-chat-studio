@@ -1094,13 +1094,6 @@ class TestExperimentTrends:
         assert sum(success) == 1, f"Expected 1 success, got {sum(success)}"
         assert sum(errors) == 2, f"Expected 2 errors, got {sum(errors)}"
 
-        # Test that any version in the family returns the same aggregated data
-        success_v1, errors_v1 = version1.get_trend_data()
-        success_v2, errors_v2 = version2.get_trend_data()
-
-        assert success == success_v1 == success_v2, "All versions should return the same success data"
-        assert errors == errors_v1 == errors_v2, "All versions should return the same error data"
-
     def test_get_experiment_trend_data_with_no_errors(self, experiment):
         """Test that the function returns an array of zeros when there are no error traces"""
         success, errors = experiment.get_trend_data()

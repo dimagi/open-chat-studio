@@ -916,7 +916,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
         trace_counts = (
             Trace.objects.filter(
-                experiment_id__in=self.version_family_ids, timestamp__gte=from_date, timestamp__lte=to_date
+                Q(experiment__working_version=self) | Q(experiment__working_version=None),
+                timestamp__gte=from_date,
+                timestamp__lte=to_date,
             )
             .annotate(hour_bucket=functions.TruncHour("timestamp", tzinfo=UTC))
             .values("hour_bucket")
