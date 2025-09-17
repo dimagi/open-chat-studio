@@ -100,44 +100,28 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
 class VersionsFilter(ChoiceColumnFilter):
     query_param = "versions"
 
-    def apply_any_of(self, queryset, value, timezone=None):
-        tag_exists = [
-            ChatMessage.objects.filter(
+    def _get_messages_queryset(self, tags, operator):
+        combined_query = Q()
+        for tag in tags:
+            queryset = ChatMessage.objects.filter(
                 chat=OuterRef("chat"),
                 tags__name=tag,
                 tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
             ).values("id")
-            for tag in value
-        ]
-        combined_query = Q()
-        for query in tag_exists:
-            combined_query |= Q(Exists(query))
+            combined_query = operator(combined_query, Q(Exists(queryset)))
+        return combined_query
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        combined_query = self._get_messages_queryset(value, lambda x, y: x | y)
         return queryset.filter(combined_query)
 
     def apply_excludes(self, queryset, value, timezone=None):
-        tag_exists = [
-            ChatMessage.objects.filter(
-                chat=OuterRef("chat"),
-                tags__name=tag,
-                tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-            ).values("id")
-            for tag in value
-        ]
-        combined_query = Q()
-        for query in tag_exists:
-            combined_query |= Q(Exists(query))
+        combined_query = self._get_messages_queryset(value, lambda x, y: x | y)
         return queryset.exclude(combined_query)
 
     def apply_all_of(self, queryset, value, timezone=None):
-        q_objects = Q()
-        for tag in value:
-            tag_exists = ChatMessage.objects.filter(
-                chat=OuterRef("chat"),
-                tags__name=tag,
-                tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-            ).values("id")
-            q_objects &= Q(Exists(tag_exists))
-        return queryset.filter(q_objects)
+        combined_query = self._get_messages_queryset(value, lambda x, y: x & y)
+        return queryset.filter(combined_query)
 
 
 class ChannelsFilter(ChoiceColumnFilter):
