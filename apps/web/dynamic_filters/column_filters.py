@@ -4,15 +4,15 @@ from typing import ClassVar
 import pytz
 from django.db.models import QuerySet
 
-from .base import ChoiceFilterMixin, ColumnFilter, StringFilterMixin
+from .base import ChoiceColumnFilter, ColumnFilter, StringColumnFilter
 
 
-class ParticipantFilter(StringFilterMixin, ColumnFilter):
+class ParticipantFilter(StringColumnFilter):
     query_param = "participant"
     column: ClassVar[str] = "participant__identifier"
 
 
-class ExperimentFilter(ChoiceFilterMixin, ColumnFilter):
+class ExperimentFilter(ChoiceColumnFilter):
     query_param = "experiment"
     column: ClassVar[str] = "experiment_id"
 
@@ -26,14 +26,14 @@ class ExperimentFilter(ChoiceFilterMixin, ColumnFilter):
         return values
 
 
-class StatusFilter(ChoiceFilterMixin, ColumnFilter):
+class StatusFilter(ChoiceColumnFilter):
     column: ClassVar[str] = "status"
 
     def __init__(self, query_param: str):
         self.query_param = query_param
 
 
-class RemoteIdFilter(ChoiceFilterMixin, ColumnFilter):
+class RemoteIdFilter(ChoiceColumnFilter):
     query_param = "remote_id"
     column = "participant__remote_id"
 

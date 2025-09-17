@@ -8,7 +8,7 @@ from apps.experiments.filters import (
     get_filter_context_data,
 )
 from apps.trace.models import TraceStatus
-from apps.web.dynamic_filters.base import ChoiceFilterMixin, ColumnFilter, MultiColumnFilter
+from apps.web.dynamic_filters.base import ChoiceColumnFilter, ColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
     ParticipantFilter,
@@ -39,12 +39,12 @@ def get_trace_filter_context_data(team):
     return context
 
 
-class SpanNameFilter(ChoiceFilterMixin, ColumnFilter):
+class SpanNameFilter(ChoiceColumnFilter):
     query_param = "span_name"
     column: ClassVar[str] = "spans__name"
 
 
-class SpanTagsFilter(ChoiceFilterMixin, ColumnFilter):
+class SpanTagsFilter(ChoiceColumnFilter):
     query_param = "tags"
     column: ClassVar[str] = "spans__tags__name"
 

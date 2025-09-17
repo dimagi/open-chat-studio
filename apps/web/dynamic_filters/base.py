@@ -121,7 +121,7 @@ class ColumnFilter:
         return queryset
 
 
-class ChoiceFilterMixin:
+class ChoiceColumnFilter(ColumnFilter):
     column: ClassVar[str]
 
     def parse_query_value(self, query_value) -> any:
@@ -139,7 +139,7 @@ class ChoiceFilterMixin:
         return queryset.exclude(**{f"{self.column}__in": value})
 
 
-class StringFilterMixin:
+class StringColumnFilter(ColumnFilter):
     column: ClassVar[str]
 
     def apply_equals(self, queryset, value, timezone=None) -> QuerySet:

@@ -11,7 +11,7 @@ from apps.experiments.models import Experiment, SessionStatus
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
     FIELD_TYPE_FILTERS,
-    ChoiceFilterMixin,
+    ChoiceColumnFilter,
     ColumnFilter,
     MultiColumnFilter,
 )
@@ -58,7 +58,7 @@ def get_experiment_filter_options(team):
     return [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
 
 
-class ChatMessageTagsFilter(ChoiceFilterMixin, ColumnFilter):
+class ChatMessageTagsFilter(ChoiceColumnFilter):
     query_param = "tags"
 
     def apply_any_of(self, queryset, value, timezone=None):
@@ -97,7 +97,7 @@ class ChatMessageTagsFilter(ChoiceFilterMixin, ColumnFilter):
         return queryset.exclude(chat_tags_condition | message_tags_condition)
 
 
-class VersionsFilter(ChoiceFilterMixin, ColumnFilter):
+class VersionsFilter(ChoiceColumnFilter):
     query_param = "versions"
 
     def apply_any_of(self, queryset, value, timezone=None):
@@ -140,7 +140,7 @@ class VersionsFilter(ChoiceFilterMixin, ColumnFilter):
         return queryset.filter(q_objects)
 
 
-class ChannelsFilter(ChoiceFilterMixin, ColumnFilter):
+class ChannelsFilter(ChoiceColumnFilter):
     query_param = "channels"
     column = "experiment_channel__platform"
 

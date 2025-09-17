@@ -15,7 +15,7 @@ The backend is responsible for defining the filters and applying them to the dat
 
 - **`MultiColumnFilter`**: A container class that holds a list of `ColumnFilter` instances and applies them to a queryset. It provides a `columns()` class method to list available filter column names and handles the orchestration of applying multiple filters.
 
-- **Filter Mixins**: `StringFilterMixin` and `ChoiceFilterMixin` provide pre-built implementations for common filtering patterns, reducing boilerplate code.
+- **Filter Types**: `StringColumnFilter` and `ChoiceColumnFilter` provide pre-built implementations for common filtering patterns, reducing boilerplate code.
 
 - **Filter Implementations**: Concrete implementations of `ColumnFilter` can be found in `apps/web/dynamic_filters/column_filters.py` (base filters like `TimestampFilter`, `ParticipantFilter`) and in app-specific `filters.py` files throughout the project (e.g., `apps/experiments/filters.py`).
 
@@ -50,11 +50,11 @@ The `ColumnFilter.apply()` method:
 2. Converts the operator to a method name (e.g., "starts with" → `apply_starts_with`)
 3. Calls the appropriate `apply_*` method with the parsed value
 
-### Available Filter Mixins
+### Available Filter Types
 
-The dynamic filter system provides several mixins to implement common filtering patterns:
+The dynamic filter system provides several filter types that implements common filtering patterns:
 
-#### StringFilterMixin
+#### StringColumnFilter
 Provides methods for string-based filtering operations:
 - `apply_equals()` - Exact match
 - `apply_contains()` - Case-insensitive contains
@@ -65,7 +65,7 @@ Provides methods for string-based filtering operations:
 
 Requires setting a `column` class variable with the database field path.
 
-#### ChoiceFilterMixin
+#### ChoiceColumnFilter
 Provides methods for choice-based filtering operations:
 - `apply_any_of()` - Match any value from a list
 - `apply_all_of()` - Match all values from a list (AND logic)
@@ -89,14 +89,14 @@ This walkthrough will guide you through creating a complete filtering system for
 
 ### Step 1: Create a Custom Column Filter
 
-First, let's create a filter for product categories using the existing mixins:
+First, let's create a filter for product categories using the existing filter types:
 
 ```python
 # apps/inventory/filters.py
-from apps.web.dynamic_filters.base import ChoiceFilterMixin, ColumnFilter, StringFilterMixin
+from apps.web.dynamic_filters.base import ChoiceColumnFilter, StringColumnFilter
 from apps.web.dynamic_filters.column_filters import TimestampFilter
 
-class ProductCategoryFilter(StringFilterMixin, ColumnFilter):
+class ProductCategoryFilter(StringColumnFilter, ColumnFilter):
     """Filter products by category name."""
     query_param = "category"
     column = "category__name"  # Database field path
