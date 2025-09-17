@@ -1,6 +1,8 @@
 {% load static %}
 
-<canvas id="{{ record.id }}-trends" class="m-2 max-w-20 max-h-20"></canvas>
+<a href="{{ record.traces_url }}">
+    <canvas id="{{ record.id }}-trends" class="m-2 max-w-20 max-h-20"></canvas>
+</a>
 <script>
     (function() {
         const canvasElement = document.getElementById('{{ record.id }}-trends');
