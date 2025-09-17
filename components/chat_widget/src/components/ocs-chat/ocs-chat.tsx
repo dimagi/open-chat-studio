@@ -329,9 +329,7 @@ export class OcsChat {
     if (this.translationsUrl) {
         customTranslationsObj = await this.loadTranslationsFromUrl(this.translationsUrl);
     }
-
-    this.currentLanguage = this.language || getBrowserLanguage();
-    this.translationManager = new TranslationManager(this.currentLanguage, customTranslationsObj);
+    this.translationManager = new TranslationManager(this.language, customTranslationsObj);
   }
 
   private async loadTranslationsFromUrl(url: string): Promise<Partial<TranslationStrings>> {
