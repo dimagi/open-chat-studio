@@ -1,3 +1,4 @@
+import operator
 from collections.abc import Sequence
 from typing import ClassVar
 
@@ -112,15 +113,15 @@ class VersionsFilter(ChoiceColumnFilter):
         return combined_query
 
     def apply_any_of(self, queryset, value, timezone=None):
-        combined_query = self._get_messages_queryset(value, lambda x, y: x | y)
+        combined_query = self._get_messages_queryset(value, operator.or_)
         return queryset.filter(combined_query)
 
     def apply_excludes(self, queryset, value, timezone=None):
-        combined_query = self._get_messages_queryset(value, lambda x, y: x | y)
+        combined_query = self._get_messages_queryset(value, operator.or_)
         return queryset.exclude(combined_query)
 
     def apply_all_of(self, queryset, value, timezone=None):
-        combined_query = self._get_messages_queryset(value, lambda x, y: x & y)
+        combined_query = self._get_messages_queryset(value, operator.and_)
         return queryset.filter(combined_query)
 
 
