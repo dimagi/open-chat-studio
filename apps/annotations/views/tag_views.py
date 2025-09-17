@@ -16,6 +16,7 @@ from apps.annotations.forms import TagForm
 from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.annotations.tables import TagTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.roles import is_super_admin
 from apps.utils.search import similarity_search
 
 
@@ -43,6 +44,11 @@ class CreateTag(CreateView, PermissionRequiredMixin):
         "button_text": "Create",
         "active_tab": "tags",
     }
+
+    def dispatch(self, request, *args, **kwargs):
+        if not is_super_admin(request.user, request.team):
+            return redirect("annotations:tag_home", team_slug=request.team.slug)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_success_url(self):
         return reverse("annotations:tag_home", args=[self.request.team.slug])
@@ -90,6 +96,9 @@ class DeleteTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
     permission_required = "annotations.delete_tag"
 
     def delete(self, request, team_slug: str, pk: int):
+        if not is_super_admin(request.user, request.team):
+            return HttpResponseForbidden("Only super admins can delete tags.")
+
         tag = get_object_or_404(Tag, id=pk, team=request.team)
         if tag.is_system_tag:
             return HttpResponseForbidden("System tags cannot be deleted.")
@@ -157,6 +166,7 @@ class TagUI(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
                 "team_slug": team_slug,
                 "object": obj,
                 "edit_mode": request.GET.get("edit"),
+                "is_super_admin": is_super_admin(request.user, request.team),
                 "available_tags": [
                     t.name
                     for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False)
@@ -176,7 +186,12 @@ class LinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         tag_name = request.POST["tag_name"]
         content_type = get_object_or_404(ContentType, app_label=object_info["app"], model=object_info["model_name"])
         obj = content_type.get_object_for_this_type(id=object_id)
-        if not Tag.objects.filter(name=tag_name, team__slug=team_slug).exists():
+        tag_exists = Tag.objects.filter(name=tag_name, team__slug=team_slug).exists()
+
+        if not tag_exists:
+            if not is_super_admin(request.user, request.team):
+                return HttpResponseForbidden("Only super admins can create new tags. Please select from existing tags.")
+
             obj.tags.create(team=request.team, name=tag_name, created_by=request.user)
 
         obj.add_tags([tag_name], team=request.team, added_by=request.user)
