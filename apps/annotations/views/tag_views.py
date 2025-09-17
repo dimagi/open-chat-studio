@@ -78,6 +78,11 @@ class EditTag(UpdateView, PermissionRequiredMixin):
         "active_tab": "tags",
     }
 
+    def dispatch(self, request, *args, **kwargs):
+        if not is_super_admin(request.user, request.team):
+            return redirect("annotations:tag_home", team_slug=request.team.slug)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_queryset(self):
         return Tag.objects.filter(team=self.request.team, is_system_tag=False)
 
