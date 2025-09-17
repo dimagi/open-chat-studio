@@ -1,6 +1,7 @@
 import base64
 import logging
 import secrets
+import urllib
 import uuid
 from datetime import UTC, datetime
 from functools import cached_property
@@ -890,6 +891,15 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         trend_data = self._calculate_trends()
         cache.set(self.trends_cache_key, trend_data, settings.EXPERIMENT_TREND_CACHE_TIMEOUT)
         return trend_data
+
+    def traces_url(self) -> str:
+        """
+        Returns a URL to the traces page, filtered to show only traces for this experiment.
+        """
+        query_params = urllib.parse.urlencode(
+            {"filter_0_column": "experiment", "filter_0_operator": "any of", "filter_0_value": f"[{self.id}]"}
+        )
+        return reverse("trace:home", kwargs={"team_slug": self.team.slug}) + "?" + query_params
 
     def _calculate_trends(self) -> tuple[list, list]:
         """
