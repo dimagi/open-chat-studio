@@ -1,5 +1,6 @@
 import csv
 import logging
+from collections import defaultdict
 from collections.abc import Iterable
 from datetime import timedelta
 from io import StringIO
@@ -449,8 +450,12 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
     columns = list(csv_data[0].keys()) if csv_data else []
     has_id_column = "id" in columns
 
-    evaluators = evaluation_run.config.evaluators.all()
-    evaluator_by_id = {evaluator.id: evaluator for evaluator in evaluators}
+    evaluator_ids = evaluation_run.config.evaluators.all().values_list("id", flat=True)
+
+    all_evaluation_results = EvaluationResult.objects.filter(run=evaluation_run, team=team)
+    results_lookup = defaultdict(dict)
+    for result in all_evaluation_results:
+        results_lookup[result.message_id].update({result.evaluator_id: result})
 
     for row_index, row in enumerate(csv_data):
         try:
@@ -466,9 +471,7 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
                 stats["error_messages"].append(f"Row {row_index + 1}: Invalid ID format")
                 continue
 
-            evaluation_results = EvaluationResult.objects.filter(message_id=message_id, run=evaluation_run, team=team)
-
-            if not evaluation_results.exists():
+            if message_id not in results_lookup:
                 stats["error_messages"].append(
                     f"Row {row_index + 1}: No evaluation results found for message ID {message_id}"
                 )
@@ -479,17 +482,16 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
                     continue
 
                 value = row[column_name]
-                # Convert None to empty string for consistency
                 if value is None:
                     value = ""
+
                 result_key = column_name
                 if "(" in column_name and column_name.endswith(")"):
                     result_key = column_name[: column_name.rfind("(")].strip()
 
                 try:
                     evaluator_id = int(evaluator_id)
-                    evaluator = evaluator_by_id.get(evaluator_id)
-                    if not evaluator:
+                    if evaluator_id not in evaluator_ids:
                         stats["error_messages"].append(
                             f"Row {row_index + 1}: Evaluator with ID '{evaluator_id}' not found"
                         )
@@ -498,8 +500,8 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
                     stats["error_messages"].append(f"Row {row_index + 1}: Invalid evaluator ID '{evaluator_id}'")
                     continue
 
-                try:
-                    evaluation_result = evaluation_results.get(evaluator=evaluator)
+                evaluation_result = results_lookup.get(message_id, {}).get(evaluator_id)
+                if evaluation_result:
                     updated_output = evaluation_result.output.copy()
 
                     if "result" not in updated_output:
@@ -511,11 +513,8 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
                         evaluation_result.output = updated_output
                         evaluation_result.save()
                         stats["updated_count"] += 1
-                except EvaluationResult.DoesNotExist:
-                    stats["error_messages"].append(
-                        f"Row {row_index + 1}: No result found for evaluator '{evaluator.name}' "
-                        f"and message {message_id}"
-                    )
+                else:
+                    stats["error_messages"].append(f"Row {row_index + 1}: No results foundand message {message_id}")
         except Exception as e:
             stats["error_messages"].append(f"Row {row_index + 1}: {str(e)}")
             continue
