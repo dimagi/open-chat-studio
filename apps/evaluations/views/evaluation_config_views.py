@@ -244,7 +244,13 @@ def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_ru
         writer.writerow(["No results available yet"])
         return response
 
-    headers = list(table_data[0].keys())
+    all_headers = set()
+    for row in table_data:
+        all_headers.update(row.keys())
+
+    fixed_headers = ["id", "session", "Dataset Input", "Dataset Output", "Generated Response"]
+    other_headers = sorted([h for h in all_headers if h not in fixed_headers and h != "error"])
+    headers = [h for h in fixed_headers if h in all_headers] + other_headers + ["error"]
     writer.writerow(headers)
 
     for row in table_data:

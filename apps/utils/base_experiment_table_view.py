@@ -11,6 +11,12 @@ class BaseExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Permis
     paginate_by = 25
     template_name = "table/single_table.html"
 
+    def get_table(self, **kwargs):
+        table = super().get_table(**kwargs)
+        if not flag_is_active(self.request, "flag_tracing"):
+            table.exclude = ("trends",)
+        return table
+
     def get_queryset(self):
         chatbots_enabled = flag_is_active(self.request, "flag_chatbots")
         is_experiment = self.kwargs.get("is_experiment", False)

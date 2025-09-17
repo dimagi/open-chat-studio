@@ -2,17 +2,19 @@ import json
 from datetime import datetime, timedelta
 
 import pytest
+from django.http import QueryDict
 
 from apps.annotations.models import Tag
-from apps.experiments.filters import Operators
-from apps.trace.filters import DynamicTraceFilter
+from apps.trace.filters import TraceFilter
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.traces import SpanFactory, TraceFactory
+from apps.web.dynamic_filters.base import Operators
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 @pytest.mark.django_db()
-class TestDynamicTraceFilter:
+class TestTraceFilter:
     @pytest.fixture()
     def experiment(self, team):
         return ExperimentFactory(team=team)
@@ -38,8 +40,10 @@ class TestDynamicTraceFilter:
             "filter_0_operator": operator,
             "filter_0_value": value,
         }
-        filter_instance = DynamicTraceFilter(queryset, params, timezone)
-        return filter_instance.apply()
+        query_params = QueryDict("", mutable=True)
+        query_params.update(params)
+        filter_instance = TraceFilter()
+        return filter_instance.apply(queryset, FilterParams(query_params), timezone)
 
     def test_participant_filter_equals(self, trace, team):
         queryset = Trace.objects.filter(team=team)
@@ -358,16 +362,19 @@ class TestDynamicTraceFilter:
             "filter_1_operator": Operators.ANY_OF,
             "filter_1_value": json.dumps(["tag1"]),
         }
-
+        query_params = QueryDict("", mutable=True)
+        query_params.update(params)
         queryset = Trace.objects.filter(team=team)
-        filter_instance = DynamicTraceFilter(queryset, params, "UTC")
-        result = filter_instance.apply()
+        filter_instance = TraceFilter()
+        result = filter_instance.apply(queryset, FilterParams(query_params), "UTC")
 
         assert trace in result
 
         # Test with one filter not matching
         params["filter_1_value"] = json.dumps(["tag2"])
-        filter_instance = DynamicTraceFilter(queryset, params, "UTC")
-        result = filter_instance.apply()
+        query_params = QueryDict("", mutable=True)
+        query_params.update(params)
+        filter_instance = TraceFilter()
+        result = filter_instance.apply(queryset, FilterParams(query_params), "UTC")
 
         assert trace not in result
