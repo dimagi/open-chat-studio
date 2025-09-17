@@ -104,6 +104,7 @@ class ColumnFilter:
             return json.loads(json_value)
         except json.JSONDecodeError:
             logger.error("Failed to decode JSON for chat message tag filter", exc_info=True)
+        return []
 
     def parse_query_value(self, query_value) -> any:
         """Parses the query value from the URL into a format suitable for filtering."""
