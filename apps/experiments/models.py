@@ -897,7 +897,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         Returns a URL to the traces page, filtered to show only traces for this experiment.
         """
         query_params = ColumnFilterData(
-            column="experiment", operator="any of", value=[self.version_family_ids]
+            column="experiment", operator="any of", value=self.version_family_ids
         ).as_query_string()
         return reverse("trace:home", kwargs={"team_slug": self.team.slug}) + "?" + query_params
 
