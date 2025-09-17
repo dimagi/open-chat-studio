@@ -158,6 +158,12 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
     table_class = ChatbotTable
     permission_required = "experiments.view_experiment"
 
+    def get_table(self, **kwargs):
+        table = super().get_table(**kwargs)
+        if not flag_is_active(self.request, "flag_tracing"):
+            table.exclude = ("trends",)
+        return table
+
     def get_queryset(self):
         end_date = timezone.now()
         start_date = end_date - timedelta(days=30)
