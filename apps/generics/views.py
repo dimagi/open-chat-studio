@@ -105,6 +105,7 @@ def generic_home(
     table_url_name: str,
     actions=None,
     show_modal_or_banner=False,
+    load_trend_modules=False,
 ):
     """
     Generate a template response using the generic 'object_home.html' template.
@@ -130,6 +131,7 @@ def generic_home(
             "toggle_archived": True,
             "show_modal_or_banner": show_modal_or_banner,
             "actions": actions,
+            "load_trend_modules": load_trend_modules,
         },
     )
 

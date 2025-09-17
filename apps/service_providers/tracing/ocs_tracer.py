@@ -5,6 +5,7 @@ import time
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from django.core.cache import cache
 from django.utils import timezone
 from langchain_core.callbacks.base import BaseCallbackHandler
 
@@ -143,6 +144,8 @@ class OCSTracer(Tracer):
                 tags = get_tags_from_error(error)
                 for tag in tags:
                     span.create_and_add_tag(tag=tag, team=span.team, tag_category=TagCategories.ERROR)
+
+            self._bust_caches()
         else:
             span.status = TraceStatus.SUCCESS
         span.save()
@@ -174,6 +177,25 @@ class OCSTracer(Tracer):
             return self.spans[last_span]
         else:
             return self.trace
+
+    def get_trace_metadata(self) -> dict[str, Any]:
+        if not self.ready:
+            return
+
+        return {
+            "trace_id": self.trace.id,
+            "trace_url": self.trace.get_absolute_url(),
+            "trace_provider": self.type,
+        }
+
+    def _bust_caches(self):
+        """
+        Bust any relevant caches when an error is detected in a span.
+        """
+        from apps.experiments.models import Experiment
+
+        cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment_id)
+        cache.delete(cache_key)
 
 
 class OCSCallbackHandler(BaseCallbackHandler):

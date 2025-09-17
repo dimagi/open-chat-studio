@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from functools import cached_property
 from typing import cast
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 import jwt
 from celery.result import AsyncResult
@@ -20,7 +20,15 @@ from django.db import transaction
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
+from django.http import (
+    FileResponse,
+    Http404,
+    HttpResponse,
+    HttpResponseForbidden,
+    HttpResponseRedirect,
+    JsonResponse,
+    QueryDict,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -59,7 +67,7 @@ from apps.experiments.decorators import (
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.filters import (
-    DynamicExperimentSessionFilter,
+    ExperimentSessionFilter,
     get_experiment_filter_context_data,
 )
 from apps.experiments.forms import (
@@ -107,6 +115,7 @@ from apps.service_providers.utils import get_llm_provider_choices, get_models_by
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 @login_and_team_required
@@ -122,7 +131,13 @@ def experiments_home(request, team_slug: str):
         )
     ]
     return generic_home(
-        request, team_slug, "Experiments", "experiments:table", actions=actions_, show_modal_or_banner=show_modal
+        request,
+        team_slug,
+        "Experiments",
+        "experiments:table",
+        actions=actions_,
+        show_modal_or_banner=show_modal,
+        load_trend_modules=True,
     )
 
 
@@ -155,13 +170,11 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             )
         )
         timezone = self.request.session.get("detected_tz", None)
-        filters = self.request.GET
-        if not filters and (hx_url := self.request.headers.get("HX-Current-URL")):
-            parsed_url = urlparse(hx_url)
-            filters = parse_qs(parsed_url.query)
 
-        session_filter = DynamicExperimentSessionFilter(query_set, filters, timezone)
-        query_set = session_filter.apply()
+        session_filter = ExperimentSessionFilter()
+        query_set = session_filter.apply(
+            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
+        )
         return query_set
 
 
@@ -980,9 +993,9 @@ def experiment_invitations(request, team_slug: str, experiment_id: int, origin="
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     timezone = request.session.get("detected_tz", None)
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
     parsed_url = urlparse(request.headers.get("HX-Current-URL"))
-    query_params = parse_qs(parsed_url.query)
+    query_params = QueryDict(parsed_url.query)
     task_id = async_export_chat.delay(experiment_id, query_params, timezone)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
@@ -1563,4 +1576,19 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         messages.error(request, "There was an error during the migration. Please try again later.")
         return redirect(failed_url)
 
-    return redirect(failed_url)
+
+@require_GET
+@login_and_team_required
+@permission_required("experiments.view_experiment")
+def trends_data(request, team_slug: str, experiment_id: int):
+    """
+    Returns JSON data for the experiment's trend barchart chart.
+    """
+    try:
+        experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
+        successes, errors = experiment.default_version.get_trend_data()
+        data = {"successes": successes, "errors": errors}
+        return JsonResponse({"trends": data})
+    except Exception:
+        logging.exception(f"Error loading barchart data for experiment {experiment_id}")
+        return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)
