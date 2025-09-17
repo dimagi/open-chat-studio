@@ -1586,7 +1586,7 @@ def trends_data(request, team_slug: str, experiment_id: int):
     """
     try:
         experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
-        successes, errors = experiment.default_version.get_trend_data()
+        successes, errors = experiment.get_trend_data()
         data = {"successes": successes, "errors": errors}
         return JsonResponse({"trends": data})
     except Exception:

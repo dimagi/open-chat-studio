@@ -42,9 +42,10 @@ from apps.generics.chips import Chip
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team
-from apps.trace.models import TraceStatus
+from apps.trace.models import Trace, TraceStatus
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
+from apps.web.dynamic_filters.datastructures import ColumnFilterData
 from apps.web.meta import absolute_url
 
 log = logging.getLogger("ocs.experiments")
@@ -881,8 +882,8 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     def get_trend_data(self) -> tuple[list, list]:
         """
-        Get the trend data for the experiment from cache. If it is missing from the cache, it is calculated and
-        stored in the cache.
+        Get the error/success trends across all versions in this experiment's version family. If it is missing from the
+        cache, it is calculated and stored in the cache.
         """
 
         if trend_data := cache.get(self.trends_cache_key):
@@ -903,8 +904,8 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     def _calculate_trends(self) -> tuple[list, list]:
         """
-        Calculate the trend data for the experiment. Returns two lists: successes and errors, each containing the count
-        of successful and error traces for each hour in the last 48 hours.
+        Calculate the trends across all versions in this experiment's version family. Returns two lists: successes and
+        errors, each containing the count of successful and error traces for each hour in the last 48 hours.
         """
         days = 2
         to_date = timezone.now()
@@ -913,8 +914,11 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         # Get error counts for each hour bucket
         error_trend = {}
         success_trend = {}
+
         trace_counts = (
-            self.traces.filter(timestamp__gte=from_date, timestamp__lte=to_date)
+            Trace.objects.filter(
+                experiment_id__in=self.version_family_ids, timestamp__gte=from_date, timestamp__lte=to_date
+            )
             .annotate(hour_bucket=functions.TruncHour("timestamp", tzinfo=UTC))
             .values("hour_bucket")
             .annotate(
