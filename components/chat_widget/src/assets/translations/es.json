@@ -24,5 +24,7 @@
   "buttonText": "Charlemos",
   "headerText": "Normal, modo claro",
   "welcomeMessages": [],
-  "starterQuestions": []
+  "starterQuestions": [],
+  "typingIndicatorText": "Preparando respuesta",
+  "uploading": "Subiendo"
 }

@@ -24,5 +24,7 @@
   "buttonText": "Discutons",
   "headerText": "Régulier, mode clair",
   "welcomeMessages": [],
-  "starterQuestions": []
+  "starterQuestions": [],
+  "typingIndicatorText": "Préparation de la réponse",
+  "uploading": "Téléversement"
 }

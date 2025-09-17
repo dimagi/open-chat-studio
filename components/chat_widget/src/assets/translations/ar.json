@@ -24,5 +24,7 @@
   "buttonText": "لنبدأ المحادثة",
   "headerText": "الوضع العادي، الوضع الفاتح",
   "welcomeMessages": [],
-  "starterQuestions": []
+  "starterQuestions": [],
+  "typingIndicatorText": "جارٍ تحضير الرد",
+  "uploading": "جارٍ التحميل"
 }

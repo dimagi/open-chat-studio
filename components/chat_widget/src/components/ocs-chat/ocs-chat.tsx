@@ -1456,7 +1456,7 @@ export class OcsChat {
                         <button
                           onClick={() => this.removeSelectedFile(index)}
                           class="selected-file-remove-button"
-                          aria-label="Remove file"
+                          aria-label={this.translationManager.get('removeFile')}
                         ><XIcon />
                         </button>
                       </div>
@@ -1515,13 +1515,13 @@ export class OcsChat {
                       onClick={() => this.sendMessage(this.messageInput)}
                       disabled={this.isTyping || this.isUploadingFiles || !this.messageInput.trim()}
                     >
-                      {this.isUploadingFiles ? 'Uploading...' : this.translationManager.get('sendMessage')}
+                      {this.isUploadingFiles ? `${this.translationManager.get('uploading')}...` : this.translationManager.get('sendMessage')}
                     </button>
                   </div>
                 </div>
               )}
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
-                <p>Powered by <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
+                <p>{this.translationManager.get('poweredBy')}{' '} <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
               </div>
             </div>
           </div>

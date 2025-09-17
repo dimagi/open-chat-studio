@@ -24,5 +24,7 @@
   "buttonText": "Tuchat",
   "headerText": "Kawaida, hali nyepesi",
   "welcomeMessages": [],
-  "starterQuestions": []
+  "starterQuestions": [],
+  "typingIndicatorText": "Inatayarisha jibu",
+  "uploading": "Inapakia"
 }

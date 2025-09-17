@@ -24,5 +24,7 @@
   "buttonText": "आइए चैट करें",
   "headerText": "सामान्य, हल्का मोड",
   "welcomeMessages": [],
-  "starterQuestions": []
+  "starterQuestions": [],
+  "typingIndicatorText": "जवाब तैयार किया जा रहा है",
+  "uploading": "अपलोड हो रहा है"
 }

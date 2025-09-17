@@ -24,5 +24,7 @@
   "buttonText": "Let's Chat",
   "headerText": "Regular, light mode",
   "welcomeMessages": [],
-  "starterQuestions": []
+  "starterQuestions": [],
+  "typingIndicatorText": "Preparing response",
+  "uploading": "Uploading"
 }

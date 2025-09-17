@@ -24,5 +24,7 @@
   "buttonText": "Vamos conversar",
   "headerText": "Normal, modo claro",
   "welcomeMessages": [],
-  "starterQuestions": []
+  "starterQuestions": [],
+  "typingIndicatorText": "Preparando resposta",
+  "uploading": "Carregando"
 }
