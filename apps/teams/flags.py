@@ -24,6 +24,9 @@ class FlagInfo:
     teams_can_manage: bool = False
     """Whether team admins can enable / disable this flag themselves"""
 
+    removed: bool = False
+    """Whether this flag has been removed and therefore is no longer active"""
+
 
 class Flags(FlagInfo, Enum):
     """All feature flags with their metadata."""
@@ -32,6 +35,15 @@ class Flags(FlagInfo, Enum):
         "flag_pipelines-v2",
         "Second version of pipeline functionality with enhanced features",
         "pipelines",
+    )
+
+    CHATBOTS = (
+        "flag_chatbots",
+        "Enables simplified chatbot creation and management interface",
+        "chatbots",
+        ["flag_pipelines-v2"],
+        True,
+        True,
     )
 
     OPEN_AI_VOICE_ENGINE = ("flag_open_ai_voice_engine", "Enables OpenAI voice synthesis for audio responses", "")
