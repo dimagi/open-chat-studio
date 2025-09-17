@@ -95,7 +95,7 @@
         <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
         <div class="card-body bg-base-50 shadow-md">
             {% for span in spans %}
-            {% include "trace/span_tree.html" with span=span is_root=True %}
+                {% include "trace/span_tree.html" with span=span is_root=True %}
             {% empty %}
             <div class="card bg-base-100 border border-base-200">
                 <div class="card-body p-4 text-center text-base-content/60">
