@@ -223,7 +223,7 @@ db_options = DATABASES["default"].setdefault("OPTIONS", {})
 db_options.pop("CONN_MAX_AGE", None)  # remove connection age since it's not compatible with connection pooling
 db_options["pool"] = {
     "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
-    "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=10),
+    "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=20),
     "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
 }
 
@@ -635,7 +635,7 @@ DOCUMENTATION_LINKS = {
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
-    "migrate_from_assistant": "/how-to/migrate_from_assistant_to_collection/",
+    "migrate_from_assistant": "/how-to/assistants_migration/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
@@ -763,3 +763,6 @@ CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight for 24 hours
 
 # Analytics settings
 ANALYTICS_MAX_SESSIONS = 750
+
+# Experiment Trend cache settings
+EXPERIMENT_TREND_CACHE_TIMEOUT = 900  # 15 minutes

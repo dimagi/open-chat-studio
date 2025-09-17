@@ -9,6 +9,7 @@ from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
 from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage
+from apps.experiments.models import Experiment, SessionStatus
 
 
 class Operators(StrEnum):
@@ -50,6 +51,40 @@ DATE_RANGE_OPTIONS = [
 ]
 
 
+def get_experiment_filter_context_data(team, table_url: str, single_experiment=None):
+    context = get_filter_context_data(
+        team, DynamicExperimentSessionFilter.columns, "last_message", table_url, "sessions-table"
+    )
+    context.update(
+        {
+            "df_state_list": SessionStatus.for_chatbots(),
+            "df_available_tags": [tag.name for tag in team.tag_set.filter(is_system_tag=False)],
+        }
+    )
+
+    context["df_experiment_versions"] = Experiment.objects.get_version_names(team, working_version=single_experiment)
+    if not single_experiment:
+        context["df_experiment_list"] = get_experiment_filter_options(team)
+    return context
+
+
+def get_filter_context_data(team, columns, date_range_column: str, table_url: str, table_container_id: str):
+    return {
+        "df_field_type_filters": FIELD_TYPE_FILTERS,
+        "df_date_range_options": DATE_RANGE_OPTIONS,
+        "df_channel_list": ChannelPlatform.for_filter(team),
+        "df_filter_columns": columns,
+        "df_date_range_column_name": date_range_column,
+        "df_filter_data_source_url": table_url,
+        "df_filter_data_source_container_id": table_container_id,
+    }
+
+
+def get_experiment_filter_options(team):
+    experiments = Experiment.objects.working_versions_queryset().filter(team=team).values("id", "name").order_by("name")
+    return [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
+
+
 # TODO: Add Readme on how to use the filter component
 class DynamicFilter:
     columns: list = []
@@ -76,7 +111,7 @@ class DynamicFilter:
             filter_value = param_source.get(f"filter_{i}_value")
 
             if not all([filter_column, filter_operator, filter_value]):
-                break
+                continue
 
             filter_column = filter_column[0] if isinstance(filter_column, list) else filter_column
             filter_operator = filter_operator[0] if isinstance(filter_operator, list) else filter_operator
@@ -336,7 +371,7 @@ class DynamicExperimentSessionFilter(DynamicFilter):
                 tag_exists = [
                     ChatMessage.objects.filter(
                         chat=OuterRef("chat"),
-                        tags__name__startswith=tag,
+                        tags__name=tag,
                         tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
                     ).values("id")
                     for tag in version_tags
@@ -352,7 +387,7 @@ class DynamicExperimentSessionFilter(DynamicFilter):
                 for tag in version_tags:
                     tag_exists = ChatMessage.objects.filter(
                         chat=OuterRef("chat"),
-                        tags__name__startswith=tag,
+                        tags__name=tag,
                         tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
                     ).values("id")
                     q_objects &= Q(Exists(tag_exists))
@@ -374,11 +409,6 @@ class DynamicExperimentSessionFilter(DynamicFilter):
                 return None
             if operator == Operators.ANY_OF:
                 return Q(experiment_channel__platform__in=selected_values)
-            elif operator == Operators.ALL_OF:
-                conditions = Q()
-                for channel in selected_values:
-                    conditions &= Q(experiment_channel__platform__iexact=channel)
-                return conditions
             elif operator == Operators.EXCLUDES:
                 return ~Q(experiment_channel__platform__in=selected_values)
         except json.JSONDecodeError:

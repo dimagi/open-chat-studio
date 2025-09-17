@@ -1,6 +1,7 @@
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Q
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
@@ -9,6 +10,12 @@ from apps.utils.search import similarity_search
 class BaseExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     paginate_by = 25
     template_name = "table/single_table.html"
+
+    def get_table(self, **kwargs):
+        table = super().get_table(**kwargs)
+        if not flag_is_active(self.request, "flag_tracing"):
+            table.exclude = ("trends",)
+        return table
 
     def get_queryset(self):
         is_experiment = self.kwargs.get("is_experiment", False)
