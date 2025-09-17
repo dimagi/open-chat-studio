@@ -8,14 +8,12 @@
                     {% endfor %}
                 </div>
             {% endif %}
-            {% if span.error %}
-                <div class="text-xs rounded overflow-x-auto space-y-3">
-                    <pre class="whitespace-pre-wrap">{{ span.error }}</pre>
-                </div>
-            {% endif %}
         </div>
     </div>
 </div>
+
+<!-- Include the drawer component for this span -->
+{% include "trace/partials/span_drawer.html" %}
 
 <!-- Child spans -->
 {% with child_spans=span.child_spans.all %}

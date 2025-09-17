@@ -1,0 +1,25 @@
+{% load json_tags %}
+
+{% if span.input %}
+    <div class="space-y-3">
+        <h4 class="text-lg font-semibold">Input Data</h4>
+        <div class="bg-base-300 p-4 rounded-lg border">
+            <pre class="text-sm overflow-x-auto whitespace-pre-wrap"><code>{{ span.input|prettyjson }}</code></pre>
+        </div>
+    </div>
+{% endif %}
+
+{% if span.error %}
+    <div class="space-y-3 {% if span.input %}mt-6{% endif %}">
+        <h4 class="text-lg font-semibold text-red-600">Error</h4>
+        <div class="bg-red-50 p-4 rounded-lg border border-red-200">
+            <pre class="text-sm overflow-x-auto whitespace-pre-wrap text-red-800"><code>{{ span.error }}</code></pre>
+        </div>
+    </div>
+{% endif %}
+
+{% if not span.input and not span.error %}
+    <div class="text-center text-gray-500 py-8">
+        <p>No input data available for this span.</p>
+    </div>
+{% endif %}

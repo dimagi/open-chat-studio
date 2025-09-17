@@ -1,17 +1,22 @@
 {% load static %}
 
-<div x-data="{ isOpen: true }" class="mb-4">
-    <div
-        class="flex flex-row items-center justify-between hover:cursor-pointer hover:bg-base-300 rounded-lg p-3"
-        @click="isOpen = !isOpen">
-        <div class="flex gap-2 items-center">
-            <i x-show="!isOpen" class="fa-solid fa-angle-right"></i>
-            <i x-show="isOpen" class="fa-solid fa-angle-down"></i>
-            <span class="text-lg font-bold">{{ span.name }}</span>
+<div x-data="{ collapsableIsOpen: true }" class="mb-4">
+    <div class="flex flex-row items-center">
+        {% if span.child_spans.count > 0 %}
+            <button @click="collapsableIsOpen = !collapsableIsOpen" class="btn btn-ghost btn-sm p-1">
+                <i x-show="!collapsableIsOpen" class="fa-solid fa-angle-right"></i>
+                <i x-show="collapsableIsOpen" class="fa-solid fa-angle-down"></i>
+            </button>
+        {% endif %}
+        <div
+            class="w-full flex flex-row justify-between rounded-lg p-3 hover:cursor-pointer hover:bg-base-300"
+            :class="$store.spanDrawer.spanId === '{{ span.id }}' ? 'bg-base-300' : ''"
+            @click="$store.spanDrawer.spanId === '{{ span.id }}' ? $store.spanDrawer.close() : $store.spanDrawer.open('{{ span.id }}')">
+            <span class="p-1 text-lg font-bold">{{ span.name }}</span>
+            <div class="text-sm font-medium {% if span.status == 'error' %}text-red-500{% elif span.status == 'success' %}text-green-500{% endif %}">{{ span.duration_seconds }}s</div>
         </div>
-        <div class="text-sm font-medium {% if span.status == 'error' %}text-red-500{% elif span.status == 'success' %}text-green-500{% endif %}">{{ span.duration_seconds }}s</div>
     </div>
-    <div x-show="isOpen">
+    <div x-show="collapsableIsOpen">
         {% include "trace/partials/span_details.html" %}
     </div>
 </div>
