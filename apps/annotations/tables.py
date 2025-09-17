@@ -4,12 +4,16 @@ from django.template import Context
 from django_tables2 import columns, tables
 
 from apps.generics import actions
+from apps.teams.roles import is_super_admin
 
 from .models import Tag
 
 
 def display_condition(request: HttpRequest, record: Context) -> bool:
-    return not record.is_system_tag
+    """Only show actions for non-system tags and only for super admins."""
+    if record.is_system_tag:
+        return False
+    return is_super_admin(request.user, request.team)
 
 
 class TagTable(tables.Table):
