@@ -148,7 +148,7 @@ def chatbots_home(request, team_slug: str):
             },
         )
     ]
-    return generic_home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_)
+    return generic_home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_, load_trend_modules=True)
 
 
 class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -157,6 +157,12 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
     model = Experiment
     table_class = ChatbotTable
     permission_required = "experiments.view_experiment"
+
+    def get_table(self, **kwargs):
+        table = super().get_table(**kwargs)
+        if not flag_is_active(self.request, "flag_tracing"):
+            table.exclude = ("trends",)
+        return table
 
     def get_queryset(self):
         end_date = timezone.now()
