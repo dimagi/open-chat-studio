@@ -177,6 +177,16 @@ class OCSTracer(Tracer):
         else:
             return self.trace
 
+    def get_trace_metadata(self) -> dict[str, Any]:
+        if not self.ready:
+            return
+
+        return {
+            "trace_id": self.trace.id,
+            "trace_url": self.trace.get_absolute_url(),
+            "trace_provider": self.type,
+        }
+
     def _bust_caches(self):
         """
         Bust any relevant caches when an error is detected in a span.
