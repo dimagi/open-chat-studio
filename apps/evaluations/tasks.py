@@ -475,10 +475,13 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
                 continue
 
             for column_name, evaluator_id in column_mappings.items():
-                if column_name not in row or row[column_name] is None or row[column_name] == "":
+                if column_name not in row:
                     continue
 
                 value = row[column_name]
+                # Convert None to empty string for consistency
+                if value is None:
+                    value = ""
                 result_key = column_name
                 if "(" in column_name and column_name.endswith(")"):
                     result_key = column_name[: column_name.rfind("(")].strip()
