@@ -8,10 +8,11 @@ from django.db.models import Exists, OuterRef, Q, Subquery
 from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage
-from apps.experiments.models import Experiment, SessionStatus
+from apps.experiments.models import Experiment
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
     FIELD_TYPE_FILTERS,
+    TYPE_CHOICE,
     ChoiceColumnFilter,
     ColumnFilter,
     MultiColumnFilter,
@@ -23,23 +24,6 @@ from apps.web.dynamic_filters.column_filters import (
     StatusFilter,
     TimestampFilter,
 )
-
-
-def get_experiment_filter_context_data(team, table_url: str, single_experiment=None):
-    context = get_filter_context_data(
-        team, ExperimentSessionFilter.columns(), "last_message", table_url, "sessions-table"
-    )
-    context.update(
-        {
-            "df_state_list": SessionStatus.for_chatbots(),
-            "df_available_tags": [tag.name for tag in team.tag_set.filter(is_system_tag=False)],
-        }
-    )
-
-    context["df_experiment_versions"] = Experiment.objects.get_version_names(team, working_version=single_experiment)
-    if not single_experiment:
-        context["df_experiment_list"] = get_experiment_filter_options(team)
-    return context
 
 
 def get_filter_context_data(team, columns, date_range_column: str, table_url: str, table_container_id: str):
@@ -61,6 +45,11 @@ def get_experiment_filter_options(team):
 
 class ChatMessageTagsFilter(ChoiceColumnFilter):
     query_param: str = "tags"
+    label: str = "Tags"
+    type: str = TYPE_CHOICE
+
+    def prepare(self, team, **kwargs):
+        self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
 
     def apply_any_of(self, queryset, value, timezone=None):
         chat_tags_condition = Q(chat__tags__name__in=value)
@@ -100,6 +89,11 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
 
 class VersionsFilter(ChoiceColumnFilter):
     query_param: str = "versions"
+    label: str = "Versions"
+
+    def prepare(self, team, **kwargs):
+        single_experiment = kwargs.get("single_experiment")
+        self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)
 
     def _get_messages_queryset(self, tags, operator):
         combined_query = Q()
@@ -127,7 +121,11 @@ class VersionsFilter(ChoiceColumnFilter):
 
 class ChannelsFilter(ChoiceColumnFilter):
     query_param: str = "channels"
+    label: str = "Channels"
     column: str = "experiment_channel__platform"
+
+    def prepare(self, team, **kwargs):
+        self.options = ChannelPlatform.for_filter(team)
 
     def parse_query_value(self, query_value) -> any:
         selected_display_names = self.values_list(query_value)
@@ -144,8 +142,8 @@ class ExperimentSessionFilter(MultiColumnFilter):
 
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
-        TimestampFilter(column="last_message_created_at", query_param="last_message"),
-        TimestampFilter(column="first_message_created_at", query_param="first_message"),
+        TimestampFilter(label="Last Message", column="last_message_created_at", query_param="last_message"),
+        TimestampFilter(label="First Message", column="first_message_created_at", query_param="first_message"),
         ChatMessageTagsFilter(),
         VersionsFilter(),
         ChannelsFilter(),

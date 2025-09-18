@@ -79,7 +79,7 @@
           <!-- Value Input (Choice, String, Timestamp) -->
           <template x-if="filter.operator">
             <div class="relative">
-              <template x-if="['choice', 'string'].includes(filterData.columns[filter.column]?.type) && ['any of', 'all of', 'excludes'].includes(filter.operator)">
+              <template x-if="['choice', 'string', 'exclusive_choice'].includes(filterData.columns[filter.column]?.type) && ['any of', 'all of', 'excludes'].includes(filter.operator)">
                 <div class="relative">
                   <div @click="filter.showOptions = !filter.showOptions" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
                     <span x-text="filter.selectedValues.length ? getSelectedDisplayText(filter) : 'Select'"></span>
@@ -194,22 +194,10 @@
 {{ df_field_type_filters|json_script:"field-type-filters" }}
 {{ df_date_range_options|json_script:"date-range-options" }}
 {{ df_filter_columns|json_script:"filter-columns-data" }}
-{{ df_state_list|json_script:"state-data" }}
-{{ df_available_tags|default:""|json_script:"available-tags-data" }}
-{{ df_experiment_versions|default:""|json_script:"experiment-versions-data" }}
-{{ df_channel_list|default:"[]"|json_script:"channel-list-data" }}
-{{ df_span_names|default:"[]"|json_script:"available-span-names-data" }}
-{% if df_experiment_list %}{{ df_experiment_list|json_script:"experiment-list-data" }}{% else %}<script id="experiment-list-data" type="application/json">[]</script>{% endif %}
 <script>
-  const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
-  const span_names = JSON.parse(document.getElementById('available-span-names-data').textContent);
-  const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
   const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
-  const channelsList = JSON.parse(document.getElementById('channel-list-data').textContent);
-  const experimentList = JSON.parse(document.getElementById('experiment-list-data').textContent);
   const filterColumns = JSON.parse(document.getElementById('filter-columns-data').textContent);
   const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
-  const stateOptions = JSON.parse(document.getElementById('state-data').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
       dateRangeOptions,
@@ -217,35 +205,11 @@
         showFilters: false,
         filters: [],
         loading: false,
-        columns: {}
+        columns: filterColumns,
       },
 
       init() {
         const App = SiteJS.app;
-        // Build columns dynamically based on filter_columns context
-        const allColumns = {
-          'experiment': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, options: experimentList, label: 'Experiment'},
-          'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
-          'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message',  options: dateRangeOptions},
-          'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message',  options: dateRangeOptions},
-          'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
-          'versions': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, options: versionsList, label: 'Versions'},
-          'channels': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, options: channelsList, label: 'Channels'},
-          'state': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, options: stateOptions, label: 'State'},
-          'remote_id': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, label: 'Remote Id'},
-          'timestamp': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Timestamp',  options: dateRangeOptions},
-          'span_name': {type: 'choice', operators: fieldTypeFilters.choice, options: span_names, label: 'Span Name' },
-          'status': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, options: stateOptions, label: 'Status'},
-        };
-
-        // Only include columns that are in the filterColumns list
-        this.filterData.columns = {};
-        filterColumns.forEach(column => {
-          if (allColumns[column]) {
-            this.filterData.columns[column] = allColumns[column];
-          }
-        });
-
         this.loadFiltersFromUrl();
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {
@@ -320,7 +284,7 @@
           filter.value = '';
           filter.selectedValues = [];
           filter.searchQuery = '';
-          if (['choice', 'string'].includes(this.filterData.columns[column].type)) {
+          if (['choice', 'string', 'exclusive_choice'].includes(this.filterData.columns[column].type)) {
             filter.filteredOptions = [...this.filterData.columns[column].options || []];
           } else {
             filter.filteredOptions = [];

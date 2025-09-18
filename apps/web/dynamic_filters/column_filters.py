@@ -3,17 +3,29 @@ from datetime import datetime, timedelta
 import pytz
 from django.db.models import QuerySet
 
-from .base import ChoiceColumnFilter, ColumnFilter, StringColumnFilter
+from apps.experiments.models import SessionStatus
+
+from .base import DATE_RANGE_OPTIONS, TYPE_TIMESTAMP, ChoiceColumnFilter, ColumnFilter, StringColumnFilter
 
 
 class ParticipantFilter(StringColumnFilter):
     query_param: str = "participant"
     column: str = "participant__identifier"
+    label: str = "Participant"
 
 
 class ExperimentFilter(ChoiceColumnFilter):
     query_param: str = "experiment"
     column: str = "experiment_id"
+    label: str = "Chatbot"
+
+    def prepare(self, team, **kwargs):
+        from apps.experiments.models import Experiment
+
+        experiments = (
+            Experiment.objects.working_versions_queryset().filter(team=team).values("id", "name").order_by("name")
+        )
+        self.options = [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
 
     def parse_query_value(self, value) -> list[int]:
         values = []
@@ -27,15 +39,21 @@ class ExperimentFilter(ChoiceColumnFilter):
 
 class StatusFilter(ChoiceColumnFilter):
     column: str = "status"
+    label: str = "Status"
+    options: list[str] = SessionStatus.for_chatbots()
 
 
 class RemoteIdFilter(ChoiceColumnFilter):
     query_param: str = "remote_id"
     column: str = "participant__remote_id"
+    label: str = "Remote ID"
 
 
 class TimestampFilter(ColumnFilter):
-    def _get_date_as_utc(self, value) -> datetime:
+    type: str = TYPE_TIMESTAMP
+    options: list[dict[str, str]] = DATE_RANGE_OPTIONS
+
+    def _get_date_as_utc(self, value) -> datetime | None:
         try:
             date_value = datetime.fromisoformat(value)
             # Convert date to UTC to compare it correctly with stored timestamps

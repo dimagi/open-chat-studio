@@ -4,10 +4,10 @@ import json
 import logging
 from collections.abc import Sequence
 from enum import StrEnum
-from typing import ClassVar
+from typing import Any, ClassVar, Literal
 
 from django.db.models import QuerySet
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .datastructures import FilterParams
 
@@ -31,8 +31,15 @@ class Operators(StrEnum):
     RANGE = "range"
 
 
+TYPE_STRING = "string"
+TYPE_TIMESTAMP = "timestamp"
+TYPE_CHOICE = "choice"
+TYPE_EXCLUSIVE_CHOICE = "exclusive_choice"
+
+TYPE_ANNOTATION = Literal[TYPE_STRING, TYPE_TIMESTAMP, TYPE_CHOICE, TYPE_EXCLUSIVE_CHOICE]
+
 FIELD_TYPE_FILTERS = {
-    "string": [
+    TYPE_STRING: [
         Operators.EQUALS,
         Operators.CONTAINS,
         Operators.DOES_NOT_CONTAIN,
@@ -40,9 +47,9 @@ FIELD_TYPE_FILTERS = {
         Operators.ENDS_WITH,
         Operators.ANY_OF,
     ],
-    "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER, Operators.RANGE],
-    "choice": [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
-    "exclusive_choice": [Operators.ANY_OF, Operators.EXCLUDES],
+    TYPE_TIMESTAMP: [Operators.ON, Operators.BEFORE, Operators.AFTER, Operators.RANGE],
+    TYPE_CHOICE: [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
+    TYPE_EXCLUSIVE_CHOICE: [Operators.ANY_OF, Operators.EXCLUDES],
 }
 
 DATE_RANGE_OPTIONS = [
@@ -69,8 +76,10 @@ class MultiColumnFilter:
     filters: ClassVar[Sequence[ColumnFilter]]
 
     @classmethod
-    def columns(cls) -> list[str]:
-        return [filter_component.query_param for filter_component in cls.filters]
+    def columns(cls, team, **kwargs) -> dict[str:dict]:
+        for filter_component in cls.filters:
+            filter_component.prepare(team, **kwargs)
+        return {filter_component.query_param: filter_component.model_dump() for filter_component in cls.filters}
 
     def prepare_queryset(self, queryset):
         """Hook for subclasses to modify the queryset before applying filters."""
@@ -100,7 +109,13 @@ class ColumnFilter(BaseModel):
     """
 
     query_param: str
+    label: str
+    type: TYPE_ANNOTATION
+    operators: list[Operators] = Field(default_factory=lambda data: FIELD_TYPE_FILTERS[data["type"]])
     column: str = None
+
+    def prepare(self, team, **kwargs):
+        pass
 
     def values_list(self, json_value: str) -> list[str]:
         try:
@@ -126,6 +141,9 @@ class ColumnFilter(BaseModel):
 
 
 class ChoiceColumnFilter(ColumnFilter):
+    type: str = TYPE_EXCLUSIVE_CHOICE
+    options: Sequence[str | dict[str, Any]] = []
+
     def parse_query_value(self, query_value) -> any:
         return self.values_list(query_value)
 
@@ -142,6 +160,8 @@ class ChoiceColumnFilter(ColumnFilter):
 
 
 class StringColumnFilter(ColumnFilter):
+    type: str = TYPE_STRING
+
     def apply_equals(self, queryset, value, timezone=None) -> QuerySet:
         return queryset.filter(**{f"{self.column}": value})
 
