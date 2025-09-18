@@ -57,7 +57,7 @@ class ExperimentVersionsFilter(ChoiceColumnFilter):
 
     def values_list(self, json_value: str) -> list[str]:
         values = super().values_list(json_value)
-        # versions are returns as strings like "v1", "v2", so we need to strip the "v" and convert to int
+        # versions are returned as strings like "v1", "v2", so we need to strip the "v" and convert to int
         return [int(v[1]) for v in values if "v" in v]
 
 
