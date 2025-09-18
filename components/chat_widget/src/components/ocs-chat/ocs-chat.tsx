@@ -212,7 +212,6 @@ export class OcsChat {
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
 
-  currentLanguage: string = 'en';
   translationManager: TranslationManager = new TranslationManager();
 
   private pollingIntervalRef?: any;
@@ -1058,28 +1057,30 @@ export class OcsChat {
   }
 
   private getButtonClasses(): string {
-    const hasText = this.buttonText && this.buttonText.trim();
+    const translatedButtonText = this.translationManager.get('buttonText');
+    const hasText = (translatedButtonText && translatedButtonText.trim()) || (this.buttonText && this.buttonText.trim());
     const baseClass = hasText ? 'chat-btn-text' : 'chat-btn-icon';
     const shapeClass = this.buttonShape === 'round' ? 'round' : '';
     return `${baseClass} ${shapeClass}`.trim();
   }
 
   private renderButton() {
-    const hasText = this.buttonText && this.buttonText.trim();
+    const translatedButtonText = this.translationManager.get('buttonText');
+    const hasText = (translatedButtonText && translatedButtonText.trim()) || (this.buttonText && this.buttonText.trim());
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
     const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
-    const translatedButtonText = this.translationManager.get('buttonText') || this.buttonText
+    const finalButtonText = translatedButtonText || this.buttonText;
     if (hasText) {
       return (
         <button
           class={buttonClasses}
           onClick={() => this.toggleWindowVisibility()}
-          aria-label={`Open chat - ${translatedButtonText}`}
-          title={translatedButtonText}
+          aria-label={`Open chat - ${finalButtonText}`}
+          title={finalButtonText}
         >
           <img src={iconSrc} alt="" />
-          <span>{translatedButtonText}</span>
+          <span>{finalButtonText}</span>
         </button>
       );
     } else {
@@ -1407,7 +1408,7 @@ export class OcsChat {
                         <div class="typing-progress"></div>
                       </div>
                       <div class="typing-text">
-                        <span>{this.typingIndicatorText}</span>
+                        <span>{this.translationManager.get('typingIndicatorText')}</span>
                         <span class="typing-dots loading"></span>
                       </div>
                     </div>
