@@ -20,5 +20,5 @@ function currentDomainMatchesApiBaseUrl(apiBaseUrl: string): boolean {
     return false;
   }
 
-  return window.location.hostname === apiBase.hostname && window.location.port === apiBase.port && window.location.protocol === apiBase.protocol;
+  return window.location.origin === apiBase.origin;
 }
