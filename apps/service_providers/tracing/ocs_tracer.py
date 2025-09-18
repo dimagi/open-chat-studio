@@ -130,7 +130,10 @@ class OCSTracer(Tracer):
         if not self.ready:
             return
 
-        span = self.spans.pop(span_id)
+        span = self.spans.pop(span_id, None)
+        if not span:
+            return
+
         span.output = outputs or {}
         span.end_time = timezone.now()
         if error:
