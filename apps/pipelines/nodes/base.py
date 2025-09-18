@@ -15,6 +15,7 @@ from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import TypedDict
 
 from apps.experiments.models import ExperimentSession
+from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 
@@ -526,13 +527,16 @@ class NodeSchema(BaseModel):
             schema["ui:icon"] = self.icon
 
 
-def deprecated_node(cls=None, *, message=None):
+def deprecated_node(cls=None, *, message=None, docs_link=None):
     """Class decorator for deprecating a node"""
 
     def _inner(cls):
+        notice = message or ""
+        if docs_link:
+            notice = render_help_with_link(notice, docs_link)
         schema = cls.model_config["json_schema_extra"]
         schema.deprecated = True
-        schema.deprecation_message = message
+        schema.deprecation_message = notice
         schema.can_add = False
         return cls
 

@@ -56,7 +56,7 @@
     "@uiw/react-codemirror": "^4.23.7",
     "alertifyjs": "^1.14.0",
     "alpinejs": "^3.14.3",
-    "axios": "^1.11.0",
+    "axios": "^1.12.0",
     "chart.js": "^4.4.9",
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^4.1.0",

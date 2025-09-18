@@ -122,6 +122,16 @@ class EvaluationMessage(BaseModel):
                 context_tags.extend([tag.name for tag in tags if not tag.is_system_tag])
                 existing_context["tags"] = list(dict.fromkeys(context_tags))  # dedupe preserving order
 
+        def _messages_to_history(messages_):
+            return [
+                {
+                    "message_type": msg.message_type,
+                    "content": msg.content,
+                    "summary": getattr(msg, "summary", None),
+                }
+                for msg in messages_
+            ]
+
         messages_by_session = defaultdict(list)
         for message in all_messages:
             messages_by_session[message.chat.experiment_session.external_id].append(message)
@@ -151,25 +161,12 @@ class EvaluationMessage(BaseModel):
                         },
                     )
                     new_messages.append(evaluation_message)
-
-                    history.append(
-                        {
-                            "message_type": current_msg.message_type,
-                            "content": current_msg.content,
-                            "summary": getattr(current_msg, "summary", None),
-                        }
-                    )
-                    history.append(
-                        {
-                            "message_type": next_msg.message_type,
-                            "content": next_msg.content,
-                            "summary": getattr(next_msg, "summary", None),
-                        }
-                    )
-
+                    history.extend(_messages_to_history([current_msg, next_msg]))
                     i += 2
                 else:
-                    # If there is not a (human, ai) pair, move on.
+                    # Add AI seed messages to the history
+                    if current_msg.message_type == ChatMessageType.AI and not history:
+                        history.extend(_messages_to_history([current_msg]))
                     i += 1
         return new_messages
 
@@ -211,6 +208,16 @@ class EvaluationMessage(BaseModel):
             history_lines.append(f"{display_type}: {content}")
 
         return "\n".join(history_lines)
+
+    def as_result_dict(self) -> dict:
+        """Returns a dict representation to be stored in any evaluator result"""
+        return {
+            "input": self.input,
+            "output": self.output,
+            "context": self.context,
+            "history": self.history,
+            "metadata": self.metadata,
+        }
 
 
 class EvaluationDataset(BaseTeamModel):
@@ -336,7 +343,7 @@ class EvaluationRun(BaseTeamModel):
             context_columns = {
                 # exclude 'current_datetime'
                 f"{key}": value
-                for key, value in result.message.context.items()
+                for key, value in result.message_context.items()
                 if key != "current_datetime"
             }
             if include_ids is True:
@@ -344,8 +351,8 @@ class EvaluationRun(BaseTeamModel):
 
             table_by_message[result.message.id].update(
                 {
-                    "Dataset Input": result.message.input.get("content", ""),
-                    "Dataset Output": result.message.output.get("content", ""),
+                    "Dataset Input": result.input_message,
+                    "Dataset Output": result.output_message,
                     "Generated Response": result.output.get("generated_response", ""),
                     **{
                         f"{key} ({result.evaluator.name})": value
@@ -369,3 +376,24 @@ class EvaluationResult(BaseTeamModel):
 
     def __str__(self):
         return f"EvaluatorResult for Evaluator {self.evaluator_id}"
+
+    @property
+    def input_message(self) -> str:
+        try:
+            return self.output["message"]["input"]["content"]
+        except KeyError:
+            return ""
+
+    @property
+    def output_message(self) -> str:
+        try:
+            return self.output["message"]["output"]["content"]
+        except KeyError:
+            return ""
+
+    @property
+    def message_context(self) -> str:
+        try:
+            return self.output["message"]["context"]
+        except KeyError:
+            return ""

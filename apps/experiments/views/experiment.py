@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from functools import cached_property
 from typing import cast
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 import jwt
 from celery.result import AsyncResult
@@ -20,7 +20,15 @@ from django.db import transaction
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect, JsonResponse
+from django.http import (
+    FileResponse,
+    Http404,
+    HttpResponse,
+    HttpResponseForbidden,
+    HttpResponseRedirect,
+    JsonResponse,
+    QueryDict,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -58,7 +66,10 @@ from apps.experiments.decorators import (
     verify_session_access_cookie,
 )
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
-from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, DynamicExperimentSessionFilter
+from apps.experiments.filters import (
+    ExperimentSessionFilter,
+    get_experiment_filter_context_data,
+)
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
@@ -92,7 +103,6 @@ from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
-from apps.experiments.utils import get_experiment_error_trend_data
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
@@ -105,6 +115,7 @@ from apps.service_providers.utils import get_llm_provider_choices, get_models_by
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 @login_and_team_required
@@ -120,7 +131,13 @@ def experiments_home(request, team_slug: str):
         )
     ]
     return generic_home(
-        request, team_slug, "Experiments", "experiments:table", actions=actions_, show_modal_or_banner=show_modal
+        request,
+        team_slug,
+        "Experiments",
+        "experiments:table",
+        actions=actions_,
+        show_modal_or_banner=show_modal,
+        load_trend_modules=True,
     )
 
 
@@ -153,13 +170,11 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             )
         )
         timezone = self.request.session.get("detected_tz", None)
-        filters = self.request.GET
-        if not filters and (hx_url := self.request.headers.get("HX-Current-URL")):
-            parsed_url = urlparse(hx_url)
-            filters = parse_qs(parsed_url.query)
 
-        session_filter = DynamicExperimentSessionFilter(query_set, filters, timezone)
-        query_set = session_filter.apply()
+        session_filter = ExperimentSessionFilter()
+        query_set = session_filter.apply(
+            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
+        )
         return query_set
 
 
@@ -465,11 +480,6 @@ def version_create_status(request, team_slug: str, experiment_id: int):
 def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
     experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
 
-    user_sessions = (
-        ExperimentSession.objects.with_last_message_created_at()
-        .filter(participant__user=request.user, experiment=experiment)
-        .exclude(experiment_channel__platform__in=[ChannelPlatform.API, ChannelPlatform.EVALUATIONS])
-    )
     channels, available_platforms = get_channels_context(experiment)
 
     deployed_version = None
@@ -483,31 +493,30 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         elif assistant := experiment.assistant:
             bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
 
-    channel_list = ChannelPlatform.for_filter(experiment.team)
     context = {
         "active_tab": active_tab,
         "bot_type_chip": bot_type_chip,
         "experiment": experiment,
-        "user_sessions": user_sessions,
         "platforms": available_platforms,
         "channels": channels,
-        "df_available_tags": [tag.name for tag in experiment.team.tag_set.filter(is_system_tag=False)],
-        "df_experiment_versions": experiment.get_version_name_list(),
         "deployed_version": deployed_version,
-        "df_field_type_filters": FIELD_TYPE_FILTERS,
-        "df_channel_list": channel_list,
         "allow_copy": not experiment.child_links.exists(),
-        "df_date_range_options": DATE_RANGE_OPTIONS,
-        "df_filter_columns": DynamicExperimentSessionFilter.columns,
-        "df_state_list": SessionStatus.for_chatbots(),
-        "df_filter_data_source_container_id": "sessions-table",
-        "df_filter_data_source_url": reverse("experiments:sessions-list", args=(team_slug, experiment_id)),
-        "df_date_range_column_name": "last_message",
         **_get_events_context(experiment, team_slug, request.origin),
     }
     if active_tab != "chatbots":
         context.update(**_get_terminal_bots_context(experiment, team_slug))
         context.update(**_get_routes_context(experiment, team_slug))
+        session_table_url = reverse("experiments:sessions-list", args=(team_slug, experiment_id))
+    else:
+        session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
+
+    context.update(
+        get_experiment_filter_context_data(
+            request.team,
+            session_table_url,
+            single_experiment=experiment,
+        )
+    )
 
     return TemplateResponse(request, template_name, context)
 
@@ -984,9 +993,9 @@ def experiment_invitations(request, team_slug: str, experiment_id: int, origin="
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     timezone = request.session.get("detected_tz", None)
-    experiment = get_object_or_404(Experiment, id=experiment_id)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
     parsed_url = urlparse(request.headers.get("HX-Current-URL"))
-    query_params = parse_qs(parsed_url.query)
+    query_params = QueryDict(parsed_url.query)
     task_id = async_export_chat.delay(experiment_id, query_params, timezone)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
@@ -1567,19 +1576,19 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         messages.error(request, "There was an error during the migration. Please try again later.")
         return redirect(failed_url)
 
-    return redirect(failed_url)
-
 
 @require_GET
 @login_and_team_required
 @permission_required("experiments.view_experiment")
-def experiment_error_trend(request, team_slug: str, experiment_id: int):
+def trends_data(request, team_slug: str, experiment_id: int):
     """
-    Returns JSON data for experiment error trend sparkline chart.
+    Returns JSON data for the experiment's trend barchart chart.
     """
     try:
         experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
-        return JsonResponse({"data": get_experiment_error_trend_data(experiment)})
+        successes, errors = experiment.default_version.get_trend_data()
+        data = {"successes": successes, "errors": errors}
+        return JsonResponse({"trends": data})
     except Exception:
-        logging.exception(f"Error loading sparkline data for experiment {experiment_id}")
-        return JsonResponse({"error": "Failed to load sparkline data", "data": []}, status=500)
+        logging.exception(f"Error loading barchart data for experiment {experiment_id}")
+        return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)
