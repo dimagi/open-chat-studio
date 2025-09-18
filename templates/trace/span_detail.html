@@ -52,11 +52,11 @@
             </div>
         </div>
 
-        {% if span.tags.all %}
+        {% if span.prefetched_tagged_items %}
         <div class="mb-6">
             <h3 class="text-lg font-semibold mb-3">Tags</h3>
             <div class="flex flex-wrap gap-2">
-                {% for tag in span.tags.all %}
+                {% for tag in span.prefetched_tagged_items %}
                     <span class="badge badge-info">{{ tag.name }}</span>
                 {% endfor %}
             </div>
