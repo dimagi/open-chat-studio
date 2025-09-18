@@ -256,7 +256,6 @@ The frontend configuration maps field types to available operators using the `FI
 
 The `get_filter_context_data()` helper function provides the necessary context variables:
 
-- `df_field_type_filters`: Maps field types to operators
 - `df_date_range_options`: Predefined date ranges (1h, 1d, 7d, etc.)
 - `df_filter_columns`: List of column names for this filter
 - `df_date_range_column_name`: Default date column for quick range selection

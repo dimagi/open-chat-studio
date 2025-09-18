@@ -11,7 +11,6 @@ from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import Experiment
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
-    FIELD_TYPE_FILTERS,
     TYPE_CHOICE,
     ChoiceColumnFilter,
     ColumnFilter,
@@ -28,7 +27,6 @@ from apps.web.dynamic_filters.column_filters import (
 
 def get_filter_context_data(team, columns, date_range_column: str, table_url: str, table_container_id: str):
     return {
-        "df_field_type_filters": FIELD_TYPE_FILTERS,
         "df_date_range_options": DATE_RANGE_OPTIONS,
         "df_channel_list": ChannelPlatform.for_filter(team),
         "df_filter_columns": columns,
