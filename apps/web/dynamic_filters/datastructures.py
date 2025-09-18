@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Self
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from django.conf import settings
 from django.http import QueryDict
@@ -18,8 +18,12 @@ class ColumnFilterData:
         return bool(self.column and self.operator and self.value)
 
     def as_query_string(self, filter_number=0) -> str:
-        return "filter_{fn}_column={col}&filter_{fn}_operator={op}&filter_{fn}_value={val}".format(  # noqa: UP032
-            col=self.column, op=self.operator, val=self.value, fn=filter_number
+        return urlencode(
+            {
+                f"filter_{filter_number}_column": self.column,
+                f"filter_{filter_number}_operator": self.operator,
+                f"filter_{filter_number}_value": self.value,
+            }
         )
 
 
