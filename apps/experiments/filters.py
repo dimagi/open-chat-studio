@@ -36,11 +36,6 @@ def get_filter_context_data(team, columns, date_range_column: str, table_url: st
     }
 
 
-def get_experiment_filter_options(team):
-    experiments = Experiment.objects.working_versions_queryset().filter(team=team).values("id", "name").order_by("name")
-    return [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
-
-
 class ChatMessageTagsFilter(ChoiceColumnFilter):
     query_param: str = "tags"
     label: str = "Tags"
