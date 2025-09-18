@@ -208,7 +208,7 @@ class TracingService:
         metadata = {}
         if self.session:
             metadata["participant-id"] = self.session.participant.identifier
-            metadata["session-id"] = self.session.external_id
+            metadata["session-id"] = str(self.session.external_id)
 
         config = RunnableConfig(
             run_name=f"{span_name or 'OCS'} run",

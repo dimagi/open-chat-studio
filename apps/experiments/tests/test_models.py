@@ -1069,6 +1069,31 @@ class TestExperimentObjectManager:
 
 @pytest.mark.django_db()
 class TestExperimentTrends:
+    def test_get_trend_data_returns_data_from_all_versions(self, experiment):
+        """Test that get_trend_data aggregates traces from all versions of an experiment"""
+        # Create some versions of the experiment
+        version1 = experiment.create_new_version()
+        version2 = experiment.create_new_version()
+
+        curr_time = timezone.now()
+        Trace.objects.create(
+            experiment=experiment, team=experiment.team, status=TraceStatus.SUCCESS, timestamp=curr_time, duration=1
+        )
+        # Trace for version1
+        Trace.objects.create(
+            experiment=version1, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+        )
+        # Trace for version2
+        Trace.objects.create(
+            experiment=version2, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+        )
+
+        success, errors = experiment.get_trend_data()
+
+        # Should aggregate traces from all versions: 1 success + 2 errors
+        assert sum(success) == 1, f"Expected 1 success, got {sum(success)}"
+        assert sum(errors) == 2, f"Expected 2 errors, got {sum(errors)}"
+
     def test_get_experiment_trend_data_with_no_errors(self, experiment):
         """Test that the function returns an array of zeros when there are no error traces"""
         success, errors = experiment.get_trend_data()
