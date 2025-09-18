@@ -8,7 +8,7 @@ import {
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { getCSRFToken } from '../../utils/cookies';
 import { varToPixels } from '../../utils/utils';
-import {TranslationStrings, TranslationManager, getBrowserLanguage, defaultTranslations} from '../../utils/translations';
+import {TranslationStrings, TranslationManager, defaultTranslations} from '../../utils/translations';
 
 interface ChatMessage {
   created_at: string;
