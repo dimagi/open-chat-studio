@@ -1,12 +1,26 @@
 {% load json_tags %}
 
-<div x-show="selectedSpan === '{{ span.id }}'" x-cloak class="border border-l border-base-300">
+<div 
+    x-show="$store.spanDrawer.isOpen && $store.spanDrawer.spanId === '{{ span.id }}'" 
+    x-transition:enter="transition ease-out duration-300 transform"
+    x-transition:enter-start="translate-x-full"
+    x-transition:enter-end="translate-x-0"
+    x-transition:leave="transition ease-in duration-200 transform"
+    x-transition:leave-start="translate-x-0"
+    x-transition:leave-end="translate-x-full"
+    class="fixed top-0 right-0 z-50 w-full max-w-2xl h-full bg-base-100 shadow-xl overflow-y-auto border border-l border-base-300"
+    x-cloak>
     <!-- Header -->
     <div class="flex items-center justify-between p-6 border-b border-base-300">
         <div>
             <h2 class="text-xl font-bold">{{ span.name }}</h2>
             <p class="text-sm text-base-content/60">Span Details</p>
         </div>
+        <button 
+            @click="$store.spanDrawer.close()"
+            class="btn btn-ghost btn-sm btn-circle">
+            <i class="fa-solid fa-times"></i>
+        </button>
     </div>
 
     <!-- Content -->

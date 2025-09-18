@@ -94,20 +94,15 @@
         <div class="card mb-6">
             <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
             <div class="flex gap-2">
-                <div class="border-l card-body bg-base-50 shadow-md w-1/2">
+                <div class="card-body bg-base-50 shadow-md">
                     {% for span in spans %}
                         {% include "trace/span_tree.html" with span=span is_root=True %}
                     {% empty %}
-                    <div class="card bg-base-100 border border-base-200">
+                    <div class="card bg-base-100">
                         <div class="card-body p-4 text-center text-base-content/60">
                         No spans found for this trace.
                         </div>
                     </div>
-                    {% endfor %}
-                </div>
-                <div class="w-1/2">
-                    {% for span in trace.spans.all %}
-                        {% include "trace/span_detail.html" with span=span %}
                     {% endfor %}
                 </div>
             </div>
@@ -124,4 +119,23 @@
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.store('spanDrawer', {
+            isOpen: false,
+            spanId: null,
+
+            open(spanId) {
+                this.spanId = spanId;
+                this.isOpen = true;
+            },
+
+            close() {
+                this.isOpen = false;
+                this.spanId = null;
+            }
+        });
+    });
+</script>
 {% endblock app %}
