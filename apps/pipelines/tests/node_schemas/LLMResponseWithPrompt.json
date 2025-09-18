@@ -99,7 +99,6 @@
     "collection_id": {
       "default": null,
       "title": "Media",
-      "ui:flagRequired": "flag_pipelines-v2",
       "ui:optionsSource": "collection",
       "ui:widget": "select",
       "type": "integer"
@@ -107,7 +106,6 @@
     "collection_index_id": {
       "default": null,
       "title": "Collection Index",
-      "ui:flagRequired": "flag_pipelines-v2",
       "ui:optionsSource": "collection_index",
       "ui:widget": "select",
       "type": "integer"
