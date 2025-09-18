@@ -13,21 +13,12 @@ export function getCSRFToken(apiBaseUrl: string): string | undefined {
 }
 
 function currentDomainMatchesApiBaseUrl(apiBaseUrl: string): boolean {
-  const currentDomain = window.location.hostname;
-  const apiDomain = getDomainFromUrl(apiBaseUrl);
-
-  if (!apiDomain) {
+  let apiBase: URL;
+  try {
+    apiBase = new URL(apiBaseUrl);
+  } catch {
     return false;
   }
 
-  return currentDomain === apiDomain;
-}
-
-function getDomainFromUrl(url: string): string | null {
-  try {
-    const urlObj = new URL(url);
-    return urlObj.hostname;
-  } catch (error) {
-    return null;
-  }
+  return window.location.origin === apiBase.origin;
 }
