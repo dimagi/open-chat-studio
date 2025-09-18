@@ -45,7 +45,7 @@ from apps.teams.utils import current_team
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
-from apps.web.dynamic_filters.datastructures import ColumnFilterData
+from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
 from apps.web.meta import absolute_url
 
 log = logging.getLogger("ocs.experiments")
@@ -897,17 +897,13 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """
         Returns a URL to the traces page, filtered to show only traces for this experiment.
         """
-        experiment_filter_params = ColumnFilterData(
-            column="experiment", operator="any of", value=json.dumps([self.id])
-        ).as_query_string(filter_number=0)
+        experiment_filter = ColumnFilterData(column="experiment", operator="any of", value=json.dumps([self.id]))
 
         versions_to_include = [f"v{n}" for n in range(1, self.version_number + 1)]
-        versions_filter_params = ColumnFilterData(
-            column="versions", operator="any of", value=json.dumps(versions_to_include)
-        ).as_query_string(filter_number=1)
+        versions_filter = ColumnFilterData(column="versions", operator="any of", value=json.dumps(versions_to_include))
 
-        query = experiment_filter_params + "&" + versions_filter_params
-        return reverse("trace:home", kwargs={"team_slug": self.team.slug}) + "?" + query
+        filter_params = FilterParams(column_filters=[experiment_filter, versions_filter])
+        return reverse("trace:home", kwargs={"team_slug": self.team.slug}) + "?" + filter_params.to_query()
 
     def _calculate_trends(self) -> tuple[list, list]:
         """
