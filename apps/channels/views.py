@@ -243,6 +243,14 @@ class BaseChannelDialogView(View):
             context["success_message"] = form.success_message
         if form.warning_message:
             context["warning_message"] = form.warning_message
+        if extra_form:
+            if hasattr(extra_form, "embed_code") and extra_form.embed_code:
+                context["embed_code"] = extra_form.embed_code
+            if hasattr(extra_form, "widget_token") and extra_form.widget_token:
+                context["widget_token"] = extra_form.widget_token
+            if hasattr(extra_form, "cleaned_data") and extra_form.cleaned_data:
+                allowed_domains = extra_form.cleaned_data.get("allowed_domains")
+                context["allowed_domains"] = allowed_domains
         return context
 
     def get_success_url(self):
@@ -262,12 +270,24 @@ class BaseChannelDialogView(View):
                 "channels": channels,
                 "platforms": available_platforms,
                 "channel": channel,
-                "extra_form": channel.extra_form(
-                    experiment=self.experiment
-                ),  # override extra form to get 'update' rendering
             }
+            if not self._has_widget_data(form):
+                additional_context["extra_form"] = channel.extra_form(
+                    experiment=self.experiment
+                )  # override extra form to get 'update' rendering
             return self.render_to_response({**self.get_context_data(form=form), **additional_context})
         return HttpResponse(headers={"hx-redirect": self.get_success_url()})
+
+    def _has_widget_data(self, form):
+        """Check if form has widget data that should trigger the success modal"""
+        extra_form = form.extra_form if hasattr(form, "extra_form") else None
+        return (
+            extra_form
+            and hasattr(extra_form, "embed_code")
+            and extra_form.embed_code
+            and hasattr(extra_form, "widget_token")
+            and extra_form.widget_token
+        )
 
 
 class ChannelEditDialogView(BaseChannelDialogView, PermissionRequiredMixin, UpdateView):
@@ -353,3 +373,12 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
             "experiment": channel.experiment,
         },
     )
+
+
+@require_POST
+@login_and_team_required
+def clear_widget_success_session(request, team_slug: str, experiment_id: int):
+    """Clear the embedded widget success data from session"""
+    if "embedded_widget_success" in request.session:
+        del request.session["embedded_widget_success"]
+    return JsonResponse({"status": "success"})
