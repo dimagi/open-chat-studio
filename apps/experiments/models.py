@@ -920,7 +920,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
         trace_counts = (
             Trace.objects.filter(
-                Q(experiment__working_version=self) | Q(experiment__working_version=None),
+                Q(experiment__working_version_id=self.id) | Q(experiment_id=self.id),
                 timestamp__gte=from_date,
                 timestamp__lte=to_date,
             )
