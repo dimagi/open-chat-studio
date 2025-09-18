@@ -12,9 +12,6 @@
     </div>
 </div>
 
-<!-- Include the drawer component for this span -->
-{% include "trace/partials/span_drawer.html" %}
-
 <!-- Child spans -->
 {% with child_spans=span.child_spans.all %}
     {% if child_spans %}

@@ -13,7 +13,7 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-<div x-data="{activeTab: 'spans', selectedSpan: 'span-{{ spans.0.id }}'}">
+<div x-data="{activeTab: 'spans', selectedSpan: '{{ spans.0.id }}'}">
     <div class="container mx-auto px-4 py-6">
         <!-- Header Section -->
         <div class="flex justify-between w-full">
@@ -124,24 +124,4 @@
         </div>
     </div>
 </div>
-
-<script>
-document.addEventListener('alpine:init', () => {
-    Alpine.store('spanDrawer', {
-        isOpen: false,
-        spanId: null,
-        
-        open(spanId) {
-            this.spanId = spanId;
-            this.isOpen = true;
-        },
-        
-        close() {
-            this.isOpen = false;
-            this.spanId = null;
-        }
-    });
-});
-</script>
-
 {% endblock app %}
