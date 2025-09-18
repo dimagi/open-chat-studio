@@ -7,6 +7,7 @@ from apps.experiments.filters import (
     get_experiment_filter_options,
     get_filter_context_data,
 )
+from apps.experiments.models import Experiment
 from apps.trace.models import TraceStatus
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, ColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import (
@@ -34,6 +35,7 @@ def get_trace_filter_context_data(team):
             "df_state_list": TraceStatus.values,
             "df_experiment_list": get_experiment_filter_options(team),
             "df_available_tags": span_tags,
+            "df_experiment_versions": Experiment.objects.get_version_names(team),
         }
     )
     return context
@@ -49,6 +51,16 @@ class SpanTagsFilter(ChoiceColumnFilter):
     column: ClassVar[str] = "spans__tags__name"
 
 
+class ExperimentVersionsFilter(ChoiceColumnFilter):
+    query_param = "versions"
+    column = "experiment__version_number"
+
+    def values_list(self, json_value: str) -> list[str]:
+        values = super().values_list(json_value)
+        # versions are returns as strings like "v1", "v2", so we need to strip the "v" and convert to int
+        return [int(v[1]) for v in values if "v" in v]
+
+
 class TraceFilter(MultiColumnFilter):
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
@@ -57,5 +69,6 @@ class TraceFilter(MultiColumnFilter):
         SpanNameFilter(),
         RemoteIdFilter(),
         ExperimentFilter(),
+        ExperimentVersionsFilter(),
         StatusFilter(query_param="status"),
     ]

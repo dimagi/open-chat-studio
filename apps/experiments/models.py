@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 import secrets
 import uuid
@@ -896,10 +897,17 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """
         Returns a URL to the traces page, filtered to show only traces for this experiment.
         """
-        query_params = ColumnFilterData(
-            column="experiment", operator="any of", value=self.version_family_ids
-        ).as_query_string()
-        return reverse("trace:home", kwargs={"team_slug": self.team.slug}) + "?" + query_params
+        experiment_filter_params = ColumnFilterData(
+            column="experiment", operator="any of", value=json.dumps([self.id])
+        ).as_query_string(filter_number=0)
+
+        versions_to_include = [f"v{n}" for n in range(1, self.version_number + 1)]
+        versions_filter_params = ColumnFilterData(
+            column="versions", operator="any of", value=json.dumps(versions_to_include)
+        ).as_query_string(filter_number=1)
+
+        query = experiment_filter_params + "&" + versions_filter_params
+        return reverse("trace:home", kwargs={"team_slug": self.team.slug}) + "?" + query
 
     def _calculate_trends(self) -> tuple[list, list]:
         """
