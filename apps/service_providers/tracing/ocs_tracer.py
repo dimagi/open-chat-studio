@@ -271,3 +271,6 @@ class OCSCallbackHandler(BaseCallbackHandler):
             span_id=run_id,
             error=error,
         )
+
+    def on_chat_model_start(self, *args, **kwargs) -> Any:
+        pass
