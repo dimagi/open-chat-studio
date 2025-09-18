@@ -516,15 +516,18 @@
 
       selectOption(option) {
         this.selectedLabel = option.label;
-        this.filterData.filters = this.filterData.filters.filter(f => f.column !== '{{ df_date_range_column_name }}');
-        this.filterData.filters.push({
-          column: '{{ df_date_range_column_name }}',
-          operator: 'range',
-          value: option.value,
-          availableOperators: fieldTypeFilters.timestamp,
-        });
-        this.filterData.filters = this.getActiveFilters(this.filterData.filters);
-        this.triggerFilterChange();
+        const column = this.filterData.columns['{{ df_date_range_column_name }}'];
+        if (column) {
+          this.filterData.filters = this.filterData.filters.filter(f => f.column !== column.query_param);
+          this.filterData.filters.push({
+            column: column.query_param,
+            operator: 'range',
+            value: option.value,
+            availableOperators: column.operators,
+          });
+          this.filterData.filters = this.getActiveFilters(this.filterData.filters);
+          this.triggerFilterChange();
+        }
       },
 
       selectAllTagOptions(index) {
