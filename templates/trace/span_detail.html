@@ -77,7 +77,7 @@
                     <h3 class="text-lg font-semibold mb-3">Input Data</h3>
                     {% if span.input %}
                         <div class="bg-base-300 p-4 rounded-lg border">
-                            <pre class="text-sm overflow-x-auto whitespace-pre-wrap"><code>{{ span.input|prettyjson }}</code></pre>
+                            <pre class="text-sm overflow-x-auto whitespace-pre-wrap"><code>{{ span.input|to_json }}</code></pre>
                         </div>
                     {% else %}
                         <div class="text-center text-base-content/60 py-8">
@@ -100,7 +100,7 @@
                     <h3 class="text-lg font-semibold mb-3">Output Data</h3>
                     {% if span.output %}
                         <div class="bg-base-300 p-4 rounded-lg border">
-                            <pre class="text-sm overflow-x-auto whitespace-pre-wrap"><code>{{ span.output|prettyjson }}</code></pre>
+                            <pre class="text-sm overflow-x-auto whitespace-pre-wrap"><code>{{ span.output|to_json }}</code></pre>
                         </div>
                     {% else %}
                         <div class="text-center text-base-content/60 py-8">
@@ -114,7 +114,7 @@
                     <h3 class="text-lg font-semibold mb-3">Metadata</h3>
                     {% if span.metadata %}
                         <div class="bg-base-300 p-4 rounded-lg border">
-                            <pre class="text-sm overflow-x-auto whitespace-pre-wrap"><code>{{ span.metadata|prettyjson }}</code></pre>
+                            <pre class="text-sm overflow-x-auto whitespace-pre-wrap"><code>{{ span.metadata|to_json }}</code></pre>
                         </div>
                     {% else %}
                         <div class="text-center text-base-content/60 py-8">
