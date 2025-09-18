@@ -42,6 +42,7 @@ FIELD_TYPE_FILTERS = {
     ],
     "timestamp": [Operators.ON, Operators.BEFORE, Operators.AFTER, Operators.RANGE],
     "choice": [Operators.ANY_OF, Operators.ALL_OF, Operators.EXCLUDES],
+    "exclusive_choice": [Operators.ANY_OF, Operators.EXCLUDES],
 }
 
 DATE_RANGE_OPTIONS = [

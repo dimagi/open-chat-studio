@@ -223,20 +223,19 @@
       init() {
         const App = SiteJS.app;
         // Build columns dynamically based on filter_columns context
-        const singleOptionChoice = fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes')
         const allColumns = {
-          'experiment': {type: 'choice', operators: singleOptionChoice, options: experimentList, label: 'Experiment'},
+          'experiment': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, options: experimentList, label: 'Experiment'},
           'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
           'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message',  options: dateRangeOptions},
           'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message',  options: dateRangeOptions},
           'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
-          'versions': {type: 'choice', operators: singleOptionChoice, options: versionsList, label: 'Versions'},
-          'channels': {type: 'choice', operators: singleOptionChoice, options: channelsList, label: 'Channels'},
-          'state': {type: 'choice', operators: singleOptionChoice, options: stateOptions, label: 'State'},
-          'remote_id': {type: 'choice', operators: singleOptionChoice, label: 'Remote Id'},
+          'versions': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, options: versionsList, label: 'Versions'},
+          'channels': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, options: channelsList, label: 'Channels'},
+          'state': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, options: stateOptions, label: 'State'},
+          'remote_id': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, label: 'Remote Id'},
           'timestamp': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Timestamp',  options: dateRangeOptions},
           'span_name': {type: 'choice', operators: fieldTypeFilters.choice, options: span_names, label: 'Span Name' },
-          'status': {type: 'choice', operators: singleOptionChoice, options: stateOptions, label: 'Status'},
+          'status': {type: 'choice', operators: fieldTypeFilters.exclusive_choice, options: stateOptions, label: 'Status'},
         };
 
         // Only include columns that are in the filterColumns list
