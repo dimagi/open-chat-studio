@@ -738,7 +738,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 # CORS settings
 CORS_ALLOW_CREDENTIALS = False
-CORS_ALLOWED_HEADERS = [
+CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",
     "content-type",
@@ -749,7 +749,7 @@ CORS_ALLOWED_HEADERS = [
     "x-requested-with",
 ]
 
-CORS_ALLOWED_METHODS = [
+CORS_ALLOW_METHODS = [
     "DELETE",
     "GET",
     "OPTIONS",
