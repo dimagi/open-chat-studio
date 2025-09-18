@@ -36,7 +36,7 @@
   {% else %}
     <div class="flex place-items-center">
       <select data-info="{{ object.object_info }}" class="tag-multiselect" name="state[]" multiple
-              data-allowCreate="{% if is_super_admin %}true{% else %}false{% endif %}"
+              data-allowCreate="{% if perms.annotations.add_customtaggeditem and perms.annotations.add_tag %}true{% else %}false{% endif %}"
               placeholder="Select a tag..." autocomplete="off"
               hx-get="{% url "annotations:tag_ui" request.team.slug %}"
               hx-vals='{{ object.object_info }}'
