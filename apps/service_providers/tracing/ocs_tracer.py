@@ -199,6 +199,8 @@ class OCSTracer(Tracer):
 
 
 class OCSCallbackHandler(BaseCallbackHandler):
+    LANGCHAIN_CHAINS_TO_IGNORE = ["start", "end"]
+
     def __init__(self, tracer: OCSTracer):
         super().__init__()
         self.tracer = tracer
@@ -226,9 +228,13 @@ class OCSCallbackHandler(BaseCallbackHandler):
     def on_chain_start(self, serialized, inputs, run_id, parent_run_id, tags, metadata, *args, **kwargs) -> None:
         metadata = metadata or {}
         serialized = serialized or {}
+        chain_name = kwargs.get("name", "Unknown span")
+        if chain_name in OCSCallbackHandler.LANGCHAIN_CHAINS_TO_IGNORE:
+            return
+
         self.tracer.start_span(
             span_id=run_id,
-            span_name=kwargs.get("name", "Unknown span"),
+            span_name=chain_name,
             inputs=inputs,
             metadata=metadata or {},
         )
