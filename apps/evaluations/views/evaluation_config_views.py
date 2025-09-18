@@ -1,23 +1,30 @@
 import csv
+import json
+import logging
 from functools import cached_property
+from io import StringIO
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
 
+from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
+from apps.evaluations.tasks import upload_evaluation_run_results_task
 from apps.evaluations.utils import get_evaluators_with_schema
 from apps.experiments.models import Experiment
 from apps.generics import actions
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+
+logger = logging.getLogger(__name__)
 
 
 class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -248,9 +255,8 @@ def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_ru
     for row in table_data:
         all_headers.update(row.keys())
 
-    fixed_headers = ["id", "session", "Dataset Input", "Dataset Output", "Generated Response"]
-    other_headers = sorted([h for h in all_headers if h not in fixed_headers and h != "error"])
-    headers = [h for h in fixed_headers if h in all_headers] + other_headers + ["error"]
+    other_headers = sorted([h for h in all_headers if h not in EVALUATION_RUN_FIXED_HEADERS and h != "error"])
+    headers = [h for h in EVALUATION_RUN_FIXED_HEADERS if h in all_headers] + other_headers + ["error"]
     writer.writerow(headers)
 
     for row in table_data:
@@ -299,3 +305,90 @@ def load_experiment_versions(request, team_slug: str):
         "help_text": "Specific chatbot version to use for evaluation.",
     }
     return render(request, "evaluations/partials/version_select.html", context)
+
+
+@login_and_team_required
+@permission_required("evaluations.change_evaluationrun")
+def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
+    """Upload CSV to update evaluation run results"""
+    evaluation_run = get_object_or_404(
+        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
+    )
+    if request.method == "GET":
+        context = {
+            "active_tab": "evaluations",
+            "title": "Upload Results",
+            "evaluation_run": evaluation_run,
+        }
+        return render(request, "evaluations/evaluation_run_update.html", context)
+    elif request.method == "POST":
+        try:
+            payload = json.loads(request.body)
+            csv_data = payload.get("csv_data", [])
+            column_mappings = payload.get("column_mappings", {})
+
+            task = upload_evaluation_run_results_task.delay(
+                evaluation_run.id, csv_data, request.team.id, column_mappings
+            )
+            return JsonResponse({"success": True, "task_id": task.id})
+        except Exception as e:
+            logger.error(f"Error starting CSV upload for evaluation run {evaluation_run.id}: {str(e)}")
+            return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
+
+
+@login_and_team_required
+@require_POST
+def parse_evaluation_results_csv_columns(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
+    """Parse uploaded CSV and return column names and sample data for evaluation results."""
+    try:
+        evaluation_run = get_object_or_404(
+            EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
+        )
+        csv_file = request.FILES.get("csv_file")
+        if not csv_file:
+            return JsonResponse({"error": "No CSV file provided"}, status=400)
+
+        file_content = csv_file.read().decode("utf-8")
+        csv_reader = csv.DictReader(StringIO(file_content))
+        columns = csv_reader.fieldnames or []
+
+        all_rows = list(csv_reader)
+        sample_rows = all_rows[:3]
+        total_rows = len(all_rows)
+
+        protected_columns = set(EVALUATION_RUN_FIXED_HEADERS) | set(["error"])
+
+        result_columns = [col for col in columns if col not in protected_columns]
+        suggestions = generate_evaluation_results_column_suggestions(result_columns, evaluation_run)
+        return JsonResponse(
+            {
+                "columns": columns,
+                "result_columns": result_columns,
+                "sample_rows": sample_rows,
+                "all_rows": all_rows,
+                "total_rows": total_rows,
+                "suggestions": suggestions,
+            }
+        )
+
+    except Exception:
+        logger.warning("Error parsing evaluation results CSV")
+        return JsonResponse({"error": "An error occurred while parsing the CSV file."}, status=400)
+
+
+def generate_evaluation_results_column_suggestions(result_columns, evaluation_run):
+    """Generate suggestions for mapping result columns to evaluators."""
+    evaluators = evaluation_run.config.evaluators.all()
+    evaluator_name_to_id = {evaluator.name: evaluator.id for evaluator in evaluators}
+
+    suggestions = {}
+
+    for column in result_columns:
+        suggested_evaluator_id = None
+        if " (" in column and column.endswith(")"):
+            evaluator_name_in_column = column[column.rfind("(") + 1 : -1]
+            if evaluator_name_in_column in evaluator_name_to_id:
+                suggested_evaluator_id = evaluator_name_to_id[evaluator_name_in_column]
+        suggestions[column] = suggested_evaluator_id
+
+    return suggestions

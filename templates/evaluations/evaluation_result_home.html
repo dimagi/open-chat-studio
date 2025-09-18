@@ -36,7 +36,12 @@
           <a href="{% url 'evaluations:evaluation_run_download' request.team.slug evaluation_run.config_id evaluation_run.id %}"
              class="btn btn-primary">
             <i class="fa-solid fa-download"></i>
-            Download CSV
+            Download Results
+          </a>
+          <a href="{% url 'evaluations:evaluation_run_update' request.team.slug evaluation_run.config_id evaluation_run.id %}"
+             class="btn btn-outline">
+            <i class="fa-solid fa-upload"></i>
+            Edit Results
           </a>
         </div>
       {% endif %}
