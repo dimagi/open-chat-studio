@@ -107,7 +107,7 @@
                 </div>
                 <div class="w-1/2">
                     {% for span in trace.spans.all %}
-                        {% include "trace/span_input_output.html" with span=span %}
+                        {% include "trace/span_detail.html" with span=span %}
                     {% endfor %}
                 </div>
             </div>

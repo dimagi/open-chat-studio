@@ -9,14 +9,38 @@
             </button>
         {% endif %}
         <div
-            class="w-full flex flex-row justify-between rounded-lg p-3 hover:cursor-pointer hover:bg-base-300"
+            class="w-full flex flex-row justify-between items-center rounded-lg p-3 hover:cursor-pointer hover:bg-base-300"
             :class="selectedSpan === '{{ span.id }}' ? 'bg-base-300' : ''"
             @click="selectedSpan = '{{ span.id }}'">
             <span class="p-1 text-lg font-bold">{{ span.name }}</span>
             <div class="text-sm font-medium {% if span.status == 'error' %}text-red-500{% elif span.status == 'success' %}text-green-500{% endif %}">{{ span.duration_seconds }}s</div>
         </div>
     </div>
+
     <div x-show="collapsableIsOpen">
-        {% include "trace/partials/span_details.html" %}
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="flex flex-col gap-1">
+                    {% if span.tags.all %}
+                        <div class="flex flex-row gap-1">
+                            {% for tag in span.tags.all %}
+                                <span class="badge badge-info">{{ tag.name }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Child spans -->
+        {% with child_spans=span.child_spans.all %}
+            {% if child_spans %}
+                <div class="ml-4 pl-4 mt-4">
+                    {% for child_span in child_spans %}
+                        {% include "trace/span_tree.html" with span=child_span is_root=False %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
     </div>
 </div>
