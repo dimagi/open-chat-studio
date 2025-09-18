@@ -1,5 +1,6 @@
 import pytest
 
+from apps.annotations.models import UserComment
 from apps.chat.models import ChatMessageType
 from apps.evaluations.models import EvaluationMessage, ExperimentVersionSelection
 from apps.utils.factories.evaluations import EvaluationConfigFactory
@@ -17,7 +18,8 @@ def test_create_messages_from_sessions_includes_history():
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="session1 message2 human", chat=session_1.chat)
     ChatMessageFactory(message_type=ChatMessageType.AI, content="session1 message2 ai", chat=session_1.chat)
 
-    # One message pair from the second session
+    # One message pair from the second session (with a seed message in the history)
+    ChatMessageFactory(message_type=ChatMessageType.AI, content="session2 message0 ai", chat=session_2.chat)
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="session2 message1 human", chat=session_2.chat)
     ChatMessageFactory(message_type=ChatMessageType.AI, content="session2 message1 ai", chat=session_2.chat)
 
@@ -47,8 +49,58 @@ def test_create_messages_from_sessions_includes_history():
     assert eval_messages[1].history[1]["content"] == "session1 message1 ai"
     assert eval_messages[1].full_history == "user: session1 message1 human\nassistant: session1 message1 ai"
 
-    assert eval_messages[2].history == []
-    assert eval_messages[2].full_history == ""
+    assert eval_messages[2].history == [
+        {"message_type": ChatMessageType.AI, "content": "session2 message0 ai", "summary": None}
+    ]
+    assert eval_messages[2].full_history == "assistant: session2 message0 ai"
+
+
+@pytest.mark.django_db()
+def test_create_messages_from_sessions_includes_comments(team_with_users):
+    session_1 = ExperimentSessionFactory(team=team_with_users)
+    user = team_with_users.members.first()
+
+    team = session_1.team
+    human_message = ChatMessageFactory(
+        message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat
+    )
+    UserComment.add_for_model(human_message, comment="comment1", added_by=user, team=team)
+    UserComment.add_for_model(human_message, comment="comment2", added_by=user, team=team)
+
+    ai_message = ChatMessageFactory(
+        message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat
+    )
+    UserComment.add_for_model(ai_message, comment="comment3", added_by=user, team=team)
+
+    eval_messages = EvaluationMessage.create_from_sessions(team, [session_1.external_id])
+
+    assert len(eval_messages) == 1
+
+    assert eval_messages[0].context["comments"] == ["comment1", "comment2", "comment3"]
+
+
+@pytest.mark.django_db()
+def test_create_messages_from_sessions_includes_tags():
+    session_1 = ExperimentSessionFactory()
+
+    team = session_1.team
+    human_message = ChatMessageFactory(
+        message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat
+    )
+    human_message.add_version_tag(2, True)
+    human_message.add_rating("+1")
+
+    ai_message = ChatMessageFactory(
+        message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat
+    )
+    ai_message.add_version_tag(3, True)
+    ai_message.add_rating("+2")
+
+    eval_messages = EvaluationMessage.create_from_sessions(team, [session_1.external_id])
+
+    assert len(eval_messages) == 1
+
+    assert eval_messages[0].context["tags"] == ["+1", "+2"]
 
 
 @pytest.mark.django_db()

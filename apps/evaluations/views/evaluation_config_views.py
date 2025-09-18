@@ -244,7 +244,13 @@ def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_ru
         writer.writerow(["No results available yet"])
         return response
 
-    headers = list(table_data[0].keys())
+    all_headers = set()
+    for row in table_data:
+        all_headers.update(row.keys())
+
+    fixed_headers = ["id", "session", "Dataset Input", "Dataset Output", "Generated Response"]
+    other_headers = sorted([h for h in all_headers if h not in fixed_headers and h != "error"])
+    headers = [h for h in fixed_headers if h in all_headers] + other_headers + ["error"]
     writer.writerow(headers)
 
     for row in table_data:
@@ -268,23 +274,10 @@ def load_experiment_versions(request, team_slug: str):
         return render(request, "evaluations/partials/version_select.html", context)
 
     try:
-        experiment = Experiment.objects.working_versions_queryset().get(
+        Experiment.objects.working_versions_queryset().exists(
             id=experiment_id,
             team=request.team,
         )
-        versions = Experiment.objects.all_versions_queryset(experiment).filter(team=request.team)
-        choices = get_experiment_version_choices(versions)
-        version_choices = [{"value": value, "label": label} for value, label in choices]
-
-        context = {
-            "empty_message": "Select a version...",
-            "field_name": "experiment_version",
-            "field_id": "id_experiment_version",
-            "versions": version_choices,
-            "help_text": "Specific chatbot version to use for evaluation.",
-        }
-        return render(request, "evaluations/partials/version_select.html", context)
-
     except Experiment.DoesNotExist:
         context = {
             "empty_message": "Chatbot not found",
@@ -293,3 +286,16 @@ def load_experiment_versions(request, team_slug: str):
             "versions": [],
         }
         return render(request, "evaluations/partials/version_select.html", context)
+
+    versions = Experiment.objects.all_versions_queryset(experiment_id).filter(team=request.team)
+    choices = get_experiment_version_choices(versions)
+    version_choices = [{"value": value, "label": label} for value, label in choices]
+
+    context = {
+        "empty_message": "Select a version...",
+        "field_name": "experiment_version",
+        "field_id": "id_experiment_version",
+        "versions": version_choices,
+        "help_text": "Specific chatbot version to use for evaluation.",
+    }
+    return render(request, "evaluations/partials/version_select.html", context)

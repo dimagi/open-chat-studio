@@ -22,6 +22,10 @@ class ExperimentTable(tables.Table):
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     type = columns.Column(orderable=False, empty_values=())
+    trends = columns.TemplateColumn(
+        verbose_name="Trends (last 48h)",
+        template_name="table/trends_chart.html",
+    )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
         extra_context={"type": "experiments"},

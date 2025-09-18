@@ -23,6 +23,7 @@
     >
       {% csrf_token %}
       {{ form.non_field_errors }}
+      {% if extra_form %}{{ extra_form.non_field_errors }}{% endif %}
       {% render_form_fields form %}
       {% if extra_form %}
         <div {% include "generic/attrs.html" with attrs=extra_form.form_attrs %}>
