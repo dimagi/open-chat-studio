@@ -339,16 +339,12 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     collection_id: OptionalInt = Field(
         None,
         title="Media",
-        json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="flag_pipelines-v2"
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection),
     )
     collection_index_id: OptionalInt = Field(
         None,
         title="Collection Index",
-        json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="flag_pipelines-v2"
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection_index),
     )
     max_results: OptionalInt = Field(
         default=20,

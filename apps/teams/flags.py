@@ -35,6 +35,8 @@ class Flags(FlagInfo, Enum):
         "flag_pipelines-v2",
         "Second version of pipeline functionality with enhanced features",
         "pipelines",
+        False,
+        True,
     )
 
     CHATBOTS = (
