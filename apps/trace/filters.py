@@ -40,19 +40,19 @@ def get_trace_filter_context_data(team):
 
 
 class SpanNameFilter(ChoiceColumnFilter):
-    query_param = "span_name"
-    column: ClassVar[str] = "spans__name"
+    query_param: str = "span_name"
+    column: str = "spans__name"
 
 
 class SpanTagsFilter(ChoiceColumnFilter):
-    query_param = "tags"
-    column: ClassVar[str] = "spans__tags__name"
+    query_param: str = "tags"
+    column: str = "spans__tags__name"
 
 
 class TraceFilter(MultiColumnFilter):
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
-        TimestampFilter(db_column="timestamp", query_param="timestamp"),
+        TimestampFilter(column="timestamp", query_param="timestamp"),
         SpanTagsFilter(),
         SpanNameFilter(),
         RemoteIdFilter(),

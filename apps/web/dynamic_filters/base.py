@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import ClassVar
 
 from django.db.models import QuerySet
+from pydantic import BaseModel
 
 from .datastructures import FilterParams
 
@@ -84,7 +85,7 @@ class MultiColumnFilter:
         return queryset.distinct()
 
 
-class ColumnFilter:
+class ColumnFilter(BaseModel):
     """
     Abstract base class for a single column filter.
 
@@ -97,7 +98,8 @@ class ColumnFilter:
         query_param: The name of the query parameter used in the URL to identify this filter.
     """
 
-    query_param: str = None
+    query_param: str
+    column: str = None
 
     def values_list(self, json_value: str) -> list[str]:
         try:
@@ -123,8 +125,6 @@ class ColumnFilter:
 
 
 class ChoiceColumnFilter(ColumnFilter):
-    column: ClassVar[str]
-
     def parse_query_value(self, query_value) -> any:
         return self.values_list(query_value)
 
@@ -141,8 +141,6 @@ class ChoiceColumnFilter(ColumnFilter):
 
 
 class StringColumnFilter(ColumnFilter):
-    column: ClassVar[str]
-
     def apply_equals(self, queryset, value, timezone=None) -> QuerySet:
         return queryset.filter(**{f"{self.column}": value})
 

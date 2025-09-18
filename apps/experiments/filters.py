@@ -60,7 +60,7 @@ def get_experiment_filter_options(team):
 
 
 class ChatMessageTagsFilter(ChoiceColumnFilter):
-    query_param = "tags"
+    query_param: str = "tags"
 
     def apply_any_of(self, queryset, value, timezone=None):
         chat_tags_condition = Q(chat__tags__name__in=value)
@@ -99,7 +99,7 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
 
 
 class VersionsFilter(ChoiceColumnFilter):
-    query_param = "versions"
+    query_param: str = "versions"
 
     def _get_messages_queryset(self, tags, operator):
         combined_query = Q()
@@ -126,8 +126,8 @@ class VersionsFilter(ChoiceColumnFilter):
 
 
 class ChannelsFilter(ChoiceColumnFilter):
-    query_param = "channels"
-    column = "experiment_channel__platform"
+    query_param: str = "channels"
+    column: str = "experiment_channel__platform"
 
     def parse_query_value(self, query_value) -> any:
         selected_display_names = self.values_list(query_value)
@@ -144,8 +144,8 @@ class ExperimentSessionFilter(MultiColumnFilter):
 
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
-        TimestampFilter(db_column="last_message_created_at", query_param="last_message"),
-        TimestampFilter(db_column="first_message_created_at", query_param="first_message"),
+        TimestampFilter(column="last_message_created_at", query_param="last_message"),
+        TimestampFilter(column="first_message_created_at", query_param="first_message"),
         ChatMessageTagsFilter(),
         VersionsFilter(),
         ChannelsFilter(),
