@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Any, ClassVar, Literal
 
 from django.db.models import QuerySet
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, computed_field
 
 from .datastructures import FilterParams
 
@@ -111,8 +111,12 @@ class ColumnFilter(BaseModel):
     query_param: str
     label: str
     type: TYPE_ANNOTATION
-    operators: list[Operators] = Field(default_factory=lambda data: FIELD_TYPE_FILTERS[data["type"]])
     column: str = None
+
+    @computed_field
+    @property
+    def operators(self) -> list[Operators]:
+        return FIELD_TYPE_FILTERS[self.type]
 
     def prepare(self, team, **kwargs):
         pass
