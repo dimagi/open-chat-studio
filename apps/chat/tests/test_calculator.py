@@ -31,6 +31,11 @@ from apps.chat.agent.calculator import (
         ("sin(30)", "-0.9880316240928618"),
         ("'hello' + 'world'", "helloworld"),
         ("(" * 10 + "1" + ")" * 10, "1"),  # deep nesting
+        ("0x10 + 8", "24"),  # hex
+        ("1e-1000 + 1", "1.0"),  # very small number
+        ("-0.0 + 0.0", "0.0"),  # negative 0
+        ("1_000 + 2_000", "3000"),
+        ("(" + "1+" * 50 + "1)*2", "102"),
         # Error cases
         ("5/0", "Error: division by zero"),
         ("10 / (5 - 5)", "Error: division by zero"),
@@ -43,6 +48,18 @@ from apps.chat.agent.calculator import (
         ("exec('print(\"hacked\")')", f"Error: {GENERIC_PARSE_ERROR}"),
         ("eval('2+2')", f"Error: {GENERIC_PARSE_ERROR}"),
         (" + ".join(["1"] * 1000), EXPRESSION_TOO_LARGE_ERROR),  # large expression
+        (f"{'9' * 100000} + 1", EXPRESSION_TOO_LARGE_ERROR),
+        ("2(3 + 4)", "Error: 'int' object is not callable"),
+        ("'2' + 3", 'Error: can only concatenate str (not "int") to str'),
+        ('"2" + 3', 'Error: can only concatenate str (not "int") to str'),
+        ("2 + \\n3", "Error: unexpected character after line continuation character at statement: '2 + \\\\n3'"),
+        ("\\x32 + 3", "Error: unexpected character after line continuation character at statement: '\\\\x32 + 3'"),
+        ("(2).__class__", f"Error: {GENERIC_PARSE_ERROR}"),
+        ("__builtins__['eval']('2+2')", f"Error: {GENERIC_PARSE_ERROR}"),
+        ("(lambda: 2+2)()", "4"),  # TODO - don't allow lambdas
+        ("sum([x for x in range(10)])", "Error: name '_getiter_' is not defined"),  # TODO
+        ("float('inf') + 1", "Error: name 'float' is not defined"),
+        ("2,5 + 3,7", "(2, 8, 7)"),  # European decimal  TODO
     ],
 )
 def test_calculator(expression, result):

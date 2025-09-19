@@ -20,6 +20,8 @@ ALLOWED_OPERATORS = {
     ast.USub,
 }
 
+REPLACEMENTS = {"＋": "+", "^": "**", "×": "*", "÷": "/", "−": "-"}
+
 
 class RestrictedOperationsTransformer(RestrictingNodeTransformer):
     def visit_BinOp(self, node):
@@ -29,9 +31,15 @@ class RestrictedOperationsTransformer(RestrictingNodeTransformer):
 
 
 def calculate(expression: str):
-    expression = expression.strip().replace("^", "**").replace("×", "*").replace("÷", "/")
+    expression = expression.strip()
+    for old, new in REPLACEMENTS.items():
+        expression = expression.replace(old, new)
+
     if not expression:
         return EMPTY_EXPRESSION_ERROR
+    if len(expression) > 200:
+        return EXPRESSION_TOO_LARGE_ERROR
+
     filename = "<inline_code>"
     try:
         byte_code = compile_restricted(
