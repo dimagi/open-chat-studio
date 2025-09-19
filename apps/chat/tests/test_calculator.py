@@ -47,8 +47,6 @@ from apps.chat.agent.calculator import (
         ("__import__('os').system('ls')", f"Error: {GENERIC_PARSE_ERROR}"),
         ("exec('print(\"hacked\")')", f"Error: {GENERIC_PARSE_ERROR}"),
         ("eval('2+2')", f"Error: {GENERIC_PARSE_ERROR}"),
-        (" + ".join(["1"] * 1000), EXPRESSION_TOO_LARGE_ERROR),  # large expression
-        (f"{'9' * 100000} + 1", EXPRESSION_TOO_LARGE_ERROR),
         ("2(3 + 4)", "Error: 'int' object is not callable"),
         ("'2' + 3", 'Error: can only concatenate str (not "int") to str'),
         ('"2" + 3', 'Error: can only concatenate str (not "int") to str'),
@@ -64,3 +62,9 @@ from apps.chat.agent.calculator import (
 )
 def test_calculator(expression, result):
     assert calculate(expression) == result
+
+
+def test_large_expressions():
+    # keep these out of the parameterized test to avoid large outputs in the test logs
+    assert calculate(" + ".join(["1"] * 1000)) == EXPRESSION_TOO_LARGE_ERROR
+    assert calculate(f"{'9' * 100000} + 1") == EXPRESSION_TOO_LARGE_ERROR
