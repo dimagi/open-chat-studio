@@ -76,7 +76,7 @@ class MultiColumnFilter:
     filters: ClassVar[Sequence[ColumnFilter]]
 
     @classmethod
-    def columns(cls, team, **kwargs) -> dict[str:dict]:
+    def columns(cls, team, **kwargs) -> dict[str, dict]:
         # Create per-call copies to avoid mutating shared instances
         instances = [f.model_copy(deep=True) for f in cls.filters]
         for filter_component in instances:
