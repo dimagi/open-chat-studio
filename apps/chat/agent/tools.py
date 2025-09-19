@@ -1,6 +1,7 @@
 import functools
 import json
 import logging
+import textwrap
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -15,6 +16,7 @@ from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
+from apps.chat.agent.calculator import calculate
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
@@ -439,6 +441,28 @@ class GetSessionStateTool(CustomBaseTool):
         return f"The value for key '{key}' is: {value}"
 
 
+class CalculatorTool(CustomBaseTool):
+    name: str = AgentTools.CALCULATOR
+    description: str = textwrap.dedent("""
+        Evaluates a mathematical expression and returns the result.
+        
+        Supports basic operators (+, -, *, /, **, %), mathematical functions
+        (sin, cos, tan, exp, log, log10, sqrt), and constants (pi, e).
+        
+        Returns the result as a string e.g. "2*5" returns "10"
+        
+        Notes:
+            - Use '*' or '×' for multiplication e.g. 2*4 == 2×4
+            - Use '**' or '^' for power e.g. x**2 == x^2.
+            - Use '/' or '÷' for divide e.g. 6/3 == 6÷3
+        """)
+    requires_session: bool = False
+    args_schema: type[schemas.CalculatorSchema] = schemas.CalculatorSchema
+
+    def action(self, expression: str):
+        return calculate(expression)
+
+
 def create_schedule_message(
     experiment_session: ExperimentSession,
     message: str,
@@ -499,6 +523,7 @@ TOOL_CLASS_MAP = {
     AgentTools.SEARCH_INDEX: SearchIndexTool,
     AgentTools.SET_SESSION_STATE: SetSessionStateTool,
     AgentTools.GET_SESSION_STATE: GetSessionStateTool,
+    AgentTools.CALCULATOR: CalculatorTool,
 }
 
 
