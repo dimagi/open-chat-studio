@@ -492,7 +492,7 @@
         }).finally(() => {
           this.filterData.loading = false;
           // remove selected value from date range dropdown if range filter is removed
-          const hasLastMessageRange = this.filterData.filters.some(f => f.column === 'last_message' && f.operator === 'range');
+          const hasLastMessageRange = this.filterData.filters.some(f => f.column === '{{ df_date_range_column_name }}' && f.operator === 'range');
           if (!hasLastMessageRange) {
             this.syncDateRangeDropdown(null);
           }
@@ -552,7 +552,7 @@
 
       getLastMessageFilterIndex(params) {
         for (const [key, val] of params.entries()) {
-          if (key.includes('_column') && val === 'last_message') {
+          if (key.includes('_column') && val === '{{ df_date_range_column_name }}') {
             const match = key.match(/filter_(\d+)_column/);
             if (match) {
               return match[1];
