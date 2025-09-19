@@ -597,6 +597,7 @@ class AgentTools(models.TextChoices):
     SEARCH_INDEX = "file-search", gettext("File Search")
     SET_SESSION_STATE = "set-session-state", gettext("Set Session State")
     GET_SESSION_STATE = "get-session-state", gettext("Get Session State")
+    CALCULATOR = "calculator", gettext("Calculator")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
