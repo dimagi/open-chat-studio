@@ -248,6 +248,11 @@
             })
             .catch(err => console.error("Failed to load participants", err));
         }
+        Object.entries(this.filterData.columns).forEach(([key, column]) => {
+          if (column.type === 'string' && !column.options) {
+            column.operators = column.operators.filter(item => item !== 'any of');
+          }
+        })
       },
 
       toggleFilters() {
