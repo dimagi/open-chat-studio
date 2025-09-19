@@ -2,7 +2,6 @@ import json
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -15,10 +14,10 @@ from apps.participants.forms import ParticipantForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
-from ..channels.models import ChannelPlatform
 from ..events.models import ScheduledMessage
 from ..experiments.filters import get_filter_context_data
 from ..experiments.tables import ExperimentSessionsTable
+from ..web.dynamic_filters.datastructures import FilterParams
 from .filters import ParticipantFilter
 from .tables import ParticipantTable
 
@@ -72,12 +71,9 @@ class ParticipantTableView(LoginAndTeamRequiredMixin, SingleTableView, Permissio
 
     def get_queryset(self):
         query = Participant.objects.filter(team=self.request.team)
-        search = self.request.GET.get("search")
-        if search:
-            if search in {v.lower() for v in ChannelPlatform.values}:
-                query = query.filter(platform__iexact=search)
-            else:
-                query = query.filter(Q(identifier__icontains=search) | Q(name__icontains=search))
+        timezone = self.request.session.get("detected_tz", None)
+        filter_set = ParticipantFilter()
+        query = filter_set.apply(query, filter_params=FilterParams.from_request(self.request), timezone=timezone)
         return query
 
 
