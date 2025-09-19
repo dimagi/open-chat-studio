@@ -20,7 +20,7 @@ ALLOWED_OPERATORS = {
     ast.USub,
 }
 
-REPLACEMENTS = {"＋": "+", "^": "**", "×": "*", "÷": "/", "−": "-"}
+UNICODE_REPLACEMENTS = {"＋": "+", "^": "**", "×": "*", "÷": "/", "−": "-"}
 
 
 class RestrictedOperationsTransformer(RestrictingNodeTransformer):
@@ -32,7 +32,7 @@ class RestrictedOperationsTransformer(RestrictingNodeTransformer):
 
 def calculate(expression: str):
     expression = expression.strip()
-    for old, new in REPLACEMENTS.items():
+    for old, new in UNICODE_REPLACEMENTS.items():
         expression = expression.replace(old, new)
 
     if not expression:
