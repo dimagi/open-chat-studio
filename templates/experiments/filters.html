@@ -492,8 +492,8 @@
         }).finally(() => {
           this.filterData.loading = false;
           // remove selected value from date range dropdown if range filter is removed
-          const hasLastMessageRange = this.filterData.filters.some(f => f.column === '{{ df_date_range_column_name }}' && f.operator === 'range');
-          if (!hasLastMessageRange) {
+          const hasDateRangeRange = this.filterData.filters.some(f => f.column === '{{ df_date_range_column_name }}' && f.operator === 'range');
+          if (!hasDateRangeRange) {
             this.syncDateRangeDropdown(null);
           }
         });
@@ -502,7 +502,7 @@
       setLabelFromURL() {
         const url = new URL(window.location.href);
         const params = url.searchParams;
-        const matchedIndex = this.getLastMessageFilterIndex(params);
+        const matchedIndex = this.getDateRangeFilterIndex(params);
         if (matchedIndex !== null) {
           const filterValue = params.get(`filter_${matchedIndex}_value`);
           const found = this.dateRangeOptions.find(opt => opt.value === filterValue);
@@ -550,7 +550,7 @@
         return allTags.length > 0 && filter.selectedValues.length === allTags.length;
       },
 
-      getLastMessageFilterIndex(params) {
+      getDateRangeFilterIndex(params) {
         for (const [key, val] of params.entries()) {
           if (key.includes('_column') && val === '{{ df_date_range_column_name }}') {
             const match = key.match(/filter_(\d+)_column/);
