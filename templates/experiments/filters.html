@@ -218,30 +218,36 @@
         window.addEventListener('popstate', () => {
           this.setLabelFromURL();
         });
-        fetch("{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}", {
-          method: 'GET',
-          credentials: 'same-origin',
-          headers: {
-            'X-CSRFToken': App.Cookies.get('csrftoken'),
-            'Accept': 'application/json'
-          }
-        })
-          .then(res => res.json())
-          .then(data => {
-            const identifiers = data.identifiers;
-            const remoteIds = data.remote_ids;
-            this.filterData.columns.participant.options = identifiers;
-            this.filterData.columns.remote_id.options = remoteIds;
-
-            this.filterData.filters.forEach(filter => {
-              if (filter.column === 'participant') {
-                filter.filteredOptions = [...identifiers];
-              } else if (filter.column === 'remote_id') {
-                filter.filteredOptions = [...remoteIds];
-              }
-            });
+        if (this.filterData.columns.participant || this.filterData.columns.remote_id) {
+          fetch("{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}", {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+              'X-CSRFToken': App.Cookies.get('csrftoken'),
+              'Accept': 'application/json'
+            }
           })
-          .catch(err => console.error("Failed to load participants", err));
+            .then(res => res.json())
+            .then(data => {
+              const identifiers = data.identifiers;
+              const remoteIds = data.remote_ids;
+              if (this.filterData.columns.participant) {
+                this.filterData.columns.participant.options = identifiers;
+              }
+              if (this.filterData.columns.remote_id) {
+                this.filterData.columns.remote_id.options = remoteIds;
+              }
+
+              this.filterData.filters.forEach(filter => {
+                if (filter.column === 'participant') {
+                  filter.filteredOptions = [...identifiers];
+                } else if (filter.column === 'remote_id') {
+                  filter.filteredOptions = [...remoteIds];
+                }
+              });
+            })
+            .catch(err => console.error("Failed to load participants", err));
+        }
       },
 
       toggleFilters() {
