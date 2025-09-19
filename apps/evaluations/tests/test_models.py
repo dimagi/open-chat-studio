@@ -18,7 +18,8 @@ def test_create_messages_from_sessions_includes_history():
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="session1 message2 human", chat=session_1.chat)
     ChatMessageFactory(message_type=ChatMessageType.AI, content="session1 message2 ai", chat=session_1.chat)
 
-    # One message pair from the second session
+    # One message pair from the second session (with a seed message in the history)
+    ChatMessageFactory(message_type=ChatMessageType.AI, content="session2 message0 ai", chat=session_2.chat)
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="session2 message1 human", chat=session_2.chat)
     ChatMessageFactory(message_type=ChatMessageType.AI, content="session2 message1 ai", chat=session_2.chat)
 
@@ -48,8 +49,10 @@ def test_create_messages_from_sessions_includes_history():
     assert eval_messages[1].history[1]["content"] == "session1 message1 ai"
     assert eval_messages[1].full_history == "user: session1 message1 human\nassistant: session1 message1 ai"
 
-    assert eval_messages[2].history == []
-    assert eval_messages[2].full_history == ""
+    assert eval_messages[2].history == [
+        {"message_type": ChatMessageType.AI, "content": "session2 message0 ai", "summary": None}
+    ]
+    assert eval_messages[2].full_history == "assistant: session2 message0 ai"
 
 
 @pytest.mark.django_db()

@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import {Component, Host, h, Prop, State, Element, Watch} from '@stencil/core';
+import {Component, Host, h, Prop, State, Element, Watch, Env} from '@stencil/core';
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
@@ -8,6 +8,7 @@ import {
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { getCSRFToken } from '../../utils/cookies';
 import { varToPixels } from '../../utils/utils';
+import {TranslationStrings, TranslationManager, defaultTranslations} from '../../utils/translations';
 
 interface ChatMessage {
   created_at: string;
@@ -101,9 +102,9 @@ export class OcsChat {
   @Prop() chatbotId!: string;
 
   /**
-   * The base URL for the API (defaults to current origin).
+   * The base URL for the API.
    */
-  @Prop() apiBaseUrl?: string = "https://chatbots.dimagi.com";
+  @Prop() apiBaseUrl?: string = "https://www.openchatstudio.com";
 
   /**
    * The text to display on the button.
@@ -184,6 +185,13 @@ export class OcsChat {
    */
   @Prop() typingIndicatorText?: string = "Preparing response";
 
+  /**
+   * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
+   */
+  @Prop() language?: string;
+
+  @Prop() translationsUrl?: string;
+
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -204,6 +212,8 @@ export class OcsChat {
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
 
+  translationManager: TranslationManager = new TranslationManager();
+
   private pollingIntervalRef?: any;
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
@@ -216,11 +226,14 @@ export class OcsChat {
   @Element() host: HTMLElement;
 
 
-  componentWillLoad() {
+  async componentWillLoad() {
     if (!this.chatbotId) {
       this.error = 'Chatbot ID is required';
       return;
     }
+
+    await this.initializeTranslations();
+
     // Always try to load existing session if localStorage is available
     if (this.persistentSession && this.isLocalStorageAvailable()) {
       const { sessionId, messages } = this.loadSessionFromStorage();
@@ -309,6 +322,29 @@ export class OcsChat {
     this.parsedStarterQuestions = this.parseJSONProp(this.starterQuestions, 'starter questions');
   }
 
+  private async initializeTranslations() {
+    let customTranslationsObj: Partial<TranslationStrings> | undefined;
+
+    if (this.translationsUrl) {
+        customTranslationsObj = await this.loadTranslationsFromUrl(this.translationsUrl);
+    }
+    this.translationManager = new TranslationManager(this.language, customTranslationsObj);
+  }
+
+  private async loadTranslationsFromUrl(url: string): Promise<Partial<TranslationStrings>> {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const translations = await response.json();
+      return translations as Partial<TranslationStrings>;
+    } catch (error) {
+      console.error('Error loading translations from URL:', error);
+      return defaultTranslations
+    }
+  }
+
   private cleanup() {
     if (this.pollingIntervalRef) {
       clearInterval(this.pollingIntervalRef);
@@ -317,16 +353,13 @@ export class OcsChat {
     this.currentPollTaskId = '';
   }
 
-  private getApiBaseUrl(): string {
-    return this.apiBaseUrl || window.location.origin;
-  }
-
   private getApiHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'x-ocs-widget-version': Env.version,
     };
 
-    const csrfToken = getCSRFToken(this.getApiBaseUrl());
+    const csrfToken = getCSRFToken(this.apiBaseUrl);
     if (csrfToken) {
       headers['X-CSRFToken'] = csrfToken;
     }
@@ -353,7 +386,7 @@ export class OcsChat {
         requestBody.participant_name = this.userName;
       }
 
-      const response = await fetch(`${this.getApiBaseUrl()}/api/chat/start/`, {
+      const response = await fetch(`${this.apiBaseUrl}/api/chat/start/`, {
         method: 'POST',
         headers: this.getApiHeaders(),
         body: JSON.stringify(requestBody)
@@ -422,7 +455,7 @@ export class OcsChat {
 
       // Only upload if there are new files
       if (formData.has('files')) {
-        const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/upload/`, {
+        const response = await fetch(`${this.apiBaseUrl}/api/chat/${this.sessionId}/upload/`, {
           method: 'POST',
           body: formData,
         });
@@ -516,7 +549,7 @@ export class OcsChat {
         requestBody.attachment_ids = attachmentIds;
       }
 
-      const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/message/`, {
+      const response = await fetch(`${this.apiBaseUrl}/api/chat/${this.sessionId}/message/`, {
         method: 'POST',
         headers: this.getApiHeaders(),
         body: JSON.stringify(requestBody)
@@ -557,7 +590,7 @@ export class OcsChat {
       if (!this.sessionId || !this.currentPollTaskId) return;
 
       try {
-        const response = await fetch(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/${this.currentPollTaskId}/poll/`);
+        const response = await fetch(`${this.apiBaseUrl}/api/chat/${this.sessionId}/${this.currentPollTaskId}/poll/`);
 
         if (!response.ok) {
           throw new Error(`Failed to poll task: ${response.statusText}`);
@@ -641,7 +674,7 @@ export class OcsChat {
     if (!this.sessionId) return;
 
     try {
-      const url = new URL(`${this.getApiBaseUrl()}/api/chat/${this.sessionId}/poll/`);
+      const url = new URL(`${this.apiBaseUrl}/api/chat/${this.sessionId}/poll/`);
       if (this.messages && this.messages.length > 0) {
         url.searchParams.set('since', this.messages.at(-1).created_at);
       }
@@ -1006,32 +1039,48 @@ export class OcsChat {
   };
 
   private getDefaultIconUrl(): string {
-    return `${this.getApiBaseUrl()}/static/images/favicons/favicon.svg`;
+    return `${this.apiBaseUrl}/static/images/favicons/favicon.svg`;
+  }
+
+  private getWelcomeMessages(): string[] {
+    const translated = this.translationManager.getArray("welcomeMessages");
+    return translated && translated.length > 0
+      ? translated
+      : this.parsedWelcomeMessages;
+  }
+
+  private getStarterQuestions(): string[] {
+    const translated = this.translationManager.getArray("starterQuestions");
+    return translated && translated.length > 0
+      ? translated
+      : this.parsedStarterQuestions;
   }
 
   private getButtonClasses(): string {
-    const hasText = this.buttonText && this.buttonText.trim();
+    const translatedButtonText = this.translationManager.get('buttonText');
+    const hasText = (translatedButtonText && translatedButtonText.trim()) || (this.buttonText && this.buttonText.trim());
     const baseClass = hasText ? 'chat-btn-text' : 'chat-btn-icon';
     const shapeClass = this.buttonShape === 'round' ? 'round' : '';
     return `${baseClass} ${shapeClass}`.trim();
   }
 
   private renderButton() {
-    const hasText = this.buttonText && this.buttonText.trim();
+    const translatedButtonText = this.translationManager.get('buttonText');
+    const hasText = (translatedButtonText && translatedButtonText.trim()) || (this.buttonText && this.buttonText.trim());
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
     const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
-
+    const finalButtonText = translatedButtonText || this.buttonText;
     if (hasText) {
       return (
         <button
           class={buttonClasses}
           onClick={() => this.toggleWindowVisibility()}
-          aria-label={`Open chat - ${this.buttonText}`}
-          title={this.buttonText}
+          aria-label={`Open chat - ${finalButtonText}`}
+          title={finalButtonText}
         >
           <img src={iconSrc} alt="" />
-          <span>{this.buttonText}</span>
+          <span>{finalButtonText}</span>
         </button>
       );
     } else {
@@ -1223,15 +1272,15 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="header-text">{this.headerText}</div>
+              <div class="header-text">{this.translationManager.get('headerText') || this.headerText}</div>
               <div class="header-buttons">
                 {/* New Chat button */}
                 {this.messages.length > 0 && (
                   <button
                     class="header-button"
                     onClick={() => this.showConfirmationDialog()}
-                    title="Start new chat"
-                    aria-label="Start new chat"
+                    title={this.translationManager.get('startNewChat')}
+                    aria-label={this.translationManager.get('startNewChat')}
                   >
                     <PlusWithCircleIcon/>
                   </button>
@@ -1240,15 +1289,16 @@ export class OcsChat {
                 {this.allowFullScreen && <button
                   class="header-button fullscreen-button"
                   onClick={() => this.toggleFullscreen()}
-                  title={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                  aria-label={this.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  title={this.isFullscreen ? this.translationManager.get('exitFullscreen') : this.translationManager.get('enterFullscreen')}
+                  aria-label={this.isFullscreen ? this.translationManager.get('exitFullscreen') : this.translationManager.get('enterFullscreen')}
                 >
                   {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
                 </button>}
+
                 <button
                   class="header-button"
                   onClick={() => this.visible = false}
-                  aria-label="Close"
+                  aria-label={this.translationManager.get('close')}
                 >
                   <XMarkIcon/>
                 </button>
@@ -1259,22 +1309,22 @@ export class OcsChat {
               <div class="confirmation-overlay">
                 <div class="confirmation-dialog">
                   <div class="confirmation-content">
-                    <h3 class="confirmation-title">Start New Chat</h3>
+                    <h3 class="confirmation-title">{this.translationManager.get('startNewChatTitle')}</h3>
                     <p class="confirmation-message">
-                      {this.newChatConfirmationMessage}
+                      {this.translationManager.get('startNewChatMessage') || this.newChatConfirmationMessage}
                     </p>
                     <div class="confirmation-buttons">
                       <button
                         class="confirmation-button confirmation-button-cancel"
                         onClick={() => this.hideConfirmationDialog()}
                       >
-                        Cancel
+                        {this.translationManager.get('cancel')}
                       </button>
                       <button
                         class="confirmation-button confirmation-button-confirm"
                         onClick={() => this.confirmNewChat()}
                       >
-                        Continue
+                        {this.translationManager.get('confirm')}
                       </button>
                     </div>
                   </div>
@@ -1300,8 +1350,7 @@ export class OcsChat {
                 >
                   {this.messages.length === 0 && this.parsedWelcomeMessages.length > 0 && (
                     <div class="welcome-messages">
-                      {/* Welcome Messages */}
-                      {this.parsedWelcomeMessages.map((message, index) => (
+                      {this.getWelcomeMessages().map((message, index) => (
                         <div key={`welcome-${index}`} class="message-row message-row-assistant">
                           <div class="message-bubble message-bubble-assistant">
                             <div
@@ -1359,7 +1408,7 @@ export class OcsChat {
                         <div class="typing-progress"></div>
                       </div>
                       <div class="typing-text">
-                        <span>{this.typingIndicatorText}</span>
+                        <span>{this.translationManager.get('typingIndicatorText')}</span>
                         <span class="typing-dots loading"></span>
                       </div>
                     </div>
@@ -1370,7 +1419,7 @@ export class OcsChat {
               {/* Starter Questions */}
               {this.messages.length === 0 && this.parsedStarterQuestions.length > 0 && (
                 <div class="starter-questions">
-                  {this.parsedStarterQuestions.map((question, index) => (
+                  {this.getStarterQuestions().map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
                       <button
                         class="starter-question"
@@ -1405,7 +1454,7 @@ export class OcsChat {
                         <button
                           onClick={() => this.removeSelectedFile(index)}
                           class="selected-file-remove-button"
-                          aria-label="Remove file"
+                          aria-label={this.translationManager.get('removeFile')}
                         ><XIcon />
                         </button>
                       </div>
@@ -1422,7 +1471,7 @@ export class OcsChat {
                       ref={(el) => this.textareaRef = el}
                       class="message-textarea"
                       rows={1}
-                      placeholder="Type your message..."
+                      placeholder={this.translationManager.get('typeMessage')}
                       value={this.messageInput}
                       onInput={(e) => this.handleInputChange(e)}
                       onKeyPress={(e) => this.handleKeyPress(e)}
@@ -1449,8 +1498,8 @@ export class OcsChat {
                         class="file-attachment-button"
                         onClick={() => this.fileInputRef?.click()}
                         disabled={this.isTyping || this.isUploadingFiles}
-                        title="Attach files"
-                        aria-label="Attach files"
+                        title={this.translationManager.get('attachFiles')}
+                        aria-label={this.translationManager.get('attachFiles')}
                       >
                         <PaperClipIcon />
                       </button>
@@ -1464,13 +1513,13 @@ export class OcsChat {
                       onClick={() => this.sendMessage(this.messageInput)}
                       disabled={this.isTyping || this.isUploadingFiles || !this.messageInput.trim()}
                     >
-                      {this.isUploadingFiles ? 'Uploading...' : 'Send'}
+                      {this.isUploadingFiles ? `${this.translationManager.get('uploading')}...` : this.translationManager.get('sendMessage')}
                     </button>
                   </div>
                 </div>
               )}
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
-                <p>Powered by <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
+                <p>{this.translationManager.get('poweredBy')}{' '} <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
               </div>
             </div>
           </div>

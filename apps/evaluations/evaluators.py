@@ -21,8 +21,9 @@ class EvaluatorSchema(BaseModel):
 
 
 class EvaluatorResult(BaseModel):
-    result: dict | None
-    generated_response: str
+    message: dict | None  # A copy of the message this was run against
+    generated_response: str  # The generated response from the bot
+    result: dict | None  # The output from the evaluator
 
 
 class BaseEvaluator(BaseModel):
@@ -97,7 +98,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             generated_response=generated_response,
         )
         result = llm.invoke(formatted_prompt)
-        return EvaluatorResult(result=result, generated_response=generated_response)
+        return EvaluatorResult(message=message.as_result_dict(), generated_response=generated_response, result=result)
 
 
 DEFAULT_FUNCTION = """# The main function is called for each message in the evaluation dataset
@@ -167,4 +168,4 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
         except Exception as exc:
             raise EvaluationRunException(get_code_error_message("<inline_code>", self.code)) from exc
 
-        return EvaluatorResult(result=result, generated_response=generated_response)
+        return EvaluatorResult(message=message.as_result_dict(), generated_response=generated_response, result=result)

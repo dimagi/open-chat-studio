@@ -192,10 +192,7 @@ class FakeLlmEcho(FakeLlmSimpleTokenCount):
     def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
         """Returns "{system_message} {user_message}" """
         self.calls.append(mock.call(messages, *args, **kwargs))
-        try:
-            user_message = messages[-1].content
-        except AttributeError:
-            user_message = messages[-1].to_string()
+        user_message = messages[-1].text()
 
         try:
             system_message = next(message.content for message in messages if message.type == "system")

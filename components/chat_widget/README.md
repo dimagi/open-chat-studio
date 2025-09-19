@@ -50,14 +50,12 @@ also edit the `src/index.html` file to change the page that is loaded when you r
 
 The component uses [Tailwind CSS](https://tailwindcss.com/) with [DaisyUI](https://daisyui.com/) for styling.
 
-## Using this component
+## Publishing
 
-There are three strategies we recommend for using web components built with Stencil.
+This widget is published via GitHub actions. To trigger the action:
 
-The first step for all three of these strategies is to [publish to NPM](https://docs.npmjs.com/getting-started/publishing-npm-packages).
-
-Once you've set up your local npm account, can do this by running
-
-```
-npm publish
-```
+* Update the version number in `package.json`.
+  * `npm version [patch|minor|major]` 
+  * Commit and push the changes.
+* Tag the repo with `w_v{version number}`.
+* Push the changes and the tag to `main`.

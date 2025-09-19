@@ -31,22 +31,23 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center space-x-3">
                     <div class="flex-1 min-w-0">
+                    {% with flag_info=flag_info_map|get_item:flag.name %}
                       <h3 class="text-md font-medium text-base-content truncate">
                         {{ flag.name }}
+                        {% if flag_info.removed %} (removed){% endif %}
                       </h3>
-                      {% with flag_info=flag_info_map|get_item:flag.name %}
-                        {% if flag_info %}
-                          <p class="text-sm text-base-content/70 mt-1 truncate">{{ flag_info.description }}</p>
-                          {% if flag_info.docs_url %}
-                            <a href="{{ flag_info.docs_url }}" target="_blank" class="text-xs text-primary hover:text-primary-focus mt-1 inline-flex items-center">
-                              <i class="fa fa-external-link mr-1" aria-hidden="true"></i>
-                              Documentation
-                            </a>
-                          {% endif %}
-                        {% else %}
-                          <p class="text-xs text-warning mt-1">No description defined</p>
+                      {% if flag_info %}
+                        <p class="text-sm text-base-content/70 mt-1 truncate">{{ flag_info.description }}</p>
+                        {% if flag_info.docs_url %}
+                          <a href="{{ flag_info.docs_url }}" target="_blank" class="text-xs text-primary hover:text-primary-focus mt-1 inline-flex items-center">
+                            <i class="fa fa-external-link mr-1" aria-hidden="true"></i>
+                            Documentation
+                          </a>
                         {% endif %}
-                      {% endwith %}
+                      {% else %}
+                        <p class="text-xs text-warning mt-1">No description defined</p>
+                      {% endif %}
+                    {% endwith %}
                     </div>
                     <div class="flex space-x-2">
                       {% if flag.everyone %}

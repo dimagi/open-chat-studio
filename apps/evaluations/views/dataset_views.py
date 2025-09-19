@@ -12,7 +12,6 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from apps.channels.models import ChannelPlatform
 from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.tables import (
@@ -22,10 +21,14 @@ from apps.evaluations.tables import (
 )
 from apps.evaluations.tasks import upload_dataset_csv_task
 from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
-from apps.experiments.filters import DATE_RANGE_OPTIONS, FIELD_TYPE_FILTERS, DynamicExperimentSessionFilter
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.filters import (
+    ExperimentSessionFilter,
+    get_experiment_filter_context_data,
+)
+from apps.experiments.models import ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -125,8 +128,10 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
                 .select_related("participant__user")
             )
             timezone = self.request.session.get("detected_tz", None)
-            session_filter = DynamicExperimentSessionFilter(queryset, self.request.GET, timezone)
-            filtered_queryset = session_filter.apply()
+            session_filter = ExperimentSessionFilter()
+            filtered_queryset = session_filter.apply(
+                queryset, filter_params=FilterParams.from_request(self.request), timezone=timezone
+            )
             filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
             if filtered_session_ids:
                 initial["session_ids"] = filtered_session_ids
@@ -134,36 +139,8 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         return initial
 
     def _get_filter_context_data(self):
-        experiments = (
-            Experiment.objects.working_versions_queryset()
-            .filter(team=self.request.team)
-            .values("id", "name")
-            .order_by("name")
-        )
-        experiment_list = [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
-
-        channel_list = ChannelPlatform.for_filter(self.request.team)
-        available_tags = [tag.name for tag in self.request.team.tag_set.filter(is_system_tag=False)]
-
-        experiment_versions = []
-        for experiment in Experiment.objects.filter(team=self.request.team):
-            experiment_versions.extend(experiment.get_version_name_list())
-        experiment_versions = list(set(experiment_versions))
-
-        return {
-            "df_available_tags": available_tags,
-            "df_experiment_versions": experiment_versions,
-            "df_experiment_list": experiment_list,
-            "df_field_type_filters": FIELD_TYPE_FILTERS,
-            "df_channel_list": channel_list,
-            "df_date_range_options": DATE_RANGE_OPTIONS,
-            "df_filter_columns": DynamicExperimentSessionFilter.columns,
-            "df_date_range_column_name": "last_message",
-            "df_filter_data_source_url": reverse(
-                "evaluations:dataset_sessions_selection_list", args=[self.request.team.slug]
-            ),
-            "df_filter_data_source_container_id": "sessions-table",
-        }
+        table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
+        return get_experiment_filter_context_data(self.request.team, table_url)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -198,8 +175,10 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .order_by("experiment__name")
         )
         timezone = self.request.session.get("detected_tz", None)
-        session_filter = DynamicExperimentSessionFilter(query_set, self.request.GET, timezone)
-        query_set = session_filter.apply()
+        session_filter = ExperimentSessionFilter()
+        query_set = session_filter.apply(
+            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
+        )
         return query_set
 
 
