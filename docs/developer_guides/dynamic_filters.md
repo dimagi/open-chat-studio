@@ -113,7 +113,7 @@ p_filter = ProductCategoryFilter()
 
 # Alternately, you can construct it directly using kwargs:
 
-p_filter = ChoiceColumnFilter(label="Category", query_param="category", column="category_name", options=[...])
+p_filter = ChoiceColumnFilter(label="Category", query_param="category", column="category__name", options=[...])
 ```
 
 ### Step 2: Create a Multi-Column Filter
@@ -211,7 +211,7 @@ class ProductInventoryView(SingleTableView):
         # Add filter context data using the helper function
         filter_context = get_filter_context_data(
             team=self.request.team,  # Assuming team is available in request
-            columns=ProductInventoryFilter.columns(request.team),
+            columns=ProductInventoryFilter.columns(self.request.team),
             date_range_column="created_date",
             table_url=reverse("inventory:product_table"),  # Your HTMX table URL
             table_container_id="product-table"
@@ -241,35 +241,4 @@ Create the template that includes the filter interface:
 </div>
 
 {% endblock %}
-```
-
-**Update the Shared Filter Template**
-
-Since the filter template is shared across the application, you'll need to update `templates/experiments/filters.html` to include your new filter columns. Add your custom columns to the `allColumns` object in the Alpine.js component.
-
-The frontend configuration maps field types to available operators using the `FIELD_TYPE_FILTERS` constant:
-
-- **`"string"`**: equals, contains, does not contain, starts with, ends with, any of
-- **`"timestamp"`**: on, before, after, range  
-- **`"choice"`**: any of, all of, excludes
-- **`"exclusive_choice"`**: any of, excludes
-
-The `get_filter_context_data()` helper function provides the necessary context variables:
-
-- `df_date_range_options`: Predefined date ranges (1h, 1d, 7d, etc.)
-- `df_filter_columns`: List of column names for this filter
-- `df_date_range_column_name`: Default date column for quick range selection
-- `df_filter_data_source_url`: HTMX endpoint for table updates
-- `df_filter_data_source_container_id`: HTML element ID containing the table
-
-In your template, define the column configuration in JavaScript:
-
-```javascript
-// In templates/experiments/filters.html or your custom template
-{{ df_product_categories|default:"[]"|json_script:"product-categories" }}
-<script>
-    const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
-    const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
-    // ...rest of Alpine.js configuration
-</script>
 ```

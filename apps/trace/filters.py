@@ -24,7 +24,7 @@ def get_trace_filter_context_data(team):
 class SpanNameFilter(ChoiceColumnFilter):
     query_param: str = "span_name"
     column: str = "spans__name"
-    label: str = "Spans Name"
+    label: str = "Span Name"
 
     def prepare(self, team, **_):
         self.options = list(team.span_set.values_list("name", flat=True).order_by("name").distinct())
