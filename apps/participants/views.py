@@ -17,7 +17,9 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..channels.models import ChannelPlatform
 from ..events.models import ScheduledMessage
+from ..experiments.filters import get_filter_context_data
 from ..experiments.tables import ExperimentSessionsTable
+from .filters import ParticipantFilter
 from .tables import ParticipantTable
 
 
@@ -26,12 +28,18 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
     permission_required = "experiments.view_participant"
 
     def get_context_data(self, team_slug: str, **kwargs):
+        table_url = reverse("participants:participant_table", kwargs={"team_slug": team_slug})
+        filter_context = get_filter_context_data(
+            self.request.team, ParticipantFilter.columns(self.request.team), "created_on", table_url, "data-table"
+        )
+
         return {
             "active_tab": "participants",
             "title": "Participants",
             "allow_new": False,
-            "table_url": reverse("participants:participant_table", args=[team_slug]),
-            "enable_search": True,
+            "table_url": table_url,
+            "use_dynamic_filters": True,
+            **filter_context,
         }
 
 
