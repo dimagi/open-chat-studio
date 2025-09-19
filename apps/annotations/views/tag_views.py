@@ -168,7 +168,7 @@ class TagUI(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
 
 class LinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
-    permission_required = ("annotations.add_customtaggeditem", "annotations.add_tag")
+    permission_required = "annotations.add_customtaggeditem"
 
     def post(self, request, team_slug: str):
         object_info = json.loads(request.POST["object_info"])
@@ -178,7 +178,7 @@ class LinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         obj = content_type.get_object_for_this_type(id=object_id)
         tag_exists = Tag.objects.filter(name=tag_name, team__slug=team_slug).exists()
 
-        if not tag_exists:
+        if not tag_exists and request.user.has_perm("annotations.add_tag"):
             obj.tags.create(team=request.team, name=tag_name, created_by=request.user)
 
         obj.add_tags([tag_name], team=request.team, added_by=request.user)
