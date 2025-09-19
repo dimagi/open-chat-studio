@@ -77,9 +77,11 @@ class MultiColumnFilter:
 
     @classmethod
     def columns(cls, team, **kwargs) -> dict[str:dict]:
-        for filter_component in cls.filters:
+        # Create per-call copies to avoid mutating shared instances
+        instances = [f.model_copy(deep=True) for f in cls.filters]
+        for filter_component in instances:
             filter_component.prepare(team, **kwargs)
-        return {filter_component.query_param: filter_component.model_dump() for filter_component in cls.filters}
+        return {filter_component.query_param: filter_component.model_dump() for filter_component in instances}
 
     def prepare_queryset(self, queryset):
         """Hook for subclasses to modify the queryset before applying filters."""
