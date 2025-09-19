@@ -2,7 +2,6 @@ import json
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -15,9 +14,11 @@ from apps.participants.forms import ParticipantForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
-from ..channels.models import ChannelPlatform
 from ..events.models import ScheduledMessage
+from ..experiments.filters import get_filter_context_data
 from ..experiments.tables import ExperimentSessionsTable
+from ..web.dynamic_filters.datastructures import FilterParams
+from .filters import ParticipantFilter
 from .tables import ParticipantTable
 
 
@@ -26,12 +27,18 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
     permission_required = "experiments.view_participant"
 
     def get_context_data(self, team_slug: str, **kwargs):
+        table_url = reverse("participants:participant_table", kwargs={"team_slug": team_slug})
+        filter_context = get_filter_context_data(
+            self.request.team, ParticipantFilter.columns(self.request.team), "created_on", table_url, "data-table"
+        )
+
         return {
             "active_tab": "participants",
             "title": "Participants",
             "allow_new": False,
-            "table_url": reverse("participants:participant_table", args=[team_slug]),
-            "enable_search": True,
+            "table_url": table_url,
+            "use_dynamic_filters": True,
+            **filter_context,
         }
 
 
@@ -64,12 +71,9 @@ class ParticipantTableView(LoginAndTeamRequiredMixin, SingleTableView, Permissio
 
     def get_queryset(self):
         query = Participant.objects.filter(team=self.request.team)
-        search = self.request.GET.get("search")
-        if search:
-            if search in {v.lower() for v in ChannelPlatform.values}:
-                query = query.filter(platform__iexact=search)
-            else:
-                query = query.filter(Q(identifier__icontains=search) | Q(name__icontains=search))
+        timezone = self.request.session.get("detected_tz", None)
+        filter_set = ParticipantFilter()
+        query = filter_set.apply(query, filter_params=FilterParams.from_request(self.request), timezone=timezone)
         return query
 
 
