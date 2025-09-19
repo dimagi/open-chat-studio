@@ -1,9 +1,7 @@
 import logging
-from uuid import UUID
 
 from celery.app import shared_task
 from django.db.models import Subquery
-from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -15,8 +13,13 @@ from apps.teams.utils import current_team
 logger = logging.getLogger("ocs.api.commcare_connect.setup_connect_channels_for_bots")
 
 
-@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map: dict):
+@shared_task(
+    bind=True,
+    acks_late=True,
+    ignore_result=True,
+    max_retries=3,
+)
+def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: dict):
     """
     Set up Connect channels for experiments that are using the ConnectMessaging channel
 
@@ -51,6 +54,7 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
 
     channels = {ch.experiment_id: ch for ch in channels}
 
+    successful_ids = set()
     for participant_datum in participant_data:
         try:
             experiment = participant_datum.experiment
@@ -64,8 +68,14 @@ def setup_connect_channels_for_bots(self, connect_id: UUID, experiment_data_map:
                 "consent": response["consent"],
             }
             participant_datum.save(update_fields=["system_metadata"])
+            successful_ids.add(experiment.id)
         except Exception as e:
-            logger.exception(f"Failed to create channel for participant data {participant_datum.id}: {e}")
+            if self.request.retries == self.max_retries:
+                failed_ids = set(experiment_ids) - successful_ids
+                logger.exception(
+                    "Failed to create channel for participant '%s' and experiments '{}'", connect_id, failed_ids
+                )
+            raise self.retry(e, countdown=60) from None
 
 
 @shared_task(ignore_result=True)
