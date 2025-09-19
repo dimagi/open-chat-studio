@@ -141,7 +141,8 @@ class ColumnFilter(BaseModel):
 
         operator = column_filter.operator.replace(" ", "_").lower()
         if method := getattr(self, f"apply_{operator}", None):
-            if parsed_value := self.parse_query_value(column_filter.value):
+            parsed_value = self.parse_query_value(column_filter.value)
+            if parsed_value not in (None, "", []):
                 return method(queryset, parsed_value, timezone)
         return queryset
 
