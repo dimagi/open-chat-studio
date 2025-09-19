@@ -127,7 +127,7 @@ class ColumnFilter(BaseModel):
         try:
             return json.loads(json_value)
         except json.JSONDecodeError:
-            logger.error("Failed to decode JSON for chat message tag filter", exc_info=True)
+            logger.exception("Failed to decode JSON for filter value: %s: %s", self.query_param, json_value)
         return []
 
     def parse_query_value(self, query_value) -> any:
