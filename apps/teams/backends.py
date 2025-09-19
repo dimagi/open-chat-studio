@@ -183,7 +183,9 @@ GROUPS = [
         [
             AppPermSetDef("experiments", ALL),
             AppPermSetDef("bot_channels", ALL),
-            AppPermSetDef("annotations", [VIEW]),
+            ModelPermSetDef("annotations", "tag", [VIEW]),
+            ModelPermSetDef("annotations", "customtaggeditem", ALL),
+            ModelPermSetDef("annotations", "usercomment", ALL),
             CustomPermissionSetDef("experiments", CUSTOM_PERMISSIONS["experiments"]),
             CustomPermissionSetDef("documents", ALL),
         ],
