@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Any, ClassVar, Literal
 
 from django.db.models import QuerySet
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 from .datastructures import FilterParams
 
@@ -149,7 +149,7 @@ class ColumnFilter(BaseModel):
 
 class ChoiceColumnFilter(ColumnFilter):
     type: str = TYPE_EXCLUSIVE_CHOICE
-    options: Sequence[str | dict[str, Any]] = []
+    options: list[str | dict[str, Any]] = Field(default_factory=list)
 
     def parse_query_value(self, query_value) -> any:
         return self.values_list(query_value)
