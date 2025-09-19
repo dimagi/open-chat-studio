@@ -26,7 +26,7 @@ class SpanNameFilter(ChoiceColumnFilter):
     column: str = "spans__name"
     label: str = "Spans Name"
 
-    def prepare(self, team, **kwargs):
+    def prepare(self, team, **_):
         self.options = list(team.span_set.values_list("name", flat=True).order_by("name").distinct())
 
 
@@ -36,7 +36,7 @@ class SpanTagsFilter(ChoiceColumnFilter):
     label: str = "Tags"
     type: str = TYPE_CHOICE
 
-    def prepare(self, team, **kwargs):
+    def prepare(self, team, **_):
         self.options = list(
             team.span_set.filter(tags__is_system_tag=True)
             .values_list("tags__name", flat=True)

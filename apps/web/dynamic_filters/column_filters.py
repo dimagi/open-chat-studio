@@ -19,7 +19,7 @@ class ExperimentFilter(ChoiceColumnFilter):
     column: str = "experiment_id"
     label: str = "Chatbot"
 
-    def prepare(self, team, **kwargs):
+    def prepare(self, team, **_):
         from apps.experiments.models import Experiment
 
         experiments = (

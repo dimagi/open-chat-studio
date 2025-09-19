@@ -41,7 +41,7 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
     label: str = "Tags"
     type: str = TYPE_CHOICE
 
-    def prepare(self, team, **kwargs):
+    def prepare(self, team, **_):
         self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
 
     def apply_any_of(self, queryset, value, timezone=None):
@@ -117,7 +117,7 @@ class ChannelsFilter(ChoiceColumnFilter):
     label: str = "Channels"
     column: str = "experiment_channel__platform"
 
-    def prepare(self, team, **kwargs):
+    def prepare(self, team, **_):
         self.options = ChannelPlatform.for_filter(team)
 
     def parse_query_value(self, query_value) -> any:
