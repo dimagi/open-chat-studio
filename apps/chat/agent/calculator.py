@@ -26,8 +26,11 @@ UNICODE_REPLACEMENTS = {"＋": "+", "^": "**", "×": "*", "÷": "/", "−": "-"}
 class RestrictedOperationsTransformer(RestrictingNodeTransformer):
     def visit_BinOp(self, node):
         if node.op.__class__ not in ALLOWED_OPERATORS:
-            raise ValueError(f"Unsupported operation: {ast.dump(node)}")
+            raise ValueError(f"Unsupported operation: {node.op}")
         return super().visit_BinOp(node)
+
+    def visit_Lambda(self, node):
+        raise ValueError("Unsupported expression")
 
 
 def calculate(expression: str):
@@ -55,6 +58,8 @@ def calculate(expression: str):
         return f"Error: {message}"
     except RecursionError:
         return EXPRESSION_TOO_LARGE_ERROR
+    except ValueError as e:
+        return f"Error: {e}"
 
     allowed_names = {k: getattr(math, k) for k in dir(math) if not k.startswith("__")}
     allowed_names.update(

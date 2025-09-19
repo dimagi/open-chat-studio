@@ -54,10 +54,10 @@ from apps.chat.agent.calculator import (
         ("\\x32 + 3", "Error: unexpected character after line continuation character at statement: '\\\\x32 + 3'"),
         ("(2).__class__", f"Error: {GENERIC_PARSE_ERROR}"),
         ("__builtins__['eval']('2+2')", f"Error: {GENERIC_PARSE_ERROR}"),
-        ("(lambda: 2+2)()", "4"),  # TODO - don't allow lambdas
+        ("(lambda: 2+2)()", "Error: Unsupported expression"),
         ("sum([x for x in range(10)])", "Error: name '_getiter_' is not defined"),  # TODO
         ("float('inf') + 1", "Error: name 'float' is not defined"),
-        ("2,5 + 3,7", "(2, 8, 7)"),  # European decimal  TODO
+        ("2,5 + 3,7", "(2, 8, 7)"),  # European decimal
     ],
 )
 def test_calculator(expression, result):
