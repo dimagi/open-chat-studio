@@ -23,7 +23,7 @@ from apps.evaluations.tasks import upload_dataset_csv_task
 from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
 from apps.experiments.filters import (
     ExperimentSessionFilter,
-    get_experiment_filter_context_data,
+    get_filter_context_data,
 )
 from apps.experiments.models import ExperimentSession
 from apps.teams.decorators import login_and_team_required
@@ -140,7 +140,13 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 
     def _get_filter_context_data(self):
         table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
-        return get_experiment_filter_context_data(self.request.team, table_url)
+        return get_filter_context_data(
+            self.request.team,
+            ExperimentSessionFilter.columns(self.request.team),
+            "last_message",
+            table_url,
+            "sessions-table",
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
