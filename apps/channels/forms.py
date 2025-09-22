@@ -582,13 +582,6 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         """Save widget data and set success message"""
         widget_token = self.cleaned_data["widget_token"]
         embed_code = self._generate_embed_code(channel, widget_token)
-        channel.extra_data.update(
-            {
-                "widget_token": widget_token,
-                "allowed_domains": self.cleaned_data["allowed_domains"],
-            }
-        )
-        channel.save()
         self.widget_token = widget_token
         self.embed_code = embed_code
         self.success_message = f"Embedded widget channel created successfully! Widget token: {widget_token}"
