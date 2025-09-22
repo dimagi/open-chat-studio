@@ -134,6 +134,7 @@ class RestrictedPythonExecutionMixin(BaseModel):
                 "any": any,
                 "datetime": datetime,
                 "dict": dict,
+                "range": limited_range,
             }
         )
 
@@ -209,3 +210,20 @@ def get_code_error_message(filename: str, code: str) -> str:
         logger.exception("Error while getting code error message")
 
     return error_message
+
+
+def limited_range(*args):
+    # Limit range to maximum of 1000 items
+    if len(args) == 1:
+        if args[0] > 1000:
+            raise ValueError("Range too large")
+        return range(args[0])
+    elif len(args) == 2:
+        if abs(args[1] - args[0]) > 1000:
+            raise ValueError("Range too large")
+        return range(args[0], args[1])
+    elif len(args) == 3:
+        if abs((args[1] - args[0]) / args[2]) > 1000:
+            raise ValueError("Range too large")
+        return range(args[0], args[1], args[2])
+    return range(*args)

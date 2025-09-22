@@ -84,3 +84,10 @@ class SetSessionStateSchema(BaseModel):
 
 class GetSessionStateSchema(BaseModel):
     key: str = Field(description="The key in the session state to retrieve")
+
+
+class CalculatorSchema(BaseModel):
+    expression: str = Field(
+        description="The mathematical expression to evaluate. "
+        "Use periods for decimals (not commas). Maximum 200 characters."
+    )
