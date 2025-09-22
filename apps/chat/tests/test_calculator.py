@@ -5,6 +5,7 @@ from apps.chat.agent.calculator import (
     EXPRESSION_TOO_LARGE_ERROR,
     GENERIC_PARSE_ERROR,
     MAX_DIGIT_ERROR,
+    MULTIPLE_RESULTS_WARNING,
     UNSUPPORTED_EXPRESSION_ERROR,
     calculate,
 )
@@ -59,7 +60,7 @@ from apps.chat.agent.calculator import (
         ("__builtins__['eval']('2+2')", f"Error: {GENERIC_PARSE_ERROR}"),
         ("(lambda: 2+2)()", UNSUPPORTED_EXPRESSION_ERROR),
         ("float('inf') + 1", UNSUPPORTED_EXPRESSION_ERROR),
-        ("2,5 + 3,7", "(2, 8, 7)"),  # European decimal
+        ("2,5 + 3,7", MULTIPLE_RESULTS_WARNING + "(2, 8, 7)"),  # European decimal
         ("locals()", UNSUPPORTED_EXPRESSION_ERROR),
         ("globals()", UNSUPPORTED_EXPRESSION_ERROR),
     ],

@@ -6,6 +6,12 @@ from RestrictedPython.Eval import default_guarded_getiter
 
 from apps.utils.python_execution import limited_range
 
+MULTIPLE_RESULTS_WARNING = (
+    "Warning: European decimal notation detected. "
+    "Expressions using commas as decimal separators (e.g., '2,5') are interpreted as separate values. "
+    "For decimal calculations, please use periods (e.g., '2.5 + 3.7' instead of '2,5 + 3,7').\n\n"
+)
+
 EMPTY_EXPRESSION_ERROR = "Error: empty expression"
 
 EXPRESSION_TOO_LARGE_ERROR = "Error: expression too large"
@@ -85,7 +91,8 @@ def calculate(expression: str):
     except Exception as e:
         return f"Error: {e}"
 
+    warning = MULTIPLE_RESULTS_WARNING if isinstance(result, tuple) else ""
     try:
-        return str(result)
+        return warning + str(result)
     except ValueError:
         return MAX_DIGIT_ERROR
