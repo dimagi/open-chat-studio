@@ -11,6 +11,7 @@ EMPTY_EXPRESSION_ERROR = "Error: empty expression"
 EXPRESSION_TOO_LARGE_ERROR = "Error: expression too large"
 MAX_DIGIT_ERROR = "Error: result exceeds the maximum digit size"
 GENERIC_PARSE_ERROR = "Unable to parse the expression. Please check the syntax."
+UNSUPPORTED_EXPRESSION_ERROR = "Error: unsupported expression"
 
 ALLOWED_OPERATORS = {
     ast.Add,
@@ -29,11 +30,11 @@ UNICODE_REPLACEMENTS = {"＋": "+", "^": "**", "×": "*", "÷": "/", "−": "-"}
 class RestrictedOperationsTransformer(RestrictingNodeTransformer):
     def visit_BinOp(self, node):
         if node.op.__class__ not in ALLOWED_OPERATORS:
-            raise ValueError(f"Unsupported operation: {node.op}")
+            raise ValueError(f"unsupported operation: {node.op}")
         return super().visit_BinOp(node)
 
     def visit_Lambda(self, node):
-        raise ValueError("Unsupported expression")
+        raise ValueError("unsupported expression")
 
 
 def calculate(expression: str):
@@ -79,6 +80,8 @@ def calculate(expression: str):
     )
     try:
         result = eval(byte_code, {"__builtins__": {}}, allowed_names)
+    except NameError:
+        return UNSUPPORTED_EXPRESSION_ERROR
     except Exception as e:
         return f"Error: {e}"
 

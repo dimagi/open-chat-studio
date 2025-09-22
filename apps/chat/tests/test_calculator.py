@@ -5,6 +5,7 @@ from apps.chat.agent.calculator import (
     EXPRESSION_TOO_LARGE_ERROR,
     GENERIC_PARSE_ERROR,
     MAX_DIGIT_ERROR,
+    UNSUPPORTED_EXPRESSION_ERROR,
     calculate,
 )
 
@@ -42,7 +43,7 @@ from apps.chat.agent.calculator import (
         ("5/0", "Error: division by zero"),
         ("10 / (5 - 5)", "Error: division by zero"),
         ("(2 + 3", "Error: '(' was never closed at statement: '(2 + 3'"),
-        ("3 + a", "Error: name 'a' is not defined"),
+        ("3 + a", UNSUPPORTED_EXPRESSION_ERROR),
         ("   ", EMPTY_EXPRESSION_ERROR),
         ("2..3 + 1", "Error: invalid syntax at statement: '2..3 + 1'"),
         ("10**10000 * 10**10000", MAX_DIGIT_ERROR),
@@ -56,11 +57,11 @@ from apps.chat.agent.calculator import (
         ("\\x32 + 3", "Error: unexpected character after line continuation character at statement: '\\\\x32 + 3'"),
         ("(2).__class__", f"Error: {GENERIC_PARSE_ERROR}"),
         ("__builtins__['eval']('2+2')", f"Error: {GENERIC_PARSE_ERROR}"),
-        ("(lambda: 2+2)()", "Error: Unsupported expression"),
-        ("float('inf') + 1", "Error: name 'float' is not defined"),
+        ("(lambda: 2+2)()", UNSUPPORTED_EXPRESSION_ERROR),
+        ("float('inf') + 1", UNSUPPORTED_EXPRESSION_ERROR),
         ("2,5 + 3,7", "(2, 8, 7)"),  # European decimal
-        ("locals()", "Error: name 'locals' is not defined"),
-        ("globals()", "Error: name 'globals' is not defined"),
+        ("locals()", UNSUPPORTED_EXPRESSION_ERROR),
+        ("globals()", UNSUPPORTED_EXPRESSION_ERROR),
     ],
 )
 def test_calculator(expression, result):
