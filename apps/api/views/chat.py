@@ -100,6 +100,13 @@ def check_session_access(session, request=None):
     """
     Check if the request has access to the session.
     Now handles both authenticated users and embedded widgets.
+    Args:
+        session: Session object (should have experiment_channel prefetched)
+        request: Request object (required for embedded widgets)
+
+    Note:
+        Callers should use select_related('experiment_channel') when querying
+        sessions to avoid N+1 queries.
 
     Returns:
         Response object if access denied, None if access allowed
@@ -177,7 +184,10 @@ def validate_file_upload(file):
 @permission_classes([])
 @parser_classes([MultiPartParser])
 def chat_upload_file(request, session_id):
-    session = get_object_or_404(ExperimentSession, external_id=session_id)
+    session = get_object_or_404(
+        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
+        external_id=session_id,
+    )
     access_response = check_session_access(session, request)
     if access_response:
         return access_response
@@ -425,7 +435,10 @@ def chat_send_message(request, session_id):
     message_text = data["message"]
     attachment_ids = data.get("attachment_ids", [])
 
-    session = get_object_or_404(ExperimentSession, external_id=session_id)
+    session = get_object_or_404(
+        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
+        external_id=session_id,
+    )
 
     access_response = check_session_access(session, request)
     if access_response:
@@ -505,7 +518,10 @@ def chat_send_message(request, session_id):
 @permission_classes([])
 def chat_poll_task_response(request, session_id, task_id):
     try:
-        session = ExperimentSession.objects.select_related("experiment").get(external_id=session_id)
+        session = get_object_or_404(
+            ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
+            external_id=session_id,
+        )
     except ExperimentSession.DoesNotExist:
         raise Http404() from None
 
@@ -566,7 +582,10 @@ def chat_poll_response(request, session_id):
     """
     Poll for new messages in a chat session
     """
-    session = get_object_or_404(ExperimentSession, external_id=session_id)
+    session = get_object_or_404(
+        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
+        external_id=session_id,
+    )
 
     access_response = check_session_access(session, request)
     if access_response:
