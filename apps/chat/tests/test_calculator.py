@@ -36,7 +36,9 @@ from apps.chat.agent.calculator import (
         ("-0.0 + 0.0", "0.0"),  # negative 0
         ("1_000 + 2_000", "3000"),
         ("(" + "1+" * 50 + "1)*2", "102"),
+        ("sum([x for x in range(10)])", "45"),
         # Error cases
+        ("sum([x for x in range(10**10)])", "Error: Range too large"),
         ("5/0", "Error: division by zero"),
         ("10 / (5 - 5)", "Error: division by zero"),
         ("(2 + 3", "Error: '(' was never closed at statement: '(2 + 3'"),
@@ -55,7 +57,6 @@ from apps.chat.agent.calculator import (
         ("(2).__class__", f"Error: {GENERIC_PARSE_ERROR}"),
         ("__builtins__['eval']('2+2')", f"Error: {GENERIC_PARSE_ERROR}"),
         ("(lambda: 2+2)()", "Error: Unsupported expression"),
-        ("sum([x for x in range(10)])", "Error: name '_getiter_' is not defined"),
         ("float('inf') + 1", "Error: name 'float' is not defined"),
         ("2,5 + 3,7", "(2, 8, 7)"),  # European decimal
     ],

@@ -2,6 +2,9 @@ import ast
 import math
 
 from RestrictedPython import RestrictingNodeTransformer, compile_restricted
+from RestrictedPython.Eval import default_guarded_getiter
+
+from apps.utils.python_execution import limited_range
 
 EMPTY_EXPRESSION_ERROR = "Error: empty expression"
 
@@ -70,6 +73,8 @@ def calculate(expression: str):
             "max": max,
             "sum": sum,
             "abs": abs,
+            "_getiter_": default_guarded_getiter,
+            "range": limited_range,
         }
     )
     try:
