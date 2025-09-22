@@ -27,15 +27,16 @@ def extract_domain_from_headers(request) -> str:
     return ""
 
 
-def validate_embed_key_for_experiment(
-    token: str, origin_domain: str, experiment_id: str
-) -> tuple[bool, ExperimentChannel]:
+def validate_embed_key_for_experiment(token: str, origin_domain: str, experiment_id: str) -> ExperimentChannel | None:
     """
     Validate embedded widget request for a specific experiment.
     Used in start_session when we have experiment_id but not team yet.
+
+    Returns:
+        ExperimentChannel if validation succeeds, None otherwise.
     """
     if not token or not origin_domain:
-        return False, None
+        return None
 
     try:
         channel = ExperimentChannel.objects.select_related("experiment", "team").get(
@@ -46,14 +47,16 @@ def validate_embed_key_for_experiment(
         )
         allowed_domains = channel.extra_data.get("allowed_domains", [])
         if not allowed_domains:
-            return False, None
+            return None
 
         for allowed_domain in allowed_domains:
             if match_domain_pattern(origin_domain, allowed_domain):
-                return True, channel
-        return False, None
+                return channel
+
+        return None
+
     except ExperimentChannel.DoesNotExist:
-        return False, None
+        return None
 
 
 def validate_platform_availability(experiment: Experiment, platform: ChannelPlatform):

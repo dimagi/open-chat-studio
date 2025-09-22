@@ -78,11 +78,11 @@ def handle_embedded_widget_auth(request, experiment_id=None, session=None):
     else:
         raise ValueError("Either experiment_id or session must be provided")
 
-    is_valid, experiment_channel = validate_embed_key_for_experiment(
+    experiment_channel = validate_embed_key_for_experiment(
         token=embed_key, origin_domain=origin_domain, experiment_id=target_experiment_id
     )
 
-    if not is_valid:
+    if not experiment_channel:
         raise PermissionDenied("Invalid embed key or domain not allowed")
 
     # Generate id for anon widget users
