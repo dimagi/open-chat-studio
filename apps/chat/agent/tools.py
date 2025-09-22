@@ -15,6 +15,7 @@ from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
+from apps.chat.agent.calculator import calculate
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
@@ -439,6 +440,24 @@ class GetSessionStateTool(CustomBaseTool):
         return f"The value for key '{key}' is: {value}"
 
 
+class CalculatorTool(CustomBaseTool):
+    name: str = AgentTools.CALCULATOR
+    description: str = (
+        "Evaluates mathematical expressions and returns numerical results. "
+        "Supports basic arithmetic operations (+, -, *, /, //, %, **), "
+        "mathematical functions (sin, cos, tan, log, sqrt, etc.), and constants (pi, e). "
+        "Handles functions like min, max, sum, abs, and range. "
+        "IMPORTANT: Uses period (.) for decimals - expressions with commas like '2,5 + 3,7' will be "
+        "treated as separate values and return a tuple like (2, 8, 7). "
+        "For decimal calculations, use '2.5 + 3.7' instead."
+    )
+    requires_session: bool = False
+    args_schema: type[schemas.CalculatorSchema] = schemas.CalculatorSchema
+
+    def action(self, expression: str):
+        return calculate(expression)
+
+
 def create_schedule_message(
     experiment_session: ExperimentSession,
     message: str,
@@ -499,6 +518,7 @@ TOOL_CLASS_MAP = {
     AgentTools.SEARCH_INDEX: SearchIndexTool,
     AgentTools.SET_SESSION_STATE: SetSessionStateTool,
     AgentTools.GET_SESSION_STATE: GetSessionStateTool,
+    AgentTools.CALCULATOR: CalculatorTool,
 }
 
 

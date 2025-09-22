@@ -1,5 +1,6 @@
 import csv
 import logging
+from collections import defaultdict
 from collections.abc import Iterable
 from datetime import timedelta
 from io import StringIO
@@ -396,6 +397,124 @@ def process_csv_rows(dataset, rows, columns, progress_recorder, team):
                 _create_new_message(dataset, row_data)
                 stats["created_count"] += 1
 
+        except Exception as e:
+            stats["error_messages"].append(f"Row {row_index + 1}: {str(e)}")
+            continue
+
+        processed_rows = row_index + 1
+        progress = int(10 + (processed_rows / total_rows) * 85)  # 10-95% for processing
+        progress_recorder.set_progress(progress, 100, f"Processing row {processed_rows}/{total_rows}")
+
+    return stats
+
+
+@shared_task(bind=True)
+def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_id, column_mappings=None):
+    """
+    Process CSV upload for evaluation run results asynchronously with progress tracking.
+    csv_data: List of dictionaries representing CSV rows
+    column_mappings: Dictionary mapping column names to evaluator names
+    """
+
+    if not csv_data:
+        return {"success": False, "error": "CSV file is empty"}
+
+    progress_recorder = ProgressRecorder(self)
+
+    try:
+        evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id, team_id=team_id)
+        team = evaluation_run.team
+        with current_team(team):
+            stats = process_evaluation_results_csv_rows(
+                evaluation_run, csv_data, column_mappings or {}, progress_recorder, team
+            )
+            progress_recorder.set_progress(100, 100, "Upload complete")
+            return {
+                "success": True,
+                "updated_count": stats["updated_count"],
+                "created_count": stats["created_count"],
+                "total_processed": stats["updated_count"] + stats["created_count"],
+                "errors": stats["error_messages"],
+            }
+
+    except Exception as e:
+        logger.error(f"Error in CSV upload task for evaluation run {evaluation_run_id}: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mappings, progress_recorder, team):
+    """Process all CSV rows for evaluation results and return statistics."""
+    stats = {"updated_count": 0, "created_count": 0, "error_messages": []}
+    total_rows = len(csv_data)
+
+    columns = list(csv_data[0].keys()) if csv_data else []
+    has_id_column = "id" in columns
+
+    evaluator_ids = evaluation_run.config.evaluators.all().values_list("id", flat=True)
+
+    all_evaluation_results = EvaluationResult.objects.filter(run=evaluation_run, team=team)
+    results_lookup = defaultdict(dict)
+    for result in all_evaluation_results:
+        results_lookup[result.message_id].update({result.evaluator_id: result})
+
+    for row_index, row in enumerate(csv_data):
+        try:
+            if not has_id_column or not row.get("id"):
+                stats["error_messages"].append(
+                    f"Row {row_index + 1}: Missing 'id' column - cannot update results without ID"
+                )
+                continue
+
+            try:
+                message_id = int(row["id"])
+            except ValueError:
+                stats["error_messages"].append(f"Row {row_index + 1}: Invalid ID format")
+                continue
+
+            if message_id not in results_lookup:
+                stats["error_messages"].append(
+                    f"Row {row_index + 1}: No evaluation results found for message ID {message_id}"
+                )
+                continue
+
+            for column_name, evaluator_id in column_mappings.items():
+                if column_name not in row:
+                    continue
+
+                value = row[column_name]
+                if value is None:
+                    value = ""
+
+                result_key = column_name
+                if "(" in column_name and column_name.endswith(")"):
+                    result_key = column_name[: column_name.rfind("(")].strip()
+
+                try:
+                    evaluator_id = int(evaluator_id)
+                    if evaluator_id not in evaluator_ids:
+                        stats["error_messages"].append(
+                            f"Row {row_index + 1}: Evaluator with ID '{evaluator_id}' not found"
+                        )
+                        continue
+                except (ValueError, TypeError):
+                    stats["error_messages"].append(f"Row {row_index + 1}: Invalid evaluator ID '{evaluator_id}'")
+                    continue
+
+                evaluation_result = results_lookup.get(message_id, {}).get(evaluator_id)
+                if evaluation_result:
+                    updated_output = evaluation_result.output.copy()
+
+                    if "result" not in updated_output:
+                        updated_output["result"] = {}
+
+                    current_value = updated_output["result"].get(result_key)
+                    if current_value != value:
+                        updated_output["result"][result_key] = value
+                        evaluation_result.output = updated_output
+                        evaluation_result.save()
+                        stats["updated_count"] += 1
+                else:
+                    stats["error_messages"].append(f"Row {row_index + 1}: No results foundand message {message_id}")
         except Exception as e:
             stats["error_messages"].append(f"Row {row_index + 1}: {str(e)}")
             continue

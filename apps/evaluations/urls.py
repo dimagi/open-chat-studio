@@ -48,6 +48,11 @@ urlpatterns = [
         name="evaluation_run_download",
     ),
     path(
+        "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/update",
+        evaluation_config_views.update_evaluation_run_results,
+        name="evaluation_run_update",
+    ),
+    path(
         "sessions_selection_table",
         dataset_views.DatasetSessionsSelectionTableView.as_view(),
         name="dataset_sessions_selection_list",
@@ -81,6 +86,11 @@ urlpatterns = [
         "parse_csv_columns/",
         dataset_views.parse_csv_columns,
         name="parse_csv_columns",
+    ),
+    path(
+        "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/parse_csv_columns/",
+        evaluation_config_views.parse_evaluation_results_csv_columns,
+        name="parse_evaluation_results_csv_columns",
     ),
     path(
         "dataset/<int:pk>/download/",

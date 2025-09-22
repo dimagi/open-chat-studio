@@ -59,17 +59,32 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
 
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
-    for message in dataset.messages.all():
+    for message in dataset.messages.all().order_by("created_at"):
         evaluate_single_message_task(evaluation_run.id, [evaluator.id], message.id)
 
     evaluation_run.refresh_from_db()
-    results = evaluation_run.results.all()
+    results = evaluation_run.results.all().order_by("created_at")
 
     assert len(results) == 2
 
     assert "result" in results[0].output
     assert "sentiment" in results[0].output["result"]
     assert results[0].output["result"]["sentiment"] == "positive"
+
+    assert results[0].output["message"] == {
+        "input": {"content": "Hello, I'm upbeat and friendly", "role": "human"},
+        "output": {"content": "Hello! I'm glad to hear that.", "role": "ai"},
+        "context": {"current_datetime": "2023-01-01T00:00:00"},
+        "history": [],
+        "metadata": {},
+    }
+    assert results[1].output["message"] == {
+        "input": {"content": "Hello, I'm sad and downtrodden", "role": "human"},
+        "output": {"content": "I'm sorry to hear that.", "role": "ai"},
+        "context": {"current_datetime": "2023-01-01T00:00:00"},
+        "history": [],
+        "metadata": {},
+    }
 
 
 @pytest.mark.django_db()

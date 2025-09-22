@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
+import time_machine
 from django.db.utils import IntegrityError
 from django.utils import timezone
 from time_machine import travel
@@ -22,6 +23,7 @@ from apps.experiments.models import (
 )
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.tracing import TraceInfo
+from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
     EventActionFactory,
@@ -1063,6 +1065,111 @@ class TestExperimentObjectManager:
 
         # To get all experiment,s use the dedicated object method
         assert Experiment.objects.get_all().count() == 2
+
+
+@pytest.mark.django_db()
+class TestExperimentTrends:
+    def test_get_trend_data_returns_data_from_all_versions(self, experiment):
+        """Test that get_trend_data aggregates traces from all versions of an experiment"""
+        # Create some versions of the experiment
+        version1 = experiment.create_new_version()
+        version2 = experiment.create_new_version()
+
+        curr_time = timezone.now()
+        Trace.objects.create(
+            experiment=experiment, team=experiment.team, status=TraceStatus.SUCCESS, timestamp=curr_time, duration=1
+        )
+        # Trace for version1
+        Trace.objects.create(
+            experiment=version1, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+        )
+        # Trace for version2
+        Trace.objects.create(
+            experiment=version2, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+        )
+
+        success, errors = experiment.get_trend_data()
+
+        # Should aggregate traces from all versions: 1 success + 2 errors
+        assert sum(success) == 1, f"Expected 1 success, got {sum(success)}"
+        assert sum(errors) == 2, f"Expected 2 errors, got {sum(errors)}"
+
+    def test_get_experiment_trend_data_with_no_errors(self, experiment):
+        """Test that the function returns an array of zeros when there are no error traces"""
+        success, errors = experiment.get_trend_data()
+        empty_data = [0] * 49
+        assert errors == empty_data
+        assert success == empty_data
+
+    def test_get_experiment_trend_data_with_errors(self, experiment):
+        """Test that the function returns error counts when there are error traces"""
+        # Create traces with error status
+        with time_machine.travel("2025-01-01 12:00:00") as curr_time:
+            Trace.objects.create(
+                experiment=experiment, team=experiment.team, status=TraceStatus.SUCCESS, timestamp=curr_time, duration=1
+            )
+            Trace.objects.create(
+                experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+            )
+
+        with time_machine.travel("2025-01-01 10:00:00"):
+            Trace.objects.create(
+                experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+            )
+
+        with time_machine.travel("2025-01-01 7:00:00"):
+            Trace.objects.create(
+                experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+            )
+
+        with time_machine.travel("2025-01-01 13:00:00") as curr_time:
+            success, errors = experiment.get_trend_data()
+
+        # Should return actual error counts (2 errors in one hour, 1 in another)
+        assert isinstance(errors, list)
+        assert sum(errors) == 3
+        assert sum(success) == 1
+
+    def test_get_experiment_trend_data_only_recent_errors(self, experiment):
+        """Test that only errors within the last 2 days are counted"""
+        # Mock current time
+        with time_machine.travel("2025-08-15 12:00:00"):
+            # Create an error trace outside the 2-day window
+            Trace.objects.create(experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, duration=1)
+
+        # Create an error trace within the 2-day window
+        with time_machine.travel("2025-08-21 12:00:00"):
+            # Create an error trace outside the 2-day window
+            Trace.objects.create(experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, duration=1)
+
+            Trace.objects.create(experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, duration=1)
+
+            success, error = experiment.get_trend_data()
+
+            # Should only count the recent error
+            assert sum(error) == 2
+            assert experiment.traces.filter(status=TraceStatus.ERROR).count() == 3
+            assert sum(success) == 0
+
+    @patch("apps.experiments.models.cache")
+    @patch("apps.experiments.models.Experiment._calculate_trends")
+    def test_trend_data_caching(self, _calculate_trends, cache, experiment):
+        trends = ([1, 2, 3], [4, 5, 6])
+
+        # Nothing in the cache
+        _calculate_trends.return_value = trends
+        cache.get.return_value = None
+        _, errors = experiment.get_trend_data()
+        assert errors == [4, 5, 6]
+        _calculate_trends.assert_called()
+        cache.set.assert_called()
+
+        # Simulate cache hit
+        _calculate_trends.reset_mock()
+        cache.get.return_value = trends
+        _, errors = experiment.get_trend_data()
+        assert errors == [4, 5, 6]
+        _calculate_trends.assert_not_called()
 
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:

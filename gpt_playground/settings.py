@@ -738,7 +738,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 # CORS settings
 CORS_ALLOW_CREDENTIALS = False
-CORS_ALLOWED_HEADERS = [
+CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",
     "content-type",
@@ -747,9 +747,10 @@ CORS_ALLOWED_HEADERS = [
     "user-agent",
     # "x-csrftoken",
     "x-requested-with",
+    "x-ocs-widget-version",
 ]
 
-CORS_ALLOWED_METHODS = [
+CORS_ALLOW_METHODS = [
     "DELETE",
     "GET",
     "OPTIONS",
@@ -763,3 +764,9 @@ CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight for 24 hours
 
 # Analytics settings
 ANALYTICS_MAX_SESSIONS = 750
+
+# Experiment Trend cache settings
+EXPERIMENT_TREND_CACHE_TIMEOUT = 900  # 15 minutes
+
+# Dynamic Filter configs
+MAX_FILTER_PARAMS = 30

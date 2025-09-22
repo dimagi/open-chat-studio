@@ -11,15 +11,20 @@ class BaseExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Permis
     paginate_by = 25
     template_name = "table/single_table.html"
 
+    def get_table(self, **kwargs):
+        table = super().get_table(**kwargs)
+        if not flag_is_active(self.request, "flag_tracing"):
+            table.exclude = ("trends",)
+        return table
+
     def get_queryset(self):
-        chatbots_enabled = flag_is_active(self.request, "flag_chatbots")
         is_experiment = self.kwargs.get("is_experiment", False)
         query_set = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True)
             .order_by("is_archived", "name")
         )
-        if chatbots_enabled and is_experiment:
+        if is_experiment:
             query_set = query_set.filter(pipeline__isnull=True)
         show_archived = self.request.GET.get("show_archived") == "on"
         if not show_archived:

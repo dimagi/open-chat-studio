@@ -1,12 +1,17 @@
+from collections import defaultdict
+
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db.models import Prefetch
 from django.urls import reverse
 from django.views.generic import DetailView, TemplateView
 from django_tables2 import SingleTableView
 
+from apps.annotations.models import CustomTaggedItem
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.trace.filters import DynamicTraceFilter, get_trace_filter_context_data
+from apps.trace.filters import TraceFilter, get_trace_filter_context_data
 from apps.trace.models import Span, Trace, TraceStatus
 from apps.trace.tables import TraceTable
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -38,8 +43,8 @@ class TraceTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequi
         )
 
         timezone = self.request.session.get("detected_tz", None)
-        trace_filter = DynamicTraceFilter(queryset, self.request.GET, timezone)
-        return trace_filter.apply()
+        trace_filter = TraceFilter()
+        return trace_filter.apply(queryset, filter_params=FilterParams.from_request(self.request), timezone=timezone)
 
 
 class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
@@ -54,5 +59,22 @@ class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredM
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["spans"] = Span.objects.filter(trace=self.object, parent_span_id__isnull=True)
+        # Get ALL spans for this trace in one query. The recursive tree building will be done in Python to avoid N+1
+        # queries.
+        all_spans = Span.objects.filter(trace=self.object).prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag"),
+                to_attr="prefetched_tagged_items",
+            )
+        )
+
+        child_spans = defaultdict(list)
+        for span in all_spans:
+            if span.parent_span_id:
+                child_spans[span.parent_span_id].append(span)
+
+        root_spans = [span for span in all_spans if span.parent_span_id is None]
+        context["root_spans"] = root_spans
+        context["child_spans_map"] = child_spans
         return context

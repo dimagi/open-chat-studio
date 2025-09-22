@@ -13,7 +13,7 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-<div x-data="{activeTab: 'spans'}">
+<div x-data="{activeTab: 'spans', selectedSpan: '{{ root_spans.0.id }}'}">
     <div class="container mx-auto px-4 py-6">
         <!-- Header Section -->
         <div class="flex justify-between w-full">
@@ -37,22 +37,14 @@
             <div>
                 <div class="text-sm text-base-content/60 tracking-wide">Experiment</div>
                 <div class="mt-1">
-                    {% flag "flag_chatbots" %}
-                        {% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}
-                    {% else %}
-                        {% include "generic/chip.html" with chip=trace.experiment.as_experiment_chip %}
-                    {% endflag %}
+                    {% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}
                 </div>
                 <div class="text-xs mt-1">Version: {{ trace.experiment.get_version_name }}</div>
             </div>
             <div>
                 <div class="text-sm text-base-content/60 tracking-wide">Session</div>
                 <div class="mt-1">
-                    {% flag "flag_chatbots" %}
-                        {% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}
-                    {% else %}
-                        {% include "generic/chip.html" with chip=trace.session.as_experiment_chip %}
-                    {% endflag %}
+                    {% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}
                 </div>
             </div>
             <div>
@@ -78,7 +70,7 @@
             class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none"
             :class="activeTab === 'spans' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
             @click="activeTab = 'spans'">
-            Spans ({{ spans|length }})
+            Spans ({{ root_spans|length }})
           </button>
           <button 
             class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none"
@@ -92,18 +84,20 @@
 
     <div x-show="activeTab === 'spans'" id="spans-content">
         <div class="card mb-6">
-        <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
-        <div class="card-body bg-base-50 shadow-md">
-            {% for span in spans %}
-            {% include "trace/span_tree.html" with span=span is_root=True %}
-            {% empty %}
-            <div class="card bg-base-100 border border-base-200">
-                <div class="card-body p-4 text-center text-base-content/60">
-                No spans found for this trace.
+            <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
+            <div class="flex gap-2">
+                <div class="card-body bg-base-50 shadow-md">
+                    {% for span in root_spans %}
+                        {% include "trace/span_tree.html" with span=span %}
+                    {% empty %}
+                    <div class="card bg-base-100">
+                        <div class="card-body p-4 text-center text-base-content/60">
+                        No spans found for this trace.
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
-            {% endfor %}
-        </div>
         </div>
     </div>
 
@@ -117,4 +111,23 @@
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.store('spanDrawer', {
+            isOpen: false,
+            spanId: null,
+
+            open(spanId) {
+                this.spanId = spanId;
+                this.isOpen = true;
+            },
+
+            close() {
+                this.isOpen = false;
+                this.spanId = null;
+            }
+        });
+    });
+</script>
 {% endblock app %}

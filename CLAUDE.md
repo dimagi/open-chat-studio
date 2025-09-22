@@ -5,7 +5,7 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 ## Project Overview
 
 **Tech Stack:**
-- **Backend**: Django 5.x with Python 3.11+
+- **Backend**: Django 5.x with Python 3.13+
 - **Frontend**: React/TypeScript, TailwindCSS, AlpineJS, HTMX
 - **Database**: PostgreSQL with pgvector extension
 - **Task Queue**: Celery with Redis
