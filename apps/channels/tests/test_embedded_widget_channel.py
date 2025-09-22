@@ -7,7 +7,7 @@ from apps.channels.forms import (
     EmbeddedWidgetChannelForm,
 )
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.utils import match_domain_pattern, validate_embedded_widget_request
+from apps.channels.utils import match_domain_pattern
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -106,35 +106,6 @@ class TestEmbeddedWidgetUtils:
     def test_match_domain_pattern(self, origin_domain, allowed_pattern, should_match):
         result = match_domain_pattern(origin_domain, allowed_pattern)
         assert result == should_match
-
-    @pytest.mark.django_db()
-    def test_validate_embedded_widget_request_success(self):
-        team = TeamWithUsersFactory()
-        token = "test_token_123456789012345678901234"
-
-        channel = ExperimentChannelFactory(
-            team=team,
-            platform=ChannelPlatform.EMBEDDED_WIDGET,
-            extra_data={"widget_token": token, "allowed_domains": ["example.com", "*.subdomain.com"]},
-        )
-        is_valid, returned_channel = validate_embedded_widget_request(token, "example.com", team)
-        assert is_valid is True
-        assert returned_channel == channel
-
-    @pytest.mark.django_db()
-    def test_validate_embedded_widget_request_failures(self):
-        team = TeamWithUsersFactory()
-        token = "test_token_123456789012345678901234"
-
-        ExperimentChannelFactory(
-            team=team,
-            platform=ChannelPlatform.EMBEDDED_WIDGET,
-            extra_data={"widget_token": token, "allowed_domains": ["example.com"]},
-        )
-
-        is_valid, returned_channel = validate_embedded_widget_request("invalid_token", "example.com", team)
-        assert is_valid is False
-        assert returned_channel is None
 
 
 @pytest.mark.django_db()

@@ -27,7 +27,6 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import (
     extract_domain_from_headers,
     validate_embed_key_for_experiment,
-    validate_embedded_widget_request,
 )
 from apps.chat.channels import ApiChannel, WebChannel
 from apps.chat.models import Chat, ChatAttachment
@@ -73,17 +72,15 @@ def handle_embedded_widget_auth(request, experiment_id=None, session=None):
         raise PermissionDenied("Origin or Referer header required for embedded widgets")
 
     if experiment_id:
-        is_valid, experiment_channel = validate_embed_key_for_experiment(
-            token=embed_key, origin_domain=origin_domain, experiment_id=experiment_id
-        )
+        target_experiment_id = experiment_id
     elif session:
-        is_valid, experiment_channel = validate_embedded_widget_request(
-            token=embed_key, origin_domain=origin_domain, team=session.team
-        )
-        if is_valid and session.experiment_channel.platform != ChannelPlatform.EMBEDDED_WIDGET:
-            raise PermissionDenied("Session does not belong to an embedded widget channel")
+        target_experiment_id = session.experiment.public_id
     else:
         raise ValueError("Either experiment_id or session must be provided")
+
+    is_valid, experiment_channel = validate_embed_key_for_experiment(
+        token=embed_key, origin_domain=origin_domain, experiment_id=target_experiment_id
+    )
 
     if not is_valid:
         raise PermissionDenied("Invalid embed key or domain not allowed")

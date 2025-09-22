@@ -5,27 +5,6 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment
 
 
-def validate_embedded_widget_request(token: str, origin_domain: str, team) -> tuple[bool, ExperimentChannel]:
-    if not token or not origin_domain:
-        return False, None
-
-    try:
-        channel = ExperimentChannel.objects.get(
-            team=team, platform=ChannelPlatform.EMBEDDED_WIDGET, extra_data__widget_token=token, deleted=False
-        )
-
-        allowed_domains = channel.extra_data.get("allowed_domains", [])
-
-        for allowed_domain in allowed_domains:
-            if match_domain_pattern(origin_domain, allowed_domain):
-                return True, channel
-
-        return False, None
-
-    except ExperimentChannel.DoesNotExist:
-        return False, None
-
-
 def match_domain_pattern(origin_domain: str, allowed_pattern: str) -> bool:
     """Check if origin domain matches the allowed domain pattern."""
     if origin_domain == allowed_pattern:
