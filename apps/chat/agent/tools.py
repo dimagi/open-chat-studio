@@ -1,7 +1,6 @@
 import functools
 import json
 import logging
-import textwrap
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -443,19 +442,15 @@ class GetSessionStateTool(CustomBaseTool):
 
 class CalculatorTool(CustomBaseTool):
     name: str = AgentTools.CALCULATOR
-    description: str = textwrap.dedent("""
-        Evaluates a mathematical expression and returns the result.
-        
-        Supports basic operators (+, -, *, /, **, %), mathematical functions
-        (sin, cos, tan, exp, log, log10, sqrt), and constants (pi, e).
-        
-        Returns the result as a string e.g. "2*5" returns "10"
-        
-        Notes:
-            - Use '*' or '×' for multiplication e.g. 2*4 == 2×4
-            - Use '**' or '^' for power e.g. x**2 == x^2.
-            - Use '/' or '÷' for divide e.g. 6/3 == 6÷3
-        """)
+    description: str = (
+        "Evaluates mathematical expressions and returns numerical results. "
+        "Supports basic arithmetic operations (+, -, *, /, //, %, **), "
+        "mathematical functions (sin, cos, tan, log, sqrt, etc.), and constants (pi, e). "
+        "Handles functions like min, max, sum, abs, and range. "
+        "IMPORTANT: Uses period (.) for decimals - expressions with commas like '2,5 + 3,7' will be "
+        "treated as separate values and return a tuple like (2, 8, 7). "
+        "For decimal calculations, use '2.5 + 3.7' instead."
+    )
     requires_session: bool = False
     args_schema: type[schemas.CalculatorSchema] = schemas.CalculatorSchema
 

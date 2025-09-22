@@ -87,4 +87,7 @@ class GetSessionStateSchema(BaseModel):
 
 
 class CalculatorSchema(BaseModel):
-    expression: str = Field(description="Mathematical expression to calculate e.g. 42 + (3 x 6)")
+    expression: str = Field(
+        description="The mathematical expression to evaluate. "
+        "Use periods for decimals (not commas). Maximum 200 characters."
+    )
