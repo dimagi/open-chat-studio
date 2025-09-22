@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.tracing")
 
 
-# TODO in followup PR: Return link to trace in get_trace_metadata
 class OCSTracer(Tracer):
     """
     Internal OCS tracer that creates Trace objects in the database.
