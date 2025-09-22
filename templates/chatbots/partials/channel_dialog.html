@@ -152,25 +152,8 @@
     </dialog>
 
     <script>
-      async function clearSessionData() {
-        try {
-          await fetch("{% url 'channels:clear_widget_success' request.team.slug experiment.id %}", {
-            method: 'POST',
-            headers: {
-              'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-              'Content-Type': 'application/json',
-            }
-          });
-        } catch (error) {
-          console.warn('Failed to clear session data:', error);
-        }
-      }
-
       function closeSuccessModal() {
         document.getElementById('embedded_widget_success_modal').close();
-        clearSessionData();
       }
-
-      clearSessionData();
     </script>
   {% endif %}
