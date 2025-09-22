@@ -59,6 +59,8 @@ from apps.chat.agent.calculator import (
         ("(lambda: 2+2)()", "Error: Unsupported expression"),
         ("float('inf') + 1", "Error: name 'float' is not defined"),
         ("2,5 + 3,7", "(2, 8, 7)"),  # European decimal
+        ("locals()", "Error: name 'locals' is not defined"),
+        ("globals()", "Error: name 'globals' is not defined"),
     ],
 )
 def test_calculator(expression, result):
