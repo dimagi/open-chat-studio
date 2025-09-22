@@ -182,8 +182,7 @@ class ExperimentForm(forms.ModelForm):
         if flag_is_active(request, "flag_open_ai_voice_engine"):
             exclude_services = []
 
-        if flag_is_active(request, "flag_pipelines-v2"):
-            self.fields["type"].choices += [("pipeline", gettext("Pipeline"))]
+        self.fields["type"].choices += [("pipeline", gettext("Pipeline"))]
 
         # Limit to team's data
         self.fields["llm_provider"].queryset = team.llmprovider_set

@@ -37,22 +37,14 @@
             <div>
                 <div class="text-sm text-base-content/60 tracking-wide">Experiment</div>
                 <div class="mt-1">
-                    {% flag "flag_chatbots" %}
-                        {% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}
-                    {% else %}
-                        {% include "generic/chip.html" with chip=trace.experiment.as_experiment_chip %}
-                    {% endflag %}
+                    {% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}
                 </div>
                 <div class="text-xs mt-1">Version: {{ trace.experiment.get_version_name }}</div>
             </div>
             <div>
                 <div class="text-sm text-base-content/60 tracking-wide">Session</div>
                 <div class="mt-1">
-                    {% flag "flag_chatbots" %}
-                        {% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}
-                    {% else %}
-                        {% include "generic/chip.html" with chip=trace.session.as_experiment_chip %}
-                    {% endflag %}
+                    {% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}
                 </div>
             </div>
             <div>

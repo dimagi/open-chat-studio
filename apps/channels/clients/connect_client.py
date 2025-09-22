@@ -42,7 +42,7 @@ class CommCareConnectClient:
         stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger, logging.INFO),
     )
-    def create_channel(self, connect_id: UUID, channel_source: str) -> UUID:
+    def create_channel(self, connect_id: str, channel_source: str) -> dict:
         url = f"{self._base_url}/messaging/create_channel/"
         response = self.client.post(url, json={"connectid": str(connect_id), "channel_source": channel_source})
         response.raise_for_status()

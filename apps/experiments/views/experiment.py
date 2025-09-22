@@ -68,7 +68,7 @@ from apps.experiments.decorators import (
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.filters import (
     ExperimentSessionFilter,
-    get_experiment_filter_context_data,
+    get_filter_context_data,
 )
 from apps.experiments.forms import (
     ConsentForm,
@@ -121,7 +121,6 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    show_modal = flag_is_active(request, "flag_chatbots")
     actions_ = [
         actions.Action(
             "experiments:new",
@@ -136,7 +135,7 @@ def experiments_home(request, team_slug: str):
         "Experiments",
         "experiments:table",
         actions=actions_,
-        show_modal_or_banner=show_modal,
+        show_modal_or_banner=True,
         load_trend_modules=True,
     )
 
@@ -295,7 +294,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
     def dispatch(self, request, *args, **kwargs):
         is_chatbot = kwargs.get("new_chatbot", False)
-        if not is_chatbot and flag_is_active(request, "flag_chatbots"):
+        if not is_chatbot:
             return HttpResponseRedirect(reverse("chatbots:new", args=[request.team.slug]))
         return super().dispatch(request, *args, **kwargs)
 
@@ -510,13 +509,8 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     else:
         session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
 
-    context.update(
-        get_experiment_filter_context_data(
-            request.team,
-            session_table_url,
-            single_experiment=experiment,
-        )
-    )
+    columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
+    context.update(get_filter_context_data(request.team, columns, "last_message", session_table_url, "sessions-table"))
 
     return TemplateResponse(request, template_name, context)
 
