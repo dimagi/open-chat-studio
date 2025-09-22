@@ -53,11 +53,9 @@ class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredM
     permission_required = "trace.view_trace"
 
     def get_queryset(self):
-        return (
-            Trace.objects.select_related("experiment", "session", "participant", "input_message", "output_message")
-            .prefetch_related("spans")
-            .filter(team=self.request.team)
-        )
+        return Trace.objects.select_related(
+            "experiment", "session", "participant", "input_message", "output_message"
+        ).filter(team=self.request.team)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
