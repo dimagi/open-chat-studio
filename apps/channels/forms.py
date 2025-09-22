@@ -7,6 +7,8 @@ from functools import cached_property
 import phonenumbers
 from django import forms
 from django.conf import settings
+from django.contrib.postgres.forms import SimpleArrayField
+from django.core.validators import RegexValidator
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
@@ -536,51 +538,32 @@ class CommCareConnectChannelForm(ExtraFormBase):
 
 
 class EmbeddedWidgetChannelForm(ExtraFormBase):
-    """Form for creating embedded chat widget channels"""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Initialize widget data attributes
-        self.widget_token = None
-        self.embed_code = None
-
-        # Convert allowed_domains list back to newline-separated text for editing
-        if self.channel and self.channel.extra_data.get("allowed_domains"):
-            domains_list = self.channel.extra_data.get("allowed_domains", [])
-            if isinstance(domains_list, list) and domains_list:
-                self.fields["allowed_domains"].initial = "\n".join(domains_list)
-
-    allowed_domains = forms.CharField(
-        label="Allowed Domains",
+    allowed_domains = SimpleArrayField(
+        forms.CharField(
+            max_length=100,
+            validators=[
+                RegexValidator(
+                    regex=r"^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*(:\d+)?$",
+                    message="Invalid domain format",
+                )
+            ],
+        ),
+        delimiter="\n",
         widget=forms.Textarea(
             attrs={
                 "rows": 4,
                 "class": "textarea textarea-bordered w-full",
-                "placeholder": "Enter one domain per line, e.g.:\nexample.com\nwww.mysite.org\nsubdomain.example.com",
+                "placeholder": "Enter one domain per line, e.g.:\nexample.com\nwww.mysite.org",
             }
         ),
-        help_text="Enter the domains where this widget is allowed to be embedded (one per line). "
-        "Leave blank to allow all domains.",
         required=False,
+        help_text="Enter the domains where this widget is allowed to be embedded (one per line).",
     )
 
-    def clean_allowed_domains(self):
-        """Validate and clean the allowed domains"""
-        domains_text = self.cleaned_data.get("allowed_domains", "").strip()
-        if not domains_text:
-            return []
-
-        domains = []
-        for line in domains_text.split("\n"):
-            domain = line.strip()
-            if domain:
-                if not re.match(
-                    r"^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*(:\d+)?$",
-                    domain,
-                ):
-                    raise forms.ValidationError(f"Invalid domain format: {domain}")
-                domains.append(domain)
-        return domains
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.channel and self.channel.extra_data.get("allowed_domains"):
+            self.fields["allowed_domains"].initial = self.channel.extra_data.get("allowed_domains", [])
 
     def clean(self):
         """Generate or preserve the widget token"""
