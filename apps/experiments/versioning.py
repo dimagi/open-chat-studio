@@ -331,7 +331,7 @@ class VersionsMixin:
     def has_versions(self):
         return self.versions.exists()
 
-    @property
+    @cached_property
     def version_family_ids(self) -> list[int]:
         """Returns the ids of records in this version family, including the working version"""
         working_version = self.get_working_version()

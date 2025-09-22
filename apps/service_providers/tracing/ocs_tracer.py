@@ -7,6 +7,7 @@ from uuid import UUID
 
 from django.core.cache import cache
 from django.utils import timezone
+from langchain_core.callbacks.base import BaseCallbackHandler
 
 from apps.annotations.models import TagCategories
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
@@ -21,7 +22,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.tracing")
 
 
-# TODO in followup PR: Return link to trace in get_trace_metadata
 class OCSTracer(Tracer):
     """
     Internal OCS tracer that creates Trace objects in the database.
@@ -129,7 +129,10 @@ class OCSTracer(Tracer):
         if not self.ready:
             return
 
-        span = self.spans.pop(span_id)
+        span = self.spans.pop(span_id, None)
+        if not span:
+            return
+
         span.output = outputs or {}
         span.end_time = timezone.now()
         if error:
@@ -151,7 +154,7 @@ class OCSTracer(Tracer):
 
     def get_langchain_callback(self) -> None:
         """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
-        return None
+        return OCSCallbackHandler(tracer=self)
 
     def add_trace_tags(self, tags: list[str]) -> None:
         pass
@@ -195,3 +198,81 @@ class OCSTracer(Tracer):
 
         cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment_id)
         cache.delete(cache_key)
+
+
+class OCSCallbackHandler(BaseCallbackHandler):
+    LANGCHAIN_CHAINS_TO_IGNORE = ["start", "end"]
+
+    def __init__(self, tracer: OCSTracer):
+        super().__init__()
+        self.tracer = tracer
+
+    def on_llm_start(self, serialized, prompts, run_id, parent_run_id, tags, metadata, *args, **kwargs) -> None:
+        self.tracer.start_span(
+            span_id=run_id,
+            span_name=kwargs.get("name", "Unknown span"),
+            inputs={"prompts": prompts},
+            metadata=metadata or {},
+        )
+
+    def on_llm_end(self, response, run_id, parent_run_id, *args, **kwargs) -> None:
+        self.tracer.end_span(
+            span_id=run_id,
+            outputs={"output": response},
+        )
+
+    def on_llm_error(self, error, run_id, parent_run_id, *args, **kwargs) -> None:
+        self.tracer.end_span(
+            span_id=run_id,
+            error=error,
+        )
+
+    def on_chain_start(self, serialized, inputs, run_id, parent_run_id, tags, metadata, *args, **kwargs) -> None:
+        metadata = metadata or {}
+        serialized = serialized or {}
+        chain_name = kwargs.get("name", "Unknown span")
+        if chain_name in OCSCallbackHandler.LANGCHAIN_CHAINS_TO_IGNORE:
+            return
+
+        self.tracer.start_span(
+            span_id=run_id,
+            span_name=chain_name,
+            inputs=inputs,
+            metadata=metadata or {},
+        )
+
+    def on_chain_end(self, outputs, run_id, parent_run_id, *args, **kwargs) -> None:
+        self.tracer.end_span(
+            span_id=run_id,
+            outputs=outputs,
+        )
+
+    def on_chain_error(self, error, run_id, parent_run_id, *args, **kwargs) -> None:
+        self.tracer.end_span(
+            span_id=run_id,
+            outputs={},
+            error=error,
+        )
+
+    def on_tool_start(self, serialized, input_str, run_id, parent_run_id, tags, metadata, *args, **kwargs) -> None:
+        self.tracer.start_span(
+            span_id=run_id,
+            span_name=kwargs.get("name", "Unknown span"),
+            inputs={"input": input_str},
+            metadata=metadata or {},
+        )
+
+    def on_tool_end(self, output, run_id, parent_run_id, *args, **kwargs) -> None:
+        self.tracer.end_span(
+            span_id=run_id,
+            outputs={"output": output},
+        )
+
+    def on_tool_error(self, error, run_id, parent_run_id, *args, **kwargs) -> None:
+        self.tracer.end_span(
+            span_id=run_id,
+            error=error,
+        )
+
+    def on_chat_model_start(self, *args, **kwargs) -> Any:
+        pass

@@ -1,7 +1,7 @@
 import base64
+import json
 import logging
 import secrets
-import urllib
 import uuid
 from datetime import UTC, datetime
 from functools import cached_property
@@ -42,9 +42,10 @@ from apps.generics.chips import Chip
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team
-from apps.trace.models import TraceStatus
+from apps.trace.models import Trace, TraceStatus
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
+from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
 from apps.web.meta import absolute_url
 
 log = logging.getLogger("ocs.experiments")
@@ -882,8 +883,8 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     def get_trend_data(self) -> tuple[list, list]:
         """
-        Get the trend data for the experiment from cache. If it is missing from the cache, it is calculated and
-        stored in the cache.
+        Get the error/success trends across all versions in this experiment's version family. If it is missing from the
+        cache, it is calculated and stored in the cache.
         """
 
         if trend_data := cache.get(self.trends_cache_key):
@@ -897,15 +898,18 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         """
         Returns a URL to the traces page, filtered to show only traces for this experiment.
         """
-        query_params = urllib.parse.urlencode(
-            {"filter_0_column": "experiment", "filter_0_operator": "any of", "filter_0_value": f"[{self.id}]"}
-        )
-        return reverse("trace:home", kwargs={"team_slug": self.team.slug}) + "?" + query_params
+        experiment_filter = ColumnFilterData(column="experiment", operator="any of", value=json.dumps([self.id]))
+
+        versions_to_include = [f"v{n}" for n in range(1, self.version_number + 1)]
+        versions_filter = ColumnFilterData(column="versions", operator="any of", value=json.dumps(versions_to_include))
+
+        filter_params = FilterParams(column_filters=[experiment_filter, versions_filter])
+        return reverse("trace:home", kwargs={"team_slug": self.team.slug}) + "?" + filter_params.to_query()
 
     def _calculate_trends(self) -> tuple[list, list]:
         """
-        Calculate the trend data for the experiment. Returns two lists: successes and errors, each containing the count
-        of successful and error traces for each hour in the last 48 hours.
+        Calculate the trends across all versions in this experiment's version family. Returns two lists: successes and
+        errors, each containing the count of successful and error traces for each hour in the last 48 hours.
         """
         days = 2
         to_date = timezone.now()
@@ -914,8 +918,13 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         # Get error counts for each hour bucket
         error_trend = {}
         success_trend = {}
+
         trace_counts = (
-            self.traces.filter(timestamp__gte=from_date, timestamp__lte=to_date)
+            Trace.objects.filter(
+                Q(experiment__working_version_id=self.id) | Q(experiment_id=self.id),
+                timestamp__gte=from_date,
+                timestamp__lte=to_date,
+            )
             .annotate(hour_bucket=functions.TruncHour("timestamp", tzinfo=UTC))
             .values("hour_bucket")
             .annotate(
