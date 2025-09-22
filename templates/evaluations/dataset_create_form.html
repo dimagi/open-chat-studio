@@ -462,10 +462,13 @@
 
         // Session selection methods (for clone mode)
         updateSelectedSessions() {
-          const checkboxes = document.querySelectorAll('.session-checkbox:checked');
+          const toggleInput = document.querySelector('thead .session-checkbox');
+          const checkboxes = document.querySelectorAll('tbody .session-checkbox:checked');
           const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
-          const allCurrentPageCheckboxes = document.querySelectorAll('.session-checkbox');
+          const allCurrentPageCheckboxes = document.querySelectorAll('tbody .session-checkbox');
           const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
+
+          toggleInput.checked = checkboxes.length === allCurrentPageCheckboxes.length;
 
           this.selectedSessionIds = this.selectedSessionIds.filter(id =>
             !currentPageSessionIds.includes(id) || currentPageSelections.includes(id)
@@ -479,6 +482,15 @@
 
           this.updateSessionHiddenField();
           this.showError = false;
+        },
+
+        toggleAllSelections() {
+          const toggleInput = document.querySelector('thead .session-checkbox');
+          document.querySelectorAll('tbody .session-checkbox').forEach(cb => {
+            cb.checked = toggleInput.checked;
+          });
+
+          this.updateSelectedSessions();
         },
 
         clearAllSelections() {
