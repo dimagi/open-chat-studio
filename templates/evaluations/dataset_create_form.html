@@ -29,6 +29,9 @@
                 <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
                   Clear
                 </button>
+                <button type="button" class="btn btn-xs btn-outline ml-2" @click="toggleAllSelections(1)">
+                  Select all
+                </button>
               </div>
             </div>
           </div>
@@ -484,10 +487,10 @@
           this.showError = false;
         },
 
-        toggleAllSelections() {
+        toggleAllSelections(val) {
           const toggleInput = document.querySelector('thead .session-checkbox');
           document.querySelectorAll('tbody .session-checkbox').forEach(cb => {
-            cb.checked = toggleInput.checked;
+            cb.checked = val || toggleInput.checked;
           });
 
           this.updateSelectedSessions();
