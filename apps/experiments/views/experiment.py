@@ -68,7 +68,7 @@ from apps.experiments.decorators import (
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.filters import (
     ExperimentSessionFilter,
-    get_experiment_filter_context_data,
+    get_filter_context_data,
 )
 from apps.experiments.forms import (
     ConsentForm,
@@ -509,13 +509,8 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     else:
         session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
 
-    context.update(
-        get_experiment_filter_context_data(
-            request.team,
-            session_table_url,
-            single_experiment=experiment,
-        )
-    )
+    columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
+    context.update(get_filter_context_data(request.team, columns, "last_message", session_table_url, "sessions-table"))
 
     return TemplateResponse(request, template_name, context)
 
@@ -1585,7 +1580,7 @@ def trends_data(request, team_slug: str, experiment_id: int):
     """
     try:
         experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
-        successes, errors = experiment.default_version.get_trend_data()
+        successes, errors = experiment.get_trend_data()
         data = {"successes": successes, "errors": errors}
         return JsonResponse({"trends": data})
     except Exception:
