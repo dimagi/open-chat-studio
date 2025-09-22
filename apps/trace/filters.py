@@ -6,6 +6,7 @@ from django.urls import reverse
 from apps.experiments.filters import (
     get_filter_context_data,
 )
+from apps.experiments.models import Experiment
 from apps.web.dynamic_filters.base import TYPE_CHOICE, ChoiceColumnFilter, ColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
@@ -55,6 +56,9 @@ class ExperimentVersionsFilter(ChoiceColumnFilter):
         values = super().values_list(json_value)
         # versions are returned as strings like "v1", "v2", so we need to strip the "v" and convert to int
         return [int(v[1]) for v in values if "v" in v]
+
+    def prepare(self, team, **kwargs):
+        self.options = Experiment.objects.get_version_names(team)
 
 
 class TraceFilter(MultiColumnFilter):
