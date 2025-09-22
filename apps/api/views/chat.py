@@ -14,6 +14,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
+from apps.api.auth import handle_embedded_widget_auth
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -26,7 +27,6 @@ from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import (
     extract_domain_from_headers,
-    validate_embed_key_for_experiment,
 )
 from apps.chat.channels import ApiChannel, WebChannel
 from apps.chat.models import Chat, ChatAttachment
@@ -61,31 +61,10 @@ def check_experiment_access(experiment, participant_id):
     return None
 
 
-def handle_embedded_widget_auth(request, experiment_id=None, session=None):
-    embed_key = request.headers.get("X-Embed-Key")
-    if not embed_key:
-        return False, None, None
-
-    # Extract origin domain from headers
-    origin_domain = extract_domain_from_headers(request)
-    if not origin_domain:
-        raise PermissionDenied("Origin or Referer header required for embedded widgets")
-
-    if experiment_id:
-        target_experiment_id = experiment_id
-    elif session:
-        target_experiment_id = session.experiment.public_id
-    else:
-        raise ValueError("Either experiment_id or session must be provided")
-
-    experiment_channel = validate_embed_key_for_experiment(
-        token=embed_key, origin_domain=origin_domain, experiment_id=target_experiment_id
-    )
-
-    if not experiment_channel:
-        raise PermissionDenied("Invalid embed key or domain not allowed")
-
-    # Generate id for anon widget users
+def get_or_generate_participant_id(request):
+    """
+    Extract participant remote ID from request data or generate a new one for anonymous users.
+    """
     participant_remote_id = None
     if hasattr(request, "data") and request.data:
         participant_remote_id = request.data.get("participant_remote_id")
@@ -93,7 +72,7 @@ def handle_embedded_widget_auth(request, experiment_id=None, session=None):
     if not participant_remote_id:
         participant_remote_id = f"embed_{uuid.uuid4()}"
 
-    return True, experiment_channel, participant_remote_id
+    return participant_remote_id
 
 
 def check_session_access(session, request=None):
