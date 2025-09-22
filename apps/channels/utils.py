@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment
@@ -25,47 +27,24 @@ def validate_embedded_widget_request(token: str, origin_domain: str, team) -> tu
 
 
 def match_domain_pattern(origin_domain: str, allowed_pattern: str) -> bool:
-    """
-    Check if origin domain matches the allowed domain pattern.
-    """
+    """Check if origin domain matches the allowed domain pattern."""
     if origin_domain == allowed_pattern:
         return True
 
-    origin_parts = origin_domain.split(":")
-    pattern_parts = allowed_pattern.split(":")
-
-    origin_domain_part = origin_parts[0]
-    origin_port = origin_parts[1] if len(origin_parts) > 1 else None
-
-    pattern_domain_part = pattern_parts[0]
-    pattern_port = pattern_parts[1] if len(pattern_parts) > 1 else None
-
-    # If pattern specifies a port, origin must match that port exactly
-    if pattern_port is not None:
-        if origin_port != pattern_port:
-            return False
-
-    if origin_domain_part == pattern_domain_part:
-        return True
-
-    if pattern_domain_part.startswith("*."):
-        base_domain = pattern_domain_part[2:]  # Remove "*."
-        if origin_domain_part.endswith("." + base_domain):
+    if allowed_pattern.startswith("*."):
+        base_domain = allowed_pattern[2:]
+        if origin_domain.endswith("." + base_domain):
             return True
 
     return False
 
 
 def extract_domain_from_headers(request) -> str:
-    origin = request.headers.get("Origin")
-    if origin:
-        return origin.replace("http://", "").replace("https://", "")
-
-    referer = request.headers.get("Referer")
-    if referer:
-        domain = referer.replace("http://", "").replace("https://", "").split("/")[0]
-        return domain
-
+    for header in ["Origin", "Referer"]:
+        value = request.headers.get(header)
+        if value:
+            parsed = urlparse(value)
+            return parsed.hostname or ""
     return ""
 
 

@@ -543,7 +543,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             max_length=100,
             validators=[
                 RegexValidator(
-                    regex=r"^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*(:\d+)?$",
+                    regex=r"^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$",
                     message="Invalid domain format",
                 )
             ],
