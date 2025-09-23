@@ -221,9 +221,9 @@ else:
 
 db_options = DATABASES["default"].setdefault("OPTIONS", {})
 if conn_max_age := env.int("DJANGO_DATABASE_CONN_MAX_AGE", None):
-    db_options["CONN_MAX_AGE"] = conn_max_age
+    DATABASES["default"]["CONN_MAX_AGE"] = conn_max_age
 else:
-    db_options.pop("CONN_MAX_AGE", None)
+    DATABASES["default"].pop("CONN_MAX_AGE", None)
     db_options["pool"] = {
         "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
         "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=20),
