@@ -1,0 +1,7 @@
+{% extends "generic/object_home.html" %}
+{% load static %}
+
+{% block page_head %}
+  {{ block.super }}
+  <script src="{% static 'js/trends-bundle.js' %}"></script>
+{% endblock page_head %}

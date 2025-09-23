@@ -108,7 +108,7 @@ from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
 from apps.generics import actions
 from apps.generics.chips import Chip
-from apps.generics.views import generic_home, paginate_session, render_session_details
+from apps.generics.views import paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
@@ -121,6 +121,8 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
+    from apps.chatbots.views import home
+
     actions_ = [
         actions.Action(
             "experiments:new",
@@ -129,14 +131,13 @@ def experiments_home(request, team_slug: str):
             required_permissions=["experiments.add_experiment"],
         )
     ]
-    return generic_home(
+    return home(
         request,
         team_slug,
         "Experiments",
         "experiments:table",
         actions=actions_,
         show_modal_or_banner=True,
-        load_trend_modules=True,
     )
 
 
