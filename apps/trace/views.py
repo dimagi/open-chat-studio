@@ -22,7 +22,6 @@ class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
             "active_tab": "traces",
             "title": "Traces",
             "table_url": reverse("trace:table", args=[team_slug]),
-            "use_dynamic_filters": True,
             **get_trace_filter_context_data(self.request.team),
         }
 

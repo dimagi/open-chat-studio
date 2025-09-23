@@ -106,15 +106,15 @@
         </div>
       </div>
     </form>
-  {% elif use_dynamic_filters %}
-    <div class="my-2">
+  {% elif df_filter_columns %}
+    <div class="my-2 flex justify-between">
       {% include "experiments/filters.html" %}
     </div>
   {% else %}
     <hr class="my-2">
   {% endif %}
 
-    {% if use_dynamic_filters %}
+    {% if df_filter_columns %}
     <div id="data-table">
       {% include "table/table_placeholder.html" %}
     </div>

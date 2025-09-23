@@ -37,7 +37,6 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "title": "Participants",
             "allow_new": False,
             "table_url": table_url,
-            "use_dynamic_filters": True,
             **filter_context,
         }
 
