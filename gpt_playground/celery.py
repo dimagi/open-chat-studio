@@ -1,10 +1,7 @@
-import logging
 import os
 
 from celery import Celery
 from celery.app import trace
-from celery.signals import task_prerun
-from django.db import connections
 
 os.environ.setdefault("DJANGO_DATABASE_CONN_MAX_AGE", "10")
 
@@ -27,11 +24,3 @@ app.conf.result_expires = 86400  # expire results in redis in 1 day
 trace.LOG_SUCCESS = """\
 Task %(name)s[%(id)s] succeeded in %(runtime)ss\
 """
-
-logger = logging.getLogger("ocs.debug")
-
-
-@task_prerun.connect
-def log_pool_stats(*args, **kwargs):
-    for conn in connections.all():
-        logger.info(conn.pool.get_stats())
