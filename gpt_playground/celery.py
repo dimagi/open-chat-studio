@@ -6,6 +6,8 @@ from celery.app import trace
 from celery.signals import task_prerun
 from django.db import connections
 
+os.environ.setdefault("DJANGO_DATABASE_CONN_MAX_AGE", "10")
+
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 
