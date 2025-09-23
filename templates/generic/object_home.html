@@ -2,13 +2,6 @@
 {% extends "web/app/app_base.html" %}
 {% load static %}
 
-{% block page_head %}
-  {{ block.super }}
-  {% if load_trend_modules %}
-    <script src="{% static 'js/trends-bundle.js' %}"></script>
-  {% endif %}
-{% endblock page_head %}
-
 {% block app %}
   {% include "generic/object_home_content.html" %}
 {% endblock app %}

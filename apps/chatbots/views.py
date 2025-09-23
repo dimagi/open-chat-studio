@@ -6,6 +6,7 @@ from django.db.models import Count, F, Max, Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
+from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -34,7 +35,8 @@ from apps.experiments.views.experiment import (
     version_create_status,
 )
 from apps.generics import actions
-from apps.generics.views import generic_home, paginate_session, render_session_details
+from apps.generics.help import render_help_with_link
+from apps.generics.views import paginate_session, render_session_details
 from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required, team_required
@@ -146,7 +148,7 @@ def chatbots_home(request, team_slug: str):
             },
         )
     ]
-    return generic_home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_, load_trend_modules=True)
+    return home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_)
 
 
 class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -401,3 +403,43 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
     else:
         experiment_id = kwargs["pk"]
         return single_chatbot_home(request, team_slug, experiment_id)
+
+
+def home(
+    request,
+    team_slug: str,
+    title: str,
+    table_url_name: str,
+    actions=None,
+    show_modal_or_banner=False,
+):
+    """
+    Renders the home page for chatbots with the given parameters.
+
+    Arguments:
+        request: The current request.
+        team_slug: The slug of the team.
+        title: The title of the page.
+        table_url_name: The url name of the table.
+        actions: List of `apps.generics.actions.Action` objects to display in the title.
+        show_modal_or_banner: Temporary flag for experiment deprecation notice.
+    """
+    help_text_keys = {
+        "Experiments": "experiment",
+        "Chatbots": "chatbots",
+    }
+    help_key = help_text_keys.get(title, title.lower())  # Default to lowercase if missing
+    return TemplateResponse(
+        request,
+        "chatbots/home.html",
+        {
+            "active_tab": title.lower(),
+            "title": title,
+            "title_help_content": render_help_with_link("", help_key),
+            "table_url": reverse(table_url_name, args=[team_slug]),
+            "enable_search": True,
+            "toggle_archived": True,
+            "show_modal_or_banner": show_modal_or_banner,
+            "actions": actions,
+        },
+    )

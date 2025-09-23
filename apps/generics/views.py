@@ -6,14 +6,12 @@ from django.db.models import Prefetch
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
-from django.urls import reverse
 from django.utils.translation import gettext
 
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.models import ExperimentSession
 from apps.files.forms import get_file_formset
-from apps.generics.help import render_help_with_link
 from apps.generics.type_select_form import TypeSelectForm
 
 
@@ -90,50 +88,6 @@ class BaseTypeSelectFormView(views.View):
 
     def get_success_url(self) -> str:
         raise NotImplementedError
-
-
-HELP_TEXT_KEYS = {
-    "Experiments": "experiment",
-    "Chatbots": "chatbots",
-}
-
-
-def generic_home(
-    request,
-    team_slug: str,
-    title: str,
-    table_url_name: str,
-    actions=None,
-    show_modal_or_banner=False,
-    load_trend_modules=False,
-):
-    """
-    Generate a template response using the generic 'object_home.html' template.
-
-    Arguments:
-        request: The current request.
-        team_slug: The slug of the team.
-        title: The title of the page.
-        table_url_name: The url name of the table.
-        actions: List of `apps.generics.actions.Action` objects to display in the title.
-        show_modal_or_banner: Temporary flag for experiment deprecation notice.
-    """
-    help_key = HELP_TEXT_KEYS.get(title, title.lower())  # Default to lowercase if missing
-    return TemplateResponse(
-        request,
-        "generic/object_home.html",
-        {
-            "active_tab": title.lower(),
-            "title": title,
-            "title_help_content": render_help_with_link("", help_key),
-            "table_url": reverse(table_url_name, args=[team_slug]),
-            "enable_search": True,
-            "toggle_archived": True,
-            "show_modal_or_banner": show_modal_or_banner,
-            "actions": actions,
-            "load_trend_modules": load_trend_modules,
-        },
-    )
 
 
 def render_session_details(

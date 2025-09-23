@@ -12,20 +12,20 @@ from apps.chatbots.views import (
     ChatbotVersionsTableView,
     CreateChatbotVersion,
     chatbot_session_pagination_view,
+    home,
 )
 from apps.experiments.models import Experiment, ExperimentSession, Participant
-from apps.generics.views import generic_home
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
 
 
 @pytest.mark.django_db()
-def test_generic_home():
+def test_chatbot_home():
     team_slug = "test-team"
     title = "Chatbots"
     table_url_name = "chatbots:table"
     actions = [{"action": "chatbots:new"}]
-    response = generic_home(None, team_slug, title, table_url_name, actions=actions)
+    response = home(None, team_slug, title, table_url_name, actions=actions)
 
     assert isinstance(response, TemplateResponse)
 
