@@ -9,6 +9,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField
 from django.core.validators import RegexValidator
+from django.template.loader import render_to_string
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
@@ -537,6 +538,29 @@ class CommCareConnectChannelForm(ExtraFormBase):
     )
 
 
+class WidgetTokenWidget(forms.Widget):
+    template_name = "channels/widgets/widget_token.html"
+
+    def format_value(self, value):
+        return "" if value is None else value
+
+
+class EmbedCodeWidget(forms.Widget):
+    template_name = "channels/widgets/embed_code.html"
+
+    def __init__(self, experiment=None, attrs=None):
+        super().__init__(attrs)
+        self.experiment = experiment
+
+    def format_value(self, value):
+        return "" if value is None else value
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["experiment"] = self.experiment
+        return context
+
+
 class EmbeddedWidgetChannelForm(ExtraFormBase):
     allowed_domains = SimpleArrayField(
         forms.CharField(
@@ -560,10 +584,34 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         help_text="Enter the domains where this widget is allowed to be embedded (one per line).",
     )
 
+    widget_token = forms.CharField(
+        max_length=255,
+        required=False,
+        widget=forms.HiddenInput(),
+        help_text="Authentication token for the embedded widget",
+    )
+
+    embed_code = forms.CharField(required=False, widget=forms.HiddenInput(), help_text="Embed code for the widget")
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.channel and self.channel.extra_data.get("allowed_domains"):
-            self.fields["allowed_domains"].initial = self.channel.extra_data.get("allowed_domains", [])
+
+        if self.channel:
+            self.initial["allowed_domains"] = self.channel.extra_data.get("allowed_domains", [])
+            widget_token = self.channel.extra_data.get("widget_token")
+            if widget_token:
+                self.initial["widget_token"] = widget_token
+                embed_code = render_to_string(
+                    "experiments/share/widget.html",
+                    {
+                        "experiment": self.channel.experiment,
+                        "widget_token": widget_token,
+                    },
+                )
+                self.initial["embed_code"] = embed_code
+
+                self.fields["widget_token"].widget = WidgetTokenWidget()
+                self.fields["embed_code"].widget = EmbedCodeWidget(experiment=self.channel.experiment)
 
     def clean(self):
         """Generate or preserve the widget token"""
@@ -577,24 +625,3 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             cleaned_data["widget_token"] = secrets.token_urlsafe(24)
 
         return cleaned_data
-
-    def post_save(self, channel: ExperimentChannel):
-        """Save widget data and set success message"""
-        widget_token = self.cleaned_data["widget_token"]
-        embed_code = self._generate_embed_code(channel, widget_token)
-        self.widget_token = widget_token
-        self.embed_code = embed_code
-        self.success_message = f"Embedded widget channel created successfully! Widget token: {widget_token}"
-
-    def _generate_embed_code(self, channel: ExperimentChannel, token: str) -> str:
-        """Generate the embed code for the widget"""
-        base_url = getattr(settings, "SITE_URL", "https://chatbots.dimagi.com")
-        embed_code = f'''<!-- Open Chat Studio Embedded Widget -->
-<script type="module" src="{base_url}/static/js/open-chat-studio-widget.esm.js"></script>
-<script nomodule src="{base_url}/static/js/open-chat-studio-widget.js"></script>
-<open-chat-studio-widget
-    chatbot-id="{channel.experiment.public_id}"
-    api-base-url="{base_url}"
-    key="{token}">
-</open-chat-studio-widget>'''
-        return embed_code
