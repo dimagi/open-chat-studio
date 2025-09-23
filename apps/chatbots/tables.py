@@ -38,14 +38,10 @@ class ChatbotTable(tables.Table):
         align="left",
         orderable=True,
     )
-    participant_count = columns.Column(verbose_name="Participants", orderable=True)
+    participant_count = columns.Column(verbose_name="Total Participants", orderable=True)
     last_message = TimeAgoColumn(verbose_name="Last activity", orderable=True)
-    session_count = ColumnWithHelp(
-        verbose_name="Sessions", orderable=True, help_text="Active sessions in the last 30 days"
-    )
-    messages_count = ColumnWithHelp(
-        verbose_name="Messages", orderable=True, help_text="Messages sent and received in the last 30 days"
-    )
+    session_count = ColumnWithHelp(verbose_name="Total Sessions", orderable=True)
+    messages_count = ColumnWithHelp(verbose_name="Total Messages", orderable=True)
     trends = columns.TemplateColumn(
         verbose_name="Trends (last 48h)",
         template_name="table/trends_chart.html",

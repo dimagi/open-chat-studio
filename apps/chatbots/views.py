@@ -1,5 +1,4 @@
 import uuid
-from datetime import timedelta
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -8,7 +7,6 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
-from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
@@ -165,31 +163,12 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return table
 
     def get_queryset(self):
-        end_date = timezone.now()
-        start_date = end_date - timedelta(days=30)
         query_set = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
-            .annotate(session_count=Count("sessions"))
-            .annotate(
-                participant_count=Count(
-                    "sessions__participant",
-                    filter=Q(
-                        sessions__chat__messages__created_at__gte=start_date,
-                        sessions__chat__messages__created_at__lte=end_date,
-                    ),
-                    distinct=True,
-                )
-            )
-            .annotate(
-                messages_count=Count(
-                    "sessions__chat__messages",
-                    filter=Q(
-                        sessions__chat__messages__created_at__gte=start_date,
-                        sessions__chat__messages__created_at__lte=end_date,
-                    ),
-                )
-            )
+            .annotate(session_count=Count("sessions", distinct=True))
+            .annotate(participant_count=Count("sessions__participant", distinct=True))
+            .annotate(messages_count=Count("sessions__chat__messages", distinct=True))
             .annotate(last_message=Max("sessions__chat__messages__created_at"))
             .order_by(F("last_message").desc(nulls_last=True))
         )
