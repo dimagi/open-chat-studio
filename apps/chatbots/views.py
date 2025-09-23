@@ -38,7 +38,7 @@ from apps.experiments.views.experiment import (
 )
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
-from apps.generics.views import HELP_TEXT_KEYS, paginate_session, render_session_details
+from apps.generics.views import paginate_session, render_session_details
 from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required, team_required
@@ -445,7 +445,11 @@ def home(
         actions: List of `apps.generics.actions.Action` objects to display in the title.
         show_modal_or_banner: Temporary flag for experiment deprecation notice.
     """
-    help_key = HELP_TEXT_KEYS.get(title, title.lower())  # Default to lowercase if missing
+    help_text_keys = {
+        "Experiments": "experiment",
+        "Chatbots": "chatbots",
+    }
+    help_key = help_text_keys.get(title, title.lower())  # Default to lowercase if missing
     return TemplateResponse(
         request,
         "chatbots/home.html",

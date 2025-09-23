@@ -90,12 +90,6 @@ class BaseTypeSelectFormView(views.View):
         raise NotImplementedError
 
 
-HELP_TEXT_KEYS = {
-    "Experiments": "experiment",
-    "Chatbots": "chatbots",
-}
-
-
 def render_session_details(
     request, team_slug, experiment_id, session_id, active_tab, template_path, session_type="Experiment"
 ):
