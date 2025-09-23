@@ -25,7 +25,11 @@ from apps.web.dynamic_filters.column_filters import (
 )
 
 
-def get_filter_context_data(team, columns, date_range_column: str, table_url: str, table_container_id: str):
+def get_filter_context_data(
+    team, columns: dict[str, dict], date_range_column: str, table_url: str, table_container_id: str
+):
+    if date_range_column not in columns:
+        raise ValueError("Date range column is not present in list of columns")
     return {
         "df_date_range_options": DATE_RANGE_OPTIONS,
         "df_channel_list": ChannelPlatform.for_filter(team),
