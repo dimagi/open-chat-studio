@@ -41,12 +41,10 @@
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "assistant" %}
       </div>
-      {% flag "flag_pipelines-v2" %}
-        <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Pipeline" x-bind:checked="type === 'pipeline'" x-show="type === 'pipeline'" {% if experiment_type != "pipeline" %}x-cloak{% endif %}>
-        <div role="tabpanel" class="tab-content">
-          {% render_form_fields form "pipeline" %}
-        </div>
-      {% endflag %}
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Pipeline" x-bind:checked="type === 'pipeline'" x-show="type === 'pipeline'" {% if experiment_type != "pipeline" %}x-cloak{% endif %}>
+      <div role="tabpanel" class="tab-content">
+        {% render_form_fields form "pipeline" %}
+      </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Safety" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "safety_layers" "safety_violation_notification_emails" "input_formatter" %}

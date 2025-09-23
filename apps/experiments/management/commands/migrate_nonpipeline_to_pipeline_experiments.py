@@ -6,7 +6,6 @@ from apps.experiments.models import Experiment
 from apps.pipelines.helper import (
     convert_non_pipeline_experiment_to_pipeline,
 )
-from apps.teams.models import Flag
 from apps.teams.utils import current_team
 
 
@@ -30,11 +29,6 @@ class Command(BaseCommand):
             help="Convert only a specific experiment by ID",
         )
         parser.add_argument(
-            "--chatbots-flag-only",
-            action="store_true",
-            help='Only convert experiments for teams that have the "flag_chatbots" feature flag enabled',
-        )
-        parser.add_argument(
             "--skip-confirmation",
             action="store_true",
             help="Skip confirmation prompt and proceed automatically",
@@ -44,21 +38,12 @@ class Command(BaseCommand):
         dry_run = options["dry_run"]
         team_slug = options.get("team_slug")
         experiment_id = options.get("experiment_id")
-        chatbots_flag_only = options["chatbots_flag_only"]
         skip_confirmation = options["skip_confirmation"]
 
         query = Q(pipeline__isnull=True) & (Q(assistant__isnull=False) | Q(llm_provider__isnull=False))
 
         if team_slug:
             query &= Q(team__slug=team_slug)
-
-        if chatbots_flag_only:
-            chatbots_flag_team_ids = self._get_chatbots_flag_team_ids()
-            if not chatbots_flag_team_ids:
-                self.stdout.write(self.style.WARNING('No teams found with the "flag_chatbots" feature flag enabled.'))
-                return
-            query &= Q(team_id__in=chatbots_flag_team_ids)
-            self.stdout.write(f"Filtering to teams with 'flag_chatbots' FF ({len(chatbots_flag_team_ids)} teams)")
 
         if experiment_id:
             query &= Q(id=experiment_id)
@@ -150,7 +135,3 @@ class Command(BaseCommand):
         experiment_type = "Assistant" if experiment.assistant else "LLM" if experiment.llm_provider else "Unknown"
         team_info = f"{experiment.team.name} ({experiment.team.slug})"
         self.stdout.write(f"{experiment.name} (ID: {experiment.id}) - Type: {experiment_type} - Team: {team_info}")
-
-    def _get_chatbots_flag_team_ids(self):
-        chatbots_flag = Flag.objects.get(name="flag_chatbots")
-        return list(chatbots_flag.teams.values_list("id", flat=True))

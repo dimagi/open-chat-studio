@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 import pytz
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 
 from apps.experiments.models import SessionStatus
 
@@ -35,6 +35,21 @@ class ExperimentFilter(ChoiceColumnFilter):
             except (ValueError, TypeError):
                 continue
         return values
+
+    def _get_filter_clause(self, id_values):
+        # This experiment and all of its versions should be returned
+        return Q(experiment_id__in=id_values) | Q(experiment__working_version_id__in=id_values)
+
+    def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
+        return queryset.filter(self._get_filter_clause(value))
+
+    def apply_all_of(self, queryset, value, timezone=None) -> QuerySet:
+        for val in value:
+            queryset = queryset.filter(self._get_filter_clause(val))
+        return queryset
+
+    def apply_excludes(self, queryset, value, timezone=None) -> QuerySet:
+        return queryset.exclude(self._get_filter_clause(value))
 
 
 class StatusFilter(ChoiceColumnFilter):

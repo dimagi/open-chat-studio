@@ -121,7 +121,6 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    show_modal = flag_is_active(request, "flag_chatbots")
     actions_ = [
         actions.Action(
             "experiments:new",
@@ -136,7 +135,7 @@ def experiments_home(request, team_slug: str):
         "Experiments",
         "experiments:table",
         actions=actions_,
-        show_modal_or_banner=show_modal,
+        show_modal_or_banner=True,
         load_trend_modules=True,
     )
 
@@ -295,7 +294,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
     def dispatch(self, request, *args, **kwargs):
         is_chatbot = kwargs.get("new_chatbot", False)
-        if not is_chatbot and flag_is_active(request, "flag_chatbots"):
+        if not is_chatbot:
             return HttpResponseRedirect(reverse("chatbots:new", args=[request.team.slug]))
         return super().dispatch(request, *args, **kwargs)
 
@@ -1581,7 +1580,7 @@ def trends_data(request, team_slug: str, experiment_id: int):
     """
     try:
         experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
-        successes, errors = experiment.default_version.get_trend_data()
+        successes, errors = experiment.get_trend_data()
         data = {"successes": successes, "errors": errors}
         return JsonResponse({"trends": data})
     except Exception:

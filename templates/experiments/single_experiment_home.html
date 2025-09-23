@@ -5,48 +5,46 @@
 {% load form_tags %}
 {% load django_tables2 %}
 {% block breadcrumbs %}
-  {% flag "flag_chatbots" %}
-    {% if experiment.pipeline %}
+{% if experiment.pipeline %}
+  <div>
+    <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
       <div>
-        <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
-          <div>
-            We're migrating Experiments to a new interface for a more streamlined bot building experience. You can access the new interface in the Chatbots section. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a>
-          </div>
-          <div>
-            <a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}"
-               class="btn btn-primary">
-              Go to Chatbot
-            </a>
-          </div>
-        </div>
+        We're migrating Experiments to a new interface for a more streamlined bot building experience. You can access the new interface in the Chatbots section. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a>
       </div>
-    {% else %}
       <div>
-        <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
-          <div>
-            <p>Your experiment is ready to migrate to a chatbot! Chatbots is a new interface for a more streamlined bot building experience. This is a safe operation that will not change the existing functionality. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a></p>
-            {% if first_parent_id %}
-              <p><br/>However, since this is a 'child' of another experiment, you must migrate the parent which will migrate all the children.</p>
-            {% endif %}
-          </div>
-          <div>
-            {% if first_parent_id %}
-              <a class="btn btn-primary" href="{% url 'experiments:single_experiment_home' request.team.slug first_parent_id %}">
-                Go to Parent
-              </a>
-            {% else %}
-              <form method="post" action="{% url 'experiments:migrate_experiment' request.team.slug experiment.id %}" style="display: inline;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-primary">
-                  Migrate Experiment
-                </button>
-              </form>
-            {% endif %}
-          </div>
-        </div>
+        <a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}"
+           class="btn btn-primary">
+          Go to Chatbot
+        </a>
       </div>
-    {% endif %}
-  {% endflag %}
+    </div>
+  </div>
+{% else %}
+  <div>
+    <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
+      <div>
+        <p>Your experiment is ready to migrate to a chatbot! Chatbots is a new interface for a more streamlined bot building experience. This is a safe operation that will not change the existing functionality. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a></p>
+        {% if first_parent_id %}
+          <p><br/>However, since this is a 'child' of another experiment, you must migrate the parent which will migrate all the children.</p>
+        {% endif %}
+      </div>
+      <div>
+        {% if first_parent_id %}
+          <a class="btn btn-primary" href="{% url 'experiments:single_experiment_home' request.team.slug first_parent_id %}">
+            Go to Parent
+          </a>
+        {% else %}
+          <form method="post" action="{% url 'experiments:migrate_experiment' request.team.slug experiment.id %}" style="display: inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+              Migrate Experiment
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endif %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
