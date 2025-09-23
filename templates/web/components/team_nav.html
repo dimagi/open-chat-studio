@@ -26,6 +26,14 @@
             </li>
         </ul>
       {% endif %}
+        <ul>
+            <li>
+              <a href="{% url 'chatbots:all_sessions_home' request.team.slug %}" {% if active_tab == 'all_sessions' %}class="menu-active"{% endif %}>
+                <i class="fa fa-users" aria-hidden="true"></i>
+                {% translate "All sessions" %}
+              </a>
+            </li>
+        </ul>
     {% endflag %}
   </li>
   <li>

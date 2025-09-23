@@ -77,4 +77,6 @@ urlpatterns = [
         name="settings",
     ),
     path("<int:pk>/copy/", views.copy_chatbot, name="copy"),
+    path("sessions/", views.AllSessionsHome.as_view(), name="all_sessions_home"),
+    path("sessions-list/", views.ChatbotSessionsTableView.as_view(), name="all_sessions_list"),
 ]

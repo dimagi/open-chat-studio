@@ -18,6 +18,10 @@ from apps.chat.channels import WebChannel
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
+from apps.experiments.filters import (
+    ExperimentSessionFilter,
+    get_filter_context_data,
+)
 from apps.experiments.models import Experiment, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
@@ -306,6 +310,12 @@ def chatbot_version_create_status(
 class ChatbotSessionsTableView(ExperimentSessionsTableView):
     table_class = ChatbotSessionsTable
 
+    def get_table(self, **kwargs):
+        table = super().get_table(**kwargs)
+        if self.kwargs.get("experiment_id"):
+            table.exclude = ("chatbot",)
+        return table
+
 
 @experiment_session_view()
 @verify_session_access_cookie
@@ -443,3 +453,27 @@ def home(
             "actions": actions,
         },
     )
+
+
+class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    template_name = "generic/object_home.html"
+    permission_required = "experiments.view_participant"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        table_url = reverse("chatbots:all_sessions_list", kwargs={"team_slug": team_slug})
+        filter_context = get_filter_context_data(
+            team=self.request.team,
+            columns=ExperimentSessionFilter.columns(self.request.team),
+            date_range_column="last_message",
+            table_url=table_url,
+            table_container_id="data-table",
+        )
+
+        return {
+            "active_tab": "all_sessions",
+            "title": "All Sessions",
+            "allow_new": False,
+            "table_url": table_url,
+            "use_dynamic_filters": True,
+            **filter_context,
+        }

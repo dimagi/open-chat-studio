@@ -17,7 +17,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
+from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import (
@@ -148,6 +148,11 @@ class ExperimentTableView(BaseExperimentTableView):
 
 
 class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+    """
+    This view is used to render experiment sessions. When called by a specific chatbot, it includes an "experiment_id"
+    parameter in the request, which narrows the sessions to only those belonging to that chatbot.
+    """
+
     model = ExperimentSession
     paginate_by = 25
     table_class = ExperimentSessionsTable
@@ -155,9 +160,13 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
     permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
+        experiment_filter = Q()
+        if experiment_id := self.kwargs.get("experiment_id"):
+            experiment_filter = Q(experiment__id=experiment_id)
+
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
-            .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
+            .filter(experiment_filter, team=self.request.team)
             .select_related("participant__user", "chat")
             .prefetch_related(
                 "chat__tags",
