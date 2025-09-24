@@ -1,3 +1,4 @@
+import logging
 import pathlib
 
 from django.conf import settings
@@ -39,6 +40,8 @@ AUTH_CLASSES = [SessionAuthentication]
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
 SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["collections"]
+
+logger = logging.getLogger("ocs.api_chat")
 
 
 def check_experiment_access(experiment, participant_id):
@@ -96,7 +99,8 @@ def check_session_access(session, request=None):
             return None  # Access allowed
         except PermissionDenied as e:
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
-        except Exception:
+        except Exception as e:
+            logger.exception(f"Error during embedded widget authentication. {e}")
             return Response({"error": "Embedded widget authentication failed"}, status=status.HTTP_403_FORBIDDEN)
     return check_experiment_access(session.experiment, session.participant.identifier)
 
