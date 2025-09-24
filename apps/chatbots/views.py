@@ -311,6 +311,9 @@ class ChatbotSessionsTableView(ExperimentSessionsTableView):
     table_class = ChatbotSessionsTable
 
     def get_table(self, **kwargs):
+        """
+        When viewing sessions for a specific chatbot, hide the chatbot column
+        """
         table = super().get_table(**kwargs)
         if self.kwargs.get("experiment_id"):
             table.exclude = ("chatbot",)
