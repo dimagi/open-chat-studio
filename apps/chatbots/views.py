@@ -457,7 +457,7 @@ def home(
 
 class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
     template_name = "generic/object_home.html"
-    permission_required = "experiments.view_participant"
+    permission_required = "experiments.view_experimentsession"
 
     def get_context_data(self, team_slug: str, **kwargs):
         table_url = reverse("chatbots:all_sessions_list", kwargs={"team_slug": team_slug})
