@@ -1608,7 +1608,6 @@ def _serialize_filter_set(fs: FilterSet) -> dict:
     }
 
 @login_and_team_required
-@permission_required("experiments.view_experiment")
 def list_filter_sets(request, team_slug: str, table_type: str):
     qs = FilterSet.objects.filter(
         team=request.team,
