@@ -787,10 +787,12 @@ function dashboard() {
                 let operator = "any of";
                 if (key === "start_date") {
                     operator = "after";
-                    parsedValue = value; // keep date as string
+                    // To account for filter mismatches, we add one day to the start date
+                    parsedValue = this.getDayAfter(value); // keep date as string
                 } else if (key === "end_date") {
                     operator = "before";
-                    parsedValue = value; // keep date as string
+                    // To account for filter mismatches, we add one day to the end date
+                    parsedValue = this.getDayAfter(value); // keep date as string
                 } else if (key === "date_range") {
                     operator = "range";
                     parsedValue = value + "d";
@@ -804,6 +806,13 @@ function dashboard() {
             });
             return allSessionsUrl + "?" + urlParams.toString();
         },
+
+        getDayAfter(dateString) {
+            let date = new Date(dateString);
+            date.setDate(date.getDate() + 1);
+            return date.toISOString().split('T')[0];
+        },
+
         // Cleanup
         destroy() {
             if (this.refreshTimeout) {
