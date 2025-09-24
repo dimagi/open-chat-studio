@@ -1,0 +1,135 @@
+{% load i18n %}
+<dialog id="saveFilterDialog" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-base-300">
+    <div class="flex items-center justify-between mb-6">
+      <h3 class="font-bold text-lg text-base-content">{% trans "Create Filter Set" %}</h3>
+      <form method="dialog">
+        <button class="btn btn-sm btn-ghost text-base-content hover:bg-base-200">✕</button>
+      </form>
+    </div>
+
+    <!-- Create New Filter Set Form -->
+    <form id="createFilterSetForm" onsubmit="submitFilterSet(event)">
+      {% csrf_token %}
+      <div class="mb-6">
+        <label class="block text-sm font-medium text-base-content mb-2">{% trans "Name" %}</label>
+        <input type="text" 
+               id="filterSetName" 
+               class="input input-bordered w-full bg-base-100 border-base-300 text-base-content placeholder-base-content/60 focus:border-primary" 
+               placeholder="{% trans 'Name' %}" 
+               required>
+      </div>
+      
+      <div class="flex justify-end gap-3">
+        <form method="dialog">
+          <button type="button" class="btn btn-ghost text-base-content hover:bg-base-200">{% trans "Cancel" %}</button>
+        </form>
+        <button type="submit" class="btn btn-primary" id="saveFilterBtn">
+          <span id="saveFilterText">{% trans "Save" %}</span>
+          <span id="saveFilterSpinner" class="loading loading-spinner loading-xs hidden"></span>
+        </button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<script>
+
+function submitFilterSet(event) {
+  event.preventDefault();
+  
+  const nameInput = document.getElementById('filterSetName');
+  const saveBtn = document.getElementById('saveFilterBtn');
+  const saveText = document.getElementById('saveFilterText');
+  const saveSpinner = document.getElementById('saveFilterSpinner');
+  
+  const name = nameInput.value.trim();
+  if (!name) {
+    showNotification('Please enter a name for the filter set', 'error');
+    return;
+  }
+    saveBtn.disabled = true;
+  saveText.classList.add('hidden');
+  saveSpinner.classList.remove('hidden');
+  
+  const currentFilterParams = getCurrentFilterParams();
+  
+  const payload = {
+    name: name,
+    filter_params: currentFilterParams,
+  };
+
+  const url = '{% url "experiments:create_filter_set" request.team.slug table_type %}';
+
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': SiteJS.app.Cookies.get('csrftoken')
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify(payload)
+  })
+  .then(response => {
+    if (!response.ok) {
+      return response.text().then(text => {
+        throw new Error(`Failed to save filter set: ${response.status} ${text}`);
+      });
+    }
+    return response.json();
+  })
+  .then(data => {
+    nameInput.value = '';
+    document.getElementById('saveFilterDialog').close();
+    showNotification('Filter set saved successfully', 'success');
+    loadSavedFilters();
+    }
+  })
+  .catch(error => {
+    console.error('Error saving filter set:', error);
+    showNotification('Failed to save filter set: ' + error.message, 'error');
+  })
+  .finally(() => {
+    saveBtn.disabled = false;
+    saveText.classList.remove('hidden');
+    saveSpinner.classList.add('hidden');
+  });
+}
+
+function getCurrentFilterParams() {
+  const params = new URLSearchParams(window.location.search);
+  const obj = {};
+  params.forEach((value, key) => {
+    if (key.startsWith('filter_')) obj[key] = value;
+  });
+  return obj;
+}
+
+function showNotification(message, type = 'info') {
+  if (typeof window.showNotification === 'function') {
+    window.showNotification(message, type);
+    return;
+  }
+  
+  const notification = document.createElement('div');
+  notification.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white max-w-sm ${
+    type === 'success' ? 'bg-green-500' : 
+    type === 'error' ? 'bg-red-500' : 
+    'bg-blue-500'
+  }`;
+  notification.textContent = message;
+  
+  document.body.appendChild(notification);
+  
+  // Auto remove after 3 seconds
+  setTimeout(() => {
+    if (notification.parentNode) {
+      notification.parentNode.removeChild(notification);
+    }
+  }, 3000);
+}
+</script>
+{% endwith %}
