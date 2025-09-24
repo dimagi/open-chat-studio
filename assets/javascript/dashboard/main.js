@@ -759,21 +759,29 @@ function dashboard() {
                 }
             });
         },
+
         getDynamicFiltersUrl(allSessionsUrl, tagName) {
-            // This method is a temporary workaround to map the dashboard's query filters to dynamic query filters
-            // When the dashboard filters uses dynamic filters, this method can be removed
-            let urlParams = new URLSearchParams();
+            const urlParams = this.buildBaseTagDynamicFilter(tagName);
+            this.addMappedDynamicFilters(urlParams);
+            return `${allSessionsUrl}?${urlParams.toString()}`;
+        },
+
+        buildBaseTagDynamicFilter(tagName) {
+            const urlParams = new URLSearchParams();
             urlParams.append("filter_0_column", "tags");
             urlParams.append("filter_0_value", JSON.stringify([tagName]));
             urlParams.append("filter_0_operator", "any of");
-            const paramMap = {
+            return urlParams;
+        },
+
+        addMappedDynamicFilters(urlParams) {
+            const dynamicFilterParamMapping = {
                 "experiments": "experiment",
                 "participants": "participant",
                 "start_date": "message_date",
                 "end_date": "message_date",
                 "date_range": "message_date",
             };
-            
             let params = this.sanitizeParams(this.filters);
             Object.entries(params).forEach(([key, value], index) => {
                 if (key === "granularity" || key === "tags" || value === "custom" ||key === "participants") {
@@ -783,7 +791,7 @@ function dashboard() {
                 
                 let parsedValue = "";
                 // Map the filter keys to the expected query params in the all sessions view
-                let keyMapped = paramMap[key] || key;
+                let keyMapped = dynamicFilterParamMapping[key] || key;
                 let operator = "any of";
                 if (key === "start_date") {
                     operator = "after";
@@ -804,7 +812,6 @@ function dashboard() {
                 urlParams.append(`filter_${index + 1}_value`, parsedValue);
                 urlParams.append(`filter_${index + 1}_operator`, operator);
             });
-            return allSessionsUrl + "?" + urlParams.toString();
         },
 
         getDayAfter(dateString) {
