@@ -8,7 +8,7 @@ import phonenumbers
 from django import forms
 from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField
-from django.core.validators import RegexValidator
+from django.core.validators import validate_domain_name
 from django.template.loader import render_to_string
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
@@ -565,12 +565,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
     allowed_domains = SimpleArrayField(
         forms.CharField(
             max_length=100,
-            validators=[
-                RegexValidator(
-                    regex=r"^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$",
-                    message="Invalid domain format",
-                )
-            ],
+            validators=[validate_domain_name],
         ),
         delimiter="\n",
         widget=forms.Textarea(
