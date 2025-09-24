@@ -8,7 +8,6 @@ import phonenumbers
 from django import forms
 from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField
-from django.core.validators import validate_domain_name
 from django.template.loader import render_to_string
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
@@ -16,7 +15,7 @@ from telebot import TeleBot, apihelper, types
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.utils import validate_platform_availability
+from apps.channels.utils import validate_domain_or_wildcard, validate_platform_availability
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
@@ -565,7 +564,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
     allowed_domains = SimpleArrayField(
         forms.CharField(
             max_length=100,
-            validators=[validate_domain_name],
+            validators=[validate_domain_or_wildcard],
         ),
         delimiter="\n",
         widget=forms.Textarea(

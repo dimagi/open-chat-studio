@@ -1,5 +1,7 @@
 from urllib.parse import urlparse
 
+from django.core.validators import validate_domain_name
+
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment
@@ -69,3 +71,9 @@ def validate_platform_availability(experiment: Experiment, platform: ChannelPlat
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
     if not available_platforms.get(platform):
         raise ExperimentChannelException("Platform already used or not available.")
+
+
+def validate_domain_or_wildcard(value):
+    """Validate domain name, allowing wildcard subdomains (*.example.com)"""
+    domain_part = value[2:] if value.startswith("*.") else value
+    validate_domain_name(domain_part)
