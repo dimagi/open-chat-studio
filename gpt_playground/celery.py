@@ -3,7 +3,8 @@ import os
 from celery import Celery
 from celery.app import trace
 
-os.environ.setdefault("DJANGO_DATABASE_CONN_MAX_AGE", "10")
+# Use connection pooling
+# os.environ.setdefault("DJANGO_DATABASE_CONN_MAX_AGE", "10")
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
