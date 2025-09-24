@@ -776,7 +776,7 @@ function dashboard() {
             
             let params = this.sanitizeParams(this.filters);
             Object.entries(params).forEach(([key, value], index) => {
-                if (key === "granularity" || key === "tags" || value === "custom") {
+                if (key === "granularity" || key === "tags" || value === "custom" ||key === "participants") {
                     // dynamic filters do not support granularity, and the tags filter is already added
                     return;
                 }
