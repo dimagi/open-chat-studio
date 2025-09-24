@@ -98,7 +98,8 @@ def check_session_access(session, request=None):
             handle_embedded_widget_auth(request, session=session)
             return None  # Access allowed
         except PermissionDenied as e:
-            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+            logger.error(f"Permission denied during embedded widget authentication: {e}")
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
             logger.exception(f"Error during embedded widget authentication. {e}")
             return Response({"error": "Embedded widget authentication failed"}, status=status.HTTP_403_FORBIDDEN)
