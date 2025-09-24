@@ -1,12 +1,13 @@
 import django_tables2 as tables
 from django.conf import settings
 from django.db.models import F
+from django.template.loader import get_template
 from django.urls import reverse
 from django_tables2 import columns
 
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.experiments.tables import ExperimentSessionsTable, _show_chat_button, session_chat_url
-from apps.generics import actions
+from apps.generics import actions, chips
 from apps.generics.actions import chip_action
 from apps.generics.tables import ColumnWithHelp, TimeAgoColumn
 
@@ -79,6 +80,12 @@ def chatbot_url_factory(_, __, record, value):
 
 
 class ChatbotSessionsTable(ExperimentSessionsTable):
+    chatbot = columns.Column(
+        verbose_name="Chatbot",
+        accessor="experiment",
+        orderable=True,
+    )
+
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(
@@ -95,3 +102,17 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
         ],
         align="right",
     )
+
+    def render_chatbot(self, record):
+        template = get_template("generic/chip.html")
+        chatbot = record.experiment
+        chip = chips.Chip(label=str(chatbot), url=chatbot.get_absolute_url())
+        return template.render({"chip": chip})
+
+    class Meta:
+        model = ExperimentSession
+        # Ensure that chatbot is shown first
+        fields = ["chatbot"]
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No sessions yet!"
