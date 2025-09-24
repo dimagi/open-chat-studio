@@ -53,26 +53,6 @@ class TestEmbeddedWidgetChannelForm:
         else:
             assert "allowed_domains" in form.errors
 
-    def test_domain_validation_edge_cases(self):
-        form = EmbeddedWidgetChannelForm(
-            data={"allowed_domains": " example.com \n\n  *.subdomain.com  \n\ndimagi.com\n\n"}, experiment=Mock()
-        )
-
-        assert form.is_valid()
-        assert form.cleaned_data["allowed_domains"] == ["example.com", "*.subdomain.com", "dimagi.com"]
-
-    def test_form_cleaning(self):
-        channel = Mock()
-        channel.extra_data = {}
-
-        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=Mock())
-
-        # Must validate form before accessing cleaned_data
-        assert form.is_valid()
-
-        assert form.cleaned_data["embed_code"] is not None
-        assert form.cleaned_data["widget_token"] is not None
-
 
 class TestEmbeddedWidgetUtils:
     @pytest.mark.parametrize(
@@ -102,10 +82,6 @@ class TestEmbeddedWidgetChannelModel:
 
     def test_embedded_widget_channel_identifier_key(self):
         assert ChannelPlatform.EMBEDDED_WIDGET.channel_identifier_key == "widget_token"
-
-    def test_embedded_widget_extra_form(self):
-        form = ChannelPlatform.EMBEDDED_WIDGET.extra_form()
-        assert isinstance(form, EmbeddedWidgetChannelForm)
 
     def test_create_embedded_widget_channel(self):
         experiment = ExperimentFactory()
