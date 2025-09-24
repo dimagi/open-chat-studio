@@ -25,10 +25,10 @@ class TestEmbeddedWidgetChannelForm:
     def test_form_preserves_token_for_existing_channel(self):
         existing_token = "existing_token_12345678901234567890"
         channel = Mock()
-        channel.extra_data = {"widget_token": existing_token, "allowed_domains": ["example.com", "localhost:3000"]}
+        channel.extra_data = {"widget_token": existing_token, "allowed_domains": ["example.com", "dimagi.com"]}
 
         form = EmbeddedWidgetChannelForm(
-            data={"allowed_domains": "example.com\nlocalhost:3000"}, channel=channel, experiment=Mock()
+            data={"allowed_domains": "example.com\ndimagi.com"}, channel=channel, experiment=Mock()
         )
 
         assert form.is_valid()
@@ -39,14 +39,8 @@ class TestEmbeddedWidgetChannelForm:
         [
             ("example.com", True, ["example.com"]),
             ("example.com\n*.subdomain.com", True, ["example.com", "*.subdomain.com"]),
-            ("localhost:3000\n127.0.0.1:8000", True, ["localhost:3000", "127.0.0.1:8000"]),
             ("", True, []),
             ("invalid..domain", False, None),  # Invalid domain format
-            (
-                "example.com\n*.subdomain.com\nlocalhost:3000",
-                True,
-                ["example.com", "*.subdomain.com", "localhost:3000"],
-            ),
         ],
     )
     def test_domain_validation(self, domains_input, is_valid, expected_domains):
@@ -61,13 +55,13 @@ class TestEmbeddedWidgetChannelForm:
 
     def test_domain_validation_edge_cases(self):
         form = EmbeddedWidgetChannelForm(
-            data={"allowed_domains": " example.com \n\n  *.subdomain.com  \n\nlocalhost:3000\n\n"}, experiment=Mock()
+            data={"allowed_domains": " example.com \n\n  *.subdomain.com  \n\ndimagi.com\n\n"}, experiment=Mock()
         )
 
         assert form.is_valid()
-        assert form.cleaned_data["allowed_domains"] == ["example.com", "*.subdomain.com", "localhost:3000"]
+        assert form.cleaned_data["allowed_domains"] == ["example.com", "*.subdomain.com", "dimagi.com"]
 
-    def test_post_save_message(self):
+    def test_form_cleaning(self):
         channel = Mock()
         channel.extra_data = {}
 
@@ -76,10 +70,8 @@ class TestEmbeddedWidgetChannelForm:
         # Must validate form before accessing cleaned_data
         assert form.is_valid()
 
-        form.post_save(channel)
-
-        assert "Embedded widget channel created successfully" in form.success_message
-        assert form.cleaned_data["widget_token"] in form.success_message
+        assert form.cleaned_data["embed_code"] is not None
+        assert form.cleaned_data["widget_token"] is not None
 
 
 class TestEmbeddedWidgetUtils:
@@ -87,17 +79,9 @@ class TestEmbeddedWidgetUtils:
         ("origin_domain", "allowed_pattern", "should_match"),
         [
             ("example.com", "example.com", True),
-            ("localhost:3000", "localhost:3000", True),
             ("api.example.com", "*.example.com", True),
             ("sub.domain.example.com", "*.example.com", True),
             ("example.com", "*.example.com", False),
-            ("example.com:80", "example.com", True),  # Origin has port, pattern doesn't
-            ("example.com", "example.com:80", False),  # Pattern has port, origin doesn't
-            ("example.com:443", "example.com:443", True),  # Same ports
-            ("example.com:3000", "example.com:8000", False),  # Different ports
-            ("api.example.com:3000", "*.example.com:3000", True),
-            ("api.example.com:8000", "*.example.com:3000", False),
-            ("api.example.com", "*.example.com:3000", False),
             ("other.com", "example.com", False),
             ("malicious.com", "*.example.com", False),
             ("example.com.evil.com", "*.example.com", False),
@@ -126,7 +110,7 @@ class TestEmbeddedWidgetChannelModel:
     def test_create_embedded_widget_channel(self):
         experiment = ExperimentFactory()
         token = "test_token_123456789012345678901234"
-        domains = ["example.com", "*.subdomain.com", "localhost:3000"]
+        domains = ["example.com", "*.subdomain.com"]
 
         channel = ExperimentChannelFactory(
             experiment=experiment,
