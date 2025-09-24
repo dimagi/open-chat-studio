@@ -796,11 +796,11 @@ function dashboard() {
                 if (key === "start_date") {
                     operator = "after";
                     // To account for filter mismatches, we add one day to the start date
-                    parsedValue = this.getDayAfter(value); // keep date as string
+                    parsedValue = this.shiftDay(value, -1); // keep date as string
                 } else if (key === "end_date") {
                     operator = "before";
                     // To account for filter mismatches, we add one day to the end date
-                    parsedValue = this.getDayAfter(value); // keep date as string
+                    parsedValue = this.shiftDay(value, 1); // keep date as string
                 } else if (key === "date_range") {
                     operator = "range";
                     parsedValue = value + "d";
@@ -814,9 +814,9 @@ function dashboard() {
             });
         },
 
-        getDayAfter(dateString) {
-            let date = new Date(dateString);
-            date.setDate(date.getDate() + 1);
+        shiftDay(dateString, amount) {
+            let date = new Date(dateString + 'T00:00:00.000Z');
+            date.setUTCDate(date.getUTCDate() + amount);
             return date.toISOString().split('T')[0];
         },
 
