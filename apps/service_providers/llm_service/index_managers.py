@@ -229,6 +229,8 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
     def delete_files(self, files: list[File]):
         """A convenience method to delete a files from the remote service"""
         for file in files:
+            if not file.external_id:
+                continue
             with contextlib.suppress(openai.NotFoundError):
                 self.client.files.delete(file.external_id)
 

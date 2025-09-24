@@ -114,11 +114,17 @@
     <hr class="my-2">
   {% endif %}
 
+    {% if use_dynamic_filters %}
+    <div id="data-table">
+      {% include "table/table_placeholder.html" %}
+    </div>
+    {% else %}
     <div id="data-table">
       <div hx-get="{{ table_url }}{% querystring %}"
         hx-trigger="load" hx-swap="outerHTML">
       {% include "table/table_placeholder.html" %}
     </div>
+    {% endif %}
   </div>
 </div>
 

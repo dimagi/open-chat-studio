@@ -15,6 +15,16 @@
       <i class="fas fa-comments"></i>
       {% translate "Chatbots" %}
     </a>
+    {% if perms.experiments.view_experimentsession %}
+      <ul>
+          <li>
+            <a href="{% url 'chatbots:all_sessions_home' request.team.slug %}" {% if active_tab == 'all_sessions' %}class="menu-active"{% endif %}>
+              <i class="fa fa-users" aria-hidden="true"></i>
+              {% translate "All sessions" %}
+            </a>
+          </li>
+      </ul>
+    {% endif %}
     {% flag "flag_tracing" %}
       {% if perms.trace.view_trace %}
         <ul>

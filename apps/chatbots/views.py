@@ -1,5 +1,4 @@
 import uuid
-from datetime import timedelta
 
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -7,8 +6,8 @@ from django.db.models import Count, F, Max, Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
+from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
@@ -19,6 +18,10 @@ from apps.chat.channels import WebChannel
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
+from apps.experiments.filters import (
+    ExperimentSessionFilter,
+    get_filter_context_data,
+)
 from apps.experiments.models import Experiment, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
@@ -36,7 +39,8 @@ from apps.experiments.views.experiment import (
     version_create_status,
 )
 from apps.generics import actions
-from apps.generics.views import generic_home, paginate_session, render_session_details
+from apps.generics.help import render_help_with_link
+from apps.generics.views import paginate_session, render_session_details
 from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required, team_required
@@ -148,7 +152,7 @@ def chatbots_home(request, team_slug: str):
             },
         )
     ]
-    return generic_home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_, load_trend_modules=True)
+    return home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_)
 
 
 class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -165,31 +169,12 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return table
 
     def get_queryset(self):
-        end_date = timezone.now()
-        start_date = end_date - timedelta(days=30)
         query_set = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
-            .annotate(session_count=Count("sessions"))
-            .annotate(
-                participant_count=Count(
-                    "sessions__participant",
-                    filter=Q(
-                        sessions__chat__messages__created_at__gte=start_date,
-                        sessions__chat__messages__created_at__lte=end_date,
-                    ),
-                    distinct=True,
-                )
-            )
-            .annotate(
-                messages_count=Count(
-                    "sessions__chat__messages",
-                    filter=Q(
-                        sessions__chat__messages__created_at__gte=start_date,
-                        sessions__chat__messages__created_at__lte=end_date,
-                    ),
-                )
-            )
+            .annotate(session_count=Count("sessions", distinct=True))
+            .annotate(participant_count=Count("sessions__participant", distinct=True))
+            .annotate(messages_count=Count("sessions__chat__messages", distinct=True))
             .annotate(last_message=Max("sessions__chat__messages__created_at"))
             .order_by(F("last_message").desc(nulls_last=True))
         )
@@ -325,6 +310,15 @@ def chatbot_version_create_status(
 class ChatbotSessionsTableView(ExperimentSessionsTableView):
     table_class = ChatbotSessionsTable
 
+    def get_table(self, **kwargs):
+        """
+        When viewing sessions for a specific chatbot, hide the chatbot column
+        """
+        table = super().get_table(**kwargs)
+        if self.kwargs.get("experiment_id"):
+            table.exclude = ("chatbot",)
+        return table
+
 
 @experiment_session_view()
 @verify_session_access_cookie
@@ -422,3 +416,67 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
     else:
         experiment_id = kwargs["pk"]
         return single_chatbot_home(request, team_slug, experiment_id)
+
+
+def home(
+    request,
+    team_slug: str,
+    title: str,
+    table_url_name: str,
+    actions=None,
+    show_modal_or_banner=False,
+):
+    """
+    Renders the home page for chatbots with the given parameters.
+
+    Arguments:
+        request: The current request.
+        team_slug: The slug of the team.
+        title: The title of the page.
+        table_url_name: The url name of the table.
+        actions: List of `apps.generics.actions.Action` objects to display in the title.
+        show_modal_or_banner: Temporary flag for experiment deprecation notice.
+    """
+    help_text_keys = {
+        "Experiments": "experiment",
+        "Chatbots": "chatbots",
+    }
+    help_key = help_text_keys.get(title, title.lower())  # Default to lowercase if missing
+    return TemplateResponse(
+        request,
+        "chatbots/home.html",
+        {
+            "active_tab": title.lower(),
+            "title": title,
+            "title_help_content": render_help_with_link("", help_key),
+            "table_url": reverse(table_url_name, args=[team_slug]),
+            "enable_search": True,
+            "toggle_archived": True,
+            "show_modal_or_banner": show_modal_or_banner,
+            "actions": actions,
+        },
+    )
+
+
+class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    template_name = "generic/object_home.html"
+    permission_required = "experiments.view_experimentsession"
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        table_url = reverse("chatbots:all_sessions_list", kwargs={"team_slug": team_slug})
+        filter_context = get_filter_context_data(
+            team=self.request.team,
+            columns=ExperimentSessionFilter.columns(self.request.team),
+            date_range_column="last_message",
+            table_url=table_url,
+            table_container_id="data-table",
+        )
+
+        return {
+            "active_tab": "all_sessions",
+            "title": "All Sessions",
+            "allow_new": False,
+            "table_url": table_url,
+            "use_dynamic_filters": True,
+            **filter_context,
+        }
