@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from apps.assistants.models import OpenAiAssistant
     from apps.pipelines.models import Node
 
+logger = logging.getLogger("ocs.tools")
 
 OCS_CITATION_PATTERN = r"<CIT\s+(?P<file_id>\d+)\s*/>"
 
@@ -117,8 +118,8 @@ class CustomBaseTool(BaseTool):
             return "I am unable to do this"
         try:
             return self.action(*args, **kwargs)
-        except Exception as e:
-            logging.exception(e)
+        except Exception:
+            logger.exception("Error executing tool: %s", self.name)
             return "Something went wrong"
 
     async def _arun(self, *args, **kwargs) -> str:
@@ -501,7 +502,7 @@ def create_schedule_message(
             return "Success: scheduled message created"
         except Experiment.DoesNotExist:
             return "Could not create scheduled message"
-    logging.exception(f"Could not create one-off reminder. Form errors: {form.errors}")
+    logger.exception(f"Could not create one-off reminder. Form errors: {form.errors}")
     return "Could not create scheduled message"
 
 
