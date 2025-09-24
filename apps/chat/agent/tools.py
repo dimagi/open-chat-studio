@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from apps.assistants.models import OpenAiAssistant
     from apps.pipelines.models import Node
 
-logger = logging.getLogger("ocs.debug")
+logger = logging.getLogger("ocs.tools")
 
 OCS_CITATION_PATTERN = r"<CIT\s+(?P<file_id>\d+)\s*/>"
 
