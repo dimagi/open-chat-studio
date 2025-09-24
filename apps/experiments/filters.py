@@ -141,6 +141,7 @@ class ExperimentSessionFilter(MultiColumnFilter):
         ParticipantFilter(),
         TimestampFilter(label="Last Message", column="last_message_created_at", query_param="last_message"),
         TimestampFilter(label="First Message", column="first_message_created_at", query_param="first_message"),
+        TimestampFilter(label="Message Date", column="chat__messages__created_at", query_param="message_date"),
         ChatMessageTagsFilter(),
         VersionsFilter(),
         ChannelsFilter(),
