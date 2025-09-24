@@ -578,6 +578,10 @@ LOGGING = {
         "console": {"class": "logging.StreamHandler", "formatter": "verbose"},
     },
     "loggers": {
+        "": {  # Root logger
+            "handlers": ["console"],
+            "level": "WARN",
+        },
         "django": {
             "handlers": ["console"],
             "level": env("DJANGO_LOG_LEVEL", default="INFO"),
