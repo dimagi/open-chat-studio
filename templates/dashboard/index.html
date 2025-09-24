@@ -371,7 +371,7 @@
               <h4 class="tag-category-title" x-text="category"></h4>
               <div class="tag-list">
                 <template x-for="[tagName, count] in Object.entries(tags)" :key="tagName">
-                  <a :href="getAllSessionsUrl('{% url 'chatbots:all_sessions_home' team_slug=request.team.slug %}', tagName)">
+                  <a :href="getDynamicFiltersUrl('{% url 'chatbots:all_sessions_home' team_slug=request.team.slug %}', tagName)">
                     <div class="tag-item">
                       <span class="tag-name" x-text="tagName"></span>
                       <span class="tag-count" x-text="count"></span>

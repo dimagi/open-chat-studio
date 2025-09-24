@@ -204,7 +204,7 @@ function dashboard() {
         updateURL() {
             const url = new URL(window.location);
             const params = new URLSearchParams();
-
+            
             // Add filters to URL params
             for (const [key, value] of Object.entries(this.filters)) {
                 if (value && value !== '' && !(Array.isArray(value) && value.length === 0)) {
@@ -759,12 +759,49 @@ function dashboard() {
                 }
             });
         },
-        getAllSessionsUrl(allSessionsUrl, tagName) {
-            // Returns the url to the view listing all sessions, filtered by the given tag
+        getDynamicFiltersUrl(allSessionsUrl, tagName) {
+            // This method is a temporary workaround to map the dashboard's query filters to dynamic query filters
+            // When the dashboard filters uses dynamic filters, this method can be removed
             let urlParams = new URLSearchParams();
             urlParams.append("filter_0_column", "tags");
             urlParams.append("filter_0_value", JSON.stringify([tagName]));
             urlParams.append("filter_0_operator", "any of");
+            const paramMap = {
+                "experiments": "experiment",
+                "participants": "participant",
+                "start_date": "message_date",
+                "end_date": "message_date",
+                "date_range": "message_date",
+            };
+            
+            let params = this.sanitizeParams(this.filters);
+            Object.entries(params).forEach(([key, value], index) => {
+                if (key === "granularity" || key === "tags") {
+                    // dynamic filters do not support granularity, and the tags filter is already added
+                    return;
+                }
+                
+                let parsedValue = "";
+                // Map the filter keys to the expected query params in the all sessions view
+                let keyMapped = paramMap[key] || key;
+                let operator = "any of";
+                if (key === "start_date") {
+                    operator = "after";
+                    parsedValue = value; // keep date as string
+                } else if (key === "end_date") {
+                    operator = "before";
+                    parsedValue = value; // keep date as string
+                } else if (key === "date_range") {
+                    operator = "range";
+                    parsedValue = value + "d";
+                } else {
+                    // Non-date fields expects array values
+                    parsedValue = JSON.stringify((Array.isArray(value) ? value : [value]))
+                }
+                urlParams.append(`filter_${index + 1}_column`, keyMapped);
+                urlParams.append(`filter_${index + 1}_value`, parsedValue);
+                urlParams.append(`filter_${index + 1}_operator`, operator);
+            });
             return allSessionsUrl + "?" + urlParams.toString();
         },
         // Cleanup
