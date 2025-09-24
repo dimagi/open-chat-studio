@@ -1,5 +1,4 @@
 import pathlib
-import uuid
 
 from django.conf import settings
 from django.http import Http404
@@ -63,14 +62,11 @@ def check_experiment_access(experiment, participant_id):
 
 def get_or_generate_participant_id(request):
     """
-    Extract participant remote ID from request data or generate a new one for anonymous users.
+    Extract participant remote ID from request data or return None
     """
     participant_remote_id = None
     if hasattr(request, "data") and request.data:
         participant_remote_id = request.data.get("participant_remote_id")
-
-    if not participant_remote_id:
-        participant_remote_id = f"embed_{uuid.uuid4()}"
 
     return participant_remote_id
 
@@ -262,11 +258,9 @@ def chat_start_session(request):
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
-
+    experiment_channel = None
     try:
-        is_embedded, experiment_channel, embed_participant_id = handle_embedded_widget_auth(
-            request, experiment_id=experiment_id
-        )
+        experiment_channel = handle_embedded_widget_auth(request, experiment_id=experiment_id)
     except PermissionDenied as e:
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
@@ -280,9 +274,9 @@ def chat_start_session(request):
 
     team = experiment.team
 
-    if is_embedded:
+    if experiment_channel:
         user = None
-        participant_id = remote_id if remote_id else embed_participant_id
+        participant_id = remote_id if remote_id else get_or_generate_participant_id(request)
         platform = ChannelPlatform.EMBEDDED_WIDGET
         api_channel = experiment_channel
         # Skip public API access checks for embedded widgets
@@ -317,7 +311,7 @@ def chat_start_session(request):
         )
     else:
         participant = Participant.create_anonymous(team, platform, remote_id)
-        if is_embedded:
+        if experiment_channel:
             participant.identifier = participant_id
             participant.save(update_fields=["identifier"])
 
@@ -337,7 +331,7 @@ def chat_start_session(request):
             participant_data.save(update_fields=["data"])
 
     metadata = {Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)}
-    if is_embedded:
+    if experiment_channel:
         metadata["embedded_widget"] = True
         metadata["origin_domain"] = extract_domain_from_headers(request)
 
