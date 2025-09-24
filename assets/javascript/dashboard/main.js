@@ -759,7 +759,14 @@ function dashboard() {
                 }
             });
         },
-        
+        getAllSessionsUrl(allSessionsUrl, tagName) {
+            // Returns the url to the view listing all sessions, filtered by the given tag
+            let urlParams = new URLSearchParams();
+            urlParams.append("filter_0_column", "tags");
+            urlParams.append("filter_0_value", JSON.stringify([tagName]));
+            urlParams.append("filter_0_operator", "any of");
+            return allSessionsUrl + "?" + urlParams.toString();
+        },
         // Cleanup
         destroy() {
             if (this.refreshTimeout) {
