@@ -3,6 +3,18 @@
 <div class="my-3">
   <div class="relative">
     <div class="flex items-center gap-1">
+      <!-- Refresh button -->
+      <button class="btn btn-ghost btn-sm"
+              hx-get="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
+              hx-target="#sessions-table"
+              hx-swap="innerHTML"
+              hx-indicator="#refresh-loader"
+              hx-disabled-elt="this"
+              title="Refresh sessions">
+        <i class="fa-solid fa-rotate htmx-hide"></i>
+      </button>
+      <span class="loading loading-spinner loading-sm htmx-indicator htmx-show" id="refresh-loader"></span>
+      
       {% if perms.experiments.download_chats %}
         {% include "experiments/components/exports.html" %}
       {% endif %}

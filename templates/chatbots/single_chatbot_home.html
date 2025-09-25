@@ -146,19 +146,6 @@
     {% if perms.chat.view_chat %}
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="relative">
-          <!-- Sessions table refresh button -->
-          <div class="flex items-center justify-between mb-3">
-            <div class="flex items-center gap-2">
-              <button type="button" 
-                      onclick="refreshSessionsTable()" 
-                      class="btn btn-square btn-sm btn-ghost" 
-                      title="Refresh sessions table">
-                <i class="fa-solid fa-refresh" id="sessions-refresh-icon"></i>
-              </button>
-              <span class="text-sm text-gray-600">Sessions</span>
-            </div>
-          </div>
-          
           {% include "chatbots/components/session_table_actions.html" %}
 
           <div id="sessions-table">
@@ -233,23 +220,6 @@
         });
       });
       window.addEventListener('hashchange', selectTabFromHash);
-      
-      // Function to refresh the sessions table
-      function refreshSessionsTable() {
-        const refreshIcon = document.getElementById('sessions-refresh-icon');
-        const sessionsTable = document.getElementById('sessions-table');
-        
-        // Add spinning animation
-        refreshIcon.classList.add('fa-spin');
-        
-        // Trigger HTMX refresh
-        htmx.trigger(sessionsTable, 'refresh');
-        
-        // Remove spinning animation after a delay
-        setTimeout(() => {
-          refreshIcon.classList.remove('fa-spin');
-        }, 1000);
-      }
     </script>
   </div>
 {% endblock app %}
