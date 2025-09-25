@@ -169,3 +169,19 @@ def test_get_team_evaluations_channel(team_with_users):
     # Should return the same channel on subsequent calls
     channel2 = ExperimentChannel.objects.get_team_evaluations_channel(team)
     assert channel.id == channel2.id
+
+
+class TestChannelPlatform:
+    def test_normalize_identifier(self):
+        identifier = "abc"
+        for platform in ChannelPlatform:
+            normalized_id = platform.normalize_identifier(identifier)
+            assert normalized_id == "abc"
+
+        identifier = "ABC"
+        for platform in ChannelPlatform:
+            normalized_id = platform.normalize_identifier(identifier)
+            if platform == ChannelPlatform.COMMCARE_CONNECT:
+                assert normalized_id == "abc"
+            else:
+                assert normalized_id == "ABC"

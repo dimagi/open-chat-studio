@@ -93,10 +93,7 @@ def _update_participant_data(request):
     platform = serializer.data["platform"]
     team = request.team
 
-    if platform == ChannelPlatform.COMMCARE_CONNECT:
-        # CommCare Connect IDs are case insensitive, so we store them in lowercase
-        identifier = identifier.lower()
-
+    identifier = ChannelPlatform(platform).normalize_identifier(identifier)
     participant, _ = Participant.objects.get_or_create(identifier=identifier, team=team, platform=platform)
 
     # Update the participant's name if provided

@@ -122,6 +122,13 @@ class ChannelPlatform(models.TextChoices):
         platforms_with_labels.append(cls.EVALUATIONS.label)
         return sorted(platforms_with_labels)
 
+    def normalize_identifier(self, identifier: str) -> str:
+        """Normalize the identifier for storage and comparison purposes"""
+        match self:
+            case self.COMMCARE_CONNECT:
+                return identifier.lower()
+        return identifier
+
 
 class ExperimentChannelObjectManager(AuditingManager):
     def filter_extras(self, team_slug: str, platform: ChannelPlatform, key: str, value: str):
