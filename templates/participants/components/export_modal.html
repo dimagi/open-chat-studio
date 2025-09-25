@@ -1,0 +1,21 @@
+{% load form_tags %}
+<dialog id="{{ modal_id }}" class="modal" x-data="{ buttonDisabled: false }">
+  <div class="modal-box">
+    <h3 class="text-lg font-bold">{{ modal_title }}</h3>
+    <form id="participant_export_form" method="post" class="my-2" action="{{ action_url }}"
+          x-on:submit.debounce="buttonDisabled = true">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% render_form_fields form %}
+    </form>
+    <div class="modal-action">
+       <span x-show="buttonDisabled" x-cloak class="loading loading-spinner loading-xs"></span>
+      <button type="submit" form="participant_export_form" class="btn btn-primary" :disabled="buttonDisabled">
+        Export data
+      </button>
+      <form method="dialog">
+        <button class="btn">Close</button>
+      </form>
+    </div>
+  </div>
+</dialog>

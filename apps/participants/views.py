@@ -3,7 +3,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -11,7 +11,7 @@ from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
-from apps.participants.forms import ParticipantForm, ParticipantImportForm
+from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -54,7 +54,18 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
                     icon_class="fa-solid fa-file-import",
                     title="Import participants",
                     required_permissions=IMPORT_PERMISSIONS,
-                )
+                ),
+                actions.ModalAction(
+                    "participants:export",
+                    label="Export",
+                    icon_class="fa-solid fa-download",
+                    required_permissions=["experiments.view_participant", "experiments.view_participantdata"],
+                    modal_template="participants/components/export_modal.html",
+                    modal_context={
+                        "form": ParticipantExportForm(team=self.request.team),
+                        "modal_title": "Export Participant Data",
+                    },
+                ),
             ],
             **filter_context,
         }
@@ -248,3 +259,13 @@ def import_participants(request, team_slug: str):
                 messages.error(request, f"Import failed: {str(e)}")
 
     return render(request, "participants/participant_import.html", {"form": form, "import_results": import_results})
+
+
+@permission_required(["experiments.view_participant", "experiments.view_participantdata"])
+@login_and_team_required
+def export_participants(request, team_slug: str):
+    form = ParticipantImportForm(request.POST, request.FILES, team=request.team)
+    if form.is_valid():
+        # export data
+        pass
+    return HttpResponse()
