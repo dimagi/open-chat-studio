@@ -110,7 +110,14 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     }
 
     def get_form_kwargs(self):
-        return {**super().get_form_kwargs(), "team": self.request.team}
+        kwargs = super().get_form_kwargs()
+        kwargs["team"] = self.request.team
+
+        # Pass current filter parameters to the form
+        kwargs["filter_params"] = FilterParams.from_request(self.request)
+        kwargs["timezone"] = self.request.session.get("detected_tz", None)
+
+        return kwargs
 
     def get_initial(self):
         """Support filters from experiment session list via URL parameters."""

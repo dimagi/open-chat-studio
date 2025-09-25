@@ -5,7 +5,7 @@
 
 {% block form %}
   {{ form.non_field_errors }}
-  {% render_form_fields form "name" "mode" "session_ids" "messages_json" "column_mapping" "csv_data" %}
+  {% render_form_fields form "name" "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_data" %}
   <div x-data="datasetBuilder()" x-init="init()">
     <div x-show="!loaded" class="text-center py-8">
       <i class="fa-solid fa-spinner fa-spin fa-2x text-primary"></i>
@@ -308,6 +308,7 @@
         loaded: false,
         mode: 'clone',
         selectedSessionIds: [],
+        filteredSessionIds: [],
         messages: [],
         messagesJsonString: '[]',
         showError: false,
@@ -351,6 +352,13 @@
             this.selectedSessionIds = preselected.split(',').filter(id => id.trim());
           }
           this.updateSessionHiddenField();
+
+          // Initialize filtered session selection
+          const preselectedFiltered = document.querySelector('input[name="filtered_session_ids"]').value;
+          if (preselectedFiltered) {
+            this.filteredSessionIds = preselectedFiltered.split(',').filter(id => id.trim());
+          }
+          this.updateFilteredSessionHiddenField();
 
           // Initialize messages for manual mode
           const messagesData = document.querySelector('input[name="messages_json"]').value;
@@ -398,7 +406,7 @@
           this.errorMessage = '';
 
           if (this.mode === 'clone') {
-            if (this.selectedSessionIds.length === 0) {
+            if (this.selectedSessionIds.length + this.filteredSessionIds.length === 0) {
               e.preventDefault();
               this.showError = true;
               this.errorMessage = 'Please select at least one session to create the dataset.';
@@ -490,6 +498,32 @@
         updateSessionHiddenField() {
           const hiddenField = document.querySelector('input[name="session_ids"]');
           hiddenField.value = this.selectedSessionIds.join(',');
+        },
+
+        // Filtered session methods (for per-session filtering)
+        updateFilteredSessions() {
+          const checkboxes = document.querySelectorAll('.filter-checkbox:checked');
+          const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
+          const allCurrentPageCheckboxes = document.querySelectorAll('.filter-checkbox');
+          const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
+
+          // Remove current page sessions from filtered list, then add back checked ones
+          this.filteredSessionIds = this.filteredSessionIds.filter(id =>
+            !currentPageSessionIds.includes(id) || currentPageSelections.includes(id)
+          );
+
+          currentPageSelections.forEach(id => {
+            if (!this.filteredSessionIds.includes(id)) {
+              this.filteredSessionIds.push(id);
+            }
+          });
+
+          this.updateFilteredSessionHiddenField();
+        },
+
+        updateFilteredSessionHiddenField() {
+          const hiddenField = document.querySelector('input[name="filtered_session_ids"]');
+          hiddenField.value = this.filteredSessionIds.join(',');
         },
 
         // Manual message methods (for manual mode)
@@ -851,10 +885,29 @@
       });
     }
 
+    function restoreFilteredCheckboxStates() {
+      const filteredHiddenField = document.querySelector('input[name="filtered_session_ids"]');
+      if (!filteredHiddenField) return;
+
+      const filteredIds = filteredHiddenField.value ? filteredHiddenField.value.split(',').filter(id => id.trim()) : [];
+
+      document.querySelectorAll('.filter-checkbox').forEach(cb => {
+        cb.checked = false;
+      });
+
+      filteredIds.forEach(sessionId => {
+        const checkbox = document.querySelector(`.filter-checkbox[value="${sessionId}"]`);
+        if (checkbox) {
+          checkbox.checked = true;
+        }
+      });
+    }
+
     document.addEventListener('htmx:afterSettle', function(event) {
       if (event.target.id === 'sessions-table') {
         setTimeout(() => {
           restoreCheckboxStates();
+          restoreFilteredCheckboxStates();
         }, 10);
       }
     });
@@ -863,6 +916,7 @@
       if (event.target.id === 'sessions-table') {
         setTimeout(() => {
           restoreCheckboxStates();
+          restoreFilteredCheckboxStates();
         }, 10);
       }
     });

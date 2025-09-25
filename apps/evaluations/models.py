@@ -13,6 +13,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.evaluations.utils import make_message_pairs_from_queryset
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
@@ -97,11 +98,15 @@ class EvaluationMessage(BaseModel):
         return f"{input_role}: {input_content}, {output_role}: {output_content}"
 
     @classmethod
-    def create_from_sessions(cls, team: Team, external_session_ids) -> list[Self]:
+    def create_from_sessions(
+        cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None
+    ) -> list[Self]:
+        from apps.experiments.filters import ChatMessageFilter
+
         new_messages = []
-        all_messages = (
+        all_messages = []
+        base_queryset = (
             ChatMessage.objects.filter(
-                chat__experiment_session__external_id__in=external_session_ids,
                 chat__experiment_session__team=team,
             )
             .select_related(
@@ -111,8 +116,22 @@ class EvaluationMessage(BaseModel):
             )
             .prefetch_related("comments", "tags")
             .order_by("chat__experiment_session__created_at", "created_at")
-            .all()
         )
+        if external_session_ids:
+            regular_messages = base_queryset.filter(chat__experiment_session__external_id__in=external_session_ids)
+            all_messages.extend(list(regular_messages))
+
+        if filtered_session_ids and filter_params:
+            filtered_messages = base_queryset.filter(chat__experiment_session__external_id__in=filtered_session_ids)
+            message_filter = ChatMessageFilter()
+            filtered_messages = message_filter.apply(filtered_messages, filter_params, timezone)
+            message_pairs = make_message_pairs_from_queryset(
+                filtered_messages
+            )  # Add in extra messages that were filtered out
+            all_messages.extend(message_pairs)
+
+        # Sort all messages by session creation and message creation time
+        all_messages.sort(key=lambda msg: (msg.chat.experiment_session.created_at, msg.created_at))
 
         def _add_additional_context(msg, existing_context):
             if comments := list(msg.comments.all()):

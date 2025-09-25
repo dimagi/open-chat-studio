@@ -5,6 +5,7 @@ from apps.chat.models import ChatMessageType
 from apps.evaluations.models import EvaluationMessage, ExperimentVersionSelection
 from apps.utils.factories.evaluations import EvaluationConfigFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory, ExperimentSessionFactory
+from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
 
 
 @pytest.mark.django_db()
@@ -165,3 +166,123 @@ def test_get_generation_experiment_version_no_base_experiment():
         version_selection_type=ExperimentVersionSelection.LATEST_WORKING,
     )
     assert config.get_generation_experiment_version() is None
+
+
+@pytest.mark.django_db()
+def test_create_from_sessions_with_filtered_sessions_only():
+    """Test cloning only filtered messages from sessions."""
+    session_1 = ExperimentSessionFactory()
+    team = session_1.team
+
+    # Create messages with different ratings
+    human_msg1 = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
+    human_msg1.add_rating("+1")  # This will be filtered
+    ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
+
+    human_msg2 = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message2 human", chat=session_1.chat)
+    human_msg2.add_rating("-1")  # This will be filtered out
+    ChatMessageFactory(message_type=ChatMessageType.AI, content="message2 ai", chat=session_1.chat)
+
+    # Create filter params to only include +1 rated messages
+    filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
+
+    eval_messages = EvaluationMessage.create_from_sessions(
+        team=team,
+        external_session_ids=[],
+        filtered_session_ids=[session_1.external_id],
+        filter_params=filter_params,
+        timezone=None,
+    )
+
+    # Should only get the message pair with +1 rating
+    assert len(eval_messages) == 1
+    assert eval_messages[0].input == {"content": "message1 human", "role": "human"}
+    assert eval_messages[0].output == {"content": "message1 ai", "role": "ai"}
+
+
+@pytest.mark.django_db()
+def test_create_from_sessions_mixed_regular_and_filtered():
+    """Test combining regular sessions (all messages) with filtered sessions."""
+    session_1 = ExperimentSessionFactory()
+    session_2 = ExperimentSessionFactory(team=session_1.team)
+    team = session_1.team
+
+    # Session 1: Regular session - all messages should be included
+    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat)
+    ChatMessageFactory(message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat)
+
+    # Session 2: Filtered session - only +1 rated messages should be included
+    human_msg1 = ChatMessageFactory(
+        message_type=ChatMessageType.HUMAN, content="session2 message1 human", chat=session_2.chat
+    )
+    human_msg1.add_rating("+1")  # This will be included
+    ChatMessageFactory(
+        message_type=ChatMessageType.AI, content="session2 message1 ai", chat=session_2.chat
+    )  # This will also be included
+    ChatMessageFactory(
+        message_type=ChatMessageType.HUMAN, content="session2 message1 human", chat=session_2.chat
+    )  # This won't be included
+
+    human_msg3 = ChatMessageFactory(
+        message_type=ChatMessageType.HUMAN, content="session2 message2 human", chat=session_2.chat
+    )
+    human_msg3.add_rating("-1")  # This won't be incldued
+    ChatMessageFactory(message_type=ChatMessageType.AI, content="session2 message2 ai", chat=session_2.chat)
+
+    # Create filter params to only include +1 rated messages
+    filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
+
+    eval_messages = EvaluationMessage.create_from_sessions(
+        team=team,
+        external_session_ids=[session_1.external_id],
+        filtered_session_ids=[session_2.external_id],
+        filter_params=filter_params,
+        timezone=None,
+    )
+
+    # Should get: 1 from session_1 (regular) + 1 from session_2 (filtered)
+    assert len(eval_messages) == 2
+
+    # Sort by session external_id to ensure consistent ordering for assertions
+    eval_messages.sort(key=lambda msg: msg.metadata.get("session_id", ""))
+
+    assert eval_messages[0].input == {"content": "session1 message1 human", "role": "human"}
+    assert eval_messages[0].output == {"content": "session1 message1 ai", "role": "ai"}
+
+    assert eval_messages[1].input == {"content": "session2 message1 human", "role": "human"}
+    assert eval_messages[1].output == {"content": "session2 message1 ai", "role": "ai"}
+
+
+@pytest.mark.django_db()
+def test_create_from_sessions_no_filter_params():
+    """Test that filtered sessions are ignored when no filter params provided."""
+    session_1 = ExperimentSessionFactory()
+    team = session_1.team
+
+    # Create messages
+    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
+    ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
+
+    eval_messages = EvaluationMessage.create_from_sessions(
+        team=team,
+        external_session_ids=[],
+        filtered_session_ids=[session_1.external_id],
+        filter_params=None,  # No filter params
+        timezone=None,
+    )
+
+    # Should get no messages since filtered sessions are ignored without filter params
+    assert len(eval_messages) == 0
+
+
+@pytest.mark.django_db()
+def test_create_from_sessions_empty_sessions():
+    """Test behavior with empty session lists."""
+    session_1 = ExperimentSessionFactory()
+    team = session_1.team
+
+    eval_messages = EvaluationMessage.create_from_sessions(
+        team=team, external_session_ids=[], filtered_session_ids=[], filter_params=None, timezone=None
+    )
+
+    assert len(eval_messages) == 0
