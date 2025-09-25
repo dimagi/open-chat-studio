@@ -777,14 +777,13 @@ function dashboard() {
         addMappedDynamicFilters(urlParams) {
             const dynamicFilterParamMapping = {
                 "experiments": "experiment",
-                "participants": "participant",
                 "start_date": "message_date",
                 "end_date": "message_date",
                 "date_range": "message_date",
             };
             let params = this.sanitizeParams(this.filters);
             Object.entries(params).forEach(([key, value], index) => {
-                if (key === "granularity" || key === "tags" || value === "custom" ||key === "participants") {
+                if (key === "granularity" || key === "tags" || value === "custom" || key === "participants") {
                     // dynamic filters do not support granularity, and the tags filter is already added
                     return;
                 }
