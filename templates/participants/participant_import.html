@@ -5,8 +5,22 @@
 {% block app %}
   <div class="app-card">
     <h1 class="pg-title">Import Participants</h1>
+    <div class="mb-4">
+      <h3>CSV Format</h3>
+      <p>Your CSV file should have the following columns:</p>
+      <ul>
+        <li><strong>identifier</strong> (required) - Unique identifier for the participant (e.g., email address)</li>
+        <li><strong>platform</strong> (required) - Platform type (web, telegram, whatsapp, etc.)</li>
+        <li><strong>name</strong> (optional) - Display name for the participant</li>
+        <li><strong>data.*</strong> (optional) - Custom data fields (e.g., data.age, data.preferences)</li>
+      </ul>
+      <p><strong>Example:</strong></p>
+      <pre>identifier,platform,name,data.age,data.location
+user@example.com,web,John Doe,25,New York
++1234567890,whatsapp,Jane Smith,30,"{""city"":""London"",""country"":""UK""}"</pre>
+    </div>
     <div>
-      <form method="post" class="my-2">
+      <form method="post" enctype="multipart/form-data" class="my-2">
         {% csrf_token %}
         {{ form.non_field_errors }}
         {% render_form_fields form %}
