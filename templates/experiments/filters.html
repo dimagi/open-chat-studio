@@ -1,3 +1,4 @@
+{% with table_type=table_type|default:"sessions" %}
 <div x-data="filterComponent" @click.outside="filterData.showFilters = false" class="relative">
   <!-- Filter Button -->
   <div class="flex items-center">
@@ -188,6 +189,19 @@
       <!-- Add Filter Button -->
       <button type="button" @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
     </div>
+    
+    <!-- Starred Filters as Small Tabs -->
+    <div class="mt-4">
+      <div class="flex items-center gap-2">
+        <div class="w-4 h-px bg-base-300"></div>
+        <div class="w-2 h-2 bg-base-300 rounded-full"></div>
+      </div>
+      <div id="starredFiltersList" class="flex flex-wrap gap-2 mt-2">
+        <div class="flex justify-center items-center p-2">
+          <span class="loading loading-spinner loading-xs"></span>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -248,6 +262,10 @@
         });
 
         this.loadFiltersFromUrl();
+
+        // Default filters set by user or team
+        this.loadDefaultFilters();
+
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {
           this.triggerFilterChange(false); // Don't update URL again since we just loaded from it
@@ -285,8 +303,11 @@
 
       toggleFilters() {
         this.filterData.showFilters = !this.filterData.showFilters;
-        if (this.filterData.showFilters && this.filterData.filters.length === 0) {
-          this.addFilter();
+        if (this.filterData.showFilters) {
+          this.loadStarredFilters();
+          if (this.filterData.filters.length === 0) {
+            this.addFilter();
+          }
         }
       },
 
@@ -602,6 +623,152 @@
         const selected = this.dateRangeOptions.find(opt => opt.value === value);
         this.selectedLabel = selected ? selected.label : '';
       },
+
+      loadStarredFilters() {
+        try {
+          const storeKey = 'savedFilters{{ table_type|default:"sessions"|title }}';
+          const store = Alpine.store(storeKey);
+          
+          if (store && store.items) {
+            const starredFilters = store.items.filter(fs => fs.is_starred);
+            this.displayStarredFilters(starredFilters);
+          } else {
+            // Fallback: if store doesn't exist yet, load it first
+              this.displayStarredFilters([]);
+          }
+        } catch (error) {
+          console.error('Failed to load starred filters from store:', error);
+          this.displayStarredFilters([]);
+        }
+      },
+
+      displayStarredFilters(starredFilters) {
+        const starredFiltersList = document.getElementById('starredFiltersList');
+        
+        if (starredFilters.length === 0) {
+          starredFiltersList.innerHTML = '';
+          return;
+        }
+        
+        const html = starredFilters.map(filterSet => `
+          <div class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
+               onclick="applyStarredFilter(${filterSet.id}, '${escapeHtml(filterSet.name)}')">
+            <span class="text-base-content">${escapeHtml(filterSet.name)}</span>
+          </div>
+        `).join('');
+        
+        starredFiltersList.innerHTML = html;
+      },
+
+
+      loadDefaultFilters() {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const hasExistingFilters = [...urlParams.keys()].some(key => key.startsWith('filter_'));
+          
+          if (hasExistingFilters) {
+            return;
+          }
+
+          const storeKey = 'savedFilters{{ table_type|default:"sessions"|title }}';
+          const store = Alpine.store(storeKey);
+          
+          const applyDefaults = () => {
+            if (store && store.items && store.items.length > 0) {
+              // First try to find user default
+              let defaultFilterSet = store.items.find(fs => fs.is_default_for_user);
+              
+              // If no user default, try team default
+              if (!defaultFilterSet) {
+                defaultFilterSet = store.items.find(fs => fs.is_default_for_team);
+              }
+            
+              if (defaultFilterSet && defaultFilterSet.filter_params) {
+                this.applyDefaultFilterSet(defaultFilterSet);
+              }
+            }
+          };
+          
+          if (store && store.items) {
+            applyDefaults();
+          }
+        } catch (error) {
+          console.error('Failed to load default filters:', error);
+        }
+      },
+
+      // Apply a default filter set
+      applyDefaultFilterSet(filterSet) {
+        // Clear existing filters
+        this.filterData.filters = [];
+        
+        // Apply the filter set parameters to URL
+        const currentUrl = new URL(window.location);
+        const params = new URLSearchParams(currentUrl.search);
+        
+        // Clear existing filter parameters
+        [...params.keys()].forEach(key => {
+          if (key.startsWith('filter_')) {
+            params.delete(key);
+          }
+        });
+        
+        // Add the filter set parameters
+        Object.entries(filterSet.filter_params).forEach(([key, value]) => {
+          params.set(key, value);
+        });
+        
+        // Update the URL and reload the page
+        currentUrl.search = params.toString();
+        window.location.href = currentUrl.toString();
+      },
     }));
-  });
-</script>
+    });
+
+
+
+    // Function to apply a starred filter
+    async function applyStarredFilter(filterSetId, filterSetName) {
+      try {
+        const url = '{% url "experiments:list_filter_set" request.team.slug table_type %}';
+        const response = await fetch(url, { credentials: 'same-origin' });
+        const data = await response.json();
+        
+        const filterSet = data.results ? data.results.find(fs => fs.id === filterSetId) : null;
+        
+        // Apply the filter parameters to the current URL
+        const currentUrl = new URL(window.location);
+        const params = new URLSearchParams(currentUrl.search);
+        
+        // Clear existing filter parameters
+        [...params.keys()].forEach(key => {
+          if (key.startsWith('filter_')) {
+            params.delete(key);
+          }
+        });
+        
+        // Add the filter set parameters
+        Object.entries(filterSet.filter_params).forEach(([key, value]) => {
+          params.set(key, value);
+        });
+        
+        // Update the URL and reload
+        currentUrl.search = params.toString();
+        window.location.href = currentUrl.toString();
+        
+      } catch (error) {
+        console.error('Error applying starred filter:', error);
+      }
+    }
+
+    // Helper function to escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+
+{% include "filters/saved_filters_dialog.html" with table_type=table_type %}
+{% endwith %}
+{% include "filters/save_filter_dialog.html" with table_type=table_type %}

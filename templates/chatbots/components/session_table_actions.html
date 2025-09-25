@@ -17,6 +17,9 @@
   </div>
 </div>
 
+<!-- Include saved filters dialog -->
+{% include "filters/saved_filters_dialog.html" with table_type=table_type %}
+
 <script>
     document.addEventListener('alpine:init', () => {
       if (!Alpine.store('savedFilters{{ table_type|default:"sessions"|title }}')) {
