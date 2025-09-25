@@ -270,4 +270,15 @@ def export_participants(request, team_slug: str):
         return HttpResponse("Invalid form data", status=400)
 
     experiment = form.cleaned_data.get("experiment")
-    return export_participant_data_to_response(request.team, experiment)
+
+    query = Participant.objects.filter(team=request.team)
+    if experiment:
+        query.filter(data_set__experiment=experiment).distinct()
+
+    filter_set = ParticipantFilter()
+    timezone = request.session.get("detected_tz", None)
+    query = filter_set.apply(
+        query, filter_params=FilterParams.from_request_header(request, "referer"), timezone=timezone
+    )
+
+    return export_participant_data_to_response(request.team, experiment, query)

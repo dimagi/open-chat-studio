@@ -104,14 +104,7 @@ def process_participant_import(csv_file, experiment, team):
     return results
 
 
-def export_participant_data_to_response(team, experiment):
-    # Get base participant data for the team
-    participants_query = Participant.objects.filter(team=team).select_related("team")
-
-    # If experiment is specified, filter participants who have sessions with that experiment
-    if experiment:
-        participants_query = participants_query.filter(data_set__experiment=experiment).distinct()
-
+def export_participant_data_to_response(team, experiment, participants_query):
     participants = participants_query.order_by("platform", "identifier")
 
     # Prepare CSV response
