@@ -22,7 +22,7 @@
           <div class="mb-4">
             <div class="flex items-center justify-between">
               <div>
-                {% include "experiments/filters.html" %}
+                {% include "experiments/filters.html" with table_type="datasets" %}
               </div>
               <div x-show="selectedSessionIds.length > 0" class="text-sm font-medium ml-4">
                 <span x-text="selectedSessionIds.length"></span> session<span x-show="selectedSessionIds.length !== 1">s</span> selected
