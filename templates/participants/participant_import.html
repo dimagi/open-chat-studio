@@ -5,28 +5,15 @@
 {% block app %}
   <div class="app-card">
     <h1 class="pg-title">Import Participants</h1>
-    <div class="mb-4">
-      <h3>CSV Format</h3>
-      <p>Your CSV file should have the following columns:</p>
-      <ul>
-        <li><strong>identifier</strong> (required) - Unique identifier for the participant (e.g., email address)</li>
-        <li><strong>platform</strong> (required) - Platform type (web, telegram, whatsapp, etc.)</li>
-        <li><strong>name</strong> (optional) - Display name for the participant</li>
-        <li><strong>data.*</strong> (optional) - Custom data fields (e.g., data.age, data.preferences)</li>
-      </ul>
-      <p><strong>Example:</strong></p>
-      <pre>identifier,platform,name,data.age,data.location
-user@example.com,web,John Doe,25,New York
-+1234567890,whatsapp,Jane Smith,30,"{""city"":""London"",""country"":""UK""}"</pre>
-    </div>
-    <div>
-      <form method="post" enctype="multipart/form-data" class="my-2">
-        {% csrf_token %}
-        {{ form.non_field_errors }}
-        {% render_form_fields form %}
-        <input type="submit" class="btn btn-primary mt-2" value="Import">
-      </form>
-    </div>
+
+    <form method="post" enctype="multipart/form-data" class="mb-6">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% render_form_fields form %}
+      <input type="submit" class="btn btn-primary mt-2" value="Import">
+    </form>
+
+    <div class="divider"></div>
 
     {% if import_results %}
       {% if import_results.created or import_records.updated %}
@@ -51,5 +38,51 @@ user@example.com,web,John Doe,25,New York
         </div>
       {% endif %}
     {% endif %}
+
+    <div class="prose max-w-none mt-2">
+      <h3 class="text-lg font-semibold mb-3">CSV Format Requirements</h3>
+      <p class="mb-2">Your CSV file should include the following columns:</p>
+
+      <div class="overflow-x-auto">
+        <table class="table table-zebra w-full mb-4">
+          <thead>
+          <tr>
+            <th>Column</th>
+            <th>Required</th>
+            <th>Description</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr>
+            <td><code class="bg-base-200 px-2 py-1 rounded">identifier</code></td>
+            <td><span class="badge badge-error">Required</span></td>
+            <td>Unique identifier for the participant (e.g., email address)</td>
+          </tr>
+          <tr>
+            <td><code class="bg-base-200 px-2 py-1 rounded">platform</code></td>
+            <td><span class="badge badge-error">Required</span></td>
+            <td>Platform type (web, telegram, whatsapp, etc.)</td>
+          </tr>
+          <tr>
+            <td><code class="bg-base-200 px-2 py-1 rounded">name</code></td>
+            <td><span class="badge badge-ghost">Optional</span></td>
+            <td>Display name for the participant</td>
+          </tr>
+          <tr>
+            <td><code class="bg-base-200 px-2 py-1 rounded">data.*</code></td>
+            <td><span class="badge badge-ghost">Optional</span></td>
+            <td>Custom data fields (e.g., data.age, data.preferences)</td>
+          </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4 class="text-md font-semibold mb-2">Example CSV:</h4>
+      <div class="mockup-code mb-4">
+        <pre><code>identifier,platform,name,data.age,data.location
+user@example.com,web,John Doe,25,New York
++1234567890,whatsapp,Jane Smith,30,"{""city"":""London"",""country"":""UK""}"</code></pre>
+      </div>
+    </div>
   </div>
 {% endblock app %}}
