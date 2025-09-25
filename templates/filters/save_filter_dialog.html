@@ -37,7 +37,6 @@
 </dialog>
 
 <script>
-
 function submitFilterSet(event) {
   event.preventDefault();
   
@@ -51,7 +50,7 @@ function submitFilterSet(event) {
     showNotification('Please enter a name for the filter set', 'error');
     return;
   }
-    saveBtn.disabled = true;
+  saveBtn.disabled = true;
   saveText.classList.add('hidden');
   saveSpinner.classList.remove('hidden');
   
@@ -83,10 +82,9 @@ function submitFilterSet(event) {
   })
   .then(data => {
     nameInput.value = '';
+    loadSavedFilters();
     document.getElementById('saveFilterDialog').close();
     showNotification('Filter set saved successfully', 'success');
-    loadSavedFilters();
-    }
   })
   .catch(error => {
     console.error('Error saving filter set:', error);
@@ -115,9 +113,9 @@ function showNotification(message, type = 'info') {
   }
   
   const notification = document.createElement('div');
-  notification.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white max-w-sm ${
-    type === 'success' ? 'bg-green-500' : 
-    type === 'error' ? 'bg-red-500' : 
+  notification.className = `fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white max-w-sm ${
+    type === 'success' ? 'bg-green-500' :
+    type === 'error' ? 'bg-red-500' :
     'bg-blue-500'
   }`;
   notification.textContent = message;
@@ -130,5 +128,11 @@ function showNotification(message, type = 'info') {
       notification.parentNode.removeChild(notification);
     }
   }, 3000);
+}
+
+function loadSavedFilters() {
+  if (typeof FilterDialog !== 'undefined' && FilterDialog.load) {
+    FilterDialog.load();
+  }
 }
 </script>
