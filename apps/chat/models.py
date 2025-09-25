@@ -176,6 +176,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         return self.metadata.get("compression_marker") == PipelineChatHistoryModes.SUMMARIZE
 
     @property
+    def is_first_message(self) -> bool:
+        return not self.chat.messages.filter(created_at__lt=self.created_at).exists()
+
+    @property
     def compression_marker(self):
         return self.metadata.get("compression_marker")
 

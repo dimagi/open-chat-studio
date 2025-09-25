@@ -1,7 +1,9 @@
 import inspect
 import re
 
-from apps.chat.models import ChatMessageType
+from django.db.models import QuerySet
+
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import Evaluator
 
@@ -165,3 +167,55 @@ def _clean_context_field_name(field_name):
     field_name = re.sub(r"_+", "_", field_name).strip("_")
 
     return field_name or "context_variable"
+
+
+def make_message_pairs_from_queryset(queryset: QuerySet) -> list[ChatMessage]:
+    """Takes a queryset of ChatMessages, and adds extra messages such that we always have (Human, AI) message pairs.
+    There can be a single AI Message at the beginning (AI seed message).
+    All messages must be from the same chat.
+    """
+
+    if not queryset:
+        return []
+
+    queryset_list = list(queryset)
+    chat = queryset_list[0].chat
+
+    all_chat_messages = list(chat.messages.order_by("created_at"))
+    message_lookup = {msg.id: i for i, msg in enumerate(all_chat_messages)}
+
+    def get_previous_message(message):
+        current_index = message_lookup[message.id]
+        return all_chat_messages[current_index - 1] if current_index > 0 else None
+
+    def get_next_message(message):
+        current_index = message_lookup[message.id]
+        return all_chat_messages[current_index + 1] if current_index < len(all_chat_messages) - 1 else None
+
+    all_messages = set()
+
+    # Handle AI seed message
+    has_ai_seed_message = False
+    if queryset_list[0].is_first_message and queryset_list[0].is_ai_message:
+        has_ai_seed_message = True
+        all_messages.add(queryset_list[0])
+
+    starting_index = 1 if has_ai_seed_message else 0
+    for message in queryset_list[starting_index:]:
+        all_messages.add(message)  # Add the current message
+
+        if message.is_ai_message:
+            previous_message = get_previous_message(message)
+            if previous_message and previous_message.message_type == ChatMessageType.HUMAN:
+                all_messages.add(previous_message)
+            else:
+                raise ValueError(f"AI message {message.id} has no corresponding human message")
+
+        elif message.is_human_message:
+            next_message = get_next_message(message)
+            if next_message and next_message.message_type == ChatMessageType.AI:
+                all_messages.add(next_message)
+            else:
+                raise ValueError(f"Human message {message.id} has no corresponding AI message")
+
+    return list(all_messages)
