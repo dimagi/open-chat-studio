@@ -20,8 +20,8 @@ from ..experiments.filters import get_filter_context_data
 from ..experiments.tables import ExperimentSessionsTable
 from ..generics import actions
 from ..web.dynamic_filters.datastructures import FilterParams
-from .data_import import export_participant_data_to_response, process_participant_import
 from .filters import ParticipantFilter
+from .import_export import export_participant_data_to_response, process_participant_import
 from .tables import ParticipantTable
 
 IMPORT_PERMISSIONS = [
