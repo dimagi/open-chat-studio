@@ -19,7 +19,7 @@ class TraceStatus(models.TextChoices):
 class Trace(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     trace_id = models.UUIDField(default=uuid.uuid4, editable=False)
-    status = models.CharField(max_length=32, choices=TraceStatus.choices, default=TraceStatus.PENDING)
+    status = models.CharField(max_length=32, choices=TraceStatus.choices, default=TraceStatus.PENDING, db_index=True)
     experiment = models.ForeignKey(
         "experiments.Experiment", on_delete=models.SET_NULL, null=True, related_name="traces"
     )
