@@ -6,6 +6,10 @@
       {% csrf_token %}
       {{ form.non_field_errors }}
       {% render_form_fields form %}
+      <div class="prose prose-sm prose-light">
+        <p>Selecting a chatbot will filter the export to only participants that have interacted with this chatbot.</p>
+        <p>It will also include the participant's data for this chatbot.</p>
+      </div>
     </form>
     <div class="modal-action">
       <button type="submit" form="participant_export_form" class="btn btn-primary">

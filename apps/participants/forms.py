@@ -71,7 +71,6 @@ class ParticipantExportForm(forms.Form):
     experiment = forms.ModelChoiceField(
         label="Chatbot",
         queryset=Experiment.objects.none(),
-        help_text="Select the chatbot to export data for.",
         required=False,
     )
 
