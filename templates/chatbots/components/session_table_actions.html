@@ -2,29 +2,33 @@
 {% with table_type=table_type|default:"sessions" %}
 <div class="my-3">
   <div class="relative">
-    <div class="flex items-center gap-1">
-      <!-- Refresh button -->
-      <button class="btn btn-ghost btn-sm"
-              hx-get="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
-              hx-target="#sessions-table"
-              hx-swap="innerHTML"
-              hx-indicator="#refresh-loader"
-              hx-disabled-elt="this"
-              title="Refresh sessions">
-        <i class="fa-solid fa-rotate htmx-hide"></i>
-      </button>
-      <span class="loading loading-spinner loading-sm htmx-indicator htmx-show" id="refresh-loader"></span>
+    <div class="flex items-center justify-between w-full">
+      <div class="flex items-center gap-1">
+        <button class="btn btn-ghost btn-sm"
+                hx-get="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
+                hx-target="#sessions-table"
+                hx-swap="innerHTML"
+                hx-indicator="#refresh-loader"
+                hx-disabled-elt="this"
+                title="Refresh sessions">
+          <i class="fa-solid fa-rotate htmx-hide"></i>
+        </button>
+        <span class="loading loading-spinner loading-sm htmx-indicator htmx-show" id="refresh-loader"></span>
+        
+        {% if perms.experiments.download_chats %}
+          {% include "experiments/components/exports.html" %}
+        {% endif %}
+         {% flag "flag_session-analysis" %}
+          <a href="{% url 'analysis:create' team.slug experiment.id %}" class="btn btn-sm btn-outline btn-primary">
+              <i class="fa-solid fa-table-list"></i> Analyze Transcripts
+          </a>
+        {% endflag %}
+        {% include "experiments/filters.html" %}
+      </div>
       
-      {% if perms.experiments.download_chats %}
-        {% include "experiments/components/exports.html" %}
-      {% endif %}
-       {% flag "flag_session-analysis" %}
-        <a href="{% url 'analysis:create' team.slug experiment.id %}" class="btn btn-sm btn-outline btn-primary">
-            <i class="fa-solid fa-table-list"></i> Analyze Transcripts
-        </a>
-      {% endflag %}
-      {% include "experiments/filters.html" %}
-      {% include "chatbots/table_actions_dropdown.html" %}
+      <div class="ml-4">
+        {% include "chatbots/table_actions_dropdown.html" %}
+      </div>
     </div>
   </div>
 </div>
