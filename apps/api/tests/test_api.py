@@ -343,12 +343,12 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     # Experiment 3: The participant already have a connect channel set up
     # Expectation: Only 1 channel needs to be set up for this participant
     _setup_channel_participant(
-        experiment1, identifier="CONNECTID_2", channel_platform=ChannelPlatform.COMMCARE_CONNECT, system_metadata={}
+        experiment1, identifier="connectid_2", channel_platform=ChannelPlatform.COMMCARE_CONNECT, system_metadata={}
     )
 
     _setup_channel_participant(
         experiment3,
-        identifier="CONNECTID_2",
+        identifier="connectid_2",
         channel_platform=ChannelPlatform.COMMCARE_CONNECT,
         system_metadata={"commcare_connect_channel_id": "7d6a-fdc93-4e9c"},
     )
@@ -380,10 +380,10 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     # we expect only one call to the Connect servers to have been made
     request = httpx_mock.get_request()
     request_data = json.loads(request.read())
-    assert request_data["connectid"] == "ConnectID_2"
+    assert request_data["connectid"] == "connectid_2"
     assert request_data["channel_source"] == "bot1"
-    assert Participant.objects.filter(identifier="ConnectID_2").exists()
-    data = ParticipantData.objects.get(participant__identifier="ConnectID_2", experiment_id=experiment1.id)
+    assert Participant.objects.filter(identifier="connectid_2").exists()
+    data = ParticipantData.objects.get(participant__identifier="connectid_2", experiment_id=experiment1.id)
     assert data.system_metadata == {"commcare_connect_channel_id": created_connect_channel_id, "consent": True}
 
 
