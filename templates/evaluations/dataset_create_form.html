@@ -30,6 +30,10 @@
                   Clear
                 </button>
               </div>
+              
+              <div class="ml-4">
+                {% include "chatbots/table_actions_dropdown.html" with table_type="datasets" %}
+              </div>
             </div>
           </div>
 
@@ -872,3 +876,57 @@
 
   </script>
 {% endblock page_js %}
+
+<script>
+  // Initialize Alpine.js store for datasets
+  document.addEventListener('alpine:init', () => {
+    if (!Alpine.store('savedFiltersDatasets')) {
+      Alpine.store('savedFiltersDatasets', {
+        tableType: 'datasets',
+        items: [],
+        newName: '',
+        async load() {
+          try {
+            const url = '{% url "experiments:list_filter_set" request.team.slug "datasets" %}';
+            const res = await fetch(url, { credentials: 'same-origin' });
+            const data = await res.json();
+            this.items = data.results || [];
+          } catch (e) { console.error('Failed to load filter sets', e); }
+        },
+        createNew() {
+          this.newName = '';
+          document.getElementById('saveFilterDialog')?.showModal();
+        },
+        currentFilterParamsFromURL() {
+          const params = new URLSearchParams(window.location.search);
+          const obj = {};
+          params.forEach((value, key) => { if (key.startsWith('filter_')) obj[key] = value; });
+          return obj;
+        },
+        async submitCreate() {
+          const payload = {
+            name: this.newName,
+            filter_params: this.currentFilterParamsFromURL(),
+          };
+          try {
+            const url = '{% url "experiments:create_filter_set" request.team.slug "datasets" %}';
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-CSRFToken': SiteJS.app.Cookies.get('csrftoken') },
+              credentials: 'same-origin',
+              body: JSON.stringify(payload)
+            });
+            if (!res.ok) {
+              const errText = await res.text();
+              console.error('Save filter failed', res.status, errText);
+              throw new Error('Failed to save filter set');
+            }
+            await this.load();
+            document.getElementById('saveFilterDialog')?.close();
+          } catch (e) { console.error(e); }
+        },
+      });
+      Alpine.store('savedFiltersDatasets').load();
+    }
+  });
+</script>
