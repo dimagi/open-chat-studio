@@ -3,23 +3,31 @@ import json
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
-from apps.participants.forms import ParticipantForm
+from apps.participants.forms import ParticipantForm, ParticipantImportForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..events.models import ScheduledMessage
 from ..experiments.filters import get_filter_context_data
 from ..experiments.tables import ExperimentSessionsTable
+from ..generics import actions
 from ..web.dynamic_filters.datastructures import FilterParams
 from .filters import ParticipantFilter
 from .tables import ParticipantTable
+
+IMPORT_PERMISSIONS = [
+    "experiments.add_participant",
+    "experiments.change_participant",
+    "experiments.add_participantdata",
+    "experiments.change_participantdata",
+]
 
 
 class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -37,6 +45,15 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "title": "Participants",
             "allow_new": False,
             "table_url": table_url,
+            "actions": [
+                actions.Action(
+                    "participants:import",
+                    label="Import",
+                    icon_class="fa-solid fa-file-import",
+                    title="Import participants",
+                    required_permissions=IMPORT_PERMISSIONS,
+                )
+            ],
             **filter_context,
         }
 
@@ -201,3 +218,16 @@ def _get_identifiers_response(queryset):
         },
         safe=False,
     )
+
+
+@permission_required(IMPORT_PERMISSIONS)
+@login_and_team_required
+def import_participants(request, team_slug: str):
+    if request.method == "POST":
+        form = ParticipantImportForm(request.POST)
+        if form.is_valid():
+            # do import
+            pass
+            return redirect("participants:participant_home", team_slug=team_slug)
+
+    return render(request, "participants/participant_import.html", {"form": ParticipantImportForm()})

@@ -1,0 +1,17 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags %}
+{% load static %}
+
+{% block app %}
+  <div class="app-card">
+    <h1 class="pg-title">Import Participants</h1>
+    <div>
+      <form method="post" class="my-2">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% render_form_fields form %}
+        <input type="submit" class="btn btn-primary mt-2" value="Import">
+      </form>
+    </div>
+  </div>
+{% endblock app %}}

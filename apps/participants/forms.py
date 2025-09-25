@@ -10,3 +10,7 @@ class ParticipantForm(forms.ModelForm):
     class Meta:
         model = Participant
         fields = ("identifier", "public_id", "user")
+
+
+class ParticipantImportForm(forms.Form):
+    file = forms.FileField()
