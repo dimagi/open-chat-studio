@@ -16,7 +16,7 @@
     <div class="divider"></div>
 
     {% if import_results %}
-      {% if import_results.created or import_records.updated %}
+      {% if import_results.created or import_results.updated %}
         <div class="mt-6">
           <p class="text-md font-semibold text-success mb-2">Successfully created {{ import_results.created }} records
             and updated {{ import_results.updated }} records.</p>

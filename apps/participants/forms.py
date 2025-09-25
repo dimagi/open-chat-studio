@@ -1,6 +1,10 @@
+import logging
+
 from django import forms
 
 from apps.experiments.models import Experiment, Participant
+
+logger = logging.getLogger("ocs.participants")
 
 
 class ParticipantForm(forms.ModelForm):
@@ -46,20 +50,18 @@ class ParticipantImportForm(forms.Form):
                 content = file.read().decode("utf-8")
                 csv_reader = csv.DictReader(io.StringIO(content))
                 headers = csv_reader.fieldnames or []
-
-                # Check if any headers start with 'data.'
-                has_data_columns = any(header.startswith("data.") for header in headers)
-
-                if has_data_columns and not experiment:
-                    raise forms.ValidationError(
-                        "An experiment/chatbot must be selected when importing files with 'data.*' columns."
-                    )
-
             except UnicodeDecodeError:
                 raise forms.ValidationError("File must be a valid CSV with UTF-8 encoding.") from None
             except Exception as e:
+                logger.exception("error importing file: %s", e)
                 raise forms.ValidationError("Error reading CSV file.") from e
             finally:
                 file.seek(0)  # Reset file pointer for later use
+
+            # Check if any headers start with 'data.'
+            has_data_columns = any(header.startswith("data.") for header in headers)
+
+            if has_data_columns and not experiment:
+                raise forms.ValidationError("An chatbot must be selected when importing files with 'data.*' columns.")
 
         return cleaned_data
