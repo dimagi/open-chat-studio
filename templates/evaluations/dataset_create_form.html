@@ -24,14 +24,14 @@
               <div>
                 {% include "experiments/filters.html" with table_type="datasets" %}
               </div>
-              <div x-show="selectedSessionIds.length > 0" class="text-sm font-medium ml-4">
-                <span x-text="selectedSessionIds.length"></span> session<span x-show="selectedSessionIds.length !== 1">s</span> selected
-                <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
-                  Clear
-                </button>
-              </div>
               
-              <div class="ml-4">
+              <div class="flex items-center gap-3">
+                <div x-show="selectedSessionIds.length > 0" class="text-sm font-medium">
+                  <span x-text="selectedSessionIds.length"></span> session<span x-show="selectedSessionIds.length !== 1">s</span> selected
+                  <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
+                    Clear
+                  </button>
+                </div>
                 {% include "chatbots/table_actions_dropdown.html" with table_type="datasets" %}
               </div>
             </div>
