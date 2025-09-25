@@ -32,6 +32,34 @@ class ParticipantImportForm(forms.Form):
             self.fields["experiment"].queryset = Experiment.objects.filter(team=team, working_version__isnull=True)
 
     def clean(self):
-        if not self.cleaned_data.get("experiment"):
-            # validate that the file doesn't contain any data.* columns
-            pass
+        cleaned_data = super().clean()
+        file = cleaned_data.get("file")
+        experiment = cleaned_data.get("experiment")
+
+        if file:
+            # Check if CSV contains data.* columns
+            import csv
+            import io
+
+            file.seek(0)
+            try:
+                content = file.read().decode("utf-8")
+                csv_reader = csv.DictReader(io.StringIO(content))
+                headers = csv_reader.fieldnames or []
+
+                # Check if any headers start with 'data.'
+                has_data_columns = any(header.startswith("data.") for header in headers)
+
+                if has_data_columns and not experiment:
+                    raise forms.ValidationError(
+                        "An experiment/chatbot must be selected when importing files with 'data.*' columns."
+                    )
+
+            except UnicodeDecodeError:
+                raise forms.ValidationError("File must be a valid CSV with UTF-8 encoding.") from None
+            except Exception as e:
+                raise forms.ValidationError("Error reading CSV file.") from e
+            finally:
+                file.seek(0)  # Reset file pointer for later use
+
+        return cleaned_data
