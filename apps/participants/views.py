@@ -20,7 +20,7 @@ from ..experiments.filters import get_filter_context_data
 from ..experiments.tables import ExperimentSessionsTable
 from ..generics import actions
 from ..web.dynamic_filters.datastructures import FilterParams
-from .data_import import process_participant_import
+from .data_import import export_participant_data_to_response, process_participant_import
 from .filters import ParticipantFilter
 from .tables import ParticipantTable
 
@@ -264,8 +264,10 @@ def import_participants(request, team_slug: str):
 @permission_required(["experiments.view_participant", "experiments.view_participantdata"])
 @login_and_team_required
 def export_participants(request, team_slug: str):
-    form = ParticipantImportForm(request.POST, request.FILES, team=request.team)
-    if form.is_valid():
-        # export data
-        pass
-    return HttpResponse()
+    form = ParticipantExportForm(request.POST, team=request.team)
+
+    if not form.is_valid():
+        return HttpResponse("Invalid form data", status=400)
+
+    experiment = form.cleaned_data.get("experiment")
+    return export_participant_data_to_response(request.team, experiment)

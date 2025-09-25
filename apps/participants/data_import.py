@@ -3,6 +3,7 @@ import io
 import json
 
 from django.db import transaction
+from django.http import HttpResponse
 
 from apps.experiments.models import Participant, ParticipantData
 
@@ -101,3 +102,61 @@ def process_participant_import(csv_file, experiment, team):
             continue
 
     return results
+
+
+def export_participant_data_to_response(team, experiment):
+    # Get base participant data for the team
+    participants_query = Participant.objects.filter(team=team).select_related("team")
+
+    # If experiment is specified, filter participants who have sessions with that experiment
+    if experiment:
+        participants_query = participants_query.filter(data_set__experiment=experiment).distinct()
+
+    participants = participants_query.order_by("platform", "identifier")
+
+    # Prepare CSV response
+    response = HttpResponse(content_type="text/csv")
+    filename = f"participants_{team.slug}"
+    if experiment:
+        filename += f"_{experiment.name}"
+    response["Content-Disposition"] = f'attachment; filename="{filename}.csv"'
+
+    # Get all unique data keys for experiment if specified
+    data_keys = set()
+    data_map = {}
+    if experiment:
+        participant_data = ParticipantData.objects.filter(
+            team=team, experiment=experiment, participant__in=participants
+        ).only("participant_id", "data")
+        for data in participant_data:
+            data_map[data.participant_id] = data.data
+            if isinstance(data.data, dict):
+                data_keys.update(data.data.keys())
+
+    # Create CSV header
+    fieldnames = ["identifier", "platform", "name"]
+    if data_keys:
+        fieldnames.extend([f"data.{key}" for key in sorted(data_keys)])
+
+    writer = csv.DictWriter(response, fieldnames=fieldnames)
+    writer.writeheader()
+
+    # Write participant data
+    for participant in participants:
+        row = {
+            "identifier": participant.identifier,
+            "platform": participant.platform,
+            "name": participant.name,
+        }
+
+        if experiment:
+            if participant_data := data_map.get(participant.id):
+                for key in data_keys:
+                    row[f"data.{key}"] = participant_data.get(key, "")
+            else:
+                for key in data_keys:
+                    row[f"data.{key}"] = ""
+
+        writer.writerow(row)
+
+    return response
