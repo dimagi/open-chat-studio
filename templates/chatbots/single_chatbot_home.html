@@ -147,18 +147,6 @@
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         <div class="relative">
           {% include "chatbots/components/session_table_actions.html" %}
-          <div class="absolute top-0 right-0 flex items-center gap-2">
-            <button class="btn btn-ghost btn-sm"
-                    hx-get="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
-                    hx-target="#sessions-table"
-                    hx-swap="innerHTML"
-                    hx-indicator="#refresh-loader"
-                    hx-disabled-elt="this"
-                    title="Refresh sessions">
-              <i class="fa-solid fa-rotate htmx-hide"></i>
-            </button>
-            <span class="loading loading-spinner loading-sm htmx-indicator htmx-show" id="refresh-loader"></span>
-          </div>
 
           <div id="sessions-table">
             <div class="flex justify-center items-center p-6">
