@@ -76,7 +76,13 @@
             class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none"
             :class="activeTab === 'inputs' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
             @click="activeTab = 'inputs'">
-            Inputs & Outputs
+            Inputs
+          </button>
+          <button 
+            class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none"
+            :class="activeTab === 'outputs' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            @click="activeTab = 'outputs'">
+            Outputs
           </button>
         </nav>
       </div>
@@ -101,13 +107,21 @@
         </div>
     </div>
 
-    <!-- Inputs & Outputs tab content -->
     <div x-cloak x-show="activeTab === 'inputs'" id="inputs-content">
         <div class="card mb-6">
-        <h2 class="text-xl font-bold mb-2">Inputs & Outputs</h2>
-        <div class="card-body bg-base-50 shadow-md">
-            {% include "trace/input_output_tab.html" %}
+            <h2 class="text-xl font-bold mb-2">Inputs</h2>
+            <div class="card-body bg-base-50 shadow-md">
+                {% include "trace/inputs.html" %}
+            </div>
         </div>
+    </div>
+
+    <div x-cloak x-show="activeTab === 'outputs'" id="outputs">
+        <div class="card mb-6">
+            <h2 class="text-xl font-bold mb-2">Outputs</h2>
+            <div class="card-body bg-base-50 shadow-md">
+                {% include "trace/outputs.html" %}
+            </div>
         </div>
     </div>
 </div>
