@@ -624,20 +624,15 @@
         this.selectedLabel = selected ? selected.label : '';
       },
 
-      loadStarredFilters() {
+      async loadStarredFilters() {
         try {
-          const storeKey = 'savedFilters{{ table_type|default:"sessions"|title }}';
-          const store = Alpine.store(storeKey);
-          
-          if (store && store.items) {
-            const starredFilters = store.items.filter(fs => fs.is_starred);
-            this.displayStarredFilters(starredFilters);
-          } else {
-            // Fallback: if store doesn't exist yet, load it first
-              this.displayStarredFilters([]);
-          }
+          const url = '{% url "experiments:list_filter_set" request.team.slug table_type %}';
+          const res = await fetch(url, { credentials: 'same-origin' });
+          const data = await res.json();
+          const starredFilters = (data.results || []).filter(fs => fs.is_starred);
+          this.displayStarredFilters(starredFilters);
         } catch (error) {
-          console.error('Failed to load starred filters from store:', error);
+          console.error('Failed to load starred filters:', error);
           this.displayStarredFilters([]);
         }
       },
@@ -661,7 +656,7 @@
       },
 
 
-      loadDefaultFilters() {
+      async loadDefaultFilters() {
         try {
           const urlParams = new URLSearchParams(window.location.search);
           const hasExistingFilters = [...urlParams.keys()].some(key => key.startsWith('filter_'));
@@ -670,27 +665,23 @@
             return;
           }
 
-          const storeKey = 'savedFilters{{ table_type|default:"sessions"|title }}';
-          const store = Alpine.store(storeKey);
+          const url = '{% url "experiments:list_filter_set" request.team.slug table_type %}';
+          const res = await fetch(url, { credentials: 'same-origin' });
+          const data = await res.json();
+          const filterSets = data.results || [];
           
-          const applyDefaults = () => {
-            if (store && store.items && store.items.length > 0) {
-              // First try to find user default
-              let defaultFilterSet = store.items.find(fs => fs.is_default_for_user);
-              
-              // If no user default, try team default
-              if (!defaultFilterSet) {
-                defaultFilterSet = store.items.find(fs => fs.is_default_for_team);
-              }
+          if (filterSets.length > 0) {
+            // First try to find user default
+            let defaultFilterSet = filterSets.find(fs => fs.is_default_for_user);
             
-              if (defaultFilterSet && defaultFilterSet.filter_params) {
-                this.applyDefaultFilterSet(defaultFilterSet);
-              }
+            // If no user default, try team default
+            if (!defaultFilterSet) {
+              defaultFilterSet = filterSets.find(fs => fs.is_default_for_team);
             }
-          };
           
-          if (store && store.items) {
-            applyDefaults();
+            if (defaultFilterSet && defaultFilterSet.filter_params) {
+              this.applyDefaultFilterSet(defaultFilterSet);
+            }
           }
         } catch (error) {
           console.error('Failed to load default filters:', error);
@@ -724,8 +715,6 @@
       },
     }));
     });
-
-
 
     // Function to apply a starred filter
     async function applyStarredFilter(filterSetId, filterSetName) {
