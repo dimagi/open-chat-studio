@@ -795,7 +795,7 @@ function dashboard() {
                 let operator = "any of";
                 if (key === "start_date") {
                     operator = "after";
-                    // To account for filter mismatches, we add one day to the start date
+                    // To account for filter mismatches, we subtract one day from the start date
                     parsedValue = this.shiftDay(value, -1); // keep date as string
                 } else if (key === "end_date") {
                     operator = "before";
