@@ -1,0 +1,159 @@
+<dialog id="savedFiltersDialog" class="modal">
+  <div class="modal-box max-w-xl">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="font-bold text-lg">Saved Filters</h3>
+      <button class="btn btn-sm btn-ghost" onclick="this.closest('dialog').close()">✕</button>
+    </div>
+
+    <div id="filtersContent">
+      <div class="flex justify-center p-4">
+        <span class="loading loading-spinner loading-sm"></span>
+      </div>
+    </div>
+
+    <div class="mt-4">
+      <button class="btn btn-outline btn-sm" onclick="openCreateFilterDialog()">
+        <i class="fa-solid fa-plus mr-2"></i> Create new
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+const FilterDialog = {
+  isLoading: false,
+
+  async load() {
+    if (this.isLoading) return;
+    this.isLoading = true;
+    const content = document.getElementById('filtersContent');
+    content.innerHTML = '<div class="flex justify-center p-4"><span class="loading loading-spinner loading-sm"></span></div>';
+
+    try {
+      const filters = await this.apiCall("{% url 'experiments:list_filter_set' request.team.slug table_type %}");
+      content.innerHTML = filters.results?.length
+        ? this.renderFilters(filters.results)
+        : '<div class="text-center text-gray-500 py-4">No saved filter sets</div>';
+    } catch (e) {
+      content.innerHTML = '<div class="text-center text-red-500 py-4">Failed to load filter sets</div>';
+    } finally {
+      this.isLoading = false;
+    }
+  },
+
+  renderFilters(filters) {
+    return `<div class="space-y-4">
+      ${filters.map(f => `
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <div class="font-medium cursor-pointer hover:text-primary"
+                 onclick="FilterDialog.apply(${f.id}, ${JSON.stringify(f.filter_params)})"
+                 title="Click to apply">${this.escape(f.name)}</div>
+            <button class="link link-primary text-xs" onclick="FilterDialog.update(${f.id})">Update</button>
+          </div>
+          <div class="flex gap-1">
+            ${this.buttons(f)}
+          </div>
+        </div>`).join('')}
+    </div>`;
+  },
+
+  buttons(f) {
+    const btns = [
+      { icon: "fa-user",   title: "Personal Default", action: `FilterDialog.toggleDefault(${f.id},'user')`,   active: f.is_default_for_user },
+      { icon: "fa-users",  title: "Team Default",     action: `FilterDialog.toggleDefault(${f.id},'team')`,   active: f.is_default_for_team },
+      { icon: "fa-share-nodes", title: "Share",       action: `FilterDialog.share(${f.id})` },
+      { icon: "fa-star",   title: "Star",             action: `FilterDialog.toggleStar(${f.id})`,             active: f.is_starred },
+      { icon: "fa-trash-can", title: "Delete",        action: `FilterDialog.delete(${f.id},'${this.escape(f.name)}')`, extra: "text-error" }
+    ];
+
+    return btns.map(b => this.renderButton(b)).join("");
+  },
+
+  renderButton({icon,title,action,active=false,extra=""}) {
+    const color = active ? 'style="color:#f59e0b;"' : '';
+    const className = `btn btn-ghost btn-xs ${extra}`;
+    const iconClass = ['fa-users','fa-share-nodes'].includes(icon) ? 'fa-solid' : 'fa-regular';
+    return `<button class="${className}" title="${title}" onclick="${action}" ${color}>
+      <i class="${iconClass} ${icon}"></i>
+    </button>`;
+  },
+
+  // ---- ACTIONS ----
+  apply(id, params) {
+    const url = new URL(window.location);
+    const q = new URLSearchParams(url.search);
+    [...q.keys()].filter(k=>k.startsWith("filter_")).forEach(k=>q.delete(k));
+    Object.entries(params).forEach(([k,v])=>q.set(k,v));
+    window.location.href = `${url.pathname}?${q}`;
+  },
+
+  async update(id) {
+    await this.api(`/ ${id}/edit/`, "PATCH", { filter_params: this.currentFilters() });
+    this.load(); this.notify("Filter updated","success");
+  },
+
+  async toggleDefault(id,type) {
+    const field = `is_default_for_${type}`;
+    await this.api(`/${id}/edit/`,"PATCH",{ [field]:true, [`clear_other_${type}_defaults`]:true });
+    this.load(); this.notify(`Set as ${type} default`,"success");
+  },
+
+  async share(id) {
+    await this.api(`/${id}/edit/`,"PATCH",{ is_shared:true });
+    this.load(); this.notify("Filter shared","success");
+  },
+
+  async toggleStar(id) {
+    await this.api(`/${id}/edit/`,"PATCH",{ is_starred:true });
+    this.load(); this.notify("Star toggled","success");
+  },
+
+  async delete(id,name) {
+    if(!confirm(`Delete "${name}"?`)) return;
+    await this.api(`/${id}/edit/`,"DELETE");
+    this.load(); this.notify("Filter deleted","success");
+  },
+
+  // ---- HELPERS ----
+  async apiCall(url) {
+    const r = await fetch(url,{credentials:"same-origin"});
+    if(!r.ok) throw new Error(r.statusText);
+    return r.json();
+  },
+
+  async api(endpoint, method, body) {
+    const base = "{% url 'experiments:edit_filter_set' request.team.slug 0 %}";
+    const url = base.replace("/0/edit/", endpoint);
+    const opts = {
+      method, credentials:"same-origin",
+      headers:{ "X-CSRFToken": SiteJS.app.Cookies.get("csrftoken") }
+    };
+    if(body){ opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(body);}
+    const r = await fetch(url,opts);
+    if(!r.ok) throw new Error("API failed");
+    return r.json().catch(()=>({}));
+  },
+
+  currentFilters() {
+    const q=new URLSearchParams(window.location.search), out={};
+    q.forEach((v,k)=>{ if(k.startsWith("filter_")) out[k]=v; });
+    return out;
+  },
+
+  notify(msg,type="info") {
+    const colors={success:"bg-green-500",error:"bg-red-500",info:"bg-blue-500"};
+    const n=document.createElement("div");
+    n.className=`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg text-white ${colors[type]}`;
+    n.textContent=msg; document.body.appendChild(n);
+    setTimeout(()=>n.remove(),3000);
+  },
+
+  escape(str) {
+    const div=document.createElement("div"); div.textContent=str; return div.innerHTML;
+  }
+};
+
+document.addEventListener("DOMContentLoaded",()=>FilterDialog.load());
+</script>
