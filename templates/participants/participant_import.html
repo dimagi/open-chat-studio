@@ -27,5 +27,29 @@ user@example.com,web,John Doe,25,New York
         <input type="submit" class="btn btn-primary mt-2" value="Import">
       </form>
     </div>
+
+    {% if import_results %}
+      {% if import_results.created or import_records.updated %}
+        <div class="mt-6">
+          <p class="text-md font-semibold text-success mb-2">Successfully created {{ import_results.created }} records
+            and updated {{ import_results.updated }} records.</p>
+        </div>
+      {% endif %}
+      {% if import_results.errors %}
+        <div class="mt-6">
+          <h3 class="text-lg font-semibold text-error mb-2">Import Errors ({{ import_results.errors|length }})</h3>
+          <p class="text-sm text-base-content/70 my-2">
+            Please fix the errors above and try importing again.
+          </p>
+          <div class="bg-error/10 border border-error/20 rounded-lg p-4 max-h-96 overflow-y-auto">
+            <ul class="space-y-1">
+              {% for error in import_results.errors %}
+                <li class="text-md">{{ error }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      {% endif %}
+    {% endif %}
   </div>
 {% endblock app %}}

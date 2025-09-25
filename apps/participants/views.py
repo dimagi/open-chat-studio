@@ -227,6 +227,9 @@ def _get_identifiers_response(queryset):
 @permission_required(IMPORT_PERMISSIONS)
 @login_and_team_required
 def import_participants(request, team_slug: str):
+    form = ParticipantImportForm(team=request.team)
+    import_results = None
+
     if request.method == "POST":
         form = ParticipantImportForm(request.POST, request.FILES, team=request.team)
         if form.is_valid():
@@ -234,23 +237,28 @@ def import_participants(request, team_slug: str):
                 import_results = _process_csv_import(
                     form.cleaned_data["file"], form.cleaned_data["experiment"], request.team
                 )
-                success_msg = (
-                    f"Successfully imported {import_results['created']} participants, "
-                    f"updated {import_results['updated']} participants"
-                )
-                if import_results["errors"]:
-                    success_msg += f", encountered {len(import_results['errors'])} errors"
-                messages.success(request, success_msg)
-                if import_results["errors"]:
-                    for error in import_results["errors"][:5]:  # Show first 5 errors
-                        messages.error(request, error)
-                return redirect("participants:participant_home", team_slug=team_slug)
+
+                # Only redirect if there are no errors
+                if not import_results["errors"]:
+                    success_msg = (
+                        f"Successfully imported {import_results['created']} participants, "
+                        f"updated {import_results['updated']} participants"
+                    )
+                    messages.success(request, success_msg)
+                    return redirect("participants:participant_home", team_slug=team_slug)
+                else:
+                    # Show success message but stay on page to display errors
+                    if import_results["created"] or import_results["updated"]:
+                        success_msg = (
+                            f"Partially completed: imported {import_results['created']} participants, "
+                            f"updated {import_results['updated']} participants"
+                        )
+                        messages.success(request, success_msg)
+
             except Exception as e:
                 messages.error(request, f"Import failed: {str(e)}")
-    else:
-        form = ParticipantImportForm(team=request.team)
 
-    return render(request, "participants/participant_import.html", {"form": form})
+    return render(request, "participants/participant_import.html", {"form": form, "import_results": import_results})
 
 
 def _process_csv_import(csv_file, experiment, team):
