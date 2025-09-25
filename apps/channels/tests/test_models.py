@@ -184,4 +184,5 @@ class TestChannelPlatform:
             if platform == ChannelPlatform.COMMCARE_CONNECT:
                 assert normalized_id == "abc"
             else:
+                # Identifier should be unchanged for other platforms
                 assert normalized_id == "ABC"
