@@ -228,6 +228,9 @@ else:
         "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
         "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=35),
         "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
+        "max_idle": 300,
+        "max_lifetime": 3600,
+        "reconnect_failed": True,
     }
 
 # Auth / login stuff
