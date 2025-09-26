@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import textwrap
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +24,7 @@ from apps.service_providers.tracing import TraceInfo, TracingService
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
+    from apps.experiments.models import SyntheticVoice
 
 
 def create_conversation(
@@ -124,7 +127,7 @@ class TopicBot:
             SafetyBot(safety_layer, self.llm, self.source_material) for safety_layer in self.safety_layers
         ]
 
-    def _call_predict(self, input_str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
+    def _call_predict(self, input_str, save_input_to_history=True, attachments: list[Attachment] | None = None):
         if self.child_chains:
             tag, chain = self._get_child_chain(input_str, attachments)
         else:
@@ -165,7 +168,7 @@ class TopicBot:
         self.output_tokens = self.output_tokens + result.completion_tokens
         return result.output
 
-    def _get_child_chain(self, input_str: str, attachments: list["Attachment"] | None = None) -> tuple[str, Any]:
+    def _get_child_chain(self, input_str: str, attachments: list[Attachment] | None = None) -> tuple[str, Any]:
         result = self.chain.invoke(
             input_str,
             config={
@@ -186,7 +189,7 @@ class TopicBot:
         except KeyError:
             return self.default_tag, self.default_child_chain
 
-    def process_input(self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None):
+    def process_input(self, user_input: str, save_input_to_history=True, attachments: list[Attachment] | None = None):
         @chain
         def main_bot_chain(user_input):
             # human safety layers
@@ -288,14 +291,19 @@ class PipelineBot:
         self.synthetic_voice_id = None
 
     def process_input(
-        self, user_input: str, save_input_to_history=True, attachments: list["Attachment"] | None = None
+        self, user_input: str, save_input_to_history=True, attachments: list[Attachment] | None = None
     ) -> ChatMessage:
         input_state = self._get_input_state(attachments, user_input)
-        return self.invoke_pipeline(
-            input_state,
-            save_run_to_history=True,
-            save_input_to_history=save_input_to_history,
-        )
+
+        kwargs = {
+            "input_state": input_state,
+            "save_run_to_history": True,
+            "save_input_to_history": save_input_to_history,
+        }
+        with self.trace_service.span("Run Pipeline", inputs=kwargs | {"input_state": input_state.json_safe()}) as span:
+            chat_message = self.invoke_pipeline(**kwargs)
+            span.set_current_span_outputs({"content": chat_message.content})
+            return chat_message
 
     def invoke_pipeline(
         self,
@@ -316,7 +324,7 @@ class PipelineBot:
         self.synthetic_voice_id = output.get("synthetic_voice_id", None)
         return result
 
-    def _get_input_state(self, attachments: list["Attachment"], user_input: str):
+    def _get_input_state(self, attachments: list[Attachment], user_input: str):
         attachments = attachments or []
         serializable_attachments = [attachment.model_dump() for attachment in attachments]
         incoming_file_ids = []
@@ -426,7 +434,7 @@ class PipelineBot:
                 chat_message.create_and_add_tag(tag_value, self.session.team, category or "")
         return chat_message
 
-    def synthesize_voice(self) -> tuple["SyntheticVoice"] | None:
+    def synthesize_voice(self) -> tuple[SyntheticVoice] | None:
         from apps.experiments.models import SyntheticVoice
 
         if self.synthetic_voice_id is None:

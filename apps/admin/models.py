@@ -29,13 +29,14 @@ class ChatWidgetConfig(PydanticBaseModel):
     position: str = Field(default="right", description="Position of the widget")
 
     def get_widget_attributes(self):
-        return {
+        attrs = {
             "chatbot-id": self.chatbot_id,
             "button-text": self.button_text,
             "welcome-messages": json.dumps(self.welcome_messages),
             "starter-questions": json.dumps(self.starter_questions),
-            "position": self.position,
+            "position": self.position
         }
+        return attrs
 
 
 class SiteConfig(PydanticBaseModel):

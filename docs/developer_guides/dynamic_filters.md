@@ -15,7 +15,7 @@ The backend is responsible for defining the filters and applying them to the dat
 
 - **`MultiColumnFilter`**: A container class that holds a list of `ColumnFilter` instances and applies them to a queryset. It provides a `columns()` class method to list available filter column names and handles the orchestration of applying multiple filters.
 
-- **Filter Types**: `StringColumnFilter` and `ChoiceColumnFilter` provide pre-built implementations for common filtering patterns, reducing boilerplate code.
+- **Filter Types**: `StringColumnFilter`, `ChoiceColumnFilter`, and `TimestampFilter` provide pre-built implementations for common filtering patterns, reducing boilerplate code.
 
 - **Filter Implementations**: Concrete implementations of `ColumnFilter` can be found in `apps/web/dynamic_filters/column_filters.py` (base filters like `TimestampFilter`, `ParticipantFilter`) and in app-specific `filters.py` files throughout the project (e.g., `apps/experiments/filters.py`).
 
@@ -81,7 +81,8 @@ The system supports the following operators defined in the `Operators` enum:
 - **Date/time operations**: `on`, `before`, `after`, `range`
 - **Choice operations**: `any of`, `all of`, `excludes`
 
-The frontend automatically shows appropriate operators based on the field type configuration.
+Operators are configured in the `ColumnFilter` class. They are determined automatically based on the filter type but
+can be overridden.
 
 ## Step-by-Step Walkthrough: Creating a Product Inventory Filter
 
@@ -96,10 +97,23 @@ First, let's create a filter for product categories using the existing filter ty
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, StringColumnFilter
 from apps.web.dynamic_filters.column_filters import TimestampFilter
 
-class ProductCategoryFilter(StringColumnFilter, ColumnFilter):
+class ProductCategoryFilter(ChoiceColumnFilter):
     """Filter products by category name."""
-    query_param = "category"
-    column = "category__name"  # Database field path
+    query_param: str = "category"
+    column: str = "category__name"  # Database field path
+    label: str = "Category"
+    
+    def prepare(self, team, **kwargs):
+        self.options = [
+            {"id": cat.id, "label": cat.name} 
+            for cat in Category.objects.filter(team=team).all()
+        ]
+        
+p_filter = ProductCategoryFilter()
+
+# Alternately, you can construct it directly using kwargs:
+
+p_filter = ChoiceColumnFilter(label="Category", query_param="category", column="category__name", options=[...])
 ```
 
 ### Step 2: Create a Multi-Column Filter
@@ -117,8 +131,8 @@ class ProductInventoryFilter(MultiColumnFilter):
     
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ProductCategoryFilter(),
-        TimestampFilter(db_column="created_at", query_param="created_date"),
-        TimestampFilter(db_column="updated_at", query_param="last_updated"),
+        TimestampFilter(label="Created At", column="created_at", query_param="created_date"),
+        TimestampFilter(label="Updated At", column="updated_at", query_param="last_updated"),
         # Add more filters as needed
     ]
 
@@ -197,19 +211,11 @@ class ProductInventoryView(SingleTableView):
         # Add filter context data using the helper function
         filter_context = get_filter_context_data(
             team=self.request.team,  # Assuming team is available in request
-            columns=ProductInventoryFilter.columns(),
+            columns=ProductInventoryFilter.columns(self.request.team),
             date_range_column="created_date",
             table_url=reverse("inventory:product_table"),  # Your HTMX table URL
             table_container_id="product-table"
         )
-        
-        # Add any additional context specific to your filters
-        filter_context.update({
-            "df_product_categories": [
-                {"id": cat.id, "label": cat.name} 
-                for cat in Category.objects.all()
-            ]
-        })
         
         context.update(filter_context)
         return context
@@ -235,58 +241,4 @@ Create the template that includes the filter interface:
 </div>
 
 {% endblock %}
-```
-
-**Update the Shared Filter Template**
-
-Since the filter template is shared across the application, you'll need to update `templates/experiments/filters.html` to include your new filter columns. Add your custom columns to the `allColumns` object in the Alpine.js component.
-
-The frontend configuration maps field types to available operators using the `FIELD_TYPE_FILTERS` constant:
-
-- **`"string"`**: equals, contains, does not contain, starts with, ends with, any of
-- **`"timestamp"`**: on, before, after, range  
-- **`"choice"`**: any of, all of, excludes
-
-The `get_filter_context_data()` helper function provides the necessary context variables:
-
-- `df_field_type_filters`: Maps field types to operators
-- `df_date_range_options`: Predefined date ranges (1h, 1d, 7d, etc.)
-- `df_filter_columns`: List of column names for this filter
-- `df_date_range_column_name`: Default date column for quick range selection
-- `df_filter_data_source_url`: HTMX endpoint for table updates
-- `df_filter_data_source_container_id`: HTML element ID containing the table
-
-In your template, define the column configuration in JavaScript:
-
-```javascript
-// In templates/experiments/filters.html or your custom template
-{{ df_product_categories|default:"[]"|json_script:"product-categories" }}
-<script>
-    const categories = JSON.parse(document.getElementById('product-categories').textContent);
-    const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
-    const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
-    
-    const allColumns = {
-        // Existing columns...
-        'category': {
-            type: 'choice', 
-            operators: fieldTypeFilters.choice,
-            options: categories,
-            label: 'Product Category'
-        },
-        'created_date': {
-            type: 'timestamp', 
-            operators: fieldTypeFilters.timestamp, 
-            options: dateRangeOptions,
-            label: 'Created Date'
-        },
-        'last_updated': {
-            type: 'timestamp', 
-            operators: fieldTypeFilters.timestamp, 
-            options: dateRangeOptions,
-            label: 'Last Updated'
-        }
-    }
-    // ...rest of Alpine.js configuration
-</script>
 ```

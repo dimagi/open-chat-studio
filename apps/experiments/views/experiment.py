@@ -17,7 +17,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction, models
-from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
+from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import (
@@ -69,7 +69,7 @@ from apps.experiments.decorators import (
 from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.filters import (
     ExperimentSessionFilter,
-    get_experiment_filter_context_data,
+    get_filter_context_data,
 )
 from apps.experiments.forms import (
     ConsentForm,
@@ -109,7 +109,7 @@ from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
 from apps.generics import actions
 from apps.generics.chips import Chip
-from apps.generics.views import generic_home, paginate_session, render_session_details
+from apps.generics.views import paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
@@ -123,7 +123,8 @@ from apps.experiments.models import FilterSet
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    show_modal = flag_is_active(request, "flag_chatbots")
+    from apps.chatbots.views import home
+
     actions_ = [
         actions.Action(
             "experiments:new",
@@ -132,14 +133,13 @@ def experiments_home(request, team_slug: str):
             required_permissions=["experiments.add_experiment"],
         )
     ]
-    return generic_home(
+    return home(
         request,
         team_slug,
         "Experiments",
         "experiments:table",
         actions=actions_,
-        show_modal_or_banner=show_modal,
-        load_trend_modules=True,
+        show_modal_or_banner=True,
     )
 
 
@@ -150,6 +150,11 @@ class ExperimentTableView(BaseExperimentTableView):
 
 
 class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+    """
+    This view is used to render experiment sessions. When called by a specific chatbot, it includes an "experiment_id"
+    parameter in the request, which narrows the sessions to only those belonging to that chatbot.
+    """
+
     model = ExperimentSession
     paginate_by = 25
     table_class = ExperimentSessionsTable
@@ -157,9 +162,13 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
     permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
+        experiment_filter = Q()
+        if experiment_id := self.kwargs.get("experiment_id"):
+            experiment_filter = Q(experiment__id=experiment_id)
+
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
-            .filter(team=self.request.team, experiment__id=self.kwargs["experiment_id"])
+            .filter(experiment_filter, team=self.request.team)
             .select_related("participant__user", "chat")
             .prefetch_related(
                 "chat__tags",
@@ -297,7 +306,7 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
     def dispatch(self, request, *args, **kwargs):
         is_chatbot = kwargs.get("new_chatbot", False)
-        if not is_chatbot and flag_is_active(request, "flag_chatbots"):
+        if not is_chatbot:
             return HttpResponseRedirect(reverse("chatbots:new", args=[request.team.slug]))
         return super().dispatch(request, *args, **kwargs)
 
@@ -512,13 +521,8 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     else:
         session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
 
-    context.update(
-        get_experiment_filter_context_data(
-            request.team,
-            session_table_url,
-            single_experiment=experiment,
-        )
-    )
+    columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
+    context.update(get_filter_context_data(request.team, columns, "last_message", session_table_url, "sessions-table"))
 
     return TemplateResponse(request, template_name, context)
 
@@ -1588,7 +1592,7 @@ def trends_data(request, team_slug: str, experiment_id: int):
     """
     try:
         experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
-        successes, errors = experiment.default_version.get_trend_data()
+        successes, errors = experiment.get_trend_data()
         data = {"successes": successes, "errors": errors}
         return JsonResponse({"trends": data})
     except Exception:

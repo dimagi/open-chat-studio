@@ -19,4 +19,4 @@ def to_json(obj):
     # json.dumps does not properly convert QueryDict array parameter to json
     if isinstance(obj, QueryDict):
         obj = dict(obj)
-    return mark_safe(escape_script_tags(json.dumps(obj, cls=DjangoJSONEncoder)))
+    return mark_safe(escape_script_tags(json.dumps(obj, indent=2, cls=DjangoJSONEncoder)))

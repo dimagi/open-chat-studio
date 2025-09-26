@@ -38,9 +38,7 @@
           </div>
 
           <div id="sessions-table" data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
-            <div class="text-center py-4">
-              <i class="fa-solid fa-spinner fa-spin"></i> Loading sessions...
-            </div>
+            {% include "table/table_placeholder.html" %}
           </div>
         </div>
       </div>

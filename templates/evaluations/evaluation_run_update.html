@@ -1,0 +1,288 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+{% load i18n %}
+
+{% block page_head %}
+  {{ block.super }}
+  <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+{% endblock page_head %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'evaluations:home' request.team.slug %}">{% trans "Evaluations" %}</a></li>
+      <li><a href="{% url 'evaluations:evaluation_runs_home' request.team.slug evaluation_run.config_id %}">{{ evaluation_run.config.name }} {% trans "Runs" %}</a></li>
+      <li><a href="{% url 'evaluations:evaluation_results_home' request.team.slug evaluation_run.config_id evaluation_run.id %}">{% trans "Run" %} {{ evaluation_run.id }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{% trans "Edit Results" %}</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+  <div class="container mx-auto px-4 py-8" x-data="uploadResultsData()"
+>
+
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold">{{ title }}</h1>
+      <a href="{% url 'evaluations:evaluation_results_home' request.team.slug evaluation_run.config_id evaluation_run.id %}"
+         class="btn btn-outline">
+        <i class="fa-solid fa-arrow-left"></i>
+        {% trans "Back to Results" %}
+      </a>
+    </div>
+
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body">
+      <!-- File Upload Section -->
+      <div x-show="!csvParsed">
+        <h2 class="text-lg font-medium mb-4">{% trans "Upload CSV File" %}</h2>
+
+        <form @submit.prevent="">
+          {% csrf_token %}
+          <div class="mb-4">
+            <label for="csv-file" class="block text-sm font-medium mb-2">{% trans "CSV File" %}</label>
+            <input type="file"
+                   id="csv-file"
+                   name="csv_file"
+                   accept=".csv"
+                   class="file-input file-input-bordered w-full"
+                   @change="parseCSV"
+                   required>
+          </div>
+
+          <div class="flex gap-2">
+            <a href="{% url 'evaluations:evaluation_run_download' request.team.slug evaluation_run.config_id evaluation_run.id %}"
+               class="btn btn-outline">
+              <i class="fa-solid fa-download"></i> {% trans "Download Template" %}
+            </a>
+          </div>
+        </form>
+      </div>
+
+      <!-- Column Mapping Section -->
+      <div x-show="csvParsed" class="space-y-6">
+        <div class="card bg-base-200 shadow">
+          <div class="card-body">
+            <h4 class="font-medium mb-2">{% trans "CSV Preview" %}</h4>
+            <p class="text-sm text-base-content/70 mb-3">
+            {% trans "Found" %} <span x-text="csvData?.total_rows || 0"></span> {% trans "rows" %}
+          </p>
+
+          <!-- Sample data table -->
+          <div class="overflow-x-auto">
+            <table class="table table-xs w-full">
+              <thead>
+                <tr class="bg-base-300">
+                  <template x-for="column in csvData?.columns || []">
+                    <th x-text="column" class="font-medium"></th>
+                  </template>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(row, idx) in csvData?.sample_rows || []">
+                  <tr>
+                    <template x-for="column in csvData?.columns || []">
+                      <td x-text="row[column]" class="text-xs truncate" style="max-width: 200px;"></td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          </div>
+        </div>
+
+        <!-- Column mapping controls -->
+        <div class="space-y-4">
+          <h4 class="font-medium">{% trans "Map Result Columns to Evaluators" %}</h4>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+            <div>
+              <h5 class="text-sm font-semibold text-base-content/70">{% trans "CSV Column" %}</h5>
+            </div>
+            <div>
+              <h5 class="text-sm font-semibold text-base-content/70">{% trans "Save to Evaluator result" %}</h5>
+            </div>
+          </div>
+
+          <template x-for="column in csvData?.result_columns || []">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+              <div>
+                <label class="block text-sm font-medium" x-text="column"></label>
+              </div>
+              <div>
+                <select x-model="columnMapping[column]" class="select select-bordered w-full">
+                  <option value="">{% trans "Skip this column" %}</option>
+                  <template x-for="evaluator in evaluators">
+                    <option :value="evaluator.id" x-text="evaluator.name"></option>
+                  </template>
+                </select>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Upload button -->
+        <div class="flex gap-2">
+          <button @click="submitUpload"
+                  :disabled="uploading"
+                  class="btn btn-primary">
+            <i class="fa-solid fa-upload"></i>
+            <span x-text="uploading ? '{% trans "Uploading..." %}' : '{% trans "Upload Results" %}'"></span>
+          </button>
+          <button @click="csvParsed = false; csvData = null" class="btn btn-outline">
+            <i class="fa-solid fa-arrow-left"></i> {% trans "Choose Different File" %}
+          </button>
+        </div>
+      </div>
+
+      <!-- Upload Status -->
+      <div x-show="uploadStatus" class="mt-4">
+        <div class="alert" :class="uploadStatus?.type === 'success' ? 'alert-success' : 'alert-error'">
+          <div x-text="uploadStatus?.message"></div>
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div x-show="progressVisible" class="mt-4">
+        <div class="progress-wrapper">
+          <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
+            <div class="bg-blue-600 dark:bg-blue-400 h-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+        <div id="progress-bar-message" class="mt-2 text-sm text-center">{% trans "Processing CSV..." %}</div>
+      </div>
+      </div>
+    </div>
+  </div>
+{% endblock app %}
+
+{% block page_js %}
+  {{ block.super }}
+  <script>
+    function uploadResultsData() {
+      return {
+        csvData: null,
+        csvParsed: false,
+        columnMapping: {},
+        evaluators: [
+          {% for evaluator in evaluation_run.config.evaluators.all %}
+            { id: {{ evaluator.id }}, name: '{{ evaluator.name|escapejs }}' }{% if not forloop.last %},{% endif %}
+          {% endfor %}
+        ],
+        uploading: false,
+        uploadStatus: null,
+        progressVisible: false,
+
+        async parseCSV(event) {
+          const formData = new FormData();
+          formData.append('csv_file', event.target.files[0]);
+
+          try {
+            const response = await fetch('{% url 'evaluations:parse_evaluation_results_csv_columns' request.team.slug evaluation_run.config_id evaluation_run.id %}', {
+              method: 'POST',
+              body: formData,
+              headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+              }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(data.error || '{% trans "Failed to parse CSV" %}');
+            }
+
+            this.csvData = data;
+            this.csvParsed = true;
+
+            // Initialize column mappings with suggestions
+            if (data.suggestions) {
+              this.columnMapping = {};
+              this.$nextTick(() => {
+                this.columnMapping = {...data.suggestions};
+              });
+            } else {
+              this.columnMapping = {};
+            }
+          } catch (error) {
+            alert('{% trans "Error parsing CSV" %}: ' + error.message);
+          }
+        },
+
+        async submitUpload() {
+          if (!this.csvData) return;
+          this.uploading = true;
+          this.progressVisible = true;
+          const filteredColumnMapping = {};
+          for (const [column, evaluator] of Object.entries(this.columnMapping)) {
+            if (evaluator) {
+              filteredColumnMapping[column] = evaluator;
+            }
+          }
+          const payload = {
+            csv_data: this.csvData.all_rows,
+            column_mappings: filteredColumnMapping
+          };
+
+          try {
+            const response = await fetch('{% url 'evaluations:evaluation_run_update' request.team.slug evaluation_run.config_id evaluation_run.id %}', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+              },
+              body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+            if (data.success && data.task_id) {
+              const progressUrl = `/celery-progress/${data.task_id}/`;
+              CeleryProgressBar.initProgressBar(progressUrl, {
+                pollInterval: 1000,
+                onSuccess: (progressBarElement, progressBarMessageElement, result) => {
+                  this.progressVisible = false;
+                  this.uploading = false;
+
+                  if (result && result.success) {
+                    this.uploadStatus = {
+                      type: 'success',
+                      message: `{% trans "Successfully processed" %} ${result.total_processed} {% trans "results" %}: ${result.updated_count} {% trans "updated" %}, ${result.created_count} {% trans "created" %}.`
+                    };
+                  } else {
+                    this.uploadStatus = {
+                      type: 'error',
+                      message: result?.error || '{% trans "Upload completed with errors" %}'
+                    };
+                  }
+                },
+                onError: (progressBarElement, progressBarMessageElement, excMessage) => {
+                  this.progressVisible = false;
+                  this.uploading = false;
+                  this.uploadStatus = {
+                    type: 'error',
+                    message: '{% trans "Error during upload" %}: ' + excMessage
+                  };
+                }
+              });
+            } else {
+              this.progressVisible = false;
+              this.uploading = false;
+              this.uploadStatus = {
+                type: 'error',
+                message: data.error || '{% trans "An error occurred while uploading the CSV." %}'
+              };
+            }
+          } catch (error) {
+            this.progressVisible = false;
+            this.uploading = false;
+            this.uploadStatus = {
+              type: 'error',
+              message: '{% trans "An error occurred while uploading the CSV." %}'
+            };
+          }
+        }
+      };
+    }
+  </script>
+{% endblock page_js %}
