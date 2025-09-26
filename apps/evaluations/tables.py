@@ -221,8 +221,8 @@ class EvaluationSessionsSelectionTable(tables.Table):
         verbose_name="Select",
         orderable=False,
         attrs={
-            "input": {"class": "checkbox checkbox-primary session-checkbox", "@change": "updateSelectedSessions()"},
-            "th__input": {"style": "display: none;"},  # Hide the select all checkbox in header
+            "td__input": {"class": "checkbox checkbox-primary session-checkbox", "@change": "updateSelectedSessions()"},
+            "th__input": {"class": "checkbox checkbox-primary session-checkbox", "@change": "toggleAllSelections()"},
         },
     )
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
