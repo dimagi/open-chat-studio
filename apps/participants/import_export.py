@@ -67,7 +67,8 @@ def process_participant_import(csv_file, experiment, team):
                         participant_data[data_key] = value
             if participant_data and not experiment:
                 results["errors"].append(f"Row {row_num}: participant data import requires a chatbot.")
-            if name:
+                continue
+            if name and experiment:
                 participant_data |= {"name": name}
 
             # Create or update participant
