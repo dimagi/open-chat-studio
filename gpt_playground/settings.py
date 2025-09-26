@@ -222,13 +222,11 @@ else:
 db_options = DATABASES["default"].setdefault("OPTIONS", {})
 if env.bool("DJANGO_DATABASE_USE_POOL", True):
     DATABASES["default"].pop("CONN_MAX_AGE", None)
+    # See https://www.psycopg.org/psycopg3/docs/api/pool.html#psycopg_pool.ConnectionPool
     db_options["pool"] = {
         "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
         "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=35),
         "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
-        "max_idle": 300,
-        "max_lifetime": 3600,
-        "reconnect_failed": True,
     }
 else:
     DATABASES["default"]["CONN_MAX_AGE"] = env.int("DJANGO_DATABASE_CONN_MAX_AGE", 0)
