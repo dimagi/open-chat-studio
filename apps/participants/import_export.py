@@ -29,7 +29,7 @@ def process_participant_import(csv_file, experiment, team):
 
     results = {"created": 0, "updated": 0, "errors": []}
     valid_platforms = [choice.value for choice in ChannelPlatform.for_dropdown([], team)]
-    valid_platforms.append(ChannelPlatform.WEB.value)
+    valid_platforms.extend([ChannelPlatform.WEB.value, ChannelPlatform.API.value])
     valid_platforms.sort()
 
     # Process each row
