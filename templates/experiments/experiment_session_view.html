@@ -58,7 +58,7 @@
         <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Data" />
         <div role="tabpanel" class="tab-content pt-3">
           <div class="p-3 border rounded-lg">
-          <pre><code class="text-sm">{{ participant_data|escape }}</code></pre>
+          <pre><code class="text-sm">{{ experiment_session.participant_data_from_experiment|to_json }}</code></pre>
           </div>
         </div>
         <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />

@@ -1,5 +1,3 @@
-import json
-
 from django import views
 from django.contrib import messages
 from django.db.models import Prefetch
@@ -125,7 +123,6 @@ def render_session_details(
                 }
                 for trigger in experiment.event_triggers
             ],
-            "participant_data": json.dumps(session.participant_data_from_experiment, indent=4),
             "participant_schedules": session.participant.get_schedules_for_experiment(
                 experiment, as_dict=True, include_inactive=True
             ),
