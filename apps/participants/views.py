@@ -273,7 +273,7 @@ def export_participants(request, team_slug: str):
 
     query = Participant.objects.filter(team=request.team)
     if experiment:
-        query.filter(data_set__experiment=experiment).distinct()
+        query = query.filter(data_set__experiment=experiment).distinct()
 
     filter_set = ParticipantFilter()
     timezone = request.session.get("detected_tz", None)
