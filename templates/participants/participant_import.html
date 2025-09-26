@@ -15,11 +15,13 @@
   <div class="app-card">
     <h1 class="pg-title">Import Participants</h1>
 
-    <form method="post" enctype="multipart/form-data" class="mb-6">
+    <form method="post" enctype="multipart/form-data" class="mb-6" x-data="{ buttonDisabled: false }"
+      x-on:submit.debounce="buttonDisabled = true">
       {% csrf_token %}
       {{ form.non_field_errors }}
       {% render_form_fields form %}
-      <input type="submit" class="btn btn-primary mt-2" value="Import">
+      <span x-show="buttonDisabled" x-cloak class="loading loading-spinner loading-xs"></span>
+      <input type="submit" class="btn btn-primary mt-2" value="Import" :disabled="buttonDisabled">
     </form>
 
     <div class="divider"></div>
