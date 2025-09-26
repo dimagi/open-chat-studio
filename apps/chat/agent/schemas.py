@@ -66,7 +66,7 @@ class IncrementCounterSchema(BaseModel):
 
 
 class AttachMediaSchema(BaseModel):
-    file_id: int = Field(description="The ID of the media file to attach")
+    file_ids: list[int] = Field(description="The IDs of the media files to attach (max 5)")
 
 
 class SearchIndexSchema(BaseModel):
