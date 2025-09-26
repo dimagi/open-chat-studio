@@ -142,6 +142,12 @@ function dashboard() {
                     }
                 }
             }
+
+            if (this.filters.date_range !== "custom") {
+                // We cannot have a start_date or end_date if the date range is not custom
+                delete this.filters.start_date;
+                delete this.filters.end_date;
+            }
         },
         
         handleFilterChange() {
