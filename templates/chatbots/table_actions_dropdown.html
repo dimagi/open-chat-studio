@@ -56,3 +56,7 @@
       linkElement.href = newUrl;
     }
 </script>
+
+<!-- Include the dialogs where they're actually accessed -->
+{% include "filters/saved_filters_dialog.html" with table_type=table_type %}
+{% include "filters/save_filter_dialog.html" with table_type=table_type %}
