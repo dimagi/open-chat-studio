@@ -332,14 +332,14 @@ class AttachMediaTool(CustomBaseTool):
                 if include_links:
                     # Only the web platform is able to render these links
                     if file.is_image:
-                        link_text = FILE_LINK_TEXT.format(
-                            name=file.name,
+                        link_text = IMAGE_LINK_TEXT.format(
                             file_id=file_id,
                             session_id=self.experiment_session.id,
                             team_slug=file.team.slug,
                         )
                     else:
-                        link_text = IMAGE_LINK_TEXT.format(
+                        link_text = FILE_LINK_TEXT.format(
+                            name=file.name,
                             file_id=file_id,
                             session_id=self.experiment_session.id,
                             team_slug=file.team.slug,
