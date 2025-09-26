@@ -37,13 +37,19 @@ class FilterParams:
             for item in column_filters:
                 self.filters[item.column] = item
 
-    @staticmethod
-    def from_request(request) -> Self:
+    @classmethod
+    def from_request(cls, request) -> Self:
         query_params = request.GET
-        if not query_params and (hx_url := request.headers.get("HX-Current-URL")):
-            parsed_url = urlparse(hx_url)
-            query_params = QueryDict(parsed_url.query)
-        return FilterParams(query_params)
+        if not any(key.startswith("filter_") for key in query_params):
+            return cls.from_request_header(request, "HX-Current-URL")
+        return cls(query_params)
+
+    @classmethod
+    def from_request_header(cls, request, header: str):
+        if header_value := request.headers.get(header):
+            parsed_url = urlparse(header_value)
+            return cls(QueryDict(parsed_url.query))
+        return cls()
 
     def get(self, column: str) -> ColumnFilterData | None:
         return self.filters.get(column)
