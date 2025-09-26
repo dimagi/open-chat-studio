@@ -37,19 +37,19 @@ def process_participant_import(csv_file, experiment, team):
         try:
             # Validate required fields
             identifier = row.get("identifier", "").strip()
-            platform = row.get("platform", "").strip()
+            platform = row.get("channel", "").strip()
 
             if not identifier:
                 results["errors"].append(f"Row {row_num}: identifier is required")
                 continue
 
             if not platform:
-                results["errors"].append(f"Row {row_num}: platform is required")
+                results["errors"].append(f"Row {row_num}: channel is required")
                 continue
 
             if platform not in valid_platforms:
                 results["errors"].append(
-                    f"Row {row_num}: invalid platform '{platform}'. Valid options: {', '.join(valid_platforms)}"
+                    f"Row {row_num}: invalid channel '{platform}'. Valid options: {', '.join(valid_platforms)}"
                 )
                 continue
 
@@ -128,7 +128,7 @@ def export_participant_data_to_response(team, experiment, participants_query):
                 data_keys.update(data.data.keys())
 
     # Create CSV header
-    fieldnames = ["identifier", "platform", "name"]
+    fieldnames = ["identifier", "channel", "name"]
     if data_keys:
         fieldnames.extend([f"data.{key}" for key in sorted(data_keys)])
 
@@ -139,7 +139,7 @@ def export_participant_data_to_response(team, experiment, participants_query):
     for participant in participants:
         row = {
             "identifier": participant.identifier,
-            "platform": participant.platform,
+            "channel": participant.platform,
             "name": participant.name,
         }
 

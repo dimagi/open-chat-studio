@@ -49,7 +49,7 @@ def participant_data_records(participants, experiment):
 @pytest.fixture()
 def simple_csv_content():
     """CSV content for basic import test"""
-    return """identifier,platform,name
+    return """identifier,channel,name
 user1@example.com,web,User One
 user2@example.com,telegram,User Two"""
 
@@ -57,7 +57,7 @@ user2@example.com,telegram,User Two"""
 @pytest.fixture()
 def csv_with_data_content():
     """CSV content with participant data fields"""
-    return """identifier,platform,name,data.age,data.city,data.preferences
+    return """identifier,channel,name,data.age,data.city,data.preferences
 user1@example.com,web,User One,25,New York,"{""theme"": ""dark""}"
 user2@example.com,telegram,User Two,30,Los Angeles,"{""notifications"": true}"""
 
@@ -65,7 +65,7 @@ user2@example.com,telegram,User Two,30,Los Angeles,"{""notifications"": true}"""
 @pytest.fixture()
 def invalid_csv_content():
     """CSV content with validation errors"""
-    return """identifier,platform,name
+    return """identifier,channel,name
 ,web,Missing Identifier
 user@example.com,,Missing Platform  
 user@example.com,invalid_platform,Invalid Platform"""
@@ -120,7 +120,7 @@ class TestProcessParticipantImport:
 
     def test_update_existing_participants(self, team_with_users, participants):
         """Test updating existing participants"""
-        csv_content = """identifier,platform,name
+        csv_content = """identifier,channel,name
 user1@example.com,web,Updated User One
 user2@example.com,telegram,Updated User Two"""
 
@@ -141,7 +141,7 @@ user2@example.com,telegram,Updated User Two"""
 
     def test_merge_participant_data(self, team_with_users, experiment, participant_data_records):
         """Test merging data with existing participant data records"""
-        csv_content = """identifier,platform,name,data.age,data.country
+        csv_content = """identifier,channel,name,data.age,data.country
 user1@example.com,web,User One,26,USA"""
 
         csv_file = io.BytesIO(csv_content.encode("utf-8"))
@@ -176,20 +176,17 @@ user1@example.com,web,User One,26,USA"""
 
         errors = result["errors"]
         assert "Row 2: identifier is required" in errors
-        assert "Row 3: platform is required" in errors
-        assert "Row 4: invalid platform 'invalid_platform'" in errors[2]
+        assert "Row 3: channel is required" in errors
+        assert "Row 4: invalid channel 'invalid_platform'" in errors[2]
 
     def test_data_without_experiment_error(self, team_with_users):
         """Test error when trying to import data fields without experiment"""
-        csv_content = """identifier,platform,name,data.age
+        csv_content = """identifier,channel,name,data.age
 user1@example.com,web,User One,25"""
 
         csv_file = io.BytesIO(csv_content.encode("utf-8"))
 
-        with patch("apps.channels.models.ChannelPlatform.for_dropdown") as mock_dropdown:
-            mock_dropdown.return_value = {ChannelPlatform.WEB: True}
-
-            result = process_participant_import(csv_file, None, team_with_users)
+        result = process_participant_import(csv_file, None, team_with_users)
 
         assert result["created"] == 0
         assert result["updated"] == 0
@@ -198,16 +195,13 @@ user1@example.com,web,User One,25"""
 
     def test_json_parsing_in_data_fields(self, team_with_users, experiment):
         """Test JSON parsing and fallback to string for data fields"""
-        csv_content = """identifier,platform,name,data.json_field,data.string_field
+        csv_content = """identifier,channel,name,data.json_field,data.string_field
 user1@example.com,web,User One,"{""key"": ""value""}","just a string"
 user2@example.com,web,User Two,"invalid {json",another string"""
 
         csv_file = io.BytesIO(csv_content.encode("utf-8"))
 
-        with patch("apps.channels.models.ChannelPlatform.for_dropdown") as mock_dropdown:
-            mock_dropdown.return_value = {ChannelPlatform.WEB: True}
-
-            result = process_participant_import(csv_file, experiment, team_with_users)
+        result = process_participant_import(csv_file, experiment, team_with_users)
 
         assert result["created"] == 2
         assert result["errors"] == []
@@ -226,12 +220,9 @@ user2@example.com,web,User Two,"invalid {json",another string"""
 
     def test_empty_csv(self, team_with_users):
         """Test handling empty CSV file"""
-        csv_file = io.BytesIO(b"identifier,platform,name\n")
+        csv_file = io.BytesIO(b"identifier,channel,name\n")
 
-        with patch("apps.channels.models.ChannelPlatform.for_dropdown") as mock_dropdown:
-            mock_dropdown.return_value = {ChannelPlatform.WEB: True}
-
-            result = process_participant_import(csv_file, None, team_with_users)
+        result = process_participant_import(csv_file, None, team_with_users)
 
         assert result["created"] == 0
         assert result["updated"] == 0
@@ -239,7 +230,7 @@ user2@example.com,web,User Two,"invalid {json",another string"""
 
     def test_exception_handling(self, team_with_users):
         """Test that exceptions in processing are caught and reported"""
-        csv_content = """identifier,platform,name
+        csv_content = """identifier,channel,name
 user@example.com,web,User"""
 
         csv_file = io.BytesIO(csv_content.encode("utf-8"))
@@ -276,16 +267,16 @@ class TestExportParticipantDataToResponse:
         assert len(rows) == 2
 
         # Verify header
-        expected_headers = ["identifier", "platform", "name"]
+        expected_headers = ["identifier", "channel", "name"]
         assert list(csv_reader.fieldnames) == expected_headers
 
-        # Verify data (ordered by platform, identifier)
+        # Verify data (ordered by channel, identifier)
         assert rows[0]["identifier"] == "user2@example.com"  # telegram comes before web
-        assert rows[0]["platform"] == "telegram"
+        assert rows[0]["channel"] == "telegram"
         assert rows[0]["name"] == "User Two"
 
         assert rows[1]["identifier"] == "user1@example.com"
-        assert rows[1]["platform"] == "web"
+        assert rows[1]["channel"] == "web"
         assert rows[1]["name"] == "User One"
 
     def test_export_with_experiment_data(self, team_with_users, experiment, participants, participant_data_records):
@@ -303,17 +294,17 @@ class TestExportParticipantDataToResponse:
         assert len(rows) == 2
 
         # Verify headers include data fields
-        expected_headers = ["identifier", "platform", "name", "data.age", "data.city", "data.name"]
+        expected_headers = ["identifier", "channel", "name", "data.age", "data.city", "data.name"]
         assert set(csv_reader.fieldnames) == set(expected_headers)
 
         # Verify data content
-        web_row = next(row for row in rows if row["platform"] == "web")
+        web_row = next(row for row in rows if row["channel"] == "web")
         assert web_row["identifier"] == "user1@example.com"
         assert web_row["name"] == "User One"
         assert web_row["data.age"] == "25"
         assert web_row["data.city"] == "New York"
 
-        telegram_row = next(row for row in rows if row["platform"] == "telegram")
+        telegram_row = next(row for row in rows if row["channel"] == "telegram")
         assert telegram_row["identifier"] == "user2@example.com"
         assert telegram_row["name"] == "User Two"
         assert telegram_row["data.age"] == "30"
@@ -340,12 +331,12 @@ class TestExportParticipantDataToResponse:
         assert len(rows) == 2
 
         # Participant with data should have values
-        web_row = next(row for row in rows if row["platform"] == "web")
+        web_row = next(row for row in rows if row["channel"] == "web")
         assert web_row["data.age"] == "25"
         assert web_row["data.city"] == "New York"
 
         # Participant without data should have empty strings
-        telegram_row = next(row for row in rows if row["platform"] == "telegram")
+        telegram_row = next(row for row in rows if row["channel"] == "telegram")
         assert telegram_row["data.age"] == ""
         assert telegram_row["data.city"] == ""
 
@@ -360,7 +351,7 @@ class TestExportParticipantDataToResponse:
         rows = list(csv_reader)
 
         assert len(rows) == 0
-        assert list(csv_reader.fieldnames) == ["identifier", "platform", "name"]
+        assert list(csv_reader.fieldnames) == ["identifier", "channel", "name"]
 
     def test_export_complex_data_types(self, team_with_users, experiment, participants):
         """Test exporting participants with complex data types (dicts, lists)"""
@@ -383,7 +374,7 @@ class TestExportParticipantDataToResponse:
         csv_reader = csv.DictReader(io.StringIO(content))
         rows = list(csv_reader)
 
-        web_row = next(row for row in rows if row["platform"] == "web")
+        web_row = next(row for row in rows if row["channel"] == "web")
 
         # Complex data types should be exported as their string representation
         assert "data.preferences" in csv_reader.fieldnames
