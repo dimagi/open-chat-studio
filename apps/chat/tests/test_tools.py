@@ -26,9 +26,11 @@ from apps.chat.agent.tools import (
     create_schedule_message,
     get_mcp_tool_instances,
 )
+from apps.chat.models import ChatAttachment
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
 from apps.files.models import FileChunkEmbedding
+from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -42,7 +44,10 @@ class BaseTestAgentTool:
     tool_cls: type[tools.CustomBaseTool]
 
     def _invoke_tool(self, session, **tool_kwargs):
-        tool = self.tool_cls(experiment_session=session)
+        kwargs = {"experiment_session": session}
+        if self.tool_cls.requires_callbacks:
+            kwargs["tool_callbacks"] = ToolCallbacks()
+        tool = self.tool_cls(**kwargs)
         return tool.action(**tool_kwargs)
 
     @staticmethod
@@ -649,3 +654,18 @@ class TestGetSessionStateTool(BaseTestAgentTool):
 
         response = self._invoke_tool(session, key="any_key")
         assert "No value found" in response
+
+
+class TestAttachMediaTool(BaseTestAgentTool):
+    tool_cls = tools.AttachMediaTool
+
+    def test_attach_files(self, session):
+        chat_attachment, _ = ChatAttachment.objects.get_or_create(chat=session.chat, tool_type="ocs_attachments")
+        assert chat_attachment.files.count() == 0
+
+        files = FileFactory.create_batch(3)
+        response = self._invoke_tool(session, file_ids=[file.id for file in files])
+
+        assert chat_attachment.files.count() == 3
+        assert all(str(file.id) in response for file in files)
+        print(response)
