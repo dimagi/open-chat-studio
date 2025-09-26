@@ -6,7 +6,6 @@ const urlData = document.getElementById('tag-multiselect');
 const linkTagUrl = urlData.getAttribute("data-linkTagUrl");
 const unlinkTagUrl = urlData.getAttribute("data-unlinkTagUrl");
 const tsBlur = new Event("ts-blur");
-
 let controlInstances = [];
 
 function addTag (name, el, objectInfo) {
@@ -32,17 +31,19 @@ function configureTomSelect() {
   const filter = '.tag-multiselect:not(.tomselected):not(.ts-wrapper)';
   document.querySelectorAll(filter).forEach((el) => {
     let objectInfo = el.getAttribute("data-info");
+    let allowCreate = el.getAttribute("data-allowCreate") !== "false";
+
     let control = new TomSelect(el, {
       plugins: ["remove_button", "caret_position", "input_autogrow"],
       maxItems: null,
-      create: true,
-      createFilter: (input) => {
+      create: allowCreate,
+      createFilter: allowCreate ? (input) => {
         if (input.length > 100) {
           el.tomselect.dropdown_content.innerHTML = `<div class="ts-error-message" style="color: red; padding: 5px;">Tag name too long. Maximum 100 characters allowed.</div>`;
           return false;
         }
         return true;
-      },
+      } : false,
       onItemAdd: addTag('onItemAdd', el, objectInfo),
       onItemRemove: removeTag('onItemRemove', el, objectInfo),
       onBlur: () => {
