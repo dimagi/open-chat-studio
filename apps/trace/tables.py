@@ -32,6 +32,7 @@ class TraceTable(tables.Table):
         align="left",
         orderable=True,
     )
+    duration = tables.Column(verbose_name="Duration", accessor="duration", orderable=True)
     session = actions.ActionsColumn(
         actions=[
             chip_action(
