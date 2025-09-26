@@ -1,0 +1,25 @@
+<div class="card bg-base-200">
+  <div class="card-body">
+    <h3 class="card-title text-base">
+      <i class="fa-solid fa-code me-1"></i>
+      Embed Code
+    </h3>
+    <div class="join w-full">
+      <textarea
+             name="{{ widget.name }}"
+             class="textarea textarea-bordered join-item flex-1 font-mono text-sm"
+             rows="4"
+             readonly
+             {% if widget.attrs.id %}id="{{ widget.attrs.id }}"{% else %}id="embed-code-input"{% endif %}>{{ widget.value|default:'' }}</textarea>
+      <button class="btn btn-outline join-item" type="button"
+              onclick="SiteJS.app.copyToClipboard(this, '{% if widget.attrs.id %}{{ widget.attrs.id }}{% else %}embed-code-input{% endif %}')"
+              title="Copy embed code to clipboard">
+          <i class="fa-solid fa-copy"></i> Copy
+      </button>
+    </div>
+    <div class="text-sm opacity-70 mt-2">
+      <i class="fa-solid fa-info-circle me-1"></i>
+      Copy this code and paste it into your website's HTML where you want the chat widget to appear.
+    </div>
+  </div>
+</div>
