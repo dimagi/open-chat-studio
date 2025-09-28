@@ -82,10 +82,11 @@ function submitFilterSet(event) {
     return response.json();
   })
   .then(data => {
+    const filterSetName = nameInput.value.trim();
     nameInput.value = '';
-    loadSavedFilters();
+    window.refreshFilterSets?.() || loadSavedFilters?.();
     document.getElementById('saveFilterDialog').close();
-    showNotification('Filter set saved successfully', 'success');
+    showNotification(`Filter set "${filterSetName}" saved successfully`, 'success');
   })
   .catch(error => {
     console.error('Error saving filter set:', error);

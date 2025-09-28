@@ -23,6 +23,7 @@
 <script>
 const FilterDialog = {
   isLoading: false,
+  filters: [], // Store the loaded filters
 
   async load() {
     if (this.isLoading) return;
@@ -32,8 +33,9 @@ const FilterDialog = {
 
     try {
       const filters = await this.apiCall("{% url 'experiments:list_filter_set' request.team.slug table_type %}");
-      content.innerHTML = filters.results?.length
-        ? this.renderFilters(filters.results)
+      this.filters = filters.results || []; // Store the filters
+      content.innerHTML = this.filters.length
+        ? this.renderFilters(this.filters)
         : '<div class="text-center text-gray-500 py-4">No saved filter sets</div>';
     } catch (e) {
       content.innerHTML = '<div class="text-center text-red-500 py-4">Failed to load filter sets</div>';
@@ -90,33 +92,56 @@ const FilterDialog = {
   },
 
   async update(id) {
+    const filterSetName = this.getFilterSetName(id);
+    
     await this.api(`/ ${id}/edit/`, "PATCH", { filter_params: this.currentFilters() });
-    this.load(); this.notify("Filter updated","success");
+    this.load(); 
+    window.refreshFilterSets?.();
+    this.notify(`"${filterSetName}" updated`,"success");
   },
 
   async toggleDefault(id,type) {
+    const filterSetName = this.getFilterSetName(id);
+    
     const field = `is_default_for_${type}`;
     await this.api(`/${id}/edit/`,"PATCH",{ [field]:true, [`clear_other_${type}_defaults`]:true });
-    this.load(); this.notify(`Set as ${type} default`,"success");
+    this.load(); 
+    window.refreshFilterSets?.();
+    this.notify(`"${filterSetName}" set as ${type} default`,"success");
   },
 
   async share(id) {
+    const filterSetName = this.getFilterSetName(id);
+    
     await this.api(`/${id}/edit/`,"PATCH",{ is_shared:true });
-    this.load(); this.notify("Filter shared","success");
+    this.load(); 
+    this.notify(`"${filterSetName}" shared`,"success");
   },
 
   async toggleStar(id) {
+    const filterSetName = this.getFilterSetName(id);
+    
     await this.api(`/${id}/edit/`,"PATCH",{ is_starred:true });
-    this.load(); this.notify("Star toggled","success");
+    this.load(); 
+    window.refreshFilterSets?.();
+    this.notify(`"${filterSetName}" starred`,"success");
   },
 
   async delete(id,name) {
     if(!confirm(`Delete "${name}"?`)) return;
     await this.api(`/${id}/edit/`,"DELETE");
-    this.load(); this.notify("Filter deleted","success");
+    this.load(); 
+    window.refreshFilterSets?.();
+    this.notify(`"${name}" deleted`,"success");
   },
 
   // ---- HELPERS ----
+  getFilterSetName(id) {
+    const filterSet = this.filters.find(f => f.id === id);
+    console.log('Looking for filter set with id:', id, 'Found:', filterSet);
+    return filterSet?.name || 'Filter set';
+  },
+
   async apiCall(url) {
     const r = await fetch(url,{credentials:"same-origin"});
     if(!r.ok) throw new Error(r.statusText);
