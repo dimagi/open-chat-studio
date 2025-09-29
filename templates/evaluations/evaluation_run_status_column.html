@@ -46,15 +46,15 @@
             if (data.progress && data.progress.description) {
               badge.textContent = data.progress.description;
               setTimeout(updateProgress, 2000);
-            })
-              .catch(error => {
-                console.error('Progress update failed:', error);
-                setTimeout(updateProgress, 5000);
-              });
-          }
+            }
+          }).catch(error => {
+            console.error('Progress update failed:', error);
+            setTimeout(updateProgress, 5000);
+          });
+      }
 
-  // Start polling
-        setTimeout(updateProgress, 1000);
+      // Start polling
+      setTimeout(updateProgress, 1000);
       })();
   </script>
 {% endif %}

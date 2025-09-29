@@ -1,4 +1,5 @@
 import json
+from json import JSONDecodeError
 
 from django import template
 from django.core.serializers.json import DjangoJSONEncoder
@@ -19,4 +20,8 @@ def to_json(obj):
     # json.dumps does not properly convert QueryDict array parameter to json
     if isinstance(obj, QueryDict):
         obj = dict(obj)
-    return mark_safe(escape_script_tags(json.dumps(obj, indent=2, cls=DjangoJSONEncoder)))
+    try:
+        json_string = json.dumps(obj, indent=2, cls=DjangoJSONEncoder)
+        return mark_safe(escape_script_tags(json_string))
+    except JSONDecodeError:
+        return mark_safe("Unable to decode JSON data")

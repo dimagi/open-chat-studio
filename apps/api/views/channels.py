@@ -1,4 +1,5 @@
 import json
+import logging
 
 import httpx
 from django.conf import settings
@@ -18,6 +19,8 @@ from apps.api.tasks import trigger_bot_message_task
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment, Participant, ParticipantData
 
+connect_logger = logging.getLogger("api.connect_channel")
+
 
 @csrf_exempt
 @require_POST
@@ -29,14 +32,18 @@ def generate_key(request: Request):
 
     commcare_connect_channel_id = request.POST["channel_id"]
     response = httpx.get(settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
+    connect_logger.info(f"CommCare Connect response: {response.status_code}")
     response.raise_for_status()
-    connect_id = response.json().get("sub")
+    connect_id = response.json().get("sub").lower()
 
     try:
         participant_data = ParticipantData.objects.defer("data").get(
             participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
         )
     except ParticipantData.DoesNotExist:
+        connect_logger.exception(
+            f"ParticipantData with connect_id: {connect_id} and channel_id: {commcare_connect_channel_id} not found"
+        )
         raise Http404() from None
 
     if not participant_data.encryption_key:
@@ -128,6 +135,7 @@ def trigger_bot_message(request):
     data = serializer.data
     platform = data["platform"]
     identifier = data["identifier"]
+    identifier = ChannelPlatform(platform).normalize_identifier(identifier)
     experiment_public_id = data["experiment"]
 
     experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)

@@ -360,11 +360,11 @@ redis = [
 
 [[package]]
 name = "celery-progress"
-version = "0.4"
+version = "0.5"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/af/3b/5e6facf5cefbff0eb42ded0eead292d264204bf8d4ef8c9667859b54481b/celery_progress-0.4.tar.gz", hash = "sha256:0343a9a5111e1790c3b68fb5ce0b7889dd05b445e77e2f42469303acaea2ecbf", size = 15926, upload-time = "2024-06-12T15:41:58.461Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4b/1a/1e66f578556698d4bd47d14b099b46cafd9aef2f62a881bdfc51e3643c3c/celery_progress-0.5.tar.gz", hash = "sha256:ca345b8c86c35f6deb32a4b0df9a984f3f5aa9248a152eace9e04363367e848a", size = 15939, upload-time = "2025-01-30T07:18:54.984Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/24/8559dc0593b130ba8198c2bcdc8e809977fa84cce231add13b56244da1b3/celery_progress-0.4-py3-none-any.whl", hash = "sha256:7521b38a3160ef18b214c241810830698fa4734094d2819098256f83bc1c7a4d", size = 17277, upload-time = "2024-06-12T15:41:54.014Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/84/31a409b57d544040244c130a44fadb4c43afafa69ddd0d8ac3018ccd8492/celery_progress-0.5-py3-none-any.whl", hash = "sha256:a02aaacc9dc8b97d975f3186ba2de08a8afef00457dadc3832b463b06b5316fa", size = 17328, upload-time = "2025-01-30T07:18:52.589Z" },
 ]
 
 [[package]]
