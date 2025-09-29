@@ -37,6 +37,8 @@ def reconcile_connect_participants(ParticipantModel):
     for upper_part in duplicates_queryset.iterator(chunk_size=500):
         # Move existing sessions to the lowercased participant
         upper_part.experimentsession_set.update(participant_id=upper_part.lc_participant_id)
+        # scheduled_messages is misspelled in the model's related name, so we have to use that name here
+        upper_part.schduled_messages.update(participant_id=upper_part.lc_participant_id)
         # This will delete the participant data as well
         upper_part.delete()
 
