@@ -354,8 +354,9 @@ class JsonEditor extends BaseEditor {
    * Initialize all editors matching a selector
    * @param {string} selector - CSS selector to find editor elements
    */
-  static initAll(selector = '.json-editor') {
-    Array.from(document.querySelectorAll(selector)).forEach(el => {
+  static initAll(parent, selector = '.json-editor') {
+    parent = parent || document;
+    Array.from(parent.querySelectorAll(selector)).forEach(el => {
       JsonEditor.create(el);
     });
   }
@@ -505,8 +506,8 @@ class PromptEditor extends BaseEditor {
 }
 
 // Initialize editors when the DOM is loaded
-export const initJsonEditors = () => {
-  JsonEditor.initAll();
+export const initJsonEditors = (parent) => {
+  JsonEditor.initAll(parent);
 };
 
 // Create a single editor instance

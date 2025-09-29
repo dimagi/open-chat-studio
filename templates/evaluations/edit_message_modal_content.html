@@ -38,9 +38,9 @@
 
 <script>
   setTimeout(() => {
-    const jsonEditorElement = document.querySelector('.json-editor');
-    if (jsonEditorElement && window.SiteJS && window.SiteJS.editors) {
-      window.SiteJS.editors.createJsonEditor(jsonEditorElement);
+    let modal = document.getElementById('editMessageModal');
+    if (modal) {
+      window.SiteJS.editors.initJsonEditors(modal);
     }
   }, 100);
 </script>

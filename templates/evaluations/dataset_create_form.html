@@ -386,12 +386,8 @@
 
           // Initialize JSON editor for manual message form after DOM is ready
           this.$nextTick(() => {
-            const jsonEditorElements = document.querySelectorAll('#manual-message-form .json-editor');
-            if (jsonEditorElements && window.SiteJS && window.SiteJS.editors) {
-              Array.from(jsonEditorElements).forEach(el => {
-                window.SiteJS.editors.createJsonEditor(el);
-              });
-            }
+            const form = document.getElementById('manual-message-form');
+            window.SiteJS.editors.initJsonEditors(form);
           });
         },
 
@@ -581,14 +577,7 @@
           this.$nextTick(() => {
             let modal = document.getElementById('editMessageModal');
             modal.showModal();
-
-            // Initialize JSON editor for modal
-            const jsonEditorElements = modal.querySelectorAll('.json-editor');
-            if (jsonEditorElements && window.SiteJS && window.SiteJS.editors) {
-              Array.from(jsonEditorElements).forEach(el => {
-                window.SiteJS.editors.createJsonEditor(el);
-              });
-            }
+            window.SiteJS.editors.initJsonEditors(modal);
           });
         },
 
