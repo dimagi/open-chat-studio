@@ -17,16 +17,37 @@
     <table class="table w-full">
       <thead class="bg-base-200 base-content uppercase text-sm leading-normal">
         <tr>
-          <th class="w-1/5 px-3 py-3 text-left">{% trans "Human Message" %}</th>
-          <th class="w-1/5 px-3 py-3 text-left">{% trans "AI Message" %}</th>
-          <th class="w-1/6 px-3 py-3 text-left">{% trans "Context" %}</th>
-          <th class="w-1/6 px-3 py-3 text-left">{% trans "History" %}</th>
-          <th class="w-1/6 px-3 py-3 text-left">{% trans "Actions" %}</th>
+          <th class="p-3 text-right"></th>
+          <th class="w-1/5 p-3 text-left">{% trans "Human Message" %}</th>
+          <th class="w-1/5 p-3 text-left">{% trans "AI Message" %}</th>
+          <th class="w-1/6 p-3 text-left">{% trans "Context" %}</th>
+          <th class="w-1/6 p-3 text-left">{% trans "History" %}</th>
+          <th class="w-1/6 p-3 text-left">{% trans "Participant Data" %}</th>
+          <th class="w-1/6 p-3 text-left">{% trans "Session State" %}</th>
         </tr>
       </thead>
       <tbody>
         <template x-for="(message, index) in messages" :key="index">
           <tr>
+            <!-- Actions -->
+            <td class="px-3 py-4 align-top">
+              <div class="join join-vertical lg:join-horizontal">
+                <button type="button"
+                        class="btn btn-sm join-item"
+                        :title="`Edit message pair ${index + 1}`"
+                        @click="editMessage(index)">
+                  <i class="fa-solid fa-pencil"></i>
+                </button>
+
+                <button type="button"
+                        class="btn btn-sm join-item"
+                        :title="`Delete message pair ${index + 1}`"
+                        @click="confirmDelete(index)">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            </td>
+
             <!-- Human Message -->
             <td class="px-3 py-4 align-top">
               <div class="text-sm" :title="message.human">
@@ -102,22 +123,27 @@
               </div>
             </td>
 
-            <!-- Actions -->
+            <!-- Participant Data -->
             <td class="px-3 py-4 align-top">
-              <div class="join join-vertical lg:join-horizontal">
-                <button type="button"
-                        class="btn btn-sm join-item"
-                        :title="`Edit message pair ${index + 1}`"
-                        @click="editMessage(index)">
-                  <i class="fa-solid fa-pencil"></i>
-                </button>
+              <div class="text-xs">
+                <div x-show="!message.participant_data || message.participant_data.trim() === '' || message.participant_data === '{}'" class="text-gray-400">
+                  {% trans "---" %}
+                </div>
+                <div x-show="message.participant_data && message.participant_data.trim() !== '' && message.participant_data !== '{}'">
+                  <code><pre x-text="message.participant_data"></pre></code>
+                </div>
+              </div>
+            </td>
 
-                <button type="button"
-                        class="btn btn-sm join-item"
-                        :title="`Delete message pair ${index + 1}`"
-                        @click="confirmDelete(index)">
-                  <i class="fa-solid fa-trash"></i>
-                </button>
+            <!-- Session State -->
+            <td class="px-3 py-4 align-top">
+              <div class="text-xs">
+                <div x-show="!message.session_state || message.session_state.trim() === '' || message.session_state === '{}'" class="text-gray-400">
+                  {% trans "---" %}
+                </div>
+                <div x-show="message.session_state && message.session_state.trim() !== '' && message.session_state !== '{}'">
+                  <code><pre x-text="message.session_state"></pre></code>
+                </div>
               </div>
             </td>
           </tr>
