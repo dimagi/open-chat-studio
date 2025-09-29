@@ -34,7 +34,7 @@ def generate_key(request: Request):
     response = httpx.get(settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
     connect_logger.info(f"CommCare Connect response: {response.status_code}")
     response.raise_for_status()
-    connect_id = response.json().get("sub")
+    connect_id = response.json().get("sub").lower()
 
     try:
         participant_data = ParticipantData.objects.defer("data").get(
@@ -135,6 +135,7 @@ def trigger_bot_message(request):
     data = serializer.data
     platform = data["platform"]
     identifier = data["identifier"]
+    identifier = ChannelPlatform(platform).normalize_identifier(identifier)
     experiment_public_id = data["experiment"]
 
     experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
