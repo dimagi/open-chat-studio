@@ -196,8 +196,14 @@
         <div class="w-4 h-px bg-base-300"></div>
         <div class="w-2 h-2 bg-base-300 rounded-full"></div>
       </div>
-      <div id="starredFiltersList" class="flex flex-wrap gap-2 mt-2">
-        <div class="flex justify-center items-center p-2">
+      <div class="flex flex-wrap gap-2 mt-2">
+        <template x-for="filterSet in starredFilters" :key="filterSet.id">
+          <div class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
+               @click="applyStarredFilter(filterSet.id, filterSet.name)">
+            <span class="text-base-content" x-text="filterSet.name"></span>
+          </div>
+        </template>
+        <div x-show="starredFilters.length === 0" class="flex justify-center items-center p-2">
           <span class="loading loading-spinner loading-xs"></span>
         </div>
       </div>
@@ -219,6 +225,7 @@
         loading: false,
         columns: filterColumns,
       },
+      starredFilters: [],
 
       init() {
         const App = SiteJS.app;
@@ -599,137 +606,127 @@
         this.selectedLabel = selected ? selected.label : '';
       },
 
-      async loadStarredFilters() {
+      async loadFilterSets() {
         try {
           const url = '{% url "experiments:list_filter_set" request.team.slug table_type %}';
           const res = await fetch(url, { credentials: 'same-origin' });
           const data = await res.json();
-          const starredFilters = (data.results || []).filter(fs => fs.is_starred);
-          this.displayStarredFilters(starredFilters);
+          return data.results || [];
+        } catch (error) {
+          console.error('Failed to load filter sets:', error);
+          return [];
+        }
+      },
+
+      async loadStarredFilters() {
+        try {
+          const filterSets = await this.loadFilterSets();
+          this.starredFilters = filterSets.filter(fs => fs.is_starred);
         } catch (error) {
           console.error('Failed to load starred filters:', error);
-          this.displayStarredFilters([]);
+          this.starredFilters = [];
         }
       },
-
-      displayStarredFilters(starredFilters) {
-        const starredFiltersList = document.getElementById('starredFiltersList');
-        
-        if (starredFilters.length === 0) {
-          starredFiltersList.innerHTML = '';
-          return;
-        }
-        
-        const html = starredFilters.map(filterSet => `
-          <div class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
-               onclick="applyStarredFilter(${filterSet.id}, '${escapeHtml(filterSet.name)}')">
-            <span class="text-base-content">${escapeHtml(filterSet.name)}</span>
-          </div>
-        `).join('');
-        
-        starredFiltersList.innerHTML = html;
-      },
-
 
       async loadDefaultFilters() {
         try {
           const urlParams = new URLSearchParams(window.location.search);
           const hasExistingFilters = [...urlParams.keys()].some(key => key.startsWith('filter_'));
           
-          if (hasExistingFilters) {
-            return;
-          }
+          if (hasExistingFilters) return;
 
-          const url = '{% url "experiments:list_filter_set" request.team.slug table_type %}';
-          const res = await fetch(url, { credentials: 'same-origin' });
-          const data = await res.json();
-          const filterSets = data.results || [];
+          const filterSets = await this.loadFilterSets();
+          const defaultFilterSet = filterSets.find(fs => fs.is_default_for_user) || 
+                                 filterSets.find(fs => fs.is_default_for_team);
           
-          if (filterSets.length > 0) {
-            // First try to find user default
-            let defaultFilterSet = filterSets.find(fs => fs.is_default_for_user);
-            
-            // If no user default, try team default
-            if (!defaultFilterSet) {
-              defaultFilterSet = filterSets.find(fs => fs.is_default_for_team);
-            }
-          
-            if (defaultFilterSet && defaultFilterSet.filter_params) {
-              this.applyDefaultFilterSet(defaultFilterSet);
-            }
+          if (defaultFilterSet?.filter_params && Object.keys(defaultFilterSet.filter_params).length > 0) {
+            this.applyDefaultFilterSet(defaultFilterSet);
           }
         } catch (error) {
           console.error('Failed to load default filters:', error);
         }
       },
 
-      // Apply a default filter set
       applyDefaultFilterSet(filterSet) {
-        // Clear existing filters
         this.filterData.filters = [];
-        
-        // Apply the filter set parameters to URL
-        const currentUrl = new URL(window.location);
-        const params = new URLSearchParams(currentUrl.search);
-        
-        // Clear existing filter parameters
-        [...params.keys()].forEach(key => {
-          if (key.startsWith('filter_')) {
-            params.delete(key);
+        this.parseAndApplyFilterParams(filterSet.filter_params);
+        this.updateUrlWithFilters(this.getActiveFilters(this.filterData.filters));
+        this.triggerFilterChange(false);
+      },
+
+      parseAndApplyFilterParams(filterParams) {
+        const filterEntries = Object.entries(filterParams)
+          .filter(([key]) => key.startsWith('filter_'))
+          .reduce((acc, [key, value]) => {
+            const match = key.match(/filter_(\d+)_(.+)/);
+            if (match) {
+              const [, index, param] = match;
+              if (!acc[index]) acc[index] = {};
+              acc[index][param] = value;
+            }
+            return acc;
+          }, {});
+
+        Object.values(filterEntries).forEach((filterData) => {
+          if (filterData.column && filterData.operator) {
+            const filter = {
+              column: filterData.column,
+              operator: '',
+              value: '',
+              selectedValues: [],
+              availableOperators: [],
+              showOptions: false,
+              searchQuery: '',
+              filteredOptions: []
+            };
+
+            this.filterData.filters.push(filter);
+            const filterIndex = this.filterData.filters.length - 1;
+            
+            this.updateOperatorsByColumn(filterIndex);
+            
+            const currentFilter = this.filterData.filters[filterIndex];
+            currentFilter.operator = filterData.operator;
+            currentFilter.value = filterData.value || '';
+
+            if (['any of', 'all of', 'excludes'].includes(filterData.operator)) {
+              try {
+                currentFilter.selectedValues = JSON.parse(filterData.value || '[]');
+              } catch (e) {
+                currentFilter.selectedValues = [];
+              }
+            }
           }
         });
-        
-        // Add the filter set parameters
-        Object.entries(filterSet.filter_params).forEach(([key, value]) => {
-          params.set(key, value);
-        });
-        
-        // Update the URL and reload the page
-        currentUrl.search = params.toString();
-        window.location.href = currentUrl.toString();
+      },
+
+      async applyStarredFilter(filterSetId, filterSetName) {
+        try {
+          const filterSets = await this.loadFilterSets();
+          const filterSet = filterSets.find(fs => fs.id === filterSetId);
+          if (!filterSet) return;
+          
+          this.filterData.filters = [];
+          this.parseAndApplyFilterParams(filterSet.filter_params);
+          this.updateUrlWithFilters(this.getActiveFilters(this.filterData.filters));
+          this.triggerFilterChange(false);
+        } catch (error) {
+          console.error('Error applying starred filter:', error);
+        }
       },
     }));
     });
 
-    // Function to apply a starred filter
-    async function applyStarredFilter(filterSetId, filterSetName) {
+    window.refreshFilterSets = async function() {
       try {
-        const url = '{% url "experiments:list_filter_set" request.team.slug table_type %}';
-        const response = await fetch(url, { credentials: 'same-origin' });
-        const data = await response.json();
-        
-        const filterSet = data.results ? data.results.find(fs => fs.id === filterSetId) : null;
-        
-        // Apply the filter parameters to the current URL
-        const currentUrl = new URL(window.location);
-        const params = new URLSearchParams(currentUrl.search);
-        
-        // Clear existing filter parameters
-        [...params.keys()].forEach(key => {
-          if (key.startsWith('filter_')) {
-            params.delete(key);
-          }
-        });
-        
-        // Add the filter set parameters
-        Object.entries(filterSet.filter_params).forEach(([key, value]) => {
-          params.set(key, value);
-        });
-        
-        // Update the URL and reload
-        currentUrl.search = params.toString();
-        window.location.href = currentUrl.toString();
-        
+        const filterComponent = document.querySelector('[x-data*="filterComponent"]');
+        if (filterComponent?.__x) {
+          const component = filterComponent.__x.$data;
+          await component.loadStarredFilters();
+        }
       } catch (error) {
-        console.error('Error applying starred filter:', error);
+        console.error('Error refreshing filter sets:', error);
       }
-    }
-
-    // Helper function to escape HTML
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
+    };
   </script>
 {% endwith %}
