@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0115_alter_participant_remote_id'),
+        ('experiments', '0116_migrate_experiments_to_chatbots'),
         ('teams', '0007_create_commcare_connect_flag'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
