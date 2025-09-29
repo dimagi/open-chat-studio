@@ -75,10 +75,44 @@ assistant: I am doing well, thank you for asking!
   <input type="hidden" name="context" id="{{ context_field_id }}"
          {% if use_alpine_model %}x-model="editingMessage.context"{% else %}value="{{ context_value|default:'{}' }}"{% endif %}>
   <div class="json-editor w-full h-32 resize-y overflow-auto"
-       data-target-field="#{{ context_field_id }}"
+       data-target-field="previous input[type='hidden'][name='context']"
        {% if disable_button_id %}data-disable-elt="#{{ disable_button_id }}"{% endif %}>
   </div>
   {% if errors.context %}
   <div class="text-error text-sm mt-1">{{ errors.context }}</div>
+  {% endif %}
+</div>
+
+<!-- Participant Data -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "Participant Data (JSON)" %}</span>
+    <span class="label-text-alt text-gray-500">{% trans "Optional participant data" %}</span>
+  </label>
+  <input type="hidden" name="participant_data"
+         {% if use_alpine_model %}x-model="editingMessage.participant_data"{% else %}value="{{ participant_data_value|default:'{}' }}"{% endif %}>
+  <div class="json-editor w-full h-32 resize-y overflow-auto"
+       data-target-field="previous input[type='hidden'][name='participant_data']"
+       {% if disable_button_id %}data-disable-elt="#{{ disable_button_id }}"{% endif %}>
+  </div>
+  {% if errors.participant_data %}
+  <div class="text-error text-sm mt-1">{{ errors.participant_data }}</div>
+  {% endif %}
+</div>
+
+<!-- Session State -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "Session State (JSON)" %}</span>
+    <span class="label-text-alt text-gray-500">{% trans "Optional session state" %}</span>
+  </label>
+  <input type="hidden" name="session_state"
+         {% if use_alpine_model %}x-model="editingMessage.session_state"{% else %}value="{{ session_state_value|default:'{}' }}"{% endif %}>
+  <div class="json-editor w-full h-32 resize-y overflow-auto"
+       data-target-field="previous input[name='session_state']"
+       {% if disable_button_id %}data-disable-elt="#{{ disable_button_id }}"{% endif %}>
+  </div>
+  {% if errors.session_state %}
+  <div class="text-error text-sm mt-1">{{ errors.session_state }}</div>
   {% endif %}
 </div>

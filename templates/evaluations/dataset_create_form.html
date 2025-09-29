@@ -64,7 +64,7 @@
                     <i class="fa-solid fa-plus mr-2"></i>
                     {% trans "Add Message Pair" %}
                   </button>
-                  <button type="reset" class="btn btn-ghost" @click="clearMessageForm()">
+                  <button type="reset" class="btn btn-ghost" @click="clearManualMessageForm()">
                     <i class="fa-solid fa-times mr-2"></i>
                     {% trans "Clear Form" %}
                   </button>
@@ -386,9 +386,11 @@
 
           // Initialize JSON editor for manual message form after DOM is ready
           this.$nextTick(() => {
-            const jsonEditorElement = document.querySelector('#manual-message-form .json-editor');
-            if (jsonEditorElement && window.SiteJS && window.SiteJS.editors) {
-              window.SiteJS.editors.createJsonEditor(jsonEditorElement);
+            const jsonEditorElements = document.querySelectorAll('#manual-message-form .json-editor');
+            if (jsonEditorElements && window.SiteJS && window.SiteJS.editors) {
+              Array.from(jsonEditorElements).forEach(el => {
+                window.SiteJS.editors.createJsonEditor(el);
+              });
             }
           });
         },
@@ -495,10 +497,13 @@
         // Manual message methods (for manual mode)
         addMessageFromForm() {
           // Get values from the form
-          const humanMessage = document.querySelector('textarea[name="human_message"]').value.trim();
-          const aiMessage = document.querySelector('textarea[name="ai_message"]').value.trim();
-          const contextValue = document.querySelector('#manual-context-field').value || '{}';
-          const historyText = document.querySelector('textarea[name="history_text"]').value.trim();
+          const form = document.querySelector('#manual-message-form');
+          const humanMessage = form.querySelector('textarea[name="human_message"]').value.trim();
+          const aiMessage = form.querySelector('textarea[name="ai_message"]').value.trim();
+          const contextValue = form.querySelector('input[type="hidden"][name="context"]').value || '{}';
+          const historyText = form.querySelector('textarea[name="history_text"]').value.trim();
+          const participantData = form.querySelector('input[type="hidden"][name="participant_data"]').value || '{}';
+          const sessionState = form.querySelector('input[type="hidden"][name="session_state"]').value || '{}';
 
           // Validate required fields
           if (!humanMessage || !aiMessage) {
@@ -507,16 +512,26 @@
             return;
           }
 
-          // Validate JSON context
-          let contextObj = {};
-          if (contextValue.trim() && contextValue !== '{}') {
-            try {
-              contextObj = JSON.parse(contextValue);
-            } catch (e) {
-              this.showError = true;
-              this.errorMessage = 'Invalid JSON format in context field.';
-              return;
+          const validateJsonField = (name, value) => {
+            if (value.trim() && value !== '{}') {
+              try {
+                JSON.parse(value);
+              } catch (e) {
+                this.showError = true;
+                this.errorMessage = `Invalid JSON format in ${name} field.`;
+              }
             }
+            return true;
+          }
+
+          if (!validateJsonField('context', contextValue)) {
+            return;
+          }
+          if (!validateJsonField('participant data', participantData)) {
+            return;
+          }
+          if (!validateJsonField('session state', sessionState)) {
+            return;
           }
 
           // Validate history text format if present
@@ -534,20 +549,24 @@
             human: humanMessage,
             ai: aiMessage,
             context: contextValue,
-            history_text: historyText
+            history_text: historyText,
+            participant_data: participantData,
+            session_state: sessionState,
           });
 
           this.updateMessagesJson();
-          this.clearMessageForm();
+          this.clearManualMessageForm();
           this.showError = false;
         },
 
-        clearMessageForm() {
+        clearManualMessageForm() {
           // Clear form fields
           document.querySelector('textarea[name="human_message"]').value = '';
           document.querySelector('textarea[name="ai_message"]').value = '';
           document.querySelector('textarea[name="history_text"]').value = '';
-          document.querySelector('#manual-context-field').value = '{}';
+          document.querySelector('input[type="hidden"][name="context"]').value = '{}';
+          document.querySelector('input[type="hidden"][name="participant_data"]').value = {};
+          document.querySelector('input[type="hidden"][name="session_state"]').value = {};
         },
 
         editMessage(index) {
@@ -562,9 +581,11 @@
             document.getElementById('editMessageModal').showModal();
 
             // Initialize JSON editor for modal
-            const jsonEditorElement = document.querySelector('#edit-modal-context-field').parentElement.querySelector('.json-editor');
-            if (jsonEditorElement && window.SiteJS && window.SiteJS.editors) {
-              window.SiteJS.editors.createJsonEditor(jsonEditorElement);
+            const jsonEditorElements = document.querySelector('#edit-modal-context-field').parentElement.querySelectorAll('.json-editor');
+            if (jsonEditorElements && window.SiteJS && window.SiteJS.editors) {
+              Array.from(jsonEditorElements).forEach(el => {
+                window.SiteJS.editors.createJsonEditor(el);
+              });
             }
           });
         },

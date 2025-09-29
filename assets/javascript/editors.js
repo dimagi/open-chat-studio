@@ -10,6 +10,7 @@ import {MergeView} from "@codemirror/merge"
 import { python } from "@codemirror/lang-python"
 import { textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme } from "./utils/codemirror-extensions.js"
 import { autocompletion } from "@codemirror/autocomplete"
+import { find } from "./utils"
 import "../styles/app/editors.css";
 
 const githubDark = githubDarkInit({
@@ -63,9 +64,9 @@ class BaseEditor {
     this.initialValue = "";
 
     // Get form field target
-    const targetField = this.element.getAttribute('data-target-field');
+    let targetField = this.element.getAttribute('data-target-field');
     if (targetField) {
-      this.target = document.querySelector(targetField);
+      this.target = find(this.element, targetField);
       if (this.target) {
         this.initialValue = this.target.value;
         this.target.style.display = 'none';
