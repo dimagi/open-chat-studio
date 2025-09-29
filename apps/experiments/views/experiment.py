@@ -42,7 +42,7 @@ from django.views.generic import CreateView, UpdateView
 from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
-import json as _json
+import json
 from waffle import flag_is_active
 
 from apps.analysis.const import LANGUAGE_CHOICES
@@ -1625,8 +1625,7 @@ def list_filter_sets(request, team_slug: str, table_type: str):
 @login_and_team_required
 @require_POST
 def create_filter_set(request, team_slug: str, table_type: str):
-    payload = request.body
-    payload = _json.loads(request.body or b"{}")
+    payload = json.loads(request.body or b"{}")
 
     name = payload.get("name", "").strip()
     filter_params = payload.get("filter_params", {})
