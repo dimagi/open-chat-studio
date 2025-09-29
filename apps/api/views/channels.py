@@ -34,7 +34,7 @@ def generate_key(request: Request):
     response = httpx.get(settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, headers={"AUTHORIZATION": token})
     connect_logger.info(f"CommCare Connect response: {response.status_code}")
     response.raise_for_status()
-    connect_id = response.json().get("sub")
+    connect_id = response.json().get("sub").lower()
 
     try:
         participant_data = ParticipantData.objects.defer("data").get(
