@@ -72,7 +72,7 @@ assistant: I am doing well, thank you for asking!
     <span class="label-text font-semibold">{% trans "Context (JSON)" %}</span>
     <span class="label-text-alt text-gray-500">{% trans "Optional additional context data" %}</span>
   </label>
-  <input type="hidden" name="context" id="{{ context_field_id }}"
+  <input type="hidden" name="context"
          {% if use_alpine_model %}x-model="editingMessage.context"{% else %}value="{{ context_value|default:'{}' }}"{% endif %}>
   <div class="json-editor w-full h-32 resize-y overflow-auto"
        data-target-field="previous input[type='hidden'][name='context']"

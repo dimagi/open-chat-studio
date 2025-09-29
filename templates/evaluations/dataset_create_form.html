@@ -57,7 +57,7 @@
             <div class="app-card">
               <h4 class="text-lg font-semibold mb-4">{% trans "Add New Message Pair" %}</h4>
               <div id="manual-message-form">
-                {% include "evaluations/components/message_pair_form.html" with context_field_id="manual-context-field" disable_button_id="manual-add-button" %}
+                {% include "evaluations/components/message_pair_form.html" with disable_button_id="manual-add-button" %}
 
                 <div class="flex gap-2 mt-4">
                   <button type="button" class="btn btn-primary" id="manual-add-button" @click="addMessageFromForm()">
@@ -268,7 +268,7 @@
 
         <!-- Modal content - no form tags to avoid nesting -->
         <div class="space-y-6">
-          {% include "evaluations/components/message_pair_form.html" with context_field_id="edit-modal-context-field" disable_button_id="modal-save-button" use_alpine_model=True %}
+          {% include "evaluations/components/message_pair_form.html" with disable_button_id="modal-save-button" use_alpine_model=True %}
 
           <!-- Error messages -->
           <div x-show="editingMessageErrors.human" class="text-error text-sm mt-1" x-text="editingMessageErrors.human"></div>
@@ -497,7 +497,7 @@
         // Manual message methods (for manual mode)
         addMessageFromForm() {
           // Get values from the form
-          const form = document.querySelector('#manual-message-form');
+          const form = document.getElementById('manual-message-form');
           const humanMessage = form.querySelector('textarea[name="human_message"]').value.trim();
           const aiMessage = form.querySelector('textarea[name="ai_message"]').value.trim();
           const contextValue = form.querySelector('input[type="hidden"][name="context"]').value || '{}';
@@ -561,12 +561,13 @@
 
         clearManualMessageForm() {
           // Clear form fields
-          document.querySelector('textarea[name="human_message"]').value = '';
-          document.querySelector('textarea[name="ai_message"]').value = '';
-          document.querySelector('textarea[name="history_text"]').value = '';
-          document.querySelector('input[type="hidden"][name="context"]').value = '{}';
-          document.querySelector('input[type="hidden"][name="participant_data"]').value = {};
-          document.querySelector('input[type="hidden"][name="session_state"]').value = {};
+          const form = document.getElementById('manual-message-form');
+          form.querySelector('textarea[name="human_message"]').value = '';
+          form.querySelector('textarea[name="ai_message"]').value = '';
+          form.querySelector('textarea[name="history_text"]').value = '';
+          form.querySelector('input[type="hidden"][name="context"]').value = '{}';
+          form.querySelector('input[type="hidden"][name="participant_data"]').value = '{}';
+          form.querySelector('input[type="hidden"][name="session_state"]').value = '{}';
         },
 
         editMessage(index) {
@@ -578,10 +579,11 @@
 
           // Show modal and initialize JSON editor
           this.$nextTick(() => {
-            document.getElementById('editMessageModal').showModal();
+            let modal = document.getElementById('editMessageModal');
+            modal.showModal();
 
             // Initialize JSON editor for modal
-            const jsonEditorElements = document.querySelector('#edit-modal-context-field').parentElement.querySelectorAll('.json-editor');
+            const jsonEditorElements = modal.querySelectorAll('.json-editor');
             if (jsonEditorElements && window.SiteJS && window.SiteJS.editors) {
               Array.from(jsonEditorElements).forEach(el => {
                 window.SiteJS.editors.createJsonEditor(el);
