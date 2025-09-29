@@ -135,6 +135,7 @@ def trigger_bot_message(request):
     data = serializer.data
     platform = data["platform"]
     identifier = data["identifier"]
+    identifier = ChannelPlatform(platform).normalize_identifier(identifier)
     experiment_public_id = data["experiment"]
 
     experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
