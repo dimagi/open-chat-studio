@@ -1943,9 +1943,13 @@ class ExperimentSession(BaseTeamModel):
         return Chip(label=self.external_id, url=url)
 
 class FilterSet(BaseTeamModel):
+    class TableType(models.TextChoices):
+        SESSIONS = "sessions", "Sessions"
+        DATASETS = "datasets", "Datasets"
+    
     name = models.CharField(max_length=256)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    table_type = models.CharField(max_length=50)
+    table_type = models.CharField(max_length=50, choices=TableType.choices)
     filter_params = models.JSONField(default=dict)
     is_shared = models.BooleanField(default=False)
     is_starred = models.BooleanField(default=False)

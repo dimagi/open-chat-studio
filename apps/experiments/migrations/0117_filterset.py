@@ -38,4 +38,9 @@ class Migration(migrations.Migration):
             },
             bases=(models.Model, apps.utils.models.VersioningMixin),
         ),
+        migrations.AlterField(
+            model_name='filterset',
+            name='table_type',
+            field=models.CharField(choices=[('sessions', 'Sessions'), ('datasets', 'Datasets')], max_length=50),
+        ),
     ]
