@@ -7,7 +7,12 @@ def reconcile_connect_participants(ParticipantModel):
     Reconcile connect channel participants with the same identifier but different casing.
 
     The commcare_connect channel expects lowercase participant identifiers, but some participants
-    have been created with uppercase identifiers.
+    have been created with uppercase identifiers. To send and receive messages correctly, encryption keys are stored
+    in the participant's data, specifically under system_metadata. If a participant has chatted to a bot, there will
+    be a ParticipantData entry for that bot. If a participant has never chatted to a bot, there will be no
+    ParticipantData entry for that bot. We need to account for this when merging participants. Transferring sessions to
+    from one participant to another without transferring the associated participant data would result in loss of
+    encryption keys and other critical metadata, potentially disrupting communication with chatbots.
 
     This function identifies participants using the "commcare_connect" channel whose identifiers differ only by case
     (e.g., "ABC123" vs "abc123"). It merges sessions and scheduled messages from the uppercase identifier participant
