@@ -67,7 +67,7 @@ class OCSTracer(Tracer):
         experiment = Experiment.objects.get(id=self.experiment_id)
         experiment_id = self.experiment_id
         experiment_version_number = None
-        if experiment.working_version_id:
+        if experiment.get_working_version_id():
             # Trace needs to be associated with the working version of the experiment
             experiment_id = experiment.working_version_id
             experiment_version_number = experiment.version_number
