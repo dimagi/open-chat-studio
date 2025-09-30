@@ -1,14 +1,16 @@
 {% load i18n %}
 <div class="text-xs">
-  {% if record.context %}
+  {% if record|get_attr:field %}
     <ul class="list-none space-y-1">
-      {% for key, value in record.context.items %}
+      {% with field_value=record|get_attr:field %}
+      {% for key, value in field_value.items %}
         <li>
           <span class="font-medium">{{ key }}: </span>{{ value|truncatewords:10 }}
         </li>
       {% endfor %}
+      {% endwith %}
     </ul>
   {% else %}
-    <span class="text-gray-400">{% trans "No context" %}</span>
+    <span class="text-gray-400">No {{ column.verbose_name }}</span>
   {% endif %}
 </div>
