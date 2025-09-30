@@ -35,12 +35,3 @@
     </div>
   </form>
 </div>
-
-<script>
-  setTimeout(() => {
-    const jsonEditorElement = document.querySelector('.json-editor');
-    if (jsonEditorElement && window.SiteJS && window.SiteJS.editors) {
-      window.SiteJS.editors.createJsonEditor(jsonEditorElement);
-    }
-  }, 100);
-</script>
