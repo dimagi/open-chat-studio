@@ -227,15 +227,21 @@ class BaseChannelDialogView(View):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        form = context["form"]
+        form = context.get("form")
+
+        platform_form = form.channel_form
         extra_form = form.extra_form if hasattr(form, "extra_form") else None
-        context["experiment"] = self.experiment
-
-        if extra_form and extra_form.success_message:
-            context["success_message"] = extra_form.success_message
-        if extra_form and extra_form.warning_message:
-            context["warning_message"] = extra_form.warning_message
-
+        context.update(
+            {
+                "experiment": self.experiment,
+                "form": platform_form,
+                "extra_form": extra_form,
+            }
+        )
+        if form.success_message:
+            context["success_message"] = form.success_message
+        if form.warning_message:
+            context["warning_message"] = form.warning_message
         return context
 
     def get_success_url(self):
@@ -255,7 +261,9 @@ class BaseChannelDialogView(View):
                 "channels": channels,
                 "platforms": available_platforms,
                 "channel": channel,
-                "extra_form": channel.extra_form(experiment=self.experiment),
+                "extra_form": channel.extra_form(
+                    experiment=self.experiment
+                ),  # override extra form to get 'update' rendering
             }
             return self.render_to_response({**self.get_context_data(form=form), **additional_context})
         return HttpResponse(headers={"hx-redirect": self.get_success_url()})

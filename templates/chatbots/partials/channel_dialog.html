@@ -23,13 +23,14 @@
     >
       {% csrf_token %}
       {{ form.non_field_errors }}
-      {% render_form_fields form.channel_form %}
-      {% if form.extra_form %}
-        <div {% include "generic/attrs.html" with attrs=form.extra_form.form_attrs %}>
-          {% render_form_fields form.extra_form %}
+      {% if extra_form %}{{ extra_form.non_field_errors }}{% endif %}
+      {% render_form_fields form %}
+      {% if extra_form %}
+        <div {% include "generic/attrs.html" with attrs=extra_form.form_attrs %}>
+          {% render_form_fields extra_form %}
         </div>
       {% endif %}
-      {% if success_message and not embed_code %}
+      {% if success_message %}
         <div role="alert" class="alert alert-success">
           <span>{{ success_message }}</span>
         </div>
