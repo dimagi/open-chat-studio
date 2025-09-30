@@ -199,8 +199,8 @@
             <span class="text-base-content" x-text="filterSet.name"></span>
           </div>
         </template>
-        <div x-show="starredFilters.length === 0" class="flex justify-center items-center p-2">
-          <span class="loading loading-spinner loading-xs"></span>
+        <div x-show="starredFilters.length === 0" class="flex justify-center items-center p-2 text-gray-500 text-sm">
+          No starred filters
         </div>
       </div>
     </div>
@@ -229,6 +229,9 @@
 
         // Default filters set by user or team
         this.loadDefaultFilters();
+        
+        // Load starred filters on initialization
+        this.loadStarredFilters();
 
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {

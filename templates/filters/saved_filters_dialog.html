@@ -102,29 +102,66 @@ const FilterDialog = {
 
   async toggleDefault(id,type) {
     const filterSetName = this.getFilterSetName(id);
+    const filterSet = this.filters.find(f => f.id === id);
+    
+    if (!filterSet) return;
     
     const field = `is_default_for_${type}`;
-    await this.api(`/${id}/edit/`,"PATCH",{ [field]:true, [`clear_other_${type}_defaults`]:true });
+    const isCurrentlyDefault = filterSet[field];
+    
+    if (isCurrentlyDefault) {
+      await this.api(`/${id}/edit/`,"PATCH",{ [field]:false });
+      this.notify(`"${filterSetName}" removed as ${type} default`,"success");
+    } else {
+      await this.api(`/${id}/edit/`,"PATCH",{ [field]:true, [`clear_other_${type}_defaults`]:true });
+      this.notify(`"${filterSetName}" set as ${type} default`,"success");
+    }
+    
     this.load(); 
     window.refreshFilterSets?.();
-    this.notify(`"${filterSetName}" set as ${type} default`,"success");
   },
 
   async share(id) {
     const filterSetName = this.getFilterSetName(id);
+    const filterSet = this.filters.find(f => f.id === id);
     
-    await this.api(`/${id}/edit/`,"PATCH",{ is_shared:true });
+    if (!filterSet) return;
+    
+    const isCurrentlyShared = filterSet.is_shared;
+    
+    if (isCurrentlyShared) {
+      // Unshare
+      await this.api(`/${id}/edit/`,"PATCH",{ is_shared:false });
+      this.notify(`"${filterSetName}" unshared`,"success");
+    } else {
+      // Share
+      await this.api(`/${id}/edit/`,"PATCH",{ is_shared:true });
+      this.notify(`"${filterSetName}" shared`,"success");
+    }
+    
     this.load(); 
-    this.notify(`"${filterSetName}" shared`,"success");
   },
 
   async toggleStar(id) {
     const filterSetName = this.getFilterSetName(id);
+    const filterSet = this.filters.find(f => f.id === id);
     
-    await this.api(`/${id}/edit/`,"PATCH",{ is_starred:true });
+    if (!filterSet) return;
+    
+    const isCurrentlyStarred = filterSet.is_starred;
+    
+    if (isCurrentlyStarred) {
+      // Unstar
+      await this.api(`/${id}/edit/`,"PATCH",{ is_starred:false });
+      this.notify(`"${filterSetName}" unstarred`,"success");
+    } else {
+      // Star
+      await this.api(`/${id}/edit/`,"PATCH",{ is_starred:true });
+      this.notify(`"${filterSetName}" starred`,"success");
+    }
+    
     this.load(); 
     window.refreshFilterSets?.();
-    this.notify(`"${filterSetName}" starred`,"success");
   },
 
   async delete(id,name) {
@@ -135,7 +172,6 @@ const FilterDialog = {
     this.notify(`"${name}" deleted`,"success");
   },
 
-  // ---- HELPERS ----
   getFilterSetName(id) {
     const filterSet = this.filters.find(f => f.id === id);
     console.log('Looking for filter set with id:', id, 'Found:', filterSet);
