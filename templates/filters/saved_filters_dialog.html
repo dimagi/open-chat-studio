@@ -97,7 +97,7 @@ const FilterDialog = {
     await this.api(`/${id}/edit/`, "PATCH", { filter_params: this.currentFilters() });
     this.load(); 
     window.refreshFilterSets?.();
-    this.notify(`"${filterSetName}" updated`,"success");
+    alertify.notify(`"${filterSetName}" updated`, "success", 10);
   },
 
   async toggleDefault(id,type) {
