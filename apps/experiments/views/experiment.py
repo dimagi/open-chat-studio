@@ -37,7 +37,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from django.views.generic import CreateView, UpdateView
 from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
@@ -1611,6 +1611,7 @@ def _serialize_filter_set(fs: FilterSet) -> dict:
         "is_default_for_team": fs.is_default_for_team,
     }
 
+@require_http_methods(["GET"])
 @login_and_team_required
 def list_filter_sets(request, team_slug: str, table_type: str):
     qs = FilterSet.objects.filter(
@@ -1622,8 +1623,8 @@ def list_filter_sets(request, team_slug: str, table_type: str):
     data = [_serialize_filter_set(fs) for fs in qs.order_by("-is_starred", "name").all()]
     return JsonResponse({"results": data})
 
+@require_http_methods(["POST"])
 @login_and_team_required
-@require_POST
 def create_filter_set(request, team_slug: str, table_type: str):
     payload = json.loads(request.body or b"{}")
 
@@ -1660,6 +1661,7 @@ def create_filter_set(request, team_slug: str, table_type: str):
     return JsonResponse({"result": _serialize_filter_set(fs)}, status=201)
 
 
+@require_http_methods(["PATCH", "DELETE"])
 @login_and_team_required
 def edit_or_delete_filter_set(request, team_slug: str, pk: int):
     try:
