@@ -254,7 +254,7 @@ class DatasetMessagesTable(tables.Table):
         orderable=False,
     )
     context = TemplateColumn(
-        template_name="evaluations/dataset_message_context_column.html",
+        template_name="evaluations/dataset_message_dict_column.html",
         verbose_name="Context",
         orderable=False,
         extra_context={"field": "context"},
@@ -265,13 +265,13 @@ class DatasetMessagesTable(tables.Table):
         orderable=False,
     )
     participant_data = TemplateColumn(
-        template_name="evaluations/dataset_message_context_column.html",
+        template_name="evaluations/dataset_message_dict_column.html",
         verbose_name="Participant Data",
         orderable=False,
         extra_context={"field": "participant_data", "field_verbose_name": "Participant Data"},
     )
     session_state = TemplateColumn(
-        template_name="evaluations/dataset_message_context_column.html",
+        template_name="evaluations/dataset_message_dict_column.html",
         verbose_name="Session State",
         orderable=False,
         extra_context={"field": "session_state", "field_verbose_name": "Session State"},
