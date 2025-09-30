@@ -1668,10 +1668,7 @@ def edit_or_delete_filter_set(request, team_slug: str, pk: int):
         return JsonResponse({"error": "Not found"}, status=404)
 
     is_owner = fs.user == request.user
-    is_team_admin = request.team.membership_set.filter(
-        user=request.user,
-        groups__name__in=["Team Admin", "Super Admin"]
-    ).exists()
+    is_team_admin = request.team_membership.is_team_admin
 
     if request.method == "DELETE":
         # Only owner or team admin can delete
