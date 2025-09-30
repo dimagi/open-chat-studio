@@ -216,19 +216,28 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
 
         human_message = request.POST.get("human_message", "").strip()
         ai_message = request.POST.get("ai_message", "").strip()
-        context_json = request.POST.get("context", "{}")
         history_text = request.POST.get("history_text", "").strip()
 
         if not human_message or not ai_message:
             return HttpResponse("Both human and AI messages are required", status=400)
 
-        if context_json.strip():
-            try:
-                context = json.loads(context_json)
-            except json.JSONDecodeError:
-                return HttpResponse("Invalid JSON format in context", status=400)
-        else:
-            context = {}
+        def _get_json_var(name):
+            json_val = request.POST.get(name, "{}")
+            if json_val.strip():
+                try:
+                    return json.loads(json_val)
+                except json.JSONDecodeError:
+                    raise ValueError(f"Invalid JSON format in {name}") from None
+            else:
+                return {}
+
+        try:
+            context = _get_json_var("context")
+            participant_data = _get_json_var("participant_data")
+            session_state = _get_json_var("session_state")
+        except ValueError as e:
+            message = str(e)
+            return HttpResponse(message, status=400)
 
         # Parse history text if provided
         history = []
@@ -243,6 +252,8 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
             output=EvaluationMessageContent(content=ai_message, role="ai").model_dump(),
             context=context,
             history=history,
+            participant_data=participant_data,
+            session_state=session_state,
             metadata={"created_mode": "manual"},
         )
 
