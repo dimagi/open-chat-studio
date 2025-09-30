@@ -256,7 +256,11 @@
 
       <div x-show="showError" class="alert alert-error mb-4">
         <i class="fa-solid fa-exclamation-triangle"></i>
-        <span x-text="errorMessage"></span>
+        <div>
+          <template x-for="error in errorMessages || []">
+            <p x-text="error"></p>
+          </template>
+        </div>
       </div>
     </div> <!-- End of loaded content div -->
 
@@ -271,12 +275,9 @@
           {% include "evaluations/components/message_pair_form.html" with disable_button_id="modal-save-button" use_alpine_model=True %}
 
           <!-- Error messages -->
-          <div x-show="editingMessageErrors.human" class="text-error text-sm mt-1" x-text="editingMessageErrors.human"></div>
-          <div x-show="editingMessageErrors.ai" class="text-error text-sm mt-1" x-text="editingMessageErrors.ai"></div>
-          <div x-show="editingMessageErrors.context" class="text-error text-sm mt-1" x-text="editingMessageErrors.context"></div>
-          <div x-show="editingMessageErrors.history_text" class="text-error text-sm mt-1" x-text="editingMessageErrors.history_text"></div>
-          <div x-show="editingMessageErrors.participant_data" class="text-error text-sm mt-1" x-text="editingMessageErrors.participant_data"></div>
-          <div x-show="editingMessageErrors.session_state" class="text-error text-sm mt-1" x-text="editingMessageErrors.session_state"></div>
+          <template x-for="error in editingMessageErrors || []">
+            <div class="text-error text-sm mt-1" x-text="error"></div>
+          </template>
 
           <!-- Actions -->
           <div class="modal-action">
@@ -313,7 +314,7 @@
         messages: [],
         messagesJsonString: '[]',
         showError: false,
-        errorMessage: '',
+        errorMessages: [],
 
         // Modal editing state
         editingMessage: {
@@ -323,7 +324,7 @@
           history_text: ''
         },
         editingMessageIndex: -1,
-        editingMessageErrors: {},
+        editingMessageErrors: [],
         isEditingMessage: false,
 
         // CSV mode properties
@@ -395,20 +396,20 @@
 
         validateForm(e) {
           this.showError = false;
-          this.errorMessage = '';
+          this.errorMessages = [];
 
           if (this.mode === 'clone') {
             if (this.selectedSessionIds.length === 0) {
               e.preventDefault();
               this.showError = true;
-              this.errorMessage = 'Please select at least one session to create the dataset.';
+              this.errorMessages.push('Please select at least one session to create the dataset.');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           } else if (this.mode === 'manual') {
             if (this.messages.length === 0) {
               e.preventDefault();
               this.showError = true;
-              this.errorMessage = 'Please add at least one message pair to create the dataset.';
+              this.errorMessages.push('Please add at least one message pair to create the dataset.');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
               // Validate that all messages have content
@@ -417,7 +418,7 @@
                 if (!msg.human.trim() || !msg.ai.trim()) {
                   e.preventDefault();
                   this.showError = true;
-                  this.errorMessage = `Message pair ${i + 1} is missing required content.`;
+                  this.errorMessages.push(`Message pair ${i + 1} is missing required content.`);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                   return;
                 }
@@ -428,7 +429,7 @@
                   if (parsedHistory.length === 0) {
                     e.preventDefault();
                     this.showError = true;
-                    this.errorMessage = `Message pair ${i + 1} has invalid history format. History should contain lines starting with "user:" or "assistant:".`;
+                    this.errorMessages.push(`Message pair ${i + 1} has invalid history format. History should contain lines starting with "user:" or "assistant:".`);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                     return;
                   }
@@ -439,7 +440,7 @@
             if (!this.csvParsed || !this.columnMapping.input || !this.columnMapping.output) {
               e.preventDefault();
               this.showError = true;
-              this.errorMessage = 'Please upload a CSV file and map both input and output columns.';
+              this.errorMessages.push('Please upload a CSV file and map both input and output columns.');
               window.scrollTo({ top: 0, behavior: 'smooth' });
               return;
             }
@@ -450,7 +451,7 @@
               if (this.contextMappings[i].fieldNameError) {
                 e.preventDefault();
                 this.showError = true;
-                this.errorMessage = 'Please fix context field name errors before submitting.';
+                this.errorMessages.push('Please fix context field name errors before submitting.');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 return;
               }
@@ -496,65 +497,25 @@
         addMessageFromForm() {
           // Get values from the form
           const form = document.getElementById('manual-message-form');
-          const humanMessage = form.querySelector('textarea[name="human_message"]').value.trim();
-          const aiMessage = form.querySelector('textarea[name="ai_message"]').value.trim();
-          const contextValue = form.querySelector('input[type="hidden"][name="context"]').value || '{}';
-          const historyText = form.querySelector('textarea[name="history_text"]').value.trim();
-          const participantData = form.querySelector('input[type="hidden"][name="participant_data"]').value || '{}';
-          const sessionState = form.querySelector('input[type="hidden"][name="session_state"]').value || '{}';
 
-          // Validate required fields
-          if (!humanMessage || !aiMessage) {
+          const message = {
+            human: form.querySelector('textarea[name="human_message"]').value.trim(),
+            ai: form.querySelector('textarea[name="ai_message"]').value.trim(),
+            context: form.querySelector('input[type="hidden"][name="context"]').value || '{}',
+            history_text: form.querySelector('textarea[name="history_text"]').value.trim(),
+            participant_data: form.querySelector('input[type="hidden"][name="participant_data"]').value || '{}',
+            session_state: form.querySelector('input[type="hidden"][name="session_state"]').value || '{}',
+          }
+
+          const errors = this.validateMessage(message);
+          if (errors.length !== 0) {
             this.showError = true;
-            this.errorMessage = 'Both human and AI messages are required.';
+            this.errorMessages = errors;
             return;
-          }
-
-          const validateJsonField = (name, value) => {
-            if (value.trim() && value !== '{}') {
-              try {
-                JSON.parse(value);
-              } catch (e) {
-                this.showError = true;
-                this.errorMessage = `Invalid JSON format in ${name} field.`;
-              }
-            }
-            return true;
-          }
-
-          if (!validateJsonField('context', contextValue)) {
-            return;
-          }
-          if (!validateJsonField('participant data', participantData)) {
-            return;
-          }
-          if (!validateJsonField('session state', sessionState)) {
-            return;
-          }
-
-          // Validate history text format if present
-          if (historyText && historyText.trim()) {
-            const parsedHistory = this.parseHistoryText(historyText);
-            if (parsedHistory.length === 0) {
-              this.showError = true;
-              this.errorMessage = 'Invalid history format. History should contain lines starting with "user:" or "assistant:".';
-              return;
-            }
-          }
-
-          const formatJSON = (value) => {
-            return JSON.stringify(JSON.parse(value), null, 2);
           }
 
           // Add message to array
-          this.messages.push({
-            human: humanMessage,
-            ai: aiMessage,
-            context: formatJSON(contextValue),
-            history_text: historyText,
-            participant_data: formatJSON(participantData),
-            session_state: formatJSON(sessionState),
-          });
+          this.messages.push(message);
 
           this.updateMessagesJson();
           this.clearManualMessageForm();
@@ -576,7 +537,7 @@
           // Set up modal editing state
           this.editingMessage = { ...this.messages[index] };
           this.editingMessageIndex = index;
-          this.editingMessageErrors = {};
+          this.editingMessageErrors = [];
           this.isEditingMessage = true;
 
           // Show modal and initialize JSON editor
@@ -588,41 +549,9 @@
         },
 
         updateEditingMessage() {
-          // Validate required fields
-          if (!this.editingMessage.human.trim() || !this.editingMessage.ai.trim()) {
-            this.editingMessageErrors = {
-              human: !this.editingMessage.human.trim() ? 'Human message is required' : '',
-              ai: !this.editingMessage.ai.trim() ? 'AI message is required' : ''
-            };
+          this.editingMessageErrors = this.validateMessage(this.editingMessage);
+          if (this.editingMessageErrors.length !== 0) {
             return;
-          }
-
-          const _validateJsonField = (field) => {
-            if (this.editingMessage[field].trim() && this.editingMessage[field] !== '{}') {
-              try {
-                JSON.parse(this.editingMessage[field]);
-              } catch (e) {
-                this.editingMessageErrors[field] = 'Invalid JSON format'
-              }
-            }
-          }
-
-          _validateJsonField('context')
-          _validateJsonField('participant_data')
-          _validateJsonField('session_state')
-          if (Object.keys(this.editingMessageErrors).length !== 0) {
-            return;
-          }
-
-          // Validate history text format if present
-          if (this.editingMessage.history_text && this.editingMessage.history_text.trim()) {
-            const parsedHistory = this.parseHistoryText(this.editingMessage.history_text);
-            if (parsedHistory.length === 0) {
-              this.editingMessageErrors = {
-                history_text: 'Invalid history format. History should contain lines starting with "user:" or "assistant:".'
-              };
-              return;
-            }
           }
 
           // Update the message in the array
@@ -631,6 +560,39 @@
 
           // Close modal and reset state
           this.cancelEditingMessage();
+        },
+        
+        validateMessage(message) {
+          let errors = [];
+          if (!message.human.trim()) {
+            errors.push('Human message is required');
+          }
+          if (!message.ai.trim()) {
+            errors.push('AI message is required');
+          }
+
+          const _validateJsonField = (field) => {
+            if (message[field].trim() && message[field] !== '{}') {
+              try {
+                message[field] = JSON.stringify(JSON.parse(message[field]), null, 2);
+              } catch (e) {
+                errors.push(`Invalid JSON format for ${field}`);
+              }
+            }
+          }
+
+          _validateJsonField('context')
+          _validateJsonField('participant_data')
+          _validateJsonField('session_state')
+
+          // Validate history text format if present
+          if (message.history_text && message.history_text.trim()) {
+            const parsedHistory = this.parseHistoryText(message.history_text);
+            if (parsedHistory.length === 0) {
+              errors.push('Invalid history format. History should contain lines starting with "user:" or "assistant:".');
+            }
+          }
+          return errors;
         },
 
         cancelEditingMessage() {
@@ -641,7 +603,7 @@
             history_text: ''
           };
           this.editingMessageIndex = -1;
-          this.editingMessageErrors = {};
+          this.editingMessageErrors = [];
           this.isEditingMessage = false;
           document.getElementById('editMessageModal').close();
         },
@@ -720,7 +682,7 @@
             this.updateColumnMapping();
           } catch (error) {
             this.showError = true;
-            this.errorMessage = error.message;
+            this.errorMessages.push(error.message);
             this.csvParsed = false;
           } finally {
             this.csvUploading = false;
