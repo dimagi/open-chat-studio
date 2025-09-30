@@ -73,14 +73,9 @@ def process_participant_import(csv_file, experiment, team):
 
             # Create or update participant
             with transaction.atomic():
-                participant, created = Participant.objects.get_or_create(
+                participant, created = Participant.objects.update_or_create(
                     team=team, platform=platform, identifier=identifier, defaults={"name": name}
                 )
-
-                if not created and name:
-                    # Update name if provided
-                    participant.name = name
-                    participant.save(update_fields=["name"])
 
                 # Create or update participant data if any data.* columns exist
                 if participant_data:
