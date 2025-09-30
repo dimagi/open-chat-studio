@@ -58,15 +58,15 @@ def reconcile_connect_participants(ParticipantModel):
 
         # Transfer system metadata from upper_part to lc_participant where system_metadata is empty
         # Get system metadata from upper_part for chatbots that exist in both participants
-        upper_metadata = {
-            ds.experiment_id: ds.system_metadata for ds in upper_part.data_set.exclude(system_metadata={}).all()
-        }
+        upper_metadata = {ds.experiment_id: ds for ds in upper_part.data_set.exclude(system_metadata={}).all()}
 
         # Update lc_participant data sets that have empty system_metadata with upper_part's metadata
-        for data_set in lc_participant.data_set.filter(system_metadata={}).all():
-            if data_set.experiment_id in upper_metadata:
-                data_set.system_metadata = upper_metadata[data_set.experiment_id]
-                data_set.save()
+        for lc_data_set in lc_participant.data_set.filter(system_metadata={}).all():
+            if lc_data_set.experiment_id in upper_metadata:
+                uc_dataset = upper_metadata[lc_data_set.experiment_id]
+                lc_data_set.system_metadata = uc_dataset.system_metadata
+                lc_data_set.encryption_key = uc_dataset.encryption_key
+                lc_data_set.save()
 
         # This will delete the participant data as well
         upper_part.delete()
