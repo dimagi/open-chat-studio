@@ -275,6 +275,8 @@
           <div x-show="editingMessageErrors.ai" class="text-error text-sm mt-1" x-text="editingMessageErrors.ai"></div>
           <div x-show="editingMessageErrors.context" class="text-error text-sm mt-1" x-text="editingMessageErrors.context"></div>
           <div x-show="editingMessageErrors.history_text" class="text-error text-sm mt-1" x-text="editingMessageErrors.history_text"></div>
+          <div x-show="editingMessageErrors.participant_data" class="text-error text-sm mt-1" x-text="editingMessageErrors.participant_data"></div>
+          <div x-show="editingMessageErrors.session_state" class="text-error text-sm mt-1" x-text="editingMessageErrors.session_state"></div>
 
           <!-- Actions -->
           <div class="modal-action">
@@ -595,14 +597,21 @@
             return;
           }
 
-          // Validate JSON context
-          if (this.editingMessage.context.trim() && this.editingMessage.context !== '{}') {
-            try {
-              JSON.parse(this.editingMessage.context);
-            } catch (e) {
-              this.editingMessageErrors = { context: 'Invalid JSON format' };
-              return;
+          const _validateJsonField = (field) => {
+            if (this.editingMessage[field].trim() && this.editingMessage[field] !== '{}') {
+              try {
+                JSON.parse(this.editingMessage[field]);
+              } catch (e) {
+                this.editingMessageErrors[field] = 'Invalid JSON format'
+              }
             }
+          }
+
+          _validateJsonField('context')
+          _validateJsonField('participant_data')
+          _validateJsonField('session_state')
+          if (Object.keys(this.editingMessageErrors).length !== 0) {
+            return;
           }
 
           // Validate history text format if present
