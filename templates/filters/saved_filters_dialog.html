@@ -168,11 +168,7 @@ const FilterDialog = {
   },
 
   notify(msg,type="info") {
-    const colors={success:"bg-green-500",error:"bg-red-500",info:"bg-blue-500"};
-    const n=document.createElement("div");
-    n.className=`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg text-white ${colors[type]}`;
-    n.textContent=msg; document.body.appendChild(n);
-    setTimeout(()=>n.remove(),3000);
+    alertify.notify(msg, type, 10);
   },
 
   escape(str) {

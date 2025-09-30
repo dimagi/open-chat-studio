@@ -48,7 +48,7 @@ function submitFilterSet(event) {
   
   const name = nameInput.value.trim();
   if (!name) {
-    showNotification('Please enter a name for the filter set', 'error');
+    alertify.notify('Please enter a name for the filter set', 'error', 10);
     return;
   }
   saveBtn.disabled = true;
@@ -89,11 +89,11 @@ function submitFilterSet(event) {
       FilterDialog.load();
     }
     document.getElementById('saveFilterDialog').close();
-    showNotification(`Filter set "${filterSetName}" saved successfully`, 'success');
+    alertify.notify(`Filter set "${filterSetName}" saved successfully`, 'success', 10);
   })
   .catch(error => {
     console.error('Error saving filter set:', error);
-    showNotification('Failed to save filter set: ' + error.message, 'error');
+    alertify.notify('Failed to save filter set: ' + error.message, 'error', 10);
   })
   .finally(() => {
     saveBtn.disabled = false;
@@ -111,29 +111,6 @@ function getCurrentFilterParams() {
   return obj;
 }
 
-function showNotification(message, type = 'info') {
-  if (typeof window.showNotification === 'function') {
-    window.showNotification(message, type);
-    return;
-  }
-  
-  const notification = document.createElement('div');
-  notification.className = `fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white max-w-sm ${
-    type === 'success' ? 'bg-green-500' :
-    type === 'error' ? 'bg-red-500' :
-    'bg-blue-500'
-  }`;
-  notification.textContent = message;
-  
-  document.body.appendChild(notification);
-  
-  // Auto remove after 3 seconds
-  setTimeout(() => {
-    if (notification.parentNode) {
-      notification.parentNode.removeChild(notification);
-    }
-  }, 3000);
-}
 
 function loadSavedFilters() {
   if (typeof FilterDialog !== 'undefined' && FilterDialog.load) {
