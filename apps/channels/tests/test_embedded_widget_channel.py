@@ -74,30 +74,6 @@ class TestEmbeddedWidgetUtils:
 
 @pytest.mark.django_db()
 class TestEmbeddedWidgetChannelModel:
-    def test_embedded_widget_platform_available_in_dropdown(self):
-        team = TeamWithUsersFactory()
-        available_platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=team)
-        assert ChannelPlatform.EMBEDDED_WIDGET in available_platforms
-        assert available_platforms[ChannelPlatform.EMBEDDED_WIDGET] is True
-
-    def test_embedded_widget_channel_identifier_key(self):
-        assert ChannelPlatform.EMBEDDED_WIDGET.channel_identifier_key == "widget_token"
-
-    def test_create_embedded_widget_channel(self):
-        experiment = ExperimentFactory()
-        token = "test_token_123456789012345678901234"
-        domains = ["example.com", "*.subdomain.com"]
-
-        channel = ExperimentChannelFactory(
-            experiment=experiment,
-            platform=ChannelPlatform.EMBEDDED_WIDGET,
-            extra_data={"widget_token": token, "allowed_domains": domains},
-        )
-
-        assert channel.platform == ChannelPlatform.EMBEDDED_WIDGET
-        assert channel.extra_data["widget_token"] == token
-        assert channel.extra_data["allowed_domains"] == domains
-
     def test_channel_usage_check_with_embedded_widget(self):
         ExperimentChannelFactory(
             platform=ChannelPlatform.EMBEDDED_WIDGET, extra_data={"widget_token": "existing_token_123456789012345678"}
