@@ -9,10 +9,10 @@ def reconcile_connect_participants(ParticipantModel):
     The commcare_connect channel expects lowercase participant identifiers, but some participants
     have been created with uppercase identifiers.
 
-    This function identifies participants on the "commcare_connect" platform whose identifiers differ only by case
-    (e.g., "ABC123" vs "abc123"). It merges sessions from the uppercase identifier participant into the lowercase
-    identifier participant and then deletes the uppercase participant. Finally, it ensures that all remaining
-    participants have lowercase identifiers.
+    This function identifies participants using the "commcare_connect" channel whose identifiers differ only by case
+    (e.g., "ABC123" vs "abc123"). It merges sessions and scheduled messages from the uppercase identifier participant
+    into the lowercase identifier participant and then deletes the uppercase participant. Finally, it ensures that all
+    remaining participants have lowercase identifiers.
     """
     lower_case_id_query = ParticipantModel.objects.filter(
         identifier=OuterRef("id_lower"), team=OuterRef("team_id")

@@ -43,6 +43,7 @@ def test_reconcile_connect_participants(experiment):
     assert Participant.objects.filter(team=team, identifier="ABC123").exists() is False
 
     assert session4.participant == session5.participant
+    assert session4.participant.id != session1.participant.id
     assert session6.participant.identifier == "def456"
 
     # Ensure no participants with uppercase identifiers remain
