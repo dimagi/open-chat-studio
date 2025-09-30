@@ -511,6 +511,9 @@
           form.querySelector('input[type="hidden"][name="context"]').value = '{}';
           form.querySelector('input[type="hidden"][name="participant_data"]').value = '{}';
           form.querySelector('input[type="hidden"][name="session_state"]').value = '{}';
+          form.querySelectorAll('.json-editor').forEach(editor => {
+            editor.dispatchEvent(new CustomEvent('resetEditor'));
+          });
         },
 
         editMessage(index) {

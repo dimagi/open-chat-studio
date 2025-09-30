@@ -210,6 +210,9 @@ class JsonEditor extends BaseEditor {
         setTimeout(() => this.reset(), 10);
       });
     }
+    this.element.addEventListener('resetEditor', () => {
+      setTimeout(() => this.reset(), 10);
+    })
   }
 
   /**
@@ -319,21 +322,25 @@ class JsonEditor extends BaseEditor {
     }
   }
 
-  reset() {
+  updateValue(newValue) {
     if (!this.view) return;
 
     this.view.dispatch({
       changes: {
         from: 0,
         to: this.view.state.doc.length,
-        insert: this.initialValue || '{}'
+        insert: newValue
       }
     });
-
-    if (this.target) {
-        this.target.value = this.initialValue || '{}';
-    }
     this.updateErrorStatus();
+  }
+
+  reset() {
+    const newValue = this.initialValue || '';
+    this.updateValue(newValue);
+    if (this.target) {
+        this.target.value = newValue;
+    }
   }
 
   /**
