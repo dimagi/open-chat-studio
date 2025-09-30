@@ -254,7 +254,7 @@
         </div>
       </div>
 
-      <div x-show="showError" class="alert alert-error mb-4">
+      <div x-show="errorMessages.length" class="alert alert-error mb-4">
         <i class="fa-solid fa-exclamation-triangle"></i>
         <div>
           <template x-for="error in errorMessages || []">
@@ -313,7 +313,6 @@
         selectedSessionIds: [],
         messages: [],
         messagesJsonString: '[]',
-        showError: false,
         errorMessages: [],
 
         // Modal editing state
@@ -344,7 +343,7 @@
           document.addEventListener('change', (e) => {
             if (e.target.name === 'mode') {
               this.mode = e.target.value;
-              this.showError = false;
+              this.errorMessages = [];
             }
           });
 
@@ -395,67 +394,49 @@
         },
 
         validateForm(e) {
-          this.showError = false;
           this.errorMessages = [];
 
           if (this.mode === 'clone') {
             if (this.selectedSessionIds.length === 0) {
-              e.preventDefault();
-              this.showError = true;
               this.errorMessages.push('Please select at least one session to create the dataset.');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           } else if (this.mode === 'manual') {
             if (this.messages.length === 0) {
-              e.preventDefault();
-              this.showError = true;
               this.errorMessages.push('Please add at least one message pair to create the dataset.');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
               // Validate that all messages have content
               for (let i = 0; i < this.messages.length; i++) {
                 const msg = this.messages[i];
                 if (!msg.human.trim() || !msg.ai.trim()) {
-                  e.preventDefault();
-                  this.showError = true;
                   this.errorMessages.push(`Message pair ${i + 1} is missing required content.`);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                  return;
                 }
 
                 // Validate history text format if present
                 if (msg.history_text && msg.history_text.trim()) {
                   const parsedHistory = this.parseHistoryText(msg.history_text);
                   if (parsedHistory.length === 0) {
-                    e.preventDefault();
-                    this.showError = true;
                     this.errorMessages.push(`Message pair ${i + 1} has invalid history format. History should contain lines starting with "user:" or "assistant:".`);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                    return;
                   }
                 }
               }
             }
           } else if (this.mode === 'csv') {
             if (!this.csvParsed || !this.columnMapping.input || !this.columnMapping.output) {
-              e.preventDefault();
-              this.showError = true;
               this.errorMessages.push('Please upload a CSV file and map both input and output columns.');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-              return;
             }
 
             // Check for context field validation errors
             for (let i = 0; i < this.contextMappings.length; i++) {
               this.validateContextFieldName(i);
               if (this.contextMappings[i].fieldNameError) {
-                e.preventDefault();
-                this.showError = true;
                 this.errorMessages.push('Please fix context field name errors before submitting.');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-                return;
               }
             }
+          }
+
+          if (this.errorMessages.length !== 0) {
+            e.preventDefault();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
           }
         },
 
@@ -477,7 +458,7 @@
           });
 
           this.updateSessionHiddenField();
-          this.showError = false;
+          this.errorMessages = [];
         },
 
         clearAllSelections() {
@@ -509,7 +490,6 @@
 
           const errors = this.validateMessage(message);
           if (errors.length !== 0) {
-            this.showError = true;
             this.errorMessages = errors;
             return;
           }
@@ -519,7 +499,7 @@
 
           this.updateMessagesJson();
           this.clearManualMessageForm();
-          this.showError = false;
+          this.errorMessages = [];
         },
 
         clearManualMessageForm() {
@@ -638,7 +618,7 @@
           if (!file) return;
 
           this.csvUploading = true;
-          this.showError = false;
+          this.errorMessages = [];
 
           const formData = new FormData();
           formData.append('csv_file', file);
@@ -681,7 +661,6 @@
 
             this.updateColumnMapping();
           } catch (error) {
-            this.showError = true;
             this.errorMessages.push(error.message);
             this.csvParsed = false;
           } finally {
