@@ -10,11 +10,11 @@ from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schem
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from apps.api.auth import handle_embedded_widget_auth
+from apps.api.exceptions import EmbeddedWidgetAuthError
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -86,7 +86,7 @@ def check_session_access(session, request=None):
         try:
             handle_embedded_widget_auth(request, session=session)
             return None  # Access allowed
-        except PermissionDenied as e:
+        except EmbeddedWidgetAuthError as e:
             logger.error(f"Permission denied during embedded widget authentication: {e}")
             return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
@@ -255,7 +255,7 @@ def chat_start_session(request):
     experiment_channel = None
     try:
         experiment_channel = handle_embedded_widget_auth(request, experiment_id=experiment_id)
-    except PermissionDenied as e:
+    except EmbeddedWidgetAuthError as e:
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
     # Get experiment
