@@ -45,22 +45,26 @@
               </div>
             </td>
 
-            <!-- Context -->
-            <td class="px-3 py-4 align-top">
+            {% comment %}Template partial for JSON columns allows rendering key value pairs{% endcomment %}
+            {% partialdef json_field %}
+            <!-- {{json_field_name}} -->
+            <td class="px-3 py-4 align-top" x-data="{
+              get jsonField() { return message.{{ json_field_name }} },
+              get isEmpty() { return !this.jsonField || this.jsonField.trim() === '' || this.jsonField === '{}'},
+              get contextPairs() {
+                try {
+                  const parsed = JSON.parse(this.jsonField);
+                  return Object.entries(parsed || {});
+                } catch (e) {
+                  return [];
+                }
+              }
+              }">
               <div class="text-xs">
-                <div x-show="!message.context || message.context.trim() === '' || message.context === '{}'" class="text-gray-400">
-                  {% trans "No context" %}
+                <div x-show="isEmpty" class="text-gray-400">
+                  {% trans "Empty" %}
                 </div>
-                <div x-show="message.context && message.context.trim() !== '' && message.context !== '{}'" x-data="{
-                  get contextPairs() {
-                    try {
-                      const parsed = JSON.parse(this.message.context);
-                      return Object.entries(parsed || {});
-                    } catch (e) {
-                      return [];
-                    }
-                  }
-                }">
+                <div x-show="!isEmpty">
                   <template x-if="contextPairs.length > 0">
                     <ul class="list-none space-y-1">
                       <template x-for="[key, value] in contextPairs" :key="key">
@@ -72,17 +76,20 @@
                     </ul>
                   </template>
                   <template x-if="contextPairs.length === 0">
-                    <div class="text-gray-400 font-mono" x-text="message.context.length > 50 ? message.context.substring(0, 50) + '...' : message.context" :title="message.context"></div>
+                    <div class="text-gray-400 font-mono" x-text="jsonField.length > 50 ? jsonField.substring(0, 50) + '...' : jsonField" :title="jsonField"></div>
                   </template>
                 </div>
               </div>
             </td>
+          {% endpartialdef %}
+
+          {% with json_field_name="context" %}{% partial json_field %}{% endwith %}
 
             <!-- History -->
             <td class="px-3 py-4 align-top">
               <div class="text-xs">
                 <div x-show="!message.history_text || message.history_text.trim() === ''" class="text-gray-400">
-                  {% trans "No history" %}
+                  {% trans "Empty" %}
                 </div>
                 <div x-show="message.history_text && message.history_text.trim() !== ''" class="space-y-1" x-data="{
                   get parsedHistory() {
@@ -104,29 +111,8 @@
               </div>
             </td>
 
-            <!-- Participant Data -->
-            <td class="px-3 py-4 align-top">
-              <div class="text-xs">
-                <div x-show="!message.participant_data || message.participant_data.trim() === '' || message.participant_data === '{}'" class="text-gray-400">
-                  {% trans "---" %}
-                </div>
-                <div x-show="message.participant_data && message.participant_data.trim() !== '' && message.participant_data !== '{}'">
-                  <code><pre x-text="message.participant_data"></pre></code>
-                </div>
-              </div>
-            </td>
-
-            <!-- Session State -->
-            <td class="px-3 py-4 align-top">
-              <div class="text-xs">
-                <div x-show="!message.session_state || message.session_state.trim() === '' || message.session_state === '{}'" class="text-gray-400">
-                  {% trans "---" %}
-                </div>
-                <div x-show="message.session_state && message.session_state.trim() !== '' && message.session_state !== '{}'">
-                  <code><pre x-text="message.session_state"></pre></code>
-                </div>
-              </div>
-            </td>
+          {% with json_field_name="participant_data" %}{% partial json_field %}{% endwith %}
+          {% with json_field_name="session_state" %}{% partial json_field %}{% endwith %}
 
             <!-- Actions -->
             <td class="px-3 py-4 align-top">
