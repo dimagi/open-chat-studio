@@ -85,6 +85,9 @@ function submitFilterSet(event) {
     const filterSetName = nameInput.value.trim();
     nameInput.value = '';
     window.refreshFilterSets?.() || loadSavedFilters?.();
+    if (typeof FilterDialog !== 'undefined') {
+      FilterDialog.load();
+    }
     document.getElementById('saveFilterDialog').close();
     showNotification(`Filter set "${filterSetName}" saved successfully`, 'success');
   })
