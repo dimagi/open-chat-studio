@@ -287,16 +287,12 @@ class DatasetMessagesTable(tables.Table):
                 url_name="evaluations:edit_message_modal",
                 template="evaluations/dataset_message_edit_action.html",
             ),
-            actions.AjaxAction(
+            actions.delete_action(
                 url_name="evaluations:delete_message",
                 url_factory=lambda url_name, request, record, value: reverse(
                     url_name, args=[request.team.slug, record.id]
                 ),
-                icon_class="fa-solid fa-trash",
-                title="Delete message",
-                button_style="btn btn-sm",
                 confirm_message="Are you sure you want to delete this message? This action cannot be undone.",
-                hx_method="delete",
             ),
         ]
     )
