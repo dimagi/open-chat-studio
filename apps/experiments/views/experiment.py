@@ -1681,8 +1681,7 @@ def edit_or_delete_filter_set(request, team_slug: str, pk: int):
         fs.save(update_fields=["is_deleted"])
         return JsonResponse({"success": True})
 
-
-    payload = _json.loads(request.body or b"{}")
+    payload = json.loads(request.body or b"{}")
 
     filter_params = payload.get("filter_params")
     is_shared = payload.get("is_shared")
