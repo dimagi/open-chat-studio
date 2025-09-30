@@ -117,7 +117,7 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 from apps.web.dynamic_filters.datastructures import FilterParams
-from apps.experiments.models import FilterSet
+from apps.filters.models import FilterSet
 
 
 @login_and_team_required
