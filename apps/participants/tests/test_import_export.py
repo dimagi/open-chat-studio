@@ -235,8 +235,8 @@ user@example.com,web,User"""
 
         csv_file = io.BytesIO(csv_content.encode("utf-8"))
 
-        # Mock Participant.objects.get_or_create to raise an exception
-        with patch("apps.experiments.models.Participant.objects.get_or_create") as mock_create:
+        # Mock Participant.objects.update_or_create to raise an exception
+        with patch("apps.experiments.models.Participant.objects.update_or_create") as mock_create:
             mock_create.side_effect = IntegrityError("Database error")
 
             result = process_participant_import(csv_file, None, team_with_users)
