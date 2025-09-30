@@ -63,17 +63,6 @@ def check_experiment_access(experiment, participant_id):
     return None
 
 
-def get_participant_remote_id(request):
-    """
-    Extract participant remote ID from request data or return None
-    """
-    participant_remote_id = None
-    if hasattr(request, "data") and request.data:
-        participant_remote_id = request.data.get("participant_remote_id")
-
-    return participant_remote_id
-
-
 def check_session_access(session, request=None):
     """
     Check if the request has access to the session.
@@ -281,7 +270,7 @@ def chat_start_session(request):
 
     if experiment_channel:
         user = None
-        participant_id = remote_id if remote_id else get_participant_remote_id(request)
+        participant_id = None
         platform = ChannelPlatform.EMBEDDED_WIDGET
         api_channel = experiment_channel
         # Skip public API access checks for embedded widgets
