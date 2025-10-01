@@ -1,7 +1,7 @@
 import inspect
 import re
 
-from django.db.models import QuerySet
+from django.db.models import OuterRef, QuerySet, Subquery
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
@@ -179,44 +179,53 @@ def make_message_pairs_from_queryset(queryset: QuerySet) -> list[ChatMessage]:
     if not queryset:
         return []
 
-    queryset_list = list(queryset)
-    chat = queryset_list[0].chat
+    first_message = queryset.first()
+    if not first_message:
+        return []
 
-    all_chat_messages = list(chat.messages.order_by("created_at"))
-    message_lookup = {msg.id: i for i, msg in enumerate(all_chat_messages)}
+    chat = first_message.chat
 
-    def get_previous_message(message):
-        current_index = message_lookup[message.id]
-        return all_chat_messages[current_index - 1] if current_index > 0 else None
+    prev_message_subquery = (
+        ChatMessage.objects.filter(chat=chat, created_at__lt=OuterRef("created_at"))
+        .order_by("-created_at")
+        .values("id", "message_type")[:1]
+    )
+    next_message_subquery = (
+        ChatMessage.objects.filter(chat=chat, created_at__gt=OuterRef("created_at"))
+        .order_by("created_at")
+        .values("id", "message_type")[:1]
+    )
 
-    def get_next_message(message):
-        current_index = message_lookup[message.id]
-        return all_chat_messages[current_index + 1] if current_index < len(all_chat_messages) - 1 else None
+    queryset = queryset.annotate(
+        prev_message_id=Subquery(prev_message_subquery.values("id")),
+        prev_message_type=Subquery(prev_message_subquery.values("message_type")),
+        next_message_id=Subquery(next_message_subquery.values("id")),
+        next_message_type=Subquery(next_message_subquery.values("message_type")),
+    )
 
-    all_messages = set()
+    all_message_ids = set()
 
-    # Handle AI seed message
-    has_ai_seed_message = False
-    if queryset_list[0].is_first_message and queryset_list[0].is_ai_message:
-        has_ai_seed_message = True
-        all_messages.add(queryset_list[0])
+    for message in queryset.iterator():
+        # Handle AI seed message
+        is_first = message.prev_message_id is None
+        if is_first and message.message_type == ChatMessageType.AI:
+            all_message_ids.add(message.id)
+            continue
 
-    starting_index = 1 if has_ai_seed_message else 0
-    for message in queryset_list[starting_index:]:
-        all_messages.add(message)  # Add the current message
+        all_message_ids.add(message.id)
 
-        if message.is_ai_message:
-            previous_message = get_previous_message(message)
-            if previous_message and previous_message.message_type == ChatMessageType.HUMAN:
-                all_messages.add(previous_message)
+        # For AI messages, add previous human message
+        if message.message_type == ChatMessageType.AI:
+            if message.prev_message_id and message.prev_message_type == ChatMessageType.HUMAN:
+                all_message_ids.add(message.prev_message_id)
             else:
                 raise ValueError(f"AI message {message.id} has no corresponding human message")
 
-        elif message.is_human_message:
-            next_message = get_next_message(message)
-            if next_message and next_message.message_type == ChatMessageType.AI:
-                all_messages.add(next_message)
+        # For human messages, add next AI message
+        elif message.message_type == ChatMessageType.HUMAN:
+            if message.next_message_id and message.next_message_type == ChatMessageType.AI:
+                all_message_ids.add(message.next_message_id)
             else:
                 raise ValueError(f"Human message {message.id} has no corresponding AI message")
 
-    return list(all_messages)
+    return list(ChatMessage.objects.filter(id__in=all_message_ids))
