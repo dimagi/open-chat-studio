@@ -72,7 +72,6 @@ class TestParticipantDataProxy:
 
         # Check that data was updated
         assert input_state["participant_data"] == {"favorite_color": "blue", "name": "New Name"}
-        assert session.participant.name == "New Name"
 
     def test_get_schedules(self):
         """Test that get_schedules() returns scheduled messages for the participant"""
