@@ -124,6 +124,7 @@ class TestOCSTracer:
 
         assert experiment.working_version is None
         assert tracer.trace.experiment_version_number is None
+        assert tracer.trace.experiment_id == experiment.id
 
         version = experiment.create_new_version()
         tracer = OCSTracer(version.id, experiment.team_id)
