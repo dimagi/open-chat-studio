@@ -8,6 +8,7 @@ from django.db.models import Count
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -215,10 +216,10 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
         dataset = get_object_or_404(EvaluationDataset, id=dataset_id, team__slug=team_slug)
 
         form_data = _get_message_form_data(request)
-        errors, data = _get_message_data_from_request(form_data)
+        errors, data = _get_message_data_and_errors(form_data)
         if errors:
             message = "Errors:\n" + "\n".join([f"{key}: {value}" for key, value in errors.items()])
-            return HttpResponse(message, status=400)
+            return HttpResponse(escape(message), status=400)
 
         message = EvaluationMessage.objects.create(**data, metadata={"created_mode": "manual"})
 
@@ -272,7 +273,7 @@ def update_message(request, team_slug, message_id):
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
 
     form_data = _get_message_form_data(request)
-    errors, data = _get_message_data_from_request(form_data)
+    errors, data = _get_message_data_and_errors(form_data)
 
     if errors:
         update_url = reverse("evaluations:update_message", args=[team_slug, message_id])
@@ -304,7 +305,7 @@ def update_message(request, team_slug, message_id):
     return HttpResponse("", status=200)
 
 
-def _get_message_data_from_request(form_data: dict) -> tuple[dict, dict]:
+def _get_message_data_and_errors(form_data: dict) -> tuple[dict, dict]:
     errors = {}
     if not form_data["human"]:
         errors["human"] = "Human message is required"
