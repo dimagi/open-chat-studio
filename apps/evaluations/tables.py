@@ -14,6 +14,7 @@ from apps.evaluations.models import (
 from apps.evaluations.utils import get_evaluator_type_display
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
+from apps.generics.actions import chip_action
 
 
 class EvaluationConfigTable(tables.Table):
@@ -215,6 +216,13 @@ class EvaluationDatasetTable(tables.Table):
         empty_text = "No datasets found."
 
 
+def _chip_session_url_factory(_, request, record, __):
+    return reverse(
+        "chatbots:chatbot_session_view",
+        args=[record.team.slug, record.experiment.public_id, record.external_id],
+    )
+
+
 class EvaluationSessionsSelectionTable(tables.Table):
     selection = columns.CheckBoxColumn(
         accessor="external_id",
@@ -230,6 +238,16 @@ class EvaluationSessionsSelectionTable(tables.Table):
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     versions = columns.Column(verbose_name="Versions", accessor="experiment_version_for_display", orderable=False)
     message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
+    session = actions.ActionsColumn(
+        actions=[
+            chip_action(
+                label_factory=lambda record, _: record.external_id,
+                url_factory=_chip_session_url_factory,
+                open_url_in_new_tab=True,
+            ),
+        ],
+        orderable=True,
+    )
 
     class Meta:
         model = ExperimentSession
