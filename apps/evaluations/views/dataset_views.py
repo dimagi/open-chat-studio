@@ -9,6 +9,7 @@ from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -201,6 +202,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             )
             .filter(message_count__gt=0)
             .order_by("experiment__name")
+            .prefetch_related("chat__messages", "chat__messages__tags")
         )
 
         session_filter = ExperimentSessionFilter()
@@ -235,37 +237,13 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
     try:
         dataset = get_object_or_404(EvaluationDataset, id=dataset_id, team__slug=team_slug)
 
-        human_message = request.POST.get("human_message", "").strip()
-        ai_message = request.POST.get("ai_message", "").strip()
-        context_json = request.POST.get("context", "{}")
-        history_text = request.POST.get("history_text", "").strip()
+        form_data = _get_message_form_data(request)
+        errors, data = _get_message_data_and_errors(form_data)
+        if errors:
+            message = "Errors:\n" + "\n".join([f"{key}: {value}" for key, value in errors.items()])
+            return HttpResponse(escape(message), status=400)
 
-        if not human_message or not ai_message:
-            return HttpResponse("Both human and AI messages are required", status=400)
-
-        if context_json.strip():
-            try:
-                context = json.loads(context_json)
-            except json.JSONDecodeError:
-                return HttpResponse("Invalid JSON format in context", status=400)
-        else:
-            context = {}
-
-        # Parse history text if provided
-        history = []
-        if history_text:
-            try:
-                history = parse_history_text(history_text)
-            except Exception:
-                return HttpResponse("Invalid history format", status=400)
-
-        message = EvaluationMessage.objects.create(
-            input=EvaluationMessageContent(content=human_message, role="human").model_dump(),
-            output=EvaluationMessageContent(content=ai_message, role="ai").model_dump(),
-            context=context,
-            history=history,
-            metadata={"created_mode": "manual"},
-        )
+        message = EvaluationMessage.objects.create(**data, metadata={"created_mode": "manual"})
 
         dataset.messages.add(message)
 
@@ -292,6 +270,8 @@ def edit_message_modal(request, team_slug, message_id):
         "human": message.input.get("content", ""),
         "ai": message.output.get("content", ""),
         "context": json.dumps(message.context, indent=2) if message.context else "{}",
+        "participant_data": json.dumps(message.participant_data, indent=2) if message.participant_data else "{}",
+        "session_state": json.dumps(message.session_state, indent=2) if message.session_state else "{}",
         "history_text": message.full_history,
     }
 
@@ -314,34 +294,10 @@ def update_message(request, team_slug, message_id):
     """Handle form submission to update message"""
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
 
-    human_content = request.POST.get("human_message", "").strip()
-    ai_content = request.POST.get("ai_message", "").strip()
-    context_str = request.POST.get("context", "").strip()
-    history_text = request.POST.get("history_text", "").strip()
-
-    errors = {}
-    if not human_content:
-        errors["human"] = "Human message is required"
-    if not ai_content:
-        errors["ai"] = "AI message is required"
-
-    context_data = {}
-    if context_str:
-        try:
-            context_data = json.loads(context_str)
-        except json.JSONDecodeError:
-            errors["context"] = "Invalid JSON format"
-
-    # Parse history text if provided
-    history_data = []
-    if history_text:
-        try:
-            history_data = parse_history_text(history_text)
-        except Exception:
-            errors["history_text"] = "Invalid history format"
+    form_data = _get_message_form_data(request)
+    errors, data = _get_message_data_and_errors(form_data)
 
     if errors:
-        form_data = {"human": human_content, "ai": ai_content, "context": context_str, "history_text": history_text}
         update_url = reverse("evaluations:update_message", args=[team_slug, message_id])
 
         return render(
@@ -356,10 +312,8 @@ def update_message(request, team_slug, message_id):
             status=200,
         )
 
-    message.input = EvaluationMessageContent(content=human_content, role="human").model_dump()
-    message.output = EvaluationMessageContent(content=ai_content, role="ai").model_dump()
-    message.context = context_data
-    message.history = history_data
+    for attr, val in data.items():
+        setattr(message, attr, val)
 
     # Clear chat message references since this is now manually edited
     message.input_chat_message = None
@@ -371,6 +325,60 @@ def update_message(request, team_slug, message_id):
     message.save()
 
     return HttpResponse("", status=200)
+
+
+def _get_message_data_and_errors(form_data: dict) -> tuple[dict, dict]:
+    errors = {}
+    if not form_data["human"]:
+        errors["human"] = "Human message is required"
+    if not form_data["ai"]:
+        errors["ai"] = "AI message is required"
+
+    def _get_json_var(name):
+        json_val = form_data[name]
+        if json_val.strip():
+            try:
+                return json.loads(json_val)
+            except json.JSONDecodeError:
+                errors[name] = "Invalid JSON format"
+                return None
+        else:
+            return {}
+
+    context = _get_json_var("context")
+    participant_data = _get_json_var("participant_data")
+    session_state = _get_json_var("session_state")
+
+    # Parse history text if provided
+    history_data = []
+    if form_data["history_text"]:
+        try:
+            history_data = parse_history_text(form_data["history_text"])
+        except Exception:
+            errors["history_text"] = "Invalid history format"
+
+    if errors:
+        return errors, {}
+
+    return errors, {
+        "input": EvaluationMessageContent(content=form_data["human"], role="human").model_dump(),
+        "output": EvaluationMessageContent(content=form_data["ai"], role="ai").model_dump(),
+        "context": context,
+        "participant_data": participant_data,
+        "session_state": session_state,
+        "history": history_data,
+    }
+
+
+def _get_message_form_data(request) -> dict:
+    return {
+        "human": request.POST.get("human_message", "").strip(),
+        "ai": request.POST.get("ai_message", "").strip(),
+        "history_text": request.POST.get("history_text", "").strip(),
+        "context": request.POST.get("context", "{}"),
+        "participant_data": request.POST.get("participant_data", "{}"),
+        "session_state": request.POST.get("session_state", "{}"),
+    }
 
 
 @login_and_team_required
