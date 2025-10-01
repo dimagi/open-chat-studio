@@ -12,7 +12,7 @@ from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import AgentTools, ParticipantData
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
-from apps.pipelines.nodes.base import Intents, PipelineState, merge_dicts
+from apps.pipelines.nodes.base import Intents, PipelineState, merge_dict_values_as_lists
 from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
     assistant_node,
@@ -1008,7 +1008,7 @@ def test_assistant_node_empty_metadata_handling(get_llm_service, pipeline):
     ],
 )
 def test_merge_dicts(left, right, expected):
-    assert merge_dicts(left, right) == expected
+    assert merge_dict_values_as_lists(left, right) == expected
 
 
 def test_input_with_format_strings():

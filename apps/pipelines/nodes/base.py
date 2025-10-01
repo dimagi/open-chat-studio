@@ -49,7 +49,7 @@ def add_temp_state_messages(left: dict, right: dict):
     return output
 
 
-def merge_dicts(left: dict, right: dict):
+def merge_dict_values_as_lists(left: dict, right: dict):
     """
     Merge two dictionaries, combining values for the same key into a list. The value of any key is expected to be a list
     """
@@ -84,8 +84,8 @@ class PipelineState(dict):
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     temp_state: Annotated[TempState, add_temp_state_messages]
-    input_message_metadata: Annotated[dict, merge_dicts]
-    output_message_metadata: Annotated[dict, merge_dicts]
+    input_message_metadata: Annotated[dict, merge_dict_values_as_lists]
+    output_message_metadata: Annotated[dict, merge_dict_values_as_lists]
     attachments: list = Field(default=[])
     output_message_tags: Annotated[list[tuple[str, str]], operator.add]
     session_tags: Annotated[list[tuple[str, str]], operator.add]
