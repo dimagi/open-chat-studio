@@ -164,19 +164,17 @@
 
       document.addEventListener('htmx:afterRequest', function(event) {
         if (event.detail.xhr.status === 200 && event.detail.target.id === 'editMessageModal') {
-        // Check if the response contains validation errors
-        const modalBox = event.detail.target.querySelector('.modal-box');
-        const hasErrors = modalBox && modalBox.hasAttribute('data-has-errors');
+          // Check if the response contains validation errors
+          const modalBox = event.detail.target.querySelector('.modal-box');
+          const hasErrors = modalBox && modalBox.hasAttribute('data-has-errors');
 
-        if (hasErrors) {
-          // Don't close modal or refresh table if there are validation errors
-          return;
-        }
+          if (hasErrors) {
+            // Don't close modal or refresh table if there are validation errors
+            return;
+          }
 
-        if (event.detail.target.id === 'editMessageModal') {
           document.getElementById('editMessageModal').close();
-        }
-        htmx.trigger(document.body, 'refreshTable');
+          htmx.trigger(document.body, 'refreshTable');
       }});
     });
   </script>
