@@ -109,7 +109,7 @@ assistant: I am doing well, thank you for asking!
   <input type="hidden" name="session_state"
          {% if use_alpine_model %}x-model="editingMessage.session_state"{% else %}value="{{ session_state_value|default:'{}' }}"{% endif %}>
   <div class="json-editor w-full h-32 resize-y overflow-auto"
-       data-target-field="previous input[name='session_state']"
+       data-target-field="previous input[type='hidden'][name='session_state']"
        {% if disable_button_id %}data-disable-elt="#{{ disable_button_id }}"{% endif %}>
   </div>
   {% if errors.session_state %}
