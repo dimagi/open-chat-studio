@@ -336,16 +336,23 @@ class EvaluationDatasetForm(forms.ModelForm):
         if not session_ids and not filtered_session_ids:
             raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
 
+        intersection = session_ids & filtered_session_ids
+        if intersection:
+            raise forms.ValidationError(
+                "A session cannot be selected in both 'All Messages' and 'Filtered Messages'. "
+                f"The following sessions are in both lists: {', '.join(sorted(str(sid) for sid in intersection))}"
+            )
+
         all_session_ids = session_ids.union(filtered_session_ids)
         existing_sessions = ExperimentSession.objects.filter(
             team=self.team, external_id__in=all_session_ids
         ).values_list("external_id", flat=True)
 
-        missing_sessions = all_session_ids - set(existing_sessions)
+        missing_sessions = all_session_ids - set(str(sid) for sid in existing_sessions)
         if missing_sessions:
             raise forms.ValidationError(
                 "The following sessions do not exist or you don't have permission to access them: "
-                f"{', '.join(missing_sessions)}"
+                f"{', '.join(sorted(missing_sessions))}"
             )
 
         return session_ids, filtered_session_ids

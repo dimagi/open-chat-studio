@@ -24,8 +24,8 @@
               <div>
                 {% include "experiments/filters.html" %}
               </div>
-              <div x-show="selectedSessionIds.length > 0" class="text-sm font-medium ml-4">
-                <span x-text="selectedSessionIds.length"></span> session<span x-show="selectedSessionIds.length !== 1">s</span> selected
+              <div x-show="selectedSessionIds.size + filteredSessionIds.size > 0" class="text-sm font-medium ml-4">
+                <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> selected
                 <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
                   Clear
                 </button>
@@ -307,8 +307,8 @@
       return {
         loaded: false,
         mode: 'clone',
-        selectedSessionIds: [],
-        filteredSessionIds: [],
+        selectedSessionIds: new Set(),
+        filteredSessionIds: new Set(),
         messages: [],
         messagesJsonString: '[]',
         showError: false,
@@ -349,14 +349,14 @@
           // Initialize session selection for clone mode
           const preselected = document.querySelector('input[name="session_ids"]').value;
           if (preselected) {
-            this.selectedSessionIds = preselected.split(',').filter(id => id.trim());
+            preselected.split(',').filter(id => id.trim()).forEach(id => this.selectedSessionIds.add(id));
           }
           this.updateSessionHiddenField();
 
           // Initialize filtered session selection
           const preselectedFiltered = document.querySelector('input[name="filtered_session_ids"]').value;
           if (preselectedFiltered) {
-            this.filteredSessionIds = preselectedFiltered.split(',').filter(id => id.trim());
+            preselectedFiltered.split(',').filter(id => id.trim()).forEach(id => this.filteredSessionIds.add(id));
           }
           this.updateFilteredSessionHiddenField();
 
@@ -406,10 +406,18 @@
           this.errorMessage = '';
 
           if (this.mode === 'clone') {
-            if (this.selectedSessionIds.length + this.filteredSessionIds.length === 0) {
+            if (this.selectedSessionIds.size + this.filteredSessionIds.size === 0) {
               e.preventDefault();
               this.showError = true;
               this.errorMessage = 'Please select at least one session to create the dataset.';
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            const intersection = [...this.selectedSessionIds].filter(id => this.filteredSessionIds.has(id));
+            if (intersection.length > 0) {
+              e.preventDefault();
+              this.showError = true;
+              this.errorMessage = 'A session cannot be selected in both "All Messages" and "Filtered Messages". Please select each session in only one column.';
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           } else if (this.mode === 'manual') {
@@ -466,40 +474,6 @@
           }
         },
 
-        // Session selection methods (for clone mode)
-        updateSelectedSessions() {
-          const checkboxes = document.querySelectorAll('.session-checkbox:checked');
-          const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
-          const allCurrentPageCheckboxes = document.querySelectorAll('.session-checkbox');
-          const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
-
-          this.selectedSessionIds = this.selectedSessionIds.filter(id =>
-            !currentPageSessionIds.includes(id) || currentPageSelections.includes(id)
-          );
-
-          currentPageSelections.forEach(id => {
-            if (!this.selectedSessionIds.includes(id)) {
-              this.selectedSessionIds.push(id);
-            }
-          });
-
-          this.updateSessionHiddenField();
-          this.showError = false;
-        },
-
-        clearAllSelections() {
-          this.selectedSessionIds = [];
-          this.updateSessionHiddenField();
-          document.querySelectorAll('.session-checkbox:checked').forEach(cb => {
-            cb.checked = false;
-          });
-        },
-
-        updateSessionHiddenField() {
-          const hiddenField = document.querySelector('input[name="session_ids"]');
-          hiddenField.value = this.selectedSessionIds.join(',');
-        },
-
         // Filtered session methods (for per-session filtering)
         updateFilteredSessions() {
           const checkboxes = document.querySelectorAll('.filter-checkbox:checked');
@@ -507,23 +481,81 @@
           const allCurrentPageCheckboxes = document.querySelectorAll('.filter-checkbox');
           const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
 
-          // Remove current page sessions from filtered list, then add back checked ones
-          this.filteredSessionIds = this.filteredSessionIds.filter(id =>
-            !currentPageSessionIds.includes(id) || currentPageSelections.includes(id)
+          this.filteredSessionIds = new Set(
+            [...this.filteredSessionIds].filter(id => !currentPageSessionIds.includes(id))
+          );
+          currentPageSelections.forEach(id => this.filteredSessionIds.add(id));
+
+          this.selectedSessionIds = new Set(
+            [...this.selectedSessionIds].filter(id => !this.filteredSessionIds.has(id))
           );
 
-          currentPageSelections.forEach(id => {
-            if (!this.filteredSessionIds.includes(id)) {
-              this.filteredSessionIds.push(id);
-            }
-          });
-
           this.updateFilteredSessionHiddenField();
+          this.updateSessionHiddenField();
+          this.uncheckSessionCheckboxes();
+
+          this.showError = false;
+        },
+
+        // Session selection methods (for clone mode)
+        updateSelectedSessions() {
+          const checkboxes = document.querySelectorAll('.session-checkbox:checked');
+          const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
+          const allCurrentPageCheckboxes = document.querySelectorAll('.session-checkbox');
+          const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
+
+          // Remove current page sessions, then add back the checked ones
+          this.selectedSessionIds = new Set(
+            [...this.selectedSessionIds].filter(id => !currentPageSessionIds.includes(id))
+          );
+          currentPageSelections.forEach(id => this.selectedSessionIds.add(id));
+
+          this.filteredSessionIds = new Set(
+            [...this.filteredSessionIds].filter(id => !this.selectedSessionIds.has(id))
+          );
+
+          this.updateSessionHiddenField();
+          this.updateFilteredSessionHiddenField();
+          this.uncheckFilterCheckboxes();
+
+          this.showError = false;
+        },
+
+        clearAllSelections() {
+          this.selectedSessionIds = new Set();
+          this.filteredSessionIds = new Set();
+          this.updateSessionHiddenField();
+          this.updateFilteredSessionHiddenField();
+          document.querySelectorAll('.session-checkbox:checked').forEach(cb => {
+            cb.checked = false;
+          });
+          document.querySelectorAll('.filter-checkbox:checked').forEach(cb => {
+            cb.checked = false;
+          });
+        },
+
+        updateSessionHiddenField() {
+          const hiddenField = document.querySelector('input[name="session_ids"]');
+          hiddenField.value = Array.from(this.selectedSessionIds).join(',');
         },
 
         updateFilteredSessionHiddenField() {
           const hiddenField = document.querySelector('input[name="filtered_session_ids"]');
-          hiddenField.value = this.filteredSessionIds.join(',');
+          hiddenField.value = Array.from(this.filteredSessionIds).join(',');
+        },
+
+        uncheckFilterCheckboxes() {
+          this.selectedSessionIds.forEach(id => {
+            const checkbox = document.querySelector(`.filter-checkbox[value="${id}"]`);
+            if (checkbox) checkbox.checked = false;
+          });
+        },
+
+        uncheckSessionCheckboxes() {
+          this.filteredSessionIds.forEach(id => {
+            const checkbox = document.querySelector(`.session-checkbox[value="${id}"]`);
+            if (checkbox) checkbox.checked = false;
+          });
         },
 
         // Manual message methods (for manual mode)
