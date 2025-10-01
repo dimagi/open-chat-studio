@@ -558,11 +558,11 @@ class EvaluationDatasetForm(forms.ModelForm):
         return evaluation_messages
 
 
-def _get_message_pair_value(field_name, pair_index, field_value):
+def _get_message_pair_value(field_name: str, pair_index: int, field_value: str) -> dict:
     return _clean_json_field(f"{field_name} for pair {pair_index + 1}", field_value)
 
 
-def _clean_json_field(field_name, field_value):
+def _clean_json_field(field_name: str, field_value: str) -> dict:
     if not field_value.strip():
         return {}
     try:
