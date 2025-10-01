@@ -684,9 +684,9 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
             case self.DataSource.participant_data:
                 data = ParticipantDataProxy.from_state(state).get()
             case self.DataSource.temp_state:
-                data = state["temp_state"]
+                data = state.get("temp_state") or {}
             case self.DataSource.session_state:
-                data = state["session_state"]
+                data = state.get("session_state") or {}
 
         formatted_key = f"{{data.{self.route_key}}}"
         try:
