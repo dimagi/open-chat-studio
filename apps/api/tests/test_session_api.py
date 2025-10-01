@@ -136,6 +136,7 @@ def test_retrieve_session(session):
 
     for message in response_json.get("messages", []):
         message["created_at"] = "fake date"
+        message["attachments"] = sorted(message["attachments"], key=lambda x: x["name"])
 
     assert response_json == get_session_json(
         session,
