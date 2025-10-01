@@ -685,7 +685,7 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
             case self.DataSource.temp_state:
                 data = state["temp_state"]
             case self.DataSource.session_state:
-                data = state["experiment_session"].state
+                data = state["session_state"]
 
         formatted_key = f"{{data.{self.route_key}}}"
         try:

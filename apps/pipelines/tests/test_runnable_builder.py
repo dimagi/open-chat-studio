@@ -31,7 +31,6 @@ from apps.pipelines.tests.utils import (
     start_node,
     state_key_router_node,
 )
-from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -259,15 +258,19 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
         llm_provider_id=provider.id,
         llm_provider_model_id=provider_model.id,
     )
+    participant_data = {"participant_data": "b"}
     node._process_conditional(
         PipelineState(
-            outputs={"123": {"message": "a"}}, messages=["a"], experiment_session=experiment_session, node_input="a"
+            outputs={"123": {"message": "a"}},
+            messages=["a"],
+            experiment_session=experiment_session,
+            node_input="a",
+            participant_data=participant_data,
         ),
     )
 
     assert len(service.llm.get_call_messages()[0]) == 2
-    proxy = ParticipantDataProxy(experiment_session)
-    assert str(proxy.get()) in service.llm.get_call_messages()[0][0].content
+    assert str(participant_data) in service.llm.get_call_messages()[0][0].content
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -420,18 +423,6 @@ def test_router_sets_tags_correctly(pipeline, experiment_session):
     "data_source", [StaticRouterNode.DataSource.participant_data, StaticRouterNode.DataSource.session_state]
 )
 def test_static_router_participant_data(data_source, pipeline, experiment_session):
-    def _update_participant_data(session, data):
-        ParticipantDataProxy(session).set(data)
-
-    def _update_session_state(session, data):
-        session.state = data
-        session.save(update_fields=["state"])
-
-    DATA_SOURCE_UPDATERS = {
-        StaticRouterNode.DataSource.participant_data: _update_participant_data,
-        StaticRouterNode.DataSource.session_state: _update_session_state,
-    }
-
     start = start_node()
     router = state_key_router_node("route_to", ["first", "second"], data_source=data_source)
     template_a = render_template_node("A {{ input }}")
@@ -457,17 +448,22 @@ def test_static_router_participant_data(data_source, pipeline, experiment_sessio
     ]
     runnable = create_runnable(pipeline, nodes, edges)
 
-    DATA_SOURCE_UPDATERS[data_source](experiment_session, {"route_to": "first"})
-    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    def _get_state(route):
+        state = PipelineState(messages=["Hi"], experiment_session=experiment_session)
+        if data_source == StaticRouterNode.DataSource.participant_data:
+            state["participant_data"] = route
+        else:
+            state["session_state"] = route
+        return state
+
+    output = runnable.invoke(_get_state({"route_to": "first"}))
     assert output["messages"][-1] == "A Hi"
 
-    DATA_SOURCE_UPDATERS[data_source](experiment_session, {"route_to": "second"})
-    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    output = runnable.invoke(_get_state({"route_to": "second"}))
     assert output["messages"][-1] == "B Hi"
 
     # default route
-    DATA_SOURCE_UPDATERS[data_source](experiment_session, {})
-    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    output = runnable.invoke(_get_state({}))
     assert output["messages"][-1] == "A Hi"
 
 
