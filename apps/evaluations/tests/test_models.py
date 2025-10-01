@@ -243,8 +243,7 @@ def test_create_from_sessions_mixed_regular_and_filtered():
     # Should get: 1 from session_1 (regular) + 1 from session_2 (filtered)
     assert len(eval_messages) == 2
 
-    # Sort by session external_id to ensure consistent ordering for assertions
-    eval_messages.sort(key=lambda msg: msg.metadata.get("session_id", ""))
+    eval_messages.sort(key=lambda msg: msg.input_chat_message.id)
 
     assert eval_messages[0].input == {"content": "session1 message1 human", "role": "human"}
     assert eval_messages[0].output == {"content": "session1 message1 ai", "role": "ai"}
