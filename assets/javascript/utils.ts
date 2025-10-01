@@ -1,3 +1,6 @@
+/**
+ * Find next sibling element matching selector
+ */
 const next = (el: Element, selector: string) => {
   let sibling = el.nextElementSibling
   if (!selector) return sibling
@@ -8,6 +11,9 @@ const next = (el: Element, selector: string) => {
   return null
 }
 
+/**
+ * Find previous sibling element matching selector
+ */
 const previous = (el: Element, selector: string) => {
   let sibling = el.previousElementSibling
   if (!selector) return sibling
@@ -18,6 +24,13 @@ const previous = (el: Element, selector: string) => {
   return null
 }
 
+/**
+ * Enhanced element finder with special selector prefixes:
+ * - 'closest selector' - finds closest ancestor matching selector
+ * - 'next selector' - finds next sibling matching selector
+ * - 'previous selector' - finds previous sibling matching selector
+ * - otherwise uses document.querySelector
+ */
 export const find = (el: Element, selector: string) => {
   if (!selector) return null;
   if (selector.startsWith('closest ')) {
