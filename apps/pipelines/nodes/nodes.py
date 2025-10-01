@@ -1053,6 +1053,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         output_state["participant_data"] = pipeline_state.get("participant_data") or {}
         output_state["session_state"] = pipeline_state.get("session_state") or {}
 
+        # use 'output_state' so that we capture any updates
         participant_data_proxy = ParticipantDataProxy(output_state, state.get("experiment_session"))
 
         # add this node into the state so that we can trace the path
