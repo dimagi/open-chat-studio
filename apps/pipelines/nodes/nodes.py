@@ -624,7 +624,9 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "temp_state": state.get("temp_state", {}),
             "session_state": session.state or {},
         }
-        context.update(PromptTemplateContext(session, extra=extra_prompt_context).get_context(prompt.input_variables))
+        participant_data = state.get("participant_data") or {}
+        template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
+        context.update(template_context.get_context(prompt.input_variables))
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.format_messages(**context)

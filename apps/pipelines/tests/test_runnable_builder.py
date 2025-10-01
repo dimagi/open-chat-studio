@@ -136,12 +136,6 @@ def test_llm_with_prompt_response(
     get_llm_service.return_value = service
 
     user_input = "The User Input"
-    participant_data = ParticipantData.objects.create(
-        team=experiment_session.team,
-        experiment=experiment_session.experiment,
-        participant=experiment_session.participant,
-        data={"name": "A"},
-    )
     nodes = [
         start_node(),
         llm_response_with_prompt_node(
@@ -159,15 +153,19 @@ def test_llm_with_prompt_response(
         ),
         end_node(),
     ]
-    experiment_session.state = {"session_key": "session_value"}
+    participant_data = {"name": "A"}
     output = create_runnable(pipeline, nodes).invoke(
         PipelineState(
-            messages=[user_input], experiment_session=experiment_session, temp_state={"temp_key": "temp_value"}
+            messages=[user_input],
+            experiment_session=experiment_session,
+            temp_state={"temp_key": "temp_value"},
+            participant_data=participant_data,
+            session_state={"session_key": "session_value"},
         )
     )["messages"][-1]
     expected_output = (
         f"Node 2: temp_value session_value Node 1: Use this {source_material.material} to answer questions "
-        f"about {participant_data.data}. {user_input}"
+        f"about {participant_data}. {user_input}"
     )
     assert output == expected_output
 
@@ -270,7 +268,8 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
     )
 
     assert len(service.llm.get_call_messages()[0]) == 2
-    assert str(participant_data) in service.llm.get_call_messages()[0][0].content
+    expected_pd = {"name": experiment_session.participant.name} | participant_data
+    assert str(expected_pd) in service.llm.get_call_messages()[0][0].content
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
