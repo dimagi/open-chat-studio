@@ -180,6 +180,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
             .annotate(message_count=Count("chat__messages"))
             .filter(message_count__gt=0)
             .order_by("experiment__name")
+            .prefetch_related("chat__messages", "chat__messages__tags")
         )
         timezone = self.request.session.get("detected_tz", None)
         session_filter = ExperimentSessionFilter()
