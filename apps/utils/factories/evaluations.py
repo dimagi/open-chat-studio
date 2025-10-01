@@ -59,7 +59,7 @@ class EvaluationDatasetFactory(DjangoModelFactory):
         skip_postgeneration_save = True
 
     team = factory.SubFactory(TeamFactory)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Dataset {n}")
 
     @factory.post_generation
     def messages(self, create, extracted, **kwargs):
@@ -78,7 +78,7 @@ class EvaluationConfigFactory(DjangoModelFactory):
         skip_postgeneration_save = True
 
     team = factory.SubFactory(TeamFactory)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Eval Config {n}")
     dataset = factory.SubFactory(EvaluationDatasetFactory)
 
     @factory.post_generation

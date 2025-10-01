@@ -9,7 +9,7 @@ class AssistantFactory(factory.Factory):
 
     id = factory.Faker("uuid4")
     created_at = factory.Faker("pyint")
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Assistant {n}")
     description = factory.Faker("sentence")
     temperature = 0.9
     top_p = 1.0

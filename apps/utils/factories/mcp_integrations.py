@@ -7,5 +7,5 @@ class MCPServerFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = McpServer
 
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test MCP {n}")
     server_url = factory.Faker("url")

@@ -190,7 +190,7 @@ def experiment(team_with_users, db):
 # Use factories for consistent test data
 class MyModelFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f'Test Model {n}')
     
     class Meta:
         model = MyModel

@@ -599,7 +599,7 @@ class TestGetSessionStateTool(BaseTestAgentTool):
         assert "dark_mode" in response
 
     def test_get_nonexistent_key_from_populated_state(self, session):
-        response = self._invoke_tool(session, key="missing_key", tool_call_id="123", graph_state={})
+        response = self._invoke_tool(session, key="missing_key", graph_state={})
         assert "No value found" in response
 
 
