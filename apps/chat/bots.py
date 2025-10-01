@@ -416,14 +416,14 @@ class PipelineBot:
             for tag, category in session_tags:
                 self.session.chat.create_and_add_tag(tag, self.session.team, tag_category=category)
 
-        out_pd = output.get("participant_data")
-        if out_pd and out_pd != input_state.get("participant_data"):
+        out_pd = output.get("participant_data", None)
+        if out_pd is not None and out_pd != input_state.get("participant_data"):
             self.participant_data.data = out_pd
             self.participant_data.save(update_fields=["data"])
             self.session.participant.update_name_from_data(out_pd)
 
-        out_session_state = output.get("session_state")
-        if out_session_state and out_session_state != input_state.get("session_state"):
+        out_session_state = output.get("session_state", None)
+        if out_session_state is not None and out_session_state != input_state.get("session_state"):
             self.session.state = out_session_state
             self.session.save(update_fields=["state"])
         return ai_message
