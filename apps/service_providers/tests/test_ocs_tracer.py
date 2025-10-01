@@ -135,3 +135,4 @@ class TestOCSTracer:
         )
 
         assert tracer.trace.experiment_version_number == version.version_number
+        assert tracer.trace.experiment_id == experiment.id
