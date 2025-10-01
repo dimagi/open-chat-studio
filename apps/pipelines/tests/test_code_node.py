@@ -5,7 +5,7 @@ from django.core.files.base import ContentFile
 from pydantic import ValidationError
 
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import Participant, ParticipantData
+from apps.experiments.models import Participant
 from apps.files.models import File
 from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
@@ -118,31 +118,25 @@ def test_code_node_runtime_errors(code, input, error):
 
 @pytest.mark.django_db()
 def test_get_participant_data(pipeline, experiment_session):
-    ParticipantData.objects.create(
-        team=experiment_session.team,
-        experiment=experiment_session.experiment,
-        participant=experiment_session.participant,
-        data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
-    )
-
     code = """
 def main(input, **kwargs):
     return get_participant_data()["fun_facts"]["body_type"]
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node_output = node._process("hi", PipelineState(outputs={}, experiment_session=experiment_session))
+    node_output = node._process(
+        "hi",
+        PipelineState(
+            outputs={},
+            experiment_session=experiment_session,
+            participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
+        ),
+    )
     assert node_output.update["messages"][-1] == "robot"
 
 
 @pytest.mark.django_db()
 def test_update_participant_data(pipeline, experiment_session):
     output = "moody"
-    participant_data = ParticipantData.objects.create(
-        team=experiment_session.team,
-        experiment=experiment_session.experiment,
-        participant=experiment_session.participant,
-        data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
-    )
 
     code = f"""
 def main(input, **kwargs):
@@ -152,10 +146,39 @@ def main(input, **kwargs):
     return get_participant_data()["fun_facts"]["personality"]
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node_output = node._process(input, PipelineState(outputs={}, experiment_session=experiment_session))
+    node_output = node._process(
+        input,
+        PipelineState(
+            outputs={},
+            experiment_session=experiment_session,
+            participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
+        ),
+    )
     assert node_output.update["messages"][-1] == output
-    participant_data.refresh_from_db()
-    assert participant_data.data["fun_facts"]["personality"] == output
+    assert node_output.update["participant_data"]["fun_facts"]["personality"] == output
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_participant_data_across_multiple_nodes(pipeline, experiment_session):
+    code_set = """
+def main(input, **kwargs):
+    set_participant_data_key("test", "value")
+    return input
+"""
+    code_get = """
+def main(input, **kwargs):
+    return str(get_participant_data()["test"])
+"""
+    nodes = [
+        start_node(),
+        code_node(code_set),
+        code_node(code_get),
+        end_node(),
+    ]
+    node_output = create_runnable(pipeline, nodes).invoke(
+        PipelineState(experiment_session=experiment_session, messages=["hi"])
+    )
+    assert node_output["messages"][-1] == "value"
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -257,58 +280,6 @@ def main(input, **kwargs):
 
 
 @pytest.mark.django_db()
-def test_participant_data_proxy_get_includes_global_data(pipeline, experiment_session):
-    """
-    Test that the get method of ParticipantDataProxy returns a merged dictionary
-    that includes both the ParticipantData.data and the participant's global_data.
-    """
-    experiment_session.participant.name = "Dimagi"
-    experiment_session.participant.save()
-
-    ParticipantData.objects.create(
-        team=experiment_session.team,
-        experiment=experiment_session.experiment,
-        participant=experiment_session.participant,
-        data={"favorite_color": "green", "favorite_number": 42},
-    )
-    code = """
-def main(input, **kwargs):
-    data = get_participant_data()
-    return f"Name: {data.get('name')}, Color: {data.get('favorite_color')}"
-    """
-    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output.update["messages"][-1] == "Name: Dimagi, Color: green"
-
-
-@pytest.mark.django_db()
-def test_participant_data_proxy_set_updates_global_data(pipeline, experiment_session):
-    experiment_session.participant.name = "Original Boring Name"
-    experiment_session.participant.save()
-    ParticipantData.objects.create(
-        team=experiment_session.team,
-        experiment=experiment_session.experiment,
-        participant=experiment_session.participant,
-        data={},
-    )
-    code = """
-def main(input, **kwargs):
-    data = get_participant_data()
-    data["name"] = "Updated Exciting Name"
-    set_participant_data(data)
-    updated = get_participant_data()
-    return f"Name: {updated.get('name')}"
-    """
-    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output.update["messages"][-1] == "Name: Updated Exciting Name"
-    experiment_session.participant.refresh_from_db()
-    assert experiment_session.participant.name == "Updated Exciting Name"
-
-
-@pytest.mark.django_db()
 def test_render_template_with_context_keys(pipeline, experiment_session):
     participant = Participant.objects.create(
         identifier="participant_123",
@@ -317,17 +288,12 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
     )
     experiment_session.participant = participant
     experiment_session.save()
-    ParticipantData.objects.create(
-        team=experiment_session.team,
-        experiment=experiment_session.experiment,
-        participant=participant,
-        data={"custom_key": "custom_value"},
-    )
     state = PipelineState(
         experiment_session=experiment_session,
         messages=["Cycling"],
         temp_state={"my_key": "example_key"},
         outputs={},
+        participant_data={"custom_key": "custom_value"},
     )
     template = (
         "input: {{input}}, temp_state.my_key: {{temp_state.my_key}}, "
@@ -385,7 +351,7 @@ def main(input, **kwargs):
 
 
 @pytest.mark.django_db()
-def test_get_participant_schedules_empty(pipeline, experiment_session):
+def test_get_participant_schedules_empty(experiment_session):
     """
     Test that the get_participant_schedules function returns an empty list
     when there are no active scheduled messages.
@@ -402,8 +368,7 @@ def main(input, **kwargs):
 
 
 @pytest.mark.django_db()
-def test_get_and_set_session_state(pipeline, experiment_session):
-    assert experiment_session.state.get("message_count") is None
+def test_get_and_set_session_state(experiment_session):
     code = """
 def main(input, **kwargs):
     msg_count = get_session_state_key("message_count") or 1
@@ -411,7 +376,9 @@ def main(input, **kwargs):
     return input
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
+    state = PipelineState(
+        messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={}, session_state={}
+    )
     output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
     assert output.update["session_state"] == {"message_count": 2}
 
