@@ -100,6 +100,9 @@ class PipelineState(dict):
     intents: Annotated[list[Intents], operator.add]
     synthetic_voice_id: int | None
 
+    participant_data: Annotated[dict, operator.or_]
+    session_state: Annotated[dict, operator.or_]
+
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
         copy = self.copy()
