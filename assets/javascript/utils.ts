@@ -41,7 +41,7 @@ export const find = (el: Element, selector: string) => {
     return next(el, selector.split('next ')[1]);
   }
   if (selector.startsWith('previous ')) {
-    return previous(el, selector.split('previous')[1]);
+    return previous(el, selector.split('previous ')[1]);
   }
   return document.querySelector(selector);
 }
