@@ -262,7 +262,6 @@ class AppendToParticipantDataTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
 
-    @transaction.atomic
     def action(self, key: str, value: str | int | list, tool_call_id: str, graph_state: dict):
         data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
         new_value = data_proxy.append_to_key(key, value)
@@ -285,7 +284,6 @@ class IncrementCounterTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.IncrementCounterSchema] = schemas.IncrementCounterSchema
 
-    @transaction.atomic
     def action(self, counter: str, value: int, tool_call_id: str, graph_state: dict):
         namespaced_key = f"_counter_{counter}"
         data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
@@ -446,7 +444,6 @@ class SetSessionStateTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.SetSessionStateSchema] = schemas.SetSessionStateSchema
 
-    @transaction.atomic
     def action(self, key: str, value: Any, tool_call_id: str):
         if key in {"user_input", "outputs", "attachments"}:
             return f"Cannot set the '{key}' key in session state - this is read-only"
