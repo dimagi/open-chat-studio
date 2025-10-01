@@ -126,8 +126,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                             or [],
                         }
                     )
-                proxy = self.get_participant_data_proxy(state)
-                content["participant_data"] = proxy.get() or {}
+                content["participant_data"] = ParticipantDataProxy.from_state(state).get() or {}
 
             template = env.from_string(self.template_string)
             output = template.render(content)
@@ -681,7 +680,7 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
 
         match self.data_source:
             case self.DataSource.participant_data:
-                data = self.get_participant_data_proxy(state).get()
+                data = ParticipantDataProxy.from_state(state).get()
             case self.DataSource.temp_state:
                 data = state["temp_state"]
             case self.DataSource.session_state:

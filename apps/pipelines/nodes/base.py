@@ -17,7 +17,6 @@ from typing_extensions import TypedDict
 from apps.experiments.models import ExperimentSession
 from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
-from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -324,9 +323,6 @@ class BasePipelineNode(BaseModel, ABC):
                     },
                 )
         return state
-
-    def get_participant_data_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
-        return ParticipantDataProxy.from_state(state)
 
     @property
     def disabled_tools(self) -> set[str] | None:
