@@ -1526,7 +1526,7 @@ class Participant(BaseTeamModel):
 
     def get_data_for_experiment(self, experiment) -> dict:
         try:
-            return self.data_set.get(experiment=experiment).data
+            return self.data_set.get(experiment=experiment).data or {}
         except ParticipantData.DoesNotExist:
             return {}
 

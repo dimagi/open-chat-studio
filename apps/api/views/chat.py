@@ -495,7 +495,7 @@ def chat_poll_task_response(request, session_id, task_id):
 
     if message := task_details["message"]:
         data = {
-            "message": MessageSerializer(message).data,
+            "message": MessageSerializer(message, context={'request': request}).data,
             "status": "complete",
         }
         return Response(data, status=status.HTTP_200_OK)

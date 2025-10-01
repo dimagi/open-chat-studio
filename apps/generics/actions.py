@@ -27,6 +27,7 @@ class Action:
     button_style: str = None
     extra_context: dict = None
     required_permissions: list = dataclasses.field(default_factory=list)
+    open_url_in_new_tab: bool = False
     display_condition: Callable[[Any, Any], bool] = None
     """A callable that takes a request and a record and returns a boolean indicating
     whether the action should be displayed."""
@@ -66,6 +67,7 @@ class Action:
             "label": label or "",
             "title": self.title or "",
             "disabled": not self.is_enabled(request, record),
+            "open_url_in_new_tab": self.open_url_in_new_tab,
         }
         if self.button_style:
             ctxt["button_style"] = self.button_style
@@ -175,6 +177,7 @@ def chip_action(
     url_factory: Callable[[Any, Any, Any, Any], str] = None,
     icon_class: str = None,
     button_style: str = "",
+    open_url_in_new_tab: bool = False,
 ):
     """Action to display a chip-style link that links to another page.
 
@@ -202,6 +205,7 @@ def chip_action(
         button_style=button_style,
         required_permissions=required_permissions,
         display_condition=display_condition,
+        open_url_in_new_tab=open_url_in_new_tab,
     )
 
 

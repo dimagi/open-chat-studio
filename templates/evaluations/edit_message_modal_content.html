@@ -14,7 +14,7 @@
   >
     {% csrf_token %}
 
-    {% include "evaluations/components/message_pair_form.html" with human_value=form_data.human ai_value=form_data.ai context_value=form_data.context history_text_value=form_data.history_text context_field_id="context-field" disable_button_id="save-button" errors=errors %}
+    {% include "evaluations/components/message_pair_form.html" with human_value=form_data.human ai_value=form_data.ai context_value=form_data.context history_text_value=form_data.history_text participant_data_value=form_data.participant_data session_state_value=form_data.session_state disable_button_id="save-button" errors=errors %}
 
     <!-- Actions -->
     <div class="modal-action">
@@ -35,12 +35,3 @@
     </div>
   </form>
 </div>
-
-<script>
-  setTimeout(() => {
-    const jsonEditorElement = document.querySelector('.json-editor');
-    if (jsonEditorElement && window.SiteJS && window.SiteJS.editors) {
-      window.SiteJS.editors.createJsonEditor(jsonEditorElement);
-    }
-  }, 100);
-</script>

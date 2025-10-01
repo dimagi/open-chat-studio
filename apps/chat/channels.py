@@ -1270,7 +1270,7 @@ def _start_experiment_session(
     with transaction.atomic():
         participant, created = Participant.objects.get_or_create(
             team=team,
-            identifier=participant_identifier,
+            identifier=experiment_channel.platform_enum.normalize_identifier(participant_identifier),
             platform=experiment_channel.platform,
             defaults={"user": participant_user},
         )

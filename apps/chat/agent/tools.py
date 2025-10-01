@@ -36,12 +36,10 @@ logger = logging.getLogger("ocs.tools")
 
 OCS_CITATION_PATTERN = r"<CIT\s+(?P<file_id>\d+)\s*/>"
 
-SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} ({name}) is attached to your response"
+SUCCESSFUL_ATTACHMENT_MESSAGE = "* {file_id} ({name}): attached."
 
-CREATE_LINK_TEXT = """You can use this markdown link to reference it in your response:
-    `[{name}](file:{team_slug}:{session_id}:{file_id})` or `![](file:{team_slug}:{session_id}:{file_id})`
-    if it is an image.
-"""
+FILE_LINK_TEXT = "Reference link: `[{name}](file:{team_slug}:{session_id}:{file_id})`"
+IMAGE_LINK_TEXT = "Reference link: `![](file:{team_slug}:{session_id}:{file_id})`"
 
 CHUNK_TEMPLATE = """
 <file>
@@ -316,28 +314,47 @@ class AttachMediaTool(CustomBaseTool):
         return chat_attachment
 
     @transaction.atomic
-    def action(self, file_id: int) -> str:
+    def action(self, file_ids: list[int]) -> str:
+        if len(file_ids) > 5:
+            return "A maximum of 5 files can be attached."
+
         from apps.files.models import File
 
-        try:
-            file = File.objects.get(id=file_id)
-            self.chat_attachment.files.add(file_id)
-            self.tool_callbacks.attach_file(file_id)
-            response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
+        response = []
+        include_links = self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB
+        for file_id in file_ids:
+            try:
+                file = File.objects.get(id=file_id)
+                self.chat_attachment.files.add(file_id)
+                self.tool_callbacks.attach_file(file_id)
+                file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
 
-            if self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB:
-                # Only the web platform is able to render these links
-                link_text = CREATE_LINK_TEXT.format(
-                    name=file.name, file_id=file_id, session_id=self.experiment_session.id, team_slug=file.team.slug
-                )
-                response = f"{response}. {link_text}"
-            else:
-                response = f"{response}. Do not use markdown links to reference the file."
-            return response
-        except File.DoesNotExist:
-            return f"File '{file_id}' does not exist"
-        except utils.IntegrityError:
-            return f"Unable to attach file '{file_id}' to the message"
+                if include_links:
+                    # Only the web platform is able to render these links
+                    if file.is_image:
+                        link_text = IMAGE_LINK_TEXT.format(
+                            file_id=file_id,
+                            session_id=self.experiment_session.id,
+                            team_slug=file.team.slug,
+                        )
+                    else:
+                        link_text = FILE_LINK_TEXT.format(
+                            name=file.name,
+                            file_id=file_id,
+                            session_id=self.experiment_session.id,
+                            team_slug=file.team.slug,
+                        )
+                    file_response = f"{file_response} {link_text}"
+                response.append(file_response)
+            except File.DoesNotExist:
+                response.append(f"* {file_id}: File not found.")
+            except utils.IntegrityError:
+                response.append(f"* {file_id}: Error fetching file.")
+
+        resp = "File Attachment Results:\n" + "\n".join(response)
+        if include_links:
+            return f"{resp}\nYou may use the markdown links in your output to reference the attachments."
+        return f"{resp}\nDo not use markdown links to reference the files."
 
 
 class SearchIndexTool(CustomBaseTool):

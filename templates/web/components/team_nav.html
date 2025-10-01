@@ -142,21 +142,21 @@
   </li>
   {% flag "flag_evaluations" %}
     <li>
-      <a href="{% url 'evaluations:home' request.team.slug %}" {% if active_tab == 'evaluations' %}class="active"{% endif %}>
+      <a href="{% url 'evaluations:home' request.team.slug %}" {% if active_tab == 'evaluations' %}class="menu-active"{% endif %}>
         <i class="fa-solid fa-chart-simple"></i>
         {% translate "Evaluations" %}<span class="badge badge-sm">new!</span>
       </a>
       <ul>
         <li>
           <a href="{% url 'evaluations:evaluator_home' request.team.slug %}"
-             {% if active_tab == 'evaluators' %}class="active"{% endif %}>
+             {% if active_tab == 'evaluators' %}class="menu-active"{% endif %}>
             <i class="fa fa-clipboard-check fa-fw"></i>
             {% translate "Evaluators" %}
           </a>
         </li>
         <li>
           <a href="{% url 'evaluations:dataset_home' request.team.slug %}"
-             {% if active_tab == 'evaluation_datasets' %}class="active"{% endif %}>
+             {% if active_tab == 'evaluation_datasets' %}class="menu-active"{% endif %}>
             <i class="fa fa-database fa-fw"></i>
             {% translate "Datasets" %}
           </a>
