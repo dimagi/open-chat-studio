@@ -276,17 +276,15 @@ def chat_start_session(request):
         platform = ChannelPlatform.API
         api_channel = ExperimentChannel.objects.get_team_api_channel(team)
 
-        if request.user.is_authenticated:
-            user = request.user
-            participant_id = user.email
-            if remote_id != participant_id:
-                return Response(
-                    {"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST
-                )
-            remote_id = ""
-        else:
-            user = None
-            participant_id = None
+    if request.user.is_authenticated:
+        user = request.user
+        participant_id = user.email
+        if remote_id != participant_id:
+            return Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
+        remote_id = ""
+    else:
+        user = None
+        participant_id = None
 
         access_response = check_experiment_access(experiment, participant_id)
         if access_response:
