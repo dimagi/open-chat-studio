@@ -6,14 +6,22 @@ from apps.utils.time import pretty_date
 
 
 class PromptTemplateContext:
-    def __init__(self, session, source_material_id: int = None, collection_id: int = None, extra: dict = None):
+    def __init__(
+        self,
+        session,
+        source_material_id: int = None,
+        collection_id: int = None,
+        extra: dict = None,
+        participant_data: dict = None,
+    ):
         self.session = session
         self.source_material_id = source_material_id
         self.collection_id = collection_id
         self.extra = extra or {}
         self.context_cache = {}
-        # TODO: pass participant data here
-        self.participant_data_proxy = ParticipantDataProxy({}, self.session)
+        if participant_data is None:
+            participant_data = session.participant_data_from_experiment
+        self.participant_data_proxy = ParticipantDataProxy({"participant_data": participant_data}, self.session)
 
     @property
     def factories(self):

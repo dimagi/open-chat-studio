@@ -132,6 +132,7 @@ def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
         source_material_id=node.source_material_id,
         collection_id=node.collection_id,
         extra=extra_prompt_context,
+        participant_data=state.get("participant_data") or {},
     )
 
 
