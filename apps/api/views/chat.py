@@ -25,9 +25,6 @@ from apps.api.serializers import (
 )
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.utils import (
-    extract_domain_from_headers,
-)
 from apps.chat.channels import ApiChannel, WebChannel
 from apps.chat.models import Chat, ChatAttachment
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
@@ -325,9 +322,6 @@ def chat_start_session(request):
             participant_data.save(update_fields=["data"])
 
     metadata = {Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)}
-    if experiment_channel:
-        metadata["embedded_widget"] = True
-        metadata["origin_domain"] = extract_domain_from_headers(request)
 
     session = ApiChannel.start_new_session(
         working_experiment=experiment,
