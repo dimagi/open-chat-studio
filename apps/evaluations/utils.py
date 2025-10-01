@@ -205,7 +205,7 @@ def make_message_pairs_from_queryset(queryset: QuerySet) -> list[ChatMessage]:
 
     all_message_ids = set()
 
-    for message in queryset.iterator():
+    for message in queryset.iterator(chunk_size=100):
         # Handle AI seed message
         is_first = message.prev_message_id is None
         if is_first and message.message_type == ChatMessageType.AI:
