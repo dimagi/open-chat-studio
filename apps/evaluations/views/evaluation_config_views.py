@@ -277,10 +277,10 @@ def load_experiment_versions(request, team_slug: str):
         return render(request, "evaluations/partials/version_select.html", context)
 
     try:
-        Experiment.objects.working_versions_queryset().exists(
+        Experiment.objects.working_versions_queryset().filter(
             id=experiment_id,
             team=request.team,
-        )
+        ).exists()
     except Experiment.DoesNotExist:
         context = {
             "empty_message": "Chatbot not found",
