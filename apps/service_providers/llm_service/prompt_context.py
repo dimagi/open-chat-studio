@@ -12,7 +12,8 @@ class PromptTemplateContext:
         self.collection_id = collection_id
         self.extra = extra or {}
         self.context_cache = {}
-        self.participant_data_proxy = ParticipantDataProxy(self.session)
+        # TODO: pass participant data here
+        self.participant_data_proxy = ParticipantDataProxy({}, self.session)
 
     @property
     def factories(self):

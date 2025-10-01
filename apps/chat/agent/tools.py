@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Any, ClassVar, Union
 from asgiref.sync import async_to_sync
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
+from langgraph.types import Command
 from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
@@ -241,11 +243,13 @@ class UpdateParticipantDataTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.UpdateUserDataSchema] = schemas.UpdateUserDataSchema
 
-    @transaction.atomic
-    def action(self, key: str, value: Any):
-        data_proxy = ParticipantDataProxy(self.experiment_session)
-        data_proxy.set_key(key, value)
-        return "The new value has been set in user data."
+    def action(self, key: str, value: Any, tool_call_id: str):
+        return Command(
+            update={
+                "participant_data": {key: value},
+                "messages": [ToolMessage("The new value has been set in user data.", tool_call_id=tool_call_id)],
+            }
+        )
 
 
 class AppendToParticipantDataTool(CustomBaseTool):
@@ -259,14 +263,20 @@ class AppendToParticipantDataTool(CustomBaseTool):
     args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
 
     @transaction.atomic
-    def action(self, key: str, value: str | int | list):
-        data_proxy = ParticipantDataProxy(self.experiment_session)
+    def action(self, key: str, value: str | int | list, tool_call_id: str, graph_state: dict):
+        data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
         new_value = data_proxy.append_to_key(key, value)
         if len(new_value) > 10:
             new_value_msg = f"The last 10 items in the list are: {new_value[-10:]}"
         else:
             new_value_msg = f"The new list is: {new_value}"
-        return f"The value was appended to the end of the list. {new_value_msg}"
+        message = f"The value was appended to the end of the list. {new_value_msg}"
+        return Command(
+            update={
+                "participant_data": {key: new_value},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
 
 
 class IncrementCounterTool(CustomBaseTool):
@@ -276,11 +286,17 @@ class IncrementCounterTool(CustomBaseTool):
     args_schema: type[schemas.IncrementCounterSchema] = schemas.IncrementCounterSchema
 
     @transaction.atomic
-    def action(self, counter: str, value: int):
+    def action(self, counter: str, value: int, tool_call_id: str, graph_state: dict):
         namespaced_key = f"_counter_{counter}"
-        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
         new_value = data_proxy.increment_key(namespaced_key, value)
-        return f"The '{counter}' counter has been successfully incremented. The new value is {new_value}."
+        message = f"The '{counter}' counter has been successfully incremented. The new value is {new_value}."
+        return Command(
+            update={
+                "participant_data": {namespaced_key: new_value},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
 
 
 class EndSessionTool(CustomBaseTool):
@@ -431,18 +447,22 @@ class SetSessionStateTool(CustomBaseTool):
     args_schema: type[schemas.SetSessionStateSchema] = schemas.SetSessionStateSchema
 
     @transaction.atomic
-    def action(self, key: str, value: Any):
+    def action(self, key: str, value: Any, tool_call_id: str):
         if key in {"user_input", "outputs", "attachments"}:
             return f"Cannot set the '{key}' key in session state - this is read-only"
 
-        self.experiment_session.state[key] = value
-        self.experiment_session.save(update_fields=["state"])
-
         try:
-            json_value = json.dumps(value, indent=2)
-            return f"The value has been set in session state for key '{key}':\n{json_value}"
+            json_value = json.dumps(value)
+            message = f"The value has been set in session state for key '{key}':\n{json_value}"
         except (TypeError, ValueError):
-            return f"The value has been set in session state for key '{key}': {value}"
+            message = "The value has been set in session state for key '{key}': {value}"
+
+        return Command(
+            update={
+                "session_state": {key: value},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
 
 
 class GetSessionStateTool(CustomBaseTool):
@@ -451,8 +471,9 @@ class GetSessionStateTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.GetSessionStateSchema] = schemas.GetSessionStateSchema
 
-    def action(self, key: str):
-        value = self.experiment_session.state.get(key)
+    def action(self, key: str, tool_call_id: str, graph_state: dict):
+        state = graph_state.get("session_state") or {}
+        value = state.get(key)
         if value is None:
             return f"No value found for key '{key}' in session state."
         return f"The value for key '{key}' is: {value}"

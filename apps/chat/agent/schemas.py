@@ -1,6 +1,9 @@
 from datetime import datetime
 from enum import Enum
+from typing import Annotated
 
+from langchain_core.tools import InjectedToolCallId
+from langgraph.prebuilt import InjectedState
 from pydantic import BaseModel, Field
 
 from apps.events.models import TimePeriod
@@ -53,16 +56,21 @@ class ScheduledMessageSchema(BaseModel):
 class UpdateUserDataSchema(BaseModel):
     key: str = Field(description="The key in the user data to update")
     value: str | int | dict | list = Field(description="The new value of the user data")
+    tool_call_id: Annotated[str, InjectedToolCallId]
 
 
 class AppendToParticipantData(BaseModel):
     key: str = Field(description="The key in the user data to append to")
     value: str | int | list = Field(description="The value to append")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+    graph_state: Annotated[dict, InjectedState]
 
 
 class IncrementCounterSchema(BaseModel):
     counter: str = Field(description="The name of the counter to increment")
     value: int = Field(description="The value to increment the counter by", default=1)
+    tool_call_id: Annotated[str, InjectedToolCallId]
+    graph_state: Annotated[dict, InjectedState]
 
 
 class AttachMediaSchema(BaseModel):
@@ -84,6 +92,7 @@ class SetSessionStateSchema(BaseModel):
 
 class GetSessionStateSchema(BaseModel):
     key: str = Field(description="The key in the session state to retrieve")
+    graph_state: Annotated[dict, InjectedState]
 
 
 class CalculatorSchema(BaseModel):
