@@ -36,6 +36,7 @@ def session(fake_llm_service):
     session.experiment.get_llm_service = lambda: fake_llm_service
     session.experiment.tools = [AgentTools.MOVE_SCHEDULED_MESSAGE_DATE]
     session.get_participant_data = lambda *args, **kwargs: ""
+    session.participant_data_from_experiment = {}
     return session
 
 
