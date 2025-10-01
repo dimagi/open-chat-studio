@@ -1050,6 +1050,8 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         # copy this from input to output to create a consistent view within the code execution
         output_state["temp_state"] = pipeline_state.get("temp_state") or {}
+        output_state["participant_data"] = pipeline_state.get("participant_data") or {}
+        output_state["session_state"] = pipeline_state.get("session_state") or {}
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
@@ -1062,8 +1064,8 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "get_participant_schedules": participant_data_proxy.get_schedules,
             "get_temp_state_key": self._get_temp_state_key(output_state),
             "set_temp_state_key": self._set_temp_state_key(output_state),
-            "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
-            "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
+            "get_session_state_key": self._get_session_state_key(output_state),
+            "set_session_state_key": self._set_session_state_key(output_state),
             "get_selected_route": pipeline_state.get_selected_route,
             "get_node_path": pipeline_state.get_node_path,
             "get_all_routes": pipeline_state.get_all_routes,
@@ -1105,20 +1107,20 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         return require_node_outputs
 
-    def _get_session_state_key(self, session: ExperimentSession):
+    def _get_session_state_key(self, state: PipelineState):
         def get_session_state_key(key_name: str):
             """Returns the value of the session state's key with the given name.
             If the key does not exist, it returns `None`."""
-            return session.state.get(key_name)
+            return state.get("session_state", {}).get(key_name)
 
         return get_session_state_key
 
-    def _set_session_state_key(self, session: ExperimentSession):
+    def _set_session_state_key(self, state: PipelineState):
         def set_session_state_key(key_name: str, value):
             """Sets the value of the session state's key with the given name to the provided data.
             This will override any existing data."""
-            session.state[key_name] = value
-            session.save(update_fields=["state"])
+            session_state = state.setdefault("session_state", {})
+            session_state[key_name] = value
 
         return set_session_state_key
 

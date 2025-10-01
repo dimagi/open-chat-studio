@@ -412,9 +412,8 @@ def main(input, **kwargs):
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    experiment_session.refresh_from_db()
-    assert experiment_session.state["message_count"] == 2
+    output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    assert output.update["session_state"] == {"message_count": 2}
 
 
 def test_tags_mocked():
