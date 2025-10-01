@@ -147,7 +147,7 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     node_output = node._process(
-        input,
+        "Hi",
         PipelineState(
             outputs={},
             experiment_session=experiment_session,
