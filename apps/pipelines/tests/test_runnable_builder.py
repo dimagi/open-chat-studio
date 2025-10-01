@@ -10,7 +10,7 @@ from langchain_openai.chat_models.base import OpenAIRefusalError
 
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import AgentTools, ParticipantData
+from apps.experiments.models import AgentTools
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.nodes.base import Intents, PipelineState, merge_dict_values_as_lists
 from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
@@ -530,12 +530,6 @@ def test_extract_structured_data_no_chunking(provider, provider_model, pipeline)
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 def test_extract_structured_data_with_chunking(provider, provider_model, pipeline):
     session = ExperimentSessionFactory()
-    ParticipantData.objects.create(
-        team=session.team,
-        experiment=session.experiment,
-        data={"drink": "martini"},
-        participant=session.participant,
-    )
     llm = FakeLlmSimpleTokenCount(
         responses=[
             # the first chunk sees nothing of value
@@ -600,57 +594,50 @@ def test_extract_participant_data(provider, pipeline):
     correctly.
     """
     session = ExperimentSessionFactory()
-    session.participant.team = session.team
-    session.participant.save()
-    # There should be no data
-    participant_data = (
-        ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
-    )
-    assert participant_data is None
 
     # New data should be created
-    _run_data_extract_and_update_pipeline(
+    data = _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
         schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
         extracted_data={"name": "Johnny", "last_name": None},
         key_name="profile",
+        initial_data={},
     )
 
-    participant_data = ParticipantData.objects.for_experiment(session.experiment).get(participant=session.participant)
-    assert participant_data.data == {"profile": {"name": "Johnny", "last_name": None}}
+    assert data == {"profile": {"name": "Johnny", "last_name": None}}
 
     # The "profile" key should be updated
-    _run_data_extract_and_update_pipeline(
+    data = _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
         schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
         extracted_data={"name": "John", "last_name": "Wick"},
         key_name="profile",
+        initial_data=data,
     )
-    participant_data.refresh_from_db()
-    assert participant_data.data == {"profile": {"name": "John", "last_name": "Wick"}}
+    assert data == {"profile": {"name": "John", "last_name": "Wick"}}
 
     # New data should be inserted at the toplevel
-    _run_data_extract_and_update_pipeline(
+    data = _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
         schema='{"has_pets": "whether or not the user has pets"}',
         extracted_data={"has_pets": "false"},
         key_name="",
+        initial_data=data,
     )
-    participant_data.refresh_from_db()
-    assert participant_data.data == {
+    assert data == {
         "profile": {"name": "John", "last_name": "Wick"},
         "has_pets": "false",
     }
 
 
 def _run_data_extract_and_update_pipeline(
-    session, provider, pipeline, extracted_data: dict, schema: dict, key_name: str
+    session, provider, pipeline, extracted_data: dict, schema: str, key_name: str, initial_data: dict
 ):
     tool_call = AIMessage(tool_calls=[ToolCall(name="CustomModel", args=extracted_data, id="123")], content="Hi")
     service = build_fake_llm_service(responses=[tool_call], token_counts=[0])
@@ -671,8 +658,11 @@ def _run_data_extract_and_update_pipeline(
             end_node(),
         ]
         runnable = create_runnable(pipeline, nodes)
-        state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session=session)
-        runnable.invoke(state)
+        state = PipelineState(
+            messages=["ai: hi user\nhuman: hi there"], experiment_session=session, participant_data=initial_data or {}
+        )
+        result = runnable.invoke(state)
+        return result["participant_data"]
 
 
 def assistant_node_runnable_mock(

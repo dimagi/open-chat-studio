@@ -1,7 +1,7 @@
 import json
 import logging
 import unicodedata
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 import tiktoken
 from django.conf import settings
@@ -27,7 +27,7 @@ from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
-from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
+from apps.experiments.models import BuiltInTools, ExperimentSession
 from apps.pipelines.exceptions import (
     AbortPipeline,
     CodeNodeRunError,
@@ -740,12 +740,10 @@ class ExtractStructuredDataNodeMixin:
             # )
             new_reference_data = self.update_reference_data(output, reference_data)
 
-        self.post_extraction_hook(new_reference_data, state)
-        output = input if self.is_passthrough else json.dumps(new_reference_data)
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
+        return self.get_node_output(state, new_reference_data)
 
-    def post_extraction_hook(self, output, state):
-        pass
+    def get_node_output(self, state, output_data) -> PipelineState:
+        raise NotImplementedError()
 
     def get_reference_data(self, state):
         return ""
@@ -831,9 +829,9 @@ class ExtractStructuredData(
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    @property
-    def is_passthrough(self) -> bool:
-        return False
+    def get_node_output(self, state, output_data) -> PipelineState:
+        output = json.dumps(output_data)
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
 
 class ExtractParticipantData(
@@ -856,27 +854,12 @@ class ExtractParticipantData(
     )
     key_name: str = ""
 
-    @property
-    def is_passthrough(self) -> bool:
-        return True
-
-    def get_reference_data(self, state) -> dict:
+    def get_reference_data(self, state) -> Any:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
         corresponding to that key will be returned insteadg
         """
-        session = state.get("experiment_session")
-        if not session:
-            return {}
-
-        participant_data = (
-            ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
-        )
-        if not participant_data:
-            return {}
-
-        data = participant_data.data
+        data = state.get("participant_data") or {}
         if self.key_name:
-            # string, list or dict
             return data.get(self.key_name, "")
         return data
 
@@ -888,27 +871,13 @@ class ExtractParticipantData(
         # if reference data is a string or list, we cannot merge, so let's override
         return new_data
 
-    def post_extraction_hook(self, output, state):
-        session = state.get("experiment_session")
-        if not session:
-            return
-
+    def get_node_output(self, state, output_data) -> PipelineState:
         if self.key_name:
-            output = {self.key_name: output}
+            output_data = {self.key_name: output_data}
 
-        try:
-            participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
-                participant=session.participant
-            )
-            participant_data.data = participant_data.data | output
-            participant_data.save()
-        except ParticipantData.DoesNotExist:
-            ParticipantData.objects.create(
-                participant=session.participant,
-                experiment=session.experiment,
-                team=session.team,
-                data=output,
-            )
+        return PipelineState.from_node_output(
+            node_name=self.name, node_id=self.node_id, output=state["node_input"], participant_data=output_data
+        )
 
 
 @deprecated_node(message="Use the 'LLM' node instead.", docs_link="migrate_from_assistant")
