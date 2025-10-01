@@ -138,7 +138,10 @@ class PipelineStartAction(EventActionHandlerBase):
                 messages = []
 
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
-        state = PipelineState(messages=[input], experiment_session=session)
+        participant_data = session.participant.global_data | session.participant_data_from_experiment
+        state = PipelineState(
+            messages=[input], experiment_session=session, participant_data=participant_data, session_state=session.state
+        )
         trace_service = TracingService.create_for_experiment(session.experiment)
         with trace_service.trace(
             trace_name=f"{session.experiment.name} - event pipeline execution",
@@ -158,5 +161,6 @@ class PipelineStartAction(EventActionHandlerBase):
                 pipeline=pipeline,
                 save_run_to_history=False,
             )
+            # does not support updating participant data or session state
             trace_service.set_current_span_outputs({"response": output.content})
         return output.content
