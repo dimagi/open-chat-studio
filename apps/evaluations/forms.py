@@ -69,7 +69,7 @@ class EvaluationConfigForm(forms.ModelForm):
         queryset=Experiment.objects.none(),
         required=False,
         empty_label="Select a chatbot for generation...",
-        help_text="Select the chatbot to run generation against",
+        help_text="(Optional) Select the chatbot to run generation against",
         widget=forms.Select(attrs={"class": "select w-full"}),
         label="Chatbot",
     )

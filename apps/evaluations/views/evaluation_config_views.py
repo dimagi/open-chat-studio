@@ -59,10 +59,7 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
     template_name = "evaluations/evaluation_config_form.html"
     model = EvaluationConfig
     form_class = EvaluationConfigForm
-    extra_context = {
-        "title": "Create Evaluation",
-        "button_text": "Create",
-    }
+    extra_context = {"title": "Create Evaluation", "button_text": "Create", "active_tab": "evaluations"}
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
