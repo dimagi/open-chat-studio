@@ -52,7 +52,7 @@ from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
-from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
     AssistantChat,
@@ -1045,13 +1045,14 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             state: The input state. Do not modify this state.
             output_state: An empty state dict to which state modifications should be made.
         """
-        participant_data_proxy = self.get_participant_data_proxy(state)
         pipeline_state = PipelineState.clone(state)
 
         # copy this from input to output to create a consistent view within the code execution
         output_state["temp_state"] = pipeline_state.get("temp_state") or {}
         output_state["participant_data"] = pipeline_state.get("participant_data") or {}
         output_state["session_state"] = pipeline_state.get("session_state") or {}
+
+        participant_data_proxy = ParticipantDataProxy(output_state, state.get("experiment_session"))
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
