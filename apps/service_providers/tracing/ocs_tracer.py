@@ -60,6 +60,8 @@ class OCSTracer(Tracer):
             session=session,
             duration=0,
             participant=session.participant,
+            participant_data=session.participant.get_data_for_experiment(session.experiment),
+            session_state=session.state,
         )
 
         self.start_time = time.time()

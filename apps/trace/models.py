@@ -19,7 +19,7 @@ class TraceStatus(models.TextChoices):
 class Trace(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     trace_id = models.UUIDField(default=uuid.uuid4, editable=False)
-    status = models.CharField(max_length=32, choices=TraceStatus.choices, default=TraceStatus.PENDING)
+    status = models.CharField(max_length=32, choices=TraceStatus.choices, default=TraceStatus.PENDING, db_index=True)
     experiment = models.ForeignKey(
         "experiments.Experiment", on_delete=models.SET_NULL, null=True, related_name="traces"
     )
@@ -37,6 +37,12 @@ class Trace(models.Model):
     )
     team = models.ForeignKey("teams.team", on_delete=models.SET_NULL, null=True, related_name="traces")
     duration = models.IntegerField()
+    participant_data = models.JSONField(
+        default=dict, blank=True, help_text="Snapshot of participant data at the time of the trace"
+    )
+    session_state = models.JSONField(
+        default=dict, blank=True, help_text="Snapshot of session state at the time of the trace"
+    )
 
     def __str__(self):
         return f"Trace {self.experiment} {self.session} {self.duration}ms"
