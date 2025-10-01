@@ -452,7 +452,7 @@ class SetSessionStateTool(CustomBaseTool):
             json_value = json.dumps(value)
             message = f"The value has been set in session state for key '{key}':\n{json_value}"
         except (TypeError, ValueError):
-            message = "The value has been set in session state for key '{key}': {value}"
+            message = f"The value has been set in session state for key '{key}': {value}"
 
         return Command(
             update={
