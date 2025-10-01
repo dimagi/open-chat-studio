@@ -187,12 +187,10 @@ class ParticipantDataProxy:
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary")
         self._participant_data.update(data)
-        self.session.participant.update_name_from_data(self._participant_data)
 
     def set_key(self, key: str, value: Any):
         """Set a single key in the participant data."""
         self._participant_data[key] = value
-        self.session.participant.update_name_from_data(self._participant_data)
 
     def append_to_key(self, key: str, value: Any) -> list[Any]:
         """
