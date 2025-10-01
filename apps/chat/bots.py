@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import textwrap
+from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from langchain.memory import ConversationBufferMemory
@@ -14,7 +15,7 @@ from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
+from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, ParticipantData, SafetyLayer
 from apps.files.models import File
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model
@@ -337,11 +338,15 @@ class PipelineBot:
         if incoming_file_ids:
             input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
 
+        data = self.participant_data.data | {}
+        data = self.session.participant.global_data | data
         return PipelineState(
             messages=[user_input],
             experiment_session=self.session,
             attachments=serializable_attachments,
             input_message_metadata=input_message_metadata,
+            participant_data=data,
+            session_state=self.session.state,
         )
 
     def _run_pipeline(self, input_state, pipeline_to_use):
@@ -410,6 +415,16 @@ class PipelineBot:
         if session_tags := output.get("session_tags"):
             for tag, category in session_tags:
                 self.session.chat.create_and_add_tag(tag, self.session.team, tag_category=category)
+
+        out_pd = output.get("participant_data")
+        if out_pd and out_pd != input_state.get("participant_data"):
+            self.participant_data.data = out_pd
+            self.participant_data.save(update_fields=["data"])
+
+        out_session_state = output.get("session_state")
+        if out_session_state and out_session_state != input_state.get("session_state"):
+            self.session.state = out_session_state
+            self.session.save(update_fields=["state"])
         return ai_message
 
     def _process_intents(self, pipeline_output: dict):
@@ -442,6 +457,15 @@ class PipelineBot:
         return SyntheticVoice.objects.filter(
             id=self.synthetic_voice_id, service__iexact=self.experiment.voice_provider.type
         ).first()
+
+    @cached_property
+    def participant_data(self):
+        participant_data, _ = ParticipantData.objects.get_or_create(
+            participant_id=self.session.participant_id,
+            experiment_id=self.session.experiment_id,
+            team_id=self.session.team_id,
+        )
+        return participant_data
 
 
 class PipelineTestBot:
