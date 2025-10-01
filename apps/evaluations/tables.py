@@ -254,14 +254,27 @@ class DatasetMessagesTable(tables.Table):
         orderable=False,
     )
     context = TemplateColumn(
-        template_name="evaluations/dataset_message_context_column.html",
+        template_name="evaluations/dataset_message_dict_column.html",
         verbose_name="Context",
         orderable=False,
+        extra_context={"field": "context"},
     )
     history = TemplateColumn(
         template_name="evaluations/dataset_message_history_column.html",
         verbose_name="History",
         orderable=False,
+    )
+    participant_data = TemplateColumn(
+        template_name="evaluations/dataset_message_dict_column.html",
+        verbose_name="Participant Data",
+        orderable=False,
+        extra_context={"field": "participant_data"},
+    )
+    session_state = TemplateColumn(
+        template_name="evaluations/dataset_message_dict_column.html",
+        verbose_name="Session State",
+        orderable=False,
+        extra_context={"field": "session_state"},
     )
     source = TemplateColumn(
         template_name="evaluations/dataset_message_source_column.html",
@@ -274,23 +287,28 @@ class DatasetMessagesTable(tables.Table):
                 url_name="evaluations:edit_message_modal",
                 template="evaluations/dataset_message_edit_action.html",
             ),
-            actions.AjaxAction(
+            actions.delete_action(
                 url_name="evaluations:delete_message",
                 url_factory=lambda url_name, request, record, value: reverse(
                     url_name, args=[request.team.slug, record.id]
                 ),
-                icon_class="fa-solid fa-trash",
-                title="Delete message",
-                button_style="btn btn-sm",
                 confirm_message="Are you sure you want to delete this message? This action cannot be undone.",
-                hx_method="delete",
             ),
         ]
     )
 
     class Meta:
         model = EvaluationMessage
-        fields = ("human_message_content", "ai_message_content", "context", "history", "source", "actions")
+        fields = (
+            "source",
+            "human_message_content",
+            "ai_message_content",
+            "context",
+            "history",
+            "participant_data",
+            "session_state",
+            "actions",
+        )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No messages in this dataset yet."

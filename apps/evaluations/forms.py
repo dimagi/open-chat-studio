@@ -337,15 +337,11 @@ class EvaluationDatasetForm(forms.ModelForm):
         return session_ids
 
     def _clean_manual(self):
-        message_pairs = []
         messages_json = self.data.get("messages_json", "")
         if not messages_json:
             raise forms.ValidationError("At least one message pair must be added when creating manually.")
 
-        try:
-            message_pairs = json.loads(messages_json)
-        except json.JSONDecodeError as err:
-            raise forms.ValidationError("Messages data is invalid JSON.") from err
+        message_pairs = _clean_json_field("Message data", messages_json)
 
         if not isinstance(message_pairs, list) or len(message_pairs) == 0:
             raise forms.ValidationError("At least one message pair must be added.")
@@ -358,16 +354,14 @@ class EvaluationDatasetForm(forms.ModelForm):
                 raise forms.ValidationError(f"Message pair {i + 1} is missing human message content.")
             if not pair.get("ai", "").strip():
                 raise forms.ValidationError(f"Message pair {i + 1} is missing AI message content.")
-            if pair.get("context"):
-                try:
-                    json.loads(pair.get("context", "{}"))
-                except json.JSONDecodeError as err:
-                    raise forms.ValidationError(f"Context for pair {i + 1} has malformed JSON") from err
+
+            context = _get_message_pair_value("Context", i, pair.get("context"))
+            participant_data = _get_message_pair_value("Participant data", i, pair.get("participant_data"))
+            session_state = _get_message_pair_value("Session state", i, pair.get("session_state"))
 
             # Parse history text if provided
             history = []
-            history_text = pair.get("history_text", "").strip()
-            if history_text:
+            if history_text := pair.get("history_text", "").strip():
                 try:
                     history = parse_history_text(history_text)
                 except Exception as err:
@@ -377,8 +371,10 @@ class EvaluationDatasetForm(forms.ModelForm):
                 {
                     "human": EvaluationMessageContent(content=pair.get("human", "").strip(), role="human").model_dump(),
                     "ai": EvaluationMessageContent(content=pair.get("ai", "").strip(), role="ai").model_dump(),
-                    "context": json.loads(pair.get("context", "{}")) if pair.get("context") else {},
+                    "context": context,
                     "history": history,
+                    "participant_data": participant_data,
+                    "session_state": session_state,
                 }
             )
         return validated_pairs
@@ -496,6 +492,8 @@ class EvaluationDatasetForm(forms.ModelForm):
                 output=pair["ai"],
                 context=pair["context"],
                 history=pair.get("history", []),
+                participant_data=pair.get("participant_data", {}),
+                session_state=pair.get("session_state", {}),
                 metadata={"created_mode": "manual"},
             )
             for pair in self.cleaned_data.get("message_pairs", [])
@@ -558,6 +556,19 @@ class EvaluationDatasetForm(forms.ModelForm):
                     }
                 )
         return evaluation_messages
+
+
+def _get_message_pair_value(field_name: str, pair_index: int, field_value: str) -> dict:
+    return _clean_json_field(f"{field_name} for pair {pair_index + 1}", field_value)
+
+
+def _clean_json_field(field_name: str, field_value: str) -> dict:
+    if not field_value.strip():
+        return {}
+    try:
+        return json.loads(field_value)
+    except json.JSONDecodeError as err:
+        raise forms.ValidationError(f"{field_name} is not valid JSON") from err
 
 
 class EvaluationDatasetEditForm(forms.ModelForm):
