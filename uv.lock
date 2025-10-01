@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 
 [[package]]
@@ -668,17 +668,16 @@ wheels = [
 
 [[package]]
 name = "django-anymail"
-version = "10.2"
+version = "13.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
     { name = "django" },
     { name = "requests" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/49/fc/bf7c44a93c7ad730a0c29af6b3a734acb1daf765a174d12b4c51c05f1487/django_anymail-10.2.tar.gz", hash = "sha256:1f3006d3b16874aaa32976078da6cdc9baa7f5274cf80e3fc51a288887617aaf", size = 87528, upload-time = "2023-10-25T22:44:16.574Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a3/a5/258d7b7bc1b0ca91791c25c704fa4c2d500727d0c3e29843c182f9f9c4be/django_anymail-13.1.tar.gz", hash = "sha256:b51783176f8a8382e958808151551558e4a46d1375fbc343742d1ebd06ce8e9e", size = 96518, upload-time = "2025-09-03T20:00:21.071Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b6/3b/0eb71a18501a7e846d3d3bc0b368634ce07d228ff7f5d0ecff598efa2b2e/django_anymail-10.2-py3-none-any.whl", hash = "sha256:ca273abbc04b5ce06d1f3b3e5f28e2d79331519198fa6d6b5ba1b5aa5eea02f7", size = 125054, upload-time = "2023-10-25T22:44:14.877Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/ba/d34a011cb8da04ed4a7c60b9a7aa25eed61348d1f6113af66ba725b56ae4/django_anymail-13.1-py3-none-any.whl", hash = "sha256:63e48402ec8258f17640eb73c8c64141f16d2f8ae7d448d0fb1c66e82b7cbcf6", size = 134063, upload-time = "2025-09-03T20:00:19.427Z" },
 ]
 
 [[package]]
