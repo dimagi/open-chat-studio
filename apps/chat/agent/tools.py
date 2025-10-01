@@ -468,7 +468,7 @@ class GetSessionStateTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.GetSessionStateSchema] = schemas.GetSessionStateSchema
 
-    def action(self, key: str, tool_call_id: str, graph_state: dict):
+    def action(self, key: str, graph_state: dict):
         state = graph_state.get("session_state") or {}
         value = state.get(key)
         if value is None:

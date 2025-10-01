@@ -595,9 +595,7 @@ class TestGetSessionStateTool(BaseTestAgentTool):
 
     def test_retrieve_session_state(self, session):
         test_data = {"user_preference": "dark_mode", "page": "home"}
-        response = self._invoke_tool(
-            session, key="user_preference", tool_call_id="123", graph_state={"session_state": test_data}
-        )
+        response = self._invoke_tool(session, key="user_preference", graph_state={"session_state": test_data})
         assert "dark_mode" in response
 
     def test_get_nonexistent_key_from_populated_state(self, session):
