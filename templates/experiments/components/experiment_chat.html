@@ -204,7 +204,7 @@
                         get isSelected() { return commentsRow === {{ forloop.counter }} },
                         }'
               >
-                <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter }}</td>
+                <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter|add:-1 }}</td>
                 <td class="px-3 py-2 text-sm flex flex-col gap-2">
                   <div class="flex place-items-center">
                     {% if message.is_ai_message %}
