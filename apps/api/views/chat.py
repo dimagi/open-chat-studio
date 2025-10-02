@@ -77,13 +77,16 @@ def check_session_access(session, request):
     """
     if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
         try:
-            handle_embedded_widget_auth(request, session=session)
+            experiment_channel = handle_embedded_widget_auth(request, session=session)
+            if experiment_channel != session.experiment_channel:
+                logging.error("Channel mismatch in embedded widget auth")
+                return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
             return None  # Access allowed
-        except EmbeddedWidgetAuthError as e:
-            logger.error(f"Permission denied during embedded widget authentication: {e}")
+        except EmbeddedWidgetAuthError:
+            logger.error("Permission denied during embedded widget authentication")
             return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
-        except Exception as e:
-            logger.exception(f"Error during embedded widget authentication. {e}")
+        except Exception:
+            logger.exception("Error during embedded widget authentication")
             return Response({"error": "Embedded widget authentication failed"}, status=status.HTTP_403_FORBIDDEN)
     return check_experiment_access(session.experiment, session.participant.identifier)
 
