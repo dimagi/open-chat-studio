@@ -60,7 +60,7 @@ def check_experiment_access(experiment, participant_id):
     return None
 
 
-def check_session_access(session, request=None):
+def check_session_access(session, request):
     """
     Check if the request has access to the session.
     Now handles both authenticated users and embedded widgets.
@@ -76,10 +76,6 @@ def check_session_access(session, request=None):
         Response object if access denied, None if access allowed
     """
     if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
-        if not request:
-            return Response(
-                {"error": "Request context required for embedded widgets"}, status=status.HTTP_403_FORBIDDEN
-            )
         try:
             handle_embedded_widget_auth(request, session=session)
             return None  # Access allowed
