@@ -266,8 +266,6 @@ def chat_start_session(request):
     team = experiment.team
 
     if experiment_channel:
-        user = None
-        participant_id = None
         platform = ChannelPlatform.EMBEDDED_WIDGET
         api_channel = experiment_channel
         # Skip public API access checks for embedded widgets
@@ -287,10 +285,6 @@ def chat_start_session(request):
     else:
         user = None
         participant_id = None
-
-        access_response = check_experiment_access(experiment, participant_id)
-        if access_response:
-            return access_response
 
     # Create or get participant
     if user is not None:
