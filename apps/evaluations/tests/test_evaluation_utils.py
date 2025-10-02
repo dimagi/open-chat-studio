@@ -179,8 +179,9 @@ def test_make_message_pairs_from_queryset():
 
     queryset4 = ChatMessage.objects.filter(id=orphaned_ai.id)
 
-    with pytest.raises(ValueError, match=r"AI message \d+ has no corresponding human message"):
-        make_message_pairs_from_queryset(queryset4)
+    result4 = make_message_pairs_from_queryset(queryset4)
+    # If there is no human message to add, we shouldn't add it.
+    assert len(result4) == 1
 
     # Error case - Human message without corresponding AI
     chat4 = ChatFactory()
@@ -191,8 +192,9 @@ def test_make_message_pairs_from_queryset():
 
     queryset5 = ChatMessage.objects.filter(id=orphaned_human.id)
 
-    with pytest.raises(ValueError, match=r"Human message \d+ has no corresponding AI message"):
-        make_message_pairs_from_queryset(queryset5)
+    result5 = make_message_pairs_from_queryset(queryset5)
+    # If there is no AI message next, we shouldn't add one
+    assert len(result5) == 1
 
     # Mixed queryset with both human and AI messages
     chat5 = ChatFactory()

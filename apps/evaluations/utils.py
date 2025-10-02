@@ -218,14 +218,10 @@ def make_message_pairs_from_queryset(queryset: QuerySet) -> list[ChatMessage]:
         if message.message_type == ChatMessageType.AI:
             if message.prev_message_id and message.prev_message_type == ChatMessageType.HUMAN:
                 all_message_ids.add(message.prev_message_id)
-            else:
-                raise ValueError(f"AI message {message.id} has no corresponding human message")
 
         # For human messages, add next AI message
         elif message.message_type == ChatMessageType.HUMAN:
             if message.next_message_id and message.next_message_type == ChatMessageType.AI:
                 all_message_ids.add(message.next_message_id)
-            else:
-                raise ValueError(f"Human message {message.id} has no corresponding AI message")
 
     return list(ChatMessage.objects.filter(id__in=all_message_ids))
