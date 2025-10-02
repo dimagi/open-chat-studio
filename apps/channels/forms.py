@@ -536,15 +536,8 @@ class CommCareConnectChannelForm(ExtraFormBase):
     )
 
 
-class WidgetTokenWidget(forms.Widget):
-    template_name = "channels/widgets/widget_token.html"
-
-    def format_value(self, value):
-        return "" if value is None else value
-
-
-class EmbedCodeWidget(forms.Widget):
-    template_name = "channels/widgets/embed_code.html"
+class WidgetParams(forms.Widget):
+    template_name = "channels/widgets/widget_params.html"
 
     def __init__(self, experiment, widget_token):
         super().__init__()
@@ -582,13 +575,11 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
     )
 
     widget_token = forms.CharField(
-        max_length=255,
+        label="Widget Configuration",
         required=False,
         widget=forms.HiddenInput(),
-        help_text="Authentication token for the embedded widget",
+        help_text="Configuration parameters for the widget",
     )
-
-    embed_code = forms.CharField(required=False, widget=forms.HiddenInput(), help_text="Embed code for the widget")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -598,8 +589,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             widget_token = self.channel.extra_data.get("widget_token")
             if widget_token:
                 self.initial["widget_token"] = widget_token
-                self.fields["widget_token"].widget = WidgetTokenWidget()
-                self.fields["embed_code"].widget = EmbedCodeWidget(
+                self.fields["widget_token"].widget = WidgetParams(
                     experiment=self.channel.experiment, widget_token=widget_token
                 )
 
