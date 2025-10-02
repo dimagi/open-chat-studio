@@ -8,7 +8,6 @@ import phonenumbers
 from django import forms
 from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField
-from django.template.loader import render_to_string
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
@@ -547,9 +546,10 @@ class WidgetTokenWidget(forms.Widget):
 class EmbedCodeWidget(forms.Widget):
     template_name = "channels/widgets/embed_code.html"
 
-    def __init__(self, experiment=None, attrs=None):
-        super().__init__(attrs)
+    def __init__(self, experiment, widget_token):
+        super().__init__()
         self.experiment = experiment
+        self.widget_token = widget_token
 
     def format_value(self, value):
         return "" if value is None else value
@@ -557,6 +557,9 @@ class EmbedCodeWidget(forms.Widget):
     def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)
         context["widget"]["experiment"] = self.experiment
+        context["widget"]["token"] = self.widget_token
+        context["docs_base_url"] = settings.DOCUMENTATION_BASE_URL
+        context["docs_links"] = settings.DOCUMENTATION_LINKS
         return context
 
 
@@ -595,17 +598,10 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             widget_token = self.channel.extra_data.get("widget_token")
             if widget_token:
                 self.initial["widget_token"] = widget_token
-                embed_code = render_to_string(
-                    "experiments/share/widget.html",
-                    {
-                        "experiment": self.channel.experiment,
-                        "widget_token": widget_token,
-                    },
-                )
-                self.initial["embed_code"] = embed_code
-
                 self.fields["widget_token"].widget = WidgetTokenWidget()
-                self.fields["embed_code"].widget = EmbedCodeWidget(experiment=self.channel.experiment)
+                self.fields["embed_code"].widget = EmbedCodeWidget(
+                    experiment=self.channel.experiment, widget_token=widget_token
+                )
 
     def clean(self):
         """Generate or preserve the widget token"""
@@ -619,3 +615,6 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             cleaned_data["widget_token"] = secrets.token_urlsafe(24)
 
         return cleaned_data
+
+    def post_save(self, channel: ExperimentChannel):
+        self.success_message = "Channel saved successfully"
