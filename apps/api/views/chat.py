@@ -249,7 +249,6 @@ def chat_start_session(request):
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
-    experiment_channel = None
     try:
         experiment_channel = handle_embedded_widget_auth(request, experiment_id=experiment_id)
     except EmbeddedWidgetAuthError as e:
