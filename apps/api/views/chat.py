@@ -290,10 +290,6 @@ def chat_start_session(request):
     else:
         participant = Participant.create_anonymous(team, experiment_channel.platform, remote_id, prefix="embed")
 
-    if remote_id and participant.remote_id != remote_id:
-        participant.remote_id = remote_id
-        participant.save(update_fields=["remote_id"])
-
     if name:
         if participant.name != name:
             participant.name = name
