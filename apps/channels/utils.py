@@ -49,18 +49,18 @@ def validate_embed_key_for_experiment(token: str, origin_domain: str, experiment
             extra_data__widget_token=token,
             deleted=False,
         )
-        allowed_domains = channel.extra_data.get("allowed_domains", [])
-        if not allowed_domains:
-            return None
-
-        for allowed_domain in allowed_domains:
-            if match_domain_pattern(origin_domain, allowed_domain):
-                return channel
-
-        return None
-
     except ExperimentChannel.DoesNotExist:
         return None
+
+    allowed_domains = channel.extra_data.get("allowed_domains", [])
+    if not allowed_domains:
+        return None
+
+    for allowed_domain in allowed_domains:
+        if match_domain_pattern(origin_domain, allowed_domain):
+            return channel
+
+    return None
 
 
 def validate_platform_availability(experiment: Experiment, platform: ChannelPlatform):
