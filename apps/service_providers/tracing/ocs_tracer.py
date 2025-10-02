@@ -51,11 +51,31 @@ class OCSTracer(Tracer):
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Start a trace and record the start time."""
+        """
+        Initialize a new trace and begin timing its execution.
+
+        Creates a new Trace object in the database and starts recording execution time.
+
+        Note:
+            If the experiment is a versioned experiment, the trace will be linked to
+            the working version and the version number will be recorded. If the experiment
+            is already the working version, no version number is stored.
+        """
+        from apps.experiments.models import Experiment
+
         super().start_trace(trace_name, trace_id, session, inputs, metadata)
+        experiment = Experiment.objects.get(id=self.experiment_id)
+        experiment_id = self.experiment_id
+        experiment_version_number = None
+        if experiment.is_a_version:
+            # Trace needs to be associated with the working version of the experiment
+            experiment_id = experiment.working_version_id
+            experiment_version_number = experiment.version_number
+
         self.trace = Trace.objects.create(
             trace_id=trace_id,
-            experiment_id=self.experiment_id,
+            experiment_id=experiment_id,
+            experiment_version_number=experiment_version_number,
             team_id=self.team_id,
             session=session,
             duration=0,

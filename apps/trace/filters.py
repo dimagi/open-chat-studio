@@ -48,7 +48,7 @@ class SpanTagsFilter(ChoiceColumnFilter):
 
 class ExperimentVersionsFilter(ChoiceColumnFilter):
     query_param: str = "versions"
-    column: str = "experiment__version_number"
+    column: str = "experiment_version_number"
     label: str = "Versions"
     type: str = TYPE_CHOICE
 
