@@ -231,7 +231,6 @@ class BaseChannelDialogView(View):
 
         platform_form = form.channel_form
         extra_form = form.extra_form if hasattr(form, "extra_form") else None
-
         context.update(
             {
                 "experiment": self.experiment,

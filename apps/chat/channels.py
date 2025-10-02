@@ -312,6 +312,8 @@ class ChannelBase(ABC):
             channel_cls = CommCareConnectChannel
         elif platform == "evaluations":
             channel_cls = EvaluationChannel
+        elif platform == "embedded_widget":
+            channel_cls = ApiChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return channel_cls

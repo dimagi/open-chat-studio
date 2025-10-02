@@ -756,6 +756,7 @@ CORS_ALLOW_HEADERS = [
     # "x-csrftoken",
     "x-requested-with",
     "x-ocs-widget-version",
+    "x-embed-key",
 ]
 
 CORS_ALLOW_METHODS = [
