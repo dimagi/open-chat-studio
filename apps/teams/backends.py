@@ -67,6 +67,7 @@ CONTENT_TYPES = {
         "experiment",
         "experimentroute",
         "experimentsession",
+        "filterset",
         "participant",
         "participantdata",
         "promptbuilderhistory",

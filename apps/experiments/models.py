@@ -50,7 +50,6 @@ from apps.web.meta import absolute_url
 
 log = logging.getLogger("ocs.experiments")
 
-
 class VersionFieldDisplayFormatters:
     """A collection of formatters that are used for displaying version fields"""
 
