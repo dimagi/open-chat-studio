@@ -397,8 +397,8 @@ class EvaluationResult(BaseTeamModel):
             return ""
 
     @property
-    def message_context(self) -> str:
+    def message_context(self) -> dict:
         try:
             return self.output["message"]["context"]
         except KeyError:
-            return ""
+            return {}
