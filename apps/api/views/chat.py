@@ -252,7 +252,7 @@ def chat_start_session(request):
     try:
         experiment_channel = handle_embedded_widget_auth(request, experiment_id=experiment_id)
     except EmbeddedWidgetAuthError as e:
-        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        return Response({"error": e.message}, status=status.HTTP_403_FORBIDDEN)
 
     # Get experiment
     experiment = get_object_or_404(Experiment, public_id=experiment_id)
