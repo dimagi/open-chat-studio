@@ -6,6 +6,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.evaluations.models import EvaluationResult, ExperimentVersionSelection
 from apps.evaluations.tasks import evaluate_single_message_task, run_bot_generation
 from apps.experiments.models import ExperimentSession, Participant
+from apps.pipelines.tests.utils import create_pipeline_model, end_node, render_template_node, start_node
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationDatasetFactory,
@@ -13,7 +14,7 @@ from apps.utils.factories.evaluations import (
     EvaluationRunFactory,
     EvaluatorFactory,
 )
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.experiment import ChatbotFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.langchain import build_fake_llm_service
 
@@ -25,7 +26,11 @@ def team_with_users():
 
 @pytest.fixture()
 def experiment(team_with_users, db):
-    return ExperimentFactory()
+    experiment = ChatbotFactory()
+    template_node = render_template_node("I heard: {{input}}")
+    create_pipeline_model([start_node(), template_node, end_node()], pipeline=experiment.pipeline)
+    experiment.pipeline.save()
+    return experiment
 
 
 @pytest.fixture()
@@ -52,15 +57,11 @@ def evaluation_run(evaluation_message, team_with_users, db):
 
 
 @pytest.mark.django_db()
-@patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_run_bot_generation(get_llm_service, experiment, evaluation_message, team_with_users):
+def test_run_bot_generation(experiment, evaluation_message, team_with_users):
     """Test that _run_bot_generation calls the bot correctly"""
-    service = build_fake_llm_service(responses=["Bot generated response"], token_counts=[30])
-    get_llm_service.return_value = service
-
     session_id, result = run_bot_generation(team_with_users, evaluation_message, experiment)
 
-    assert result == "Bot generated response"
+    assert result == "I heard: " + evaluation_message.input["content"]
 
     evaluation_channel = ExperimentChannel.objects.get(team=team_with_users, platform=ChannelPlatform.EVALUATIONS)
     assert evaluation_channel.platform == ChannelPlatform.EVALUATIONS
@@ -79,10 +80,25 @@ def test_run_bot_generation(get_llm_service, experiment, evaluation_message, tea
 
 
 @pytest.mark.django_db()
-@patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_run_bot_generation_with_participant_data_session_state(evaluation_message, team_with_users):
+    """Test that _run_bot_generation calls the bot correctly"""
+    experiment = ChatbotFactory()
+    template_node = render_template_node("{{participant_data}}:{{session_state}}")
+    create_pipeline_model([start_node(), template_node, end_node()], pipeline=experiment.pipeline)
+    experiment.pipeline.save()
+
+    evaluation_message.participant_data = {"test_pd": "demo_pd"}
+    evaluation_message.session_state = {"test_ss": "demo_ss"}
+    session_id, result = run_bot_generation(team_with_users, evaluation_message, experiment)
+
+    data = {"name": "Evaluations Bot"} | evaluation_message.participant_data
+    assert result == f"{data}:{evaluation_message.session_state}"
+
+
+@pytest.mark.django_db()
 @patch("apps.evaluations.models.Evaluator.run")
 def test_evaluate_single_message_with_bot_generation(
-    evaluator_run_mock, get_llm_service, experiment, evaluation_run, evaluation_message
+    evaluator_run_mock, experiment, evaluation_run, evaluation_message
 ):
     """Test that evaluate_single_message calls bot generation before evaluation"""
 
@@ -95,16 +111,14 @@ def test_evaluate_single_message_with_bot_generation(
     run.generation_experiment = config.get_generation_experiment_version()
     run.save()
 
-    service = build_fake_llm_service(responses=["Bot generated response"], token_counts=[30])
-    get_llm_service.return_value = service
-
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"score": 0.8}))
 
     # Run the evaluation task
     evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
 
     # Verify evaluator was called with message and bot response
-    evaluator_run_mock.assert_called_once_with(evaluation_message, "Bot generated response")
+    expected = "I heard: " + evaluation_message.input["content"]
+    evaluator_run_mock.assert_called_once_with(evaluation_message, expected)
 
     # Verify result was created
     result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)

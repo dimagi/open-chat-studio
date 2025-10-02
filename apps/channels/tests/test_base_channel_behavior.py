@@ -509,6 +509,8 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
     `ChannelBase.from_experiment_session`. For the sake of ease, we assume all platforms uses the Twilio
     messenging provider.
     """
+    if platform == ChannelPlatform.EVALUATIONS:
+        pytest.skip("Evaluations channel can't be instantiated from a session")
     session = ExperimentSessionFactory(experiment_channel__platform=platform)
     ParticipantData.objects.create(
         team=session.team,
