@@ -2,6 +2,7 @@ import factory
 
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments import models
+from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
@@ -68,6 +69,19 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     public_id = factory.Faker("uuid4")
     synthetic_voice = factory.SubFactory(SyntheticVoiceFactory)
     voice_provider = factory.SubFactory(VoiceProviderFactory)
+
+
+class ChatbotFactory(factory.django.DjangoModelFactory):
+    """Creates an Experiment with a Pipline that has 2 nodes: start -> end"""
+
+    class Meta:
+        model = models.Experiment
+
+    team = factory.SubFactory(TeamFactory)
+    owner = factory.SubFactory(UserFactory)
+    name = factory.Sequence(lambda n: f"Test Experiment {n}")
+    public_id = factory.Faker("uuid4")
+    pipeline = factory.SubFactory(PipelineFactory, team=factory.SelfAttribute("..team"))
 
 
 class VersionedExperimentFactory(ExperimentFactory):
