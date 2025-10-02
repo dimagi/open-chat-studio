@@ -79,7 +79,7 @@ class ChatbotFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     owner = factory.SubFactory(UserFactory)
-    name = factory.Sequence(lambda n: f"Test Experiment {n}")
+    name = factory.Sequence(lambda n: f"Test Chatbot {n}")
     public_id = factory.Faker("uuid4")
     pipeline = factory.SubFactory(PipelineFactory, team=factory.SelfAttribute("..team"))
 
