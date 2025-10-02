@@ -362,23 +362,17 @@ class TestExperimentSession:
     def test_get_participant_data_name(self):
         participant = ParticipantFactory()
         session = ExperimentSessionFactory(participant=participant, team=participant.team)
-        participant_data = ParticipantData.objects.create(
-            experiment=session.experiment,
-            participant=participant,
-            team=participant.team,
-            data={"first_name": "Jimmy"},
-        )
-        data_proxy = ParticipantDataProxy(session)
+        data = {"first_name": "Jimmy"}
+        data_proxy = ParticipantDataProxy({"participant_data": data}, session)
         data = data_proxy.get()
         assert data == {
             "name": participant.name,
             "first_name": "Jimmy",
         }
 
-        participant_data.data["name"] = "James Newman"
-        participant_data.save()
+        data["name"] = "James Newman"
 
-        data_proxy = ParticipantDataProxy(session)
+        data_proxy = ParticipantDataProxy({"participant_data": data}, session)
         data = data_proxy.get()
         assert data == {
             "name": "James Newman",

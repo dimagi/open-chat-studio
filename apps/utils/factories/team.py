@@ -13,7 +13,9 @@ class TeamFactory(factory.django.DjangoModelFactory):
         model = Team
         skip_postgeneration_save = True
 
-    name = factory.Faker("text", max_nb_chars=20)
+    # TODO: Replace when factory_boy supports `unique`.
+    #   See https://github.com/FactoryBoy/factory_boy/pull/997
+    name = factory.Sequence(lambda n: f"Team {n}")
 
 
 class MembershipFactory(factory.django.DjangoModelFactory):

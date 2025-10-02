@@ -45,7 +45,7 @@ class SyntheticVoiceFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.SyntheticVoice
 
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Voice Provider {n}")
     neural = True
     language = "English"
     language_code = "en"
@@ -59,7 +59,7 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     owner = factory.SubFactory(UserFactory)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Experiment {n}")
     prompt_text = "You are a helpful assistant"
     consent_form = factory.SubFactory(ConsentFormFactory, team=factory.SelfAttribute("..team"))
     llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
@@ -93,7 +93,7 @@ class ParticipantFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     identifier = factory.Faker("uuid4")
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Participant {n}")
 
 
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):

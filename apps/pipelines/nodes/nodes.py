@@ -1,7 +1,7 @@
 import json
 import logging
 import unicodedata
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 import tiktoken
 from django.conf import settings
@@ -27,7 +27,7 @@ from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
-from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
+from apps.experiments.models import BuiltInTools, ExperimentSession
 from apps.pipelines.exceptions import (
     AbortPipeline,
     CodeNodeRunError,
@@ -52,7 +52,7 @@ from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
-from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
     AssistantChat,
@@ -106,6 +106,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
             content = {
                 "input": input,
                 "temp_state": state.get("temp_state", {}),
+                "session_state": state.get("session_state", {}),
             }
 
             if "experiment_session" in state and state["experiment_session"]:
@@ -126,8 +127,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                             or [],
                         }
                     )
-                proxy = self.get_participant_data_proxy(state)
-                content["participant_data"] = proxy.get() or {}
+                content["participant_data"] = ParticipantDataProxy.from_state(state).get() or {}
 
             template = env.from_string(self.template_string)
             output = template.render(content)
@@ -625,7 +625,9 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "temp_state": state.get("temp_state", {}),
             "session_state": session.state or {},
         }
-        context.update(PromptTemplateContext(session, extra=extra_prompt_context).get_context(prompt.input_variables))
+        participant_data = state.get("participant_data") or {}
+        template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
+        context.update(template_context.get_context(prompt.input_variables))
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.format_messages(**context)
@@ -681,11 +683,11 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
 
         match self.data_source:
             case self.DataSource.participant_data:
-                data = self.get_participant_data_proxy(state).get()
+                data = ParticipantDataProxy.from_state(state).get()
             case self.DataSource.temp_state:
-                data = state["temp_state"]
+                data = state.get("temp_state") or {}
             case self.DataSource.session_state:
-                data = state["experiment_session"].state
+                data = state.get("session_state") or {}
 
         formatted_key = f"{{data.{self.route_key}}}"
         try:
@@ -739,12 +741,10 @@ class ExtractStructuredDataNodeMixin:
             # )
             new_reference_data = self.update_reference_data(output, reference_data)
 
-        self.post_extraction_hook(new_reference_data, state)
-        output = input if self.is_passthrough else json.dumps(new_reference_data)
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
+        return self.get_node_output(state, new_reference_data)
 
-    def post_extraction_hook(self, output, state):
-        pass
+    def get_node_output(self, state, output_data) -> PipelineState:
+        raise NotImplementedError()
 
     def get_reference_data(self, state):
         return ""
@@ -830,9 +830,9 @@ class ExtractStructuredData(
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    @property
-    def is_passthrough(self) -> bool:
-        return False
+    def get_node_output(self, state, output_data) -> PipelineState:
+        output = json.dumps(output_data)
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
 
 class ExtractParticipantData(
@@ -855,27 +855,12 @@ class ExtractParticipantData(
     )
     key_name: str = ""
 
-    @property
-    def is_passthrough(self) -> bool:
-        return True
-
-    def get_reference_data(self, state) -> dict:
+    def get_reference_data(self, state) -> Any:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
         corresponding to that key will be returned insteadg
         """
-        session = state.get("experiment_session")
-        if not session:
-            return {}
-
-        participant_data = (
-            ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
-        )
-        if not participant_data:
-            return {}
-
-        data = participant_data.data
+        data = state.get("participant_data") or {}
         if self.key_name:
-            # string, list or dict
             return data.get(self.key_name, "")
         return data
 
@@ -887,27 +872,13 @@ class ExtractParticipantData(
         # if reference data is a string or list, we cannot merge, so let's override
         return new_data
 
-    def post_extraction_hook(self, output, state):
-        session = state.get("experiment_session")
-        if not session:
-            return
-
+    def get_node_output(self, state, output_data) -> PipelineState:
         if self.key_name:
-            output = {self.key_name: output}
+            output_data = {self.key_name: output_data}
 
-        try:
-            participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
-                participant=session.participant
-            )
-            participant_data.data = participant_data.data | output
-            participant_data.save()
-        except ParticipantData.DoesNotExist:
-            ParticipantData.objects.create(
-                participant=session.participant,
-                experiment=session.experiment,
-                team=session.team,
-                data=output,
-            )
+        return PipelineState.from_node_output(
+            node_name=self.name, node_id=self.node_id, output=state["node_input"], participant_data=output_data
+        )
 
 
 @deprecated_node(message="Use the 'LLM' node instead.", docs_link="migrate_from_assistant")
@@ -1045,11 +1016,15 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             state: The input state. Do not modify this state.
             output_state: An empty state dict to which state modifications should be made.
         """
-        participant_data_proxy = self.get_participant_data_proxy(state)
         pipeline_state = PipelineState.clone(state)
 
         # copy this from input to output to create a consistent view within the code execution
         output_state["temp_state"] = pipeline_state.get("temp_state") or {}
+        output_state["participant_data"] = pipeline_state.get("participant_data") or {}
+        output_state["session_state"] = pipeline_state.get("session_state") or {}
+
+        # use 'output_state' so that we capture any updates
+        participant_data_proxy = ParticipantDataProxy(output_state, state.get("experiment_session"))
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
@@ -1062,8 +1037,8 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "get_participant_schedules": participant_data_proxy.get_schedules,
             "get_temp_state_key": self._get_temp_state_key(output_state),
             "set_temp_state_key": self._set_temp_state_key(output_state),
-            "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
-            "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
+            "get_session_state_key": self._get_session_state_key(output_state),
+            "set_session_state_key": self._set_session_state_key(output_state),
             "get_selected_route": pipeline_state.get_selected_route,
             "get_node_path": pipeline_state.get_node_path,
             "get_all_routes": pipeline_state.get_all_routes,
@@ -1105,20 +1080,20 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         return require_node_outputs
 
-    def _get_session_state_key(self, session: ExperimentSession):
+    def _get_session_state_key(self, state: PipelineState):
         def get_session_state_key(key_name: str):
             """Returns the value of the session state's key with the given name.
             If the key does not exist, it returns `None`."""
-            return session.state.get(key_name)
+            return state.get("session_state", {}).get(key_name)
 
         return get_session_state_key
 
-    def _set_session_state_key(self, session: ExperimentSession):
+    def _set_session_state_key(self, state: PipelineState):
         def set_session_state_key(key_name: str, value):
             """Sets the value of the session state's key with the given name to the provided data.
             This will override any existing data."""
-            session.state[key_name] = value
-            session.save(update_fields=["state"])
+            session_state = state.setdefault("session_state", {})
+            session_state[key_name] = value
 
         return set_session_state_key
 
