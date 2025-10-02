@@ -87,6 +87,11 @@ class EvaluationMessage(BaseModel):
     context = models.JSONField(default=dict)
     history = models.JSONField(default=list)  # List of message objects with message_type, content, summary
 
+    participant_data = models.JSONField(
+        default=dict, blank=True, help_text="Participant data at the time of the message"
+    )
+    session_state = models.JSONField(default=dict, blank=True, help_text="Session state at the time of the trace")
+
     metadata = models.JSONField(default=dict)
 
     def __str__(self):
@@ -392,8 +397,8 @@ class EvaluationResult(BaseTeamModel):
             return ""
 
     @property
-    def message_context(self) -> str:
+    def message_context(self) -> dict:
         try:
             return self.output["message"]["context"]
         except KeyError:
-            return ""
+            return {}
