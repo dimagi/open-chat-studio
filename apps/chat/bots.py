@@ -326,8 +326,23 @@ class PipelineBot:
         return result
 
     def _get_input_state(self, attachments: list[Attachment], user_input: str):
+        state = PipelineState(
+            messages=[user_input],
+            experiment_session=self.session,
+            session_state=self.session.state,
+        )
+        self._update_state_with_participant_data(state)
+        self._updates_state_with_attachments(state, attachments)
+        return state
+
+    def _update_state_with_participant_data(self, state):
+        data = self.participant_data.data | {}
+        data = self.session.participant.global_data | data
+        state["participant_data"] = data
+        return state
+
+    def _updates_state_with_attachments(self, state: PipelineState, attachments: list[Attachment]):
         attachments = attachments or []
-        serializable_attachments = [attachment.model_dump() for attachment in attachments]
         incoming_file_ids = []
 
         for attachment in attachments:
@@ -338,16 +353,11 @@ class PipelineBot:
         if incoming_file_ids:
             input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
 
-        data = self.participant_data.data | {}
-        data = self.session.participant.global_data | data
-        return PipelineState(
-            messages=[user_input],
-            experiment_session=self.session,
-            attachments=serializable_attachments,
-            input_message_metadata=input_message_metadata,
-            participant_data=data,
-            session_state=self.session.state,
-        )
+        state["input_message_metadata"] = input_message_metadata
+
+        serializable_attachments = [attachment.model_dump() for attachment in attachments]
+        state["attachments"] = serializable_attachments
+        return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
         from apps.experiments.models import AgentTools
@@ -467,6 +477,16 @@ class PipelineBot:
             team_id=self.session.team_id,
         )
         return participant_data
+
+
+class EvalsBot(PipelineBot):
+    def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, participant_data: dict):
+        super().__init__(session, experiment, trace_service, False)
+        self._participant_data = participant_data
+
+    def _update_state_with_participant_data(self, state):
+        state["participant_data"] = self._participant_data
+        return state
 
 
 class PipelineTestBot:
