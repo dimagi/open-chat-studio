@@ -22,10 +22,12 @@ def match_domain_pattern(origin_domain: str, allowed_pattern: str) -> bool:
 
 def extract_domain_from_headers(request) -> str:
     for header in ["Origin", "Referer"]:
-        value = request.headers.get(header)
-        if value:
-            parsed = urlparse(value)
-            return parsed.hostname or ""
+        if value := request.headers.get(header):
+            try:
+                parsed = urlparse(value)
+                return parsed.hostname or ""
+            except ValueError:
+                pass
     return ""
 
 
