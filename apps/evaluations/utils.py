@@ -1,9 +1,10 @@
 import inspect
 import re
 
-from apps.chat.models import ChatMessageType
+from django.db.models import OuterRef, QuerySet, Subquery
+
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
-from apps.evaluations.models import Evaluator
 
 
 def get_evaluator_type_info() -> dict[str, dict[str, str]]:
@@ -43,6 +44,8 @@ def get_evaluators_with_schema(team) -> list[dict]:
     Returns:
         List of dicts containing evaluator info with schema data
     """
+    from apps.evaluations.models import Evaluator
+
     evaluator_type_info = get_evaluator_type_info()
 
     evaluators_list = []
@@ -165,3 +168,64 @@ def _clean_context_field_name(field_name):
     field_name = re.sub(r"_+", "_", field_name).strip("_")
 
     return field_name or "context_variable"
+
+
+def make_message_pairs_from_queryset(queryset: QuerySet) -> list[ChatMessage]:
+    """Takes a queryset of ChatMessages, and adds extra messages such that we always have (Human, AI) message pairs.
+    There can be a single AI Message at the beginning (AI seed message).
+    All messages must be from the same chat.
+    """
+
+    if not queryset:
+        return []
+
+    first_message = queryset.first()
+    if not first_message:
+        return []
+
+    chat = first_message.chat
+
+    prev_message_subquery = (
+        ChatMessage.objects.filter(chat=chat, created_at__lt=OuterRef("created_at"))
+        .order_by("-created_at")
+        .values("id", "message_type")[:1]
+    )
+    next_message_subquery = (
+        ChatMessage.objects.filter(chat=chat, created_at__gt=OuterRef("created_at"))
+        .order_by("created_at")
+        .values("id", "message_type")[:1]
+    )
+
+    queryset = queryset.annotate(
+        prev_message_id=Subquery(prev_message_subquery.values("id")),
+        prev_message_type=Subquery(prev_message_subquery.values("message_type")),
+        next_message_id=Subquery(next_message_subquery.values("id")),
+        next_message_type=Subquery(next_message_subquery.values("message_type")),
+    )
+
+    all_message_ids = set()
+
+    for message in queryset.iterator(chunk_size=100):
+        # Handle AI seed message
+        is_first = message.prev_message_id is None
+        if is_first and message.message_type == ChatMessageType.AI:
+            all_message_ids.add(message.id)
+            continue
+
+        all_message_ids.add(message.id)
+
+        # For AI messages, add previous human message
+        if message.message_type == ChatMessageType.AI:
+            if message.prev_message_id and message.prev_message_type == ChatMessageType.HUMAN:
+                all_message_ids.add(message.prev_message_id)
+            else:
+                raise ValueError(f"AI message {message.id} has no corresponding human message")
+
+        # For human messages, add next AI message
+        elif message.message_type == ChatMessageType.HUMAN:
+            if message.next_message_id and message.next_message_type == ChatMessageType.AI:
+                all_message_ids.add(message.next_message_id)
+            else:
+                raise ValueError(f"Human message {message.id} has no corresponding AI message")
+
+    return list(ChatMessage.objects.filter(id__in=all_message_ids))
