@@ -264,14 +264,8 @@ def chat_start_session(request):
 
     team = experiment.team
 
-    if experiment_channel:
-        platform = ChannelPlatform.EMBEDDED_WIDGET
-        api_channel = experiment_channel
-        # Skip public API access checks for embedded widgets
-
-    else:
-        platform = ChannelPlatform.API
-        api_channel = ExperimentChannel.objects.get_team_api_channel(team)
+    if not experiment_channel:
+        experiment_channel = ExperimentChannel.objects.get_team_api_channel(team)
 
     if request.user.is_authenticated:
         user = request.user
@@ -290,11 +284,11 @@ def chat_start_session(request):
         participant, created = Participant.objects.get_or_create(
             identifier=participant_id,
             team=team,
-            platform=platform,
+            platform=experiment_channel.platform,
             defaults={"user": user, "remote_id": remote_id},
         )
     else:
-        participant = Participant.create_anonymous(team, platform, remote_id, prefix="embed")
+        participant = Participant.create_anonymous(team, experiment_channel.platform, remote_id, prefix="embed")
 
     if remote_id and participant.remote_id != remote_id:
         participant.remote_id = remote_id
@@ -315,7 +309,7 @@ def chat_start_session(request):
 
     session = ApiChannel.start_new_session(
         working_experiment=experiment,
-        experiment_channel=api_channel,
+        experiment_channel=experiment_channel,
         participant_identifier=participant.identifier,
         participant_user=user,
         metadata=metadata,
