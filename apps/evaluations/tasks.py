@@ -94,6 +94,7 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
             participant=participant,
             experiment_channel=evaluation_channel,
             chat=chat,
+            state=message.session_state,
         )
 
         # Populate history on the chat with the history from the EvaluationMessage
@@ -125,6 +126,7 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
             experiment_channel=evaluation_channel,
             message_text=input_content,
             session=session,
+            participant_data=message.participant_data,
         )
         response_content = bot_response.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
