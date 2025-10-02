@@ -2,7 +2,6 @@ import logging
 import pathlib
 
 from django.conf import settings
-from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
@@ -380,8 +379,7 @@ def chat_send_message(request, session_id):
         external_id=session_id,
     )
 
-    access_response = check_session_access(session, request)
-    if access_response:
+    if access_response := check_session_access(session, request):
         return access_response
 
     # Verify session is active
@@ -457,16 +455,12 @@ def chat_send_message(request, session_id):
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([])
 def chat_poll_task_response(request, session_id, task_id):
-    try:
-        session = get_object_or_404(
-            ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
-            external_id=session_id,
-        )
-    except ExperimentSession.DoesNotExist:
-        raise Http404() from None
+    session = get_object_or_404(
+        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
+        external_id=session_id,
+    )
 
-    access_response = check_session_access(session, request)
-    if access_response:
+    if access_response := check_session_access(session, request):
         return access_response
     task_details = get_message_task_response(session.experiment, task_id)
     if not task_details["complete"]:
