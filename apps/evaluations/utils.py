@@ -1,10 +1,14 @@
 import inspect
 import re
+from typing import TYPE_CHECKING
 
 from django.db.models import OuterRef, QuerySet, Subquery
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
+
+if TYPE_CHECKING:
+    from apps.evaluations.models import EvaluationMessage
 
 
 def get_evaluator_type_info() -> dict[str, dict[str, str]]:
@@ -225,3 +229,123 @@ def make_message_pairs_from_queryset(queryset: QuerySet) -> list[ChatMessage]:
                 all_message_ids.add(message.next_message_id)
 
     return list(ChatMessage.objects.filter(id__in=all_message_ids))
+
+
+def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, list[str]]) -> list["EvaluationMessage"]:
+    from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
+
+    def _add_additional_context(msg, existing_context):
+        if comments := list(msg.comments.all()):
+            existing_context.setdefault("comments", []).extend([comment.comment for comment in comments])
+        if tags := list(msg.tags.all()):
+            context_tags = existing_context.get("tags", [])
+            context_tags.extend([tag.name for tag in tags if not tag.is_system_tag])
+            existing_context["tags"] = list(dict.fromkeys(context_tags))  # dedupe preserving order
+
+    def _messages_to_history(messages_):
+        return [
+            {
+                "message_type": msg.message_type,
+                "content": msg.content,
+                "summary": getattr(msg, "summary", None),
+            }
+            for msg in messages_
+        ]
+
+    new_messages = []
+    for session_id, target_message_ids in message_ids_per_session.items():
+        target_ids_set = set(target_message_ids)
+
+        # We need to get all the messages in the session to properly compile the history
+        all_messages = list(
+            ChatMessage.objects.filter(chat__experiment_session__external_id=session_id)
+            .select_related("chat__experiment_session")
+            .prefetch_related("comments", "tags")
+            .order_by("created_at")
+        )
+
+        history = []
+        i = 0
+
+        while i < len(all_messages):
+            current_msg = all_messages[i]
+            next_msg = all_messages[i + 1] if i + 1 < len(all_messages) else None
+
+            # Check if this is a (HUMAN, AI) pair with at least one in the target
+            is_target_pair = (
+                next_msg is not None
+                and current_msg.message_type == ChatMessageType.HUMAN
+                and next_msg.message_type == ChatMessageType.AI
+                and (current_msg.id in target_ids_set or next_msg.id in target_ids_set)
+            )
+
+            if is_target_pair:
+                # Create paired evaluation message
+                session = current_msg.chat.experiment_session
+                context = {"current_datetime": current_msg.created_at.isoformat()}
+                _add_additional_context(current_msg, context)
+                _add_additional_context(next_msg, context)
+
+                evaluation_message = EvaluationMessage(
+                    input_chat_message=current_msg,
+                    input=EvaluationMessageContent(content=current_msg.content, role="human").model_dump(),
+                    expected_output_chat_message=next_msg,
+                    output=EvaluationMessageContent(content=next_msg.content, role="ai").model_dump(),
+                    context=context,
+                    history=[msg.copy() for msg in history],
+                    metadata={
+                        "session_id": session_id,
+                        "experiment_id": str(session.experiment.public_id),
+                    },
+                )
+                new_messages.append(evaluation_message)
+
+                # Add both to history
+                history.extend(_messages_to_history([current_msg, next_msg]))
+                i += 2
+
+            elif current_msg.id in target_ids_set:
+                session = current_msg.chat.experiment_session
+                context = {"current_datetime": current_msg.created_at.isoformat()}
+                _add_additional_context(current_msg, context)
+
+                if current_msg.message_type == ChatMessageType.HUMAN:
+                    # There is an orphaned Human message, possibly because the AI message failed to generate
+                    evaluation_message = EvaluationMessage(
+                        input_chat_message=current_msg,
+                        input=EvaluationMessageContent(content=current_msg.content, role="human").model_dump(),
+                        expected_output_chat_message=None,
+                        output={},
+                        context=context,
+                        history=[msg.copy() for msg in history],
+                        metadata={
+                            "session_id": session_id,
+                            "experiment_id": str(session.experiment.public_id),
+                        },
+                    )
+                else:
+                    # There is an orphaned AI message, possibly because of a scheduled message, AI seed, etc.
+                    evaluation_message = EvaluationMessage(
+                        input_chat_message=None,
+                        input={},
+                        expected_output_chat_message=current_msg,
+                        output=EvaluationMessageContent(content=current_msg.content, role="ai").model_dump(),
+                        context=context,
+                        history=[msg.copy() for msg in history],
+                        metadata={
+                            "session_id": session_id,
+                            "experiment_id": str(session.experiment.public_id),
+                        },
+                    )
+                new_messages.append(evaluation_message)
+
+                # Add to history
+                history.extend(_messages_to_history([current_msg]))
+                i += 1
+
+            else:
+                # Not in target, just add to history
+                history.extend(_messages_to_history([current_msg]))
+                i += 1
+
+    return new_messages
