@@ -313,7 +313,7 @@ class ChannelBase(ABC):
         elif platform == "evaluations":
             channel_cls = EvaluationChannel
         elif platform == "embedded_widget":
-            channel_cls = EmbeddedWidgetChannel
+            channel_cls = ApiChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return channel_cls
@@ -1324,18 +1324,4 @@ class EvaluationChannel(ChannelBase):
 
     def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since evaluations are run internally
-        pass
-
-
-class EmbeddedWidgetChannel(ChannelBase):
-    def new_user_message(self, text: str, message_type: ChatMessageType):
-        """Handle new user message from embedded widget"""
-        return self.send_message_to_user(text, message_type)
-
-    def send_text_to_user(self, text: str):
-        """Embedded widgets use polling, so no direct sending needed"""
-        pass
-
-    def send_message(self, message: ChatMessage):
-        """Embedded widgets use polling, so no direct sending needed"""
         pass
