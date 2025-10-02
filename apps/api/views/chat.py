@@ -521,8 +521,7 @@ def chat_poll_response(request, session_id):
         external_id=session_id,
     )
 
-    access_response = check_session_access(session, request)
-    if access_response:
+    if access_response := check_session_access(session, request):
         return access_response
     since_param = request.query_params.get("since")
     limit = int(request.query_params.get("limit", 50))
