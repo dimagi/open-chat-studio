@@ -279,6 +279,8 @@ def chat_start_session(request):
     if request.user.is_authenticated:
         user = request.user
         participant_id = user.email
+        # Enforce this for authenticated users
+        # Currently this only happens if the chat widget is being hosted on the same OCS instance as the bot
         if remote_id != participant_id:
             return Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
         remote_id = ""
@@ -495,7 +497,7 @@ def chat_poll_task_response(request, session_id, task_id):
 
     if message := task_details["message"]:
         data = {
-            "message": MessageSerializer(message, context={'request': request}).data,
+            "message": MessageSerializer(message, context={"request": request}).data,
             "status": "complete",
         }
         return Response(data, status=status.HTTP_200_OK)
