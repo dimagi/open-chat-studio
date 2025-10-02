@@ -106,6 +106,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
             content = {
                 "input": input,
                 "temp_state": state.get("temp_state", {}),
+                "session_state": state.get("session_state", {}),
             }
 
             if "experiment_session" in state and state["experiment_session"]:
