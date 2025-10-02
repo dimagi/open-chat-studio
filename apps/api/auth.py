@@ -1,4 +1,4 @@
-from apps.api.exceptions import InvalidEmbedConfigError, InvalidEmbedKeyError, MissingOriginError
+from apps.api.exceptions import EmbeddedWidgetAuthError
 from apps.channels.utils import extract_domain_from_headers, validate_embed_key_for_experiment
 
 
@@ -14,19 +14,19 @@ def handle_embedded_widget_auth(request, experiment_id=None, session=None):
 
     origin_domain = extract_domain_from_headers(request)
     if not origin_domain:
-        raise MissingOriginError("Origin or Referer header required for embedded widgets")
+        raise EmbeddedWidgetAuthError("Origin or Referer header required for embedded widgets")
 
     if experiment_id:
         target_experiment_id = experiment_id
     elif session:
         target_experiment_id = session.experiment.public_id
     else:
-        raise InvalidEmbedConfigError("Either experiment_id or session must be provided")
+        raise EmbeddedWidgetAuthError("Either experiment_id or session must be provided")
 
     experiment_channel = validate_embed_key_for_experiment(
         token=embed_key, origin_domain=origin_domain, experiment_id=target_experiment_id
     )
     if not experiment_channel:
-        raise InvalidEmbedKeyError("Invalid embed key or domain not allowed")
+        raise EmbeddedWidgetAuthError("Invalid embed key or domain not allowed")
 
     return experiment_channel

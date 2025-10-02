@@ -3,21 +3,3 @@ class EmbeddedWidgetAuthError(Exception):
 
     def __init__(self, message: str):
         self.message = message
-
-
-class MissingOriginError(EmbeddedWidgetAuthError):
-    """Raised when Origin or Referer header is missing"""
-
-    pass
-
-
-class InvalidEmbedKeyError(EmbeddedWidgetAuthError):
-    """Raised when embed key is invalid or domain not allowed"""
-
-    pass
-
-
-class InvalidEmbedConfigError(EmbeddedWidgetAuthError):
-    """Raised when neither experiment_id nor session is provided"""
-
-    pass
