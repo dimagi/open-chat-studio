@@ -137,4 +137,4 @@ def _redirect_for_state(request, team_slug):
                 request,
                 "Session was in an unknown/unexpected state. It may be old, or something may have gone wrong.",
             )
-            return HttpResponseRedirect(reverse("experiments:experiment_session_view", args=view_args))
+            return HttpResponseRedirect(reverse("chatbots:chatbot_session_view", args=view_args))
