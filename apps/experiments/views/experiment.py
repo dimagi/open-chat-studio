@@ -71,6 +71,7 @@ from apps.experiments.filters import (
     get_filter_context_data,
 )
 from apps.experiments.forms import (
+    AddMessagesToDatasetForm,
     ConsentForm,
     ExperimentForm,
     ExperimentInvitationForm,
@@ -1272,6 +1273,9 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
         "all_tags": all_tags,
     }
+
+    if request.GET.get("create_dataset"):
+        context["dataset_form"] = AddMessagesToDatasetForm(team=request.team)
 
     return TemplateResponse(
         request,

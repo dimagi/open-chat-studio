@@ -102,6 +102,11 @@ urlpatterns = [
         dataset_views.upload_dataset_csv,
         name="dataset_upload",
     ),
+    path(
+        "e/<uuid:experiment_id>/s/<str:session_id>/dataset/create",
+        dataset_views.create_dataset_from_messages,
+        name="create_from_messages",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(evaluation_config_views, "Evaluation", delete=False))

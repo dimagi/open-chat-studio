@@ -2,17 +2,20 @@ import csv
 import json
 import logging
 from io import StringIO
+from uuid import UUID
 
+from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count
+from django.db.models import Count, OuterRef, Subquery
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.tables import (
@@ -26,6 +29,7 @@ from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
+from apps.experiments.forms import AddMessagesToDatasetForm
 from apps.experiments.models import ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -475,3 +479,55 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
     except Exception as e:
         logger.error(f"Error starting CSV upload for dataset {dataset.id}: {str(e)}")
         return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
+
+
+def create_dataset_from_messages(request, team_slug: str, experiment_id: UUID, session_id: str):
+    # TODO: Support creating a new dataset here as well
+    form = AddMessagesToDatasetForm(team=request.team, data=request.POST)
+    if not form.is_valid():
+        messages.error(request, "There was an error with your submission.")
+        return redirect(reverse("evaluations:dataset_home", args=[team_slug]))
+
+    dataset = get_object_or_404(EvaluationDataset, id=form.cleaned_data["dataset"], team__slug=team_slug)
+    human_message_ids = [int(id) for id in request.POST["message_ids"].split(",")]
+
+    next_message_query = ChatMessage.objects.filter(
+        chat_id=OuterRef("chat_id"),
+        created_at__gt=OuterRef("created_at"),
+    ).order_by("created_at")[:1]
+
+    human_messages = (
+        ChatMessage.objects.filter(id__in=human_message_ids, message_type=ChatMessageType.HUMAN)
+        .annotate(
+            next_message_type=Subquery(next_message_query.values("message_type")),
+            next_message_id=Subquery(next_message_query.values("id")),
+            next_message_content=Subquery(next_message_query.values("content")),
+        )
+        .filter(next_message_type=ChatMessageType.AI)
+        .prefetch_related("input_message_trace")
+    )
+
+    eval_messages = []
+    for human_message in human_messages.iterator(chunk_size=100):
+        history = []
+
+        participant_data = {}
+        session_state = {}
+        if trace_message := human_message.input_message_trace.first():
+            participant_data = trace_message.participant_data or {}
+            session_state = trace_message.session_state or {}
+
+        eval_message = EvaluationMessage.objects.create(
+            input_chat_message=human_message,
+            expected_output_chat_message_id=human_message.next_message_id,
+            input=EvaluationMessageContent(content=human_message.content, role="human").model_dump(),
+            output=EvaluationMessageContent(content=human_message.next_message_content, role="ai").model_dump(),
+            history=history,
+            participant_data=participant_data,
+            session_state=session_state,
+            metadata={"session_id": session_id, "experiment_id": str(experiment_id)},
+        )
+        eval_messages.append(eval_message)
+
+    dataset.messages.add(*eval_messages)
+    return redirect(reverse("evaluations:dataset_edit", args=[team_slug, dataset.id]))

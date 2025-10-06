@@ -345,3 +345,23 @@ class TranslateMessagesForm(forms.Form):
         else:
             self.fields["target_language"].label = "Target Language for Remaining Messages"
             self.fields["llm_provider"].label = "LLM Provider for Remaining Messages"
+
+
+class AddMessagesToDatasetForm(forms.Form):
+    dataset = forms.ChoiceField(
+        choices=[],
+        required=False,
+        label="Add to existing dataset",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full"}),
+    )
+    message_ids = forms.CharField(required=True, widget=forms.HiddenInput(attrs={"x-model": "selectedMessages"}))
+
+    def __init__(self, team, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        dataset_choices = [(dataset.id, dataset.name) for dataset in team.evaluationdataset_set.all()]
+        self.fields["dataset"].choices = dataset_choices
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cleaned_data["message_ids"] = cleaned_data["message_ids"].split(",")
+        return cleaned_data

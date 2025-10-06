@@ -3,8 +3,7 @@
 {% load form_tags %}
 {% load waffle_tags %}
 {% load pagination_tags %}
-
-<div id="table-top" class="max-w-5xl mt-4 border rounded-2xl" x-data="{messageSelectView: false}">
+<div id="table-top" class="max-w-5xl mt-4 border rounded-2xl" x-data="{selectedMessages: []}">
   {% include "experiments/components/experiment_session_messages_control_panel.html" %}
 
   <!-- Loading indicator for initial messages -->
@@ -28,6 +27,19 @@
                         get isSelected() { return commentsRow === {{ forloop.counter }} },
                         }'
               >
+                {% if request.GET.create_dataset == "on" %}
+                  <td class="pl-4">
+                    {% if message.is_human_message %}
+                      <input
+                        class="checkbox checkbox-sm"
+                        type="checkbox"
+                        @change="$el.checked ? selectedMessages.push({{ message.id }}) : selectedMessages.splice(selectedMessages.indexOf({{ message.id }}), 1)"
+                        :checked="selectedMessages.includes({{ message.id }})"
+                        >
+                      </input>
+                    {% endif %}
+                  </td>
+                {% endif %}
                 <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter|add:-1 }}</td>
                 <td class="px-3 py-2 text-sm flex flex-col gap-2">
                   <div class="flex place-items-center">
