@@ -13,11 +13,8 @@ from apps.events.models import StaticTrigger, TimeoutTrigger
 from apps.teams.decorators import login_and_team_required
 
 
-def _get_events_url(team_slug, experiment_id, origin=None):
-    if origin == "chatbots":
-        url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
-    else:
-        url = reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
+def _get_events_url(team_slug, experiment_id):
+    url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
     return f"{url}#events"
 
 
@@ -35,7 +32,6 @@ def create_static_event_view(request, team_slug: str, experiment_id: str):
 
 def _create_event_view(trigger_form_class, request, team_slug: str, experiment_id: str):
     if request.method == "POST":
-        origin = request.origin
         action_form = get_action_params_form(request.POST, team_id=request.team.id, experiment_id=experiment_id)
         trigger_form = trigger_form_class(request.POST)
         if action_form.is_valid() and trigger_form.is_valid():
@@ -43,7 +39,7 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
             trigger = trigger_form.save(commit=False, experiment_id=experiment_id)
             trigger.action = saved_action
             trigger.save()
-            return HttpResponseRedirect(_get_events_url(team_slug, experiment_id, origin))
+            return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
     else:
         action_form = get_action_params_form(team_id=request.team.id, experiment_id=experiment_id)
         trigger_form = trigger_form_class()
@@ -68,7 +64,6 @@ def edit_timeout_event_view(request, team_slug: str, experiment_id: str, trigger
 
 
 def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, trigger_id):
-    origin = request.origin
     trigger_form_class = {
         "static": StaticTriggerForm,
         "timeout": TimeoutTriggerForm,
@@ -87,7 +82,7 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
         if action_form.is_valid() and trigger_form.is_valid():
             action_form.save(experiment_id=experiment_id)
             trigger = trigger_form.save(experiment_id=experiment_id)
-            return HttpResponseRedirect(_get_events_url(team_slug, experiment_id, origin))
+            return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
     else:
         action_form = get_action_params_form(
             instance=trigger.action, team_id=request.team.id, experiment_id=experiment_id
@@ -115,14 +110,13 @@ def delete_timeout_event_view(request, team_slug: str, experiment_id: str, trigg
 
 
 def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str, trigger_id):
-    origin = request.origin
     model_class = {
         "static": StaticTrigger,
         "timeout": TimeoutTrigger,
     }[trigger_type]
     trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
     trigger.archive()
-    return HttpResponseRedirect(_get_events_url(team_slug, experiment_id, origin))
+    return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
 
 
 @login_and_team_required
@@ -162,7 +156,6 @@ def toggle_timeout_active_status(request, team_slug: str, experiment_id: str, tr
 
 
 def _toggle_event_status_view(trigger_type, request, team_slug: str, experiment_id: str, trigger_id):
-    origin = request.origin
     model_class = {
         "static": StaticTrigger,
         "timeout": TimeoutTrigger,
@@ -174,4 +167,4 @@ def _toggle_event_status_view(trigger_type, request, team_slug: str, experiment_
     new_status = not trigger.is_active
     all_versions.update(is_active=new_status)
 
-    return HttpResponseRedirect(_get_events_url(team_slug, experiment_id, origin))
+    return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
