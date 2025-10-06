@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Literal
 
 from django.conf import settings
 from django.db import models
@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.evaluations.utils import make_evaluation_messages_from_sessions, make_message_pairs_from_queryset
+from apps.evaluations.utils import make_evaluation_messages_from_sessions
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
@@ -105,7 +105,7 @@ class EvaluationMessage(BaseModel):
     @classmethod
     def create_from_sessions(
         cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None
-    ) -> list[Self]:
+    ) -> list[EvaluationMessage]:
         from apps.experiments.filters import ChatMessageFilter
 
         base_queryset = (
@@ -131,11 +131,7 @@ class EvaluationMessage(BaseModel):
             filtered_messages = base_queryset.filter(chat__experiment_session__external_id__in=filtered_session_ids)
             message_filter = ChatMessageFilter()
             filtered_messages = message_filter.apply(filtered_messages, filter_params, timezone)
-            # Get message pairs and convert to queryset
-            message_pairs = make_message_pairs_from_queryset(filtered_messages)
-            message_pair_ids = [msg.id for msg in message_pairs]
-            message_pairs_qs = base_queryset.filter(id__in=message_pair_ids)
-            for session_id, message_id in message_pairs_qs.values_list("chat__experiment_session__external_id", "id"):
+            for session_id, message_id in filtered_messages.values_list("chat__experiment_session__external_id", "id"):
                 message_ids_per_session[session_id].append(message_id)
 
         if not message_ids_per_session:
