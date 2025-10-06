@@ -409,9 +409,6 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
             )
             new_experiment.create_version_task_id = task_id
             new_experiment.save(update_fields=["create_version_task_id"])
-        referer = request.headers.get("referer")
-        if "experiments" in referer:
-            return redirect("experiments:single_experiment_home", team_slug=team_slug, experiment_id=new_experiment.id)
         return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
     else:
         experiment_id = kwargs["pk"]
