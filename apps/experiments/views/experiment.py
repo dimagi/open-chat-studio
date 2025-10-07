@@ -1,5 +1,4 @@
 import logging
-import unicodedata
 import uuid
 from datetime import datetime
 from functools import cached_property
@@ -7,6 +6,7 @@ from typing import cast
 from urllib.parse import urlparse
 
 import jwt
+import unicodedata
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django.conf import settings
@@ -16,7 +16,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.db import transaction, models
+from django.db import transaction
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
@@ -37,12 +37,11 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST, require_http_methods
+from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, UpdateView
 from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
-import json
 from waffle import flag_is_active
 
 from apps.analysis.const import LANGUAGE_CHOICES
@@ -117,7 +116,6 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 from apps.web.dynamic_filters.datastructures import FilterParams
-from apps.filters.models import FilterSet
 
 
 @login_and_team_required
@@ -1598,133 +1596,3 @@ def trends_data(request, team_slug: str, experiment_id: int):
     except Exception:
         logging.exception(f"Error loading barchart data for experiment {experiment_id}")
         return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)
-
-def _serialize_filter_set(fs: FilterSet) -> dict:
-    return {
-        "id": fs.id,
-        "name": fs.name,
-        "table_type": fs.table_type,
-        "filter_params": fs.filter_params,
-        "is_shared": fs.is_shared,
-        "is_starred": fs.is_starred,
-        "is_default_for_user": fs.is_default_for_user,
-        "is_default_for_team": fs.is_default_for_team,
-    }
-
-@require_http_methods(["GET"])
-@login_and_team_required
-def list_filter_sets(request, team_slug: str, table_type: str):
-    qs = FilterSet.objects.filter(
-        team=request.team,
-        table_type=table_type,
-        is_deleted=False,
-    ).filter(models.Q(user=request.user) | models.Q(is_shared=True))
-
-    data = [_serialize_filter_set(fs) for fs in qs.order_by("-is_starred", "name").all()]
-    return JsonResponse({"results": data})
-
-@require_http_methods(["POST"])
-@login_and_team_required
-def create_filter_set(request, team_slug: str, table_type: str):
-    payload = json.loads(request.body or b"{}")
-
-    name = payload.get("name", "").strip()
-    filter_params = payload.get("filter_params", {})
-    is_shared = bool(payload.get("is_shared", False))
-    is_starred = bool(payload.get("is_starred", False))
-    is_default_for_user = bool(payload.get("is_default_for_user", False))
-    is_default_for_team = bool(payload.get("is_default_for_team", False))
-
-    if not name:
-        return JsonResponse({"error": "name is required"}, status=400)
-
-    with transaction.atomic():
-        if is_default_for_user:
-            FilterSet.objects.filter(
-                team=request.team, user=request.user, table_type=table_type, is_default_for_user=True
-            ).update(is_default_for_user=False)
-        if is_default_for_team:
-            FilterSet.objects.filter(
-                team=request.team, table_type=table_type, is_default_for_team=True
-            ).update(is_default_for_team=False)
-        fs = FilterSet.objects.create(
-            team=request.team,
-            user=request.user,
-            name=name,
-            table_type=table_type,
-            filter_params=filter_params,
-            is_shared=is_shared,
-            is_starred=is_starred,
-            is_default_for_user=is_default_for_user,
-            is_default_for_team=is_default_for_team,
-        )
-    return JsonResponse({"result": _serialize_filter_set(fs)}, status=201)
-
-
-@require_http_methods(["PATCH", "DELETE"])
-@login_and_team_required
-def edit_or_delete_filter_set(request, team_slug: str, pk: int):
-    try:
-        fs = FilterSet.objects.get(team=request.team, id=pk, is_deleted=False)
-    except FilterSet.DoesNotExist:
-        return JsonResponse({"error": "Not found"}, status=404)
-
-    is_owner = fs.user == request.user
-    is_team_admin = request.team_membership.is_team_admin
-
-    if request.method == "DELETE":
-        # Only owner or team admin can delete
-        if not (is_owner or is_team_admin):
-            return JsonResponse({"error": "You don't have permission to delete this filter set"}, status=403)
-        fs.is_deleted = True
-        fs.save(update_fields=["is_deleted"])
-        return JsonResponse({"success": True})
-
-    payload = json.loads(request.body or b"{}")
-
-    filter_params = payload.get("filter_params")
-    is_shared = payload.get("is_shared")
-    is_starred = payload.get("is_starred")
-    is_default_for_user = payload.get("is_default_for_user")
-    is_default_for_team = payload.get("is_default_for_team")
-
-    with transaction.atomic():
-        updates = []
-        if filter_params is not None:
-            fs.filter_params = filter_params
-            updates.append("filter_params")
-        if is_shared is not None:
-            fs.is_shared = bool(is_shared)
-            updates.append("is_shared")
-        if is_starred is not None:
-            fs.is_starred = bool(is_starred)
-            updates.append("is_starred")
-        if is_default_for_user is not None and bool(is_default_for_user):
-            FilterSet.objects.filter(
-                team=request.team, user=request.user, table_type=fs.table_type, is_default_for_user=True
-            ).exclude(id=fs.id).update(is_default_for_user=False)
-            fs.is_default_for_user = True
-            updates.append("is_default_for_user")
-        elif is_default_for_user is not None and not bool(is_default_for_user):
-            fs.is_default_for_user = False
-            updates.append("is_default_for_user")
-        if is_default_for_team is not None and bool(is_default_for_team):
-            # Only team admin can set team defaults
-            if not is_team_admin:
-                return JsonResponse({"error": "Only team admins can set team defaults"}, status=403)
-            FilterSet.objects.filter(
-                team=request.team, table_type=fs.table_type, is_default_for_team=True
-            ).exclude(id=fs.id).update(is_default_for_team=False)
-            fs.is_default_for_team = True
-            updates.append("is_default_for_team")
-        elif is_default_for_team is not None and not bool(is_default_for_team):
-            # Only team admin can remove team defaults
-            if not is_team_admin:
-                return JsonResponse({"error": "Only team admins can remove team defaults"}, status=403)
-            fs.is_default_for_team = False
-            updates.append("is_default_for_team")
-
-        if updates:
-            fs.save(update_fields=updates)
-
-    return JsonResponse({"result": _serialize_filter_set(fs)})
