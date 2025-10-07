@@ -2,6 +2,8 @@ import inspect
 import re
 from typing import TYPE_CHECKING
 
+from django.db.models import F
+
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 
@@ -200,7 +202,7 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
         # We need to get all the messages in the session to properly compile the history
         all_messages = list(
             ChatMessage.objects.filter(chat__experiment_session__external_id=session_id)
-            .select_related("chat__experiment_session")
+            .annotate(experiment_public_id=F("chat__experiment_session__experiment__public_id"))
             .prefetch_related("comments", "tags")
             .order_by("created_at")
         )
@@ -222,7 +224,6 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
 
             if is_target_pair:
                 # Create paired evaluation message
-                session = current_msg.chat.experiment_session
                 context = {"current_datetime": current_msg.created_at.isoformat()}
                 _add_additional_context(current_msg, context)
                 _add_additional_context(next_msg, context)
@@ -236,7 +237,7 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                     history=[msg.copy() for msg in history],
                     metadata={
                         "session_id": session_id,
-                        "experiment_id": str(session.experiment.public_id),
+                        "experiment_id": str(current_msg.experiment_public_id),
                     },
                 )
                 new_messages.append(evaluation_message)
@@ -246,7 +247,6 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                 i += 2
 
             elif current_msg.id in target_ids_set:
-                session = current_msg.chat.experiment_session
                 context = {"current_datetime": current_msg.created_at.isoformat()}
                 _add_additional_context(current_msg, context)
 
@@ -261,7 +261,7 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                         history=[msg.copy() for msg in history],
                         metadata={
                             "session_id": session_id,
-                            "experiment_id": str(session.experiment.public_id),
+                            "experiment_id": str(current_msg.experiment_public_id),
                         },
                     )
                 else:
@@ -275,7 +275,7 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                         history=[msg.copy() for msg in history],
                         metadata={
                             "session_id": session_id,
-                            "experiment_id": str(session.experiment.public_id),
+                            "experiment_id": str(current_msg.experiment_public_id),
                         },
                     )
                 new_messages.append(evaluation_message)
