@@ -228,6 +228,16 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                 participant_data = trace_message.participant_data or {}
                 session_state = trace_message.session_state or {}
 
+            shared_attrs = {
+                "history": [msg.copy() for msg in history],
+                "metadata": {
+                    "session_id": session_id,
+                    "experiment_id": str(current_msg.experiment_public_id),
+                },
+                "participant_data": participant_data,
+                "session_state": session_state,
+            }
+
             if is_target_pair:
                 # Create paired evaluation message
                 context = {"current_datetime": current_msg.created_at.isoformat()}
@@ -240,13 +250,7 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                     expected_output_chat_message=next_msg,
                     output=EvaluationMessageContent(content=next_msg.content, role="ai").model_dump(),
                     context=context,
-                    history=[msg.copy() for msg in history],
-                    metadata={
-                        "session_id": session_id,
-                        "experiment_id": str(current_msg.experiment_public_id),
-                    },
-                    participant_data=participant_data,
-                    session_state=session_state,
+                    **shared_attrs,
                 )
                 new_messages.append(evaluation_message)
 
@@ -266,13 +270,7 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                         expected_output_chat_message=None,
                         output={},
                         context=context,
-                        history=[msg.copy() for msg in history],
-                        metadata={
-                            "session_id": session_id,
-                            "experiment_id": str(current_msg.experiment_public_id),
-                        },
-                        participant_data=participant_data,
-                        session_state=session_state,
+                        **shared_attrs,
                     )
                 else:
                     # There is an orphaned AI message, possibly because of a scheduled message, AI seed, etc.
@@ -282,13 +280,7 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                         expected_output_chat_message=current_msg,
                         output=EvaluationMessageContent(content=current_msg.content, role="ai").model_dump(),
                         context=context,
-                        history=[msg.copy() for msg in history],
-                        metadata={
-                            "session_id": session_id,
-                            "experiment_id": str(current_msg.experiment_public_id),
-                        },
-                        participant_data=participant_data,
-                        session_state=session_state,
+                        **shared_attrs,
                     )
                 new_messages.append(evaluation_message)
 
