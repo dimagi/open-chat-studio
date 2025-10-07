@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Literal
 
 from django.conf import settings
 from django.db import models
@@ -13,6 +13,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.evaluations.utils import make_evaluation_messages_from_sessions
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.models import BaseModel
@@ -102,11 +103,13 @@ class EvaluationMessage(BaseModel):
         return f"{input_role}: {input_content}, {output_role}: {output_content}"
 
     @classmethod
-    def create_from_sessions(cls, team: Team, external_session_ids) -> list[Self]:
-        new_messages = []
-        all_messages = (
+    def create_from_sessions(
+        cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None
+    ) -> list[EvaluationMessage]:
+        from apps.experiments.filters import ChatMessageFilter
+
+        base_queryset = (
             ChatMessage.objects.filter(
-                chat__experiment_session__external_id__in=external_session_ids,
                 chat__experiment_session__team=team,
             )
             .select_related(
@@ -116,64 +119,25 @@ class EvaluationMessage(BaseModel):
             )
             .prefetch_related("comments", "tags")
             .order_by("chat__experiment_session__created_at", "created_at")
-            .all()
         )
 
-        def _add_additional_context(msg, existing_context):
-            if comments := list(msg.comments.all()):
-                existing_context.setdefault("comments", []).extend([comment.comment for comment in comments])
-            if tags := list(msg.tags.all()):
-                context_tags = existing_context.get("tags", [])
-                context_tags.extend([tag.name for tag in tags if not tag.is_system_tag])
-                existing_context["tags"] = list(dict.fromkeys(context_tags))  # dedupe preserving order
+        message_ids_per_session = defaultdict(list)
+        if external_session_ids:
+            regular_messages = base_queryset.filter(chat__experiment_session__external_id__in=external_session_ids)
+            for session_id, message_id in regular_messages.values_list("chat__experiment_session__external_id", "id"):
+                message_ids_per_session[session_id].append(message_id)
 
-        def _messages_to_history(messages_):
-            return [
-                {
-                    "message_type": msg.message_type,
-                    "content": msg.content,
-                    "summary": getattr(msg, "summary", None),
-                }
-                for msg in messages_
-            ]
+        if filtered_session_ids and filter_params:
+            filtered_messages = base_queryset.filter(chat__experiment_session__external_id__in=filtered_session_ids)
+            message_filter = ChatMessageFilter()
+            filtered_messages = message_filter.apply(filtered_messages, filter_params, timezone)
+            for session_id, message_id in filtered_messages.values_list("chat__experiment_session__external_id", "id"):
+                message_ids_per_session[session_id].append(message_id)
 
-        messages_by_session = defaultdict(list)
-        for message in all_messages:
-            messages_by_session[message.chat.experiment_session.external_id].append(message)
+        if not message_ids_per_session:
+            return []
 
-        for session_id, messages in messages_by_session.items():
-            # Iterate per session so history gets cleared
-            history = []  # List of message dicts
-            i = 0
-            while i < len(messages) - 1:
-                current_msg = messages[i]
-                next_msg = messages[i + 1]
-                if current_msg.message_type == ChatMessageType.HUMAN and next_msg.message_type == ChatMessageType.AI:
-                    session = current_msg.chat.experiment_session
-                    context = {"current_datetime": current_msg.created_at.isoformat()}
-                    _add_additional_context(current_msg, context)
-                    _add_additional_context(next_msg, context)
-                    evaluation_message = EvaluationMessage(
-                        input_chat_message=current_msg,
-                        input=EvaluationMessageContent(content=current_msg.content, role="human").model_dump(),
-                        expected_output_chat_message=next_msg,
-                        output=EvaluationMessageContent(content=next_msg.content, role="ai").model_dump(),
-                        context=context,
-                        history=[msg.copy() for msg in history],  # Store as JSON list
-                        metadata={
-                            "session_id": session_id,
-                            "experiment_id": str(session.experiment.public_id),
-                        },
-                    )
-                    new_messages.append(evaluation_message)
-                    history.extend(_messages_to_history([current_msg, next_msg]))
-                    i += 2
-                else:
-                    # Add AI seed messages to the history
-                    if current_msg.message_type == ChatMessageType.AI and not history:
-                        history.extend(_messages_to_history([current_msg]))
-                    i += 1
-        return new_messages
+        return make_evaluation_messages_from_sessions(message_ids_per_session)
 
     def as_langchain_messages(self) -> list[BaseMessage]:
         """

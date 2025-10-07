@@ -122,3 +122,25 @@ def test_python_evaluator_runtime_errors(code, expected_error):
 
     with pytest.raises(EvaluationRunException, match=expected_error):
         evaluator.run(message, "")
+
+
+@pytest.mark.django_db()
+def test_python_evaluator_with_missing_output():
+    """Test that the Python evaluator handles evaluation messages with missing AI output gracefully."""
+    code = textwrap.dedent("""
+    def main(input, output, context, full_history, generated_response, **kwargs):
+        # Should handle empty output dict without errors
+        output_content = output.get('content', 'NO OUTPUT')
+        return {"has_output": bool(output.get('content')), "output_value": output_content}
+    """)
+
+    evaluator = PythonEvaluator(code=code)
+
+    # Create a message with no AI output (failed to generate)
+    message = EvaluationMessageFactory(
+        input={"content": "Hello, I need help", "role": "human"},
+        output={},  # No AI response
+    )
+
+    evaluator_output = evaluator.run(message, "")
+    assert evaluator_output.result == {"has_output": False, "output_value": "NO OUTPUT"}

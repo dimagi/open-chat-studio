@@ -6,6 +6,7 @@ from uuid import UUID
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Case, Count, OuterRef, Prefetch, Q, Subquery, Value, When
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -26,6 +27,7 @@ from apps.evaluations.tables import (
 from apps.evaluations.tasks import upload_dataset_csv_task
 from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
 from apps.experiments.filters import (
+    ChatMessageFilter,
     ExperimentSessionFilter,
     get_filter_context_data,
 )
@@ -114,7 +116,14 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     }
 
     def get_form_kwargs(self):
-        return {**super().get_form_kwargs(), "team": self.request.team}
+        kwargs = super().get_form_kwargs()
+        kwargs["team"] = self.request.team
+
+        # Pass current filter parameters to the form
+        kwargs["filter_params"] = FilterParams.from_request(self.request)
+        kwargs["timezone"] = self.request.session.get("detected_tz", None)
+
+        return kwargs
 
     def get_initial(self):
         """Support filters from experiment session list via URL parameters."""
@@ -176,20 +185,31 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
     permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
+        timezone = self.request.session.get("detected_tz", None)
+        filter_params = FilterParams.from_request(self.request)
+
+        messages_queryset = ChatMessage.objects.filter(chat__experiment_session=OuterRef("pk"))
+        message_filter = ChatMessageFilter()
+        filtered_messages = message_filter.apply(messages_queryset, filter_params, timezone)
+
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
             .filter(team=self.request.team)
             .select_related("participant__user", "chat", "experiment")
-            .annotate(message_count=Count("chat__messages"))
+            .annotate(
+                message_count=Coalesce(
+                    Count("chat__messages", filter=Q(chat__messages__in=filtered_messages.values("pk")), distinct=True),
+                    0,
+                )
+            )
             .filter(message_count__gt=0)
             .order_by("experiment__name")
             .prefetch_related("chat__messages", "chat__messages__tags")
         )
-        timezone = self.request.session.get("detected_tz", None)
+
         session_filter = ExperimentSessionFilter()
-        query_set = session_filter.apply(
-            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
-        )
+        query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
+
         return query_set
 
 

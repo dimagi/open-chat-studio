@@ -259,6 +259,11 @@ class EvaluationDatasetForm(forms.ModelForm):
         required=False,
     )
 
+    filtered_session_ids = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=False,
+    )
+
     messages_json = forms.CharField(
         widget=forms.HiddenInput(),
         required=False,
@@ -291,6 +296,8 @@ class EvaluationDatasetForm(forms.ModelForm):
         fields = ("name",)
 
     def __init__(self, team, *args, **kwargs):
+        self.filter_params = kwargs.pop("filter_params", None)
+        self.timezone = kwargs.pop("timezone", None)
         super().__init__(*args, **kwargs)
         self.team = team
 
@@ -305,7 +312,9 @@ class EvaluationDatasetForm(forms.ModelForm):
         cleaned_data = super().clean()
         mode = cleaned_data.get("mode")
         if mode == "clone":
-            cleaned_data["session_ids"] = self._clean_clone()
+            session_ids, filtered_session_ids = self._clean_clone()
+            cleaned_data["session_ids"] = session_ids
+            cleaned_data["filtered_session_ids"] = filtered_session_ids
         elif mode == "manual":
             cleaned_data["message_pairs"] = self._clean_manual()
         elif mode == "csv":
@@ -320,21 +329,33 @@ class EvaluationDatasetForm(forms.ModelForm):
         session_ids = set(session_ids_str.split(","))
         session_ids.discard("")  # Remove empty strings
 
-        if not session_ids:
+        filtered_session_ids_str = self.data.get("filtered_session_ids", "")
+        filtered_session_ids = set(filtered_session_ids_str.split(","))
+        filtered_session_ids.discard("")  # Remove empty strings
+
+        if not session_ids and not filtered_session_ids:
             raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
 
-        existing_sessions = ExperimentSession.objects.filter(team=self.team, external_id__in=session_ids).values_list(
-            "external_id", flat=True
-        )
+        intersection = session_ids & filtered_session_ids
+        if intersection:
+            raise forms.ValidationError(
+                "A session cannot be selected in both 'All Messages' and 'Filtered Messages'. "
+                f"The following sessions are in both lists: {', '.join(sorted(str(sid) for sid in intersection))}"
+            )
 
-        missing_sessions = set(session_ids) - set(existing_sessions)
+        all_session_ids = session_ids.union(filtered_session_ids)
+        existing_sessions = ExperimentSession.objects.filter(
+            team=self.team, external_id__in=all_session_ids
+        ).values_list("external_id", flat=True)
+
+        missing_sessions = all_session_ids - set(str(sid) for sid in existing_sessions)
         if missing_sessions:
             raise forms.ValidationError(
                 "The following sessions do not exist or you don't have permission to access them: "
-                f"{', '.join(missing_sessions)}"
+                f"{', '.join(sorted(missing_sessions))}"
             )
 
-        return session_ids
+        return session_ids, filtered_session_ids
 
     def _clean_manual(self):
         messages_json = self.data.get("messages_json", "")
@@ -481,8 +502,16 @@ class EvaluationDatasetForm(forms.ModelForm):
     def _save_clone(self):
         evaluation_messages = []
         session_ids = self.cleaned_data.get("session_ids", [])
-        if session_ids:
-            evaluation_messages = EvaluationMessage.create_from_sessions(self.team, session_ids)
+        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
+
+        if session_ids or filtered_session_ids:
+            evaluation_messages = EvaluationMessage.create_from_sessions(
+                team=self.team,
+                external_session_ids=session_ids,
+                filtered_session_ids=filtered_session_ids,
+                filter_params=self.filter_params,
+                timezone=self.timezone,
+            )
         return evaluation_messages
 
     def _save_manual(self):

@@ -202,7 +202,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
             if not value or not self.evaluation_run.generation_experiment_id:
                 return ""
             return reverse(
-                "experiments:experiment_session_view",
+                "chatbots:chatbot_session_view",
                 args=[self.kwargs["team_slug"], self.evaluation_run.generation_experiment.public_id, value],
             )
 

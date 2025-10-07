@@ -224,13 +224,22 @@ def _chip_session_url_factory(_, request, record, __):
 
 
 class EvaluationSessionsSelectionTable(tables.Table):
-    selection = columns.CheckBoxColumn(
-        accessor="external_id",
-        verbose_name="Select",
+    selection = TemplateColumn(
+        template_name="evaluations/session_checkbox.html",
+        verbose_name="All Messages",
         orderable=False,
-        attrs={
-            "input": {"class": "checkbox checkbox-primary session-checkbox", "@change": "updateSelectedSessions()"},
-            "th__input": {"style": "display: none;"},  # Hide the select all checkbox in header
+        extra_context={
+            "css_class": "checkbox checkbox-primary session-checkbox",
+            "js_function": "updateSelectedSessions()",
+        },
+    )
+    clone_filtered_only = TemplateColumn(
+        template_name="evaluations/session_checkbox.html",
+        verbose_name="Filtered Messages",
+        orderable=False,
+        extra_context={
+            "css_class": "checkbox checkbox-secondary filter-checkbox",
+            "js_function": "updateFilteredSessions()",
         },
     )
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")

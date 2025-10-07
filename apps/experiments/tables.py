@@ -224,11 +224,6 @@ class ExperimentVersionsTable(tables.Table):
     def render_created_at(self, record):
         return record.created_at if record.working_version_id else ""
 
-    def __init__(self, *args, **kwargs):
-        origin = kwargs.pop("entity_type", "experiments")
-        self.base_columns["actions"].extra_context = {"origin": origin}
-        super().__init__(*args, **kwargs)
-
 
 def _get_route_url(url_name, request, record, value):
     return reverse(url_name, args=[request.team.slug, record.parent_id, record.pk])
