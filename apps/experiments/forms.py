@@ -354,14 +354,20 @@ class AddMessagesToDatasetForm(forms.Form):
         label="Add to existing dataset",
         widget=forms.Select(attrs={"class": "select select-bordered w-full"}),
     )
+    new_dataset_name = forms.CharField(label="Create new dataset", required=False)
     message_ids = forms.CharField(required=True, widget=forms.HiddenInput(attrs={"x-model": "selectedMessages"}))
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        dataset_choices = [(dataset.id, dataset.name) for dataset in team.evaluationdataset_set.all()]
+        dataset_choices = [("", "---")] + [(dataset.id, dataset.name) for dataset in team.evaluationdataset_set.all()]
         self.fields["dataset"].choices = dataset_choices
+
+    def clean_message_ids(self):
+        message_ids = self.cleaned_data["message_ids"]
+        return [int(id) for id in message_ids.split(",")]
 
     def clean(self):
         cleaned_data = super().clean()
-        cleaned_data["message_ids"] = cleaned_data["message_ids"].split(",")
+        if cleaned_data["new_dataset_name"] and cleaned_data["dataset"]:
+            raise forms.ValidationError("You can only select an existing dataset or create a new one, not both.")
         return cleaned_data

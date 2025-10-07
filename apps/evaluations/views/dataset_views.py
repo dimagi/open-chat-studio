@@ -4,9 +4,8 @@ import logging
 from io import StringIO
 from uuid import UUID
 
-from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, OuterRef, Subquery
+from django.db.models import Count, OuterRef, Prefetch, Subquery
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -15,6 +14,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
@@ -481,53 +481,104 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
         return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
 
 
-def create_dataset_from_messages(request, team_slug: str, experiment_id: UUID, session_id: str):
-    # TODO: Support creating a new dataset here as well
-    form = AddMessagesToDatasetForm(team=request.team, data=request.POST)
-    if not form.is_valid():
-        messages.error(request, "There was an error with your submission.")
-        return redirect(reverse("evaluations:dataset_home", args=[team_slug]))
+class CreateDatasetFromSessionView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
+    permission_required = "evaluations.add_evaluationdataset"
+    template_name = "evaluations/dataset_create_from_session_form.html"
+    model = EvaluationDataset
+    form_class = AddMessagesToDatasetForm
+    extra_context = {
+        "title": "Create Dataset From Session",
+        "button_text": "Create Dataset",
+        "active_tab": "evaluation_datasets",
+    }
 
-    dataset = get_object_or_404(EvaluationDataset, id=form.cleaned_data["dataset"], team__slug=team_slug)
-    human_message_ids = [int(id) for id in request.POST["message_ids"].split(",")]
+    def get_form(self):
+        if self.request.method == "POST":
+            return self.form_class(self.request.team, self.request.POST)
+        return self.form_class(self.request.team)
 
-    next_message_query = ChatMessage.objects.filter(
-        chat_id=OuterRef("chat_id"),
-        created_at__gt=OuterRef("created_at"),
-    ).order_by("created_at")[:1]
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["form"] = self.get_form()
 
-    human_messages = (
-        ChatMessage.objects.filter(id__in=human_message_ids, message_type=ChatMessageType.HUMAN)
-        .annotate(
-            next_message_type=Subquery(next_message_query.values("message_type")),
-            next_message_id=Subquery(next_message_query.values("id")),
-            next_message_content=Subquery(next_message_query.values("content")),
+        # Get the session and its messages
+        experiment_id = self.kwargs.get("experiment_id")
+        session_id = self.kwargs.get("session_id")
+
+        session = get_object_or_404(
+            ExperimentSession, experiment__public_id=experiment_id, external_id=session_id, team=self.request.team
         )
-        .filter(next_message_type=ChatMessageType.AI)
-        .prefetch_related("input_message_trace")
-    )
-
-    eval_messages = []
-    for human_message in human_messages.iterator(chunk_size=100):
-        history = []
-
-        participant_data = {}
-        session_state = {}
-        if trace_message := human_message.input_message_trace.first():
-            participant_data = trace_message.participant_data or {}
-            session_state = trace_message.session_state or {}
-
-        eval_message = EvaluationMessage.objects.create(
-            input_chat_message=human_message,
-            expected_output_chat_message_id=human_message.next_message_id,
-            input=EvaluationMessageContent(content=human_message.content, role="human").model_dump(),
-            output=EvaluationMessageContent(content=human_message.next_message_content, role="ai").model_dump(),
-            history=history,
-            participant_data=participant_data,
-            session_state=session_state,
-            metadata={"session_id": session_id, "experiment_id": str(experiment_id)},
+        # Get all messages for this session with properly prefetched tags
+        messages = session.chat.messages.order_by("created_at").prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            )
         )
-        eval_messages.append(eval_message)
+        context["messages"] = messages
+        context["session"] = session
+        context["experiment"] = session.experiment
+        return context
 
-    dataset.messages.add(*eval_messages)
-    return redirect(reverse("evaluations:dataset_edit", args=[team_slug, dataset.id]))
+    def get_success_url(self):
+        return reverse("evaluations:dataset_home", args=[self.request.team.slug])
+
+    def post(self, request, team_slug: str, experiment_id: UUID, session_id: str):
+        form = self.get_form()
+
+        if not form.is_valid():
+            context = self.get_context_data()
+            context["form"] = form
+            return render(request, self.template_name, context)
+
+        data = form.cleaned_data
+        if dataset_id := data["dataset"]:
+            dataset = get_object_or_404(EvaluationDataset, id=dataset_id, team__slug=team_slug)
+        else:
+            dataset = EvaluationDataset.objects.create(
+                team=self.request.team,
+                name=data["new_dataset_name"],
+            )
+
+        human_message_ids = data["message_ids"]
+        next_message_query = ChatMessage.objects.filter(
+            chat_id=OuterRef("chat_id"),
+            created_at__gt=OuterRef("created_at"),
+        ).order_by("created_at")[:1]
+
+        human_messages = (
+            ChatMessage.objects.filter(id__in=human_message_ids, message_type=ChatMessageType.HUMAN)
+            .annotate(
+                next_message_type=Subquery(next_message_query.values("message_type")),
+                next_message_id=Subquery(next_message_query.values("id")),
+                next_message_content=Subquery(next_message_query.values("content")),
+            )
+            .filter(next_message_type=ChatMessageType.AI)
+            .prefetch_related("input_message_trace")
+        )
+
+        eval_messages = []
+        for human_message in human_messages.iterator(chunk_size=100):
+            history = []
+
+            participant_data = {}
+            session_state = {}
+            if trace_message := human_message.input_message_trace.first():
+                participant_data = trace_message.participant_data or {}
+                session_state = trace_message.session_state or {}
+
+            eval_message = EvaluationMessage.objects.create(
+                input_chat_message=human_message,
+                expected_output_chat_message_id=human_message.next_message_id,
+                input=EvaluationMessageContent(content=human_message.content, role="human").model_dump(),
+                output=EvaluationMessageContent(content=human_message.next_message_content, role="ai").model_dump(),
+                history=history,
+                participant_data=participant_data,
+                session_state=session_state,
+                metadata={"session_id": session_id, "experiment_id": str(experiment_id)},
+            )
+            eval_messages.append(eval_message)
+
+        dataset.messages.add(*eval_messages)
+        return redirect(reverse("evaluations:dataset_home", args=[self.request.team.slug]))

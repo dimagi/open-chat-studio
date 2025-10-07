@@ -104,7 +104,7 @@ urlpatterns = [
     ),
     path(
         "e/<uuid:experiment_id>/s/<str:session_id>/dataset/create",
-        dataset_views.create_dataset_from_messages,
+        dataset_views.CreateDatasetFromSessionView.as_view(),
         name="create_from_messages",
     ),
 ]

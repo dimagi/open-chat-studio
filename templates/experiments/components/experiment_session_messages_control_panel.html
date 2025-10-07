@@ -13,31 +13,9 @@
     <div class="w-full flex justify-between gap-4">
       <div>
         {% if perms.evaluations.add_evaluationdataset %}
-          <button
-            x-show="isSelectingMessages"
-            x-cloak
-            type="button"
-            class="btn btn-sm btn-primary"
-            onclick="createDatasetModal.showModal()"
-            :disabled="selectedMessages.length === 0">
-            <span>Continue (<span x-text="selectedMessages.length"></span> selected)</span>
-          </button>
-          <button
-            x-show="isSelectingMessages"
-            x-cloak
-            type="button"
-            class="btn btn-sm"
-            @click="isSelectingMessages = false; selectedMessages = []; $refs.createDatasetCheckbox.checked=false; $refs.createDatasetCheckbox.dispatchEvent(new Event('change', { bubbles: true }))">
-            Cancel
-          </button>
-          <button
-            x-show="!isSelectingMessages"
-            type="button"
-            class="btn btn-sm btn-primary"
-            @click="$refs.createDatasetCheckbox.checked=true; $refs.showAllCheckbox ? $refs.showAllCheckbox.checked=true : ''; $refs.createDatasetCheckbox.dispatchEvent(new Event('change', { bubbles: true }))">
-            Create Dataset
-          </button>
-          <input hidden name="create_dataset" type="checkbox" x-ref="createDatasetCheckbox" {% if request.GET.create_dataset == "on" %}checked{% endif %} \>
+          <a
+            href="{% url 'evaluations:create_from_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
+            class="btn btn-sm btn-primary">Create Dataset</a>
         {% endif %}
       </div>
     
@@ -212,25 +190,3 @@
         <button>close</button>
     </form>
 </dialog>
-
-{% if dataset_form %}
-<!-- Create Dataset Modal -->
-<dialog id="createDatasetModal" class="modal">
-    <div class="modal-box">
-        <h3 class="font-bold text-lg"></h3>
-        <p class="py-4">
-            Select the dataset to which you want to add the selected <span x-text="selectedMessages.length"></span> messages.
-        </p>
-        <form action="{% url 'evaluations:create_from_messages' team.slug experiment.public_id experiment_session.external_id %}" method="post">
-            {% csrf_token %}
-            {% render_field dataset_form.dataset %}
-            {% render_field dataset_form.message_ids %}
-            <button type="submit" class="btn btn-primary">Continue</button>
-            <button class="btn" type="button" onclick="createDatasetModal.close()">Cancel</button>
-        </form>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-        <button>close</button>
-    </form>
-</dialog>
-{% endif %}
