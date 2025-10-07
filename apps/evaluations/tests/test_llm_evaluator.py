@@ -153,3 +153,45 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
     assert "result" in result_2.output
     assert "evaluation" in result_2.output["result"]
     assert result_2.output["result"]["evaluation"] == "context_variables_working"
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_evaluator_with_missing_output(get_llm_service, llm_provider, llm_provider_model):
+    """Test that the evaluator handles evaluation messages with missing AI output gracefully."""
+    service = build_fake_llm_service(responses=[{"assessment": "no response to evaluate"}], token_counts=[30])
+    get_llm_service.return_value = service
+
+    prompt = "Evaluate the AI response to: {input.content}. Response: {output.content}"
+
+    # Create an evaluation message with no AI output (failed to generate)
+    evaluation_message = EvaluationMessageFactory(
+        input={"content": "Hello, I need help", "role": "human"},
+        output={},  # No AI response
+        expected_output_chat_message=None,
+        create_chat_messages=True,
+    )
+
+    llm_evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt=prompt,
+        output_schema={"assessment": "the assessment result"},
+    )
+    evaluator = EvaluatorFactory(params=llm_evaluator.model_dump(), type="LlmEvaluator")
+    dataset = EvaluationDatasetFactory(messages=[evaluation_message])
+    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory(evaluators=[evaluator], dataset=dataset))
+
+    evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
+
+    evaluate_single_message_task(evaluation_run.id, [evaluator.id], evaluation_message.id)
+
+    evaluation_run.refresh_from_db()
+    results = evaluation_run.results.all()
+
+    assert len(results) == 1
+    # Should handle missing output gracefully
+    assert results[0].output["message"]["output"] == {}
+    assert results[0].output["message"]["input"] == {"content": "Hello, I need help", "role": "human"}
+    assert "result" in results[0].output
+    assert "assessment" in results[0].output["result"]

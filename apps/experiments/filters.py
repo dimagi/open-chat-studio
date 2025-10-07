@@ -84,6 +84,21 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
         return queryset.exclude(chat_tags_condition | message_tags_condition)
 
 
+class MessageTagsFilter(ChatMessageTagsFilter):
+    """Simple tags filter for messages - works directly on message tags."""
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        return queryset.filter(tags__name__in=value)
+
+    def apply_all_of(self, queryset, value, timezone=None):
+        for tag in value:
+            queryset = queryset.filter(tags__name=tag)
+        return queryset
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        return queryset.exclude(tags__name__in=value)
+
+
 class VersionsFilter(ChoiceColumnFilter):
     query_param: str = "versions"
     label: str = "Versions"
@@ -114,6 +129,21 @@ class VersionsFilter(ChoiceColumnFilter):
     def apply_all_of(self, queryset, value, timezone=None):
         combined_query = self._get_messages_queryset(value, operator.and_)
         return queryset.filter(combined_query)
+
+
+class MessageVersionsFilter(VersionsFilter):
+    """Versions filter for messages - works directly on message version tags."""
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        return queryset.filter(tags__name__in=value, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+
+    def apply_all_of(self, queryset, value, timezone=None):
+        for tag in value:
+            queryset = queryset.filter(tags__name=tag, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+        return queryset
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        return queryset.exclude(tags__name__in=value, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
 
 
 class ChannelsFilter(ChoiceColumnFilter):
@@ -171,3 +201,13 @@ class ExperimentSessionFilter(MultiColumnFilter):
         queryset = queryset.annotate(first_message_created_at=Subquery(first_message_subquery))
         queryset = queryset.annotate(last_message_created_at=Subquery(last_message_subquery))
         return queryset
+
+
+class ChatMessageFilter(MultiColumnFilter):
+    """Filter for chat messages using tags, timestamps, and versions."""
+
+    filters: ClassVar[Sequence[ColumnFilter]] = [
+        MessageTagsFilter(),
+        TimestampFilter(label="Message Time", column="created_at", query_param="last_message"),
+        MessageVersionsFilter(),
+    ]
