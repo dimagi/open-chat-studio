@@ -1,0 +1,47 @@
+{
+    "service": "OpenAI",
+    "voices": [
+      {
+        "language": "" ,
+        "language_code": "" ,
+        "name": "alloy",
+        "gender": "Male",
+        "neural": false
+      },
+      {
+        "language": "" ,
+        "language_code": "" ,
+        "name": "echo",
+        "gender": "Male",
+        "neural": false
+      },
+      {
+        "language": "" ,
+        "language_code": "" ,
+        "name": "fable",
+        "gender": "Male",
+        "neural": false
+      },
+      {
+        "language": "" ,
+        "language_code": "" ,
+        "name": "onyx",
+        "gender": "Male",
+        "neural": false
+      },
+      {
+        "language": "" ,
+        "language_code": "" ,
+        "name": "nova",
+        "gender": "Female",
+        "neural": false
+      },
+      {
+        "language": "" ,
+        "language_code": "" ,
+        "name": "shimmer",
+        "gender": "Female",
+        "neural": false
+      }
+    ]
+  }

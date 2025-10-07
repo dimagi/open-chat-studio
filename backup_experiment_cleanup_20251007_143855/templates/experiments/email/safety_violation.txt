@@ -1,0 +1,4 @@
+A safety layer detected a violation:
+
+Safety layer link: {{ safety_layer_link }}
+Session link: {{ session_link }}

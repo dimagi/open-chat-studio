@@ -1,0 +1,3218 @@
+{
+    "service": "Azure",
+    "voices": [
+        {
+            "language_code": "af-ZA",
+            "name": "AdriNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Afrikaans (South Africa)"            
+        },
+        {
+            "language_code": "af-ZA",
+            "name": "WillemNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Afrikaans (South Africa)"            
+        },
+        {
+            "language_code": "am-ET",
+            "name": "MekdesNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Amharic (Ethiopia)"            
+        },
+        {
+            "language_code": "am-ET",
+            "name": "AmehaNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Amharic (Ethiopia)"            
+        },
+        {
+            "language_code": "ar-AE",
+            "name": "FatimaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (United Arab Emirates)"            
+        },
+        {
+            "language_code": "ar-AE",
+            "name": "HamdanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (United Arab Emirates)"            
+        },
+        {
+            "language_code": "ar-BH",
+            "name": "LailaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Bahrain)"            
+        },
+        {
+            "language_code": "ar-BH",
+            "name": "AliNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Bahrain)"            
+        },
+        {
+            "language_code": "ar-DZ",
+            "name": "AminaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Algeria)"            
+        },
+        {
+            "language_code": "ar-DZ",
+            "name": "IsmaelNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Algeria)"            
+        },
+        {
+            "language_code": "ar-EG",
+            "name": "SalmaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Egypt)"            
+        },
+        {
+            "language_code": "ar-EG",
+            "name": "ShakirNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Egypt)"            
+        },
+        {
+            "language_code": "ar-IQ",
+            "name": "RanaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Iraq)"            
+        },
+        {
+            "language_code": "ar-IQ",
+            "name": "BasselNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Iraq)"            
+        },
+        {
+            "language_code": "ar-JO",
+            "name": "SanaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Jordan)"            
+        },
+        {
+            "language_code": "ar-JO",
+            "name": "TaimNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Jordan)"            
+        },
+        {
+            "language_code": "ar-KW",
+            "name": "NouraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Kuwait)"            
+        },
+        {
+            "language_code": "ar-KW",
+            "name": "FahedNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Kuwait)"            
+        },
+        {
+            "language_code": "ar-LB",
+            "name": "LaylaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Lebanon)"            
+        },
+        {
+            "language_code": "ar-LB",
+            "name": "RamiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Lebanon)"            
+        },
+        {
+            "language_code": "ar-LY",
+            "name": "ImanNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Libya)"            
+        },
+        {
+            "language_code": "ar-LY",
+            "name": "OmarNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Libya)"            
+        },
+        {
+            "language_code": "ar-MA",
+            "name": "MounaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Morocco)"            
+        },
+        {
+            "language_code": "ar-MA",
+            "name": "JamalNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Morocco)"            
+        },
+        {
+            "language_code": "ar-OM",
+            "name": "AyshaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Oman)"            
+        },
+        {
+            "language_code": "ar-OM",
+            "name": "AbdullahNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Oman)"            
+        },
+        {
+            "language_code": "ar-QA",
+            "name": "AmalNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Qatar)"            
+        },
+        {
+            "language_code": "ar-QA",
+            "name": "MoazNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Qatar)"            
+        },
+        {
+            "language_code": "ar-SA",
+            "name": "ZariyahNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Saudi Arabia)"            
+        },
+        {
+            "language_code": "ar-SA",
+            "name": "HamedNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Saudi Arabia)"            
+        },
+        {
+            "language_code": "ar-SY",
+            "name": "AmanyNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Syria)"            
+        },
+        {
+            "language_code": "ar-SY",
+            "name": "LaithNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Syria)"            
+        },
+        {
+            "language_code": "ar-TN",
+            "name": "ReemNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Tunisia)"            
+        },
+        {
+            "language_code": "ar-TN",
+            "name": "HediNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Tunisia)"            
+        },
+        {
+            "language_code": "ar-YE",
+            "name": "MaryamNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Arabic (Yemen)"            
+        },
+        {
+            "language_code": "ar-YE",
+            "name": "SalehNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Arabic (Yemen)"            
+        },
+        {
+            "language_code": "az-AZ",
+            "name": "BanuNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Azerbaijani (Latin, Azerbaijan)"            
+        },
+        {
+            "language_code": "az-AZ",
+            "name": "BabekNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Azerbaijani (Latin, Azerbaijan)"            
+        },
+        {
+            "language_code": "bg-BG",
+            "name": "KalinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Bulgarian (Bulgaria)"            
+        },
+        {
+            "language_code": "bg-BG",
+            "name": "BorislavNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Bulgarian (Bulgaria)"            
+        },
+        {
+            "language_code": "bn-BD",
+            "name": "NabanitaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Bangla (Bangladesh)"            
+        },
+        {
+            "language_code": "bn-BD",
+            "name": "PradeepNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Bangla (Bangladesh)"            
+        },
+        {
+            "language_code": "bn-IN",
+            "name": "TanishaaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Bengali (India)"            
+        },
+        {
+            "language_code": "bn-IN",
+            "name": "BashkarNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Bengali (India)"            
+        },
+        {
+            "language_code": "bs-BA",
+            "name": "VesnaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Bosnian (Bosnia and Herzegovina)"            
+        },
+        {
+            "language_code": "bs-BA",
+            "name": "GoranNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Bosnian (Bosnia and Herzegovina)"            
+        },
+        {
+            "language_code": "ca-ES",
+            "name": "JoanaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Catalan"            
+        },
+        {
+            "language_code": "ca-ES",
+            "name": "EnricNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Catalan"            
+        },
+        {
+            "language_code": "ca-ES",
+            "name": "AlbaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Catalan"            
+        },
+        {
+            "language_code": "cs-CZ",
+            "name": "VlastaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Czech (Czechia)"            
+        },
+        {
+            "language_code": "cs-CZ",
+            "name": "AntoninNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Czech (Czechia)"            
+        },
+        {
+            "language_code": "cy-GB",
+            "name": "NiaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Welsh (United Kingdom)"            
+        },
+        {
+            "language_code": "cy-GB",
+            "name": "AledNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Welsh (United Kingdom)"            
+        },
+        {
+            "language_code": "da-DK",
+            "name": "ChristelNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Danish (Denmark)"            
+        },
+        {
+            "language_code": "da-DK",
+            "name": "JeppeNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Danish (Denmark)"            
+        },
+        {
+            "language_code": "de-AT",
+            "name": "IngridNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "German (Austria)"            
+        },
+        {
+            "language_code": "de-AT",
+            "name": "JonasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "German (Austria)"            
+        },
+        {
+            "language_code": "de-CH",
+            "name": "LeniNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "German (Switzerland)"            
+        },
+        {
+            "language_code": "de-CH",
+            "name": "JanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "German (Switzerland)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "KatjaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "ConradNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "AmalaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "BerndNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "ChristophNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "ElkeNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "KasperNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "KillianNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "KlarissaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "KlausNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "LouisaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "MajaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "RalfNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "de-DE",
+            "name": "TanjaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "German (Germany)"            
+        },
+        {
+            "language_code": "el-GR",
+            "name": "AthinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Greek (Greece)"            
+        },
+        {
+            "language_code": "el-GR",
+            "name": "NestorasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Greek (Greece)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "NatashaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "WilliamNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "AnnetteNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "CarlyNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "DarrenNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "DuncanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "ElsieNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "FreyaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "JoanneNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "KenNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "KimNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "NeilNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "TimNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-AU",
+            "name": "TinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Australia)"            
+        },
+        {
+            "language_code": "en-CA",
+            "name": "ClaraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Canada)"            
+        },
+        {
+            "language_code": "en-CA",
+            "name": "LiamNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Canada)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "SoniaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "RyanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "LibbyNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "AbbiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "AlfieNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "BellaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "ElliotNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "EthanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "HollieNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "NoahNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "OliverNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "OliviaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-GB",
+            "name": "ThomasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United Kingdom)"            
+        },
+        {
+            "language_code": "en-HK",
+            "name": "YanNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Hong Kong SAR)"            
+        },
+        {
+            "language_code": "en-HK",
+            "name": "SamNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Hong Kong SAR)"            
+        },
+        {
+            "language_code": "en-IE",
+            "name": "EmilyNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Ireland)"            
+        },
+        {
+            "language_code": "en-IE",
+            "name": "ConnorNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Ireland)"            
+        },
+        {
+            "language_code": "en-IN",
+            "name": "NeerjaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (India)"            
+        },
+        {
+            "language_code": "en-IN",
+            "name": "PrabhatNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (India)"            
+        },
+        {
+            "language_code": "en-KE",
+            "name": "AsiliaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Kenya)"            
+        },
+        {
+            "language_code": "en-KE",
+            "name": "ChilembaNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Kenya)"            
+        },
+        {
+            "language_code": "en-NG",
+            "name": "EzinneNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Nigeria)"            
+        },
+        {
+            "language_code": "en-NG",
+            "name": "AbeoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Nigeria)"            
+        },
+        {
+            "language_code": "en-NZ",
+            "name": "MollyNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (New Zealand)"            
+        },
+        {
+            "language_code": "en-NZ",
+            "name": "MitchellNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (New Zealand)"            
+        },
+        {
+            "language_code": "en-PH",
+            "name": "RosaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Philippines)"            
+        },
+        {
+            "language_code": "en-PH",
+            "name": "JamesNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Philippines)"            
+        },
+        {
+            "language_code": "en-SG",
+            "name": "LunaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Singapore)"            
+        },
+        {
+            "language_code": "en-SG",
+            "name": "WayneNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Singapore)"            
+        },
+        {
+            "language_code": "en-TZ",
+            "name": "ImaniNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (Tanzania)"            
+        },
+        {
+            "language_code": "en-TZ",
+            "name": "ElimuNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (Tanzania)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "JennyMultilingualNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "JennyNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "GuyNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "AriaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "DavisNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "AmberNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "AshleyNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "BrandonNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "ChristopherNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "CoraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "ElizabethNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "EricNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "JacobNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "JaneNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "JasonNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "MichelleNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "MonicaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "NancyNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "RogerNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "SaraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "SteffanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "TonyNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "AIGenerate1Neural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "AIGenerate2Neural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "AndrewNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "BrianNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "EmmaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "JennyMultilingualV2Neural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-US",
+            "name": "RyanMultilingualNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (United States)"            
+        },
+        {
+            "language_code": "en-ZA",
+            "name": "LeahNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "English (South Africa)"            
+        },
+        {
+            "language_code": "en-ZA",
+            "name": "LukeNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "English (South Africa)"            
+        },
+        {
+            "language_code": "es-AR",
+            "name": "ElenaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Argentina)"            
+        },
+        {
+            "language_code": "es-AR",
+            "name": "TomasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Argentina)"            
+        },
+        {
+            "language_code": "es-BO",
+            "name": "SofiaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Bolivia)"            
+        },
+        {
+            "language_code": "es-BO",
+            "name": "MarceloNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Bolivia)"            
+        },
+        {
+            "language_code": "es-CL",
+            "name": "CatalinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Chile)"            
+        },
+        {
+            "language_code": "es-CL",
+            "name": "LorenzoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Chile)"            
+        },
+        {
+            "language_code": "es-CO",
+            "name": "SalomeNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Colombia)"            
+        },
+        {
+            "language_code": "es-CO",
+            "name": "GonzaloNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Colombia)"            
+        },
+        {
+            "language_code": "es-CR",
+            "name": "MariaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Costa Rica)"            
+        },
+        {
+            "language_code": "es-CR",
+            "name": "JuanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Costa Rica)"            
+        },
+        {
+            "language_code": "es-CU",
+            "name": "BelkysNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Cuba)"            
+        },
+        {
+            "language_code": "es-CU",
+            "name": "ManuelNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Cuba)"            
+        },
+        {
+            "language_code": "es-DO",
+            "name": "RamonaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Dominican Republic)"            
+        },
+        {
+            "language_code": "es-DO",
+            "name": "EmilioNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Dominican Republic)"            
+        },
+        {
+            "language_code": "es-EC",
+            "name": "AndreaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Ecuador)"            
+        },
+        {
+            "language_code": "es-EC",
+            "name": "LuisNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Ecuador)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "ElviraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "AlvaroNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "AbrilNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "ArnauNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "DarioNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "EliasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "EstrellaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "IreneNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "LaiaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "LiaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "NilNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "SaulNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "TeoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "TrianaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-ES",
+            "name": "VeraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Spain)"            
+        },
+        {
+            "language_code": "es-GQ",
+            "name": "TeresaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Equatorial Guinea)"            
+        },
+        {
+            "language_code": "es-GQ",
+            "name": "JavierNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Equatorial Guinea)"            
+        },
+        {
+            "language_code": "es-GT",
+            "name": "MartaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Guatemala)"            
+        },
+        {
+            "language_code": "es-GT",
+            "name": "AndresNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Guatemala)"            
+        },
+        {
+            "language_code": "es-HN",
+            "name": "KarlaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Honduras)"            
+        },
+        {
+            "language_code": "es-HN",
+            "name": "CarlosNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Honduras)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "DaliaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "JorgeNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "BeatrizNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "CandelaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "CarlotaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "CecilioNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "GerardoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "LarissaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "LibertoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "LucianoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "MarinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "NuriaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "PelayoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "RenataNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-MX",
+            "name": "YagoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Mexico)"            
+        },
+        {
+            "language_code": "es-NI",
+            "name": "YolandaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Nicaragua)"            
+        },
+        {
+            "language_code": "es-NI",
+            "name": "FedericoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Nicaragua)"            
+        },
+        {
+            "language_code": "es-PA",
+            "name": "MargaritaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Panama)"            
+        },
+        {
+            "language_code": "es-PA",
+            "name": "RobertoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Panama)"            
+        },
+        {
+            "language_code": "es-PE",
+            "name": "CamilaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Peru)"            
+        },
+        {
+            "language_code": "es-PE",
+            "name": "AlexNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Peru)"            
+        },
+        {
+            "language_code": "es-PR",
+            "name": "KarinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Puerto Rico)"            
+        },
+        {
+            "language_code": "es-PR",
+            "name": "VictorNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Puerto Rico)"            
+        },
+        {
+            "language_code": "es-PY",
+            "name": "TaniaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Paraguay)"            
+        },
+        {
+            "language_code": "es-PY",
+            "name": "MarioNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Paraguay)"            
+        },
+        {
+            "language_code": "es-SV",
+            "name": "LorenaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (El Salvador)"            
+        },
+        {
+            "language_code": "es-SV",
+            "name": "RodrigoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (El Salvador)"            
+        },
+        {
+            "language_code": "es-US",
+            "name": "PalomaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (United States)"            
+        },
+        {
+            "language_code": "es-US",
+            "name": "AlonsoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (United States)"            
+        },
+        {
+            "language_code": "es-UY",
+            "name": "ValentinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Uruguay)"            
+        },
+        {
+            "language_code": "es-UY",
+            "name": "MateoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Uruguay)"            
+        },
+        {
+            "language_code": "es-VE",
+            "name": "PaolaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Spanish (Venezuela)"            
+        },
+        {
+            "language_code": "es-VE",
+            "name": "SebastianNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Spanish (Venezuela)"            
+        },
+        {
+            "language_code": "et-EE",
+            "name": "AnuNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Estonian (Estonia)"            
+        },
+        {
+            "language_code": "et-EE",
+            "name": "KertNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Estonian (Estonia)"            
+        },
+        {
+            "language_code": "eu-ES",
+            "name": "AinhoaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Basque"            
+        },
+        {
+            "language_code": "eu-ES",
+            "name": "AnderNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Basque"            
+        },
+        {
+            "language_code": "fa-IR",
+            "name": "DilaraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Persian (Iran)"            
+        },
+        {
+            "language_code": "fa-IR",
+            "name": "FaridNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Persian (Iran)"            
+        },
+        {
+            "language_code": "fi-FI",
+            "name": "SelmaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Finnish (Finland)"            
+        },
+        {
+            "language_code": "fi-FI",
+            "name": "HarriNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Finnish (Finland)"            
+        },
+        {
+            "language_code": "fi-FI",
+            "name": "NooraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Finnish (Finland)"            
+        },
+        {
+            "language_code": "fil-PH",
+            "name": "BlessicaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Filipino (Philippines)"            
+        },
+        {
+            "language_code": "fil-PH",
+            "name": "AngeloNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Filipino (Philippines)"            
+        },
+        {
+            "language_code": "fr-BE",
+            "name": "CharlineNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "French (Belgium)"            
+        },
+        {
+            "language_code": "fr-BE",
+            "name": "GerardNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "French (Belgium)"            
+        },
+        {
+            "language_code": "fr-CA",
+            "name": "SylvieNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "French (Canada)"            
+        },
+        {
+            "language_code": "fr-CA",
+            "name": "JeanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "French (Canada)"            
+        },
+        {
+            "language_code": "fr-CA",
+            "name": "AntoineNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "French (Canada)"            
+        },
+        {
+            "language_code": "fr-CH",
+            "name": "ArianeNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "French (Switzerland)"            
+        },
+        {
+            "language_code": "fr-CH",
+            "name": "FabriceNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "French (Switzerland)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "DeniseNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "HenriNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "AlainNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "BrigitteNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "CelesteNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "ClaudeNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "CoralieNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "JacquelineNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "JeromeNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "JosephineNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "MauriceNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "YvesNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "fr-FR",
+            "name": "YvetteNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "French (France)"            
+        },
+        {
+            "language_code": "ga-IE",
+            "name": "OrlaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Irish (Ireland)"            
+        },
+        {
+            "language_code": "ga-IE",
+            "name": "ColmNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Irish (Ireland)"            
+        },
+        {
+            "language_code": "gl-ES",
+            "name": "SabelaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Galician"            
+        },
+        {
+            "language_code": "gl-ES",
+            "name": "RoiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Galician"            
+        },
+        {
+            "language_code": "gu-IN",
+            "name": "DhwaniNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Gujarati (India)"            
+        },
+        {
+            "language_code": "gu-IN",
+            "name": "NiranjanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Gujarati (India)"            
+        },
+        {
+            "language_code": "he-IL",
+            "name": "HilaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Hebrew (Israel)"            
+        },
+        {
+            "language_code": "he-IL",
+            "name": "AvriNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Hebrew (Israel)"            
+        },
+        {
+            "language_code": "hi-IN",
+            "name": "SwaraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Hindi (India)"            
+        },
+        {
+            "language_code": "hi-IN",
+            "name": "MadhurNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Hindi (India)"            
+        },
+        {
+            "language_code": "hr-HR",
+            "name": "GabrijelaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Croatian (Croatia)"            
+        },
+        {
+            "language_code": "hr-HR",
+            "name": "SreckoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Croatian (Croatia)"            
+        },
+        {
+            "language_code": "hu-HU",
+            "name": "NoemiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Hungarian (Hungary)"            
+        },
+        {
+            "language_code": "hu-HU",
+            "name": "TamasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Hungarian (Hungary)"            
+        },
+        {
+            "language_code": "hy-AM",
+            "name": "AnahitNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Armenian (Armenia)"            
+        },
+        {
+            "language_code": "hy-AM",
+            "name": "HaykNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Armenian (Armenia)"            
+        },
+        {
+            "language_code": "id-ID",
+            "name": "GadisNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Indonesian (Indonesia)"            
+        },
+        {
+            "language_code": "id-ID",
+            "name": "ArdiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Indonesian (Indonesia)"            
+        },
+        {
+            "language_code": "is-IS",
+            "name": "GudrunNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Icelandic (Iceland)"            
+        },
+        {
+            "language_code": "is-IS",
+            "name": "GunnarNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Icelandic (Iceland)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "ElsaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "IsabellaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "DiegoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "BenignoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "CalimeroNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "CataldoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "FabiolaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "FiammaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "GianniNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "ImeldaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "IrmaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "LisandroNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "PalmiraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "PierinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "it-IT",
+            "name": "RinaldoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Italian (Italy)"            
+        },
+        {
+            "language_code": "ja-JP",
+            "name": "NanamiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Japanese (Japan)"            
+        },
+        {
+            "language_code": "ja-JP",
+            "name": "KeitaNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Japanese (Japan)"            
+        },
+        {
+            "language_code": "ja-JP",
+            "name": "AoiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Japanese (Japan)"            
+        },
+        {
+            "language_code": "ja-JP",
+            "name": "DaichiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Japanese (Japan)"            
+        },
+        {
+            "language_code": "ja-JP",
+            "name": "MayuNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Japanese (Japan)"            
+        },
+        {
+            "language_code": "ja-JP",
+            "name": "NaokiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Japanese (Japan)"            
+        },
+        {
+            "language_code": "ja-JP",
+            "name": "ShioriNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Japanese (Japan)"            
+        },
+        {
+            "language_code": "jv-ID",
+            "name": "SitiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Javanese (Latin, Indonesia)"            
+        },
+        {
+            "language_code": "jv-ID",
+            "name": "DimasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Javanese (Latin, Indonesia)"            
+        },
+        {
+            "language_code": "ka-GE",
+            "name": "EkaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Georgian (Georgia)"            
+        },
+        {
+            "language_code": "ka-GE",
+            "name": "GiorgiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Georgian (Georgia)"            
+        },
+        {
+            "language_code": "kk-KZ",
+            "name": "AigulNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Kazakh (Kazakhstan)"            
+        },
+        {
+            "language_code": "kk-KZ",
+            "name": "DauletNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Kazakh (Kazakhstan)"            
+        },
+        {
+            "language_code": "km-KH",
+            "name": "SreymomNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Khmer (Cambodia)"            
+        },
+        {
+            "language_code": "km-KH",
+            "name": "PisethNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Khmer (Cambodia)"            
+        },
+        {
+            "language_code": "kn-IN",
+            "name": "SapnaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Kannada (India)"            
+        },
+        {
+            "language_code": "kn-IN",
+            "name": "GaganNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Kannada (India)"            
+        },
+        {
+            "language_code": "ko-KR",
+            "name": "SunHiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Korean (Korea)"            
+        },
+        {
+            "language_code": "ko-KR",
+            "name": "InJoonNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Korean (Korea)"            
+        },
+        {
+            "language_code": "ko-KR",
+            "name": "BongJinNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Korean (Korea)"            
+        },
+        {
+            "language_code": "ko-KR",
+            "name": "GookMinNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Korean (Korea)"            
+        },
+        {
+            "language_code": "ko-KR",
+            "name": "JiMinNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Korean (Korea)"            
+        },
+        {
+            "language_code": "ko-KR",
+            "name": "SeoHyeonNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Korean (Korea)"            
+        },
+        {
+            "language_code": "ko-KR",
+            "name": "SoonBokNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Korean (Korea)"            
+        },
+        {
+            "language_code": "ko-KR",
+            "name": "YuJinNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Korean (Korea)"            
+        },
+        {
+            "language_code": "lo-LA",
+            "name": "KeomanyNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Lao (Laos)"            
+        },
+        {
+            "language_code": "lo-LA",
+            "name": "ChanthavongNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Lao (Laos)"            
+        },
+        {
+            "language_code": "lt-LT",
+            "name": "OnaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Lithuanian (Lithuania)"            
+        },
+        {
+            "language_code": "lt-LT",
+            "name": "LeonasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Lithuanian (Lithuania)"            
+        },
+        {
+            "language_code": "lv-LV",
+            "name": "EveritaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Latvian (Latvia)"            
+        },
+        {
+            "language_code": "lv-LV",
+            "name": "NilsNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Latvian (Latvia)"            
+        },
+        {
+            "language_code": "mk-MK",
+            "name": "MarijaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Macedonian (North Macedonia)"            
+        },
+        {
+            "language_code": "mk-MK",
+            "name": "AleksandarNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Macedonian (North Macedonia)"            
+        },
+        {
+            "language_code": "ml-IN",
+            "name": "SobhanaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Malayalam (India)"            
+        },
+        {
+            "language_code": "ml-IN",
+            "name": "MidhunNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Malayalam (India)"            
+        },
+        {
+            "language_code": "mn-MN",
+            "name": "YesuiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Mongolian (Mongolia)"            
+        },
+        {
+            "language_code": "mn-MN",
+            "name": "BataaNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Mongolian (Mongolia)"            
+        },
+        {
+            "language_code": "mr-IN",
+            "name": "AarohiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Marathi (India)"            
+        },
+        {
+            "language_code": "mr-IN",
+            "name": "ManoharNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Marathi (India)"            
+        },
+        {
+            "language_code": "ms-MY",
+            "name": "YasminNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Malay (Malaysia)"            
+        },
+        {
+            "language_code": "ms-MY",
+            "name": "OsmanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Malay (Malaysia)"            
+        },
+        {
+            "language_code": "mt-MT",
+            "name": "GraceNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Maltese (Malta)"            
+        },
+        {
+            "language_code": "mt-MT",
+            "name": "JosephNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Maltese (Malta)"            
+        },
+        {
+            "language_code": "my-MM",
+            "name": "NilarNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Burmese (Myanmar)"            
+        },
+        {
+            "language_code": "my-MM",
+            "name": "ThihaNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Burmese (Myanmar)"            
+        },
+        {
+            "language_code": "nb-NO",
+            "name": "PernilleNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Norwegian Bokm\u00e5l (Norway)"            
+        },
+        {
+            "language_code": "nb-NO",
+            "name": "FinnNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Norwegian Bokm\u00e5l (Norway)"            
+        },
+        {
+            "language_code": "nb-NO",
+            "name": "IselinNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Norwegian Bokm\u00e5l (Norway)"            
+        },
+        {
+            "language_code": "ne-NP",
+            "name": "HemkalaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Nepali (Nepal)"            
+        },
+        {
+            "language_code": "ne-NP",
+            "name": "SagarNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Nepali (Nepal)"            
+        },
+        {
+            "language_code": "nl-BE",
+            "name": "DenaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Dutch (Belgium)"            
+        },
+        {
+            "language_code": "nl-BE",
+            "name": "ArnaudNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Dutch (Belgium)"            
+        },
+        {
+            "language_code": "nl-NL",
+            "name": "FennaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Dutch (Netherlands)"            
+        },
+        {
+            "language_code": "nl-NL",
+            "name": "MaartenNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Dutch (Netherlands)"            
+        },
+        {
+            "language_code": "nl-NL",
+            "name": "ColetteNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Dutch (Netherlands)"            
+        },
+        {
+            "language_code": "pl-PL",
+            "name": "AgnieszkaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Polish (Poland)"            
+        },
+        {
+            "language_code": "pl-PL",
+            "name": "MarekNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Polish (Poland)"            
+        },
+        {
+            "language_code": "pl-PL",
+            "name": "ZofiaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Polish (Poland)"            
+        },
+        {
+            "language_code": "ps-AF",
+            "name": "LatifaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Pashto (Afghanistan)"            
+        },
+        {
+            "language_code": "ps-AF",
+            "name": "GulNawazNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Pashto (Afghanistan)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "FranciscaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "AntonioNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "BrendaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "DonatoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "ElzaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "FabioNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "GiovannaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "HumbertoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "JulioNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "LeilaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "LeticiaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "ManuelaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "NicolauNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "ValerioNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-BR",
+            "name": "YaraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Portuguese (Brazil)"            
+        },
+        {
+            "language_code": "pt-PT",
+            "name": "RaquelNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Portuguese (Portugal)"            
+        },
+        {
+            "language_code": "pt-PT",
+            "name": "DuarteNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Portuguese (Portugal)"            
+        },
+        {
+            "language_code": "pt-PT",
+            "name": "FernandaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Portuguese (Portugal)"            
+        },
+        {
+            "language_code": "ro-RO",
+            "name": "AlinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Romanian (Romania)"            
+        },
+        {
+            "language_code": "ro-RO",
+            "name": "EmilNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Romanian (Romania)"            
+        },
+        {
+            "language_code": "ru-RU",
+            "name": "SvetlanaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Russian (Russia)"            
+        },
+        {
+            "language_code": "ru-RU",
+            "name": "DmitryNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Russian (Russia)"            
+        },
+        {
+            "language_code": "ru-RU",
+            "name": "DariyaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Russian (Russia)"            
+        },
+        {
+            "language_code": "si-LK",
+            "name": "ThiliniNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Sinhala (Sri Lanka)"            
+        },
+        {
+            "language_code": "si-LK",
+            "name": "SameeraNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Sinhala (Sri Lanka)"            
+        },
+        {
+            "language_code": "sk-SK",
+            "name": "ViktoriaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Slovak (Slovakia)"            
+        },
+        {
+            "language_code": "sk-SK",
+            "name": "LukasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Slovak (Slovakia)"            
+        },
+        {
+            "language_code": "sl-SI",
+            "name": "PetraNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Slovenian (Slovenia)"            
+        },
+        {
+            "language_code": "sl-SI",
+            "name": "RokNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Slovenian (Slovenia)"            
+        },
+        {
+            "language_code": "so-SO",
+            "name": "UbaxNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Somali (Somalia)"            
+        },
+        {
+            "language_code": "so-SO",
+            "name": "MuuseNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Somali (Somalia)"            
+        },
+        {
+            "language_code": "sq-AL",
+            "name": "AnilaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Albanian (Albania)"            
+        },
+        {
+            "language_code": "sq-AL",
+            "name": "IlirNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Albanian (Albania)"            
+        },
+        {
+            "language_code": "sr-LATN-RS",
+            "name": "NicholasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Serbian (Latin, Serbia)"            
+        },
+        {
+            "language_code": "sr-LATN-RS",
+            "name": "SophieNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Serbian (Latin, Serbia)"            
+        },
+        {
+            "language_code": "sr-RS",
+            "name": "SophieNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Serbian (Cyrillic, Serbia)"            
+        },
+        {
+            "language_code": "sr-RS",
+            "name": "NicholasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Serbian (Cyrillic, Serbia)"            
+        },
+        {
+            "language_code": "su-ID",
+            "name": "TutiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Sundanese (Indonesia)"            
+        },
+        {
+            "language_code": "su-ID",
+            "name": "JajangNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Sundanese (Indonesia)"            
+        },
+        {
+            "language_code": "sv-SE",
+            "name": "SofieNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Swedish (Sweden)"            
+        },
+        {
+            "language_code": "sv-SE",
+            "name": "MattiasNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Swedish (Sweden)"            
+        },
+        {
+            "language_code": "sv-SE",
+            "name": "HilleviNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Swedish (Sweden)"            
+        },
+        {
+            "language_code": "sw-KE",
+            "name": "ZuriNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Swahili (Kenya)"            
+        },
+        {
+            "language_code": "sw-KE",
+            "name": "RafikiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Swahili (Kenya)"            
+        },
+        {
+            "language_code": "sw-TZ",
+            "name": "RehemaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Swahili (Tanzania)"            
+        },
+        {
+            "language_code": "sw-TZ",
+            "name": "DaudiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Swahili (Tanzania)"            
+        },
+        {
+            "language_code": "ta-IN",
+            "name": "PallaviNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Tamil (India)"            
+        },
+        {
+            "language_code": "ta-IN",
+            "name": "ValluvarNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Tamil (India)"            
+        },
+        {
+            "language_code": "ta-LK",
+            "name": "SaranyaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Tamil (Sri Lanka)"            
+        },
+        {
+            "language_code": "ta-LK",
+            "name": "KumarNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Tamil (Sri Lanka)"            
+        },
+        {
+            "language_code": "ta-MY",
+            "name": "KaniNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Tamil (Malaysia)"            
+        },
+        {
+            "language_code": "ta-MY",
+            "name": "SuryaNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Tamil (Malaysia)"            
+        },
+        {
+            "language_code": "ta-SG",
+            "name": "VenbaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Tamil (Singapore)"            
+        },
+        {
+            "language_code": "ta-SG",
+            "name": "AnbuNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Tamil (Singapore)"            
+        },
+        {
+            "language_code": "te-IN",
+            "name": "ShrutiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Telugu (India)"            
+        },
+        {
+            "language_code": "te-IN",
+            "name": "MohanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Telugu (India)"            
+        },
+        {
+            "language_code": "th-TH",
+            "name": "PremwadeeNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Thai (Thailand)"            
+        },
+        {
+            "language_code": "th-TH",
+            "name": "NiwatNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Thai (Thailand)"            
+        },
+        {
+            "language_code": "th-TH",
+            "name": "AcharaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Thai (Thailand)"            
+        },
+        {
+            "language_code": "tr-TR",
+            "name": "EmelNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Turkish (Turkey)"            
+        },
+        {
+            "language_code": "tr-TR",
+            "name": "AhmetNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Turkish (Turkey)"            
+        },
+        {
+            "language_code": "uk-UA",
+            "name": "PolinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Ukrainian (Ukraine)"            
+        },
+        {
+            "language_code": "uk-UA",
+            "name": "OstapNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Ukrainian (Ukraine)"            
+        },
+        {
+            "language_code": "ur-IN",
+            "name": "GulNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Urdu (India)"            
+        },
+        {
+            "language_code": "ur-IN",
+            "name": "SalmanNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Urdu (India)"            
+        },
+        {
+            "language_code": "ur-PK",
+            "name": "UzmaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Urdu (Pakistan)"            
+        },
+        {
+            "language_code": "ur-PK",
+            "name": "AsadNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Urdu (Pakistan)"            
+        },
+        {
+            "language_code": "uz-UZ",
+            "name": "MadinaNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Uzbek (Latin, Uzbekistan)"            
+        },
+        {
+            "language_code": "uz-UZ",
+            "name": "SardorNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Uzbek (Latin, Uzbekistan)"            
+        },
+        {
+            "language_code": "vi-VN",
+            "name": "HoaiMyNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Vietnamese (Vietnam)"            
+        },
+        {
+            "language_code": "vi-VN",
+            "name": "NamMinhNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Vietnamese (Vietnam)"            
+        },
+        {
+            "language_code": "wuu-CN",
+            "name": "XiaotongNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Wu, Simplified)"            
+        },
+        {
+            "language_code": "wuu-CN",
+            "name": "YunzheNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Wu, Simplified)"            
+        },
+        {
+            "language_code": "yue-CN",
+            "name": "XiaoMinNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Cantonese, Simplified)"            
+        },
+        {
+            "language_code": "yue-CN",
+            "name": "YunSongNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Cantonese, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaoxiaoNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "YunxiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "YunjianNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaoyiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "YunyangNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaochenNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaohanNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaomengNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaomoNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaoqiuNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaoruiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaoxuanNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaoyanNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaozhenNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "YunfengNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "YunhaoNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "YunxiaNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "YunyeNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "YunzeNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "XiaorouNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN",
+            "name": "YunjieNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN-GUANGXI",
+            "name": "YunqiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Guangxi Accent Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN-henan",
+            "name": "YundengNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Zhongyuan Mandarin Henan, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN-liaoning",
+            "name": "XiaobeiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Northeastern Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN-shaanxi",
+            "name": "XiaoniNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Zhongyuan Mandarin Shaanxi, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN-shandong",
+            "name": "YunxiangNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Jilu Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-CN-sichuan",
+            "name": "YunxiNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Southwestern Mandarin, Simplified)"            
+        },
+        {
+            "language_code": "zh-HK",
+            "name": "HiuMaanNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Cantonese, Traditional)"            
+        },
+        {
+            "language_code": "zh-HK",
+            "name": "WanLungNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Cantonese, Traditional)"            
+        },
+        {
+            "language_code": "zh-HK",
+            "name": "HiuGaaiNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Cantonese, Traditional)"            
+        },
+        {
+            "language_code": "zh-TW",
+            "name": "HsiaoChenNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Taiwanese Mandarin, Traditional)"            
+        },
+        {
+            "language_code": "zh-TW",
+            "name": "YunJheNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Chinese (Taiwanese Mandarin, Traditional)"            
+        },
+        {
+            "language_code": "zh-TW",
+            "name": "HsiaoYuNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Chinese (Taiwanese Mandarin, Traditional)"            
+        },
+        {
+            "language_code": "zu-ZA",
+            "name": "ThandoNeural",
+            "gender": "Female",
+            "neural": true,
+            "language": "Zulu (South Africa)"            
+        },
+        {
+            "language_code": "zu-ZA",
+            "name": "ThembaNeural",
+            "gender": "Male",
+            "neural": true,
+            "language": "Zulu (South Africa)"            
+        }
+    ]
+}

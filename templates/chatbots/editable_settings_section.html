@@ -1,0 +1,31 @@
+{% load form_tags %}
+<div class="mb-6" id="{{ section_id }}-section">
+  <h4 class="text-md font-bold mb-2">{{ title }}</h4>
+  <div class="p-4 bg-base-200 rounded-md" id="{{ section_id }}-{% if edit_mode %}edit{% else %}content{% endif %}">
+    {% if edit_mode %}
+      {% if edit_content %}
+        {{ edit_content }}
+      {% else %}
+        {% block edit_content %}
+          {% if form_fields %}
+            {% render_form_fields form form_fields %}
+          {% endif %}
+        {% endblock edit_content %}
+      {% endif %}
+    {% else %}
+    {% if view_content %}
+      {{ view_content }}
+      {% else %}
+      {% block view_content %}
+        {% if value %}
+        <p>{{ value }}</p>
+        {% elif default_text %}
+        <p>{{ default_text }}</p>
+        {% else %}
+        <p>No value provided</p>
+        {% endif %}
+      {% endblock view_content %}
+      {% endif %}
+  {% endif %}
+  </div>
+</div>

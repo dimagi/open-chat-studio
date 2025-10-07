@@ -4,53 +4,34 @@ import uuid
 from datetime import datetime
 from functools import cached_property
 from typing import cast
-from urllib.parse import urlparse
 
-import jwt
-from celery.result import AsyncResult
-from celery_progress.backend import Progress
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.paginator import Paginator
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Subquery, Value, When
-from django.db.models.fields.json import KeyTextTransform
-from django.db.models.functions import Coalesce
+from django.db.models import Case, Count, IntegerField, Prefetch, Q, When
 from django.http import (
-    FileResponse,
     Http404,
     HttpResponse,
-    HttpResponseForbidden,
     HttpResponseRedirect,
-    JsonResponse,
-    QueryDict,
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import format_html
-from django.utils.safestring import mark_safe
-from django.views.decorators.clickjacking import xframe_options_exempt
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
-from field_audit.models import AuditAction
 from waffle import flag_is_active
 
 from apps.analysis.const import LANGUAGE_CHOICES
-from apps.annotations.models import CustomTaggedItem, Tag
+from apps.annotations.models import CustomTaggedItem
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
-from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
-from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
@@ -65,20 +46,15 @@ from apps.experiments.decorators import (
     set_session_access_cookie,
     verify_session_access_cookie,
 )
-from apps.experiments.email import send_chat_link_email, send_experiment_invitation
+from apps.experiments.email import send_chat_link_email
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
 from apps.experiments.forms import (
-    ConsentForm,
     ExperimentForm,
-    ExperimentInvitationForm,
     ExperimentVersionForm,
-    SurveyCompletedForm,
-    TranslateMessagesForm,
 )
-from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     AgentTools,
     Experiment,
@@ -97,48 +73,20 @@ from apps.experiments.tables import (
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
-from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import (
     async_create_experiment_version,
-    async_export_chat,
     get_response_for_webchat_task,
 )
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
-from apps.generics import actions
 from apps.generics.chips import Chip
-from apps.generics.views import paginate_session, render_session_details
-from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
-from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
-from apps.teams.decorators import login_and_team_required, team_required
+from apps.service_providers.utils import get_llm_provider_choices
+from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.base_experiment_table_view import BaseExperimentTableView
 from apps.web.dynamic_filters.datastructures import FilterParams
-
-
-@login_and_team_required
-@permission_required("experiments.view_experiment", raise_exception=True)
-def experiments_home(request, team_slug: str):
-    from apps.chatbots.views import home
-
-    actions_ = [
-        actions.Action(
-            "experiments:new",
-            label="Add New",
-            button_style="btn-primary",
-            required_permissions=["experiments.add_experiment"],
-        )
-    ]
-    return home(
-        request,
-        team_slug,
-        "Experiments",
-        "experiments:table",
-        actions=actions_,
-        show_modal_or_banner=True,
-    )
 
 
 class ExperimentTableView(BaseExperimentTableView):
@@ -362,14 +310,6 @@ def _get_voice_provider_alpine_context(request):
     }
 
 
-@login_and_team_required
-@permission_required("experiments.delete_experiment", raise_exception=True)
-def delete_experiment(request, team_slug: str, pk: int):
-    safety_layer = get_object_or_404(Experiment, id=pk, team=request.team)
-    safety_layer.delete()
-    return redirect("experiments:experiments_home", team_slug=team_slug)
-
-
 class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
     model = Experiment
     form_class = ExperimentVersionForm
@@ -471,21 +411,6 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionReq
         return f"{url}#versions"
 
 
-@login_and_team_required
-@permission_required("experiments.view_experiment", raise_exception=True)
-def version_create_status(request, team_slug: str, experiment_id: int):
-    experiment = Experiment.objects.get(id=experiment_id, team=request.team)
-    return TemplateResponse(
-        request,
-        "experiments/create_version_button.html",
-        {
-            "active_tab": "experiments",
-            "experiment": experiment,
-            "trigger_refresh": experiment.create_version_task_id is not None,
-        },
-    )
-
-
 def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
     experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
 
@@ -523,14 +448,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     context.update(get_filter_context_data(request.team, columns, "last_message", session_table_url, "sessions-table"))
 
     return TemplateResponse(request, template_name, context)
-
-
-@login_and_team_required
-@permission_required("experiments.view_experiment", raise_exception=True)
-def single_experiment_home(request, team_slug: str, experiment_id: int):
-    return base_single_experiment_view(
-        request, team_slug, experiment_id, "experiments/single_experiment_home.html", "experiments"
-    )
 
 
 def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
@@ -608,52 +525,6 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
     )
 
 
-@login_and_team_required
-def experiment_chat_session(
-    request, team_slug: str, experiment_id: int, session_id: int, version_number: int, active_tab: str = "experiments"
-):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = get_object_or_404(
-        ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
-    )
-    try:
-        experiment_version = experiment.get_version(version_number)
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
-        "experiment_name": experiment_version.name,
-        "experiment_version": experiment_version,
-        "experiment_version_number": experiment_version.version_number,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/experiment_chat.html",
-        {"experiment": experiment, "session": session, "active_tab": active_tab, **version_specific_vars},
-    )
-
-
-@experiment_session_view()
-@verify_session_access_cookie
-@require_POST
-def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int):
-    return _experiment_session_message(request, version_number)
-
-
-@experiment_session_view()
-@require_POST
-@xframe_options_exempt
-@csrf_exempt
-def experiment_session_message_embed(
-    request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int
-):
-    if not request.experiment_session.participant.is_anonymous:
-        return HttpResponseForbidden()
-
-    return _experiment_session_message(request, version_number, embedded=True)
-
-
 def _experiment_session_message(request, version_number: int, embedded=False):
     working_experiment = request.experiment
     session = request.experiment_session
@@ -713,53 +584,6 @@ def _experiment_session_message(request, version_number: int, embedded=False):
     )
 
 
-@experiment_session_view()
-def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, task_id: str):
-    experiment = request.experiment
-    session = request.experiment_session
-    last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
-    message_details = get_message_task_response(experiment, task_id)
-    if not message_details:
-        # don't render empty messages
-        return HttpResponse()
-
-    attachments = message_details.pop("attachments", [])
-    return TemplateResponse(
-        request,
-        "experiments/chat/chat_message_response.html",
-        {
-            "experiment": experiment,
-            "session": session,
-            "task_id": task_id,
-            "message_details": message_details,
-            "last_message_datetime": last_message and last_message.created_at,
-            "attachments": attachments,
-        },
-    )
-
-
-@experiment_session_view()
-@require_GET
-@xframe_options_exempt
-@team_required
-def poll_messages_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    if not request.experiment_session.participant.is_anonymous:
-        return HttpResponseForbidden()
-
-    return _poll_messages(request)
-
-
-@experiment_session_view()
-@require_GET
-@team_required
-def poll_messages(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    user = get_real_user_or_none(request.user)
-    if user and request.experiment_session.participant.user != user:
-        return HttpResponseForbidden()
-
-    return _poll_messages(request)
-
-
 def _poll_messages(request):
     params = request.GET.dict()
     since_param = params.get("since")
@@ -789,114 +613,6 @@ def _poll_messages(request):
             },
         )
     return HttpResponse()
-
-
-@team_required
-def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
-    try:
-        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    except ValidationError:
-        # old links dont have uuids
-        raise Http404() from None
-
-    experiment_version = experiment.default_version
-    if not experiment_version.is_public:
-        raise Http404
-
-    consent = experiment_version.consent_form
-    user = get_real_user_or_none(request.user)
-    if not consent:
-        identifier = user.email if user else str(uuid.uuid4())
-        session = WebChannel.start_new_session(
-            working_experiment=experiment,
-            participant_user=user,
-            participant_identifier=identifier,
-            timezone=request.session.get("detected_tz", None),
-        )
-        return _record_consent_and_redirect(team_slug, experiment, session)
-
-    if request.method == "POST":
-        form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
-        if form.is_valid():
-            verify_user = True
-            if consent.capture_identifier:
-                identifier = form.cleaned_data.get("identifier", None)
-            else:
-                # The identifier field will be disabled, so we must generate one
-                verify_user = False
-                if user:
-                    identifier = user.email
-                else:
-                    identifier = Participant.create_anonymous(request.team, ChannelPlatform.WEB).identifier
-
-            session = WebChannel.start_new_session(
-                working_experiment=experiment,
-                participant_user=user,
-                participant_identifier=identifier,
-                timezone=request.session.get("detected_tz", None),
-            )
-            if verify_user and consent.identifier_type == "email":
-                return _verify_user_or_start_session(
-                    identifier=identifier,
-                    request=request,
-                    experiment=experiment,
-                    session=session,
-                )
-            else:
-                return _record_consent_and_redirect(team_slug, experiment, session)
-    else:
-        form = ConsentForm(
-            consent,
-            initial={
-                "experiment_id": experiment_version.id,
-                "identifier": user.email if user else None,
-            },
-        )
-
-    consent_notice = consent.get_rendered_content()
-    version_specific_vars = {
-        "experiment_name": experiment_version.name,
-        "experiment_description": experiment_version.description,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/start_experiment_session.html",
-        {
-            "active_tab": "experiments",
-            "experiment": experiment,
-            "consent_notice": mark_safe(consent_notice),
-            "form": form,
-            **version_specific_vars,
-        },
-    )
-
-
-@xframe_options_exempt
-@team_required
-def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
-    """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
-    will ALWAYS create anonymous participants."""
-    try:
-        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    except ValidationError:
-        # old links dont have uuids
-        raise Http404() from None
-
-    experiment_version = experiment.default_version
-    if not experiment_version.is_public:
-        raise Http404
-
-    participant = Participant.create_anonymous(request.team, ChannelPlatform.WEB)
-    session = WebChannel.start_new_session(
-        working_experiment=experiment,
-        participant_identifier=participant.identifier,
-        timezone=request.session.get("detected_tz", None),
-        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
-    )
-    redirect_url = (
-        "chatbots:chatbot_chat_embed" if request.origin == "chatbots" else "experiments:experiment_chat_embed"
-    )
-    return redirect(redirect_url, team_slug, experiment.public_id, session.external_id)
 
 
 def _verify_user_or_start_session(identifier, request, experiment, session):
@@ -930,110 +646,6 @@ def _verify_user_or_start_session(identifier, request, experiment, session):
     )
 
 
-@team_required
-def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
-    try:
-        claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
-        session = ExperimentSession.objects.select_related("experiment").get(external_id=claims["session"])
-        return _record_consent_and_redirect(team_slug, session.experiment, session)
-    except jwt.exceptions.ExpiredSignatureError:
-        messages.warning(request=request, message="This link has expired")
-        return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
-    except Exception:
-        messages.warning(request=request, message="This link could not be verified")
-        return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
-
-
-@login_and_team_required
-@permission_required("experiments.invite_participants", raise_exception=True)
-def experiment_invitations(request, team_slug: str, experiment_id: int, origin="experiments"):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    experiment_version = experiment.default_version
-    sessions = experiment.sessions.order_by("-created_at").filter(
-        status__in=["setup", "pending"],
-        participant__isnull=False,
-    )
-    form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
-    if request.method == "POST":
-        post_form = ExperimentInvitationForm(request.POST)
-        if post_form.is_valid():
-            if ExperimentSession.objects.filter(
-                team=request.team,
-                experiment_id=experiment_id,
-                status__in=["setup", "pending"],
-                participant__identifier=post_form.cleaned_data["email"],
-            ).exists():
-                participant_email = post_form.cleaned_data["email"]
-                messages.info(request, f"{participant_email} already has a pending invitation.")
-            else:
-                with transaction.atomic():
-                    session = WebChannel.start_new_session(
-                        experiment,
-                        participant_identifier=post_form.cleaned_data["email"],
-                        session_status=SessionStatus.SETUP,
-                        timezone=request.session.get("detected_tz", None),
-                    )
-                if post_form.cleaned_data["invite_now"]:
-                    send_experiment_invitation(session)
-        else:
-            form = post_form
-
-    version_specific_vars = {
-        "experiment_name": experiment_version.name,
-        "experiment_description": experiment_version.description,
-    }
-    template_name = (
-        "chatbots/chatbot_invitations.html" if origin == "chatbots" else "experiments/experiment_invitations.html"
-    )
-    return TemplateResponse(
-        request,
-        template_name,
-        {"invitation_form": form, "experiment": experiment, "sessions": sessions, **version_specific_vars},
-    )
-
-
-@require_POST
-@permission_required("experiments.download_chats", raise_exception=True)
-@login_and_team_required
-def generate_chat_export(request, team_slug: str, experiment_id: str):
-    timezone = request.session.get("detected_tz", None)
-    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
-    parsed_url = urlparse(request.headers.get("HX-Current-URL"))
-    query_params = QueryDict(parsed_url.query)
-    task_id = async_export_chat.delay(experiment_id, query_params, timezone)
-    return TemplateResponse(
-        request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
-    )
-
-
-@permission_required("experiments.download_chats", raise_exception=True)
-@login_and_team_required
-def get_export_download_link(request, team_slug: str, experiment_id: str, task_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    info = Progress(AsyncResult(task_id)).get_info()
-    context = {"experiment": experiment}
-    if info["complete"] and info["success"]:
-        file_id = info["result"]["file_id"]
-        download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id})
-        context["export_download_url"] = download_url
-    else:
-        context["task_id"] = task_id
-    return TemplateResponse(request, "experiments/components/exports.html", context)
-
-
-@login_and_team_required
-@permission_required("experiments.invite_participants", raise_exception=True)
-def send_invitation(request, team_slug: str, experiment_id: int, session_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = ExperimentSession.objects.get(experiment=experiment, external_id=session_id)
-    send_experiment_invitation(session)
-    return TemplateResponse(
-        request,
-        "experiments/manage/invite_row.html",
-        context={"request": request, "experiment": experiment, "session": session},
-    )
-
-
 def _record_consent_and_redirect(
     team_slug: str,
     experiment: Experiment,
@@ -1055,101 +667,6 @@ def _record_consent_and_redirect(
         )
     )
     return set_session_access_cookie(response, experiment, experiment_session)
-
-
-@experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
-def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    default_version = request.experiment.default_version
-    consent = default_version.consent_form
-
-    initial = {
-        "participant_id": request.experiment_session.participant.id,
-        "identifier": request.experiment_session.participant.identifier,
-    }
-    if not request.experiment_session.participant:
-        raise Http404()
-
-    if not consent:
-        return _record_consent_and_redirect(team_slug, request.experiment, request.experiment_session)
-
-    if request.method == "POST":
-        form = ConsentForm(consent, request.POST, initial=initial)
-        if form.is_valid():
-            return _record_consent_and_redirect(team_slug, request.experiment, request.experiment_session)
-
-    else:
-        form = ConsentForm(consent, initial=initial)
-
-    consent_notice = consent.get_rendered_content()
-    version_specific_vars = {
-        "experiment_name": default_version.name,
-        "experiment_description": default_version.description,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/start_experiment_session.html",
-        {
-            "active_tab": "experiments",
-            "experiment": default_version,
-            "consent_notice": mark_safe(consent_notice),
-            "form": form,
-            **version_specific_vars,
-        },
-    )
-
-
-@experiment_session_view(allowed_states=[SessionStatus.PENDING_PRE_SURVEY])
-@verify_session_access_cookie
-def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    if request.method == "POST":
-        form = SurveyCompletedForm(request.POST)
-        if form.is_valid():
-            request.experiment_session.status = SessionStatus.ACTIVE
-            request.experiment_session.save()
-            return HttpResponseRedirect(
-                reverse(
-                    "experiments:experiment_chat",
-                    args=[team_slug, experiment_id, session_id],
-                )
-            )
-    else:
-        form = SurveyCompletedForm()
-
-    default_version = request.experiment.default_version
-    experiment_session = request.experiment_session
-    version_specific_vars = {
-        "experiment_name": default_version.name,
-        "experiment_description": default_version.description,
-        "pre_survey_link": experiment_session.get_pre_survey_link(default_version),
-    }
-    return TemplateResponse(
-        request,
-        "experiments/pre_survey.html",
-        {
-            "active_tab": "experiments",
-            "form": form,
-            "experiment": request.experiment,
-            "experiment_session": experiment_session,
-            **version_specific_vars,
-        },
-    )
-
-
-@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
-@verify_session_access_cookie
-def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return _experiment_chat_ui(request)
-
-
-@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
-@xframe_options_exempt
-def experiment_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    """Special view for embedding that doesn't have the cookie security. This is OK because of the additional
-    checks to ensure the participant is 'anonymous'."""
-    session = request.experiment_session
-    if not session.participant.is_anonymous:
-        raise Http404
-    return _experiment_chat_ui(request, embedded=True)
 
 
 def _experiment_chat_ui(request, embedded=False):
@@ -1182,104 +699,6 @@ def _get_languages_for_chat(session):
         choice for choice in LANGUAGE_CHOICES if choice[0] != "" and choice[0] not in available_language_codes
     ]
     return available_languages, translatable_languages
-
-
-@experiment_session_view()
-@verify_session_access_cookie
-def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    """View for loading paginated messages with HTMX"""
-    session = request.experiment_session
-    experiment = request.experiment
-    page = int(request.GET.get("page", 1))
-    selected_tags = list(filter(None, request.GET.get("tag_filter", "").split(",")))
-    language = request.GET.get("language", "")
-    show_original_translation = request.GET.get("show_original_translation") == "on" and language
-
-    chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
-    all_tags = (
-        Tag.objects.filter(
-            annotations_customtaggeditem_items__content_type=chat_message_content_type,
-            annotations_customtaggeditem_items__object_id__in=Subquery(
-                ChatMessage.objects.filter(chat=session.chat).values("id")
-            ),
-        )
-        .annotate(count=Count("annotations_customtaggeditem_items"))
-        .distinct()
-        .order_by(F("category").asc(nulls_first=True), "name")
-    )
-    available_languages, translatable_languages = _get_languages_for_chat(session)
-    has_missing_translations = False
-    translate_form_all = TranslateMessagesForm(
-        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
-    )
-    translate_form_remaining = TranslateMessagesForm(
-        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
-    )
-    default_message = "(message generated after last translation)"
-
-    messages_queryset = (
-        ChatMessage.objects.filter(chat=session.chat)
-        .order_by("created_at")
-        .prefetch_related(
-            Prefetch(
-                "tagged_items",
-                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                to_attr="prefetched_tagged_items",
-            )
-        )
-    )
-    if selected_tags:
-        messages_queryset = messages_queryset.filter(tags__name__in=selected_tags).distinct()
-
-    if language:
-        messages_queryset = messages_queryset.annotate(
-            translation=Coalesce(
-                KeyTextTransform(language, "translations"),
-                Value(default_message),
-                output_field=CharField(),
-            )
-        )
-        has_missing_translations = messages_queryset.exclude(**{f"translations__{language}__isnull": False}).exists()
-    show_all = request.GET.get("show_all") == "on"
-    page_size = 10
-    if show_all:
-        current_page_messages = list(messages_queryset)
-        total_pages = 1
-        page_start_index = 1
-    else:
-        paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
-        current_page = paginator.page(page)
-        current_page_messages = current_page.object_list
-        total_pages = paginator.num_pages
-        page_start_index = current_page.start_index()
-    context = {
-        "experiment_session": session,
-        "experiment": experiment,
-        "messages": current_page_messages,
-        "page": page,
-        "total_pages": total_pages,
-        "total_messages": len(messages_queryset),
-        "page_size": page_size,
-        "page_start_index": page_start_index,
-        "selected_tags": selected_tags,
-        "language": language,
-        "available_languages": available_languages,
-        "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
-        "has_missing_translations": has_missing_translations,
-        "show_original_translation": show_original_translation,
-        "translate_form_all": translate_form_all,
-        "translate_form_remaining": translate_form_remaining,
-        "default_message": default_message,
-        "default_translation_models_by_providers": get_default_translation_models_by_provider(),
-        "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
-        "all_tags": all_tags,
-    }
-
-    return TemplateResponse(
-        request,
-        "experiments/components/experiment_chat.html",
-        context,
-    )
 
 
 @experiment_session_view()
@@ -1354,198 +773,6 @@ def redirect_to_messages_view(request, session):
     return HttpResponseRedirect(url)
 
 
-@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
-@verify_session_access_cookie
-@require_POST
-def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    experiment_session = request.experiment_session
-    experiment_session.update_status(SessionStatus.PENDING_REVIEW, commit=False)
-    experiment_session.end(commit=True)
-    return HttpResponseRedirect(reverse("experiments:experiment_review", args=[team_slug, experiment_id, session_id]))
-
-
-@experiment_session_view(allowed_states=[SessionStatus.PENDING_REVIEW])
-@verify_session_access_cookie
-def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    form = None
-    survey_link = None
-    survey_text = None
-    experiment_version = request.experiment.default_version
-    if request.method == "POST":
-        # no validation needed
-        request.experiment_session.status = SessionStatus.COMPLETE
-        request.experiment_session.reviewed_at = timezone.now()
-        request.experiment_session.save()
-        return HttpResponseRedirect(
-            reverse("experiments:experiment_complete", args=[team_slug, experiment_id, session_id])
-        )
-    elif experiment_version.post_survey:
-        form = SurveyCompletedForm()
-        survey_link = request.experiment_session.get_post_survey_link(experiment_version)
-        survey_text = experiment_version.post_survey.confirmation_text.format(survey_link=survey_link)
-
-    version_specific_vars = {
-        "experiment.post_survey": experiment_version.post_survey,
-        "survey_link": survey_link,
-        "survey_text": survey_text,
-        "experiment_name": experiment_version.name,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/experiment_review.html",
-        {
-            "experiment": request.experiment,
-            "experiment_session": request.experiment_session,
-            "active_tab": "experiments",
-            "form": form,
-            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
-            **version_specific_vars,
-        },
-    )
-
-
-@experiment_session_view(allowed_states=[SessionStatus.COMPLETE])
-@verify_session_access_cookie
-def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return TemplateResponse(
-        request,
-        "experiments/experiment_complete.html",
-        {
-            "experiment": request.experiment,
-            "experiment_session": request.experiment_session,
-            "active_tab": "experiments",
-        },
-    )
-
-
-@experiment_session_view()
-@verify_session_access_cookie
-def experiment_session_details_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return render_session_details(
-        request,
-        team_slug,
-        experiment_id,
-        session_id,
-        active_tab="experiments",
-        template_path="experiments/experiment_session_view.html",
-    )
-
-
-@login_and_team_required
-def experiment_session_pagination_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return paginate_session(
-        request,
-        team_slug,
-        experiment_id,
-        session_id,
-        view_name="experiments:experiment_session_view",
-    )
-
-
-@team_required
-def download_file(request, team_slug: str, session_id: int, pk: int):
-    resource = get_object_or_404(
-        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
-    )
-    try:
-        file = resource.file.open()
-        return FileResponse(file, as_attachment=True, filename=resource.file.name)
-    except FileNotFoundError:
-        raise Http404() from None
-
-
-@team_required
-def get_image_html(request, team_slug: str, session_id: int, pk: int):
-    """Return HTML for displaying an image attachment."""
-    resource = get_object_or_404(
-        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
-    )
-
-    if not resource.is_image:
-        raise Http404("File is not an image")
-
-    # Generate the image URL
-    image_url = reverse("experiments:download_file", args=[team_slug, session_id, pk])
-
-    # Return HTML for the image
-    html = format_html(
-        '<img src="{}" alt="{}" class="max-w-md max-h-64 rounded border shadow-sm mt-2">', image_url, resource.name
-    )
-
-    return HttpResponse(html)
-
-
-@require_POST
-@transaction.atomic
-@login_and_team_required
-def set_default_experiment(request, team_slug: str, experiment_id: int, version_number: int):
-    experiment = get_object_or_404(
-        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
-    )
-    Experiment.objects.exclude(version_number=version_number).filter(
-        team__slug=team_slug, working_version_id=experiment_id
-    ).update(is_default_version=False, audit_action=AuditAction.AUDIT)
-    experiment.is_default_version = True
-    experiment.save()
-    url = (
-        reverse(
-            "experiments:single_experiment_home",
-            kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
-        )
-        + "#versions"
-    )
-    return redirect(url)
-
-
-@require_POST
-@transaction.atomic
-@login_and_team_required
-def archive_experiment_version(request, team_slug: str, experiment_id: int, version_number: int):
-    """
-    Archives a single released version of an experiment, unless it's the default version
-    """
-    experiment = get_object_or_404(
-        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
-    )
-    url = (
-        reverse(
-            "experiments:single_experiment_home",
-            kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
-        )
-        + "#versions"
-    )
-    if experiment.is_default_version:
-        return redirect(url)
-    experiment.archive()
-    return redirect(url)
-
-
-@require_POST
-@transaction.atomic
-@login_and_team_required
-def update_version_description(request, team_slug: str, experiment_id: int, version_number: int):
-    experiment = get_object_or_404(
-        Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
-    )
-    experiment.version_description = request.POST.get("description", "").strip()
-    experiment.save()
-
-    return HttpResponse()
-
-
-@login_and_team_required
-def experiment_version_details(request, team_slug: str, experiment_id: int, version_number: int):
-    try:
-        experiment_version = Experiment.objects.get_all().get(
-            team=request.team, working_version_id=experiment_id, version_number=version_number
-        )
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
-    return render(request, "experiments/components/experiment_version_details_content.html", context)
-
-
 @login_and_team_required
 def get_release_status_badge(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
@@ -1581,20 +808,3 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         )
         messages.error(request, "There was an error during the migration. Please try again later.")
         return redirect(failed_url)
-
-
-@require_GET
-@login_and_team_required
-@permission_required("experiments.view_experiment")
-def trends_data(request, team_slug: str, experiment_id: int):
-    """
-    Returns JSON data for the experiment's trend barchart chart.
-    """
-    try:
-        experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
-        successes, errors = experiment.get_trend_data()
-        data = {"successes": successes, "errors": errors}
-        return JsonResponse({"trends": data})
-    except Exception:
-        logging.exception(f"Error loading barchart data for experiment {experiment_id}")
-        return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)

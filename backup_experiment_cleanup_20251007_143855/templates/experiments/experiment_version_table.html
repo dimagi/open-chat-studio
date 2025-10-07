@@ -1,0 +1,15 @@
+{% extends "table/single_table.html" %}
+
+{% block modal %}
+    <dialog id="versionDetailsModal" class="modal">
+        <div class="modal-box max-w-none w-1/2">
+            <form method="dialog">
+                <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">✕</button>
+            </form>
+            <div id="modal-content"></div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>Close</button>
+        </form>
+    </dialog>
+{% endblock modal %}
