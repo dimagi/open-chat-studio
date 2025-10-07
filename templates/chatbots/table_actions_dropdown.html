@@ -1,5 +1,5 @@
 {% load waffle_tags %}
-{% with table_type=table_type|default:"sessions" %}
+{% with df_table_type=table_type %}
     <div class="dropdown dropdown-end" x-data="filterComponent">
       <div tabindex="0" role="button" class="btn btn-square btn-sm btn-ghost">
         <i class="fa-solid fa-ellipsis-vertical"></i>
@@ -58,5 +58,5 @@
 </script>
 
 <!-- Include the dialogs where they're actually accessed -->
-{% include "filters/saved_filters_dialog.html" with table_type=table_type %}
-{% include "filters/save_filter_dialog.html" with table_type=table_type %}
+{% include "filters/saved_filters_dialog.html" with df_table_type=df_table_type %}
+{% include "filters/save_filter_dialog.html" with df_table_type=df_table_type %}

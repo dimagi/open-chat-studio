@@ -1,5 +1,5 @@
 {% load i18n %}
-{% with table_type=table_type|default:"sessions" %}
+{% with df_table_type=df_table_type %}
 <dialog id="saveFilterDialog" class="modal">
   <div class="modal-box max-w-md bg-base-100 border border-base-300">
     <div class="flex items-center justify-between mb-6">
@@ -62,7 +62,7 @@ function submitFilterSet(event) {
     filter_params: currentFilterParams,
   };
 
-  const url = '{% url "experiments:create_filter_set" request.team.slug table_type %}';
+  const url = '{% url "experiments:create_filter_set" request.team.slug df_table_type %}';
 
   fetch(url, {
     method: 'POST',

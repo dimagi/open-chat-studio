@@ -1,4 +1,4 @@
-{% with table_type=table_type|default:"sessions" %}
+{% with df_table_type=df_table_type %}
 <div x-data="filterComponent" @click.outside="filterData.showFilters = false" class="relative">
   <!-- Filter Button -->
   <div class="flex items-center">
@@ -607,7 +607,7 @@
 
       async loadFilterSets() {
         try {
-          const url = '{% url "experiments:list_filter_set" request.team.slug table_type %}';
+          const url = '{% url "experiments:list_filter_set" request.team.slug df_table_type %}';
           const res = await fetch(url, { credentials: 'same-origin' });
           const data = await res.json();
           return data.results || [];

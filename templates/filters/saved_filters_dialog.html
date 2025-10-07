@@ -32,7 +32,7 @@ const FilterDialog = {
     content.innerHTML = '<div class="flex justify-center p-4"><span class="loading loading-spinner loading-sm"></span></div>';
 
     try {
-      const filters = await this.apiCall("{% url 'experiments:list_filter_set' request.team.slug table_type %}");
+      const filters = await this.apiCall("{% url 'experiments:list_filter_set' request.team.slug df_table_type %}");
       this.filters = filters.results || []; // Store the filters
       content.innerHTML = this.filters.length
         ? this.renderFilters(this.filters)
