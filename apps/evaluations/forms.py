@@ -611,8 +611,8 @@ class AddMessagesToDatasetForm(forms.Form):
         self.fields["dataset"].choices = dataset_choices
 
     def clean_message_ids(self):
-        message_ids = self.cleaned_data["message_ids"]
-        if not message_ids or not message_ids.strip():
+        message_ids = self.cleaned_data["message_ids"].strip()
+        if not message_ids:
             raise forms.ValidationError("Please select at least one message.")
         return [int(id) for id in message_ids.split(",")]
 
