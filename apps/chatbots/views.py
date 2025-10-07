@@ -284,11 +284,6 @@ class ChatbotVersionsTableView(ExperimentVersionsTableView):
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"
     permission_required = "experiments.view_experiment"
-    entity_type = "chatbots"
-
-    def get_table(self, **kwargs):
-        table_data = self.get_table_data()
-        return self.table_class(data=table_data, entity_type="chatbots", **kwargs)
 
 
 @login_and_team_required
