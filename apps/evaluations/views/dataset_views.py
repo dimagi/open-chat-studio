@@ -16,7 +16,7 @@ from django_tables2 import SingleTableView
 
 from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
+from apps.evaluations.forms import AddMessagesToDatasetForm, EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.tables import (
     DatasetMessagesTable,
@@ -29,7 +29,6 @@ from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
-from apps.experiments.forms import AddMessagesToDatasetForm
 from apps.experiments.models import ExperimentSession
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin

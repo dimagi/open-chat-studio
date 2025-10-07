@@ -593,3 +593,38 @@ class EvaluationDatasetEditForm(forms.ModelForm):
                 raise forms.ValidationError("A dataset with this name already exists in your team.")
 
         return name
+
+
+class AddMessagesToDatasetForm(forms.Form):
+    dataset = forms.ChoiceField(
+        choices=[],
+        required=False,
+        label="Add to existing dataset",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full"}),
+    )
+    new_dataset_name = forms.CharField(label="Create new dataset", required=False)
+    message_ids = forms.CharField(required=True, widget=forms.HiddenInput(attrs={"x-model": "selectedMessages"}))
+
+    def __init__(self, team, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        dataset_choices = [("", "---")] + [(dataset.id, dataset.name) for dataset in team.evaluationdataset_set.all()]
+        self.fields["dataset"].choices = dataset_choices
+
+    def clean_message_ids(self):
+        message_ids = self.cleaned_data["message_ids"]
+        if not message_ids or not message_ids.strip():
+            raise forms.ValidationError("Please select at least one message.")
+        return [int(id) for id in message_ids.split(",")]
+
+    def clean(self):
+        cleaned_data = super().clean()
+        dataset = cleaned_data.get("dataset")
+        new_dataset_name = cleaned_data.get("new_dataset_name")
+
+        if new_dataset_name and dataset:
+            raise forms.ValidationError("You can only select an existing dataset or create a new one, not both.")
+
+        if not new_dataset_name and not dataset:
+            raise forms.ValidationError("Please either select an existing dataset or provide a name for a new dataset.")
+
+        return cleaned_data
