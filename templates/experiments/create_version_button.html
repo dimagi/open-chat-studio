@@ -1,7 +1,7 @@
 {% if experiment.create_version_task_id %}
   <div id="version_check">
     <div class="tooltip" data-tip="A new version is being created"
-         hx-get="{% if origin == 'chatbots' %}{% url 'chatbots:check_version_creation_status' experiment.team.slug experiment.id %}{% else %}{% url 'experiments:check_version_creation_status' experiment.team.slug experiment.id %}{% endif %}"
+         hx-get="{% url 'chatbots:check_version_creation_status' experiment.team.slug experiment.id %}"
          hx-trigger="every 2s"
          hx-swap="outerHTML"
          hx-target="#version_check"
@@ -17,7 +17,7 @@
     </div>
   </div>
 {% else %}
-  <a class="btn btn-sm btn-outline btn-success" href="{% if origin == 'chatbots' %}{% url 'chatbots:create_version' experiment.team.slug experiment.id %}{% else %}{% url 'experiments:create_version' experiment.team.slug experiment.id %}{% endif %}"
+  <a class="btn btn-sm btn-outline btn-success" href="{% url 'chatbots:create_version' experiment.team.slug experiment.id %}"
      {% if trigger_refresh %}x-init='htmx.trigger(".watchVersionChange", "version-changed")'{% endif %}
   >
     <i class="fa-regular fa-plus"></i> Create Version
