@@ -203,7 +203,7 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
         all_messages = list(
             ChatMessage.objects.filter(chat__experiment_session__external_id=session_id)
             .annotate(experiment_public_id=F("chat__experiment_session__experiment__public_id"))
-            .prefetch_related("comments", "tags")
+            .prefetch_related("comments", "tags", "input_message_trace")
             .order_by("created_at")
         )
 
@@ -222,6 +222,12 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                 and (current_msg.id in target_ids_set or next_msg.id in target_ids_set)
             )
 
+            participant_data = {}
+            session_state = {}
+            if trace_message := current_msg.input_message_trace.first():
+                participant_data = trace_message.participant_data or {}
+                session_state = trace_message.session_state or {}
+
             if is_target_pair:
                 # Create paired evaluation message
                 context = {"current_datetime": current_msg.created_at.isoformat()}
@@ -239,6 +245,8 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                         "session_id": session_id,
                         "experiment_id": str(current_msg.experiment_public_id),
                     },
+                    participant_data=participant_data,
+                    session_state=session_state,
                 )
                 new_messages.append(evaluation_message)
 
@@ -263,6 +271,8 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                             "session_id": session_id,
                             "experiment_id": str(current_msg.experiment_public_id),
                         },
+                        participant_data=participant_data,
+                        session_state=session_state,
                     )
                 else:
                     # There is an orphaned AI message, possibly because of a scheduled message, AI seed, etc.
@@ -277,6 +287,8 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                             "session_id": session_id,
                             "experiment_id": str(current_msg.experiment_public_id),
                         },
+                        participant_data=participant_data,
+                        session_state=session_state,
                     )
                 new_messages.append(evaluation_message)
 
