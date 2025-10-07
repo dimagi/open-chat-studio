@@ -562,7 +562,11 @@ class CreateDatasetFromSessionView(LoginAndTeamRequiredMixin, PermissionRequired
         ).order_by("created_at")[:1]
 
         human_messages = (
-            ChatMessage.objects.filter(id__in=human_message_ids, message_type=ChatMessageType.HUMAN)
+            ChatMessage.objects.filter(
+                id__in=human_message_ids,
+                message_type=ChatMessageType.HUMAN,
+                chat__experiment_session__external_id=session_id,
+            )
             .annotate(
                 next_message_type=Subquery(next_message_query.values("message_type")),
                 next_message_id=Subquery(next_message_query.values("id")),
