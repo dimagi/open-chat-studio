@@ -539,6 +539,10 @@ class CreateDatasetFromSessionView(LoginAndTeamRequiredMixin, PermissionRequired
         return reverse("evaluations:dataset_home", args=[self.request.team.slug])
 
     def post(self, request, team_slug: str, experiment_id: UUID, session_id: str):
+        """
+        Add selected messages from the session to a new or existing dataset. Messages are only added if they are human
+        messages followed by an AI response.
+        """
         form = self.get_form()
 
         if not form.is_valid():
@@ -574,11 +578,30 @@ class CreateDatasetFromSessionView(LoginAndTeamRequiredMixin, PermissionRequired
             )
             .filter(next_message_type=ChatMessageType.AI)
             .prefetch_related("input_message_trace")
+            .order_by("created_at")
+        )
+
+        # Fetch all messages in the session to avoid having to make repeated queries in the for-loop
+        # albeit at the cost of memory
+        all_messages = (
+            ChatMessage.objects.filter(chat__experiment_session__external_id=session_id)
+            .order_by("created_at")
+            .values("message_type", "content", "summary", "created_at")
         )
 
         eval_messages = []
-        for human_message in human_messages.iterator(chunk_size=100):
+        for human_message in human_messages.all():
             history = []
+
+            for message in all_messages:
+                if message["created_at"] < human_message.created_at:
+                    history.append(
+                        {
+                            "message_type": message["message_type"],
+                            "content": message["content"],
+                            "summary": message["summary"],
+                        }
+                    )
 
             participant_data = {}
             session_state = {}

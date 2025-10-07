@@ -70,6 +70,8 @@ class TestCreateDatasetFromSessionView:
         assert message1.participant_data == {"name": "John Doe"}
         assert message1.session_state == {"checkpoint": 1}
         assert message1.expected_output_chat_message.id == ai1.id
+        assert message1.history == [{"content": "hi", "message_type": "human", "summary": None}]
 
         message2 = dataset.messages.filter(input_chat_message_id=h3.id).first()
         assert message2.expected_output_chat_message.id == ai2.id
+        assert message1.history is not None
