@@ -8,7 +8,7 @@ from typing import cast
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Prefetch, Q, When
 from django.http import (
@@ -20,6 +20,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
 from django.views.generic.edit import FormView
@@ -30,8 +31,9 @@ from apps.analysis.const import LANGUAGE_CHOICES
 from apps.annotations.models import CustomTaggedItem
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
+from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
-from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
@@ -46,15 +48,18 @@ from apps.experiments.decorators import (
     set_session_access_cookie,
     verify_session_access_cookie,
 )
-from apps.experiments.email import send_chat_link_email
+from apps.experiments.email import send_chat_link_email, send_experiment_invitation
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
 from apps.experiments.forms import (
+    ConsentForm,
     ExperimentForm,
+    ExperimentInvitationForm,
     ExperimentVersionForm,
 )
+from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     AgentTools,
     Experiment,
@@ -77,7 +82,6 @@ from apps.experiments.tasks import (
     async_create_experiment_version,
     get_response_for_webchat_task,
 )
-from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
 from apps.generics.chips import Chip
@@ -229,9 +233,6 @@ class CreateExperiment(BaseExperimentView, CreateView):
 
     def get_initial(self):
         initial = super().get_initial()
-        long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
-        if long_data:
-            initial.update(long_data)
         return initial
 
     def form_valid(self, form):
@@ -808,3 +809,221 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         )
         messages.error(request, "There was an error during the migration. Please try again later.")
         return redirect(failed_url)
+
+
+# Shared functions needed by chatbots
+# These functions were extracted from the original experiment.py
+
+
+def version_create_status(request, team_slug: str, experiment_id: int):
+    experiment = Experiment.objects.get(id=experiment_id, team=request.team)
+    return TemplateResponse(
+        request,
+        "experiments/create_version_button.html",
+        {
+            "active_tab": "experiments",
+            "experiment": experiment,
+            "trigger_refresh": experiment.create_version_task_id is not None,
+        },
+    )
+
+
+def experiment_chat_session(
+    request, team_slug: str, experiment_id: int, session_id: int, version_number: int, active_tab: str = "experiments"
+):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    session = get_object_or_404(
+        ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
+    )
+    try:
+        experiment_version = experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    version_specific_vars = {
+        "assistant": experiment_version.get_assistant(),
+        "experiment_name": experiment_version.name,
+        "experiment_version": experiment_version,
+        "experiment_version_number": experiment_version.version_number,
+    }
+    return TemplateResponse(
+        request,
+        "experiments/experiment_chat.html",
+        {"experiment": experiment, "session": session, "active_tab": active_tab, **version_specific_vars},
+    )
+
+
+def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
+    try:
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+    except ValidationError:
+        # old links dont have uuids
+        raise Http404() from None
+
+    experiment_version = experiment.default_version
+    if not experiment_version.is_public:
+        raise Http404
+
+    consent = experiment_version.consent_form
+    user = get_real_user_or_none(request.user)
+    if not consent:
+        identifier = user.email if user else str(uuid.uuid4())
+        session = WebChannel.start_new_session(
+            working_experiment=experiment,
+            participant_user=user,
+            participant_identifier=identifier,
+            timezone=request.session.get("detected_tz", None),
+        )
+        return _record_consent_and_redirect(team_slug, experiment, session)
+
+    if request.method == "POST":
+        form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
+        if form.is_valid():
+            verify_user = True
+            if consent.capture_identifier:
+                identifier = form.cleaned_data.get("identifier", None)
+            else:
+                # The identifier field will be disabled, so we must generate one
+                verify_user = False
+                if user:
+                    identifier = user.email
+                else:
+                    identifier = Participant.create_anonymous(request.team, ChannelPlatform.WEB).identifier
+
+            session = WebChannel.start_new_session(
+                working_experiment=experiment,
+                participant_user=user,
+                participant_identifier=identifier,
+                timezone=request.session.get("detected_tz", None),
+            )
+            if verify_user and consent.identifier_type == "email":
+                return _verify_user_or_start_session(
+                    identifier=identifier,
+                    request=request,
+                    experiment=experiment,
+                    session=session,
+                )
+            else:
+                return _record_consent_and_redirect(team_slug, experiment, session)
+    else:
+        form = ConsentForm(
+            consent,
+            initial={
+                "experiment_id": experiment_version.id,
+                "identifier": user.email if user else None,
+            },
+        )
+
+    consent_notice = consent.get_rendered_content()
+    version_specific_vars = {
+        "experiment_name": experiment_version.name,
+        "experiment_description": experiment_version.description,
+    }
+    return TemplateResponse(
+        request,
+        "experiments/start_experiment_session.html",
+        {
+            "active_tab": "experiments",
+            "experiment": experiment,
+            "consent_notice": mark_safe(consent_notice),
+            "form": form,
+            **version_specific_vars,
+        },
+    )
+
+
+def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
+    """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
+    will ALWAYS create anonymous participants."""
+    try:
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+    except ValidationError:
+        # old links dont have uuids
+        raise Http404() from None
+
+    experiment_version = experiment.default_version
+    if not experiment_version.is_public:
+        raise Http404
+
+    participant = Participant.create_anonymous(request.team, ChannelPlatform.WEB)
+    session = WebChannel.start_new_session(
+        working_experiment=experiment,
+        participant_identifier=participant.identifier,
+        timezone=request.session.get("detected_tz", None),
+        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
+    )
+    redirect_url = (
+        "chatbots:chatbot_chat_embed" if request.origin == "chatbots" else "experiments:experiment_chat_embed"
+    )
+    return redirect(redirect_url, team_slug, experiment.public_id, session.external_id)
+
+
+def experiment_invitations(request, team_slug: str, experiment_id: int, origin="experiments"):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    experiment_version = experiment.default_version
+    sessions = experiment.sessions.order_by("-created_at").filter(
+        status__in=["setup", "pending"],
+        participant__isnull=False,
+    )
+    form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
+    if request.method == "POST":
+        post_form = ExperimentInvitationForm(request.POST)
+        if post_form.is_valid():
+            if ExperimentSession.objects.filter(
+                team=request.team,
+                experiment_id=experiment_id,
+                status__in=["setup", "pending"],
+                participant__identifier=post_form.cleaned_data["email"],
+            ).exists():
+                participant_email = post_form.cleaned_data["email"]
+                messages.info(request, f"{participant_email} already has a pending invitation.")
+            else:
+                with transaction.atomic():
+                    session = WebChannel.start_new_session(
+                        experiment,
+                        participant_identifier=post_form.cleaned_data["email"],
+                        session_status=SessionStatus.SETUP,
+                        timezone=request.session.get("detected_tz", None),
+                    )
+                if post_form.cleaned_data["invite_now"]:
+                    send_experiment_invitation(session)
+        else:
+            form = post_form
+
+    version_specific_vars = {
+        "experiment_name": experiment_version.name,
+        "experiment_description": experiment_version.description,
+    }
+    template_name = (
+        "chatbots/chatbot_invitations.html" if origin == "chatbots" else "experiments/experiment_invitations.html"
+    )
+    return TemplateResponse(
+        request,
+        template_name,
+        {"invitation_form": form, "experiment": experiment, "sessions": sessions, **version_specific_vars},
+    )
+
+
+def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    return _experiment_chat_ui(request)
+
+
+def experiment_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    """Special view for embedding that doesn't have the cookie security. This is OK because of the additional
+    checks to ensure the participant is 'anonymous'."""
+    session = request.experiment_session
+    if not session.participant.is_anonymous:
+        raise Http404
+    return _experiment_chat_ui(request, embedded=True)
+
+
+def experiment_version_details(request, team_slug: str, experiment_id: int, version_number: int):
+    try:
+        experiment_version = Experiment.objects.get_all().get(
+            team=request.team, working_version_id=experiment_id, version_number=version_number
+        )
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
+    return render(request, "experiments/components/experiment_version_details_content.html", context)
