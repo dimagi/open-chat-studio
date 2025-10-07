@@ -4,7 +4,7 @@ from apps.experiments.views.experiment_routes import CreateExperimentRoute, Dele
 from apps.generics.urls import make_crud_urls
 
 from . import views
-from .views import filters as filter_views
+from .filters import list_filter_sets, create_filter_set, edit_or_delete_filter_set
 
 app_name = "experiments"
 
@@ -215,17 +215,17 @@ urlpatterns = [
     ),
     path(
         "filters/<str:table_type>/list/",
-        filter_views.list_filter_sets,
+        list_filter_sets,
         name="list_filter_set",
     ),
     path(
         "filters/<str:table_type>/create/",
-        filter_views.create_filter_set,
+        create_filter_set,
         name="create_filter_set",
     ),
     path(
         "filters/<int:pk>/edit/",
-        filter_views.edit_or_delete_filter_set,
+        edit_or_delete_filter_set,
         name="edit_filter_set",
     ),
 ]
