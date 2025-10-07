@@ -5,7 +5,7 @@ from io import StringIO
 from uuid import UUID
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, OuterRef, Prefetch, Subquery
+from django.db.models import Case, Count, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -509,11 +509,26 @@ class CreateDatasetFromSessionView(LoginAndTeamRequiredMixin, PermissionRequired
             ExperimentSession, experiment__public_id=experiment_id, external_id=session_id, team=self.request.team
         )
         # Get all messages for this session with properly prefetched tags
-        messages = session.chat.messages.order_by("created_at").prefetch_related(
-            Prefetch(
-                "tagged_items",
-                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                to_attr="prefetched_tagged_items",
+        next_message_query = ChatMessage.objects.filter(
+            chat_id=OuterRef("chat_id"),
+            created_at__gt=OuterRef("created_at"),
+        ).order_by("created_at")[:1]
+        messages = (
+            session.chat.messages.order_by("created_at")
+            .prefetch_related(
+                Prefetch(
+                    "tagged_items",
+                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                    to_attr="prefetched_tagged_items",
+                )
+            )
+            .annotate(
+                next_message_type=Subquery(next_message_query.values("message_type")),
+            )
+            .annotate(
+                next_message_is_ai=Case(
+                    When(Q(next_message_type=ChatMessageType.AI), then=Value(True)), default=Value(False)
+                )
             )
         )
         context["messages"] = messages
