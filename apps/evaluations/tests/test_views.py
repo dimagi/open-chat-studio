@@ -64,7 +64,7 @@ class TestCreateDatasetFromSessionView:
             dataset.refresh_from_db()
 
         assert dataset is not None, "Dataset should be created"
-        assert dataset.messages.count() == 2, "Dataset should contain 2 messages"
+        assert dataset.messages.count() == 3, "Dataset should contain 3 messages"
 
         message1 = dataset.messages.filter(input_chat_message_id=h2.id).first()
         assert message1.participant_data == {"name": "John Doe"}
