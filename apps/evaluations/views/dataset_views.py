@@ -5,7 +5,8 @@ from io import StringIO
 from uuid import UUID
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Case, Count, OuterRef, Prefetch, Q, Subquery, Value, When
+from django.db import transaction
+from django.db.models import Count, OuterRef, Prefetch, Q
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -16,7 +17,7 @@ from django.views.generic import CreateView, DeleteView, TemplateView, UpdateVie
 from django_tables2 import SingleTableView
 
 from apps.annotations.models import CustomTaggedItem
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage
 from apps.evaluations.forms import AddMessagesToDatasetForm, EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.tables import (
@@ -25,7 +26,11 @@ from apps.evaluations.tables import (
     EvaluationSessionsSelectionTable,
 )
 from apps.evaluations.tasks import upload_dataset_csv_task
-from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
+from apps.evaluations.utils import (
+    generate_csv_column_suggestions,
+    make_evaluation_messages_from_sessions,
+    parse_history_text,
+)
 from apps.experiments.filters import (
     ChatMessageFilter,
     ExperimentSessionFilter,
@@ -528,26 +533,11 @@ class CreateDatasetFromSessionView(LoginAndTeamRequiredMixin, PermissionRequired
             ExperimentSession, experiment__public_id=experiment_id, external_id=session_id, team=self.request.team
         )
         # Get all messages for this session with properly prefetched tags
-        next_message_query = ChatMessage.objects.filter(
-            chat_id=OuterRef("chat_id"),
-            created_at__gt=OuterRef("created_at"),
-        ).order_by("created_at")[:1]
-        messages = (
-            session.chat.messages.order_by("created_at")
-            .prefetch_related(
-                Prefetch(
-                    "tagged_items",
-                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                    to_attr="prefetched_tagged_items",
-                )
-            )
-            .annotate(
-                next_message_type=Subquery(next_message_query.values("message_type")),
-            )
-            .annotate(
-                next_message_is_ai=Case(
-                    When(Q(next_message_type=ChatMessageType.AI), then=Value(True)), default=Value(False)
-                )
+        messages = session.chat.messages.order_by("created_at").prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
             )
         )
         context["messages"] = messages
@@ -558,6 +548,7 @@ class CreateDatasetFromSessionView(LoginAndTeamRequiredMixin, PermissionRequired
     def get_success_url(self):
         return reverse("evaluations:dataset_home", args=[self.request.team.slug])
 
+    @transaction.atomic
     def post(self, request, team_slug: str, experiment_id: UUID, session_id: str):
         """
         Add selected messages from the session to a new or existing dataset. Messages are only added if they are human
@@ -579,67 +570,7 @@ class CreateDatasetFromSessionView(LoginAndTeamRequiredMixin, PermissionRequired
                 name=data["new_dataset_name"],
             )
 
-        human_message_ids = data["message_ids"]
-        next_message_query = ChatMessage.objects.filter(
-            chat_id=OuterRef("chat_id"),
-            created_at__gt=OuterRef("created_at"),
-        ).order_by("created_at")[:1]
-
-        human_messages = (
-            ChatMessage.objects.filter(
-                id__in=human_message_ids,
-                message_type=ChatMessageType.HUMAN,
-                chat__experiment_session__external_id=session_id,
-            )
-            .annotate(
-                next_message_type=Subquery(next_message_query.values("message_type")),
-                next_message_id=Subquery(next_message_query.values("id")),
-                next_message_content=Subquery(next_message_query.values("content")),
-            )
-            .filter(next_message_type=ChatMessageType.AI)
-            .prefetch_related("input_message_trace")
-            .order_by("created_at")
-        )
-
-        # Fetch all messages in the session to avoid having to make repeated queries in the for-loop
-        # albeit at the cost of memory
-        all_messages = (
-            ChatMessage.objects.filter(chat__experiment_session__external_id=session_id)
-            .order_by("created_at")
-            .values("message_type", "content", "summary", "created_at")
-        )
-
-        eval_messages = []
-        for human_message in human_messages.all():
-            history = []
-
-            for message in all_messages:
-                if message["created_at"] < human_message.created_at:
-                    history.append(
-                        {
-                            "message_type": message["message_type"],
-                            "content": message["content"],
-                            "summary": message["summary"],
-                        }
-                    )
-
-            participant_data = {}
-            session_state = {}
-            if trace_message := human_message.input_message_trace.first():
-                participant_data = trace_message.participant_data or {}
-                session_state = trace_message.session_state or {}
-
-            eval_message = EvaluationMessage.objects.create(
-                input_chat_message=human_message,
-                expected_output_chat_message_id=human_message.next_message_id,
-                input=EvaluationMessageContent(content=human_message.content, role="human").model_dump(),
-                output=EvaluationMessageContent(content=human_message.next_message_content, role="ai").model_dump(),
-                history=history,
-                participant_data=participant_data,
-                session_state=session_state,
-                metadata={"session_id": session_id, "experiment_id": str(experiment_id)},
-            )
-            eval_messages.append(eval_message)
-
-        dataset.messages.add(*eval_messages)
+        eval_messages = make_evaluation_messages_from_sessions({session_id: data["message_ids"]})
+        EvaluationMessage.objects.bulk_create(eval_messages)
+        dataset.messages.set(eval_messages)
         return redirect(reverse("evaluations:dataset_home", args=[self.request.team.slug]))

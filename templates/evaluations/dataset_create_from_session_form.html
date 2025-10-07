@@ -42,7 +42,7 @@
               {% for message in messages %}
                 <tr class="{% if message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}">
                   <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium">
-                    {% if message.is_human_message and message.next_message_is_ai %}
+                    {% if message.is_human_message %}
                       <input 
                         type="checkbox" 
                         value="{{ message.id }}" 
