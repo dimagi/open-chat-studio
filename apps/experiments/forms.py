@@ -364,10 +364,19 @@ class AddMessagesToDatasetForm(forms.Form):
 
     def clean_message_ids(self):
         message_ids = self.cleaned_data["message_ids"]
+        if not message_ids or not message_ids.strip():
+            raise forms.ValidationError("Please select at least one message.")
         return [int(id) for id in message_ids.split(",")]
 
     def clean(self):
         cleaned_data = super().clean()
-        if cleaned_data["new_dataset_name"] and cleaned_data["dataset"]:
+        dataset = cleaned_data.get("dataset")
+        new_dataset_name = cleaned_data.get("new_dataset_name")
+
+        if new_dataset_name and dataset:
             raise forms.ValidationError("You can only select an existing dataset or create a new one, not both.")
+
+        if not new_dataset_name and not dataset:
+            raise forms.ValidationError("Please either select an existing dataset or provide a name for a new dataset.")
+
         return cleaned_data

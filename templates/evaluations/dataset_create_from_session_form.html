@@ -6,7 +6,7 @@
 {% load json_tags %}
 
 {% block app %}
-  <div class="app-card max-w-full mx-auto" x-data="{ selectedMessages: [] }">
+  <div class="app-card max-w-full mx-auto" x-data="datasetMessageSelector()">
     <div class="flex">
       <div class="flex-1">
         <h1 class="pg-title">Create Dataset</h1>
@@ -46,8 +46,9 @@
                       <input 
                         type="checkbox" 
                         value="{{ message.id }}" 
-                        class="checkbox checkbox-primary"
+                        class="checkbox checkbox-primary message-checkbox"
                         x-model="selectedMessages"
+                        data-message-id="{{ message.id }}"
                       />
                     {% endif %}
                   </td>
@@ -126,4 +127,18 @@
       </div>
     {% endif %}
   </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('datasetMessageSelector', () => ({
+            selectedMessages: [],
+            init() {
+                // Initialize from form field if it has a value
+                const messageIdsInput = document.querySelector('input[name="message_ids"]');
+                if (messageIdsInput && messageIdsInput.value) {
+                    this.selectedMessages = messageIdsInput.value.split(',').filter(id => id.trim());
+                }
+            },
+        }))});
+</script>
 {% endblock app %}
