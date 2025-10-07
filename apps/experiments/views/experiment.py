@@ -811,6 +811,59 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         return redirect(failed_url)
 
 
+# Basic views for models that lost their dedicated view files during cleanup
+@login_and_team_required
+@permission_required("experiments.view_sourcematerial", raise_exception=True)
+def source_material_home(request, team_slug: str):
+    # Simple list view for source materials
+    return TemplateResponse(
+        request,
+        "table/single_table.html",
+        {
+            "active_tab": "source_material",
+            "title": "Source Material",
+            "table_url": reverse("experiments:source_material_home", args=[team_slug]),
+        },
+    )
+
+
+@login_and_team_required
+@permission_required("experiments.view_survey", raise_exception=True)
+def survey_home(request, team_slug: str):
+    # Simple list view for surveys
+    return TemplateResponse(
+        request,
+        "table/single_table.html",
+        {
+            "active_tab": "survey",
+            "title": "Surveys",
+            "table_url": reverse("experiments:survey_home", args=[team_slug]),
+        },
+    )
+
+
+@login_and_team_required
+@permission_required("experiments.view_consentform", raise_exception=True)
+def consent_home(request, team_slug: str):
+    # Simple list view for consent forms
+    return TemplateResponse(
+        request,
+        "table/single_table.html",
+        {
+            "active_tab": "consent_forms",
+            "title": "Consent Forms",
+            "table_url": reverse("experiments:consent_home", args=[team_slug]),
+        },
+    )
+
+
+@login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
+def experiments_prompt_builder(request, team_slug: str):
+    # Redirect to chatbots since prompt builder was experiment-specific UI
+    return redirect("chatbots:chatbots_home", team_slug=team_slug)
+
+
 # Shared functions needed by chatbots
 # These functions were extracted from the original experiment.py
 

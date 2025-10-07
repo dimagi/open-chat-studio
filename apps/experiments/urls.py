@@ -116,7 +116,13 @@ urlpatterns = [
     ),
 ]
 
-# CRUD URLs for removed view modules:
+# Basic URL patterns for models that lost their dedicated view files
+(path("source_material/", views.source_material_home, name="source_material_home"),)
+(path("survey/", views.survey_home, name="survey_home"),)
+(path("consent/", views.consent_home, name="consent_home"),)
+(path("prompt_builder/", views.experiments_prompt_builder, name="experiments_prompt_builder"),)
+
+# CRUD URLs for removed view modules were commented out:
 # urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))
 # urlpatterns.extend(make_crud_urls(views, "SourceMaterial", "source_material"))
 # urlpatterns.extend(make_crud_urls(views, "Survey", "survey"))
