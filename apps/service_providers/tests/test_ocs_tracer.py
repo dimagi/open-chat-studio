@@ -111,3 +111,28 @@ class TestOCSTracer:
         )
         span = Span.objects.get(trace=tracer.trace)
         assert span.error is not None
+
+    def test_record_experiment_version(self, experiment):
+        tracer = OCSTracer(experiment.id, experiment.team_id)
+        session = ExperimentSessionFactory()
+
+        tracer.start_trace(
+            trace_name="test_trace",
+            trace_id=uuid4(),
+            session=session,
+        )
+
+        assert experiment.working_version is None
+        assert tracer.trace.experiment_version_number is None
+        assert tracer.trace.experiment_id == experiment.id
+
+        version = experiment.create_new_version()
+        tracer = OCSTracer(version.id, experiment.team_id)
+        tracer.start_trace(
+            trace_name="test_trace",
+            trace_id=uuid4(),
+            session=session,
+        )
+
+        assert tracer.trace.experiment_version_number == version.version_number
+        assert tracer.trace.experiment_id == experiment.id

@@ -1,3 +1,6 @@
+import operator
+from typing import Annotated
+
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
@@ -18,6 +21,12 @@ from apps.service_providers.llm_service.utils import (
 )
 
 
+class StateSchema(AgentState):
+    # allows tools to manipulate participant data and session state
+    participant_data: Annotated[dict, operator.or_]
+    session_state: Annotated[dict, operator.or_]
+
+
 def execute_sub_agent(node, state: PipelineState, user_input: str):
     session: ExperimentSession | None = state.get("experiment_session")
     tool_callbacks = ToolCallbacks()
@@ -26,7 +35,12 @@ def execute_sub_agent(node, state: PipelineState, user_input: str):
     attachments = [att for att in state.get("temp_state", {}).get("attachments", [])]
     formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
 
-    result = agent.invoke({"messages": [formatted_input]})
+    inputs = StateSchema(
+        messages=[formatted_input],
+        participant_data=state.get("participant_data") or {},
+        session_state=state.get("session_state") or {},
+    )
+    result = agent.invoke(inputs)
     final_message = result["messages"][-1]
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)
@@ -46,6 +60,8 @@ def execute_sub_agent(node, state: PipelineState, user_input: str):
             **tool_callbacks.output_message_metadata,
         },
         intents=tool_callbacks.intents,
+        participant_data=result.get("participant_data") or {},
+        session_state=result.get("session_state") or {},
         **voice_kwargs,
     )
 
@@ -88,6 +104,7 @@ def build_node_agent(node, state: PipelineState, session: ExperimentSession, too
         model=node.get_chat_model(),
         tools=tools,
         prompt=prompt_callable,
+        state_schema=StateSchema,
     )
 
 
@@ -107,14 +124,15 @@ def _process_files(session: ExperimentSession, cited_files: set[File], generated
 
 def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
     extra_prompt_context = {
-        "temp_state": state.get("temp_state", {}),
-        "session_state": session.state or {},
+        "temp_state": state.get("temp_state") or {},
+        "session_state": state.get("session_state") or {},
     }
     return PromptTemplateContext(
         session,
         source_material_id=node.source_material_id,
         collection_id=node.collection_id,
         extra=extra_prompt_context,
+        participant_data=state.get("participant_data") or {},
     )
 
 

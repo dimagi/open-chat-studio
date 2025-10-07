@@ -40,6 +40,7 @@ def session(request):
     chat = Chat()
     chat.save = lambda: None
     session = ExperimentSessionFactory.build(chat=chat)
+    session.participant_data_from_experiment = {}
     local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID, include_file_info=False)
     if request.param:
         local_assistant.tools = LEGACY_EXPERIMENT_TOOLS

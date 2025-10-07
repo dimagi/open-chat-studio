@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import textwrap
+from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from langchain.memory import ConversationBufferMemory
@@ -14,7 +15,7 @@ from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, SafetyLayer
+from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, ParticipantData, SafetyLayer
 from apps.files.models import File
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model
@@ -325,8 +326,23 @@ class PipelineBot:
         return result
 
     def _get_input_state(self, attachments: list[Attachment], user_input: str):
+        state = PipelineState(
+            messages=[user_input],
+            experiment_session=self.session,
+            session_state=self.session.state,
+        )
+        self._update_state_with_participant_data(state)
+        self._updates_state_with_attachments(state, attachments)
+        return state
+
+    def _update_state_with_participant_data(self, state):
+        data = self.participant_data.data | {}
+        data = self.session.participant.global_data | data
+        state["participant_data"] = data
+        return state
+
+    def _updates_state_with_attachments(self, state: PipelineState, attachments: list[Attachment]):
         attachments = attachments or []
-        serializable_attachments = [attachment.model_dump() for attachment in attachments]
         incoming_file_ids = []
 
         for attachment in attachments:
@@ -337,12 +353,11 @@ class PipelineBot:
         if incoming_file_ids:
             input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
 
-        return PipelineState(
-            messages=[user_input],
-            experiment_session=self.session,
-            attachments=serializable_attachments,
-            input_message_metadata=input_message_metadata,
-        )
+        state["input_message_metadata"] = input_message_metadata
+
+        serializable_attachments = [attachment.model_dump() for attachment in attachments]
+        state["attachments"] = serializable_attachments
+        return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
         from apps.experiments.models import AgentTools
@@ -410,6 +425,17 @@ class PipelineBot:
         if session_tags := output.get("session_tags"):
             for tag, category in session_tags:
                 self.session.chat.create_and_add_tag(tag, self.session.team, tag_category=category)
+
+        out_pd = output.get("participant_data", None)
+        if out_pd is not None and out_pd != input_state.get("participant_data"):
+            self.participant_data.data = out_pd
+            self.participant_data.save(update_fields=["data"])
+            self.session.participant.update_name_from_data(out_pd)
+
+        out_session_state = output.get("session_state", None)
+        if out_session_state is not None and out_session_state != input_state.get("session_state"):
+            self.session.state = out_session_state
+            self.session.save(update_fields=["state"])
         return ai_message
 
     def _process_intents(self, pipeline_output: dict):
@@ -442,6 +468,25 @@ class PipelineBot:
         return SyntheticVoice.objects.filter(
             id=self.synthetic_voice_id, service__iexact=self.experiment.voice_provider.type
         ).first()
+
+    @cached_property
+    def participant_data(self):
+        participant_data, _ = ParticipantData.objects.get_or_create(
+            participant_id=self.session.participant_id,
+            experiment_id=self.session.experiment_id,
+            team_id=self.session.team_id,
+        )
+        return participant_data
+
+
+class EvalsBot(PipelineBot):
+    def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, participant_data: dict):
+        super().__init__(session, experiment, trace_service, False)
+        self._participant_data = participant_data
+
+    def _update_state_with_participant_data(self, state):
+        state["participant_data"] = self._participant_data
+        return state
 
 
 class PipelineTestBot:
