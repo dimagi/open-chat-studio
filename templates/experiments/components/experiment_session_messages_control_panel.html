@@ -5,8 +5,7 @@
     class="mt-1 max-w-5xl flex justify-between p-3 pb-5 border-b"
     hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
     hx-target="#messages-container"
-    hx-trigger="change, submit"
-    x-data="{ isSelectingMessages: {{ request.GET.create_dataset|yesno:'true,false' }} }">
+    hx-trigger="change, submit">
     <!-- Hidden inputs to maintain search state -->
     <input type="hidden" name="search" value="{{ request.GET.search|default:'' }}">
 
@@ -18,8 +17,8 @@
             class="btn btn-sm btn-primary">Create Dataset</a>
         {% endif %}
       </div>
-    
-      <div class="flex flex-1 flex-col gap-2" x-show="!isSelectingMessages">
+
+      <div class="flex flex-1 flex-col gap-2">
         {% if not hide_translation|default_if_none:False %}
           <div class="flex items-center gap-3 flex-wrap">
             {% if available_languages %}
@@ -134,7 +133,8 @@
         {% endif %}
       </div>
 
-      <div class="justify-end flex flex-row" x-show="!isSelectingMessages">
+
+      <div class="justify-end flex flex-row">
         {% if total_pages > 1 or request.GET.show_all %}
           <div>
             Show all messages
