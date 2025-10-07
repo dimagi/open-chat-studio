@@ -813,7 +813,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
             participant_identifier=identifier,
             timezone=request.session.get("detected_tz", None),
         )
-        return _record_consent_and_redirect(team_slug, experiment, session, request.origin)
+        return _record_consent_and_redirect(team_slug, experiment, session)
 
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
@@ -1035,7 +1035,9 @@ def send_invitation(request, team_slug: str, experiment_id: int, session_id: str
 
 
 def _record_consent_and_redirect(
-    team_slug: str, experiment: Experiment, experiment_session: ExperimentSession, origin="experiments"
+    team_slug: str,
+    experiment: Experiment,
+    experiment_session: ExperimentSession,
 ):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
@@ -1044,7 +1046,7 @@ def _record_consent_and_redirect(
         redirect_url_name = "experiments:experiment_pre_survey"
     else:
         experiment_session.status = SessionStatus.ACTIVE
-        redirect_url_name = "chatbots:chatbot_chat" if origin == "chatbots" else "experiments:experiment_chat"
+        redirect_url_name = "chatbots:chatbot_chat"
     experiment_session.save()
     response = HttpResponseRedirect(
         reverse(
