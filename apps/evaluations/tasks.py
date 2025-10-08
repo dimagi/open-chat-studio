@@ -110,7 +110,6 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
             ]
             ChatMessage.objects.bulk_create(history_messages)
 
-        # TODO: Populate participant data?
     except Exception as e:
         logger.exception(f"Error populating eval data {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
