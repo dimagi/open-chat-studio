@@ -298,43 +298,41 @@ class DeleteParticipant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
 
 @login_and_team_required
 @permission_required("experiments.change_participant")
+@require_POST
 def edit_identifier(request, team_slug: str, pk: int):
-    participant = get_object_or_404(Participant, id=pk, team=request.team)
+    """
+    Edit the identifier of a participant.
+    """
+    current_participant = get_object_or_404(Participant, id=pk, team=request.team)
+    new_identifier = request.POST.get("identifier", "").strip()
 
-    if request.method == "POST":
-        new_identifier = request.POST.get("identifier", "").strip()
+    if not new_identifier:
+        messages.error(request, "Identifier is required")
+        return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=pk)
 
-        if not new_identifier:
-            return render(
-                request,
-                "participants/partials/edit_identifier.html",
-                {"participant": participant, "error": "Identifier is required"},
-            )
+    if new_identifier == current_participant.identifier:
+        # Do nothing if the identifier is unchanged
+        return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=pk)
 
-        # Check if the new identifier is the same as the current one
-        if new_identifier == participant.identifier:
-            return render(request, "participants/partials/participant_identifier.html", {"participant": participant})
-
+    try:
         # Check if another participant with this identifier already exists
-        try:
-            existing_participant = Participant.objects.get(
-                team=request.team, platform=participant.platform, identifier=new_identifier
-            )
-            # Merge participants
-            _merge_participants(participant, existing_participant)
-            messages.success(request, f"Participant merged with existing participant '{new_identifier}' and removed")
-            # Return a response that triggers a redirect to the participant list
-            response = HttpResponse()
-            response["HX-Redirect"] = reverse("participants:participant_home", args=[team_slug])
-            return response
+        existing_participant = Participant.objects.get(
+            team=request.team, platform=current_participant.platform, identifier=new_identifier
+        )
+        # Merge participants
+        _merge_participants(current_participant, existing_participant)
+        messages.success(request, f"Participant merged with existing participant '{new_identifier}' and removed")
+        # Redirect to the participant list since this participant was deleted
+        return redirect(
+            "participants:single-participant-home", team_slug=team_slug, participant_id=existing_participant.id
+        )
 
-        except Participant.DoesNotExist:
-            # No conflict, just update the identifier
-            participant.identifier = new_identifier
-            participant.save()
-            return render(request, "participants/partials/participant_identifier.html", {"participant": participant})
-
-    return render(request, "participants/partials/edit_identifier.html", {"participant": participant})
+    except Participant.DoesNotExist:
+        # No conflict, just update the identifier
+        current_participant.identifier = new_identifier
+        current_participant.save()
+        messages.success(request, f"Identifier updated to '{new_identifier}'")
+        return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=pk)
 
 
 def _merge_participants(old_participant: Participant, new_participant: Participant):
@@ -355,12 +353,12 @@ def _merge_participants(old_participant: Participant, new_participant: Participa
             try:
                 # Check if new participant already has data for this experiment
                 new_data = ParticipantData.objects.get(participant=new_participant, experiment=old_data.experiment)
-                # Merge the data dictionaries (new_participant's data takes precedence)
                 merged_data = old_data.data | new_data.data
                 new_data.data = merged_data
+
+                merged_system_metadata = old_data.system_metadata | new_data.system_metadata
+                new_data.system_metadata = merged_system_metadata
                 new_data.save()
-                # Delete the old data record
-                old_data.delete()
             except ParticipantData.DoesNotExist:
                 # New participant doesn't have data for this experiment, transfer it
                 old_data.participant = new_participant
@@ -372,5 +370,5 @@ def _merge_participants(old_participant: Participant, new_participant: Participa
         # 3. Transfer all scheduled messages to the new participant
         ScheduledMessage.objects.filter(participant=old_participant).update(participant=new_participant)
 
-        # 4. Delete the old participant
+        # 4. Delete the old participant.
         old_participant.delete()
