@@ -34,7 +34,7 @@ logger = logging.getLogger("ocs.evaluations")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
+def evaluate_single_message_task(self, evaluation_run_id, evaluator_ids, message_id):
     """
     Run all evaluations over a single message.
     First runs the message through the bot, then runs the evaluator.
@@ -141,7 +141,7 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def mark_evaluation_complete(results, evaluation_run_id):
+def mark_evaluation_complete(self, results, evaluation_run_id):
     """
     Callback task that marks an evaluation run as complete.
     This is called when all tasks in a chord have finished.
@@ -210,7 +210,7 @@ def run_evaluation_task(self, evaluation_run_id):
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def cleanup_old_evaluation_data():
+def cleanup_old_evaluation_data(self):
     """Delete ExperimentSessions that were created during evaluation runs and
     are older than one week.
 
@@ -230,7 +230,7 @@ def cleanup_old_evaluation_data():
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def cleanup_old_preview_evaluation_runs():
+def cleanup_old_preview_evaluation_runs(self):
     """Delete preview evaluation runs older than 1 day"""
     one_day_ago = timezone.now() - timedelta(days=1)
     old_preview_runs = EvaluationRun.objects.filter(type=EvaluationRunType.PREVIEW, created_at__lt=one_day_ago)
