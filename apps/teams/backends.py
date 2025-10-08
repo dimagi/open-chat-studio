@@ -67,7 +67,6 @@ CONTENT_TYPES = {
         "experiment",
         "experimentroute",
         "experimentsession",
-        "filterset",
         "participant",
         "participantdata",
         "promptbuilderhistory",
@@ -77,6 +76,7 @@ CONTENT_TYPES = {
         "syntheticvoice",
     ],
     "files": ["file", "filechunkembedding"],
+    "filters": ["filterset"],
     "pipelines": ["pipeline", "pipelinechathistory", "pipelinechatmessages", "node"],
     "service_providers": [
         "authprovider",

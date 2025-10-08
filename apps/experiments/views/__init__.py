@@ -54,7 +54,6 @@ from .experiment import (  # noqa: F401
     verify_public_chat_token,
     version_create_status,
 )
-# Filter views are intentionally not imported here to avoid increasing this module's surface area
 from .experiment_routes import (  # noqa: F401
     CreateExperimentRoute,
     DeleteExperimentRoute,
