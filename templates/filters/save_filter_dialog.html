@@ -17,7 +17,7 @@
         <input type="text" 
                id="filterSetName" 
                class="input input-bordered w-full bg-base-100 border-base-300 text-base-content placeholder-base-content/60 focus:border-primary" 
-               placeholder="{% trans 'Name' %}" 
+               placeholder='{% trans "Name" %}'
                required>
       </div>
       
@@ -62,7 +62,7 @@ function submitFilterSet(event) {
     filter_params: currentFilterParams,
   };
 
-  const url = '{% url "experiments:create_filter_set" request.team.slug df_table_type %}';
+  const url = '{% url "filters:create_filter_set" request.team.slug df_table_type %}';
 
   fetch(url, {
     method: 'POST',

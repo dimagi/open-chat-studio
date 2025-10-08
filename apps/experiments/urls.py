@@ -4,7 +4,6 @@ from apps.experiments.views.experiment_routes import CreateExperimentRoute, Dele
 from apps.generics.urls import make_crud_urls
 
 from . import views
-from .filters import list_filter_sets, create_filter_set, edit_or_delete_filter_set
 
 app_name = "experiments"
 
@@ -212,21 +211,6 @@ urlpatterns = [
         "experiment/<uuid:experiment_id>/session/<str:session_id>/translate-messages/",
         views.translate_messages_view,
         name="translate_messages",
-    ),
-    path(
-        "filters/<str:table_type>/list/",
-        list_filter_sets,
-        name="list_filter_set",
-    ),
-    path(
-        "filters/<str:table_type>/create/",
-        create_filter_set,
-        name="create_filter_set",
-    ),
-    path(
-        "filters/<int:pk>/edit/",
-        edit_or_delete_filter_set,
-        name="edit_filter_set",
     ),
 ]
 

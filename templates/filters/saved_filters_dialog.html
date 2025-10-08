@@ -32,7 +32,7 @@ const FilterDialog = {
     content.innerHTML = '<div class="flex justify-center p-4"><span class="loading loading-spinner loading-sm"></span></div>';
 
     try {
-      const filters = await this.apiCall("{% url 'experiments:list_filter_set' request.team.slug df_table_type %}");
+      const filters = await this.apiCall("{% url 'filters:list_filter_set' request.team.slug df_table_type %}");
       this.filters = filters.results || []; // Store the filters
       content.innerHTML = this.filters.length
         ? this.renderFilters(this.filters)
@@ -185,7 +185,7 @@ const FilterDialog = {
   },
 
   async api(endpoint, method, body) {
-    const base = "{% url 'experiments:edit_filter_set' request.team.slug 0 %}";
+    const base = "{% url 'filters:edit_filter_set' request.team.slug 0 %}";
     const url = base.replace("/0/edit/", endpoint);
     const opts = {
       method, credentials:"same-origin",

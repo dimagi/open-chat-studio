@@ -609,7 +609,7 @@
       async loadFilterSets() {
         if (this.filterSets) return this.filterSets;
         try {
-          const url = '{% url "experiments:list_filter_set" request.team.slug df_table_type %}';
+          const url = '{% url "filters:list_filter_set" request.team.slug df_table_type %}';
           const res = await fetch(url, { credentials: 'same-origin' });
           const data = await res.json();
           this.filterSets = data.results || [];
