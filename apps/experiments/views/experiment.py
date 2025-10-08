@@ -222,7 +222,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         }
 
     def get_success_url(self):
-        return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+        return reverse("chatbots:single_chatbot_home", args=[self.request.team.slug, self.object.pk])
 
     def get_queryset(self):
         return Experiment.objects.get_all().filter(team=self.request.team)
@@ -445,7 +445,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionReq
 
     def get_success_url(self):
         url = reverse(
-            "experiments:single_experiment_home",
+            "chatbots:single_chatbot_home",
             kwargs={
                 "team_slug": self.request.team.slug,
                 "experiment_id": self.kwargs["experiment_id"],
@@ -511,9 +511,8 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
-    return base_single_experiment_view(
-        request, team_slug, experiment_id, "experiments/single_experiment_home.html", "experiments"
-    )
+    """Redirect to single chatbot home - chatbots should be the primary interface for individual experiments."""
+    return HttpResponseRedirect(reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id]))
 
 
 def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
