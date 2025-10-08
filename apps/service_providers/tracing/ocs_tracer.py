@@ -67,7 +67,7 @@ class OCSTracer(Tracer):
         try:
             experiment = Experiment.objects.get(id=self.experiment_id)
         except Experiment.DoesNotExist:
-            logger.error("Experiment with id %s does not exist. Cannot start trace.", self.experiment_id)
+            logger.exception(f"Experiment with id {self.experiment_id} does not exist. Cannot start trace.")
             return
         experiment_id = self.experiment_id
         experiment_version_number = None
