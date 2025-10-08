@@ -30,10 +30,7 @@ from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView
 from apps.experiments.views.experiment import (
     CreateExperimentVersion,
     base_single_experiment_view,
-    experiment_chat,
-    experiment_chat_embed,
     start_session_public,
-    start_session_public_embed,
 )
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
@@ -453,19 +450,70 @@ def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UU
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return experiment_chat(request, team_slug, experiment_id, session_id)
+    return _chatbot_chat_ui(request)
 
 
 @xframe_options_exempt
 @team_required
 def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
-    return start_session_public_embed(request, team_slug, experiment_id)
+    """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and pre-surveys and
+    will ALWAYS create anonymous participants."""
+    from django.core.exceptions import ValidationError
+
+    from apps.channels.models import ChannelPlatform
+    from apps.chat.models import Chat
+    from apps.participants.models import Participant
+
+    try:
+        chatbot = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+    except ValidationError:
+        # old links dont have uuids
+        raise Http404() from None
+
+    chatbot_version = chatbot.default_version
+    if not chatbot_version.is_public:
+        raise Http404
+
+    participant = Participant.create_anonymous(request.team, ChannelPlatform.WEB)
+    session = WebChannel.start_new_session(
+        working_experiment=chatbot,
+        participant_identifier=participant.identifier,
+        timezone=request.session.get("detected_tz", None),
+        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
+    )
+    return redirect("chatbots:chatbot_chat_embed", team_slug, chatbot.public_id, session.external_id)
 
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @xframe_options_exempt
 def chatbot_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return experiment_chat_embed(request, team_slug, experiment_id, session_id)
+    """Special view for embedding that doesn't have the cookie security. This is OK because of the additional
+    checks to ensure the participant is 'anonymous'."""
+    session = request.experiment_session
+    if not session.participant.is_anonymous:
+        raise Http404
+    return _chatbot_chat_ui(request, embedded=True)
+
+
+def _chatbot_chat_ui(request, embedded=False):
+    chatbot_version = request.experiment.default_version
+    version_specific_vars = {
+        "assistant": chatbot_version.get_assistant(),
+        "chatbot_name": chatbot_version.name,
+        "experiment_version": chatbot_version,
+        "experiment_version_number": chatbot_version.version_number,
+    }
+    return TemplateResponse(
+        request,
+        "experiments/experiment_chat.html",
+        {
+            "experiment": request.experiment,
+            "session": request.experiment_session,
+            "active_tab": "chatbots",
+            "embedded": embedded,
+            **version_specific_vars,
+        },
+    )
 
 
 @login_and_team_required
