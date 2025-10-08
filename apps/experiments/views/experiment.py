@@ -106,7 +106,6 @@ from apps.experiments.tasks import (
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
-from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.views import paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
@@ -121,24 +120,8 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    from apps.chatbots.views import home
-
-    actions_ = [
-        actions.Action(
-            "experiments:new",
-            label="Add New",
-            button_style="btn-primary",
-            required_permissions=["experiments.add_experiment"],
-        )
-    ]
-    return home(
-        request,
-        team_slug,
-        "Experiments",
-        "experiments:table",
-        actions=actions_,
-        show_modal_or_banner=True,
-    )
+    """Redirect to chatbots home - there should be only one main homepage."""
+    return HttpResponseRedirect(reverse("chatbots:chatbots_home", args=[team_slug]))
 
 
 class ExperimentTableView(BaseExperimentTableView):
