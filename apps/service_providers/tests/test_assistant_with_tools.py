@@ -10,9 +10,8 @@ from openai.types.beta.threads.required_action_function_tool_call import Functio
 from openai.types.beta.threads.run import RequiredAction, RequiredActionSubmitToolOutputs
 
 from apps.chat.agent.openapi_tool import ToolArtifact
+from apps.experiments.runnables import AgentAssistantChat, ExperimentHistoryManager
 from apps.service_providers.llm_service.adapters import AssistantAdapter
-from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
-from apps.service_providers.llm_service.runnables import AgentAssistantChat
 from apps.service_providers.tests.test_assistant_runnable import _create_run, _create_thread_messages
 from apps.service_providers.tracing import TracingService
 from apps.utils.factories.assistants import OpenAiAssistantFactory

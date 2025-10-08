@@ -22,7 +22,11 @@
         <h1 class="pg-title">Chatbot Review</h1>
       </div>
       {% if request.user.is_authenticated %}
-        {% url 'chatbots:chatbot_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
+        {% if active_tab == "experiments" %}
+          {% url 'experiments:experiment_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
+        {% else %}
+          {% url 'chatbots:chatbot_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
+        {% endif %}
         <div class="justify-self-end">
           <div class="join">
             <a class="btn join-item"

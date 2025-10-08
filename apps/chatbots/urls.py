@@ -1,5 +1,7 @@
 from django.urls import include, path
 
+from apps.experiments.views.experiment import start_authed_web_session, start_session_public
+
 from . import views
 
 app_name = "chatbots"
@@ -41,16 +43,11 @@ urlpatterns = [
     ),
     path(
         "<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
-        views.start_authed_web_session,
-        name="start_authed_web_session",
-    ),
-    path(
-        "<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
-        views.start_authed_web_session,
+        start_authed_web_session,
         name="start_authed_web_session",
     ),
     path("<int:experiment_id>/invitations/", views.chatbot_invitations, name="chatbots_invitations"),
-    path("<uuid:experiment_id>/start/", views.start_chatbot_session_public, name="start_session_public"),
+    path("<uuid:experiment_id>/start/", start_session_public, name="start_session_public"),
     path(
         "<uuid:experiment_id>/s/<str:session_id>/chat/",
         views.chatbot_chat,

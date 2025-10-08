@@ -1,5 +1,6 @@
 from django.urls import include, path
 
+from apps.chatbots.views import chatbot_session_pagination_view
 from apps.experiments.views.experiment_routes import CreateExperimentRoute, DeleteExperimentRoute, EditExperimentRoute
 from apps.generics.urls import make_crud_urls
 
@@ -127,16 +128,6 @@ urlpatterns = [
         name="experiment_pre_survey",
     ),
     path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/chat/",
-        views.experiment_chat,
-        name="experiment_chat",
-    ),
-    path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/embed/chat/",
-        views.experiment_chat_embed,
-        name="experiment_chat_embed",
-    ),
-    path(
         "e/<uuid:experiment_id>/s/<str:session_id>/end/",
         views.end_experiment,
         name="end_experiment",
@@ -158,7 +149,7 @@ urlpatterns = [
     ),
     path(
         "e/<uuid:experiment_id>/s/<str:session_id>/paginate/",
-        views.experiment_session_pagination_view,
+        chatbot_session_pagination_view,
         name="experiment_session_pagination_view",
     ),
     path(

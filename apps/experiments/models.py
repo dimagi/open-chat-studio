@@ -1859,7 +1859,7 @@ class ExperimentSession(BaseTeamModel):
         message. The response from the bot will be saved to the chat history.
         """
         from apps.chat.bots import EventBot
-        from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
+        from apps.experiments.runnables import ExperimentHistoryManager
 
         experiment = use_experiment or self.experiment
         history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)

@@ -6,8 +6,8 @@ from langchain_core.messages import AIMessageChunk
 from apps.chat.agent.tools import OneOffReminderTool
 from apps.chat.models import Chat
 from apps.experiments.models import AgentTools
+from apps.experiments.runnables import ExperimentHistoryManager
 from apps.service_providers.llm_service.adapters import ChatAdapter
-from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import (
     AgentLLMChat,
     ChainOutput,

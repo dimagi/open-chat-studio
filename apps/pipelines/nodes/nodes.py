@@ -28,6 +28,7 @@ from apps.assistants.models import OpenAiAssistant
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
+from apps.experiments.runnables import AgentAssistantChat, AssistantChat
 from apps.pipelines.exceptions import (
     AbortPipeline,
     CodeNodeRunError,
@@ -53,11 +54,7 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
-from apps.service_providers.llm_service.runnables import (
-    AgentAssistantChat,
-    AssistantChat,
-    ChainOutput,
-)
+from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables

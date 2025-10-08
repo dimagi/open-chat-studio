@@ -165,7 +165,7 @@ class ExperimentSessionsTable(tables.Table):
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(
-                url_name="experiments:experiment_chat_session",
+                url_name="chatbots:chatbot_chat_session",
                 url_factory=session_chat_url,
                 icon_class="fa-solid fa-comment",
                 title="Continue Chat",
