@@ -3,8 +3,8 @@ import uuid
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count, F, Max, Q
-from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404, redirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -22,7 +22,7 @@ from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
-from apps.experiments.models import Experiment, SessionStatus, SyntheticVoice
+from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
 from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
@@ -31,12 +31,9 @@ from apps.experiments.views.experiment import (
     base_single_experiment_view,
     experiment_chat,
     experiment_chat_embed,
-    experiment_chat_session,
     experiment_invitations,
-    experiment_version_details,
     start_session_public,
     start_session_public_embed,
-    version_create_status,
 )
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
@@ -289,7 +286,15 @@ class ChatbotVersionsTableView(ExperimentVersionsTableView):
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def chatbot_version_details(request, team_slug: str, experiment_id: int, version_number: int):
-    return experiment_version_details(request, team_slug, experiment_id, version_number)
+    try:
+        experiment_version = Experiment.objects.get_all().get(
+            team=request.team, working_version_id=experiment_id, version_number=version_number
+        )
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
+    return render(request, "experiments/components/experiment_version_details_content.html", context)
 
 
 @login_and_team_required
@@ -299,7 +304,16 @@ def chatbot_version_create_status(
     team_slug: str,
     experiment_id: int,
 ):
-    return version_create_status(request, team_slug, experiment_id)
+    experiment = Experiment.objects.get(id=experiment_id, team=request.team)
+    return TemplateResponse(
+        request,
+        "experiments/create_version_button.html",
+        {
+            "active_tab": "chatbots",
+            "experiment": experiment,
+            "trigger_refresh": experiment.create_version_task_id is not None,
+        },
+    )
 
 
 class ChatbotSessionsTableView(ExperimentSessionsTableView):
@@ -331,7 +345,26 @@ def chatbot_session_details_view(request, team_slug: str, experiment_id: uuid.UU
 
 @login_and_team_required
 def chatbot_chat_session(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
-    return experiment_chat_session(request, team_slug, experiment_id, session_id, version_number, "chatbots")
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    session = get_object_or_404(
+        ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
+    )
+    try:
+        experiment_version = experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    version_specific_vars = {
+        "assistant": experiment_version.get_assistant(),
+        "experiment_name": experiment_version.name,
+        "experiment_version": experiment_version,
+        "experiment_version_number": experiment_version.version_number,
+    }
+    return TemplateResponse(
+        request,
+        "experiments/experiment_chat.html",
+        {"experiment": experiment, "session": session, "active_tab": "chatbots", **version_specific_vars},
+    )
 
 
 @login_and_team_required
