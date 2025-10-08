@@ -9,7 +9,7 @@ from apps.filters.serializers import FilterSetCreateUpdateSerializer
 from apps.teams.decorators import login_and_team_required
 
 
-def _serialize_filter_set(fs: FilterSet) -> dict:
+def _to_dict(fs: FilterSet) -> dict:
     return {
         "id": fs.id,
         "name": fs.name,
@@ -34,7 +34,7 @@ def list_filter_sets(request, team_slug: str, table_type: str):
         .filter(models.Q(user=request.user) | models.Q(is_shared=True))
         .order_by("-is_starred", "name")
     )
-    data = [_serialize_filter_set(fs) for fs in qs.all()]
+    data = [_to_dict(fs) for fs in qs.all()]
     return JsonResponse({"results": data})
 
 
@@ -71,7 +71,7 @@ def create_filter_set(request, team_slug: str, table_type: str):
             is_default_for_user=validated.get("is_default_for_user", False),
             is_default_for_team=validated.get("is_default_for_team", False),
         )
-    return JsonResponse({"result": _serialize_filter_set(fs)}, status=201)
+    return JsonResponse({"result": _to_dict(fs)}, status=201)
 
 
 @require_http_methods(["PATCH", "DELETE"])
@@ -134,4 +134,4 @@ def edit_or_delete_filter_set(request, team_slug: str, pk: int):
         if updates:
             fs.save(update_fields=updates)
 
-    return JsonResponse({"result": _serialize_filter_set(fs)})
+    return JsonResponse({"result": _to_dict(fs)})
