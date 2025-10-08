@@ -1,5 +1,6 @@
 import uuid
 
+from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count, F, Max, Q
@@ -31,7 +32,6 @@ from apps.experiments.views.experiment import (
     base_single_experiment_view,
     experiment_chat,
     experiment_chat_embed,
-    experiment_invitations,
     start_session_public,
     start_session_public_embed,
 )
@@ -395,8 +395,54 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
 
 
 @login_and_team_required
+@permission_required("experiments.invite_participants", raise_exception=True)
 def chatbot_invitations(request, team_slug: str, experiment_id: int):
-    return experiment_invitations(request, team_slug, experiment_id, "chatbots")
+    chatbot = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    chatbot_version = chatbot.default_version
+    sessions = chatbot.sessions.order_by("-created_at").filter(
+        status__in=["setup", "pending"],
+        participant__isnull=False,
+    )
+    from apps.experiments.forms import ExperimentInvitationForm
+
+    form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
+    if request.method == "POST":
+        post_form = ExperimentInvitationForm(request.POST)
+        if post_form.is_valid():
+            if ExperimentSession.objects.filter(
+                team=request.team,
+                experiment_id=experiment_id,
+                status__in=["setup", "pending"],
+                participant__identifier=post_form.cleaned_data["email"],
+            ).exists():
+                participant_email = post_form.cleaned_data["email"]
+                messages.info(request, f"{participant_email} already has a pending invitation.")
+            else:
+                from django.db import transaction
+
+                with transaction.atomic():
+                    session = WebChannel.start_new_session(
+                        chatbot,
+                        participant_identifier=post_form.cleaned_data["email"],
+                        session_status=SessionStatus.SETUP,
+                        timezone=request.session.get("detected_tz", None),
+                    )
+                if post_form.cleaned_data["invite_now"]:
+                    from apps.experiments.email import send_experiment_invitation
+
+                    send_experiment_invitation(session)
+        else:
+            form = post_form
+
+    version_specific_vars = {
+        "chatbot_name": chatbot_version.name,
+        "chatbot_description": chatbot_version.description,
+    }
+    return TemplateResponse(
+        request,
+        "chatbots/chatbot_invitations.html",
+        {"invitation_form": form, "experiment": chatbot, "sessions": sessions, **version_specific_vars},
+    )
 
 
 @team_required
