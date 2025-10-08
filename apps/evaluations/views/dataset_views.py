@@ -2,20 +2,23 @@ import csv
 import json
 import logging
 from io import StringIO
+from uuid import UUID
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, OuterRef, Q
+from django.db import transaction
+from django.db.models import Count, OuterRef, Prefetch, Q
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import ChatMessage
-from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
+from apps.evaluations.forms import AddMessagesToDatasetForm, EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.tables import (
     DatasetMessagesTable,
@@ -23,7 +26,11 @@ from apps.evaluations.tables import (
     EvaluationSessionsSelectionTable,
 )
 from apps.evaluations.tasks import upload_dataset_csv_task
-from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
+from apps.evaluations.utils import (
+    generate_csv_column_suggestions,
+    make_evaluation_messages_from_sessions,
+    parse_history_text,
+)
 from apps.experiments.filters import (
     ChatMessageFilter,
     ExperimentSessionFilter,
@@ -496,3 +503,74 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
     except Exception as e:
         logger.error(f"Error starting CSV upload for dataset {dataset.id}: {str(e)}")
         return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
+
+
+class CreateDatasetFromSessionView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
+    permission_required = "evaluations.add_evaluationdataset"
+    template_name = "evaluations/dataset_create_from_session_form.html"
+    model = EvaluationDataset
+    form_class = AddMessagesToDatasetForm
+    extra_context = {
+        "title": "Create Dataset From Session",
+        "button_text": "Create Dataset",
+        "active_tab": "evaluation_datasets",
+    }
+
+    def get_form(self):
+        if self.request.method == "POST":
+            return self.form_class(self.request.team, self.request.POST)
+        return self.form_class(self.request.team)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["form"] = self.get_form()
+
+        # Get the session and its messages
+        experiment_id = self.kwargs.get("experiment_id")
+        session_id = self.kwargs.get("session_id")
+
+        session = get_object_or_404(
+            ExperimentSession, experiment__public_id=experiment_id, external_id=session_id, team=self.request.team
+        )
+        # Get all messages for this session with properly prefetched tags
+        messages = session.chat.messages.order_by("created_at").prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            )
+        )
+        context["messages"] = messages
+        context["session"] = session
+        context["experiment"] = session.experiment
+        return context
+
+    def get_success_url(self):
+        return reverse("evaluations:dataset_home", args=[self.request.team.slug])
+
+    @transaction.atomic
+    def post(self, request, team_slug: str, experiment_id: UUID, session_id: str):
+        """
+        Add selected messages from the session to a new or existing dataset. Messages are only added if they are human
+        messages followed by an AI response.
+        """
+        form = self.get_form()
+
+        if not form.is_valid():
+            context = self.get_context_data()
+            context["form"] = form
+            return render(request, self.template_name, context)
+
+        data = form.cleaned_data
+        if dataset_id := data["dataset"]:
+            dataset = get_object_or_404(EvaluationDataset, id=dataset_id, team__slug=team_slug)
+        else:
+            dataset = EvaluationDataset.objects.create(
+                team=self.request.team,
+                name=data["new_dataset_name"],
+            )
+
+        eval_messages = make_evaluation_messages_from_sessions({session_id: data["message_ids"]})
+        EvaluationMessage.objects.bulk_create(eval_messages)
+        dataset.messages.set(eval_messages)
+        return redirect(reverse("evaluations:dataset_home", args=[self.request.team.slug]))
