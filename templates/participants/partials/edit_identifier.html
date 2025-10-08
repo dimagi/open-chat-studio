@@ -1,0 +1,37 @@
+<form 
+    hx-post="{% url 'participants:edit_identifier' request.team.slug participant.id %}"
+    hx-target="#participant-identifier"
+    hx-swap="outerHTML"
+>
+    {% csrf_token %}
+    <div class="flex items-center gap-2">
+        <input 
+            type="text" 
+            name="identifier" 
+            value="{{ participant.identifier }}" 
+            class="input input-sm input-bordered {% if error %}input-error{% endif %}"
+            required
+            autofocus
+        />
+        <button type="submit" class="btn btn-primary btn-xs">
+            <i class="fa-solid fa-check"></i>
+        </button>
+        <button 
+            type="button" 
+            class="btn btn-ghost btn-xs"
+            hx-get="{% url 'participants:edit_identifier' request.team.slug participant.id %}"
+            hx-target="#participant-identifier"
+            hx-swap="outerHTML"
+            onclick="this.closest('form').reset(); htmx.trigger(this, 'click');"
+        >
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+    {% if error %}
+        <div class="text-error text-xs mt-1">{{ error }}</div>
+    {% endif %}
+    <div class="text-xs text-warning mt-1">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        Note: If this identifier already exists, the participants will be merged.
+    </div>
+</form>

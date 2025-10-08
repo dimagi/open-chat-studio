@@ -22,6 +22,7 @@ urlpatterns = [
         name="edit-participant-data",
     ),
     path("participants/<int:pk>/edit_name/", views.edit_name, name="edit_name"),
+    path("participants/<int:pk>/edit_identifier/", views.edit_identifier, name="edit_identifier"),
     path(
         "participants/<int:participant_id>/cancel_schedule/<str:schedule_id>/",
         views.cancel_schedule,
@@ -35,6 +36,7 @@ urlpatterns = [
     path("participants/identifiers/", views.all_participant_identifiers, name="all_participant_identifiers"),
     path("participants/import/", views.import_participants, name="import"),
     path("participants/export/", views.export_participants, name="export"),
+    path("participants/<int:pk>/delete/", views.DeleteParticipant.as_view(), name="participant_delete"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Participant", "participant", edit=False, delete=False, new=False))
