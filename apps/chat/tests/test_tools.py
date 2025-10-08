@@ -19,16 +19,17 @@ from apps.chat.agent.tools import (
     DeleteReminderTool,
     SearchIndexTool,
     SearchToolConfig,
-    UpdateParticipantDataTool,
     _convert_to_sync_tool,
     _get_search_tool_footer,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
     get_mcp_tool_instances,
 )
+from apps.chat.models import ChatAttachment
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
 from apps.files.models import FileChunkEmbedding
+from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -42,7 +43,10 @@ class BaseTestAgentTool:
     tool_cls: type[tools.CustomBaseTool]
 
     def _invoke_tool(self, session, **tool_kwargs):
-        tool = self.tool_cls(experiment_session=session)
+        kwargs = {"experiment_session": session}
+        if self.tool_cls.requires_callbacks:
+            kwargs["tool_callbacks"] = ToolCallbacks()
+        tool = self.tool_cls(**kwargs)
         return tool.action(**tool_kwargs)
 
     @staticmethod
@@ -365,55 +369,30 @@ def test_create_schedule_message_experiment_does_not_exist():
 
 
 @pytest.mark.django_db()
-class TestUpdateParticipantDataTool:
-    def _invoke_tool(self, session, **tool_kwargs):
-        tool = UpdateParticipantDataTool(experiment_session=session)
-        return tool.action(**tool_kwargs)
-
-    @pytest.fixture()
-    def session(self, db):
-        return ExperimentSessionFactory()
-
-    @pytest.mark.parametrize(
-        "value",
-        [
-            "string",
-            1,
-            1.0,
-            True,
-            False,
-            None,
-            ["hi", "there"],
-            {"key": "value"},
-            [{"key": "value"}],
-        ],
-    )
-    def test_update(self, session, value):
-        response = self._invoke_tool(session, key="test", value=value)
-        assert response == "The new value has been set in user data."
-
-        assert session.participant_data_from_experiment == {"test": value}
-
-
-@pytest.mark.django_db()
 class TestAppendToParticipantDataTool(BaseTestAgentTool):
     tool_cls = tools.AppendToParticipantDataTool
 
     def test_append_when_data_does_not_exist(self, session):
-        response = self._invoke_tool(session, key="test", value="new_value")
-        assert response == "The value was appended to the end of the list. The new list is: ['new_value']"
-        assert session.participant_data_from_experiment == {"test": ["new_value"]}
+        response = self._invoke_tool(session, key="test", value="new_value", tool_call_id="123", graph_state={})
+        assert (
+            response.update["messages"][-1].content
+            == "The value was appended to the end of the list. The new list is: ['new_value']"
+        )
+        assert response.update["participant_data"] == {"test": ["new_value"]}
 
     def test_append_when_data_exists(self, session):
-        # First call to create the data
-        self._invoke_tool(session, key="test", value="first_value")
-        # Second call to append to the existing data
-        response = self._invoke_tool(session, key="test", value="second_value")
+        response = self._invoke_tool(
+            session,
+            key="test",
+            value="second_value",
+            tool_call_id="123",
+            graph_state={"participant_data": {"test": "first_value"}},
+        )
         assert (
-            response
+            response.update["messages"][-1].content
             == "The value was appended to the end of the list. The new list is: ['first_value', 'second_value']"
         )
-        assert session.participant_data_from_experiment == {"test": ["first_value", "second_value"]}
+        assert response.update["participant_data"] == {"test": ["first_value", "second_value"]}
 
     @pytest.mark.parametrize(
         ("existing_value", "new_value", "expected_result"),
@@ -425,14 +404,18 @@ class TestAppendToParticipantDataTool(BaseTestAgentTool):
         ],
     )
     def test_append_different_values(self, session, existing_value, new_value, expected_result):
-        # First, set a non-list value using UpdateParticipantDataTool
-        update_tool = UpdateParticipantDataTool(experiment_session=session)
-        update_tool.action(key="test", value=existing_value)
-
-        # Then append to it using AppendToParticipantDataTool
-        response = self._invoke_tool(session, key="test", value=new_value)
-        assert response == f"The value was appended to the end of the list. The new list is: {expected_result}"
-        assert session.participant_data_from_experiment == {"test": expected_result}
+        response = self._invoke_tool(
+            session,
+            key="test",
+            value=new_value,
+            tool_call_id="123",
+            graph_state={"participant_data": {"test": existing_value}},
+        )
+        assert (
+            response.update["messages"][-1].content
+            == f"The value was appended to the end of the list. The new list is: {expected_result}"
+        )
+        assert response.update["participant_data"] == {"test": expected_result}
 
 
 @pytest.mark.django_db()
@@ -440,10 +423,12 @@ class TestIncrementParticipantDataTool(BaseTestAgentTool):
     tool_cls = tools.IncrementCounterTool
 
     def test_increment(self, session):
-        response = self._invoke_tool(session, counter="test", value=1)
-        assert response == "The 'test' counter has been successfully incremented. The new value is 1."
-
-        assert session.participant_data_from_experiment == {"_counter_test": 1}
+        response = self._invoke_tool(session, counter="test", value=1, tool_call_id="1", graph_state={})
+        assert (
+            response.update["messages"][-1].content
+            == "The 'test' counter has been successfully incremented. The new value is 1."
+        )
+        assert response.update["participant_data"] == {"_counter_test": 1}
 
 
 @pytest.mark.django_db()
@@ -598,31 +583,10 @@ class TestSetSessionStateTool(BaseTestAgentTool):
         ],
     )
     def test_set_value(self, session, value):
-        response = self._invoke_tool(session, key="test_key", value=value)
+        response = self._invoke_tool(session, key="test_key", value=value, tool_call_id="123")
 
-        session.refresh_from_db()
-        assert session.state["test_key"] == value
-        assert "The value has been set in session state for key 'test_key'" in response
-
-    def test_overwrite_existing_session_state(self, session):
-        session.state = {"existing_key": "old_value"}
-        session.save()
-
-        # Update with new value
-        self._invoke_tool(session, key="existing_key", value="new_value")
-
-        session.refresh_from_db()
-        assert session.state["existing_key"] == "new_value"
-
-    def test_preserve_other_session_state(self, session):
-        session.state = {"key1": "value1", "key2": "value2"}
-        session.save()
-
-        self._invoke_tool(session, key="key1", value="updated_value")
-
-        session.refresh_from_db()
-        assert session.state["key1"] == "updated_value"
-        assert session.state["key2"] == "value2"  # Should be unchanged
+        assert "The value has been set in session state for key 'test_key'" in response.update["messages"][-1].content
+        assert response.update["session_state"] == {"test_key": value}
 
 
 @pytest.mark.django_db()
@@ -631,21 +595,24 @@ class TestGetSessionStateTool(BaseTestAgentTool):
 
     def test_retrieve_session_state(self, session):
         test_data = {"user_preference": "dark_mode", "page": "home"}
-        session.state = test_data
-        session.save()
-
-        response = self._invoke_tool(session, key="user_preference")
+        response = self._invoke_tool(session, key="user_preference", graph_state={"session_state": test_data})
         assert "dark_mode" in response
 
     def test_get_nonexistent_key_from_populated_state(self, session):
-        session.state = {"existing_key": "existing_value"}
-        session.save()
-
-        response = self._invoke_tool(session, key="missing_key")
+        response = self._invoke_tool(session, key="missing_key", graph_state={})
         assert "No value found" in response
 
-    def test_get_from_empty_session_state(self, session):
-        assert session.state == {}
 
-        response = self._invoke_tool(session, key="any_key")
-        assert "No value found" in response
+class TestAttachMediaTool(BaseTestAgentTool):
+    tool_cls = tools.AttachMediaTool
+
+    def test_attach_files(self, session):
+        chat_attachment, _ = ChatAttachment.objects.get_or_create(chat=session.chat, tool_type="ocs_attachments")
+        assert chat_attachment.files.count() == 0
+
+        files = FileFactory.create_batch(3)
+        response = self._invoke_tool(session, file_ids=[file.id for file in files])
+
+        assert chat_attachment.files.count() == 3
+        assert all(str(file.id) in response for file in files)
+        print(response)

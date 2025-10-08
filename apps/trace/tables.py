@@ -20,18 +20,26 @@ def _chip_session_url_factory(_, request, record, __):
     )
 
 
+def _get_chatbot_name(record):
+    version = "unreleased"
+    if record.experiment_version_number:
+        version = f"v{record.experiment_version_number}"
+    return f"{record.experiment.name} ({version})"
+
+
 class TraceTable(tables.Table):
     timestamp = TimeAgoColumn(verbose_name="Timestamp", orderable=True)
     bot = actions.ActionsColumn(
         actions=[
             chip_action(
-                label_factory=lambda record, _: record.experiment.name,
+                label_factory=lambda record, _: _get_chatbot_name(record),
                 url_factory=_chip_chatbot_url_factory,
             ),
         ],
         align="left",
         orderable=True,
     )
+    duration = tables.Column(verbose_name="Duration", accessor="duration", orderable=True)
     session = actions.ActionsColumn(
         actions=[
             chip_action(

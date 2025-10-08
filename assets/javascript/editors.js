@@ -10,6 +10,7 @@ import {MergeView} from "@codemirror/merge"
 import { python } from "@codemirror/lang-python"
 import { textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme } from "./utils/codemirror-extensions.js"
 import { autocompletion } from "@codemirror/autocomplete"
+import { find } from "./utils"
 import "../styles/app/editors.css";
 
 const githubDark = githubDarkInit({
@@ -63,9 +64,9 @@ class BaseEditor {
     this.initialValue = "";
 
     // Get form field target
-    const targetField = this.element.getAttribute('data-target-field');
+    let targetField = this.element.getAttribute('data-target-field');
     if (targetField) {
-      this.target = document.querySelector(targetField);
+      this.target = find(this.element, targetField);
       if (this.target) {
         this.initialValue = this.target.value;
         this.target.style.display = 'none';
@@ -209,6 +210,9 @@ class JsonEditor extends BaseEditor {
         setTimeout(() => this.reset(), 10);
       });
     }
+    this.element.addEventListener('resetEditor', () => {
+      setTimeout(() => this.reset(), 10);
+    })
   }
 
   /**
@@ -318,21 +322,25 @@ class JsonEditor extends BaseEditor {
     }
   }
 
-  reset() {
+  updateValue(newValue) {
     if (!this.view) return;
 
     this.view.dispatch({
       changes: {
         from: 0,
         to: this.view.state.doc.length,
-        insert: this.initialValue || '{}'
+        insert: newValue
       }
     });
-
-    if (this.target) {
-        this.target.value = this.initialValue || '{}';
-    }
     this.updateErrorStatus();
+  }
+
+  reset() {
+    const newValue = this.initialValue || '';
+    this.updateValue(newValue);
+    if (this.target) {
+        this.target.value = newValue;
+    }
   }
 
   /**
@@ -353,8 +361,9 @@ class JsonEditor extends BaseEditor {
    * Initialize all editors matching a selector
    * @param {string} selector - CSS selector to find editor elements
    */
-  static initAll(selector = '.json-editor') {
-    Array.from(document.querySelectorAll(selector)).forEach(el => {
+  static initAll(parent, selector = '.json-editor') {
+    parent = parent || document;
+    Array.from(parent.querySelectorAll(selector)).forEach(el => {
       JsonEditor.create(el);
     });
   }
@@ -504,8 +513,8 @@ class PromptEditor extends BaseEditor {
 }
 
 // Initialize editors when the DOM is loaded
-export const initJsonEditors = () => {
-  JsonEditor.initAll();
+export const initJsonEditors = (parent) => {
+  JsonEditor.initAll(parent);
 };
 
 // Create a single editor instance

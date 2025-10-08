@@ -4,4 +4,4 @@
 {% for action in actions %}
   {% render_action action %}
 {% endfor %}
-{% if as_group|default:True %}</div>{% endif %}
+{% if as_group|default_if_none:True %}</div>{% endif %}

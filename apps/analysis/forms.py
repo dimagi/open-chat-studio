@@ -194,7 +194,7 @@ class SessionChoiceField(forms.ModelMultipleChoiceField):
     def label_from_instance(self, obj):
         label = f"{obj.external_id} - {obj.participant.identifier}" if obj.participant else str(obj.external_id)
         url = reverse(
-            "experiments:experiment_session_view",
+            "chatbots:chatbot_session_view",
             kwargs={
                 "team_slug": obj.team.slug,
                 "experiment_id": obj.experiment.public_id,

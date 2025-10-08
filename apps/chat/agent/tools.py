@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Any, ClassVar, Union
 from asgiref.sync import async_to_sync
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
+from langgraph.types import Command
 from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
@@ -36,12 +38,10 @@ logger = logging.getLogger("ocs.tools")
 
 OCS_CITATION_PATTERN = r"<CIT\s+(?P<file_id>\d+)\s*/>"
 
-SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} ({name}) is attached to your response"
+SUCCESSFUL_ATTACHMENT_MESSAGE = "* {file_id} ({name}): attached."
 
-CREATE_LINK_TEXT = """You can use this markdown link to reference it in your response:
-    `[{name}](file:{team_slug}:{session_id}:{file_id})` or `![](file:{team_slug}:{session_id}:{file_id})`
-    if it is an image.
-"""
+FILE_LINK_TEXT = "Reference link: `[{name}](file:{team_slug}:{session_id}:{file_id})`"
+IMAGE_LINK_TEXT = "Reference link: `![](file:{team_slug}:{session_id}:{file_id})`"
 
 CHUNK_TEMPLATE = """
 <file>
@@ -243,11 +243,13 @@ class UpdateParticipantDataTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.UpdateUserDataSchema] = schemas.UpdateUserDataSchema
 
-    @transaction.atomic
-    def action(self, key: str, value: Any):
-        data_proxy = ParticipantDataProxy(self.experiment_session)
-        data_proxy.set_key(key, value)
-        return "The new value has been set in user data."
+    def action(self, key: str, value: Any, tool_call_id: str):
+        return Command(
+            update={
+                "participant_data": {key: value},
+                "messages": [ToolMessage("The new value has been set in user data.", tool_call_id=tool_call_id)],
+            }
+        )
 
 
 class AppendToParticipantDataTool(CustomBaseTool):
@@ -260,15 +262,20 @@ class AppendToParticipantDataTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
 
-    @transaction.atomic
-    def action(self, key: str, value: str | int | list):
-        data_proxy = ParticipantDataProxy(self.experiment_session)
+    def action(self, key: str, value: str | int | list, tool_call_id: str, graph_state: dict):
+        data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
         new_value = data_proxy.append_to_key(key, value)
         if len(new_value) > 10:
             new_value_msg = f"The last 10 items in the list are: {new_value[-10:]}"
         else:
             new_value_msg = f"The new list is: {new_value}"
-        return f"The value was appended to the end of the list. {new_value_msg}"
+        message = f"The value was appended to the end of the list. {new_value_msg}"
+        return Command(
+            update={
+                "participant_data": {key: new_value},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
 
 
 class IncrementCounterTool(CustomBaseTool):
@@ -277,12 +284,17 @@ class IncrementCounterTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.IncrementCounterSchema] = schemas.IncrementCounterSchema
 
-    @transaction.atomic
-    def action(self, counter: str, value: int):
+    def action(self, counter: str, value: int, tool_call_id: str, graph_state: dict):
         namespaced_key = f"_counter_{counter}"
-        data_proxy = ParticipantDataProxy(self.experiment_session)
+        data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
         new_value = data_proxy.increment_key(namespaced_key, value)
-        return f"The '{counter}' counter has been successfully incremented. The new value is {new_value}."
+        message = f"The '{counter}' counter has been successfully incremented. The new value is {new_value}."
+        return Command(
+            update={
+                "participant_data": {namespaced_key: new_value},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
 
 
 class EndSessionTool(CustomBaseTool):
@@ -316,28 +328,47 @@ class AttachMediaTool(CustomBaseTool):
         return chat_attachment
 
     @transaction.atomic
-    def action(self, file_id: int) -> str:
+    def action(self, file_ids: list[int]) -> str:
+        if len(file_ids) > 5:
+            return "A maximum of 5 files can be attached."
+
         from apps.files.models import File
 
-        try:
-            file = File.objects.get(id=file_id)
-            self.chat_attachment.files.add(file_id)
-            self.tool_callbacks.attach_file(file_id)
-            response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
+        response = []
+        include_links = self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB
+        for file_id in file_ids:
+            try:
+                file = File.objects.get(id=file_id)
+                self.chat_attachment.files.add(file_id)
+                self.tool_callbacks.attach_file(file_id)
+                file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
 
-            if self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB:
-                # Only the web platform is able to render these links
-                link_text = CREATE_LINK_TEXT.format(
-                    name=file.name, file_id=file_id, session_id=self.experiment_session.id, team_slug=file.team.slug
-                )
-                response = f"{response}. {link_text}"
-            else:
-                response = f"{response}. Do not use markdown links to reference the file."
-            return response
-        except File.DoesNotExist:
-            return f"File '{file_id}' does not exist"
-        except utils.IntegrityError:
-            return f"Unable to attach file '{file_id}' to the message"
+                if include_links:
+                    # Only the web platform is able to render these links
+                    if file.is_image:
+                        link_text = IMAGE_LINK_TEXT.format(
+                            file_id=file_id,
+                            session_id=self.experiment_session.id,
+                            team_slug=file.team.slug,
+                        )
+                    else:
+                        link_text = FILE_LINK_TEXT.format(
+                            name=file.name,
+                            file_id=file_id,
+                            session_id=self.experiment_session.id,
+                            team_slug=file.team.slug,
+                        )
+                    file_response = f"{file_response} {link_text}"
+                response.append(file_response)
+            except File.DoesNotExist:
+                response.append(f"* {file_id}: File not found.")
+            except utils.IntegrityError:
+                response.append(f"* {file_id}: Error fetching file.")
+
+        resp = "File Attachment Results:\n" + "\n".join(response)
+        if include_links:
+            return f"{resp}\nYou may use the markdown links in your output to reference the attachments."
+        return f"{resp}\nDo not use markdown links to reference the files."
 
 
 class SearchIndexTool(CustomBaseTool):
@@ -413,19 +444,22 @@ class SetSessionStateTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.SetSessionStateSchema] = schemas.SetSessionStateSchema
 
-    @transaction.atomic
-    def action(self, key: str, value: Any):
+    def action(self, key: str, value: Any, tool_call_id: str):
         if key in {"user_input", "outputs", "attachments"}:
             return f"Cannot set the '{key}' key in session state - this is read-only"
 
-        self.experiment_session.state[key] = value
-        self.experiment_session.save(update_fields=["state"])
-
         try:
-            json_value = json.dumps(value, indent=2)
-            return f"The value has been set in session state for key '{key}':\n{json_value}"
+            json_value = json.dumps(value)
+            message = f"The value has been set in session state for key '{key}':\n{json_value}"
         except (TypeError, ValueError):
-            return f"The value has been set in session state for key '{key}': {value}"
+            return "Error: The value was not JSON serializable"
+
+        return Command(
+            update={
+                "session_state": {key: value},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
 
 
 class GetSessionStateTool(CustomBaseTool):
@@ -434,8 +468,9 @@ class GetSessionStateTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.GetSessionStateSchema] = schemas.GetSessionStateSchema
 
-    def action(self, key: str):
-        value = self.experiment_session.state.get(key)
+    def action(self, key: str, graph_state: dict):
+        state = graph_state.get("session_state") or {}
+        value = state.get(key)
         if value is None:
             return f"No value found for key '{key}' in session state."
         return f"The value for key '{key}' is: {value}"

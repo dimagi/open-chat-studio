@@ -50,6 +50,7 @@ from apps.web.meta import absolute_url
 
 log = logging.getLogger("ocs.experiments")
 
+
 class VersionFieldDisplayFormatters:
     """A collection of formatters that are used for displaying version fields"""
 
@@ -1525,7 +1526,7 @@ class Participant(BaseTeamModel):
 
     def get_data_for_experiment(self, experiment) -> dict:
         try:
-            return self.data_set.get(experiment=experiment).data
+            return self.data_set.get(experiment=experiment).data or {}
         except ParticipantData.DoesNotExist:
             return {}
 

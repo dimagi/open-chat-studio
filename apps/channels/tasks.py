@@ -157,14 +157,12 @@ def handle_api_message(
 
 
 def handle_evaluation_message(
-    experiment_version, experiment_channel, message_text: str, session: ExperimentSession
+    experiment_version, experiment_channel, message_text: str, session: ExperimentSession, participant_data: dict
 ) -> ChatMessage:
     """Synchronously handles the message coming from evaluations"""
     message = BaseMessage(participant_id=session.participant.identifier, message_text=message_text)
     channel = EvaluationChannel(
-        experiment_version,
-        experiment_channel,
-        experiment_session=session,
+        experiment_version, experiment_channel, experiment_session=session, participant_data=participant_data
     )
     return channel.new_user_message(message)
 

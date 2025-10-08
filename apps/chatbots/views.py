@@ -284,11 +284,6 @@ class ChatbotVersionsTableView(ExperimentVersionsTableView):
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"
     permission_required = "experiments.view_experiment"
-    entity_type = "chatbots"
-
-    def get_table(self, **kwargs):
-        table_data = self.get_table_data()
-        return self.table_class(data=table_data, entity_type="chatbots", **kwargs)
 
 
 @login_and_team_required
@@ -409,9 +404,6 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
             )
             new_experiment.create_version_task_id = task_id
             new_experiment.save(update_fields=["create_version_task_id"])
-        referer = request.headers.get("referer")
-        if "experiments" in referer:
-            return redirect("experiments:single_experiment_home", team_slug=team_slug, experiment_id=new_experiment.id)
         return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
     else:
         experiment_id = kwargs["pk"]

@@ -11,7 +11,7 @@
   <h2 class="pg-subtitle">{% trans "Dataset Messages" %}</h2>
   <div id="dataset-messages-table"
        hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}"
-       hx-trigger="load"
+       hx-trigger="load, refreshTable from:body"
        hx-target="this"
        hx-swap="innerHTML">
     <div class="text-center py-4">
@@ -74,95 +74,97 @@
   {{ block.super }}
   <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
-    SiteJS.editors.initJsonEditors();
+    window.addEventListener('load', () => {
+      SiteJS.editors.initJsonEditors();
+    });
 
-    // CSV upload functionality
-    const uploadForm = document.getElementById('csv-upload-form');
-    const uploadStatus = document.getElementById('upload-status');
-    const uploadAlert = document.getElementById('upload-alert');
-    const uploadMessage = document.getElementById('upload-message');
-    const progressWrapper = document.getElementById('progress-wrapper');
+    document.addEventListener('DOMContentLoaded', function() {
+      // CSV upload functionality
+      const uploadForm = document.getElementById('csv-upload-form');
+      const uploadStatus = document.getElementById('upload-status');
+      const uploadAlert = document.getElementById('upload-alert');
+      const uploadMessage = document.getElementById('upload-message');
+      const progressWrapper = document.getElementById('progress-wrapper');
 
-    uploadForm.addEventListener('submit', async function(e) {
-      e.preventDefault();
+      uploadForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
 
-      const formData = new FormData(uploadForm);
-      const uploadUrl = "{% url 'evaluations:dataset_upload' request.team.slug object.id %}";
+        const formData = new FormData(uploadForm);
+        const uploadUrl = "{% url 'evaluations:dataset_upload' request.team.slug object.id %}";
 
-      // Show progress
-      uploadStatus.classList.add('hidden');
-      progressWrapper.classList.remove('hidden');
+        // Show progress
+        uploadStatus.classList.add('hidden');
+        progressWrapper.classList.remove('hidden');
 
-      try {
-        const response = await fetch(uploadUrl, {
-          method: 'POST',
-          body: formData,
-          headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-          }
-        });
-
-        const data = await response.json();
-
-        if (data.success && data.task_id) {
-          const progressUrl = `/celery-progress/${data.task_id}/`;
-          CeleryProgressBar.initProgressBar(progressUrl, {
-            pollInterval: 1000,
-            onSuccess: (progressBarElement, progressBarMessageElement, result) => {
-              progressWrapper.classList.add('hidden');
-              uploadStatus.classList.remove('hidden');
-
-              if (result && result.success) {
-                uploadAlert.className = 'alert alert-success';
-                let message = `Successfully processed ${result.total_processed} rows: `;
-                message += `${result.updated_count} updated, ${result.created_count} created.`;
-
-                if (result.errors && result.errors.length > 0) {
-                  message += `\n\nErrors:\n${result.errors.join('\n')}`;
-                }
-                uploadMessage.textContent = message;
-                const tableContainer = document.getElementById('dataset-messages-table');
-                if (tableContainer) {
-                  const tableUrl = tableContainer.getAttribute('hx-get');
-                  htmx.ajax('GET', tableUrl, {
-                    target: '#dataset-messages-table',
-                    swap: 'innerHTML'
-                  });
-                }
-
-                uploadForm.reset();
-              } else {
-                uploadAlert.className = 'alert alert-error';
-                uploadMessage.textContent = result?.error || 'Upload completed with errors';
-              }
-            },
-            onError: (progressBarElement, progressBarMessageElement, excMessage) => {
-              progressWrapper.classList.add('hidden');
-              uploadStatus.classList.remove('hidden');
-              uploadAlert.className = 'alert alert-error';
-              uploadMessage.textContent = 'Error during upload: ' + excMessage;
+        try {
+          const response = await fetch(uploadUrl, {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
             }
           });
-        } else {
+
+          const data = await response.json();
+
+          if (data.success && data.task_id) {
+            const progressUrl = `/celery-progress/${data.task_id}/`;
+            CeleryProgressBar.initProgressBar(progressUrl, {
+              pollInterval: 1000,
+              onSuccess: (progressBarElement, progressBarMessageElement, result) => {
+                progressWrapper.classList.add('hidden');
+                uploadStatus.classList.remove('hidden');
+
+                if (result && result.success) {
+                  uploadAlert.className = 'alert alert-success';
+                  let message = `Successfully processed ${result.total_processed} rows: `;
+                  message += `${result.updated_count} updated, ${result.created_count} created.`;
+
+                  if (result.errors && result.errors.length > 0) {
+                    message += `\n\nErrors:\n${result.errors.join('\n')}`;
+                  }
+                  uploadMessage.textContent = message;
+                  const tableContainer = document.getElementById('dataset-messages-table');
+                  if (tableContainer) {
+                    const tableUrl = tableContainer.getAttribute('hx-get');
+                    htmx.ajax('GET', tableUrl, {
+                      target: '#dataset-messages-table',
+                      swap: 'innerHTML'
+                    });
+                  }
+
+                  uploadForm.reset();
+                } else {
+                  uploadAlert.className = 'alert alert-error';
+                  uploadMessage.textContent = result?.error || 'Upload completed with errors';
+                }
+              },
+              onError: (progressBarElement, progressBarMessageElement, excMessage) => {
+                progressWrapper.classList.add('hidden');
+                uploadStatus.classList.remove('hidden');
+                uploadAlert.className = 'alert alert-error';
+                uploadMessage.textContent = 'Error during upload: ' + excMessage;
+              }
+            });
+          } else {
+            progressWrapper.classList.add('hidden');
+            uploadStatus.classList.remove('hidden');
+            uploadAlert.className = 'alert alert-error';
+            uploadMessage.textContent = data.error || 'An error occurred while uploading the CSV.';
+          }
+
+        } catch (error) {
+          console.error('Upload error:', error);
           progressWrapper.classList.add('hidden');
           uploadStatus.classList.remove('hidden');
           uploadAlert.className = 'alert alert-error';
-          uploadMessage.textContent = data.error || 'An error occurred while uploading the CSV.';
+          uploadMessage.textContent = 'An error occurred while uploading the CSV.';
         }
+      });
 
-      } catch (error) {
-        console.error('Upload error:', error);
-        progressWrapper.classList.add('hidden');
-        uploadStatus.classList.remove('hidden');
-        uploadAlert.className = 'alert alert-error';
-        uploadMessage.textContent = 'An error occurred while uploading the CSV.';
-      }
-    });
-
-    document.addEventListener('htmx:afterRequest', function(event) {
-      if (event.detail.xhr.status === 200 && (event.detail.target.id === 'editMessageModal' || event.detail.requestConfig.verb === 'delete')) {
-        // Check if the response contains validation errors
-        if (event.detail.target.id === 'editMessageModal') {
+      document.addEventListener('htmx:afterRequest', function(event) {
+        if (event.detail.xhr.status === 200 && event.detail.target.id === 'editMessageModal') {
+          // Check if the response contains validation errors
           const modalBox = event.detail.target.querySelector('.modal-box');
           const hasErrors = modalBox && modalBox.hasAttribute('data-has-errors');
 
@@ -170,21 +172,10 @@
             // Don't close modal or refresh table if there are validation errors
             return;
           }
-        }
 
-        const tableContainer = document.getElementById('dataset-messages-table');
-        if (tableContainer) {
-          const tableUrl = tableContainer.getAttribute('hx-get');
-          htmx.ajax('GET', tableUrl, {
-            target: '#dataset-messages-table',
-            swap: 'innerHTML'
-          });
-        }
-
-        if (event.detail.target.id === 'editMessageModal') {
           document.getElementById('editMessageModal').close();
-        }
-      }
+          htmx.trigger(document.body, 'refreshTable');
+      }});
     });
   </script>
 {% endblock page_js %}

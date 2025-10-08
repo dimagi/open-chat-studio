@@ -125,38 +125,23 @@
       </a>
     </li>
   {% endflag %}
-  <li>
-    <a href="{% url 'experiments:experiments_home' request.team.slug %}"{% if active_tab == 'experiments' %}class="menu-active"{% endif %}>
-      <i class="fa fa-flask fa-fw"></i>
-      {% translate "Experiments" %}
-    </a>
-    <ul>
-      <li>
-        <a href="{% url 'experiments:safety_home' request.team.slug %}"
-           {% if active_tab == 'safety_layers' %}class="menu-active"{% endif %}>
-          <i class="fa fa-shield fa-fw"></i>
-          {% translate "Safety Layers" %}
-        </a>
-      </li>
-    </ul>
-  </li>
   {% flag "flag_evaluations" %}
     <li>
-      <a href="{% url 'evaluations:home' request.team.slug %}" {% if active_tab == 'evaluations' %}class="active"{% endif %}>
+      <a href="{% url 'evaluations:home' request.team.slug %}" {% if active_tab == 'evaluations' %}class="menu-active"{% endif %}>
         <i class="fa-solid fa-chart-simple"></i>
         {% translate "Evaluations" %}<span class="badge badge-sm">new!</span>
       </a>
       <ul>
         <li>
           <a href="{% url 'evaluations:evaluator_home' request.team.slug %}"
-             {% if active_tab == 'evaluators' %}class="active"{% endif %}>
+             {% if active_tab == 'evaluators' %}class="menu-active"{% endif %}>
             <i class="fa fa-clipboard-check fa-fw"></i>
             {% translate "Evaluators" %}
           </a>
         </li>
         <li>
           <a href="{% url 'evaluations:dataset_home' request.team.slug %}"
-             {% if active_tab == 'evaluation_datasets' %}class="active"{% endif %}>
+             {% if active_tab == 'evaluation_datasets' %}class="menu-active"{% endif %}>
             <i class="fa fa-database fa-fw"></i>
             {% translate "Datasets" %}
           </a>
