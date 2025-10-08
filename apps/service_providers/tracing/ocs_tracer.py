@@ -64,7 +64,11 @@ class OCSTracer(Tracer):
         from apps.experiments.models import Experiment
 
         super().start_trace(trace_name, trace_id, session, inputs, metadata)
-        experiment = Experiment.objects.get(id=self.experiment_id)
+        try:
+            experiment = Experiment.objects.get(id=self.experiment_id)
+        except Experiment.DoesNotExist:
+            logger.error("Experiment with id %s does not exist. Cannot start trace.", self.experiment_id)
+            return
         experiment_id = self.experiment_id
         experiment_version_number = None
         if experiment.is_a_version:
