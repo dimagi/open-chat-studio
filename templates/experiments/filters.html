@@ -1,3 +1,4 @@
+{% with df_table_type=df_table_type %}
 <div x-data="filterComponent" @click.outside="filterData.showFilters = false" class="relative">
   <!-- Filter Button -->
   <div class="flex items-center">
@@ -188,6 +189,21 @@
       <!-- Add Filter Button -->
       <button type="button" @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
     </div>
+    
+    <!-- Starred Filters as Small Tabs -->
+    <div class="mt-4">
+      <div class="flex flex-wrap gap-2">
+        <template x-for="filterSet in starredFilters" :key="filterSet.id">
+          <div class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
+               @click="applyStarredFilter(filterSet.id, filterSet.name)">
+            <span class="text-base-content" x-text="filterSet.name"></span>
+          </div>
+        </template>
+        <div x-show="starredFilters.length === 0" class="flex justify-center items-center p-2 text-gray-500 text-sm">
+          No starred filters
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -205,10 +221,19 @@
         loading: false,
         columns: filterColumns,
       },
+      starredFilters: [],
+      filterSets: null,
 
       init() {
         const App = SiteJS.app;
         this.loadFiltersFromUrl();
+
+        // Default filters set by user or team
+        this.loadDefaultFilters();
+        
+        // Load starred filters on initialization
+        this.loadStarredFilters();
+
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {
           this.triggerFilterChange(false); // Don't update URL again since we just loaded from it
@@ -257,8 +282,11 @@
 
       toggleFilters() {
         this.filterData.showFilters = !this.filterData.showFilters;
-        if (this.filterData.showFilters && this.filterData.filters.length === 0) {
-          this.addFilter();
+        if (this.filterData.showFilters) {
+          this.loadStarredFilters();
+          if (this.filterData.filters.length === 0) {
+            this.addFilter();
+          }
         }
       },
 
@@ -577,6 +605,131 @@
         const selected = this.dateRangeOptions.find(opt => opt.value === value);
         this.selectedLabel = selected ? selected.label : '';
       },
+
+      async loadFilterSets() {
+        if (this.filterSets) return this.filterSets;
+        try {
+          const url = '{% url "filters:list_filter_set" request.team.slug df_table_type %}';
+          const res = await fetch(url, { credentials: 'same-origin' });
+          const data = await res.json();
+          this.filterSets = data.results || [];
+          return this.filterSets;
+        } catch (error) {
+          console.error('Failed to load filter sets:', error);
+          this.filterSets = [];
+          return [];
+        }
+      },
+
+      async loadStarredFilters() {
+        try {
+          const filterSets = await this.loadFilterSets();
+          this.starredFilters = filterSets.filter(fs => fs.is_starred);
+        } catch (error) {
+          console.error('Failed to load starred filters:', error);
+          this.starredFilters = [];
+        }
+      },
+
+      async loadDefaultFilters() {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const hasExistingFilters = [...urlParams.keys()].some(key => key.startsWith('filter_'));
+          
+          if (hasExistingFilters) return;
+
+          const filterSets = await this.loadFilterSets();
+          const defaultFilterSet = filterSets.find(fs => fs.is_default_for_user) || 
+                                 filterSets.find(fs => fs.is_default_for_team);
+          
+          if (defaultFilterSet?.filter_params && Object.keys(defaultFilterSet.filter_params).length > 0) {
+            this.applyDefaultFilterSet(defaultFilterSet);
+          }
+        } catch (error) {
+          console.error('Failed to load default filters:', error);
+        }
+      },
+
+      applyDefaultFilterSet(filterSet) {
+        this.filterData.filters = [];
+        this.parseAndApplyFilterParams(filterSet.filter_params);
+        this.updateUrlWithFilters(this.getActiveFilters(this.filterData.filters));
+        this.triggerFilterChange(false);
+      },
+
+      parseAndApplyFilterParams(filterParams) {
+        const filterEntries = Object.entries(filterParams)
+          .filter(([key]) => key.startsWith('filter_'))
+          .reduce((acc, [key, value]) => {
+            const match = key.match(/filter_(\d+)_(.+)/);
+            if (match) {
+              const [, index, param] = match;
+              if (!acc[index]) acc[index] = {};
+              acc[index][param] = value;
+            }
+            return acc;
+          }, {});
+
+        Object.values(filterEntries).forEach((filterData) => {
+          if (filterData.column && filterData.operator) {
+            const filter = {
+              column: filterData.column,
+              operator: '',
+              value: '',
+              selectedValues: [],
+              availableOperators: [],
+              showOptions: false,
+              searchQuery: '',
+              filteredOptions: []
+            };
+
+            this.filterData.filters.push(filter);
+            const filterIndex = this.filterData.filters.length - 1;
+            
+            this.updateOperatorsByColumn(filterIndex);
+            
+            const currentFilter = this.filterData.filters[filterIndex];
+            currentFilter.operator = filterData.operator;
+            currentFilter.value = filterData.value || '';
+
+            if (['any of', 'all of', 'excludes'].includes(filterData.operator)) {
+              try {
+                currentFilter.selectedValues = JSON.parse(filterData.value || '[]');
+              } catch (e) {
+                currentFilter.selectedValues = [];
+              }
+            }
+          }
+        });
+      },
+
+      async applyStarredFilter(filterSetId, filterSetName) {
+        try {
+          const filterSets = await this.loadFilterSets();
+          const filterSet = filterSets.find(fs => fs.id === filterSetId);
+          if (!filterSet) return;
+          
+          this.filterData.filters = [];
+          this.parseAndApplyFilterParams(filterSet.filter_params);
+          this.updateUrlWithFilters(this.getActiveFilters(this.filterData.filters));
+          this.triggerFilterChange(false);
+        } catch (error) {
+          console.error('Error applying starred filter:', error);
+        }
+      },
     }));
-  });
-</script>
+    });
+
+    window.refreshFilterSets = async function() {
+      try {
+        const filterComponent = document.querySelector('[x-data*="filterComponent"]');
+        if (filterComponent?.__x) {
+          const component = filterComponent.__x.$data;
+          await component.loadStarredFilters();
+        }
+      } catch (error) {
+        console.error('Error refreshing filter sets:', error);
+      }
+    };
+  </script>
+{% endwith %}
