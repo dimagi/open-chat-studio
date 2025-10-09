@@ -202,7 +202,11 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
         # We need to get all the messages in the session to properly compile the history
         all_messages = list(
             ChatMessage.objects.filter(chat__experiment_session__external_id=session_id)
-            .annotate(experiment_public_id=F("chat__experiment_session__experiment__public_id"))
+            .annotate(
+                experiment_public_id=F("chat__experiment_session__experiment__public_id"),
+                participant_data=F("input_message_trace__participant_data"),
+                session_state=F("input_message_trace__session_state"),
+            )
             .prefetch_related("comments", "tags", "input_message_trace")
             .order_by("created_at")
         )
@@ -222,20 +226,14 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                 and (current_msg.id in target_ids_set or next_msg.id in target_ids_set)
             )
 
-            participant_data = {}
-            session_state = {}
-            if trace_message := current_msg.input_message_trace.first():
-                participant_data = trace_message.participant_data or {}
-                session_state = trace_message.session_state or {}
-
             shared_attrs = {
                 "history": [msg.copy() for msg in history],
                 "metadata": {
                     "session_id": session_id,
                     "experiment_id": str(current_msg.experiment_public_id),
                 },
-                "participant_data": participant_data,
-                "session_state": session_state,
+                "participant_data": current_msg.participant_data or {},
+                "session_state": current_msg.session_state or {},
             }
 
             if is_target_pair:
