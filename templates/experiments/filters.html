@@ -520,18 +520,20 @@
       syncChatbotVersionsField(activeFilters) {
         // Update the versions column options based on selected experiments
         // This uses a cache to avoid refetching versions for experiments that's already loaded
-        const experimentFilter = activeFilters.filter(f => f.column === 'experiment')[0];
-        if (!experimentFilter) {
+        const experimentFilters = activeFilters.filter(f => f.column === 'experiment');
+        if (experimentFilters.length === 0) {
           return;
         }
 
-        let allSelectedExperimentIds = [];
-        if (experimentFilter && experimentFilter.selectedValues && experimentFilter.selectedValues.length > 0) {
-            allSelectedExperimentIds = experimentFilter.selectedValues;
-        }
+        let allSelectedExperimentIds = new Set();
+        experimentFilters.forEach(filter => {
+          if (filter.selectedValues && filter.selectedValues.length > 0) {
+            filter.selectedValues.forEach(id => allSelectedExperimentIds.add(id));
+          }
+        });
 
         // Find experiments that aren't cached yet
-        const uncachedExperimentIds = allSelectedExperimentIds.filter(id => !this.experimentVersionsCache[id]);
+        const uncachedExperimentIds = [...allSelectedExperimentIds].filter(id => !this.experimentVersionsCache[id]);
 
         // Fetch versions for uncached experiments
         const fetchPromises = uncachedExperimentIds.map(experimentId => {
@@ -556,9 +558,7 @@
           });
         });
 
-        // Wait for all fetches to complete, then update versions column
         Promise.all(fetchPromises).then(() => {
-          // Collect all version names from selected experiments
           let allVersions = new Set();
           allSelectedExperimentIds.forEach(experimentId => {
             const versions = this.experimentVersionsCache[experimentId] || [];
