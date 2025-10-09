@@ -212,6 +212,11 @@ urlpatterns = [
         views.translate_messages_view,
         name="translate_messages",
     ),
+    path(
+        "experiment/<int:experiment_id>/versions",
+        views.get_experiment_version_names,
+        name="get_experiment_version_names",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))
