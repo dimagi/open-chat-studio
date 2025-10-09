@@ -10,7 +10,6 @@ from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.chat.channels import WebChannel
-from apps.experiments.bots import create_conversation
 from apps.experiments.export import filtered_export_to_csv, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.files.models import File
@@ -20,6 +19,52 @@ from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
 
 logger = logging.getLogger("ocs.experiments")
+
+
+class SimpleConversation:
+    """Simple replacement for the deleted conversation system used only by prompt builder."""
+
+    def __init__(self, prompt: str, source_material: str, llm):
+        self.prompt = prompt
+        self.source_material = source_material
+        self.llm = llm
+        self.history = []
+
+    def load_memory_from_messages(self, messages):
+        self.history = messages
+
+    def predict(self, user_message: str) -> tuple[str, int, int]:
+        # Build the conversation with system prompt, source material, history, and user message
+        messages = []
+
+        # Add system prompt
+        system_content = self.prompt
+        if self.source_material:
+            system_content += f"\n\nSource Material:\n{self.source_material}"
+        messages.append({"role": "system", "content": system_content})
+
+        # Add conversation history
+        for msg in self.history:
+            if hasattr(msg, "content"):
+                role = "user" if msg.__class__.__name__ == "HumanMessage" else "assistant"
+                messages.append({"role": role, "content": msg.content})
+
+        # Add current user message
+        messages.append({"role": "user", "content": user_message})
+
+        # Get response from LLM
+        try:
+            response = self.llm.invoke(messages)
+            # Return response text and dummy token counts (since we don't have access to actual counts)
+            return response.content, 0, 0
+        except Exception as e:
+            logger.exception(f"Error in SimpleConversation.predict: {e}")
+            return "Sorry, I encountered an error processing your message.", 0, 0
+
+
+def create_conversation(prompt: str, source_material: str, llm):
+    """Simple replacement for deleted create_conversation function."""
+    return SimpleConversation(prompt, source_material, llm)
 
 
 @shared_task(bind=True, base=TaskbadgerTask)

@@ -28,7 +28,6 @@ from apps.assistants.models import OpenAiAssistant
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
-from apps.experiments.runnables import AgentAssistantChat, AssistantChat
 from apps.pipelines.exceptions import (
     AbortPipeline,
     CodeNodeRunError,
@@ -938,6 +937,8 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
         return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession):
+        from apps.service_providers.llm_service.runnables import AgentAssistantChat, AssistantChat
+
         history_manager = AssistantPipelineHistoryManager()
         adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 

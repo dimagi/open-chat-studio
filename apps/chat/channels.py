@@ -41,8 +41,8 @@ from apps.experiments.models import (
     SessionStatus,
     VoiceResponseBehaviours,
 )
-from apps.experiments.runnables import ExperimentHistoryManager, GenerationCancelled
 from apps.files.models import File
+from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.slack.utils import parse_session_external_id
@@ -788,17 +788,14 @@ class ChannelBase(ABC):
 
     def _unsupported_message_type_response(self) -> str:
         """Generates a suitable response to the user when they send unsupported messages"""
-        history_manager = ExperimentHistoryManager(
-            session=self.experiment_session, experiment=self.experiment, trace_service=self.trace_service
-        )
         trace_info = TraceInfo(name="unsupported message", metadata={"message_type": self.message.content_type})
         chat_message = ChatMessage.objects.create(
             chat=self.experiment_session.chat, message_type=ChatMessageType.AI, content=self.message.message_text
         )
         chat_message.create_and_add_tag("unsupported_message_type", self.experiment.team, TagCategories.ERROR)
-        return EventBot(self.experiment_session, self.experiment, trace_info, history_manager).get_user_message(
-            UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
-        )
+        return EventBot(
+            self.experiment_session, self.experiment, trace_info, trace_service=self.trace_service
+        ).get_user_message(UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types))
 
     def _inform_user_of_error(self, exception):
         """Simply tells the user that something went wrong to keep them in the loop.

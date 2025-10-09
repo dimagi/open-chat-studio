@@ -21,12 +21,12 @@ if TYPE_CHECKING:
 
 
 def get_bot(session: ExperimentSession, experiment: Experiment, trace_service, disable_tools: bool = False):
-    from apps.experiments.bots import TopicBot
+    """Create a bot for the given experiment session.
 
+    All experiments now use pipelines, so this always returns a PipelineBot.
+    """
     experiment = experiment or session.experiment_version
-    if experiment.pipeline_id:
-        return PipelineBot(session, experiment, trace_service, disable_reminder_tools=disable_tools)
-    return TopicBot(session, experiment, trace_service, disable_tools=disable_tools)
+    return PipelineBot(session, experiment, trace_service, disable_reminder_tools=disable_tools)
 
 
 class PipelineBot:
