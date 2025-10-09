@@ -205,6 +205,7 @@
         loading: false,
         columns: filterColumns,
       },
+      experimentVersionsCache: {}, // Cache experiment ID -> version names
 
       init() {
         const App = SiteJS.app;
@@ -434,6 +435,9 @@
         if (this.filterData.filters.length === 0) {
           this.addFilter();
         }
+        
+        // Fetch experiment versions for any experiment filters loaded from URL
+        this.syncChatbotVersionsField(this.filterData.filters);
       },
 
       updateUrlWithFilters(activeFilters) {
@@ -491,6 +495,9 @@
             filterParams[`filter_${i}_value`] = filter.value;
           }
         });
+
+        this.syncChatbotVersionsField(activeFilters);
+
         const dataSourceUrl = "{{df_filter_data_source_url}}";
         const dataSourceContainerId = "{{df_filter_data_source_container_id}}";
         if (updateUrl) {
@@ -509,6 +516,84 @@
           }
         });
       },
+
+      syncChatbotVersionsField(activeFilters) {
+        // Update the versions column options based on selected experiments
+        // This uses a cache to avoid refetching versions for experiments that's already loaded
+        const experimentFilter = activeFilters.filter(f => f.column === 'experiment')[0];
+        if (!experimentFilter) {
+          return;
+        }
+
+        let allSelectedExperimentIds = [];
+        if (experimentFilter && experimentFilter.selectedValues && experimentFilter.selectedValues.length > 0) {
+            allSelectedExperimentIds = experimentFilter.selectedValues;
+        }
+
+        // Find experiments that aren't cached yet
+        const uncachedExperimentIds = allSelectedExperimentIds.filter(id => !this.experimentVersionsCache[id]);
+
+        // Fetch versions for uncached experiments
+        const fetchPromises = uncachedExperimentIds.map(experimentId => {
+          const fetchUrl = "{% url 'experiments:get_experiment_version_names' team.slug '000' %}";
+          return fetch(fetchUrl.replace('000', experimentId), {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+              'X-CSRFToken': SiteJS.app.Cookies.get('csrftoken'),
+              'Accept': 'application/json'
+            }
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.version_names) {
+              this.experimentVersionsCache[experimentId] = data.version_names;
+            }
+            return data;
+          })
+          .catch(err => {
+            console.error(`Failed to load versions for experiment ${experimentId}:`, err);
+          });
+        });
+
+        // Wait for all fetches to complete, then update versions column
+        Promise.all(fetchPromises).then(() => {
+          // Collect all version names from selected experiments
+          let allVersions = new Set();
+          allSelectedExperimentIds.forEach(experimentId => {
+            const versions = this.experimentVersionsCache[experimentId] || [];
+            versions.forEach(version => allVersions.add(version));
+            versions.sort();
+          });
+
+          this.updateVersionsColumn(Array.from(allVersions));
+        });
+      },
+
+      updateVersionsColumn(versions) {
+        // Update the versions column options if it exists
+        if (!this.filterData.columns.versions) {
+          return;
+        }
+        // Update available options in the versions column
+        this.filterData.columns.versions.options = versions;
+
+        // Update available options for existing filters
+        this.filterData.filters.forEach(filter => {
+          if (filter.column === 'versions') {
+            filter.filteredOptions = versions;
+          }
+        });
+
+        // Update selected values to only include those still valid
+        let activeFilters = this.getActiveFilters(this.filterData.filters);
+        const activeVersionsFilter = activeFilters.find(f => f.column === 'versions');
+        if (activeVersionsFilter) {
+          let newSelectedValues = activeVersionsFilter.selectedValues.filter(val => versions.includes(val));
+          activeVersionsFilter.selectedValues = newSelectedValues.sort();
+        }
+      },
+
       // Functions for date range dropdown
       setLabelFromURL() {
         const url = new URL(window.location.href);

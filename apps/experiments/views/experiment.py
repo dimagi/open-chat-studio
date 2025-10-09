@@ -1598,3 +1598,19 @@ def trends_data(request, team_slug: str, experiment_id: int):
     except Exception:
         logging.exception(f"Error loading barchart data for experiment {experiment_id}")
         return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)
+
+
+@require_GET
+@login_and_team_required
+@permission_required("experiments.view_experiment")
+def get_experiment_version_names(request, team_slug: str, experiment_id: int):
+    """
+    Returns JSON data for the filters widget
+    """
+    try:
+        experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
+        version_names = Experiment.objects.get_version_names(experiment.team, working_version=experiment)
+        return JsonResponse({"version_names": version_names})
+    except Exception:
+        logging.exception(f"Error loading barchart data for experiment {experiment_id}")
+        return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)
