@@ -563,10 +563,12 @@
           allSelectedExperimentIds.forEach(experimentId => {
             const versions = this.experimentVersionsCache[experimentId] || [];
             versions.forEach(version => allVersions.add(version));
-            versions.sort();
           });
-
-          this.updateVersionsColumn(Array.from(allVersions));
+          this.updateVersionsColumn(
+            Array.from(allVersions).sort((a, b) => 
+              parseInt(b.slice(1)) - parseInt(a.slice(1))
+            )
+          );
         });
       },
 
