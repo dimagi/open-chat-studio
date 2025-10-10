@@ -2,8 +2,6 @@ class BannerLocationMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
         self.view_name_mapping = {
-            "experiments:experiments_home": "experiments_home",
-            "experiments:new": "experiments_new",
             "pipelines:home": "pipelines",
             "pipelines:new": "pipelines_new",
             "chatbots:chatbots_home": "chatbots_home",
