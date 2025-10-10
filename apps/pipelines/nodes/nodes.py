@@ -317,7 +317,7 @@ class ToolConfigModel(BaseModel):
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
-    """Uses and LLM to respond to the input."""
+    """Uses an LLM to respond to the input."""
 
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
