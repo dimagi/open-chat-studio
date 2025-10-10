@@ -107,7 +107,7 @@ from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
 from apps.generics.chips import Chip
-from apps.generics.views import paginate_session, render_session_details
+from apps.generics.views import render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
@@ -586,7 +586,7 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
         version=version_number,
     )
     return HttpResponseRedirect(
-        reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, version_number, session.id])
+        reverse("chatbots:chatbot_chat_session", args=[team_slug, experiment_id, version_number, session.id])
     )
 
 
@@ -875,9 +875,7 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
         timezone=request.session.get("detected_tz", None),
         metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
     )
-    redirect_url = (
-        "chatbots:chatbot_chat_embed" if request.origin == "chatbots" else "experiments:experiment_chat_embed"
-    )
+    redirect_url = "chatbots:chatbot_chat_embed"
     return redirect(redirect_url, team_slug, experiment.public_id, session.external_id)
 
 
@@ -928,7 +926,7 @@ def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, 
 
 @login_and_team_required
 @permission_required("experiments.invite_participants", raise_exception=True)
-def experiment_invitations(request, team_slug: str, experiment_id: int, origin="experiments"):
+def experiment_invitations(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     experiment_version = experiment.default_version
     sessions = experiment.sessions.order_by("-created_at").filter(
@@ -964,12 +962,9 @@ def experiment_invitations(request, team_slug: str, experiment_id: int, origin="
         "experiment_name": experiment_version.name,
         "experiment_description": experiment_version.description,
     }
-    template_name = (
-        "chatbots/chatbot_invitations.html" if origin == "chatbots" else "experiments/experiment_invitations.html"
-    )
     return TemplateResponse(
         request,
-        template_name,
+        "chatbots/chatbot_invitations.html",
         {"invitation_form": form, "experiment": experiment, "sessions": sessions, **version_specific_vars},
     )
 
@@ -1090,7 +1085,7 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, ses
             request.experiment_session.save()
             return HttpResponseRedirect(
                 reverse(
-                    "experiments:experiment_chat",
+                    "chatbots:chatbot_chat",
                     args=[team_slug, experiment_id, session_id],
                 )
             )
@@ -1112,44 +1107,6 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, ses
             "form": form,
             "experiment": request.experiment,
             "experiment_session": experiment_session,
-            **version_specific_vars,
-        },
-    )
-
-
-@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
-@verify_session_access_cookie
-def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return _experiment_chat_ui(request)
-
-
-@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
-@xframe_options_exempt
-def experiment_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    """Special view for embedding that doesn't have the cookie security. This is OK because of the additional
-    checks to ensure the participant is 'anonymous'."""
-    session = request.experiment_session
-    if not session.participant.is_anonymous:
-        raise Http404
-    return _experiment_chat_ui(request, embedded=True)
-
-
-def _experiment_chat_ui(request, embedded=False):
-    experiment_version = request.experiment.default_version
-    version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
-        "experiment_name": experiment_version.name,
-        "experiment_version": experiment_version,
-        "experiment_version_number": experiment_version.version_number,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/experiment_chat.html",
-        {
-            "experiment": request.experiment,
-            "session": request.experiment_session,
-            "active_tab": "chatbots" if request.origin == "chatbots" else "experiments",
-            "embedded": embedded,
             **version_specific_vars,
         },
     )
@@ -1409,18 +1366,7 @@ def experiment_session_details_view(request, team_slug: str, experiment_id: uuid
         experiment_id,
         session_id,
         active_tab="experiments",
-        template_path="experiments/experiment_session_view.html",
-    )
-
-
-@login_and_team_required
-def experiment_session_pagination_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return paginate_session(
-        request,
-        team_slug,
-        experiment_id,
-        session_id,
-        view_name="experiments:experiment_session_view",
+        template_path="chatbots/chatbot_session_view.html",
     )
 
 
