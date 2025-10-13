@@ -33,7 +33,7 @@ from apps.teams.utils import current_team
 logger = logging.getLogger("ocs.evaluations")
 
 
-@shared_task(base=TaskbadgerTask)
+@shared_task(base=TaskbadgerTask, rate_limit="1/s")
 def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     """
     Run all evaluations over a single message.
