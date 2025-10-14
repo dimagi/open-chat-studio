@@ -6,6 +6,7 @@ from copy import deepcopy
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Self, cast
 
+import sentry_sdk
 from langchain_core.runnables import RunnableConfig
 from langgraph.constants import END
 from langgraph.types import Command
@@ -362,7 +363,18 @@ class PipelineNode(BasePipelineNode, ABC):
         self._outgoing_nodes = outgoing_nodes
         state = PipelineState(state)
         state = self._prepare_state(self.node_id, incoming_nodes, state)
-        output = self._process(input=state["node_input"], state=state)
+
+        # Sentry context for error tracking
+        process_params = {"input": state["node_input"], "state": state}
+        sentry_context = {
+            "node_id": self.node_id,
+            "node_name": self.name,
+            "node_type": self.__class__.__name__,
+            "params": process_params,
+        }
+        sentry_sdk.set_context("Node", sentry_context)
+
+        output = self._process(**process_params)
         if isinstance(output, Command) and output.goto != END:
             return Command(goto=output.goto, update=self._augment_output(state, cast(PipelineState, output.update)))
         if not isinstance(output, dict):
