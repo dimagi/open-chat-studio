@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import ClassVar
 
+from django.db.models import Q
 from django.urls import reverse
 
 from apps.experiments.filters import (
@@ -32,9 +33,9 @@ class SpanNameFilter(ChoiceColumnFilter):
 
 
 class SpanTagsFilter(ChoiceColumnFilter):
-    query_param: str = "tags"
+    query_param: str = "span_tags"
     column: str = "spans__tags__name"
-    label: str = "Tags"
+    label: str = "Span Tags"
     type: str = TYPE_CHOICE
 
     def prepare(self, team, **_):
@@ -44,6 +45,36 @@ class SpanTagsFilter(ChoiceColumnFilter):
             .order_by("tags__name")
             .distinct("tags__name")
         )
+
+
+class MessageTagsFilter(ChoiceColumnFilter):
+    query_param: str = "message_tags"
+    label: str = "Message Tags"
+    type: str = TYPE_CHOICE
+
+    def prepare(self, team, **_):
+        # Get user tags (non-system tags) from messages
+        self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        # Filter traces where either input_message or output_message has any of the tags
+        input_tags_condition = Q(input_message__tags__name__in=value)
+        output_tags_condition = Q(output_message__tags__name__in=value)
+        return queryset.filter(input_tags_condition | output_tags_condition)
+
+    def apply_all_of(self, queryset, value, timezone=None):
+        # Filter traces where messages have all of the tags
+        for tag in value:
+            input_tags_condition = Q(input_message__tags__name=tag)
+            output_tags_condition = Q(output_message__tags__name=tag)
+            queryset = queryset.filter(input_tags_condition | output_tags_condition)
+        return queryset
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        # Exclude traces where either message has any of the tags
+        input_tags_condition = Q(input_message__tags__name__in=value)
+        output_tags_condition = Q(output_message__tags__name__in=value)
+        return queryset.exclude(input_tags_condition | output_tags_condition)
 
 
 class ExperimentVersionsFilter(ChoiceColumnFilter):
@@ -65,6 +96,7 @@ class TraceFilter(MultiColumnFilter):
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
         TimestampFilter(label="Timestamp", column="timestamp", query_param="timestamp"),
+        MessageTagsFilter(),
         SpanTagsFilter(),
         SpanNameFilter(),
         RemoteIdFilter(),

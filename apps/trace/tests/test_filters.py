@@ -110,12 +110,12 @@ class TestTraceFilter:
         queryset = Trace.objects.filter(team=team)
 
         value = json.dumps(["tag1", "tag3"])
-        result = self._create_filter_and_apply(queryset, "tags", Operators.ANY_OF, value)
+        result = self._create_filter_and_apply(queryset, "span_tags", Operators.ANY_OF, value)
         assert trace in result
 
         # Test non-matching tags
         value = json.dumps(["tag3", "tag4"])
-        result = self._create_filter_and_apply(queryset, "tags", Operators.ANY_OF, value)
+        result = self._create_filter_and_apply(queryset, "span_tags", Operators.ANY_OF, value)
         assert trace not in result
 
     def test_tags_filter_all_of(self, trace, span, team):
@@ -130,12 +130,12 @@ class TestTraceFilter:
 
         # Test ALL_OF operator - both tags present
         value = json.dumps(["tag1", "tag2"])
-        result = self._create_filter_and_apply(queryset, "tags", Operators.ALL_OF, value)
+        result = self._create_filter_and_apply(queryset, "span_tags", Operators.ALL_OF, value)
         assert trace in result
 
         # Test ALL_OF operator - one tag missing
         value = json.dumps(["tag1", "tag4"])
-        result = self._create_filter_and_apply(queryset, "tags", Operators.ALL_OF, value)
+        result = self._create_filter_and_apply(queryset, "span_tags", Operators.ALL_OF, value)
         assert trace not in result
 
     def test_tags_filter_excludes(self, trace, span, team):
@@ -147,19 +147,19 @@ class TestTraceFilter:
 
         # Test EXCLUDES operator - tag not present (should include)
         value = json.dumps(["tag2", "tag3"])
-        result = self._create_filter_and_apply(queryset, "tags", Operators.EXCLUDES, value)
+        result = self._create_filter_and_apply(queryset, "span_tags", Operators.EXCLUDES, value)
         assert trace in result
 
         # Test EXCLUDES operator - tag present (should exclude)
         value = json.dumps(["tag1", "tag3"])
-        result = self._create_filter_and_apply(queryset, "tags", Operators.EXCLUDES, value)
+        result = self._create_filter_and_apply(queryset, "span_tags", Operators.EXCLUDES, value)
         assert trace not in result
 
     def test_tags_filter_invalid_json(self, trace, team):
         queryset = Trace.objects.filter(team=team)
 
         # Test invalid JSON
-        result = self._create_filter_and_apply(queryset, "tags", Operators.ANY_OF, "invalid_json")
+        result = self._create_filter_and_apply(queryset, "span_tags", Operators.ANY_OF, "invalid_json")
         # Should return original queryset since filter returns None
         assert trace in result
 
@@ -358,7 +358,7 @@ class TestTraceFilter:
             "filter_0_column": "participant",
             "filter_0_operator": Operators.EQUALS,
             "filter_0_value": "test_participant",
-            "filter_1_column": "tags",
+            "filter_1_column": "span_tags",
             "filter_1_operator": Operators.ANY_OF,
             "filter_1_value": json.dumps(["tag1"]),
         }
@@ -377,4 +377,120 @@ class TestTraceFilter:
         filter_instance = TraceFilter()
         result = filter_instance.apply(queryset, FilterParams(query_params), "UTC")
 
+        assert trace not in result
+
+    # Test message tags filter
+    def test_message_tags_filter_any_of_input_message(self, trace, team):
+        """Test message tags filter with tags on input message."""
+        from apps.chat.models import ChatMessage, ChatMessageType
+        from apps.utils.factories.experiment import ChatFactory
+
+        # Create a chat and input message with tags
+        chat = ChatFactory(team=team)
+        input_message = ChatMessage.objects.create(
+            chat=chat, message_type=ChatMessageType.HUMAN, content="Test input"
+        )
+        tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
+        tag2 = Tag.objects.create(name="urgent", team=team, is_system_tag=False)
+        input_message.add_tag(tag1, team)
+
+        # Link the message to the trace
+        trace.input_message = input_message
+        trace.save()
+
+        queryset = Trace.objects.filter(team=team)
+
+        # Test ANY_OF operator - tag present on input message
+        value = json.dumps(["important", "other"])
+        result = self._create_filter_and_apply(queryset, "message_tags", Operators.ANY_OF, value)
+        assert trace in result
+
+        # Test non-matching tags
+        value = json.dumps(["urgent", "other"])
+        result = self._create_filter_and_apply(queryset, "message_tags", Operators.ANY_OF, value)
+        assert trace not in result
+
+    def test_message_tags_filter_any_of_output_message(self, trace, team):
+        """Test message tags filter with tags on output message."""
+        from apps.chat.models import ChatMessage, ChatMessageType
+        from apps.utils.factories.experiment import ChatFactory
+
+        # Create a chat and output message with tags
+        chat = ChatFactory(team=team)
+        output_message = ChatMessage.objects.create(
+            chat=chat, message_type=ChatMessageType.AI, content="Test output"
+        )
+        tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
+        output_message.add_tag(tag1, team)
+
+        # Link the message to the trace
+        trace.output_message = output_message
+        trace.save()
+
+        queryset = Trace.objects.filter(team=team)
+
+        # Test ANY_OF operator - tag present on output message
+        value = json.dumps(["important"])
+        result = self._create_filter_and_apply(queryset, "message_tags", Operators.ANY_OF, value)
+        assert trace in result
+
+    def test_message_tags_filter_all_of(self, trace, team):
+        """Test message tags filter with ALL_OF operator."""
+        from apps.chat.models import ChatMessage, ChatMessageType
+        from apps.utils.factories.experiment import ChatFactory
+
+        # Create messages with multiple tags
+        chat = ChatFactory(team=team)
+        input_message = ChatMessage.objects.create(
+            chat=chat, message_type=ChatMessageType.HUMAN, content="Test input"
+        )
+        tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
+        tag2 = Tag.objects.create(name="urgent", team=team, is_system_tag=False)
+        tag3 = Tag.objects.create(name="review", team=team, is_system_tag=False)
+        input_message.add_tag(tag1, team)
+        input_message.add_tag(tag2, team)
+        input_message.add_tag(tag3, team)
+
+        trace.input_message = input_message
+        trace.save()
+
+        queryset = Trace.objects.filter(team=team)
+
+        # Test ALL_OF operator - all tags present
+        value = json.dumps(["important", "urgent"])
+        result = self._create_filter_and_apply(queryset, "message_tags", Operators.ALL_OF, value)
+        assert trace in result
+
+        # Test ALL_OF operator - one tag missing
+        value = json.dumps(["important", "missing"])
+        result = self._create_filter_and_apply(queryset, "message_tags", Operators.ALL_OF, value)
+        assert trace not in result
+
+    def test_message_tags_filter_excludes(self, trace, team):
+        """Test message tags filter with EXCLUDES operator."""
+        from apps.chat.models import ChatMessage, ChatMessageType
+        from apps.utils.factories.experiment import ChatFactory
+
+        # Create message with tags
+        chat = ChatFactory(team=team)
+        input_message = ChatMessage.objects.create(
+            chat=chat, message_type=ChatMessageType.HUMAN, content="Test input"
+        )
+        tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
+        Tag.objects.create(name="urgent", team=team, is_system_tag=False)
+        input_message.add_tag(tag1, team)
+
+        trace.input_message = input_message
+        trace.save()
+
+        queryset = Trace.objects.filter(team=team)
+
+        # Test EXCLUDES operator - tag not present (should include)
+        value = json.dumps(["urgent", "other"])
+        result = self._create_filter_and_apply(queryset, "message_tags", Operators.EXCLUDES, value)
+        assert trace in result
+
+        # Test EXCLUDES operator - tag present (should exclude)
+        value = json.dumps(["important", "other"])
+        result = self._create_filter_and_apply(queryset, "message_tags", Operators.EXCLUDES, value)
         assert trace not in result
