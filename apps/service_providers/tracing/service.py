@@ -46,11 +46,11 @@ class TracingService:
         return cls([], None, None)
 
     @classmethod
-    def create_for_experiment(cls, experiment, include_ocs_tracer=True) -> Self:
+    def create_for_experiment(cls, experiment) -> Self:
         from apps.service_providers.tracing.ocs_tracer import OCSTracer
 
         tracers = []
-        if include_ocs_tracer and experiment and experiment.id and experiment.team_id:
+        if experiment and experiment.id and experiment.team_id:
             ocs_tracer = OCSTracer(experiment.id, experiment.team_id)
             tracers.append(ocs_tracer)
 
