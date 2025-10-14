@@ -15,6 +15,7 @@ from apps.evaluations.utils import get_evaluator_type_display
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 from apps.generics.actions import chip_action
+from apps.generics.tables import TemplateColumnWithHelp
 
 
 class EvaluationConfigTable(tables.Table):
@@ -224,19 +225,21 @@ def _chip_session_url_factory(_, request, record, __):
 
 
 class EvaluationSessionsSelectionTable(tables.Table):
-    selection = TemplateColumn(
+    selection = TemplateColumnWithHelp(
         template_name="evaluations/session_checkbox.html",
         verbose_name="All Messages",
         orderable=False,
+        help_text="Include all messages from these sessions in the dataset",
         extra_context={
             "css_class": "checkbox checkbox-primary session-checkbox",
             "js_function": "updateSelectedSessions()",
         },
     )
-    clone_filtered_only = TemplateColumn(
+    clone_filtered_only = TemplateColumnWithHelp(
         template_name="evaluations/session_checkbox.html",
         verbose_name="Filtered Messages",
         orderable=False,
+        help_text="Include only messages matching the current filters in the dataset",
         extra_context={
             "css_class": "checkbox checkbox-secondary filter-checkbox",
             "js_function": "updateFilteredSessions()",
