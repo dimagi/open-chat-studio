@@ -1035,6 +1035,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "append_to_participant_data_key": participant_data_proxy.append_to_key,
             "increment_participant_data_key": participant_data_proxy.increment_key,
             "get_participant_schedules": participant_data_proxy.get_schedules,
+            "get_participant_identifier": participant_data_proxy.get_participant_identifier,
             "get_temp_state_key": self._get_temp_state_key(output_state),
             "set_temp_state_key": self._set_temp_state_key(output_state),
             "get_session_state_key": self._get_session_state_key(output_state),

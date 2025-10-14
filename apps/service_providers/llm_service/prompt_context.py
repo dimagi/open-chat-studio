@@ -240,3 +240,9 @@ class ParticipantDataProxy:
     def get_timezone(self):
         """Returns the participant's timezone"""
         return self._participant_data.get("timezone")
+
+    def get_participant_identifier(self):
+        """Returns the participant's identifier"""
+        if self.session and self.session.participant:
+            return self.session.participant.identifier
+        return None

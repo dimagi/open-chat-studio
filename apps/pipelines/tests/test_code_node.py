@@ -158,6 +158,32 @@ def main(input, **kwargs):
     assert node_output.update["participant_data"]["fun_facts"]["personality"] == output
 
 
+@pytest.mark.django_db()
+def test_get_participant_identifier(pipeline, experiment_session):
+    """Test that the get_participant_identifier function returns the participant's identifier"""
+    participant = Participant.objects.create(
+        identifier="test_user@example.com",
+        team=experiment_session.team,
+        platform="web",
+    )
+    experiment_session.participant = participant
+    experiment_session.save()
+
+    code = """
+def main(input, **kwargs):
+    return get_participant_identifier()
+"""
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node_output = node._process(
+        "Hi",
+        PipelineState(
+            outputs={},
+            experiment_session=experiment_session,
+        ),
+    )
+    assert node_output.update["messages"][-1] == "test_user@example.com"
+
+
 @django_db_with_data(available_apps=("apps.service_providers",))
 def test_participant_data_across_multiple_nodes(pipeline, experiment_session):
     code_set = """

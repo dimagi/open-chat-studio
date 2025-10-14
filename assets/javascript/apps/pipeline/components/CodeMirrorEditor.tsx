@@ -96,6 +96,13 @@ export function CodeNodeEditor(
       boost: 1,
       section: "Participant Data",
     }),
+    get_participant_identifier: snip("get_participant_identifier()", {
+      label: "get_participant_identifier",
+      type: "function",
+      detail: "Returns the participant's identifier",
+      boost: 1,
+      section: "Participant Data",
+    }),
     set_temp_state_key: snip("set_temp_state_key(\"${key_name}\", ${data})", {
       label: "set_temp_state_key",
       type: "function",

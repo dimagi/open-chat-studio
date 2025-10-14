@@ -171,3 +171,26 @@ class TestParticipantDataProxy:
         proxy.set_key("text_value", "not a number")
         proxy.increment_key("text_value", 3)
         assert input_state["participant_data"] == {"counter": 7, "float_counter": 4.0, "text_value": 3}
+
+    def test_get_participant_identifier(self):
+        """Test that get_participant_identifier() returns the participant's identifier"""
+        participant = ParticipantFactory(identifier="test_user@example.com")
+        session = ExperimentSessionFactory(participant=participant)
+
+        proxy = ParticipantDataProxy({}, session)
+
+        assert proxy.get_participant_identifier() == "test_user@example.com"
+
+    def test_get_participant_identifier_no_session(self):
+        """Test that get_participant_identifier() returns None when there's no session"""
+        proxy = ParticipantDataProxy({}, None)
+
+        assert proxy.get_participant_identifier() is None
+
+    def test_get_participant_identifier_no_participant(self):
+        """Test that get_participant_identifier() returns None when there's no participant"""
+        session = ExperimentSessionFactory(participant=None)
+
+        proxy = ParticipantDataProxy({}, session)
+
+        assert proxy.get_participant_identifier() is None
