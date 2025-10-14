@@ -1,5 +1,6 @@
 import csv
 import logging
+import math
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import timedelta
@@ -188,9 +189,12 @@ def run_evaluation_task(evaluation_run_id):
                 return
 
             # Create chord with group and callback
+            concurrency_limit = 10
+            chunk_size = math.ceil(len(messages) / concurrency_limit)
+            evaluator_ids = [e.id for e in evaluators]
             chord_result = chord(
                 evaluate_single_message_task.chunks(
-                    [(evaluation_run_id, [e.id for e in evaluators], message.id) for message in messages], 5
+                    [(evaluation_run_id, evaluator_ids, message.id) for message in messages], chunk_size
                 ).group()
             )(mark_evaluation_complete.s(evaluation_run_id))
 
