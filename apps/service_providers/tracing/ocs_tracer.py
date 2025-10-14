@@ -227,7 +227,14 @@ class OCSTracer(Tracer):
 
 
 class OCSCallbackHandler(BaseCallbackHandler):
-    LANGCHAIN_CHAINS_TO_IGNORE = ["start", "end"]
+    LANGCHAIN_CHAINS_TO_IGNORE = [
+        "start",
+        "end",
+        "should_continue",
+        "RunnableSequence",
+        "LangGraph",
+        "Run Pipeline run",
+    ]
 
     def __init__(self, tracer: OCSTracer):
         super().__init__()
