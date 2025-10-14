@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 import emoji
 import requests
-import sentry_sdk
 from django.conf import settings
 from django.db import transaction
 from django.http import Http404
@@ -140,7 +139,6 @@ class ChannelBase(ABC):
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
         self.trace_service = TracingService.create_for_experiment(self.experiment)
-        sentry_sdk.set_context("chatbot", {"team_slug": experiment.team.slug, "experiment": experiment.id})
 
     @property
     def participant_id(self) -> int | None:
