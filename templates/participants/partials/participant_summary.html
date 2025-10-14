@@ -14,11 +14,7 @@
             <div class="py-3 grid grid-cols-3 sm:gap-4">
                 <dt class="text-sm font-medium leading-6">Identifier</dt>
                 <dd class="text-sm col-span-2" id="participant-identifier">
-                    {% if participant.user_id %}
-                        {{ participant.identifier }}
-                    {% else %}
-                        {% include "participants/partials/edit_identifier.html" %}
-                    {% endif %}
+                    {{ participant.identifier }}
                 </dd>
             </div>
             <div class="py-3 grid grid-cols-3 sm:gap-4">

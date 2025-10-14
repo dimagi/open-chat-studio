@@ -22,7 +22,6 @@ urlpatterns = [
         name="edit-participant-data",
     ),
     path("participants/<int:pk>/edit_name/", views.edit_name, name="edit_name"),
-    path("participants/<int:pk>/edit_identifier/", views.edit_identifier, name="edit_identifier"),
     path(
         "participants/<int:participant_id>/cancel_schedule/<str:schedule_id>/",
         views.cancel_schedule,
