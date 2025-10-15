@@ -53,7 +53,12 @@ class MessageTagsFilter(ChoiceColumnFilter):
     type: str = TYPE_CHOICE
 
     def prepare(self, team, **_):
-        self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
+        self.options = list(
+            team.tag_set.filter(is_system_tag=False)
+            .values_list("name", flat=True)
+            .order_by("name")
+            .distinct()
+        )
 
     def apply_any_of(self, queryset, value, timezone=None):
         input_tags_condition = Q(input_message__tags__name__in=value)
