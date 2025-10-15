@@ -2,7 +2,7 @@
 {% load form_tags i18n %}
 
 {% block form %}
-  <div>
+  <div x-data="{  runGeneration: {{ form.run_generation.value|yesno:'true,false' }}  }">
     {{ form.non_field_errors }}
 
     {% render_form_fields form "name" %}
@@ -10,6 +10,24 @@
     {% render_form_fields form "evaluators" %}
 
     <div class="fieldset w-full">
+      <label class="label font-bold" for="">
+        <div>Generation Configuration</div>
+      </label>
+
+      <div id="id_evaluators">
+        <div>
+          <label for="id_run_generation">
+            <input class="checkbox " type="checkbox" name="run_generation" id="id_run_generation"
+                   {% if form.run_generation.value %}checked="checked"{% endif %}
+                   x-model="runGeneration">
+            Run generation step before evaluation
+          </label>
+        {{ form.run_generation.errors }}
+        </div>
+      </div>
+    </div>
+
+    <div class="fieldset w-full" x-show="runGeneration" x-cloak x-collapse>
       <label class="label font-bold" for="{{ form.experiment.id_for_label }}">
         <div>
           {{ form.experiment.label }}
@@ -45,8 +63,10 @@
     </div>
 
     {# The version select field starts hidden in the "new" form until the user selects an experiment #}
-    <div id="version-select-container" {% if not form.experiment.value %}style="display: none;"{% endif %}>
-      {% render_form_fields form "experiment_version" %}
+    <div x-show="runGeneration" x-cloak x-collapse>
+      <div id="version-select-container" {% if not form.experiment.value %}style="display: none;"{% endif %}>
+        {% render_form_fields form "experiment_version" %}
+      </div>
     </div>
 
     <div id="version-loading" class="fieldset w-full htmx-indicator flex items-center gap-2 mt-2">
