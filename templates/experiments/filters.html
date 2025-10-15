@@ -645,18 +645,14 @@
                                  savedFilters.find(fs => fs.is_default_for_team);
           
           if (defaultFilter?.filter_params && Object.keys(defaultFilter.filter_params).length > 0) {
-            this.applyDefaultFilter(defaultFilter);
+            this.filterData.filters = [];
+            this.parseAndApplyFilterParams(defaultFilter.filter_params);
+            this.updateUrlWithFilters();
+            this.triggerFilterChange(false);
           }
         } catch (error) {
           console.error('Failed to load default filters:', error);
         }
-      },
-
-      applyDefaultFilter(savedFilter) {
-        this.filterData.filters = [];
-        this.parseAndApplyFilterParams(savedFilter.filter_params);
-        this.updateUrlWithFilters();
-        this.triggerFilterChange(false);
       },
 
       parseAndApplyFilterParams(filterParams) {
