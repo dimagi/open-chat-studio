@@ -58,7 +58,7 @@ class MessageTagsFilter(ChoiceColumnFilter):
     def apply_any_of(self, queryset, value, timezone=None):
         input_tags_condition = Q(input_message__tags__name__in=value)
         output_tags_condition = Q(output_message__tags__name__in=value)
-        return queryset.filter(input_tags_condition | output_tags_condition)
+        return queryset.filter(input_tags_condition | output_tags_condition).distinct()
 
     def apply_all_of(self, queryset, value, timezone=None):
         for tag in value:
