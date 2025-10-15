@@ -194,8 +194,10 @@
     <div class="mt-4">
       <div class="flex flex-wrap gap-2">
         <template x-for="filterSet in starredFilters" :key="filterSet.id">
-          <div class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
-               @click="applyStarredFilter(filterSet.id, filterSet.name)">
+          <div
+              class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
+              :class="activeStarredFilter === filterSet.id ? 'bg-primary text-white hover:bg-primary' : ''"
+              @click="applyStarredFilter(filterSet.id, filterSet.name)">
             <span class="text-base-content" x-text="filterSet.name"></span>
           </div>
         </template>
@@ -223,6 +225,7 @@
       },
       starredFilters: [],
       savedFilters: null,
+      activeStarredFilter: null,
       init() {
         const App = SiteJS.app;
         this.loadFiltersFromQueryString(window.location.search);
@@ -498,6 +501,7 @@
       },
 
       triggerFilterChange(updateUrl = true) {
+        this.activeStarredFilter = null;
         this.filterData.loading = true;
 
         let filterParams = {};
@@ -657,10 +661,10 @@
           const savedFilters = await this.fetchSavedFilters();
           const starredFilter = savedFilters.find(fs => fs.id === filterSetId);
           if (!starredFilter) return;
-          
           this.filterData.filters = [];
           this.loadFiltersFromQueryString(starredFilter.filter_query_string);
           this.triggerFilterChange();
+          this.activeStarredFilter = starredFilter.id;
         } catch (error) {
           console.error('Error applying starred filter:', error);
         }
