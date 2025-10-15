@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID
 
+import sentry_sdk
 from langchain_core.runnables import RunnableConfig
 
 from .base import Tracer
@@ -121,6 +122,8 @@ class TracingService:
                 )
             except Exception:  # noqa BLE001
                 logger.exception("Error initializing tracer %s", tracer.__class__.__name__)
+
+        sentry_sdk.set_context("Traces", self.get_trace_metadata())
 
     def _end_traces(self, error: Exception | None = None):
         for tracer in self._active_tracers:
