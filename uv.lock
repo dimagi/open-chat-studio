@@ -89,20 +89,21 @@ wheels = [
 
 [[package]]
 name = "anthropic"
-version = "0.51.0"
+version = "0.69.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "distro" },
+    { name = "docstring-parser" },
     { name = "httpx" },
     { name = "jiter" },
     { name = "pydantic" },
     { name = "sniffio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/63/4a/96f99a61ae299f9e5aa3e765d7342d95ab2e2ba5b69a3ffedb00ef779651/anthropic-0.51.0.tar.gz", hash = "sha256:6f824451277992af079554430d5b2c8ff5bc059cc2c968cdc3f06824437da201", size = 219063, upload-time = "2025-05-07T15:39:22.348Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c8/9d/9ad1778b95f15c5b04e7d328c1b5f558f1e893857b7c33cd288c19c0057a/anthropic-0.69.0.tar.gz", hash = "sha256:c604d287f4d73640f40bd2c0f3265a2eb6ce034217ead0608f6b07a8bc5ae5f2", size = 480622, upload-time = "2025-09-29T16:53:45.282Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/6e/9637122c5f007103bd5a259f4250bd8f1533dd2473227670fd10a1457b62/anthropic-0.51.0-py3-none-any.whl", hash = "sha256:b8b47d482c9aa1f81b923555cebb687c2730309a20d01be554730c8302e0f62a", size = 263957, upload-time = "2025-05-07T15:39:20.82Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/38/75129688de5637eb5b383e5f2b1570a5cc3aecafa4de422da8eea4b90a6c/anthropic-0.69.0-py3-none-any.whl", hash = "sha256:1f73193040f33f11e27c2cd6ec25f24fe7c3f193dc1c5cde6b7a08b18a16bcc5", size = 337265, upload-time = "2025-09-29T16:53:43.686Z" },
 ]
 
 [[package]]
@@ -969,6 +970,15 @@ wheels = [
 ]
 
 [[package]]
+name = "docstring-parser"
+version = "0.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b2/9d/c3b43da9515bd270df0f80548d9944e389870713cc1fe2b8fb35fe2bcefd/docstring_parser-0.17.0.tar.gz", hash = "sha256:583de4a309722b3315439bb31d64ba3eebada841f2e2cee23b99df001434c912", size = 27442, upload-time = "2025-07-21T07:35:01.868Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/55/e2/2537ebcff11c1ee1ff17d8d0b6f4db75873e3b0fb32c2d4a2ee31ecb310a/docstring_parser-0.17.0-py3-none-any.whl", hash = "sha256:cf2569abd23dce8099b300f9b4fa8191e9582dda731fd533daf54c4551658708", size = 36896, upload-time = "2025-07-21T07:35:00.684Z" },
+]
+
+[[package]]
 name = "drf-spectacular"
 version = "0.26.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1648,16 +1658,16 @@ wheels = [
 
 [[package]]
 name = "langchain-anthropic"
-version = "0.3.13"
+version = "0.3.22"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anthropic" },
     { name = "langchain-core" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/42/46/f26b8b21f528d7011ba6d614f12f83cf94503ad9eaf036daaea2309c72da/langchain_anthropic-0.3.13.tar.gz", hash = "sha256:12f10fc23fe324fa05bfd608ae96b80e6df3525e79f9f24da93863356a88a5a2", size = 45730, upload-time = "2025-05-08T13:34:09.075Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b8/ac/4791e4451e1972f80cb517e19d003678239921fc0685a4c4b265fe47e216/langchain_anthropic-0.3.22.tar.gz", hash = "sha256:6c440278bd8012bc94ae341f416bfc724fdc5d2d2b69630fe6e82fa6ee9682ac", size = 471312, upload-time = "2025-10-09T18:39:26.983Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/7d/39864c33a7c3c0fb9a05eb17c05214f60a4223568b7a1f15055702335afb/langchain_anthropic-0.3.13-py3-none-any.whl", hash = "sha256:2a3041ed530c7e3d3f486ce48d926c5e8173376e2b6a00da03ef83a3f8e7ba7f", size = 26131, upload-time = "2025-05-08T13:34:07.75Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/ac/019fd9d45716a4d74c154f160665074ae49885ff4764c8313737f5fda348/langchain_anthropic-0.3.22-py3-none-any.whl", hash = "sha256:17721b240342a1a3f70bf0b2ff33520ba60d69008e3b9433190a62a52ff87cf6", size = 32592, upload-time = "2025-10-09T18:39:25.766Z" },
 ]
 
 [[package]]
@@ -1685,7 +1695,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "0.3.72"
+version = "0.3.79"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -1696,9 +1706,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8b/49/7568baeb96a57d3218cb5f1f113b142063679088fd3a0d0cae1feb0b3d36/langchain_core-0.3.72.tar.gz", hash = "sha256:4de3828909b3d7910c313242ab07b241294650f5cb6eac17738dd3638b1cd7de", size = 567227, upload-time = "2025-07-24T00:40:08.5Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c8/99/f926495f467e0f43289f12e951655d267d1eddc1136c3cf4dd907794a9a7/langchain_core-0.3.79.tar.gz", hash = "sha256:024ba54a346dd9b13fb8b2342e0c83d0111e7f26fa01f545ada23ad772b55a60", size = 580895, upload-time = "2025-10-09T21:59:08.359Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6e/7d/9f75023c478e3b854d67da31d721e39f0eb30ae969ec6e755430cb1c0fb5/langchain_core-0.3.72-py3-none-any.whl", hash = "sha256:9fa15d390600eb6b6544397a7aa84be9564939b6adf7a2b091179ea30405b240", size = 442806, upload-time = "2025-07-24T00:40:06.994Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/71/46b0efaf3fc6ad2c2bd600aef500f1cb2b7038a4042f58905805630dd29d/langchain_core-0.3.79-py3-none-any.whl", hash = "sha256:92045bfda3e741f8018e1356f83be203ec601561c6a7becfefe85be5ddc58fdb", size = 449779, upload-time = "2025-10-09T21:59:06.493Z" },
 ]
 
 [[package]]
