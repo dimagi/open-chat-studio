@@ -19,8 +19,6 @@ class Banner(models.Model):
     # Pre-defined locations must match those in the middleware.py
     LOCATIONS = (
         ("global", "Global (All Pages)"),
-        ("experiments_home", "Experiments Home"),
-        ("experiments_new", "New Experiments"),
         ("pipelines", "Pipelines Home"),
         ("pipelines_new", "New Pipelines"),
         ("chatbots_home", "Chatbots Home"),
