@@ -53,17 +53,14 @@ class MessageTagsFilter(ChoiceColumnFilter):
     type: str = TYPE_CHOICE
 
     def prepare(self, team, **_):
-        # Get user tags (non-system tags) from messages
         self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
 
     def apply_any_of(self, queryset, value, timezone=None):
-        # Filter traces where either input_message or output_message has any of the tags
         input_tags_condition = Q(input_message__tags__name__in=value)
         output_tags_condition = Q(output_message__tags__name__in=value)
         return queryset.filter(input_tags_condition | output_tags_condition)
 
     def apply_all_of(self, queryset, value, timezone=None):
-        # Filter traces where messages have all of the tags
         for tag in value:
             input_tags_condition = Q(input_message__tags__name=tag)
             output_tags_condition = Q(output_message__tags__name=tag)
@@ -71,7 +68,6 @@ class MessageTagsFilter(ChoiceColumnFilter):
         return queryset
 
     def apply_excludes(self, queryset, value, timezone=None):
-        # Exclude traces where either message has any of the tags
         input_tags_condition = Q(input_message__tags__name__in=value)
         output_tags_condition = Q(output_message__tags__name__in=value)
         return queryset.exclude(input_tags_condition | output_tags_condition)
