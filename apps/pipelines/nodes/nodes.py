@@ -295,7 +295,7 @@ class BuiltinToolConfig(BaseModel):
 class AnthropicWebSearchToolConfig(BuiltinToolConfig):
     provider_type: ClassVar[str] = "anthropic"
     tool_name: ClassVar[str] = "web-search"
-    model_config = ConfigDict(json_schema_extra={"discriminatorValue": provider_type, "tool_key": tool_name})
+    model_config = ConfigDict(json_schema_extra={"conditionalValue": provider_type, "tool_key": tool_name})
     allowed_domains: list[str] = Field(
         default_factory=list,
         description="Add domains without https from which you want the search results. "
@@ -385,14 +385,14 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         json_schema_extra=UiSchema(
             widget=Widgets.multiselect,
             enum_labels=BuiltInTools.labels,
-            discriminator_field="llm_provider_type",
-            enum_discriminator_values=[["openai", "anthropic"], ["openai"]],
+            conditional_field="llm_provider_type",
+            enum_conditional_values=[["openai", "anthropic"], ["openai"]],
         ),
     )
     tool_config: dict[str, BuiltinToolConfig | AnthropicWebSearchToolConfig] = Field(
         default_factory=dict,
         description="Configuration for builtin tools",
-        json_schema_extra=UiSchema(widget=Widgets.built_in_tools_config, discriminator_field="llm_provider_type"),
+        json_schema_extra=UiSchema(widget=Widgets.built_in_tools_config, conditional_field="llm_provider_type"),
     )
     mcp_tools: list[str] = Field(
         default_factory=list,

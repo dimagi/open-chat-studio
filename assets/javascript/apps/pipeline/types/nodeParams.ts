@@ -12,8 +12,8 @@ export type PropertySchema = {
   "ui:optionsSource"?: string | undefined;
   "ui:widget"?: string | undefined;
   "ui:enumLabels"?: string[] | undefined;
-  "ui:enumDiscriminatorValues"?: string[] | undefined;
-  "ui:discriminatorField"?: string | undefined;
+  "ui:enumConditionalValues"?: string[] | undefined;
+  "ui:conditionalField"?: string | undefined;
   "ui:flagRequired"?: string | undefined;
   "additionalProperties"?: {
     anyOf?: JsonSchema[] | undefined;

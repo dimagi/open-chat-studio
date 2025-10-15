@@ -161,8 +161,8 @@
       },
       "title": "Built In Tools",
       "type": "array",
-      "ui:discriminatorField": "llm_provider_type",
-      "ui:enumDiscriminatorValues": [
+      "ui:conditionalField": "llm_provider_type",
+      "ui:enumConditionalValues": [
         [
           "openai",
           "anthropic"
@@ -186,7 +186,7 @@
             "type": "object"
           },
           {
-            "discriminatorValue": "anthropic",
+            "conditionalValue": "anthropic",
             "properties": {
               "allowed_domains": {
                 "description": "Add domains without https from which you want the search results. Use space to add multiple domains",
@@ -216,7 +216,7 @@
       "description": "Configuration for builtin tools",
       "title": "Tool Config",
       "type": "object",
-      "ui:discriminatorField": "llm_provider_type",
+      "ui:conditionalField": "llm_provider_type",
       "ui:widget": "built_in_tools_config"
     },
     "mcp_tools": {

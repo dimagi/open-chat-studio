@@ -91,7 +91,7 @@ export function getSelectOptions(schema: PropertySchema): Option[] {
   }
 
   const enumLabels = schema["ui:enumLabels"];
-  const discriminatorValues = schema["ui:enumDiscriminatorValues"] || [];
+  const conditionalValues = schema["ui:enumConditionalValues"] || [];
   let enums = [];
   if (schema.enum) {
     enums = schema.enum;
@@ -99,16 +99,16 @@ export function getSelectOptions(schema: PropertySchema): Option[] {
     enums = schema.items.enum;
   }
   return enums.map((value: string, index: number) => {
-    let discriminator: string[] = [];
-    if (discriminatorValues) {
-      const value = discriminatorValues[index];
-      discriminator = Array.isArray(value) ? value : [value];
+    let conditional: string[] = [];
+    if (conditionalValues) {
+      const value = conditionalValues[index];
+      conditional = Array.isArray(value) ? value : [value];
     }
     return new Option(
       value,
       enumLabels ? enumLabels[index] : value,
       undefined,
-      discriminator
+      conditional
     );
   });
 }

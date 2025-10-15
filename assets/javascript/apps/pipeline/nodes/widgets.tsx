@@ -183,22 +183,24 @@ function ToggleWidget(props: ToggleWidgetParams) {
   );
 }
 
-function useDiscriminator(schema: PropertySchema, nodeParams: NodeParams, allOptions: Option[]): Option[] {
+function conditionalOptions(schema: PropertySchema, nodeParams: NodeParams, allOptions: Option[]): Option[] {
   const [options, setOptions] = useState(allOptions);
 
   useEffect(() => {
-    const discriminatorField = schema["ui:discriminatorField"];
-    if (!discriminatorField) {
+    const conditionalField = schema["ui:conditionalField"];
+    if (!conditionalField) {
       return;
     }
 
-    const discriminatorValue = nodeParams[discriminatorField!];
-    if (!discriminatorValue) {
+
+    const conditionalValue = nodeParams[conditionalField!];
+    if (!conditionalValue) {
       setOptions([]);
       return;
     }
 
-    setOptions(allOptions.filter(option => option.displayForDiscriminator(discriminatorValue)));
+
+    setOptions(allOptions.filter(option => option.displayForConditional(conditionalValue)));
   }, [nodeParams]);
   return options;
 }
@@ -245,7 +247,7 @@ function SelectWidget(props: WidgetParams) {
 
 function MultiSelectWidget(props: WidgetParams) {
   const allOptions = getSelectOptions(props.schema);
-  const options = useDiscriminator(props.schema, props.nodeParams, allOptions);
+  const options = conditionalOptions(props.schema, props.nodeParams, allOptions);
 
   // props.paramValue is made immutable when produce is used to update the node, so we have to copy props.paramValue
   // in order to push to it
@@ -1054,9 +1056,9 @@ export function InputField({label, help_text, inputError, children}: React.Props
 }
 
 function BuiltInToolsConfigWidget(props: WidgetParams) {
-  const discriminatorField = props.schema["ui:discriminatorField"]!;
-  const discriminatorValue = concatenate(props.nodeParams[discriminatorField]);
-  const options = props.schema.additionalProperties?.anyOf?.filter((schema => schema.discriminatorValue && schema.discriminatorValue === discriminatorValue));
+  const conditionalField = props.schema["ui:conditionalField"]!;
+  const conditionalValue = concatenate(props.nodeParams[conditionalField]);
+  const options = props.schema.additionalProperties?.anyOf?.filter((schema => schema.conditionalValue && schema.conditionalValue === conditionalValue));
   if (!options || !options.length) {
     return <></>;
   }
@@ -1094,7 +1096,7 @@ function BuiltInToolsConfigWidget(props: WidgetParams) {
           return <React.Fragment key={`${toolKey}-config`}></React.Fragment>;
         }
         if (toolOptions.length > 1) {
-          console.error("More than one set of options found for the discriminator value", discriminatorValue, "with tools", builtinTools);
+          console.error("More than one set of options found for the conditional value", conditionalValue, "with tools", builtinTools);
           return <React.Fragment key={`${toolKey}-config`}></React.Fragment>;
         }
 

@@ -3,32 +3,32 @@ export class Option {
       label: string;
       edit_url?: string;
       /**
-       * Optional discriminator values for this option.
-       * If provided, the option will only be displayed for the specified discriminators.
+       * Optional conditional values for this option.
+       * If provided, the option will only be displayed for the specified conditionals.
        */
-      discriminatorValue?: string[] | undefined;
+      conditionalValue?: string[] | undefined;
 
       constructor(
         value: string,
         label: string,
         edit_url?: string,
-        discriminatorValue?: string[] | undefined,
+        conditionalValue?: string[] | undefined,
       ) {
         this.value = value;
         this.label = label;
         this.edit_url = edit_url;
-        this.discriminatorValue = discriminatorValue;
+        this.conditionalValue = conditionalValue;
       }
 
       /**
-       * Checks if the option should be displayed for a given discriminator.
-       * If no discriminatorValue is set, the option is displayed for all discriminators.
+       * Checks if the option should be displayed for a given conditional.
+       * If no conditionalValue is set, the option is displayed for all conditionals.
        *
-       * @param {string} discriminator - The discriminator to check against.
+       * @param {string} conditional - The conditional to check against.
        * @returns {boolean} - True if the option should be displayed, false otherwise.
        */
-      displayForDiscriminator(discriminator: string): boolean {
-        return !this.discriminatorValue || this.discriminatorValue.includes(discriminator);
+      displayForConditional(conditional: string): boolean {
+        return !this.conditionalValue || this.conditionalValue.includes(conditional);
       }
     }
 
