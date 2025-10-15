@@ -45,6 +45,22 @@ def test_evaluation_channel_initialization_with_session(experiment, evaluation_c
 
 
 @pytest.mark.django_db()
+def test_evaluation_channel_disables_ocs_tracer(experiment, evaluation_channel):
+    """Test that EvaluationChannel uses empty tracing service (no OCS tracer)"""
+    session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
+
+    channel = EvaluationChannel(
+        experiment=experiment,
+        experiment_channel=evaluation_channel,
+        experiment_session=session,
+        participant_data={},
+    )
+
+    # Verify that the tracing service has no tracers
+    assert len(channel.trace_service._tracers) == 0
+
+
+@pytest.mark.django_db()
 def test_get_team_evaluations_channel_uniqueness(experiment):
     """Test that only one evaluation channel per team can be created"""
     team = experiment.team

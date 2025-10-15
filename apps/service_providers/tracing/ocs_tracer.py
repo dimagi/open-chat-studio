@@ -64,7 +64,11 @@ class OCSTracer(Tracer):
         from apps.experiments.models import Experiment
 
         super().start_trace(trace_name, trace_id, session, inputs, metadata)
-        experiment = Experiment.objects.get(id=self.experiment_id)
+        try:
+            experiment = Experiment.objects.get(id=self.experiment_id)
+        except Experiment.DoesNotExist:
+            logger.exception(f"Experiment with id {self.experiment_id} does not exist. Cannot start trace.")
+            return
         experiment_id = self.experiment_id
         experiment_version_number = None
         if experiment.is_a_version:
@@ -223,7 +227,14 @@ class OCSTracer(Tracer):
 
 
 class OCSCallbackHandler(BaseCallbackHandler):
-    LANGCHAIN_CHAINS_TO_IGNORE = ["start", "end"]
+    LANGCHAIN_CHAINS_TO_IGNORE = [
+        "start",
+        "end",
+        "should_continue",
+        "RunnableSequence",
+        "LangGraph",
+        "Run Pipeline run",
+    ]
 
     def __init__(self, tracer: OCSTracer):
         super().__init__()

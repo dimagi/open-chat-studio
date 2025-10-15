@@ -6,6 +6,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
@@ -282,3 +283,13 @@ def export_participants(request, team_slug: str):
     )
 
     return export_participant_data_to_response(request.team, experiment, query)
+
+
+class DeleteParticipant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "experiments.delete_participant"
+
+    def delete(self, request, team_slug: str, pk: int):
+        participant = get_object_or_404(Participant, id=pk, team=request.team)
+        participant.delete()
+        messages.success(request, "Participant deleted")
+        return HttpResponse()
