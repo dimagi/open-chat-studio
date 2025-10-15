@@ -387,11 +387,9 @@ class TestTraceFilter:
 
         # Create a chat and input message with tags
         chat = ChatFactory(team=team)
-        input_message = ChatMessage.objects.create(
-            chat=chat, message_type=ChatMessageType.HUMAN, content="Test input"
-        )
+        input_message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test input")
         tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
-        tag2 = Tag.objects.create(name="urgent", team=team, is_system_tag=False)
+        Tag.objects.create(name="urgent", team=team, is_system_tag=False)
         input_message.add_tag(tag1, team)
 
         # Link the message to the trace
@@ -417,9 +415,7 @@ class TestTraceFilter:
 
         # Create a chat and output message with tags
         chat = ChatFactory(team=team)
-        output_message = ChatMessage.objects.create(
-            chat=chat, message_type=ChatMessageType.AI, content="Test output"
-        )
+        output_message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.AI, content="Test output")
         tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
         output_message.add_tag(tag1, team)
 
@@ -441,9 +437,7 @@ class TestTraceFilter:
 
         # Create messages with multiple tags
         chat = ChatFactory(team=team)
-        input_message = ChatMessage.objects.create(
-            chat=chat, message_type=ChatMessageType.HUMAN, content="Test input"
-        )
+        input_message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test input")
         tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
         tag2 = Tag.objects.create(name="urgent", team=team, is_system_tag=False)
         tag3 = Tag.objects.create(name="review", team=team, is_system_tag=False)
@@ -473,9 +467,7 @@ class TestTraceFilter:
 
         # Create message with tags
         chat = ChatFactory(team=team)
-        input_message = ChatMessage.objects.create(
-            chat=chat, message_type=ChatMessageType.HUMAN, content="Test input"
-        )
+        input_message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test input")
         tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
         Tag.objects.create(name="urgent", team=team, is_system_tag=False)
         input_message.add_tag(tag1, team)
