@@ -13,7 +13,7 @@ type GetWidgetsParams = {
 }
 
 type GetWidgetParamsGeneric = GetWidgetsParams & {
-  widgetGenerator: (params: InputWidgetParams) => React.ReactElement;
+  widgetGenerator: (params: InputWidgetParams) => React.ReactElement<any>;
 }
 
 
@@ -165,5 +165,5 @@ export const getInputWidget = (params: InputWidgetParams) => {
       getNodeFieldError={getNodeFieldError}
       readOnly={readOnly}
     />
-  )
+  );
 };
