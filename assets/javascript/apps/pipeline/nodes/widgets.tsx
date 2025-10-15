@@ -183,7 +183,12 @@ function ToggleWidget(props: ToggleWidgetParams) {
   );
 }
 
-function conditionalOptions(schema: PropertySchema, nodeParams: NodeParams, allOptions: Option[]): Option[] {
+function conditionalOptions(schema: PropertySchema, nodeParams: NodeParams): Option[] {
+  const allOptions = getSelectOptions(schema);
+  if (!schema["ui:enumConditionalValues"]) {
+    return allOptions;
+  }
+
   const [options, setOptions] = useState(allOptions);
 
   useEffect(() => {
@@ -246,8 +251,7 @@ function SelectWidget(props: WidgetParams) {
 
 
 function MultiSelectWidget(props: WidgetParams) {
-  const allOptions = getSelectOptions(props.schema);
-  const options = conditionalOptions(props.schema, props.nodeParams, allOptions);
+  const options = conditionalOptions(props.schema, props.nodeParams);
 
   // props.paramValue is made immutable when produce is used to update the node, so we have to copy props.paramValue
   // in order to push to it

@@ -6,18 +6,18 @@ export class Option {
        * Optional conditional values for this option.
        * If provided, the option will only be displayed for the specified conditionals.
        */
-      conditionalValue?: string[] | undefined;
+      conditionalValues?: string[] | undefined;
 
       constructor(
         value: string,
         label: string,
         edit_url?: string,
-        conditionalValue?: string[] | undefined,
+        conditionalValues?: string[] | undefined,
       ) {
         this.value = value;
         this.label = label;
         this.edit_url = edit_url;
-        this.conditionalValue = conditionalValue;
+        this.conditionalValues = conditionalValues;
       }
 
       /**
@@ -28,7 +28,7 @@ export class Option {
        * @returns {boolean} - True if the option should be displayed, false otherwise.
        */
       displayForConditional(conditional: string): boolean {
-        return !this.conditionalValue || this.conditionalValue.includes(conditional);
+        return !this.conditionalValues || this.conditionalValues.includes(conditional);
       }
     }
 

@@ -386,7 +386,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             widget=Widgets.multiselect,
             enum_labels=BuiltInTools.labels,
             conditional_field="llm_provider_type",
-            enum_conditional_values=[["openai", "anthropic"], ["openai"]],
+            enum_conditional_values={
+                BuiltInTools.WEB_SEARCH: ["openai", "anthropic"],
+                BuiltInTools.CODE_EXECUTION: ["openai"],
+            },
         ),
     )
     tool_config: dict[str, BuiltinToolConfig | AnthropicWebSearchToolConfig] = Field(

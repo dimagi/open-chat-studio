@@ -475,7 +475,7 @@ class UiSchema(BaseModel):
     enum_labels: list[str] = None
 
     conditional_field: str = None
-    enum_conditional_values: list = None
+    enum_conditional_values: dict[str, list[str]] = None
 
     # Use this with 'select' type fields to indicate where the options should come from
     # See `apps.pipelines.views._pipeline_node_parameter_values`

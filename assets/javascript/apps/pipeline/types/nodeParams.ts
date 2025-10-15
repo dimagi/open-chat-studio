@@ -12,7 +12,7 @@ export type PropertySchema = {
   "ui:optionsSource"?: string | undefined;
   "ui:widget"?: string | undefined;
   "ui:enumLabels"?: string[] | undefined;
-  "ui:enumConditionalValues"?: string[] | undefined;
+  "ui:enumConditionalValues"?: Record<string, string[]>;
   "ui:conditionalField"?: string | undefined;
   "ui:flagRequired"?: string | undefined;
   "additionalProperties"?: {
