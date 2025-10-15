@@ -1,0 +1,117 @@
+{% load i18n %}
+{% comment %}
+Reusable message pair form component for both add/edit scenarios
+
+Parameters:
+- human_value: initial value for human message textarea
+- ai_value: initial value for AI message textarea
+- context_value: initial value for context JSON field
+- errors: dict with validation errors
+- disable_button_id: ID of button to disable when JSON is invalid (optional)
+- use_alpine_model: if true, use x-model bindings instead of static values (optional)
+- required_fields: if true, the inputs will be required
+{% endcomment %}
+
+<!-- Human Message -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "Human Message" %}</span>
+  </label>
+  <textarea
+    name="human_message"
+    class="textarea textarea-bordered w-full min-h-[100px]{% if errors.human %} textarea-error{% endif %}"
+    placeholder="{% trans 'Enter human message...' %}"
+    {% if use_alpine_model %}x-model="editingMessage.human"{% endif %}
+    {% if required_fields %}required{% endif %}
+  >{% if not use_alpine_model %}{{ human_value|default:'' }}{% endif %}</textarea>
+  {% if errors.human %}
+  <div class="text-error text-sm mt-1">{{ errors.human }}</div>
+  {% endif %}
+</div>
+
+<!-- AI Message -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "AI Response" %}</span>
+  </label>
+  <textarea
+    name="ai_message"
+    class="textarea textarea-bordered w-full min-h-[100px]{% if errors.ai %} textarea-error{% endif %}"
+    placeholder="{% trans 'Enter AI response...' %}"
+    {% if use_alpine_model %}x-model="editingMessage.ai"{% endif %}
+    {% if required_fields %}required{% endif %}
+  >{% if not use_alpine_model %}{{ ai_value|default:'' }}{% endif %}</textarea>
+  {% if errors.ai %}
+  <div class="text-error text-sm mt-1">{{ errors.ai }}</div>
+  {% endif %}
+</div>
+
+<!-- History -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "History" %}</span>
+    <span class="label-text-alt text-gray-500">{% trans "Optional conversation history (format: user: message or assistant: message on separate lines)" %}</span>
+  </label>
+  <textarea
+    name="history_text"
+    class="textarea textarea-bordered w-full min-h-[100px]{% if errors.history_text %} textarea-error{% endif %}"
+    placeholder="{% blocktrans %}user: Hello, how are you?
+assistant: I am doing well, thank you for asking!
+{% endblocktrans %}"
+    {% if use_alpine_model %}x-model="editingMessage.history_text"{% endif %}
+  >{% if not use_alpine_model %}{{ history_text_value|default:'' }}{% endif %}</textarea>
+  {% if errors.history_text %}
+  <div class="text-error text-sm mt-1">{{ errors.history_text }}</div>
+  {% endif %}
+</div>
+
+<!-- Context -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "Context (JSON)" %}</span>
+    <span class="label-text-alt text-gray-500">{% trans "Optional additional context data" %}</span>
+  </label>
+  <input type="hidden" name="context"
+         {% if use_alpine_model %}x-model="editingMessage.context"{% else %}value="{{ context_value|default:'{}' }}"{% endif %}>
+  <div class="json-editor w-full h-32 resize-y overflow-auto"
+       data-target-field="previous input[type='hidden'][name='context']"
+       {% if disable_button_id %}data-disable-elt="#{{ disable_button_id }}"{% endif %}>
+  </div>
+  {% if errors.context %}
+  <div class="text-error text-sm mt-1">{{ errors.context }}</div>
+  {% endif %}
+</div>
+
+<!-- Participant Data -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "Participant Data (JSON)" %}</span>
+    <span class="label-text-alt text-gray-500">{% trans "Optional participant data" %}</span>
+  </label>
+  <input type="hidden" name="participant_data"
+         {% if use_alpine_model %}x-model="editingMessage.participant_data"{% else %}value="{{ participant_data_value|default:'{}' }}"{% endif %}>
+  <div class="json-editor w-full h-32 resize-y overflow-auto"
+       data-target-field="previous input[type='hidden'][name='participant_data']"
+       {% if disable_button_id %}data-disable-elt="#{{ disable_button_id }}"{% endif %}>
+  </div>
+  {% if errors.participant_data %}
+  <div class="text-error text-sm mt-1">{{ errors.participant_data }}</div>
+  {% endif %}
+</div>
+
+<!-- Session State -->
+<div class="form-control">
+  <label class="label">
+    <span class="label-text font-semibold">{% trans "Session State (JSON)" %}</span>
+    <span class="label-text-alt text-gray-500">{% trans "Optional session state" %}</span>
+  </label>
+  <input type="hidden" name="session_state"
+         {% if use_alpine_model %}x-model="editingMessage.session_state"{% else %}value="{{ session_state_value|default:'{}' }}"{% endif %}>
+  <div class="json-editor w-full h-32 resize-y overflow-auto"
+       data-target-field="previous input[type='hidden'][name='session_state']"
+       {% if disable_button_id %}data-disable-elt="#{{ disable_button_id }}"{% endif %}>
+  </div>
+  {% if errors.session_state %}
+  <div class="text-error text-sm mt-1">{{ errors.session_state }}</div>
+  {% endif %}
+</div>

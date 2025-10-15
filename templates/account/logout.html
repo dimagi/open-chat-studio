@@ -4,7 +4,7 @@
 {% block app %}
   <section class="app-card">
     <h1 class="pg-title">Sign out</h1>
-    <p class="pg-subtitle">{% translate 'Are you sure you want to sign out?' %}</p>
+    <p class="pg-subtitle">{% translate "Are you sure you want to sign out?" %}</p>
     <form method="post" action="{% url 'account_logout' %}">
       {% csrf_token %}
       {% if redirect_field_value %}
@@ -12,7 +12,7 @@
       {% endif %}
       <div class="field is-grouped">
         <div class="control">
-          <input class="btn btn-primary" type="submit" value="{% translate 'Sign Out' %}">
+          <input class="btn btn-primary" type="submit" value="{% translate "Sign Out" %}">
           <a class="btn btn-outline" href="{% url 'web:home' %}">
             <span class="pg-icon">
               <i class="fa fa-home"></i>
@@ -23,4 +23,4 @@
       </div>
     </form>
   </section>
-{% endblock %}
+{% endblock app %}

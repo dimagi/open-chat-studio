@@ -18,7 +18,7 @@
         <p>{{ message.content|render_markdown }}</p>
       </div>
     </div>
-    {% include 'experiments/chat/components/message_rating.html' with team_slug=experiment.team.slug %}
+    {% include "experiments/chat/components/message_rating.html" with team_slug=experiment.team.slug %}
     <div class="flex flex-col">
       {% for file in attachments %}
         <div class="inline">

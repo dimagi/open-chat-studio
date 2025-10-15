@@ -15,12 +15,12 @@
       {% endfor %}
       {% for model in models %}
         <div class="grid grid-cols-4 grid-flow-col-dense" id="model_{{ model.id }}">
-          <div class="col-span-2">{{ model.name }}</div>
+          <div class="col-span-2">{{ model.display_name }}</div>
           <div class="place-self-center">{{ model.max_token_limit }}</div>
           {% if show_delete %}
             <div class="place-self-start">
               <button class="btn btn-xs btn-ghost"
-                      hx-delete="{% url "service_providers:llm_provider_model_delete" request.team.slug model.id%}"
+                      hx-delete="{% url "service_providers:llm_provider_model_delete" request.team.slug model.id %}"
                       hx-target="#model_{{ model.id }}"
                       hx-swap="outerHTML">
                 <i class="fa-solid fa-trash"></i>

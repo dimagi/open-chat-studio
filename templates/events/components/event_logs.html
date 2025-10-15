@@ -34,7 +34,7 @@
                         <td>{{ event_log.log }}</td>
                         {% if include_session %}
                             <td>
-                                <a class="btn btn-sm btn-outline btn-primary" href="{% url 'experiments:experiment_session_view' team.slug trigger.experiment.public_id event_log.session.external_id %}" class="link">
+                                <a class="btn btn-sm btn-outline btn-primary link" href="{% url 'chatbots:chatbot_session_view' team.slug trigger.experiment.public_id event_log.session.external_id %}">
                                     Session Details
                                 </a>
                             </td>

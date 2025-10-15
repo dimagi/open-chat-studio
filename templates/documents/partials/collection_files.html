@@ -1,0 +1,115 @@
+{% if document_source %}
+  <div id="document_source_header_{{ document_source.id }}" hx-swap-oob="true">
+    {% include "documents/partials/document_source_header.html" %}
+  </div>
+{% endif %}
+{% if document_source and document_source.sync_task_id %}
+  <div hx-get="{% url "documents:document_source_files_list" request.team.slug collection.id document_source.id %}"
+       hx-trigger="every 5s"
+       hx-swap="outerHTML"
+  >
+    <span class="loading loading-spinner"></span>
+  </div>
+{% else %}
+  <div id="{% if document_source %}document-source-files-wrapper-{{ document_source.id }}{% else %}collection-files-wrapper{% endif %}">
+    <div class="grid grid-cols-1 gap-4">
+      {% for collection_file in collection_files %}
+        <div id="collection_file_{{ collection_file.id }}" class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
+          <div class="flex flex-col flex-1 gap-1">
+            <div class="flex items-center gap-2">
+              {% if collection_file.status %}
+                {% include "documents/collection_file_status.html" %}
+              {% endif %}
+              <span
+                  class="text-sm font-medium">{% include "generic/chip.html" with chip=collection_file.file.as_chip %}</span>
+              <div class="text-xs badge badge-ghost">{{ collection_file.file_size_mb }} MB</div>
+            </div>
+            {% if collection.is_index %}
+              {% if not collection.is_remote_index %}
+                <div id="chunk_count_{{ collection_file.id }}" class="flex flex-row items-center gap-2">
+                  <span class="text-xs text-base-content/70">{{ collection_file.chunk_count|default:0 }} chunks</span>
+                </div>
+              {% endif %}
+              <div class="flex flex-row items-center gap-2">
+                <span class="text-xs text-base-content/70">Chunking Strategy:</span>
+                <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.chunk_size }} tokens
+                </div>
+                <div class="badge badge-sm badge-ghost">Overlap: {{ collection_file.chunking_strategy.chunk_overlap }}
+                  tokens
+                </div>
+              </div>
+            {% else %}
+              <span
+                  class="text-xs text-base-content/70">{{ collection_file.file.summary|default:'No summary available' }}</span>
+            {% endif %}
+          </div>
+          <div class="flex items-center gap-2 ml-4">
+            {% if collection.is_index and not collection.is_remote_index and collection_file.chunk_count %}
+              <div class="tooltip" data-tip="View chunks">
+                <a href="{% url 'documents:file_chunks' team.slug collection.id collection_file.file.id %}"
+                   class="btn btn-sm">
+                  <i class="fa fa-puzzle-piece" aria-hidden="true"></i>
+                </a>
+              </div>
+            {% endif %}
+            <div class="tooltip" data-tip="View file">
+              <a href="{% url 'files:base' team.slug collection_file.file.id %}" class="btn btn-sm">
+                <i class="fa-solid fa-eye"></i>
+              </a>
+            </div>
+            {% if allow_delete and not read_only %}
+              <form hx-post="{% url 'documents:delete_collection_file' team.slug collection.id collection_file.file.id %}"
+                    hx-target="#collection_file_{{ collection_file.id }}"
+                    hx-swap="outerHTML"
+                    hx-disabled-elt="find button"
+                    class="inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm">
+                  <i class="fa-solid fa-trash htmx-hide"></i>
+                  <span class="loading loading-spinner loading-xs htmx-show"></span>
+                </button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      {% empty %}
+        <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
+          <div class="text-center text-base-content/60">
+            No files
+          </div>
+        </div>
+      {% endfor %}
+      </div>
+
+      {# Pagination Controls #}
+      <div class="flex justify-start mt-4">
+        <div class="join">
+          {% if collection_files.has_previous %}
+            <button class="join-item btn btn-sm"
+                    hx-get="{% if document_source %}{% url 'documents:document_source_files_list' request.team.slug collection.id document_source.id %}{% else %}{% url 'documents:collection_files_list' request.team.slug collection.id %}{% endif %}?page={{ collection_files.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}"
+                    hx-target="#{% if document_source %}document-source-files-wrapper-{{ document_source.id }}{% else %}collection-files-wrapper{% endif %}"
+                    hx-swap="innerHTML"
+                    hx-indicator=".htmx-indicator">
+              « Previous
+            </button>
+          {% else %}
+            <button class="join-item btn btn-sm" disabled>« Previous</button>
+          {% endif %}
+
+          <button class="join-item btn btn-sm">Page {{ collection_files.number }} of {{ collection_files.paginator.num_pages }}</button>
+
+          {% if collection_files.has_next %}
+            <button class="join-item btn btn-sm"
+                    hx-get="{% if document_source %}{% url 'documents:document_source_files_list' request.team.slug collection.id document_source.id %}{% else %}{% url 'documents:collection_files_list' request.team.slug collection.id %}{% endif %}?page={{ collection_files.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}"
+                    hx-target="#{% if document_source %}document-source-files-wrapper-{{ document_source.id }}{% else %}collection-files-wrapper{% endif %}"
+                    hx-swap="innerHTML"
+                    hx-indicator=".htmx-indicator">
+              Next »
+            </button>
+          {% else %}
+            <button class="join-item btn btn-sm" disabled>Next »</button>
+          {% endif %}
+        </div>
+      </div>
+  </div>
+{% endif %}

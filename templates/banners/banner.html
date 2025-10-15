@@ -2,38 +2,45 @@
 {% if banners %}
     <div class="banners-container">
         {% for banner in banners %}
-            <div class="alert alert-{{ banner.type }} alert-vertical sm:alert-horizontal" role="alert" data-banner-id="{{ banner.id }}">
-                {% if banner.title %}
-                    <strong>{{ banner.title }}</strong>:
-                {% endif %}
-                {{ banner.message|render_markdown }}
-                <div>
-                    <button class="btn btn-sm btn-ghost dismiss-banner"
-                            data-banner-id="{{ banner.id }}"
-                            aria-label="Close">x</button>
+            <div class="alert alert-{{ banner.type }} alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
+                <div class="flex-1">
+                    {% if banner.title %}
+                        <strong>{{ banner.title }}</strong>:
+                    {% endif %}
+                    <div class="markdown">{{ banner.message|render_markdown }}</div>
                 </div>
+                <button class="btn btn-sm btn-ghost dismiss-banner ml-4" aria-label="Dismiss banner"
+                        data-banner-id="{{ banner.id }}"
+                        data-expiry="{{ banner.cookie_expires }}"
+                        aria-label="Close">×</button>
             </div>
         {% endfor %}
     </div>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            function updateDismissedBanners(bannerId) {
-                const dismissed = JSON.parse(SiteJS.app.Cookies.get('dismissed_banners') || '[]');
-                if (!dismissed.includes(bannerId)) {
-                    dismissed.push(bannerId);
-                    SiteJS.app.Cookies.set('dismissed_banners', JSON.stringify(dismissed), {
-                        path: '/',
-                        maxAge: 31536000
-                    });
+            function updateDismissedBanners(bannerId, bannerExpiry) {
+                try {
+                    let cookieName = `dismissed_banner_${bannerId}`;
+                    const dismissed = SiteJS.app.Cookies.get(cookieName);
+                    if (!dismissed) {
+                        SiteJS.app.Cookies.set(cookieName, 1, { expires: Number(bannerExpiry) });
+                    }
+                } catch (error) {
+                    if (error instanceof TypeError) {
+                        console.error('TypeError in updateDismissedBanners:', error.message);
+                    } else {
+                        throw error;
+                    }
                 }
             }
             document.querySelectorAll('.dismiss-banner').forEach(button => {
                 button.addEventListener('click', function() {
-                    const bannerId = this.dataset.bannerId;
                     const alert = this.closest('.alert');
 
+                    const bannerId = this.dataset.bannerId;
                     if (alert && bannerId) {
-                        updateDismissedBanners(bannerId);
+                        const bannerExpiry = this.dataset.expiry;
+                        updateDismissedBanners(bannerId, bannerExpiry);
                         alert.remove();
                     }
                 });

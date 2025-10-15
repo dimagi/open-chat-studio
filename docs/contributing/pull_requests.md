@@ -49,6 +49,8 @@ Regardless of automated tests, ensure the quality of your changes:
 * Link the docs PR to the code PR.
 * Merge the docs PR after the code PR.
 
+See the [user docs guide](../developer_guides/user_docs.md) for more detail.
+
 ## Communication
 
 We use GitHub issues for most work and have a GitHub project where we prioritize and plan work: [GitHub Project](https://github.com/orgs/dimagi/projects/3/views/1).

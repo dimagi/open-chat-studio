@@ -4,8 +4,17 @@
 {% load static %}
 {% block app %}
   <section class="app-card">
-
-    <h1 class="pg-title">{% translate "Global Admin Dashboard" %}</h1>
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="pg-title">{% translate "Global Admin Dashboard" %}</h1>
+      <div class="flex gap-2">
+        <a href="{% url 'ocs_admin:configuration' %}" class="btn btn-primary">
+          {% translate "Site Configuration" %}
+        </a>
+        <a href="{% url 'ocs_admin:flags_home' %}" class="btn btn-primary">
+          {% translate "Manage Feature Flags" %}
+        </a>
+      </div>
+    </div>
     <form hx-get="{% url "ocs_admin:usage_chart" %}" hx-target="#charts" hx-trigger="load, change, submit">
       <div class="flex items-center gap-4" x-data="{ range_type: '{{ form.range_type.data }}' }">
         {% render_field form.range_type xmodel="range_type" %}
@@ -17,7 +26,7 @@
     </form>
     <div class="mt-4" id="charts"></div>
   </section>
-{% endblock %}
+{% endblock app %}
 {% block page_js %}
   <script src="{% static 'js/adminDashboard-bundle.js' %}"></script>
   <script>
@@ -45,4 +54,4 @@
       participantChart = SiteJS.adminDashboard.cumulativeChartWithDates(participantChartCtx, start, end, participantData.data, "Participants", participantData.start_value);
     })
   </script>
-{% endblock %}
+{% endblock page_js %}

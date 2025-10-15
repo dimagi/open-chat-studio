@@ -1,0 +1,24 @@
+.cm-merge-view {
+    display: flex;
+    align-items: stretch; /* Makes both sides stretch to same height */
+}
+
+.cm-merge-view .cm-merge-a,
+.cm-merge-view .cm-merge-b {
+    flex: 1; /* Equal width distribution */
+    display: flex;
+    flex-direction: column;
+}
+
+.cm-merge-view .cm-editor {
+    flex: 1; /* Editor takes full height of container */
+    min-height: 0; /* Allows flexbox to shrink if needed */
+}
+
+.cm-merge-a {
+    background-color: oklab(0.704 0.176821 0.072217 / 0.2)
+}
+
+.cm-merge-b {
+    background-color: oklab(0.792 -0.184039 0.0990491 / 0.2)
+}

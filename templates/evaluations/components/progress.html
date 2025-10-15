@@ -1,0 +1,31 @@
+<div class="mb-6">
+  <h2 class="text-lg font-semibold mb-4">Evaluation Progress</h2>
+  <div class="progress-wrapper">
+    <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
+    </div>
+  </div>
+  <div id="progress-bar-message" class="mt-2 text-sm text-center">Waiting for progress to start...</div>
+</div>
+
+<script>
+  const progressUrl = "{% url 'web:celery_group_status' group_job_id %}";
+  CeleryProgressBar.initProgressBar(progressUrl, {
+    pollInterval: 1000,
+    onSuccess: () => {
+      location.reload()
+    },
+    onProgress: (progressBarElement, progressBarMessageElement, progress) => {
+      progressBarElement.style.width = progress.percent + "%";
+      let description = progress.description || progress.current / 100 + ' of ' + progress.total / 100 + ' batches evaluated';
+      if (progress.current === 0) {
+        if (progress.pending === true) {
+          progressBarMessageElement.textContent = 'Waiting for evaluation to start...';
+        } else {
+          progressBarMessageElement.textContent = 'Evaluation started...';
+        }
+      } else {
+        progressBarMessageElement.textContent = description;
+      }
+    }
+  })
+</script>

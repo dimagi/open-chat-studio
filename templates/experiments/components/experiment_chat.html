@@ -1,50 +1,194 @@
 {% load json_tags %}
 {% load chat_tags %}
+{% load form_tags %}
 {% load waffle_tags %}
 {% load pagination_tags %}
-
 <div id="table-top" class="max-w-5xl mt-4 border rounded-2xl">
   <div class="mt-1 max-w-5xl flex justify-between p-3">
-    <div class="flex flex-col gap-2">
-      {% if perms.annotations.view_customtaggeditem %}
-        <div class="flex items-center gap-2">
-          <input
-            type="text"
-            name="search"
-            value="{{ search|default:'' }}"
-            class="input input-sm w-96"
-            placeholder="Search tags..."
+    <div class="flex flex-1 flex-col gap-2">
+      {% if not hide_translation|default_if_none:False %}
+        <div class="flex items-center gap-3 flex-wrap">
+          {% if available_languages %}
+          <select
+            name="language"
+            class="select select-sm select-bordered w-48 language-selector htmx-hide"
             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-            hx-trigger="keyup changed delay:500ms"
             hx-target="#messages-container"
-            hx-include="[name='search']"
+            hx-include="[name='search'], [name='show_original_translation']"
+            hx-trigger="change"
+            hx-indicator=".language-selector"
           >
-          {% if search %}
-            <button
-              class="btn btn-ghost btn-sm"
-              hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
-              hx-target="#messages-container"
-            >
-              <i class="fa-solid fa-times"></i>
-            </button>
+          {% for lang_code, lang_name in available_languages %}
+            <option value="{{ lang_code }}" {% if request.GET.language == lang_code %}selected{% endif %}>
+              {{ lang_name }}
+            </option>
+          {% endfor %}
+          </select>
+          <div class="language-selector htmx-indicator htmx-show w-48 flex text-center gap-2">
+            <span class="loading loading-spinner loading-sm"></span>
+            <span>Loading...</span>
+          </div>
+          {% endif %}
+
+          <label for="translate-all-messages-modal" class="btn btn-primary btn-sm">
+            Translate Messages
+          </label>
+
+          <input type="checkbox" id="translate-all-messages-modal" class="modal-toggle" />
+          <div class="modal">
+            <div class="modal-box">
+              <h3 class="font-bold text-lg">Translate All Messages</h3>
+              <p class="py-4">
+                This will translate all messages in this session. Select the target language:
+              </p>
+              {% render_form_fields translate_form_all %}
+              <p class="pb-4">This action may take a few moments to complete.</p>
+              <div class="modal-action">
+                <button
+                  data-action="translate-all-messages"
+                  class="btn btn-primary"
+                  hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
+                  hx-vals='{"translate_all": "true"}'
+                  hx-include="[name='search'], #translation-provider-all, [name='target_language'], #translation-provider-model-all"
+                  hx-target="#messages-container"
+                  hx-indicator=".translation-loading-spinner"
+                  onclick="document.getElementById('translate-all-messages-modal').checked = false;"
+                >Translate All Messages
+                </button>
+                <label for="translate-all-messages-modal" class="btn">Cancel</label>
+              </div>
+            </div>
+          </div>
+
+          {% if language %}
+            <div class="flex items-center gap-2">
+              <div class="tooltip" data-tip="Messages translated from original language">
+                <a class="badge badge-info badge-sm" aria-label="Messages translated from original language">
+                  Translated
+                </a>
+              </div>
+
+              <div class="my-2">
+                <label id="show_original_messages_checkbox" class="label cursor-pointer space-x-2 text-xs">
+                  Show Original Messages
+                  <input type="checkbox"
+                         name="show_original_translation"
+                         class="toggle"
+                         aria-label="Show original translation alongside translated text"
+                         hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+                         hx-target="#messages-container"
+                         hx-include="[name='search'], [name='language']"
+                         hx-trigger="change"
+                         hx-disabled-elt="this"
+                         hx-indicator="#show_original_messages_checkbox"
+                         {% if request.GET.show_original_translation == "on" %}checked{% else %}unchecked{% endif %}>
+                    <span class="loading loading-spinner loading-sm htmx-indicator"></span>
+                </label>
+              </div>
+
+              {% if has_missing_translations %}
+                <label for="translate-remaining-messages-modal" class="btn btn-outline btn-secondary btn-sm">
+                  Translate Remaining Messages
+                </label>
+
+                <input type="checkbox" id="translate-remaining-messages-modal" class="modal-toggle" />
+                <div class="modal">
+                  <div class="modal-box">
+                    <h3 class="font-bold text-lg">Translate Remaining Messages?</h3>
+                    <p class="py-4">
+                      This will translate all messages that don't currently have translations for:
+                      <strong>{% for lang_code, lang_name in available_languages %}
+                        {% if lang_code == language %}{{ lang_name }}{% endif %}
+                      {% endfor %}</strong>
+                    </p>
+
+                    {% render_form_fields translate_form_remaining "llm_provider" "llm_provider_model" %}
+                    <p class="pb-4">This action may take a few moments to complete.</p>
+                    <div class="modal-action">
+                      <button
+                        data-action="translate-remaining-messages"
+                        class="btn btn-primary"
+                        hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
+                        hx-vals='{"language": "{{ language }}"}'
+                        hx-include="[name='search'], [name='language'], [name='show_original_translation'], #translation-provider-remaining, #translation-provider-model-remaining"
+                        hx-target="#messages-container"
+                        hx-indicator=".translation-loading-spinner"
+                        onclick="document.getElementById('translate-remaining-messages-modal').checked = false;"
+                      >Translate Messages
+                      </button>
+                      <label for="translate-remaining-messages-modal" class="btn">Cancel</label>
+                    </div>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
           {% endif %}
         </div>
       {% endif %}
-
-      {% if total_pages > 1 %}
-        <div class="px-1">
-          <p class="text text-sm">
-            Showing <span class="font-semibold">{{ page_size|multiply:page|subtract:page_size|add:1 }}</span> to <span class="font-semibold">{{ page_size|multiply:page|minimum:total_messages }}</span> of <span class="font-semibold">{{ total_messages }}</span> messages
-          </p>
+      {% if perms.annotations.view_customtaggeditem and all_tags %}
+        <div class="flex items-start gap-4" x-data="{selectedTag: [{% if selected_tags %}'{{ selected_tags|safeseq|join:"','" }}'{% endif %}]}">
+          <div class="flex w-3/4 gap-1 items-center">
+            <p class="text-xs text-gray-500">Tags:</p>
+            <div class="flex flex-wrap gap-1">
+              {% for tag in all_tags %}
+                <div class="tooltip" data-tip="{{ tag.count }} message{{ tag.count|pluralize }}">
+                <input
+                    x-model="selectedTag"
+                    type="checkbox" aria-label="{{ tag.name }}" value="{{ tag.name }}"
+                    class="btn btn-xs checked:btn-accent"
+                    hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+                    hx-target="#messages-container"
+                    x-bind:hx-vals='`{"tag_filter": "${selectedTag}"}`'
+                    hx-include="[name='language'], [name='show_original_translation']"
+                >
+                </div>
+              {% endfor %}
+              <button
+                class="btn btn-ghost btn-xs" x-cloak x-show="selectedTag.length > 0"
+                hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+                hx-target="#messages-container"
+                hx-include="[name='language'], [name='show_original_translation']"
+              >
+                <i class="fa-solid fa-times"></i>
+              </button>
+            </div>
+          </div>
         </div>
       {% endif %}
     </div>
 
-    {% if total_pages > 1 %}
-      <div class="flex items-center">
-        {% include "experiments/components/pagination_buttons.html" with btn_size="sm" %}
+    {% if total_pages > 1 or request.GET.show_all %}
+      <div class="justify-end">
+        Show all messages
+        <input type="checkbox"
+               name="show_all"
+               class="toggle"
+               hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+               hx-target="#messages-container"
+               hx-include="[name='language'], [name='show_original_translation'], [name='tag_filter']"
+               hx-trigger="change"
+               hx-indicator="#show_all_spinner"
+               {% if request.GET.show_all == "on" %}checked{% endif %}>
+        <div id="show_all_spinner" class="htmx-show">
+          <span class="loading loading-spinner loading-sm"></span>
+          <span class="ml-2">Loading...</span>
+        </div>
       </div>
     {% endif %}
+
+    {% if total_pages > 1 %}
+      <div>
+        {% include "experiments/components/pagination_buttons.html" %}
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Loading indicator for initial messages -->
+  <div id="messages-initial-loading" class="hidden">
+    <div class="flex items-center justify-center p-4">
+      <span class="loading loading-spinner loading-sm"></span>
+      <span class="ml-2">Loading...</span>
+    </div>
   </div>
 
   <div class="flow-root">
@@ -60,8 +204,8 @@
                         get isSelected() { return commentsRow === {{ forloop.counter }} },
                         }'
               >
-                <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter }}</td>
-                <td class="px-3 py-4 text-sm flex flex-col gap-2">
+                <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter }}</td>
+                <td class="px-3 py-2 text-sm flex flex-col gap-2">
                   <div class="flex place-items-center">
                     {% if message.is_ai_message %}
                       {% include "experiments/chat/components/system_icon.html" %}
@@ -70,12 +214,78 @@
                     {% endif %}
                     <div class="grow">
                       <div class="message-contents">
-                        <p>{{ message.content|render_markdown }}</p>
+                        {% if message.translation == default_message %}
+                          <div id="chat-message-{{ message.id }}-translation">
+	                          <div id="translation-loading-spinner-{{ message.id }}" >
+		                          <div class="translation-loading-spinner htmx-show">
+		                            <span class="loading loading-spinner loading-sm"></span>
+		                            <span class="ml-2">Translating...</span>
+		                          </div>
+		                          <div class="translation-content-{{ message.id }} translation-loading-spinner htmx-hide">
+		                            <p>{{ message.translation|render_markdown }}</p>
+		                          </div>
+	                          </div>
+                          </div>
+                        {% else %}
+                          <div id="chat-message-{{ message.id }}-translation">
+	                          <div id="translation-loading-spinner-{{ message.id }}">
+		                          <div class="translation-content-{{ message.id }} translation-loading-spinner htmx-hide">
+		                            {% if message.translation %}
+		                              <p>{{ message.translation|render_markdown }}</p>
+		                            {% else %}
+		                              <p>{{ message.content|render_markdown }}</p>
+		                            {% endif %}
+		                          </div>
+		                          <div class="translation-loading-spinner htmx-show">
+		                            <span class="loading loading-spinner loading-sm"></span>
+		                            <span class="ml-2">Translating...</span>
+		                          </div>
+	                          </div>
+                          </div>
+                        {% endif %}
                       </div>
+
+                      {% if show_original_translation and not message.translation == default_message %}
+                        <div id="chat-message-{{ message.id }}-original" class="pg-text-muted">
+                          <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
+                        </div>
+                      {% endif %}
+                      {% if message.translation == default_message %}
+                        {# hidden when loading spinners are shown #}
+                        <div id="chat-message-{{ message.id }}-original-default" class="pg-text-muted htmx-hide">
+                          <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
+                        </div>
+                      {% endif %}
                       <div class="flex flex-col">
                         {% for file in message.get_attached_files %}
                           <div class="inline text-sm p-1">
-                            <i class="fa-solid fa-file fa-sm"></i> {{ file.name }}
+                            <a href="{% url "experiments:download_file" request.team.slug experiment_session.id file.id %}" target="_blank" class="link link-primary">
+                              <i class="fa-solid fa-file fa-sm mr-1"></i>{{ file.name }}
+                            </a>
+                            ({{ file.display_size }})
+                            {% if file.is_image %}
+                              <div class="mt-1" x-data="{ showImage: false }">
+                                <button
+                                  @click="showImage = !showImage"
+                                  class="btn btn-ghost btn-xs"
+                                  :class="showImage ? 'text-primary' : 'text-gray-500'">
+                                  <i class="fa-solid fa-image fa-sm mr-1"></i>
+                                  <span x-text="showImage ? 'Hide Image' : 'Show Image'"></span>
+                                </button>
+                                <div
+                                  x-show="showImage"
+                                  x-transition
+                                  class="mt-2"
+                                  hx-get="{% url 'experiments:get_image_html' request.team.slug experiment_session.id file.id %}"
+                                  hx-trigger="intersect once"
+                                  hx-swap="innerHTML">
+                                  <div class="flex items-center gap-2 text-xs text-gray-500">
+                                    <i class="fa-solid fa-spinner fa-spin"></i>
+                                    Loading image...
+                                  </div>
+                                </div>
+                              </div>
+                            {% endif %}
                           </div>
                         {% endfor %}
                       </div>
@@ -120,7 +330,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="2" class="p-4 text-center text">
+                <td colspan="2" class="px-4 py-2 text-center text">
                   {% if search %}
                     No messages found matching "{{ search }}".
                   {% else %}
@@ -132,22 +342,81 @@
           </tbody>
         </table>
 
-        <!-- Pagination -->
-        {% if total_pages > 1 %}
-          <div class="p-4 flex justify-between">
-            <div class="mt-4 flex justify-left">
-              <div>
-                <p class="text">
-                  Showing <span class="font-semibold">{{ page_size|multiply:page|subtract:page_size|add:1 }}</span> to <span class="font-semibold">{{ page_size|multiply:page|minimum:total_messages }}</span> of <span class="font-semibold">{{ total_messages }}</span> messages
-                </p>
-              </div>
-            </div>
-            <div class="flex justify-right">
-              {% include "experiments/components/pagination_buttons.html" %}
-            </div>
-          </div>
-        {% endif %}
+        <div class="flex justify-end p-3">
+          {% include "experiments/components/pagination_buttons.html" %}
+        </div>
       </div>
     </div>
   </div>
 </div>
+{{ llm_provider_models_dict|json_script:"provider-models-dict" }}
+{{ default_translation_models_by_providers|json_script:"default-translation-models-dict" }}
+
+<script>
+  window.hasMissingTranslations = {{ has_missing_translations|yesno:"true,false" }};
+  if (!window.providerModels) {
+    window.providerModels = JSON.parse(
+      document.getElementById("provider-models-dict").textContent
+    );
+  }
+
+  if (!window.defaultTranslationModels) {
+    window.defaultTranslationModels = JSON.parse(
+      document.getElementById("default-translation-models-dict").textContent
+    );
+  }
+
+  function setupTranslationFormBehavior(providerSelectId, modelSelectId) {
+    const providerSelect = document.getElementById(providerSelectId);
+    const modelSelect = document.getElementById(modelSelectId);
+    if (!providerSelect || !modelSelect) {
+      console.error(`Elements not found for ${providerSelectId} or ${modelSelectId}`);
+      return;
+    }
+    providerSelect.addEventListener("change", function () {
+      const providerText = this.options[this.selectedIndex].text;
+      const providerType = providerText.split(":")[0].trim();
+
+      const models = window.providerModels[providerType] || [];
+
+      // Clear and rebuild model options
+      modelSelect.innerHTML = "";
+
+      const defaultOption = document.createElement("option");
+      defaultOption.value = "";
+      defaultOption.textContent = "Choose a model for translation";
+      modelSelect.appendChild(defaultOption);
+
+      models.forEach(modelName => {
+        const option = document.createElement("option");
+        option.value = modelName;
+        option.textContent = modelName;
+        modelSelect.appendChild(option);
+      });
+
+      // Select default model for provider if available
+      const defaultModel = window.defaultTranslationModels[providerType];
+      if (defaultModel) {
+        const defaultOption = [...modelSelect.options].find(
+          option => option.text === defaultModel
+        );
+        if (defaultOption) {
+          modelSelect.value = defaultOption.value;
+        }
+      }
+    });
+  }
+
+  function initializeTranslationForms() {
+    setupTranslationFormBehavior("translation-provider-all", "translation-provider-model-all");
+    if(hasMissingTranslations) {
+      setupTranslationFormBehavior("translation-provider-remaining", "translation-provider-model-remaining");
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeTranslationForms);
+  } else {
+    initializeTranslationForms();
+  }
+</script>

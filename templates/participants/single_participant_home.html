@@ -1,11 +1,13 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load static %}
 {% block page_js %}
-  <script src="{% static 'js/jsonEditor-bundle.js' %}"></script>
+  <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
-    SiteJS.jsonEditor.initJsonEditors();
+    window.addEventListener('load', () => {
+      SiteJS.editors.initJsonEditors();
+    });
   </script>
-{% endblock %}
+{% endblock page_js %}
 
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -14,7 +16,7 @@
       <li class="pg-breadcrumb-active" aria-current="page">{{ participant }}</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <div class="app-card">
     <div class="flex">
@@ -23,11 +25,11 @@
       </div>
     </div>
     <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include 'participants/partials/participant_summary.html' %}
+      {% include "participants/partials/participant_summary.html" %}
     </div>
     <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Experiments</h3>
     <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include 'participants/partials/participant_experiments.html' %}
+      {% include "participants/partials/participant_experiments.html" %}
     </div>
   </div>
-{% endblock %}
+{% endblock app %}

@@ -1,0 +1,28 @@
+{% load i18n %}
+
+<div class="app-card">
+  <h3 class="text-lg font-semibold mb-4">{% trans "Add New Message" %}</h3>
+
+  <form
+    hx-post="{% url 'evaluations:add_message_to_dataset' request.team.slug object.id %}"
+    hx-target="#dataset-messages-table"
+    hx-swap="innerHTML"
+    hx-on::after-request="if(event.detail.successful) this.reset()"
+    class="space-y-4"
+  >
+    {% csrf_token %}
+
+    {% include "evaluations/components/message_pair_form.html" with disable_button_id="add-message-button" required_fields=True %}
+
+    <div class="flex gap-2">
+      <button type="submit" class="btn btn-primary" id="add-message-button">
+        <i class="fa-solid fa-plus mr-2"></i>
+        {% trans "Add Message" %}
+      </button>
+      <button type="reset" class="btn btn-ghost">
+        <i class="fa-solid fa-times mr-2"></i>
+        {% trans "Clear" %}
+      </button>
+    </div>
+  </form>
+</div>

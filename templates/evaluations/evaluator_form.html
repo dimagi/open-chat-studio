@@ -1,0 +1,455 @@
+{% extends "generic/object_form.html" %}
+{% load form_tags i18n %}
+
+{% block form %}
+  <div x-data="evaluatorForm">
+    {{ form.non_field_errors }}
+
+    {% render_form_fields form "name" %}
+
+    <div class="fieldset w-full">
+      <label class="label font-bold" for="id_evaluator_type">
+        <div>{% translate "Evaluator Type" %}</div>
+      </label>
+      <select x-model="selectedType"
+              @change="updateTypeAndSchema()"
+              x-effect="$nextTick(() => { if (selectedType && $el.value !== selectedType) $el.value = selectedType; })"
+              id="id_evaluator_type"
+              class="select w-full">
+        <option value="">{% translate "Select an evaluator type..." %}</option>
+        <template x-for="schema in evaluatorSchemas" :key="schema.title">
+          <option :value="schema.title" x-text="schema.label || schema.title"></option>
+        </template>
+      </select>
+      <small class="form-text text-muted" x-show="selectedSchema?.description" x-text="selectedSchema?.description"></small>
+    </div>
+
+    <!-- Dynamic Parameter Fields -->
+    <div x-show="selectedSchema" class="mt-4">
+      <h3 class="text-lg font-medium mb-3">{% translate "Evaluator Parameters" %}</h3>
+      <div id="dynamic-params">
+        <template x-for="(field, fieldName) in selectedSchema?.properties || {}" :key="fieldName">
+          <div x-show="fieldName !== 'type'" class="fieldset w-full">
+
+            <!-- LLM Provider Widget -->
+            <template x-if="getWidget(field) === 'llm_provider_model'">
+              <div>
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <select :id="'param_' + fieldName"
+                        :name="'param_' + fieldName"
+                        x-model="params[fieldName]"
+                        @change="updateLlmProviderModel(fieldName)"
+                        class="select w-full"
+                        :required="isRequired(fieldName)">
+                  <option value="">{% translate "Select LLM Provider..." %}</option>
+                  <template x-for="option in parameterValues.LlmProviderId || []" :key="option.value">
+                    <option :value="option.value" x-text="option.label"></option>
+                  </template>
+                </select>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
+            <!-- LLM Provider Model Selection (show after provider selected) -->
+            <template x-if="fieldName === 'llm_provider_model_id' && params.llm_provider_id && getWidget(field) === 'none'">
+              <div>
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div>{% translate "LLM Model" %}</div>
+                </label>
+                <select :id="'param_' + fieldName"
+                        :name="'param_' + fieldName"
+                        x-model="params[fieldName]"
+                        class="select w-full"
+                        :required="isRequired(fieldName)">
+                  <option value="">{% translate "Select Model..." %}</option>
+                  <template x-for="model in getAvailableModels()" :key="model.value">
+                    <option :value="model.value" x-text="model.label"></option>
+                  </template>
+                </select>
+                <small class="form-text text-muted">{% translate "Select the specific model to use for evaluation" %}</small>
+              </div>
+            </template>
+
+            <!-- Range Widget (for temperature) -->
+            <template x-if="getWidget(field) === 'range'">
+              <div>
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <div class="flex items-center space-x-3">
+                  <input type="range"
+                         :id="'param_' + fieldName"
+                         :name="'param_' + fieldName"
+                         x-model="params[fieldName]"
+                         class="range range-primary flex-1"
+                         :min="field.minimum || 0"
+                         :max="field.maximum || 2"
+                         :step="0.1"
+                         :required="isRequired(fieldName)">
+                  <span x-text="params[fieldName]" class="text-sm font-medium w-12"></span>
+                </div>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
+            <!-- Python Code Widget -->
+            <template x-if="getWidget(field) === 'code'">
+              <div class="mb-6">
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <div class="python-editor textarea textarea-bordered w-full p-0 overflow-auto resize-y"
+                     :data-target-field="'#param_' + fieldName"
+                     style="height: 300px; min-height: 150px; max-height: 1000px;"></div>
+                <textarea :id="'param_' + fieldName"
+                          :name="'param_' + fieldName"
+                          x-model="params[fieldName]"
+                          style="display: none;"
+                          :required="isRequired(fieldName)"></textarea>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
+            <!-- Text Editor Widget -->
+            <template x-if="getWidget(field) === 'text_editor_widget'">
+              <div class="mb-6">
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <div class="prompt-editor textarea textarea-bordered w-full p-0 overflow-auto resize-y"
+                     :data-target-field="'#param_' + fieldName"
+                     data-autocomplete-vars='["input.content", "output.content", "context", "full_history", "generated_response"]'
+                     style="height: 300px; min-height: 150px; max-height: 1000px;"></div>
+                <textarea :id="'param_' + fieldName"
+                          :name="'param_' + fieldName"
+                          x-model="params[fieldName]"
+                          style="display: none;"
+                          :required="isRequired(fieldName)"></textarea>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
+            <!-- Expandable Text Widget -->
+            <template x-if="getWidget(field) === 'expandable_text'">
+              <div>
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <textarea :id="'param_' + fieldName"
+                          :name="'param_' + fieldName"
+                          x-model="params[fieldName]"
+                          class="textarea textarea-bordered w-full"
+                          rows="6"
+                          :placeholder="field.description"
+                          :required="isRequired(fieldName)"></textarea>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
+            <!-- Key-Value Pairs Widget -->
+            <template x-if="getWidget(field) === 'key_value_pairs'">
+              <div>
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <div class="space-y-4">
+                  <template x-for="(pair, index) in getKeyValuePairs(fieldName)" :key="index">
+                    <div class="flex gap-5 items-center">
+                      <input type="text"
+                             x-model="pair.key"
+                             @input="updateKeyValuePairs(fieldName)"
+                             :required="isRequired(fieldName)"
+                             placeholder="{% translate "Column Name" %}"
+                             class="input input-bordered flex-1 mt-2">
+                      <input type="text"
+                             x-model="pair.value"
+                             @input="updateKeyValuePairs(fieldName)"
+                             :required="isRequired(fieldName)"
+                             placeholder="{% translate "Detailed Column Description" %}"
+                             class="input input-bordered flex-1 mt-2">
+                      <button type="button"
+                              @click="removeKeyValuePair(fieldName, index)"
+                              class="btn btn-outline btn-sm">
+                        <i class="fa fa-trash"></i>
+                      </button>
+                    </div>
+                  </template>
+                  <button type="button"
+                          @click="addKeyValuePair(fieldName)"
+                          class="btn btn-outline btn-primary btn-sm mt-2">
+                    {% translate "+ Add Field" %}
+                  </button>
+                </div>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
+            <!-- Default Text fields -->
+            <template x-if="!getWidget(field) && field.type === 'string' && !field.enum">
+              <div>
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <input type="text"
+                       :id="'param_' + fieldName"
+                       :name="'param_' + fieldName"
+                       x-model="params[fieldName]"
+                       class="input input-bordered w-full"
+                       :required="isRequired(fieldName)">
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
+            <!-- Number fields -->
+            <template x-if="!getWidget(field) && (field.type === 'number' || field.type === 'integer')">
+              <div>
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <input type="number"
+                       :id="'param_' + fieldName"
+                       :name="'param_' + fieldName"
+                       x-model="params[fieldName]"
+                       class="input input-bordered w-full"
+                       :min="field.minimum"
+                       :max="field.maximum"
+                       :step="field.type === 'number' ? 'any' : '1'"
+                       :required="isRequired(fieldName)">
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
+            <!-- Select/enum fields -->
+            <template x-if="!getWidget(field) && field.enum">
+              <div>
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <select :id="'param_' + fieldName"
+                        :name="'param_' + fieldName"
+                        x-model="params[fieldName]"
+                        class="select select-bordered w-full"
+                        :required="isRequired(fieldName)">
+                  <option value="">Select...</option>
+                  <template x-for="option in field.enum" :key="option">
+                    <option :value="option" x-text="option"></option>
+                  </template>
+                </select>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
+            <!-- Default object fields -->
+            <template x-if="!getWidget(field) && field.type === 'object'">
+              <div>
+                <label :for="'param_' + fieldName" class="label font-bold">
+                  <div x-text="field.title || fieldName"></div>
+                </label>
+                <textarea :id="'param_' + fieldName"
+                          :name="'param_' + fieldName"
+                          x-model="params[fieldName]"
+                          class="textarea textarea-bordered w-full"
+                          rows="4"
+                          placeholder="Enter JSON object"
+                          :required="isRequired(fieldName)"></textarea>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Hidden fields for Django form -->
+    <input type="hidden" name="type" x-model="selectedType">
+    <input type="hidden" name="params" x-model="paramsJson">
+  </div>
+{% endblock form %}
+
+{% block page_js %}
+  {{ block.super }}
+  <script src="{% load static %}{% static 'js/editors-bundle.js' %}"></script>
+  {{ evaluator_schemas|json_script:"evaluator-schemas" }}
+  {{ parameter_values|json_script:"parameter-values" }}
+  {{ default_values|json_script:"default-values" }}
+  {% if object.params %}{{ object.params|json_script:"existing-params" }}{% elif form.params.value %}{{ form.params.value|json_script:"existing-params" }}{% endif %}
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('evaluatorForm', () => ({
+        evaluatorSchemas: JSON.parse(document.getElementById("evaluator-schemas").textContent),
+        parameterValues: JSON.parse(document.getElementById("parameter-values").textContent),
+        defaultValues: JSON.parse(document.getElementById("default-values").textContent),
+        selectedType: '{% if object.type %}{{ object.type|escapejs }}{% else %}{{ form.type.value|default:"" }}{% endif %}',
+        selectedSchema: null,
+        params: {},
+        keyValuePairs: {},
+
+        init() {
+          const existingParams = document.getElementById("existing-params") ? JSON.parse(document.getElementById("existing-params").textContent) : null;
+
+          this.$nextTick(() => {
+            this.updateTypeAndSchema();
+          });
+
+          if (this.selectedType) {
+            this.updateTypeAndSchema();
+
+            if (existingParams) {
+              try {
+                this.params = { ...this.defaultValues, ...existingParams };
+                // Initialize key-value pairs for all key_value_pairs widgets
+                this.initializeKeyValuePairs();
+              } catch(e) {
+                console.error('Error parsing existing params:', e);
+                this.params = { ...this.defaultValues };
+              }
+            } else {
+              this.params = { ...this.defaultValues };
+            }
+          }
+        },
+
+        updateTypeAndSchema() {
+          this.selectedSchema = this.evaluatorSchemas.find(schema => schema.title === this.selectedType) || null;
+
+          // Initialize params with default values
+          if (this.selectedSchema && this.selectedSchema.properties) {
+            const newParams = {};
+
+            // Only add default values for fields that exist in this evaluator's schema
+            Object.keys(this.selectedSchema.properties).forEach(key => {
+              if (key !== 'type') {
+                // Check if this field exists in defaultValues and add it
+                if (this.defaultValues[key] !== undefined) {
+                  newParams[key] = this.defaultValues[key];
+                }
+                // Override with schema-specific defaults if they exist
+                if (this.selectedSchema.properties[key].default !== undefined) {
+                  newParams[key] = this.selectedSchema.properties[key].default;
+                }
+              }
+            });
+
+            // Preserve existing values for fields that exist in the schema
+            Object.keys(this.selectedSchema.properties).forEach(key => {
+              if (key !== 'type' && this.params[key] !== undefined) {
+                newParams[key] = this.params[key];
+              }
+            });
+
+            this.params = newParams;
+
+            // Initialize key-value pairs for key_value_pairs widgets
+            Object.keys(this.selectedSchema.properties).forEach(key => {
+              if (this.getWidget(this.selectedSchema.properties[key]) === 'key_value_pairs') {
+                if (!this.keyValuePairs[key]) {
+                  this.keyValuePairs[key] = this.params[key] && typeof this.params[key] === 'object'
+                    ? Object.entries(this.params[key]).map(([k, v]) => ({key: k, value: v}))
+                    : [{key: '', value: ''}];
+                }
+              }
+            });
+
+            // Initialize editors after DOM is rendered
+            this.$nextTick(() => {
+              if (window.SiteJS && window.SiteJS.editors) {
+                if (window.SiteJS.editors.initPythonEditors) {
+                  window.SiteJS.editors.initPythonEditors();
+                }
+                if (window.SiteJS.editors.initPromptEditors) {
+                  window.SiteJS.editors.initPromptEditors();
+                }
+              }
+            });
+          }
+        },
+
+        getWidget(field) {
+          return field['ui:widget'] || null;
+        },
+
+        isRequired(fieldName) {
+          return this.selectedSchema &&
+          this.selectedSchema.required &&
+          this.selectedSchema.required.includes(fieldName);
+        },
+
+        updateLlmProviderModel(fieldName) {
+          // When LLM provider changes, update the model options
+          const providerId = this.params[fieldName];
+          const availableModels = this.getAvailableModels();
+
+          // Set the first available model as default
+          if (availableModels.length > 0) {
+            this.params.llm_provider_model_id = availableModels[0].value;
+          } else {
+            this.params.llm_provider_model_id = null;
+          }
+        },
+
+        getAvailableModels() {
+          const providerId = this.params.llm_provider_id;
+          if (!providerId) return [];
+
+          const provider = this.parameterValues.LlmProviderId.find(p => p.value == providerId);
+          if (!provider) return [];
+
+          return this.parameterValues.LlmProviderModelId.filter(model => model.type === provider.type);
+        },
+
+        getKeyValuePairs(fieldName) {
+          if (!this.keyValuePairs[fieldName]) {
+            this.keyValuePairs[fieldName] = [{key: '', value: ''}];
+          }
+          return this.keyValuePairs[fieldName];
+        },
+
+        addKeyValuePair(fieldName) {
+          if (!this.keyValuePairs[fieldName]) {
+            this.keyValuePairs[fieldName] = [];
+          }
+          this.keyValuePairs[fieldName].push({key: '', value: ''});
+        },
+
+        removeKeyValuePair(fieldName, index) {
+          if (this.keyValuePairs[fieldName]) {
+            this.keyValuePairs[fieldName].splice(index, 1);
+            this.updateKeyValuePairs(fieldName);
+          }
+        },
+
+        updateKeyValuePairs(fieldName) {
+          if (this.keyValuePairs[fieldName]) {
+            const pairs = this.keyValuePairs[fieldName].filter(pair => pair.key.trim() !== '');
+            const obj = {};
+            pairs.forEach(pair => {
+              if (pair.key.trim()) {
+                obj[pair.key] = pair.value;
+              }
+            });
+            this.params[fieldName] = obj;
+          }
+        },
+
+        initializeKeyValuePairs() {
+          // Initialize key-value pairs for all fields that use key_value_pairs widget
+          if (this.selectedSchema && this.selectedSchema.properties) {
+            Object.keys(this.selectedSchema.properties).forEach(fieldName => {
+              if (this.getWidget(this.selectedSchema.properties[fieldName]) === 'key_value_pairs') {
+                if (this.params[fieldName] && typeof this.params[fieldName] === 'object') {
+                  this.keyValuePairs[fieldName] = Object.entries(this.params[fieldName]).map(([key, value]) => ({key, value}));
+                }
+              }
+            });
+          }
+        },
+
+        get paramsJson() {
+          return JSON.stringify(this.params);
+        }
+      }));
+    });
+  </script>
+{% endblock page_js %}

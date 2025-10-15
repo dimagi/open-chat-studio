@@ -26,12 +26,16 @@
     {% else %}
       <div id="edit-buttons-container">
         {% if experiment.is_editable %}
-          <button id="edit-all-button"
-                  class="btn btn-primary btn-sm"
+          <button class="btn btn-primary btn-sm"
                   hx-get="{% url 'chatbots:settings' request.team.slug experiment.id %}"
                   hx-target="#settings-wrapper"
                   hx-swap="outerHTML">
             Edit
+          </button>
+          <button class="btn btn-error btn-sm"
+                  hx-post="{% url 'chatbots:archive' request.team.slug experiment.id %}"
+                  hx-confirm="Are you sure you wish to archive this chatbot?">
+            Archive
           </button>
         {% endif %}
       </div>
@@ -45,7 +49,7 @@
     <form id="settings-form" x-data="{
                                      type: '{{ experiment_type }}',
                                      voiceProvider: null,
-                                     synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
+                                     synthetic_voice: {{ experiment.synthetic_voice_id|default:'null' }},
                                      synthetic_voice_options: [],
                                      init() {
                                      const voiceProviderTypes = JSON.parse(document.getElementById('voice-provider-types').textContent);
@@ -88,7 +92,7 @@
     <div class="p-4 bg-base-200 rounded-md">
       <div class="grid grid-cols-2 gap-4">
         {% if edit_mode %}
-          {% render_form_fields form "voice_provider" "synthetic_voice" "voice_response_behaviour" "echo_transcript" "use_processor_bot_voice" %}
+          {% render_form_fields form "voice_provider" "synthetic_voice" "voice_response_behaviour" "echo_transcript" %}
         {% else %}
           <div>
             <span class="font-semibold">Provider:</span>
@@ -105,10 +109,6 @@
           <div>
             <span class="font-semibold">Echo Transcript:</span>
             <span id="echo_transcript-content">{{ experiment.echo_transcript|yesno:"Yes,No" }}</span>
-          </div>
-          <div>
-            <span class="font-semibold">Use Processor Bot Voice:</span>
-            <span id="use_processor_bot_voice-content">{{ experiment.use_processor_bot_voice|yesno:"Yes,No" }}</span>
           </div>
         {% endif %}
       </div>
@@ -137,7 +137,7 @@
     <h4 class="text-md font-bold mb-2">Consent</h4>
     <div class="p-4 bg-base-200 rounded-md">
       {% if edit_mode %}
-        {% render_form_fields form "conversational_consent_enabled"%}
+        {% render_form_fields form "conversational_consent_enabled" %}
       {% else %}
         <div>
           <span class="font-semibold">Conversational Consent:</span>
@@ -217,6 +217,20 @@
         {% render_form_fields form "seed_message" %}
       {% else %}
         <p>{{ experiment.seed_message|default:"No seed message configured" }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-6" id="webchat-section">
+    <h4 class="text-md font-bold mb-2">Web Chat Features</h4>
+    <div class="p-4 bg-base-200 rounded-md">
+      {% if edit_mode %}
+        {% render_form_fields form "file_uploads_enabled" %}
+      {% else %}
+        <div>
+          <span class="font-semibold">Allow File Uploads:</span>
+          <span id="allow_file_uploads-content">{{ experiment.file_uploads_enabled|yesno:"Yes,No" }}</span>
+        </div>
       {% endif %}
     </div>
   </div>

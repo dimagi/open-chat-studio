@@ -17,6 +17,7 @@ EVENT_ADMIN_GROUP = "Event Admin"
 ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
 PIPELINE_ADMIN_GROUP = "Pipeline Admin"
+EVALUATION_ADMIN_GROUP = "Evaluation Admin"
 
 NORMAL_USER_GROUPS = [
     EXPERIMENT_ADMIN_GROUP,
@@ -50,10 +51,17 @@ class TeamBackend(ModelBackend):
 CONTENT_TYPES = {
     "assistants": ["openaiassistant", "toolresources"],
     "banners": ["banner"],
-    "channels": ["experimentchannel"],
+    "bot_channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage", "chatattachment"],
     "custom_actions": ["customaction", "customactionoperation"],
-    "events": ["eventaction", "statictrigger", "timeouttrigger", "eventlog", "scheduledmessage"],
+    "events": [
+        "eventaction",
+        "statictrigger",
+        "timeouttrigger",
+        "eventlog",
+        "scheduledmessage",
+        "scheduledmessageattempt",
+    ],
     "experiments": [
         "consentform",
         "experiment",
@@ -81,8 +89,18 @@ CONTENT_TYPES = {
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem", "usercomment"],
     "participants": [],
-    "documents": ["collection"],
+    "documents": ["collection", "documentsource", "documentsourcesynclog"],
     "chatbots": [],
+    "evaluations": [
+        "evaluationconfig",
+        "evaluationrun",
+        "evaluator",
+        "evaluationdataset",
+        "evaluationmessage",
+        "evaluationresult",
+    ],
+    "trace": ["trace", "span"],
+    "mcp_integrations": ["mcpserver"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
@@ -164,8 +182,10 @@ GROUPS = [
         EXPERIMENT_ADMIN_GROUP,
         [
             AppPermSetDef("experiments", ALL),
-            AppPermSetDef("channels", ALL),
-            AppPermSetDef("annotations", ALL),
+            AppPermSetDef("bot_channels", ALL),
+            ModelPermSetDef("annotations", "tag", [VIEW]),
+            ModelPermSetDef("annotations", "customtaggeditem", ALL),
+            ModelPermSetDef("annotations", "usercomment", ALL),
             CustomPermissionSetDef("experiments", CUSTOM_PERMISSIONS["experiments"]),
             CustomPermissionSetDef("documents", ALL),
         ],
@@ -194,6 +214,12 @@ GROUPS = [
         PIPELINE_ADMIN_GROUP,
         [
             AppPermSetDef("pipelines", ALL),
+        ],
+    ),
+    GroupDef(
+        EVALUATION_ADMIN_GROUP,
+        [
+            AppPermSetDef("evaluations", ALL),
         ],
     ),
 ]

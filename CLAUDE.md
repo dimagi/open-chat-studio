@@ -5,7 +5,7 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 ## Project Overview
 
 **Tech Stack:**
-- **Backend**: Django 5.x with Python 3.11+
+- **Backend**: Django 5.x with Python 3.13+
 - **Frontend**: React/TypeScript, TailwindCSS, AlpineJS, HTMX
 - **Database**: PostgreSQL with pgvector extension
 - **Task Queue**: Celery with Redis
@@ -88,7 +88,30 @@ npm uninstall <package>       # Remove package
 
 ## Django Apps Architecture
 
-The project is organized into focused Django apps:
+The project is organized into focused Django apps with consistent structure:
+
+### App File Structure
+Each app follows this pattern:
+```
+app_name/
+├── __init__.py
+├── admin.py              # Django admin configuration
+├── apps.py               # App configuration
+├── forms.py              # Form definitions
+├── models.py             # Model definitions
+├── tables.py             # Django-tables2 definitions
+├── urls.py               # URL patterns
+├── views/                # View modules (for complex apps)
+│   ├── __init__.py
+│   └── specific_views.py
+├── migrations/           # Database migrations
+├── tests/                # Test modules
+├── templatetags/         # Custom template tags
+├── management/           # Custom management commands
+├── const.py              # Application constants
+├── exceptions.py         # Custom exceptions
+└── tasks.py              # Celery task definitions
+```
 
 ### Core Apps
 - **`experiments/`** - Main experiment/chatbot management, sessions, participants
@@ -119,6 +142,7 @@ The project is organized into focused Django apps:
 - **`web/`** - Base web functionality and admin
 - **`audit/`** - Audit logging and tracking
 - **`help/`** - Help system integration
+- **`utils/`** - Shared utilities and base classes
 
 ## Key Features
 
@@ -148,15 +172,44 @@ The project is organized into focused Django apps:
 - Factory Boy for test data generation
 - Coverage reporting available
 
+### Common Test Fixtures
+
+* Check for existing fixtures in `conftest.py` files
+* Use existing factories in `apps/utils/factories/` package
+
+```python
+# Team-based fixtures (most tests need these)
+@pytest.fixture()
+def team_with_users(db):
+    return TeamWithUsersFactory.create()
+
+@pytest.fixture()
+def experiment(team_with_users, db):
+    return ExperimentFactory(team=team_with_users)
+
+# Use factories for consistent test data
+class MyModelFactory(factory.django.DjangoModelFactory):
+    team = factory.SubFactory(TeamFactory)
+    name = factory.Sequence(lambda n: f'Test Model {n}')
+    
+    class Meta:
+        model = MyModel
+```
+
+### Test Organization
+- Tests in `tests/` directories within each app
+- Separate test files: `test_models.py`, `test_views.py`, `test_api.py`
+- Mock external services (LLM providers, etc.)
+- Team isolation in all tests
+
 ### Test Configuration
 - Settings: `gpt_playground.settings` with test overrides
-- Database: `--reuse-db` for faster test runs
 - Environment variables automatically set in tests
 
 ## Configuration
 
 ### Environment Variables
-Key settings in `.env` file:
+Key settings in `.env` file such as database connection strings, credentials for external services, etc.
 
 ### Django Settings
 - **Base**: `gpt_playground/settings.py`
@@ -180,26 +233,229 @@ Key settings in `.env` file:
 ### Django Conventions
 - **Models**: Use model audit fields for tracking changes
 - **Views**: Class-based views with mixins
-- **Templates**: Django templates with HTMX for interactivity
+- **Templates**: Django templates with HTMX and Alpine.js for interactivity
 - **URLs**: App-specific URL configurations
+
+### UI/Frontend Guidelines
+- **Design System**: Use DaisyUI components and styling as the primary UI framework
+- **Fallback Styling**: Use TailwindCSS for custom styling when DaisyUI components don't meet requirements
+- **Theme Support**: All UI components must support both light and dark modes
+- **Component Priority**: Always prefer DaisyUI widgets over custom implementations
+
+### Git Usage Guidelines
+- **Logical Commits**: Break work into logical chunks and commit after completing each coherent piece of functionality
+- **Commit Messages**: Write concise commit messages that describe the change's purpose, not an exhaustive list of modifications
+- **Commit Frequency**: Commit regularly to create a clear development history and enable easy rollbacks
+- **Message Format**: Use imperative mood (e.g., "Add user authentication" not "Added user authentication")
 
 ## Development Patterns
 
-### Versioning System
-Models can be versioned using the built-in versioning system:
-- Inherit from `VersionsMixin`
-- Add `working_version` field (self-referencing FK)
-- Add `is_archived` field
-- Objects are archived, not deleted
+### Model Architecture Patterns
+
+#### Base Model Classes
+Most models should inherit from appropriate base classes:
+```python
+# For team-scoped models (most common)
+from apps.teams.models import BaseTeamModel
+class MyModel(BaseTeamModel):
+    # Automatically includes team FK and filtering
+    # Also includes created_at, updated_at timestamps
+    pass
+
+# For non-team models (rare)
+from apps.utils.models import BaseModel
+class MyModel(BaseModel):
+    # Includes created_at, updated_at timestamps
+    pass
+```
+
+#### Versioning System
+Complex models that need version tracking:
+```python
+from apps.teams.models import BaseTeamModel
+from apps.experiments.versioning import VersionsObjectManagerMixin, VersionsMixin, VersionDetails, VersionField
+
+class MyModelManager(VersionsObjectManagerMixin):
+    pass
+
+class MyModel(BaseTeamModel, VersionsMixin):
+    working_version = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True)
+    is_archived = models.BooleanField(default=False)
+    
+    # optional version number
+    version_number = models.PositiveIntegerField(default=1)
+    
+    objects = MyModelManager()
+    
+    # Objects are archived, not deleted
+    # Provides diff detection and comparison
+    
+    def _get_version_details(self) -> VersionDetails:
+        """Return details used for comparing versions"""
+        return VersionDetails(
+            instance=self,
+            fields=[
+                VersionField(group_name="General", name="field_a", raw_value=self.field_a),
+                VersionField(group_name="General", name="field_b", raw_value=self.field_b),
+            ],
+        )
+```
+
+#### Field Audit Pattern
+Track field changes on important models:
+```python
+from apps.audit.decorators import audit_fields
+
+class MyModelManager(AuditingManager):
+    pass
+
+@audit_fields("field_a", "field_b", audit_special_queryset_writes=True)
+class MyModel(BaseTeamModel):
+    # Define audit fields in model_audit_fields.py
+    objets = MyModelManager()
+```
+
+#### Common Field Patterns
+```python
+# Public API identifier
+public_id = models.UUIDField(default=uuid.uuid4, unique=True)
+
+# Encrypted sensitive data
+from django_cryptography.fields import encrypt
+encrypted_field = encrypt(models.JSONField(blank=True))
+
+# PostgreSQL-specific fields
+from django.contrib.postgres.fields import ArrayField
+tags = ArrayField(models.CharField(max_length=50), default=list, blank=True)
+```
+
+### View Security Patterns
+
+#### Required Decorators
+Always use team-based security:
+```python
+from apps.teams.decorators import login_and_team_required
+from django.contrib.auth.decorators import permission_required
+
+# Function-based views
+@login_and_team_required
+@permission_required("my_app.view_mymodel")
+def my_view(request, team_slug: str):
+    # request.user and request.team are available
+    pass
+
+# Class-based views
+from apps.teams.mixins import LoginAndTeamRequiredMixin
+from django.contrib.auth.mixins import PermissionRequiredMixin
+
+class MyView(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+    permission_required = "my_app.view_mymodel"
+```
+
+#### URL Patterns
+Team-scoped URLs with consistent naming:
+```python
+# urls.py
+urlpatterns = [
+    path("teams/<slug:team_slug>/my-feature/", MyView.as_view(), name="my_feature"),
+    path("teams/<slug:team_slug>/my-feature/<int:pk>/", MyDetailView.as_view(), name="my_feature_detail"),
+]
+```
+
+### Form Patterns
+
+#### Team-Scoped Forms
+Always filter related fields by team:
+```python
+class MyForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        self.team = kwargs.pop('team', None)
+        super().__init__(*args, **kwargs)
+        
+        # Filter all related model querysets by team
+        if self.team:
+            self.fields['related_model'].queryset = RelatedModel.objects.filter(team=self.team)
+    
+    class Meta:
+        model = MyModel
+        fields = ['name', 'related_model']
+```
+
+### Template Organization
+
+#### File Structure
+```
+templates/
+├── web/
+│   ├── base.html                    # Base template
+│   └── components/                  # Reusable components
+├── {app_name}/
+│   ├── {model}_form.html           # Form templates
+│   ├── {model}_list.html           # List templates
+│   ├── {model}_detail.html         # Detail templates
+│   └── components/                 # App-specific components
+```
+
+#### Common Template Patterns
+```html
+<!-- Extend app_base.html overall layout and navigation -->
+{% extends 'web/app/app_base.html' %}
+
+{% block page_head %}
+  {{ block.super }}
+  <!-- custom 'head' contents e.g. page-specific stylesheets -->
+{% endblock page_head %}
+
+{% block app %}
+  <!-- page specific content -->
+{% endblock app %}
+
+{% block page_js %}
+  {{ block.super }}
+  <!-- page-specific JavaScript -->
+{% endblock page_js %}
+
+<!-- HTMX for dynamic content -->
+<div hx-get="{% url 'app:view-name' team.slug %}" hx-trigger="load">
+    Loading...
+</div>
+
+<!-- Reusable components -->
+{% include "generic/chip.html" with object=my_object %}
+```
+
+### API Patterns
+
+#### Team Filtering
+Always filter API responses by team:
+```python
+class MyViewSet(viewsets.ModelViewSet):
+    def get_queryset(self):
+        return MyModel.objects.filter(team=self.request.team)
+```
+
+#### Serializer Patterns
+```python
+class MySerializer(serializers.ModelSerializer):
+    # Expose public_id as 'id' for external API
+    id = serializers.UUIDField(source="public_id", read_only=True)
+    url = serializers.HyperlinkedIdentityField(view_name="api:my-model-detail")
+    
+    class Meta:
+        model = MyModel
+        fields = ["id", "name", "url"]
+        read_only_fields = ["id"]
+```
 
 ### Team-Based Multi-Tenancy
-- All data is scoped to teams
+- All data is scoped to teams via `BaseTeamModel`
 - Use `@login_and_team_required` or `@team_required` decorators on views
-- Team context available in middleware
+- Team context available in middleware as `request.team`
 - Permission system based on team membership
+- Never allow cross-team data access without explicit permission
 
 ### Task Queue (Celery)
-- Background tasks for AI processing
+- Background tasks for AI processing, data exports
 - Scheduled messages and events
 - Progress tracking with celery-progress
 - Redis as broker and result backend
@@ -209,20 +465,6 @@ Models can be versioned using the built-in versioning system:
 - OpenAPI schema generation
 - API key authentication
 - Cursor-based pagination
-
-## Deployment
-
-### Production Considerations
-- Use `settings_production.py` for production settings
-- Configure external services (S3, email provider)
-- Set up proper logging and monitoring
-- Use gunicorn with gevent workers
-
-### Environment Setup
-- PostgreSQL with pgvector extension
-- Redis for caching and task queue
-- File storage (local or S3)
-- HTTPS with proper domain configuration
 
 ## Troubleshooting
 

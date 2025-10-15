@@ -1,0 +1,20 @@
+{% if chunks %}
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-info-circle"></i>
+        <div class="text-sm">
+            <p>Results are ranked by semantic similarity. <strong>0</strong> = perfect match, <strong>1</strong> = totally unrelated.</p>
+        </div>
+    </div>
+{% endif %}
+
+{% for chunk in chunks %}
+    <div class="flex justify-between items-start mb-1">
+        <p class="text-sm text-base-content/70">Source: {{ chunk.file.name }}</p>
+        <div class="badge badge-outline badge-sm {% if chunk.distance <= 0.3 %}badge-success{% elif chunk.distance <= 0.7 %}badge-warning{% else %}badge-error{% endif %}">
+            Distance: {{ chunk.distance|floatformat:3 }}
+        </div>
+    </div>
+    <div class="p-3 bg-base-200 rounded-lg">
+        <p class="text-sm text-base-content/70">{{ chunk.text }}</p>
+    </div>
+{% endfor %}

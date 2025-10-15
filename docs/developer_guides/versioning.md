@@ -70,8 +70,7 @@ When implementing versioning for a model, you must provide a `version_details` p
 
 Example:
 ```python
-@property
-def version_details(self) -> VersionDetails:
+def _get_version_details(self) -> VersionDetails:
     return VersionDetails(
         instance=self,
         fields=[

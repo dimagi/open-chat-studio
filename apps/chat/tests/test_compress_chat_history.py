@@ -322,7 +322,7 @@ def test_get_new_summary_with_large_message_raises_chat_exception():
         _get_new_summary(llm, pruned_memory, None, llm.max_token_limit)
 
 
-def test_reduce_summary_size_1():
+def test_reduce_summary_size():
     """Tests that the _reduce_summary_size method successfully reduces a large summary
     by calling the LLM repeatedly until the summary is under the token limit"""
     llm = FakeLlmSimpleTokenCount(responses=["Shorter summary 1", "Even shorter 2", "Final 3"])

@@ -10,7 +10,7 @@ from apps.chat.tasks import _get_latest_sessions_for_participants
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
 from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider
 from apps.service_providers.tests.mock_tracer import MockTracer
-from apps.service_providers.tracing import TraceInfo
+from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -59,9 +59,12 @@ class TasksTest(TestCase):
         provider = TraceProvider()
         provider.get_service = Mock(return_value=MockTracer())
         self.experiment_session.experiment.trace_provider = provider
-
+        trace_service = TracingService.empty()
+        trace_service.get_trace_metadata = lambda: {"trace_info": True}
         with mock_llm(responses=[expected_ping_message]):
-            response = self.experiment_session._bot_prompt_for_user("test", TraceInfo(name="Some message"))
+            response = self.experiment_session._bot_prompt_for_user(
+                "test", TraceInfo(name="Some message"), trace_service
+            )
         messages = ChatMessage.objects.filter(chat=self.experiment_session.chat).all()
         # Only the AI message should be there
         assert len(messages) == 1

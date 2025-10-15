@@ -5,14 +5,14 @@ from unittest.mock import Mock, patch
 import pytest
 from django.core import mail
 from django.test import override_settings
-from langchain_core.messages import AIMessage, ToolCall
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolCall, ToolCallChunk
 from langchain_openai.chat_models.base import OpenAIRefusalError
 
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import ParticipantData
+from apps.experiments.models import AgentTools
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
-from apps.pipelines.nodes.base import PipelineState, merge_dicts
+from apps.pipelines.nodes.base import Intents, PipelineState, merge_dict_values_as_lists
 from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
     assistant_node,
@@ -31,8 +31,6 @@ from apps.pipelines.tests.utils import (
     start_node,
     state_key_router_node,
 )
-from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
-from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -138,12 +136,6 @@ def test_llm_with_prompt_response(
     get_llm_service.return_value = service
 
     user_input = "The User Input"
-    participant_data = ParticipantData.objects.create(
-        team=experiment_session.team,
-        experiment=experiment_session.experiment,
-        participant=experiment_session.participant,
-        data={"name": "A"},
-    )
     nodes = [
         start_node(),
         llm_response_with_prompt_node(
@@ -156,18 +148,24 @@ def test_llm_with_prompt_response(
         llm_response_with_prompt_node(
             str(provider.id),
             str(provider_model.id),
-            source_material_id=str(source_material.id),
-            prompt="Node 2: {source_material}",
+            prompt="Node 2: {temp_state.temp_key} {session_state.session_key}",
             name="llm2",
         ),
         end_node(),
     ]
+    participant_data = {"name": "A"}
     output = create_runnable(pipeline, nodes).invoke(
-        PipelineState(messages=[user_input], experiment_session=experiment_session)
+        PipelineState(
+            messages=[user_input],
+            experiment_session=experiment_session,
+            temp_state={"temp_key": "temp_value"},
+            participant_data=participant_data,
+            session_state={"session_key": "session_value"},
+        )
     )["messages"][-1]
     expected_output = (
-        f"Node 2: {source_material.material} Node 1: Use this {source_material.material} to answer questions "
-        f"about {participant_data.data}. {user_input}"
+        f"Node 2: temp_value session_value Node 1: Use this {source_material.material} to answer questions "
+        f"about {participant_data}. {user_input}"
     )
     assert output == expected_output
 
@@ -185,69 +183,11 @@ def test_render_template(pipeline):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
-def test_branching_pipeline(pipeline, experiment_session):
-    start = start_node()
-    template_a = render_template_node("A ({{input }})")
-    template_b = render_template_node("B ({{ input}})")
-    template_c = render_template_node("C ({{input }})")
-    end = end_node()
-    nodes = [
-        start,
-        template_a,
-        template_b,
-        template_c,
-        end,
-    ]
-    edges = [
-        {
-            "id": "start -> RenderTemplate-A",
-            "source": start["id"],
-            "target": template_a["id"],
-        },
-        {
-            "id": "start -> RenderTemplate-B",
-            "source": start["id"],
-            "target": template_b["id"],
-        },
-        {
-            "id": "RenderTemplate-B -> RenderTemplate-C",
-            "source": template_b["id"],
-            "target": template_c["id"],
-        },
-        {
-            "id": "RenderTemplate-A -> END",
-            "source": template_a["id"],
-            "target": end["id"],
-        },
-        {
-            "id": "RenderTemplate-C -> END",
-            "source": template_c["id"],
-            "target": end["id"],
-        },
-    ]
-    user_input = "The Input"
-    output = create_runnable(pipeline, nodes, edges, lenient=True).invoke(
-        PipelineState(messages=[user_input], experiment_session=experiment_session)
-    )["outputs"]
-    expected_output = {
-        "start": {"message": user_input, "node_id": start["id"]},
-        template_a["params"]["name"]: {"message": f"A ({user_input})", "node_id": template_a["id"]},
-        template_b["params"]["name"]: {"message": f"B ({user_input})", "node_id": template_b["id"]},
-        template_c["params"]["name"]: {"message": f"C (B ({user_input}))", "node_id": template_c["id"]},
-        "end": [
-            {"message": f"A ({user_input})", "node_id": end["id"]},
-            {"message": f"C (B ({user_input}))", "node_id": end["id"]},
-        ],
-    }
-    assert output == expected_output
-
-
-@django_db_with_data(available_apps=("apps.service_providers",))
 def test_conditional_node(pipeline, experiment_session):
     start = start_node()
-    boolean = boolean_node()
-    template_true = render_template_node("said hello")
-    template_false = render_template_node("didn't say hello, said {{ input }}")
+    boolean = boolean_node(name="boolean")
+    template_true = render_template_node("said hello", name="T-true")
+    template_false = render_template_node("didn't say hello, said {{ input }}", name="T-false")
     end = end_node()
     nodes = [
         start,
@@ -287,7 +227,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         "start": {"message": "hello", "node_id": start["id"]},
         "boolean": {"route": "true", "message": "hello", "output_handle": "output_0", "node_id": boolean["id"]},
-        template_true["params"]["name"]: {"message": "said hello", "node_id": template_true["id"]},
+        "T-true": {"message": "said hello", "node_id": template_true["id"]},
         "end": {"message": "said hello", "node_id": end["id"]},
     }
 
@@ -296,7 +236,7 @@ def test_conditional_node(pipeline, experiment_session):
     assert output["outputs"] == {
         "start": {"message": "bad", "node_id": start["id"]},
         "boolean": {"route": "false", "message": "bad", "output_handle": "output_1", "node_id": boolean["id"]},
-        template_false["params"]["name"]: {"message": "didn't say hello, said bad", "node_id": template_false["id"]},
+        "T-false": {"message": "didn't say hello, said bad", "node_id": template_false["id"]},
         "end": {"message": "didn't say hello, said bad", "node_id": end["id"]},
     }
 
@@ -316,17 +256,20 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
         llm_provider_id=provider.id,
         llm_provider_model_id=provider_model.id,
     )
+    participant_data = {"participant_data": "b"}
     node._process_conditional(
         PipelineState(
             outputs={"123": {"message": "a"}},
             messages=["a"],
             experiment_session=experiment_session,
+            node_input="a",
+            participant_data=participant_data,
         ),
     )
 
     assert len(service.llm.get_call_messages()[0]) == 2
-    proxy = ParticipantDataProxy(experiment_session)
-    assert str(proxy.get()) in service.llm.get_call_messages()[0][0].content
+    expected_pd = {"name": experiment_session.participant.name} | participant_data
+    assert str(expected_pd) in service.llm.get_call_messages()[0][0].content
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -432,7 +375,11 @@ def test_static_router_case_sensitive(pipeline, experiment_session):
 def test_router_sets_tags_correctly(pipeline, experiment_session):
     start = start_node()
     router = state_key_router_node(
-        "route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.temp_state, tag_output=True
+        "route_to",
+        ["first", "second"],
+        data_source=StaticRouterNode.DataSource.temp_state,
+        tag_output=True,
+        name="static router",
     )
     template_a = render_template_node("A")
     template_b = render_template_node("B")
@@ -475,18 +422,6 @@ def test_router_sets_tags_correctly(pipeline, experiment_session):
     "data_source", [StaticRouterNode.DataSource.participant_data, StaticRouterNode.DataSource.session_state]
 )
 def test_static_router_participant_data(data_source, pipeline, experiment_session):
-    def _update_participant_data(session, data):
-        ParticipantDataProxy(session).set(data)
-
-    def _update_session_state(session, data):
-        session.state = data
-        session.save(update_fields=["state"])
-
-    DATA_SOURCE_UPDATERS = {
-        StaticRouterNode.DataSource.participant_data: _update_participant_data,
-        StaticRouterNode.DataSource.session_state: _update_session_state,
-    }
-
     start = start_node()
     router = state_key_router_node("route_to", ["first", "second"], data_source=data_source)
     template_a = render_template_node("A {{ input }}")
@@ -512,17 +447,22 @@ def test_static_router_participant_data(data_source, pipeline, experiment_sessio
     ]
     runnable = create_runnable(pipeline, nodes, edges)
 
-    DATA_SOURCE_UPDATERS[data_source](experiment_session, {"route_to": "first"})
-    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    def _get_state(route):
+        state = PipelineState(messages=["Hi"], experiment_session=experiment_session)
+        if data_source == StaticRouterNode.DataSource.participant_data:
+            state["participant_data"] = route
+        else:
+            state["session_state"] = route
+        return state
+
+    output = runnable.invoke(_get_state({"route_to": "first"}))
     assert output["messages"][-1] == "A Hi"
 
-    DATA_SOURCE_UPDATERS[data_source](experiment_session, {"route_to": "second"})
-    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    output = runnable.invoke(_get_state({"route_to": "second"}))
     assert output["messages"][-1] == "B Hi"
 
     # default route
-    DATA_SOURCE_UPDATERS[data_source](experiment_session, {})
-    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    output = runnable.invoke(_get_state({}))
     assert output["messages"][-1] == "A Hi"
 
 
@@ -541,8 +481,10 @@ def main(input, **kwargs):
     nodes = [start, code, end]
     runnable = create_runnable(pipeline, nodes)
     attachments = [
-        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
-        Attachment(file_id=456, type="file_search", name="blog.md", size=20),
+        Attachment(
+            file_id=123, type="code_interpreter", name="test.py", size=10, download_link="http://localhost:8000"
+        ),
+        Attachment(file_id=456, type="file_search", name="blog.md", size=20, download_link="http://localhost:8000"),
     ]
     serialized_attachments = [att.model_dump() for att in attachments]
     output = runnable.invoke(
@@ -588,12 +530,6 @@ def test_extract_structured_data_no_chunking(provider, provider_model, pipeline)
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 def test_extract_structured_data_with_chunking(provider, provider_model, pipeline):
     session = ExperimentSessionFactory()
-    ParticipantData.objects.create(
-        team=session.team,
-        experiment=session.experiment,
-        data={"drink": "martini"},
-        participant=session.participant,
-    )
     llm = FakeLlmSimpleTokenCount(
         responses=[
             # the first chunk sees nothing of value
@@ -658,57 +594,50 @@ def test_extract_participant_data(provider, pipeline):
     correctly.
     """
     session = ExperimentSessionFactory()
-    session.participant.team = session.team
-    session.participant.save()
-    # There should be no data
-    participant_data = (
-        ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
-    )
-    assert participant_data is None
 
     # New data should be created
-    _run_data_extract_and_update_pipeline(
+    data = _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
         schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
         extracted_data={"name": "Johnny", "last_name": None},
         key_name="profile",
+        initial_data={},
     )
 
-    participant_data = ParticipantData.objects.for_experiment(session.experiment).get(participant=session.participant)
-    assert participant_data.data == {"profile": {"name": "Johnny", "last_name": None}}
+    assert data == {"profile": {"name": "Johnny", "last_name": None}}
 
     # The "profile" key should be updated
-    _run_data_extract_and_update_pipeline(
+    data = _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
         schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
         extracted_data={"name": "John", "last_name": "Wick"},
         key_name="profile",
+        initial_data=data,
     )
-    participant_data.refresh_from_db()
-    assert participant_data.data == {"profile": {"name": "John", "last_name": "Wick"}}
+    assert data == {"profile": {"name": "John", "last_name": "Wick"}}
 
     # New data should be inserted at the toplevel
-    _run_data_extract_and_update_pipeline(
+    data = _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
         schema='{"has_pets": "whether or not the user has pets"}',
         extracted_data={"has_pets": "false"},
         key_name="",
+        initial_data=data,
     )
-    participant_data.refresh_from_db()
-    assert participant_data.data == {
+    assert data == {
         "profile": {"name": "John", "last_name": "Wick"},
         "has_pets": "false",
     }
 
 
 def _run_data_extract_and_update_pipeline(
-    session, provider, pipeline, extracted_data: dict, schema: dict, key_name: str
+    session, provider, pipeline, extracted_data: dict, schema: str, key_name: str, initial_data: dict
 ):
     tool_call = AIMessage(tool_calls=[ToolCall(name="CustomModel", args=extracted_data, id="123")], content="Hi")
     service = build_fake_llm_service(responses=[tool_call], token_counts=[0])
@@ -729,8 +658,11 @@ def _run_data_extract_and_update_pipeline(
             end_node(),
         ]
         runnable = create_runnable(pipeline, nodes)
-        state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session=session)
-        runnable.invoke(state)
+        state = PipelineState(
+            messages=["ai: hi user\nhuman: hi there"], experiment_session=session, participant_data=initial_data or {}
+        )
+        result = runnable.invoke(state)
+        return result["participant_data"]
 
 
 def assistant_node_runnable_mock(
@@ -782,8 +714,17 @@ def test_assistant_node_attachments(get_assistant_runnable):
     nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
     runnable = create_runnable(pipeline, nodes)
     attachments = [
-        Attachment(file_id=123, type="code_interpreter", name="test.py", size=10),
-        Attachment(file_id=456, type="code_interpreter", name="demo.py", size=10, upload_to_assistant=True),
+        Attachment(
+            file_id=123, type="code_interpreter", name="test.py", size=10, download_link="http://localhost:8000"
+        ),
+        Attachment(
+            file_id=456,
+            type="code_interpreter",
+            name="demo.py",
+            size=10,
+            upload_to_assistant=True,
+            download_link="http://localhost:8000",
+        ),
     ]
     state = PipelineState(
         messages=["Hi there bot"],
@@ -960,41 +901,7 @@ def test_cyclical_graph(pipeline):
     ]
 
     with pytest.raises(PipelineBuildError, match="A cycle was detected"):
-        create_runnable(pipeline, nodes, edges, lenient=True)
-
-
-@django_db_with_data(available_apps=("apps.service_providers",))
-def test_parallel_nodes(pipeline):
-    start = start_node()
-    passthrough_1 = passthrough_node()
-    passthrough_2 = passthrough_node()
-    end = end_node()
-    nodes = [start, passthrough_1, passthrough_2, end]
-    edges = [
-        {
-            "id": "start -> passthrough 1",
-            "source": start["id"],
-            "target": passthrough_1["id"],
-        },
-        {
-            "id": "start -> passthrough 2",
-            "source": start["id"],
-            "target": passthrough_2["id"],
-        },
-        {
-            "id": "passthrough 1 -> end",
-            "source": passthrough_1["id"],
-            "target": end["id"],
-        },
-        {
-            "id": "passthrough 2 -> end",
-            "source": passthrough_2["id"],
-            "target": end["id"],
-        },
-    ]
-
-    with pytest.raises(PipelineBuildError, match="Multiple edges connected to the same output"):
-        create_runnable(pipeline, nodes, edges, lenient=False)
+        create_runnable(pipeline, nodes, edges)
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -1043,7 +950,7 @@ def test_multiple_valid_inputs(pipeline):
         messages=["not hello"],
         experiment_session=experiment_session,
     )
-    output = create_runnable(pipeline, nodes, edges, lenient=False).invoke(state)
+    output = create_runnable(pipeline, nodes, edges).invoke(state)
     assert output["messages"][-1] == "T: not hello"
 
 
@@ -1075,26 +982,6 @@ def test_assistant_node_empty_metadata_handling(get_llm_service, pipeline):
     assert output_state["messages"][-1] == "How are you doing?"
 
 
-@pytest.mark.django_db()
-@patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
-    history_manager = PipelineHistoryManager.for_assistant()
-    input_metadata = {"test": "metatdata", "timestamp": "2025-03-06"}
-    output_metadata = {"test": "metadata", "tokens": 150}
-
-    history_manager.add_messages_to_history(
-        input="Hi Bot",
-        input_message_metadata=input_metadata,
-        output="Hi Human",
-        output_message_metadata=output_metadata,
-        save_input_to_history=True,
-        save_output_to_history=True,
-        experiment_tag=None,
-    )
-    assert history_manager.input_message_metadata == input_metadata
-    assert history_manager.output_message_metadata == output_metadata
-
-
 @pytest.mark.parametrize(
     ("left", "right", "expected"),
     [
@@ -1106,7 +993,7 @@ def test_pipeline_history_manager_metadata_storage(get_llm_service, pipeline):
     ],
 )
 def test_merge_dicts(left, right, expected):
-    assert merge_dicts(left, right) == expected
+    assert merge_dict_values_as_lists(left, right) == expected
 
 
 def test_input_with_format_strings():
@@ -1224,15 +1111,15 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             llm_provider_model_id=provider_model.id,
         )
         state = PipelineState(
-            outputs={"test_router": {"message": "hello world", "node_id": "123"}},
+            outputs={"prev_node": {"message": "hello world", "node_id": "prev_node"}},
             messages=["hello world"],
             experiment_session=experiment_session,
             temp_state={"user_input": "hello world", "outputs": {}},
-            path=[],
+            path=[("", "prev_node", [node_id])],
         )
         with mock.patch.object(node, "_process_conditional", return_value=("A", True)):
             edge_map = {"A": "next_node_a", "B": "next_node_b"}
-            incoming_edges = ["123"]
+            incoming_edges = ["prev_node"]
             router_func = node.build_router_function(edge_map, incoming_edges)
             command = router_func(state, {})
 
@@ -1242,8 +1129,8 @@ def test_router_node_output_structure(provider, provider_model, pipeline, experi
             assert "route" in output_state["outputs"][node.name]
             assert "message" in output_state["outputs"][node.name]
             assert output_state["outputs"][node.name]["route"] == "A"
-            assert output_state["outputs"][node.name]["message"] == state["node_input"]
-            assert command.goto == "next_node_a"
+            assert output_state["outputs"][node.name]["message"] == "hello world"
+            assert command.goto == ["next_node_a"]
 
 
 def test_get_selected_route():
@@ -1342,11 +1229,37 @@ def test_router_node_openai_refusal_uses_default_keyword(get_llm_service, provid
     )
     node.default_keyword_index = 0
     state = PipelineState(
-        outputs={"123": {"message": "a"}},
-        messages=["a"],
-        experiment_session=experiment_session,
+        outputs={"123": {"message": "a"}}, messages=["a"], experiment_session=experiment_session, node_input="a"
     )
 
     keyword, is_default_keyword = node._process_conditional(state)
     assert keyword == "DEFAULT"
     assert is_default_keyword
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_end_session_tool(get_llm_service, provider, provider_model, pipeline, experiment_session):
+    def _tool_call():
+        return AIMessageChunk(
+            tool_call_chunks=[ToolCallChunk(name=AgentTools.END_SESSION, id="123", args="")], content=""
+        )
+
+    service = build_fake_llm_service(
+        responses=[_tool_call(), "Done"],
+        token_counts=[0],
+    )
+    get_llm_service.return_value = service
+    start = start_node()
+    llm = llm_response_with_prompt_node(str(provider.id), str(provider_model.id), tools=[AgentTools.END_SESSION])
+    end = end_node()
+    nodes = [start, llm, end]
+    edges = [
+        {"id": "start -> llm", "source": start["id"], "target": llm["id"]},
+        {"id": "llm -> end", "source": llm["id"], "target": end["id"]},
+    ]
+    runnable = create_runnable(pipeline, nodes, edges)
+
+    output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+    print(output)
+    assert output["intents"] == [Intents.END_SESSION]

@@ -6,28 +6,28 @@
       <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Experiment</th>
       <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Joined on</th>
       <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold">Last message received at</th>
-      <th scope="col" class=""></th>
+      <th scope="col"></th>
     </tr>
   </thead>
   <tbody class="divide-y divide-gray-200">
     {% for experiment in experiments %}
       <tr
         class="cursor-pointer"
-        data-redirect-url="{% url 'participants:single-participant-home-with-experiment' participant.team.slug participant.id experiment.id %}#{{experiment.id}}"
+        data-redirect-url="{% url 'participants:single-participant-home-with-experiment' participant.team.slug participant.id experiment.id %}#{{ experiment.id }}"
       >
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
           <a id="{{ experiment.id }}">
-            {% include 'generic/chip.html' with chip=experiment.as_chip %}
+            {% include "generic/chip.html" with chip=experiment.as_chip %}
           </a>
         </td>
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on|default:"" }}</td>
         <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message|default:"" }}</td>
-        <td class="">
+        <td>
           <i class="fa-solid {% if selected_experiment == experiment %}fa-chevron-down{% else %}fa-chevron-up{% endif %}"></i>
         </td>
       </tr>
       {% if selected_experiment == experiment %}
-        {% include 'participants/partials/experiment_data.html' with experiment=selected_experiment %}
+        {% include "participants/partials/experiment_data.html" with experiment=selected_experiment %}
       {% endif %}
     {% endfor %}
   </tbody>

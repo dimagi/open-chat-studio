@@ -17,9 +17,8 @@
       {% endif %}
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block form %}
-  <div>
     {% render_form_fields form "name" "description" "consent_form" %}
     <div class="divider"></div>
     {% render_form_fields form "type" %}
@@ -42,12 +41,10 @@
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "assistant" %}
       </div>
-      {% flag "flag_pipelines-v2" %}
-        <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Pipeline" x-bind:checked="type === 'pipeline'" x-show="type === 'pipeline'" {% if experiment_type != "pipeline" %}x-cloak{% endif %}>
-        <div role="tabpanel" class="tab-content">
-          {% render_form_fields form "pipeline" %}
-        </div>
-      {% endflag %}
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Pipeline" x-bind:checked="type === 'pipeline'" x-show="type === 'pipeline'" {% if experiment_type != "pipeline" %}x-cloak{% endif %}>
+      <div role="tabpanel" class="tab-content">
+        {% render_form_fields form "pipeline" %}
+      </div>
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Safety" x-show="type !== 'pipeline'">
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "safety_layers" "safety_violation_notification_emails" "input_formatter" %}
@@ -70,16 +67,6 @@
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Source Material" x-show="type === 'llm'" {% if experiment_type != "llm" %}x-cloak{% endif %}>
       <div role="tabpanel" class="tab-content">
         {% render_form_fields form "source_material" %}
-        {% flag "flag_experiment_rag" %}
-          {% if not object.id %}
-            {% include "files/partials/file_formset.html" %}
-          {% else %}
-            <hr class="my-4">
-            {% url "experiments:add_file" request.team.slug object.id as upload_url %}
-            {% url "experiments:remove_file" request.team.slug object.id '000' as delete_url %}
-            {% include "files/partials/file_list.html" with files=object.files.all nested=True %}
-          {% endif %}
-        {% endflag %}
       </div>
 
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Tools" x-show="type === 'llm'">
@@ -89,8 +76,8 @@
           <p class="text-sm">{% translate "Make sure that your selected model supports tool usage" %}</p>
         </div>
         <div class="sm:grid sm:grid-cols-2">
-          {% render_form_fields form "tools"%}
-          {% render_form_fields form "custom_action_operations"%}
+          {% render_form_fields form "tools" %}
+          {% render_form_fields form "custom_action_operations" %}
         </div>
       </div>
 
@@ -102,8 +89,8 @@
             To limit the set of particiapants that can chat with this bot, simply add their identifiers in this list.
             When the list is empty, the bot will accessible via its public link.
           {% endblocktranslate %}
-          <div class="w-96 my-2" x-data="{allowlist: {{ form.initial.participant_allowlist|default:'[]' }}}">
-            <input type="hidden" name="participant_allowlist" id="id_participant_allowlist" :value="allowlist"></input>
+          <div class="w-96 my-2" x-data="{allowlist: {{ form.initial.participant_allowlist|default:'[]' }} }">
+            <input type="hidden" name="participant_allowlist" id="id_participant_allowlist" :value="allowlist">
             <select x-model="allowlist" id="allowlist-multiselect" name="state[]" multiple placeholder="Add participant identifier..." autocomplete="off">
               {% for identifier in team_participant_identifiers %}
                 <option value="{{ identifier }}" {% if identifier in form.initial.participant_allowlist %}selected{% endif %}>{{ identifier }}</option>
@@ -133,7 +120,7 @@
       {% endif %}
     </div>
   {% endif %}
-{% endblock %}
+{% endblock form_actions %}
 {% block page_js %}
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}
   {{ synthetic_voice_options|json_script:"voiceOptions" }}
@@ -162,12 +149,12 @@
         type: '{{ experiment_type }}',
 
         voiceProvider: null,
-        synthetic_voice: {{experiment.synthetic_voice_id|default:'null'}},
+        synthetic_voice: {{ experiment.synthetic_voice_id|default:'null' }},
         synthetic_voice_options: [],
 
         llmProviderId: null,
         llmProvider: null,
-        llm_provider_model: '{{experiment.llm_provider_model.id|default:form.llm_provider_model.value|default:'null'}}',
+        llm_provider_model: '{{ experiment.llm_provider_model.id|default:form.llm_provider_model.value|default:'null' }}',
         llm_provider_model_options: [],
 
         init() {

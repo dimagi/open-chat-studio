@@ -7,12 +7,13 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
-from pgvector.django import HnswIndex, VectorField
+from pgvector.django import HalfVectorField
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel
-from apps.utils.conversions import bytes_to_megabytes
+from apps.utils.conversions import bytes_to_megabytes, humanize_bytes
+from apps.utils.deletion import get_related_m2m_objects
 from apps.web.meta import absolute_url
 
 
@@ -51,32 +52,35 @@ class File(BaseTeamModel, VersionsMixin):
         return f"{self.name}"
 
     @classmethod
-    def from_external_source(cls, filename, external_file, external_id, external_source, team_id):
+    def from_external_source(
+        cls, filename, external_file, external_id, external_source, team_id, metadata: dict = None
+    ):
         if existing := File.objects.filter(
             external_id=external_id, external_source=external_source, team_id=team_id
         ).first():
             return existing
 
-        file_content_bytes = external_file.read() if external_file else None
+        return cls.create(filename, external_file, team_id, external_id, external_source, metadata)
+
+    @classmethod
+    def create(cls, filename, file_obj, team_id, external_id="", external_source="", metadata: dict = None):
+        content = file_obj.read() if file_obj else None
 
         content_type = mimetypes.guess_type(filename)[0]
-        if not content_type and external_file:
+        if not content_type and content:
             # typically means the filename doesn't have an extension
-            content_type = magic.from_buffer(file_content_bytes, mime=True)
+            content_type = magic.from_buffer(content, mime=True)
             extension = mimetypes.guess_extension(content_type)
             # leading '.' is included
             filename = f"{filename}{extension}"
 
-        return cls.from_content(filename, file_content_bytes, content_type, team_id, external_id, external_source)
-
-    @classmethod
-    def from_content(cls, filename, content, content_type, team_id, external_id="", external_source=""):
         new_file = File(
             name=filename,
             external_id=external_id,
             external_source=external_source,
             team_id=team_id,
             content_type=content_type,
+            metadata=metadata or {},
         )
 
         if content:
@@ -98,12 +102,19 @@ class File(BaseTeamModel, VersionsMixin):
             return "application/octet-stream"
 
     @property
+    def is_image(self):
+        return self.content_type.startswith("image/")
+
+    @property
+    def display_size(self):
+        return humanize_bytes(self.content_size)
+
+    @property
     def size_mb(self) -> float:
         """Returns the size of this file in megabytes"""
         return bytes_to_megabytes(self.content_size)
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
             fields=[
@@ -120,6 +131,7 @@ class File(BaseTeamModel, VersionsMixin):
                 self.name = filename
             if not self.content_type:
                 self.content_type = File.get_content_type(self.file)
+        self._clear_version_cache()
         super().save(*args, **kwargs)
 
     def duplicate(self):
@@ -159,16 +171,36 @@ class File(BaseTeamModel, VersionsMixin):
         else:
             self.delete()
 
+    def read_content(self) -> str:
+        from apps.documents.readers import Document
 
-class FileChunkEmbedding(BaseTeamModel):
+        document = Document.from_file(self)
+        return document.get_contents_as_string()
+
+    def is_used(self) -> bool:
+        # get_related_m2m_objects returns a dictionary with the file instance as the key if there are related objects
+        return self in get_related_m2m_objects([self])
+
+
+class FileChunkEmbeddingObjectManager(VersionsObjectManagerMixin):
+    pass
+
+
+class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
+    # See 0009_remove_filechunkembedding_embedding_index_and_more.py migration for the index
     file = models.ForeignKey(File, on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     chunk_number = models.PositiveIntegerField()
     text = models.TextField()
     page_number = models.PositiveIntegerField(blank=True)
-    embedding = VectorField(dimensions=1024)
+    embedding = HalfVectorField(dimensions=settings.EMBEDDING_VECTOR_SIZE)
+    working_version = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="versions",
+    )
+    is_archived = models.BooleanField(default=False)
 
-    class Meta:
-        indexes = [
-            HnswIndex(name="embedding_index", fields=["embedding"], opclasses=["vector_cosine_ops"]),
-        ]
+    objects = FileChunkEmbeddingObjectManager()

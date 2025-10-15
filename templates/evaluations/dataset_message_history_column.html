@@ -1,0 +1,20 @@
+{% load i18n %}
+<div class="text-xs">
+  {% if record.history %}
+    <div class="space-y-1">
+      {% if record.history|length > 5 %}
+        <span class="text-gray-500">... {{ record.history|slice:":-5"|length }} more messages</span>
+      {% endif %}
+      {% for message in record.history|slice:"-5:" %}
+        <div class="text-xs" title="{{ message.content }}">
+          <span class="font-medium">
+            {% if message.message_type == "human" %}User{% elif message.message_type == "ai" %}Assistant{% else %}{{ message.message_type|title }}{% endif %}:
+          </span>
+          <span class="text-gray-500">{{ message.content|truncatewords:15 }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <span class="text-gray-400">{% trans "Empty" %}</span>
+  {% endif %}
+</div>

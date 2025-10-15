@@ -62,7 +62,7 @@ from functools import wraps
 from io import BytesIO
 
 import openai
-from django.db.models import Count, Subquery
+from django.db.models import Count, Exists, OuterRef, Subquery
 from django.forms import ValidationError
 from langchain_core.utils.function_calling import convert_to_openai_tool as lc_convert_to_openai_tool
 from openai import OpenAI
@@ -71,11 +71,13 @@ from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_afte
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options
+from apps.documents.models import CollectionFile
 from apps.files.models import File
-from apps.service_providers.exceptions import OpenAiUnableToLinkFileError
-from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
+from apps.service_providers.exceptions import UnableToLinkFileException
+from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.teams.models import Team
+from apps.utils.deletion import get_related_m2m_objects
 from apps.utils.prompt import validate_prompt_variables
 
 logger = logging.getLogger("ocs.openai_sync")
@@ -228,7 +230,7 @@ def delete_openai_files_for_resource(client, team, resource: ToolResources):
 
 
 def _get_files_to_delete(team, tool_resource_id):
-    """Get files linked to the tool resource that are not referenced by any other tool resource."""
+    """Get files linked to the tool resource that are not referenced by any other tool resource or collection."""
     files_with_single_reference = (
         ToolResources.files.through.objects.filter(toolresources__assistant__team=team)
         .values("file")
@@ -237,8 +239,13 @@ def _get_files_to_delete(team, tool_resource_id):
         .values("file_id")
     )
 
+    # Files that are not used by any collections
+    files_not_in_collections = ~Exists(CollectionFile.objects.filter(file_id=OuterRef("id"), collection__team=team))
+
     subquery = Subquery(files_with_single_reference)
-    return File.objects.filter(toolresources=tool_resource_id, id__in=subquery).iterator()
+    return (
+        File.objects.filter(toolresources=tool_resource_id, id__in=subquery).filter(files_not_in_collections).iterator()
+    )
 
 
 def is_tool_configured_remotely_but_missing_locally(assistant_data, local_tool_types, tool_name: str) -> bool:
@@ -393,8 +400,31 @@ def _sync_tool_resource_files_from_openai(file_ids, ocs_resource):
             unused_files.remove(file.id)
         except KeyError:
             ocs_resource.files.add(_fetch_file_from_openai(ocs_resource.assistant, file_id))
+
     if unused_files:
-        File.objects.filter(id__in=unused_files).delete()
+        unused_files_objects = File.objects.filter(id__in=unused_files)
+        remove_files_from_tool(ocs_resource, unused_files_objects)
+
+
+def remove_files_from_tool(ocs_resource: ToolResources, files: list[File]):
+    """
+    Remove files from the tool resource and delete them if they are not used elsewhere.
+    """
+    client = ocs_resource.assistant.llm_provider.get_llm_service().get_raw_client()
+
+    # Remove the link to the tool resource
+    ocs_resource.files.through.objects.filter(file__in=files).delete()
+
+    file_references = get_related_m2m_objects(files)
+    for file in files:
+        if file in file_references:
+            if ocs_resource.extra.get("vector_store_id") and file.external_id:
+                index_manager = OpenAIRemoteIndexManager(client, index_id=ocs_resource.extra.get("vector_store_id"))
+                index_manager.delete_file_from_index(file_id=file.external_id)
+        else:
+            # The file doesn't have related objects, so it's safe to remove it completely
+            delete_file_from_openai(client, file)
+            file.delete()
 
 
 def _get_files_missing_from_vector_store(client, vector_store_id, file_ids: list[str]):
@@ -417,9 +447,9 @@ def _get_files_missing_from_vector_store(client, vector_store_id, file_ids: list
             break
         kwargs["after"] = vector_store_files.last_id
 
-    vector_store_manager = OpenAIVectorStoreManager(client)
+    vector_store_manager = OpenAIRemoteIndexManager(client, index_id=vector_store_id)
     for file_id in to_delete_remote:
-        vector_store_manager.delete_file(vector_store_id=vector_store_id, file_id=file_id)
+        vector_store_manager.delete_file_from_index(file_id=file_id)
 
     return file_ids
 
@@ -463,11 +493,11 @@ def _sync_tool_resources(assistant):
 
 def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -> str:
     client = assistant.llm_provider.get_llm_service().get_raw_client()
-    vector_store_manager = OpenAIVectorStoreManager(client)
 
     if vector_store_id:
         try:
-            vector_store_manager.get(vector_store_id)
+            vector_store_manager = OpenAIRemoteIndexManager(client, index_id=vector_store_id)
+            vector_store_manager.get()
         except openai.NotFoundError:
             vector_store_id = None
 
@@ -480,12 +510,13 @@ def _update_or_create_vector_store(assistant, name, vector_store_id, file_ids) -
     if vector_store_id:
         file_ids = _get_files_missing_from_vector_store(client, vector_store_id, file_ids)
     else:
-        vector_store_id = vector_store_manager.create_vector_store(name=name, file_ids=file_ids[:100])
+        vector_store_id = assistant.llm_provider.create_remote_index(name=name, file_ids=file_ids[:100])
         file_ids = file_ids[100:]
 
-    with contextlib.suppress(OpenAiUnableToLinkFileError):
+    with contextlib.suppress(UnableToLinkFileException):
         # This will show an out-of-sync status on the assistant where the user can handle the error appropriately
-        vector_store_manager.link_files_to_vector_store(vector_store_id, file_ids)
+        vector_store_manager = OpenAIRemoteIndexManager(client, index_id=vector_store_id)
+        vector_store_manager.link_files_to_remote_index(file_ids)
 
     return vector_store_id
 

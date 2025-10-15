@@ -1,24 +1,41 @@
+import json
+import os
 from datetime import datetime
+from inspect import signature
 from unittest import mock
 
 import pytest
 import pytz
 from django.utils import timezone
-from freezegun import freeze_time
+from langchain_core.tools import StructuredTool
+from time_machine import travel
 
 from apps.chat.agent import tools
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
+    CITATION_PROMPT,
+    SEARCH_TOOL_HEADER,
     TOOL_CLASS_MAP,
     DeleteReminderTool,
-    UpdateParticipantDataTool,
+    SearchIndexTool,
+    SearchToolConfig,
+    _convert_to_sync_tool,
+    _get_search_tool_footer,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
+    get_mcp_tool_instances,
 )
+from apps.chat.models import ChatAttachment
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
+from apps.files.models import FileChunkEmbedding
+from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
+from apps.utils.factories.mcp_integrations import MCPServerFactory
+from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.time import pretty_date
 
 
@@ -26,7 +43,10 @@ class BaseTestAgentTool:
     tool_cls: type[tools.CustomBaseTool]
 
     def _invoke_tool(self, session, **tool_kwargs):
-        tool = self.tool_cls(experiment_session=session)
+        kwargs = {"experiment_session": session}
+        if self.tool_cls.requires_callbacks:
+            kwargs["tool_callbacks"] = ToolCallbacks()
+        tool = self.tool_cls(**kwargs)
         return tool.action(**tool_kwargs)
 
     @staticmethod
@@ -153,7 +173,7 @@ class TestMoveScheduledMessageDateTool(BaseTestAgentTool):
         assert response == "The user cannot do that. Only weekdays and time of day can be changed"
 
     def test_user_can_set_custom_date_for_their_messages(self, session):
-        with freeze_time("2024-01-01"):
+        with travel("2024-01-01", tick=False):
             scheduled_message = ScheduledMessage.objects.create(
                 participant=session.participant,
                 team=session.team,
@@ -174,7 +194,7 @@ class TestMoveScheduledMessageDateTool(BaseTestAgentTool):
             assert expected_date == "Monday, 01 January 2024 00:00:00 UTC"
 
     def test_update_schedule_tool(self, session):
-        with freeze_time("2024-01-01"):
+        with travel("2024-01-01", tick=False):
             message = ScheduledMessage.objects.create(
                 participant=session.participant,
                 team=session.team,
@@ -196,7 +216,7 @@ class TestMoveScheduledMessageDateTool(BaseTestAgentTool):
             message.refresh_from_db()
             expected_date = pretty_date(message.next_trigger_date)
             assert expected_date == "Friday, 05 January 2024 08:00:00 UTC"
-            assert response == f"The new datetime is {expected_date}"
+            assert response == f"The schedule has been moved. The updated schedule datetime is {expected_date}"
 
 
 @pytest.mark.django_db()
@@ -234,7 +254,7 @@ class TestDeleteReminderTool:
             custom_schedule_params=self.schedule_params(),
         )
         response = self._invoke_tool(session, message_id=scheduled_message.external_id)
-        assert response == "Success"
+        assert response == "The reminder has been successfully deleted."
         scheduled_message.refresh_from_db()
         assert scheduled_message.cancelled_at is not None
 
@@ -337,7 +357,7 @@ def test_create_schedule_message_experiment_does_not_exist():
         response = create_schedule_message(
             experiment_session, message, name="Test", start_date=None, is_recurring=True, **kwargs
         )
-        assert response == "Experiment does not exist! Could not create scheduled message"
+        assert response == "Could not create scheduled message"
 
         scheduled_message_count = ScheduledMessage.objects.filter(
             experiment=experiment_session.experiment,
@@ -349,14 +369,204 @@ def test_create_schedule_message_experiment_does_not_exist():
 
 
 @pytest.mark.django_db()
-class TestUpdateParticipantDataTool:
-    def _invoke_tool(self, session, **tool_kwargs):
-        tool = UpdateParticipantDataTool(experiment_session=session)
-        return tool.action(**tool_kwargs)
+class TestAppendToParticipantDataTool(BaseTestAgentTool):
+    tool_cls = tools.AppendToParticipantDataTool
 
-    @pytest.fixture()
-    def session(self, db):
-        return ExperimentSessionFactory()
+    def test_append_when_data_does_not_exist(self, session):
+        response = self._invoke_tool(session, key="test", value="new_value", tool_call_id="123", graph_state={})
+        assert (
+            response.update["messages"][-1].content
+            == "The value was appended to the end of the list. The new list is: ['new_value']"
+        )
+        assert response.update["participant_data"] == {"test": ["new_value"]}
+
+    def test_append_when_data_exists(self, session):
+        response = self._invoke_tool(
+            session,
+            key="test",
+            value="second_value",
+            tool_call_id="123",
+            graph_state={"participant_data": {"test": "first_value"}},
+        )
+        assert (
+            response.update["messages"][-1].content
+            == "The value was appended to the end of the list. The new list is: ['first_value', 'second_value']"
+        )
+        assert response.update["participant_data"] == {"test": ["first_value", "second_value"]}
+
+    @pytest.mark.parametrize(
+        ("existing_value", "new_value", "expected_result"),
+        [
+            ("string", "new_value", ["string", "new_value"]),
+            ("string", ["new_value1", "new_value2"], ["string", "new_value1", "new_value2"]),
+            ({"key": "value"}, "new_value", [{"key": "value"}, "new_value"]),
+            (["val1", "val2"], "new_value", ["val1", "val2", "new_value"]),
+        ],
+    )
+    def test_append_different_values(self, session, existing_value, new_value, expected_result):
+        response = self._invoke_tool(
+            session,
+            key="test",
+            value=new_value,
+            tool_call_id="123",
+            graph_state={"participant_data": {"test": existing_value}},
+        )
+        assert (
+            response.update["messages"][-1].content
+            == f"The value was appended to the end of the list. The new list is: {expected_result}"
+        )
+        assert response.update["participant_data"] == {"test": expected_result}
+
+
+@pytest.mark.django_db()
+class TestIncrementParticipantDataTool(BaseTestAgentTool):
+    tool_cls = tools.IncrementCounterTool
+
+    def test_increment(self, session):
+        response = self._invoke_tool(session, counter="test", value=1, tool_call_id="1", graph_state={})
+        assert (
+            response.update["messages"][-1].content
+            == "The 'test' counter has been successfully incremented. The new value is 1."
+        )
+        assert response.update["participant_data"] == {"_counter_test": 1}
+
+
+@pytest.mark.django_db()
+class TestSearchIndexTool:
+    def load_vector_data(self):
+        current_directory = os.path.dirname(os.path.abspath(__file__))
+        vector_data_file = os.path.join(current_directory, "data/vector_data.json")
+        with open(vector_data_file) as json_file:
+            return json.load(json_file)
+
+    @pytest.mark.parametrize("generate_citations", [True, False])
+    def test_action_returns_relevant_chunks(self, generate_citations, team, local_index_manager_mock):
+        collection = CollectionFactory(team=team)
+        file = FileFactory(team=team, name="the_greatness_of_fruit.txt")
+        vector_data = self.load_vector_data()
+
+        FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=1,
+            text="Oranges are nice",
+            embedding=vector_data["Oranges are nice"],
+            page_number=0,
+        )
+        FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=2,
+            text="Apples are great",
+            embedding=vector_data["Apples are great"],
+            page_number=0,
+        )
+        FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=3,
+            text="Greatness is subjective",
+            embedding=vector_data["Greatness is subjective"],
+            page_number=0,
+        )
+
+        # The return value of get_embedding_vector is what determines the search results.
+        local_index_manager_mock.get_embedding_vector.return_value = vector_data["What are great fruit?"]
+        search_config = SearchToolConfig(index_id=collection.id, max_results=2, generate_citations=generate_citations)
+        result = SearchIndexTool(search_config=search_config).action(query="What are great fruit?")
+        footer = _get_search_tool_footer(generate_citations)
+        context_block = f"""<context>
+<file>
+  <file_id>{file.id}</file_id>
+  <filename>the_greatness_of_fruit.txt</filename>
+  <context>
+    <![CDATA[Apples are great]]>
+  </context>
+</file>
+<file>
+  <file_id>{file.id}</file_id>
+  <filename>the_greatness_of_fruit.txt</filename>
+  <context>
+    <![CDATA[Oranges are nice]]>
+  </context>
+</file>
+</context>"""
+        if generate_citations:
+            expected_result = f"""
+{SEARCH_TOOL_HEADER}
+{CITATION_PROMPT}
+{context_block}
+{footer}
+"""
+        else:
+            expected_result = f"""
+{SEARCH_TOOL_HEADER}
+
+{context_block}
+{footer}
+"""
+        assert result == expected_result
+
+
+def test_tools_present():
+    for tool in AgentTools.values:
+        assert tool in TOOL_CLASS_MAP
+
+
+def test_convert_to_sync_tool():
+    """Test that an async tool is converted to a sync tool and that the function's signature is preserved."""
+
+    async def async_func(url: str, method: str = "GET"):
+        return f"{method} {url}"
+
+    async_tool = StructuredTool(
+        name="test-tool",
+        description="test-description",
+        args_schema={},
+        response_format="content_and_artifact",
+        func=None,
+        coroutine=async_func,
+    )
+
+    sync_tool = _convert_to_sync_tool(async_tool)
+    assert sync_tool.coroutine is None
+    assert sync_tool.func is not None
+    assert str(signature(sync_tool.func)) == "(url: str, method: str = 'GET')"
+    assert sync_tool.func("https://example.com", "GET") == "GET https://example.com"
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.mcp_integrations.models.McpServer.fetch_tools")
+def test_get_mcp_tool_instances(fetch_tools, team):
+    async def async_func(url: str, method: str = "GET"):
+        return f"{method} {url}"
+
+    fetch_tools.return_value = [
+        StructuredTool(
+            name="test-tool",
+            description="test-description",
+            args_schema={},
+            response_format="content_and_artifact",
+            func=None,
+            coroutine=async_func,
+        )
+    ]
+    server = MCPServerFactory(team=team)
+    node = NodeFactory(
+        params={
+            "mcp_tools": [f"{server.id}:test-tool"],
+        }
+    )
+    tools = get_mcp_tool_instances(node, team)
+    assert len(tools) == 1
+
+
+@pytest.mark.django_db()
+class TestSetSessionStateTool(BaseTestAgentTool):
+    tool_cls = tools.SetSessionStateTool
 
     @pytest.mark.parametrize(
         "value",
@@ -372,16 +582,37 @@ class TestUpdateParticipantDataTool:
             [{"key": "value"}],
         ],
     )
-    def test_update(self, session, value):
-        response = self._invoke_tool(session, key="test", value=value)
-        assert response == "Success"
+    def test_set_value(self, session, value):
+        response = self._invoke_tool(session, key="test_key", value=value, tool_call_id="123")
 
-        assert session.participant_data_from_experiment == {"test": value}
+        assert "The value has been set in session state for key 'test_key'" in response.update["messages"][-1].content
+        assert response.update["session_state"] == {"test_key": value}
 
 
-def test_tools_present():
-    non_user_facing_tools = [AgentTools.ATTACH_MEDIA]
-    for tool in AgentTools.values:
-        if tool in non_user_facing_tools:
-            continue
-        assert tool in TOOL_CLASS_MAP
+@pytest.mark.django_db()
+class TestGetSessionStateTool(BaseTestAgentTool):
+    tool_cls = tools.GetSessionStateTool
+
+    def test_retrieve_session_state(self, session):
+        test_data = {"user_preference": "dark_mode", "page": "home"}
+        response = self._invoke_tool(session, key="user_preference", graph_state={"session_state": test_data})
+        assert "dark_mode" in response
+
+    def test_get_nonexistent_key_from_populated_state(self, session):
+        response = self._invoke_tool(session, key="missing_key", graph_state={})
+        assert "No value found" in response
+
+
+class TestAttachMediaTool(BaseTestAgentTool):
+    tool_cls = tools.AttachMediaTool
+
+    def test_attach_files(self, session):
+        chat_attachment, _ = ChatAttachment.objects.get_or_create(chat=session.chat, tool_type="ocs_attachments")
+        assert chat_attachment.files.count() == 0
+
+        files = FileFactory.create_batch(3)
+        response = self._invoke_tool(session, file_ids=[file.id for file in files])
+
+        assert chat_attachment.files.count() == 3
+        assert all(str(file.id) in response for file in files)
+        print(response)

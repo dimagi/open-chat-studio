@@ -55,7 +55,6 @@ class ChatbotSettingsForm(forms.ModelForm):
             "synthetic_voice",
             "voice_response_behaviour",
             "echo_transcript",
-            "use_processor_bot_voice",
             "trace_provider",
             "debug_mode_enabled",
             "conversational_consent_enabled",
@@ -63,13 +62,10 @@ class ChatbotSettingsForm(forms.ModelForm):
             "post_survey",
             "participant_allowlist",
             "seed_message",
+            "file_uploads_enabled",
         ]
         labels = {"participant_allowlist": "Participant allowlist"}
         help_texts = {
-            "use_processor_bot_voice": (
-                "In a multi-bot setup, use the configured voice of the bot that generated the output. If it doesn't "
-                "have one, the router bot's voice will be used."
-            ),
             "debug_mode_enabled": (
                 "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
                 "This is applicable only for router bots."

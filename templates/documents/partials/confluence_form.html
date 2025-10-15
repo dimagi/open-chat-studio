@@ -1,0 +1,7 @@
+{% load form_tags %}
+{% render_form_fields form "source_type" "auto_sync_enabled" "auth_provider" "base_url" "max_pages" %}
+<fieldset class="fieldset bg-base-200 border-base-300 rounded-box w-xs border p-4">
+  <legend class="fieldset-legend">Page load options</legend>
+  <p class="label">Only one option can be used to load pages.</p>
+  {% render_form_fields form "space_key" "label" "cql" "page_ids" %}
+</fieldset>

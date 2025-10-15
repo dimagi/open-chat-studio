@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from langchain.callbacks.base import BaseCallbackHandler
     from langfuse import Langfuse
 
+    from apps.experiments.models import ExperimentSession
+
 
 logger = logging.getLogger("ocs.tracing.langfuse")
 
@@ -45,19 +47,22 @@ class LangFuseTracer(Tracer):
         self,
         trace_name: str,
         trace_id: UUID,
-        session_id: str,
-        user_id: str,
+        session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         if self.trace:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        super().start_trace(trace_name, trace_id, session_id, user_id, inputs)
+        super().start_trace(trace_name, trace_id, session, inputs)
 
         self.client = client_manager.get(self.config)
         self.trace = self.client.trace(
-            name=trace_name, session_id=session_id, user_id=user_id, input=inputs, metadata=metadata
+            name=trace_name,
+            session_id=str(session.external_id),
+            user_id=session.participant.identifier,
+            input=inputs,
+            metadata=metadata,
         )
 
     def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
@@ -94,7 +99,7 @@ class LangFuseTracer(Tracer):
             "level": level,
         }
 
-        self.spans[span_id] = self._get_current_span().span(**content_span)
+        self.spans[span_id] = self._get_current_observation().span(**content_span)
 
     def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         if not self.ready:
@@ -117,7 +122,7 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        return LangfuseCallbackHandler(stateful_client=self._get_current_span(), update_stateful_client=False)
+        return LangfuseCallbackHandler(stateful_client=self._get_current_observation(), update_stateful_client=False)
 
     def get_trace_metadata(self) -> dict[str, str]:
         if not self.ready:
@@ -129,12 +134,27 @@ class LangFuseTracer(Tracer):
             "trace_provider": self.type,
         }
 
-    def _get_current_span(self) -> StatefulTraceClient | StatefulSpanClient:
+    def _get_current_observation(self) -> StatefulTraceClient | StatefulSpanClient:
+        """
+        Returns the most recent active span if one exists, otherwise returns the root trace.
+        This ensures new spans are properly nested under their parent spans.
+        """
         if self.spans:
             last_span = next(reversed(self.spans))
             return self.spans[last_span]
         else:
             return self.trace
+
+    def add_trace_tags(self, tags: list[str]) -> None:
+        if not self.ready:
+            raise ServiceNotInitializedException("Service not initialized.")
+        self.trace.update(tags=tags)
+
+    def set_output_message_id(self, output_message_id: str) -> None:
+        pass
+
+    def set_input_message_id(self, input_message_id: str) -> None:
+        pass
 
 
 class ClientManager:

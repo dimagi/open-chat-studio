@@ -1,4 +1,4 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load form_tags %}
 {% load static %}
 
@@ -11,7 +11,7 @@
     data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
   >
   </script>
-{% endblock %}
+{% endblock page_js %}
 
 {% block body %}
   <div class="app-card max-w-5xl mx-auto">
@@ -24,7 +24,7 @@
           </ul>
         </div>
       {% endif %}
-    {% endblock %}
+    {% endblock breadcrumbs %}
     <h1 class="pg-title">Experiment Review</h1>
     <div class="prose max-w-none!">
       <p>Thanks for completing the experiment!</p>
@@ -53,6 +53,6 @@
         <p class="mt-2 text-sm text-gray-700">A log of your chat history, in case you'd like to refer to it.</p>
       </div>
     </div>
-    {% include "experiments/components/experiment_chat.html" %}
+    {% include "experiments/components/experiment_chat.html" with hide_translation=True %}
   </div>
-{% endblock %}
+{% endblock body %}

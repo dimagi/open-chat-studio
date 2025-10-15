@@ -15,9 +15,9 @@ from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_core.utils.pydantic import TypeBaseModel, is_basemodel_subclass
 from openai import OpenAI
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from apps.service_providers.llm_service import LlmService
+from apps.service_providers.llm_service import LlmService, OpenAIGenericService
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.token_counters import TokenCounter
@@ -78,12 +78,16 @@ class FakeLlm(FakeListChatModel):
             FakeLlm(responses=[AIMessage(content="value")]).with_structured_output(...) -> {"route": "value"}
         """
         from langchain_core.output_parsers.openai_tools import PydanticToolsParser
+        from langchain_core.runnables import RunnableLambda
 
         if isinstance(schema, type) and is_basemodel_subclass(schema):
             output_parser = PydanticToolsParser(tools=[cast(TypeBaseModel, schema)], first_tool_only=True)
             llm = self.bind_tools([schema], tool_choice="any")
             return llm | output_parser
-        raise Exception("Unsupported schema type, only pydantic models are supported")
+        elif isinstance(schema, dict):
+            # Handle JSON schema - for testing purposes, just return the response directly
+            return RunnableLambda(lambda _: self.responses[0] if self.responses else {})
+        raise Exception("Unsupported schema type, only pydantic models and dicts are supported")
 
 
 @dataclasses.dataclass
@@ -117,6 +121,37 @@ class FakeLlmService(LlmService):
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         return []
+
+
+class FakeOpenAILlmService(OpenAIGenericService):
+    llm: Any
+    token_counter: TokenCounter
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def get_chat_model(self, llm_model: str, temperature: float):
+        return self.llm
+
+    def get_assistant(self, assistant_id: str, as_agent=False):
+        client = OpenAI(api_key="fake_key", base_url="https://fake.com")
+        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=client)
+
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(self.token_counter)
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
+        return []
+
+    @property
+    def openai_api_key(self) -> str:
+        return "api_key-123"
+
+    @property
+    def openai_api_base(self) -> str:
+        return "openai_api_base"
+
+    @property
+    def openai_organization(self) -> str:
+        return "openai_organization"
 
 
 class FakeAssistant(RunnableSerializable[dict, OutputType]):
@@ -157,8 +192,8 @@ class FakeLlmEcho(FakeLlmSimpleTokenCount):
     def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
         """Returns "{system_message} {user_message}" """
         self.calls.append(mock.call(messages, *args, **kwargs))
+        user_message = messages[-1].text()
 
-        user_message = messages[-1].content
         try:
             system_message = next(message.content for message in messages if message.type == "system")
         except StopIteration:
@@ -187,9 +222,9 @@ def mock_llm(responses: list[Any], token_counts: list[int] = None):
         yield service
 
 
-def build_fake_llm_service(responses, token_counts, fake_llm=None):
+def build_fake_llm_service(responses, token_counts, fake_llm=None, llm_service_class=FakeLlmService):
     fake_llm = fake_llm or FakeLlmSimpleTokenCount(responses=responses)
-    return FakeLlmService(llm=fake_llm, token_counter=FakeTokenCounter(token_counts=token_counts))
+    return llm_service_class(llm=fake_llm, token_counter=FakeTokenCounter(token_counts=token_counts))
 
 
 def build_fake_llm_echo_service(token_counts=None, include_system_message=True):
@@ -197,3 +232,33 @@ def build_fake_llm_echo_service(token_counts=None, include_system_message=True):
         token_counts = [0]
     llm = FakeLlmEcho(include_system_message=include_system_message)
     return FakeLlmService(llm=llm, token_counter=FakeTokenCounter(token_counts=token_counts))
+
+
+def dict_to_json_schema(data: dict) -> type[BaseModel]:
+    """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
+    The input should be in the format {"key": "description", "key2": [{"key": "description"}]}
+
+    Nested objects are not supported at the moment
+
+    Input example 1:
+    {"name": "the user's name", "surname": "the user's surname"}
+
+    Input example 2:
+    {"name": "the user's name", "pets": [{"name": "the pet's name": "type": "the type of animal"}]}
+
+    """
+
+    def _create_model_from_data(value_data, model_name: str):
+        pydantic_schema = {}
+        for key, value in value_data.items():
+            if isinstance(value, str):
+                pydantic_schema[key] = (str | None, Field(description=value))
+            elif isinstance(value, list):
+                model = _create_model_from_data(value[0], key.capitalize())
+                pydantic_schema[key] = (list[model], Field(description=f"A list of {key}"))
+        return create_model(model_name, **pydantic_schema)
+
+    Model = _create_model_from_data(data, "CustomModel")
+
+    Model.description = ""
+    return Model

@@ -35,6 +35,7 @@ from apps.teams.models import Flag
 from ..experiments.helpers import update_experiment_name_by_pipeline_id
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
+from ..utils.prompt import PromptVars
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -61,7 +62,9 @@ class PipelineTableView(SingleTableView, PermissionRequiredMixin):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return Pipeline.objects.filter(team=self.request.team, is_version=False, is_archived=False).order_by("name")
+        return Pipeline.objects.filter(
+            team=self.request.team, working_version=None, is_archived=False, experiment=None
+        ).order_by("name")
 
 
 class CreatePipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -87,7 +90,13 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "pipeline_id": kwargs["pk"],
             "pipeline_name": pipeline.name,
             "node_schemas": _pipeline_node_schemas(),
-            "parameter_values": _pipeline_node_parameter_values(self.request.team, llm_providers, llm_provider_models),
+            "parameter_values": _pipeline_node_parameter_values(
+                team=self.request.team,
+                llm_providers=llm_providers,
+                llm_provider_models=llm_provider_models,
+                synthetic_voices=[],
+                include_versions=pipeline.is_a_version,
+            ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
             "read_only": pipeline.is_a_version,
@@ -126,15 +135,17 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
 
 
-def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
+def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, synthetic_voices, include_versions=False):
     """Returns the possible values for each input type"""
-    source_materials = SourceMaterial.objects.working_versions_queryset().filter(team=team).values("id", "topic").all()
-    assistants = OpenAiAssistant.objects.working_versions_queryset().filter(team=team).values("id", "name").all()
-    collections = (
-        Collection.objects.working_versions_queryset().filter(team=team, is_index=False).values("id", "name").all()
-    )
+    common_filters = {"team": team}
+    if not include_versions:
+        common_filters["working_version"] = None
+    source_materials = SourceMaterial.objects.filter(**common_filters).values("id", "topic").all()
+    assistants = OpenAiAssistant.objects.filter(**common_filters).values("id", "name").all()
+    collections = Collection.objects.filter(**common_filters).filter(is_index=False).values("id", "name").all()
+    # Until OCS fully supports RAG, we can only use remote indexes
     collection_indexes = (
-        Collection.objects.working_versions_queryset().filter(team=team, is_index=True).values("id", "name").all()
+        Collection.objects.filter(**common_filters).filter(team=team, is_index=True).values("id", "name").all()
     )
 
     def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):
@@ -154,6 +165,12 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
     custom_action_operations = []
     for _custom_action_name, operations_disp in get_custom_action_operation_choices(team):
         custom_action_operations.extend(operations_disp)
+
+    mcp_tools = [
+        (f"{server.id}:{tool}", f"{server.name}: {tool}")
+        for server in team.mcpserver_set.all()
+        for tool in server.available_tools
+    ]
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
@@ -182,6 +199,9 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
                 _option(
                     value=collection["id"],
                     label=collection["name"],
+                    edit_url=reverse(
+                        "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": collection["id"]}
+                    ),
                 )
                 for collection in collections
             ]
@@ -192,28 +212,41 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models):
                 _option(
                     value=index["id"],
                     label=index["name"],
+                    edit_url=reverse(
+                        "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": index["id"]}
+                    ),
                 )
                 for index in collection_indexes
             ]
         ),
         OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
+        OptionsSource.mcp_tools: [_option(value, label) for value, label in mcp_tools],
         OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
+        OptionsSource.text_editor_autocomplete_vars_llm_node: PromptVars.get_all_prompt_vars(),
+        OptionsSource.text_editor_autocomplete_vars_router_node: PromptVars.get_router_prompt_vars(),
+        OptionsSource.synthetic_voice_id: sorted(
+            [
+                _option(voice.id, str(voice), voice.service.lower()) | {"provider_id": voice.voice_provider_id}
+                for voice in synthetic_voices
+            ],
+            key=lambda v: v["label"],
+        ),
     }
 
 
 def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models: QuerySet):
-    """Returns the default values for each input type"""
-    llm_provider_model_id = None
+    llm_provider_model = None
     provider_id = None
     if len(llm_providers) > 0:
-        provider = llm_providers[0]
-        provider_id = provider["id"]
-        llm_provider_model_id = llm_provider_models.filter(type=provider["type"]).first()
+        for provider in llm_providers:
+            llm_provider_model = llm_provider_models.filter(type=provider["type"]).first()
+            if llm_provider_model:
+                provider_id = provider["id"]
+                break
 
     return {
-        # these keys must match field names on the node schemas
         "llm_provider_id": provider_id,
-        "llm_provider_model_id": llm_provider_model_id.id,
+        "llm_provider_model_id": llm_provider_model.id if llm_provider_model else None,
     }
 
 

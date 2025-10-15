@@ -1,11 +1,7 @@
-import datetime
-import inspect
 import json
 import logging
-import random
-import time
 import unicodedata
-from typing import Annotated, ClassVar, Literal, Self
+from typing import Annotated, Any, ClassVar, Literal, Self
 
 import tiktoken
 from django.conf import settings
@@ -19,20 +15,26 @@ from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.constants import END
+from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
-from RestrictedPython import compile_restricted, safe_builtins, safe_globals
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.chat.agent.tools import get_node_tools
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
-from apps.experiments.models import BuiltInTools, ExperimentSession, ParticipantData
-from apps.pipelines.exceptions import PipelineNodeBuildError, PipelineNodeRunError
+from apps.experiments.models import BuiltInTools, ExperimentSession
+from apps.pipelines.exceptions import (
+    AbortPipeline,
+    CodeNodeRunError,
+    PipelineNodeBuildError,
+    PipelineNodeRunError,
+    WaitForNextInput,
+)
 from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import (
     NodeSchema,
@@ -44,21 +46,22 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
-from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
-from apps.service_providers.llm_service.history_managers import PipelineHistoryManager
-from apps.service_providers.llm_service.main import OpenAIBuiltinTool
-from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
+from apps.service_providers.llm_service import LlmService
+from apps.service_providers.llm_service.adapters import AssistantAdapter
+from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
-    AgentLLMChat,
     AssistantChat,
     ChainOutput,
-    SimpleLLMChat,
 )
 from apps.service_providers.models import LlmProviderModel
+from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
+from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
@@ -103,6 +106,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
             content = {
                 "input": input,
                 "temp_state": state.get("temp_state", {}),
+                "session_state": state.get("session_state", {}),
             }
 
             if "experiment_session" in state and state["experiment_session"]:
@@ -123,8 +127,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                             or [],
                         }
                     )
-                proxy = self.get_participant_data_proxy(state)
-                content["participant_data"] = proxy.get() or {}
+                content["participant_data"] = ParticipantDataProxy.from_state(state).get() or {}
 
             template = env.from_string(self.template_string)
             output = template.render(content)
@@ -142,7 +145,25 @@ class LLMResponseMixin(BaseModel):
         default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
     )
 
-    def get_llm_service(self):
+    @model_validator(mode="after")
+    def validate_llm_model_deprecation(self):
+        try:
+            model = self.get_llm_provider_model()
+        except PipelineNodeBuildError as e:
+            raise PydanticCustomError(
+                "invalid_model",
+                str(e),
+                {"field": "llm_provider_id"},
+            ) from None
+        if model.deprecated:
+            raise PydanticCustomError(
+                "deprecated_model",
+                f"LLM provider model '{model.name}' is deprecated.",
+                {"field": "llm_provider_id"},
+            )
+        return self
+
+    def get_llm_service(self) -> LlmService:
         from apps.service_providers.models import LlmProvider
 
         try:
@@ -199,12 +220,12 @@ class HistoryMixin(LLMResponseMixin):
             raise PydanticCustomError("invalid_history_name", "A history name is required for named history")
         return value
 
-    def _get_history_name(self, node_id):
+    def _get_history_name(self):
         if self.history_type == PipelineChatHistoryTypes.NAMED:
             return self.history_name
-        return node_id
+        return self.node_id
 
-    def _get_history(self, session: ExperimentSession, node_id: str, input_messages: list) -> list[BaseMessage]:
+    def get_history(self, session: ExperimentSession, input_messages: list) -> list[BaseMessage]:
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return []
 
@@ -223,7 +244,7 @@ class HistoryMixin(LLMResponseMixin):
 
         try:
             history: PipelineChatHistory = session.pipeline_chat_history.get(
-                type=self.history_type, name=self._get_history_name(node_id)
+                type=self.history_type, name=self._get_history_name()
             )
         except PipelineChatHistory.DoesNotExist:
             return []
@@ -240,7 +261,7 @@ class HistoryMixin(LLMResponseMixin):
             history_mode=self.history_mode,
         )
 
-    def _save_history(self, session: ExperimentSession, node_id: str, human_message: str, ai_message: str):
+    def save_history(self, session: ExperimentSession, human_message: str, ai_message: str):
         if self.history_type == PipelineChatHistoryTypes.NONE:
             return
 
@@ -248,10 +269,8 @@ class HistoryMixin(LLMResponseMixin):
             # Global History is saved outside of the node
             return
 
-        history, _ = session.pipeline_chat_history.get_or_create(
-            type=self.history_type, name=self._get_history_name(node_id)
-        )
-        message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=node_id)
+        history, _ = session.pipeline_chat_history.get_or_create(type=self.history_type, name=self._get_history_name())
+        message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=self.node_id)
         return message
 
 
@@ -261,7 +280,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
-    def _process(self, input, **kwargs) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState:
         llm = self.get_chat_model()
         output = llm.invoke(input, config=self._config)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
@@ -308,7 +327,7 @@ class AnthropicWebSearchToolConfig(BuiltinToolConfig):
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
-    """Uses and LLM to respond to the input."""
+    """Uses an LLM to respond to the input."""
 
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
@@ -323,22 +342,33 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     )
     prompt: str = Field(
         default="You are a helpful assistant. Answer the user's query as best you can",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(
+            widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars_llm_node
+        ),
     )
     collection_id: OptionalInt = Field(
         None,
         title="Media",
-        json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection, flag_required="flag_pipelines-v2"
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection),
     )
     collection_index_id: OptionalInt = Field(
         None,
         title="Collection Index",
-        json_schema_extra=UiSchema(
-            widget=Widgets.select, options_source=OptionsSource.collection_index, flag_required="flag_pipelines-v2"
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection_index),
     )
+    max_results: OptionalInt = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="The maximum number of results to retrieve from the index",
+        json_schema_extra=UiSchema(widget=Widgets.range),
+    )
+    generate_citations: bool = Field(
+        default=True,
+        description="Allow files from this collection to be referenced in LLM responses and downloaded by users",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
+
     tools: list[str] = Field(
         default_factory=list,
         description="The tools to enable for the bot",
@@ -364,6 +394,21 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         description="Configuration for builtin tools",
         json_schema_extra=UiSchema(widget=Widgets.built_in_tools_config, discriminator_field="llm_provider_type"),
     )
+    mcp_tools: list[str] = Field(
+        default_factory=list,
+        title="MCP Tools",
+        description="MCP tools to enable for the bot",
+        json_schema_extra=UiSchema(
+            widget=Widgets.multiselect, options_source=OptionsSource.mcp_tools, flag_required="flag_mcp"
+        ),
+    )
+    history_type: PipelineChatHistoryTypes = Field(
+        PipelineChatHistoryTypes.GLOBAL,
+        json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
+    )
+    synthetic_voice_id: OptionalInt = Field(
+        None, title="Voice Model", json_schema_extra=UiSchema(widget=Widgets.voice_widget)
+    )
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
@@ -374,14 +419,16 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             "media": self.collection_id,
         }
         try:
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=set(PromptVars.values))
+            # FUTURE TODO: add temp_state and session_state to PromptVars
+            known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
             return self
         except ValidationError as e:
             raise PydanticCustomError(
                 "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
             ) from None
 
-    @field_validator("tools", "built_in_tools", mode="before")
+    @field_validator("tools", "built_in_tools", "mcp_tools", mode="before")
     def ensure_value(cls, value: str):
         return value or []
 
@@ -405,54 +452,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         return value
 
     def _process(self, input, state: PipelineState) -> PipelineState:
-        session: ExperimentSession | None = state.get("experiment_session")
-        # Get runnable
-        provider_model = self.get_llm_provider_model()
-        chat_model = self.get_chat_model()
-        history_manager = PipelineHistoryManager.for_llm_chat(
-            session=session,
-            node_id=self.node_id,
-            history_type=self.history_type,
-            history_name=self.history_name,
-            max_token_limit=provider_model.max_token_limit,
-            chat_model=chat_model,
-        )
-        tools = get_node_tools(self.django_node, session, attachment_callback=history_manager.attach_file_id)
-        built_in_tools = self.built_in_tools
-        tools.extend(self.get_llm_service().attach_built_in_tools(built_in_tools, self.tool_config))
-        if self.collection_index_id:
-            collection = Collection.objects.get(id=self.collection_index_id)
-            builtin_tools = OpenAIBuiltinTool(type="file_search", vector_store_ids=[collection.openai_vector_store_id])
-            tools.append(builtin_tools)
-
-        chat_adapter = ChatAdapter.for_pipeline(
-            session=session,
-            node=self,
-            llm_service=self.get_llm_service(),
-            provider_model=provider_model,
-            tools=tools,
-            disabled_tools=self.disabled_tools,
-        )
-        allowed_tools = chat_adapter.get_allowed_tools()
-        # TODO: tracing
-        # if len(tools) != len(allowed_tools):
-        # self.logger.info(
-        #     "Some tools have been disabled: %s", [tool.name for tool in tools if tool not in allowed_tools]
-        # )
-
-        if allowed_tools:
-            chat = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
-        else:
-            chat = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
-
-        # Invoke runnable
-        result = chat.invoke(input=input)
-        return PipelineState.from_node_output(
-            node_name=self.name,
-            node_id=self.node_id,
-            output=result.output,
-            output_message_metadata=history_manager.output_message_metadata,
-        )
+        return execute_sub_agent(self, state, input)
 
 
 class SendEmail(PipelineNode, OutputMessageTagMixin):
@@ -523,7 +523,7 @@ class BooleanNode(PipelineRouterNode):
     )
 
     def _process_conditional(self, state: PipelineState) -> tuple[Literal["true", "false"], bool]:
-        if self.input_equals == state["messages"][-1]:
+        if self.input_equals == state["node_input"]:
             return "true", False
         return "false", False
 
@@ -601,7 +601,13 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
     prompt: str = Field(
         default="You are an extremely helpful router",
         min_length=1,
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(
+            widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars_router_node
+        ),
+    )
+    history_type: PipelineChatHistoryTypes = Field(
+        PipelineChatHistoryTypes.NODE,
+        json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
 
     @model_validator(mode="after")
@@ -610,9 +616,8 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "prompt": self.prompt,
         }
         try:
-            validate_prompt_variables(
-                context=context, prompt_key="prompt", known_vars=set([PromptVars.PARTICIPANT_DATA])
-            )
+            known_vars = {PromptVars.PARTICIPANT_DATA.value} | PromptVars.pipeline_extra_known_vars()
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
             return self
         except ValidationError as e:
             raise PydanticCustomError(
@@ -629,14 +634,19 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             ]
         )
         session: ExperimentSession = state["experiment_session"]
-        node_input = state["messages"][-1]
-
+        node_input = state["node_input"]
         context = {"input": node_input}
-        context.update(PromptTemplateContext(session).get_context(prompt.input_variables))
+        extra_prompt_context = {
+            "temp_state": state.get("temp_state", {}),
+            "session_state": session.state or {},
+        }
+        participant_data = state.get("participant_data") or {}
+        template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
+        context.update(template_context.get_context(prompt.input_variables))
 
         if self.history_type != PipelineChatHistoryTypes.NONE and session:
             input_messages = prompt.format_messages(**context)
-            context["history"] = self._get_history(session, self.node_id, input_messages)
+            context["history"] = self.get_history(session, input_messages)
 
         llm = self.get_chat_model()
         router_schema = self._create_router_schema()
@@ -655,7 +665,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             is_default_keyword = True
 
         if session:
-            self._save_history(session, self.node_id, node_input, keyword)
+            self.save_history(session, node_input, keyword)
         return keyword, is_default_keyword
 
 
@@ -688,11 +698,11 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
 
         match self.data_source:
             case self.DataSource.participant_data:
-                data = self.get_participant_data_proxy(state).get()
+                data = ParticipantDataProxy.from_state(state).get()
             case self.DataSource.temp_state:
-                data = state["temp_state"]
+                data = state.get("temp_state") or {}
             case self.DataSource.session_state:
-                data = state["experiment_session"].state
+                data = state.get("session_state") or {}
 
         formatted_key = f"{{data.{self.route_key}}}"
         try:
@@ -746,12 +756,10 @@ class ExtractStructuredDataNodeMixin:
             # )
             new_reference_data = self.update_reference_data(output, reference_data)
 
-        self.post_extraction_hook(new_reference_data, state)
-        output = input if self.is_passthrough else json.dumps(new_reference_data)
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
+        return self.get_node_output(state, new_reference_data)
 
-    def post_extraction_hook(self, output, state):
-        pass
+    def get_node_output(self, state, output_data) -> PipelineState:
+        raise NotImplementedError()
 
     def get_reference_data(self, state):
         return ""
@@ -801,32 +809,7 @@ class ExtractStructuredDataNodeMixin:
         return text_splitter.split_text(input)
 
     def get_tool_class(self, data: dict):
-        """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
-        The input should be in the format {"key": "description", "key2": [{"key": "description"}]}
-
-        Nested objects are not supported at the moment
-
-        Input example 1:
-        {"name": "the user's name", "surname": "the user's surname"}
-
-        Input example 2:
-        {"name": "the user's name", "pets": [{"name": "the pet's name": "type": "the type of animal"}]}
-
-        """
-
-        def _create_model_from_data(value_data, model_name: str):
-            pydantic_schema = {}
-            for key, value in value_data.items():
-                if isinstance(value, str):
-                    pydantic_schema[key] = (str | None, Field(description=value))
-                elif isinstance(value, list):
-                    model = _create_model_from_data(value[0], key.capitalize())
-                    pydantic_schema[key] = (list[model], Field(description=f"A list of {key}"))
-            return create_model(model_name, **pydantic_schema)
-
-        Model = _create_model_from_data(data, "CustomModel")
-        Model.description = ""
-        return Model
+        return dict_to_json_schema(data)
 
 
 class StructuredDataSchemaValidatorMixin:
@@ -862,9 +845,9 @@ class ExtractStructuredData(
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    @property
-    def is_passthrough(self) -> bool:
-        return False
+    def get_node_output(self, state, output_data) -> PipelineState:
+        output = json.dumps(output_data)
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
 
 class ExtractParticipantData(
@@ -887,27 +870,12 @@ class ExtractParticipantData(
     )
     key_name: str = ""
 
-    @property
-    def is_passthrough(self) -> bool:
-        return True
-
-    def get_reference_data(self, state) -> dict:
+    def get_reference_data(self, state) -> Any:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
         corresponding to that key will be returned insteadg
         """
-        session = state.get("experiment_session")
-        if not session:
-            return {}
-
-        participant_data = (
-            ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
-        )
-        if not participant_data:
-            return {}
-
-        data = participant_data.data
+        data = state.get("participant_data") or {}
         if self.key_name:
-            # string, list or dict
             return data.get(self.key_name, "")
         return data
 
@@ -919,29 +887,16 @@ class ExtractParticipantData(
         # if reference data is a string or list, we cannot merge, so let's override
         return new_data
 
-    def post_extraction_hook(self, output, state):
-        session = state.get("experiment_session")
-        if not session:
-            return
-
+    def get_node_output(self, state, output_data) -> PipelineState:
         if self.key_name:
-            output = {self.key_name: output}
+            output_data = {self.key_name: output_data}
 
-        try:
-            participant_data = ParticipantData.objects.for_experiment(session.experiment).get(
-                participant=session.participant
-            )
-            participant_data.data = participant_data.data | output
-            participant_data.save()
-        except ParticipantData.DoesNotExist:
-            ParticipantData.objects.create(
-                participant=session.participant,
-                experiment=session.experiment,
-                team=session.team,
-                data=output,
-            )
+        return PipelineState.from_node_output(
+            node_name=self.name, node_id=self.node_id, output=state["node_input"], participant_data=output_data
+        )
 
 
+@deprecated_node(message="Use the 'LLM' node instead.", docs_link="migrate_from_assistant")
 class AssistantNode(PipelineNode, OutputMessageTagMixin):
     """Calls an OpenAI assistant"""
 
@@ -1001,18 +956,10 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
         return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession):
-        history_manager = PipelineHistoryManager.for_assistant()
+        history_manager = AssistantPipelineHistoryManager()
         adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 
-        allowed_tools = adapter.get_allowed_tools()
-        # TODO: tracing
-        # if len(adapter.tools) != len(allowed_tools):
-        #     self.logger.info(
-        #         "Some tools have been disabled: %s",
-        #         [tool.name for tool in adapter.tools if tool not in allowed_tools]
-        #     )
-
-        if allowed_tools:
+        if adapter.get_allowed_tools():
             return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
         else:
             if assistant.tools_enabled:
@@ -1031,7 +978,7 @@ def main(input: str, **kwargs) -> str:
 """
 
 
-class CodeNode(PipelineNode, OutputMessageTagMixin):
+class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMixin):
     """Runs python"""
 
     model_config = ConfigDict(
@@ -1047,148 +994,139 @@ class CodeNode(PipelineNode, OutputMessageTagMixin):
         json_schema_extra=UiSchema(widget=Widgets.code),
     )
 
-    @field_validator("code")
-    def validate_code(cls, value, info: FieldValidationInfo):
-        if not value:
-            value = DEFAULT_FUNCTION
+    @classmethod
+    def _get_default_code(cls) -> str:
+        return DEFAULT_FUNCTION
+
+    @classmethod
+    def _get_function_args(cls) -> list[str]:
+        return ["input", "**kwargs"]
+
+    def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
+        output_state = PipelineState()
         try:
-            byte_code = compile_restricted(
-                value,
-                filename="<inline code>",
-                mode="exec",
+            result = self.compile_and_execute_code(
+                additional_globals=self._get_custom_functions(state, output_state), input=input
             )
-            custom_locals = {}
-            try:
-                exec(byte_code, {}, custom_locals)
-            except Exception as exc:
-                raise PydanticCustomError("invalid_code", "{error}", {"error": str(exc)}) from exc
-
-            try:
-                main = custom_locals["main"]
-            except KeyError:
-                raise SyntaxError("You must define a 'main' function") from None
-
-            for name, item in custom_locals.items():
-                if name != "main" and inspect.isfunction(item):
-                    raise SyntaxError(
-                        "You can only define a single function, 'main' at the top level. "
-                        "You may use nested functions inside that function if required"
-                    )
-
-            if list(inspect.signature(main).parameters) != ["input", "kwargs"]:
-                raise SyntaxError("The main function should have the signature main(input, **kwargs) only.")
-
-        except SyntaxError as exc:
-            raise PydanticCustomError("invalid_code", "{error}", {"error": exc.msg}) from None
-        return value
-
-    def _process(self, input: str, state: PipelineState) -> PipelineState:
-        function_name = "main"
-        byte_code = compile_restricted(
-            self.code,
-            filename="<inline code>",
-            mode="exec",
-        )
-
-        custom_locals = {}
-        custom_globals = self._get_custom_globals(self.node_id, state)
-        # TODO: tracing {"logger": self.logger}
-        kwargs = {}
-        try:
-            exec(byte_code, custom_globals, custom_locals)
-            result = str(custom_locals[function_name](input, **kwargs))
+        except WaitForNextInput:
+            return Command(goto=END)
+        except AbortPipeline as abort:
+            return interrupt(abort.to_json())
         except Exception as exc:
-            raise PipelineNodeRunError(exc) from exc
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=result)
+            message = get_code_error_message("<inline_code>", self.code)
+            raise CodeNodeRunError(message) from exc
 
-    def _get_custom_globals(self, node_id, state: PipelineState):
-        from RestrictedPython.Eval import (
-            default_guarded_getitem,
-            default_guarded_getiter,
+        if isinstance(result, Command):
+            return result
+        return Command(
+            goto=self._outgoing_nodes,
+            update=PipelineState.from_node_output(
+                node_name=self.name, node_id=self.node_id, output=str(result), **output_state
+            ),
         )
 
-        custom_globals = safe_globals.copy()
+    def _get_custom_functions(self, state: PipelineState, output_state: PipelineState) -> dict:
+        """
+        Args:
+            state: The input state. Do not modify this state.
+            output_state: An empty state dict to which state modifications should be made.
+        """
+        pipeline_state = PipelineState.clone(state)
 
-        participant_data_proxy = self.get_participant_data_proxy(state)
-        pipeline_state = PipelineState(state.copy())
+        # copy this from input to output to create a consistent view within the code execution
+        output_state["temp_state"] = pipeline_state.get("temp_state") or {}
+        output_state["participant_data"] = pipeline_state.get("participant_data") or {}
+        output_state["session_state"] = pipeline_state.get("session_state") or {}
+
+        # use 'output_state' so that we capture any updates
+        participant_data_proxy = ParticipantDataProxy(output_state, state.get("experiment_session"))
+
         # add this node into the state so that we can trace the path
-        pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": node_id}}
-        custom_globals.update(
-            {
-                "__builtins__": self._get_custom_builtins(),
-                "json": json,
-                "datetime": datetime,
-                "time": time,
-                "_getitem_": default_guarded_getitem,
-                "_getiter_": default_guarded_getiter,
-                "_write_": lambda x: x,
-                "get_participant_data": participant_data_proxy.get,
-                "set_participant_data": participant_data_proxy.set,
-                "get_participant_schedules": participant_data_proxy.get_schedules,
-                "get_temp_state_key": self._get_temp_state_key(state),
-                "set_temp_state_key": self._set_temp_state_key(state),
-                "get_session_state_key": self._get_session_state_key(state["experiment_session"]),
-                "set_session_state_key": self._set_session_state_key(state["experiment_session"]),
-                "get_selected_route": pipeline_state.get_selected_route,
-                "get_node_path": pipeline_state.get_node_path,
-                "get_all_routes": pipeline_state.get_all_routes,
-            }
-        )
-        return custom_globals
+        pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
+        return {
+            "get_participant_data": participant_data_proxy.get,
+            "set_participant_data": participant_data_proxy.set,
+            "set_participant_data_key": participant_data_proxy.set_key,
+            "append_to_participant_data_key": participant_data_proxy.append_to_key,
+            "increment_participant_data_key": participant_data_proxy.increment_key,
+            "get_participant_schedules": participant_data_proxy.get_schedules,
+            "get_temp_state_key": self._get_temp_state_key(output_state),
+            "set_temp_state_key": self._set_temp_state_key(output_state),
+            "get_session_state_key": self._get_session_state_key(output_state),
+            "set_session_state_key": self._set_session_state_key(output_state),
+            "get_selected_route": pipeline_state.get_selected_route,
+            "get_node_path": pipeline_state.get_node_path,
+            "get_all_routes": pipeline_state.get_all_routes,
+            "add_message_tag": output_state.add_message_tag,
+            "add_session_tag": output_state.add_session_tag,
+            "get_node_output": pipeline_state.get_node_output_by_name,
+            # control flow
+            "abort_with_message": self._abort_pipeline(),
+            "require_node_outputs": self._require_node_outputs(state),
+        }
 
-    def _get_session_state_key(self, session: ExperimentSession):
+    def _abort_pipeline(self):
+        def abort_pipeline(message, tag_name: str = None):
+            """Calling this will terminate the pipeline execution. No further nodes will get executed in
+            any branch of the pipeline graph.
+
+            The message provided will be used to notify the user about the reason for the termination.
+            If a tag name is provided, it will be used to tag the output message."""
+            raise AbortPipeline(message, tag_name)
+
+        return abort_pipeline
+
+    def _require_node_outputs(self, state: PipelineState):
+        """A helper function to require inputs from a specific node"""
+
+        def require_node_outputs(*node_names):
+            """This function is used to ensure that the specified nodes have been executed and their outputs
+            are available in the pipeline's state. If any of the specified nodes have not been executed,
+            the node will not execute and the pipeline will wait for the required nodes to complete.
+
+            This should be called at the start of the main function."""
+            if len(node_names) == 1 and isinstance(node_names[0], list):
+                node_names = node_names[0]
+            if not all(isinstance(name, str) for name in node_names):
+                raise CodeNodeRunError("Node names passed to 'require_node_outputs' must be a string")
+            for node_name in node_names:
+                if node_name not in state["outputs"]:
+                    raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
+
+        return require_node_outputs
+
+    def _get_session_state_key(self, state: PipelineState):
         def get_session_state_key(key_name: str):
-            return session.state.get(key_name)
+            """Returns the value of the session state's key with the given name.
+            If the key does not exist, it returns `None`."""
+            return state.get("session_state", {}).get(key_name)
 
         return get_session_state_key
 
-    def _set_session_state_key(self, session: ExperimentSession):
+    def _set_session_state_key(self, state: PipelineState):
         def set_session_state_key(key_name: str, value):
-            session.state[key_name] = value
-            session.save(update_fields=["state"])
+            """Sets the value of the session state's key with the given name to the provided data.
+            This will override any existing data."""
+            session_state = state.setdefault("session_state", {})
+            session_state[key_name] = value
 
         return set_session_state_key
 
     def _get_temp_state_key(self, state: PipelineState):
         def get_temp_state_key(key_name: str):
+            """Returns the value of the temporary state key with the given name.
+            If the key does not exist, it returns `None`."""
             return state["temp_state"].get(key_name)
 
         return get_temp_state_key
 
     def _set_temp_state_key(self, state: PipelineState):
         def set_temp_state_key(key_name: str, value):
+            """Sets the value of the temporary state key with the given name to the provided data.
+            This will override any existing data for the key unless the key is read-only, in which case
+            an error will be raised. Read-only keys are: `user_input`, `outputs`, `attachments`."""
             if key_name in {"user_input", "outputs", "attachments"}:
-                raise PipelineNodeRunError(f"Cannot set the '{key_name}' key of the temporary state")
+                raise CodeNodeRunError(f"Cannot set the '{key_name}' key of the temporary state")
             state["temp_state"][key_name] = value
 
         return set_temp_state_key
-
-    def _get_custom_builtins(self):
-        allowed_modules = {
-            "json",
-            "re",
-            "datetime",
-            "time",
-            "random",
-        }
-        custom_builtins = safe_builtins.copy()
-        custom_builtins.update(
-            {
-                "min": min,
-                "max": max,
-                "sum": sum,
-                "abs": abs,
-                "all": all,
-                "any": any,
-                "datetime": datetime,
-                "random": random,
-            }
-        )
-
-        def guarded_import(name, *args, **kwargs):
-            if name not in allowed_modules:
-                raise ImportError(f"Importing '{name}' is not allowed")
-            return __import__(name, *args, **kwargs)
-
-        custom_builtins["__import__"] = guarded_import
-        return custom_builtins

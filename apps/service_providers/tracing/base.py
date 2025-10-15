@@ -1,11 +1,16 @@
+from __future__ import annotations
+
 import dataclasses
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 
 from apps.service_providers.tracing.const import SpanLevel
+
+if TYPE_CHECKING:
+    from apps.experiments.models import ExperimentSession
 
 
 class ServiceReentryException(Exception):
@@ -21,10 +26,9 @@ class Tracer(ABC):
         self.type = type_
         self.config = config
 
-        self.trace_id = None
-        self.session_id = None
-        self.user_id = None
-        self.trace_name = None
+        self.trace_id: UUID = None
+        self.session: ExperimentSession = None
+        self.trace_name: str = None
 
     @property
     @abstractmethod
@@ -36,8 +40,7 @@ class Tracer(ABC):
         self,
         trace_name: str,
         trace_id: UUID,
-        session_id: str,
-        user_id: str,
+        session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
@@ -46,22 +49,20 @@ class Tracer(ABC):
         Args:
             trace_name (str): The name of the trace.
             trace_id (UUID): The unique identifier for the trace.
-            session_id (str): The session identifier.
+            session (ExperimentSession): The session object.
             user_id (str): The user identifier.
             inputs (dict[str, Any] | None): The inputs to the trace.
             metadata (dict[str, Any] | None): Additional metadata for the trace.
         """
         self.trace_name = trace_name
         self.trace_id = trace_id
-        self.session_id = session_id
-        self.user_id = user_id
+        self.session = session
 
     def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
         """This must be called after all tracing methods are called to finalize the trace."""
         self.trace_name = None
         self.trace_id = None
-        self.session_id = None
-        self.user_id = None
+        self.session = None
 
     @abstractmethod
     def start_span(
@@ -89,6 +90,18 @@ class Tracer(ABC):
 
     def get_trace_metadata(self) -> dict[str, str]:
         return {}
+
+    @abstractmethod
+    def add_trace_tags(self, tags: list[str]) -> None:
+        pass
+
+    @abstractmethod
+    def set_output_message_id(self, output_message_id: str) -> None:
+        pass
+
+    @abstractmethod
+    def set_input_message_id(self, input_message_id: str) -> None:
+        pass
 
 
 @dataclasses.dataclass

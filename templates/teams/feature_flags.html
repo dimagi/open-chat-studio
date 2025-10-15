@@ -1,0 +1,76 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags %}
+
+{% block app %}
+  <div class="app-card max-w-5xl mx-auto">
+    <div class="flex">
+      <div class="flex-1">
+        <h1 class="pg-title">Feature Flags</h1>
+        <p class="text-base-content/70 mt-1">
+          Enable or disable experimental features for your team.
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-6">
+      {% if not is_team_admin %}
+        <div class="alert alert-warning mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+          </svg>
+          <div>
+            <h3 class="font-medium">Read-only View</h3>
+            <p class="text-sm mt-1">
+              Only team administrators can modify feature flags. Contact your team admin to make changes.
+            </p>
+          </div>
+        </div>
+      {% endif %}
+
+      <form method="post" class="my-2">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+
+        <div class="grid gap-4">
+          {% for field in form %}
+            <div class="form-control">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input type="checkbox" name="{{ field.name }}" class="checkbox checkbox-primary"
+                       {% if field.value %}checked{% endif %}
+                       {% if not is_team_admin %}disabled{% endif %}>
+                <div class="flex-1">
+                  <div class="label-text font-medium">{{ field.label }}</div>
+                  <div class="label-text-alt text-base-content/60">{{ field.help_text }}</div>
+                </div>
+              </label>
+            </div>
+          {% endfor %}
+        </div>
+
+        <div class="mt-6 flex gap-2">
+          {% if is_team_admin %}
+            <input type="submit" class="btn btn-primary" value="Save Changes">
+          {% endif %}
+          <a href="{% url 'single_team:manage_team' team.slug %}" class="btn btn-outline">
+            {% if is_team_admin %}Cancel{% else %}Back{% endif %}
+          </a>
+        </div>
+      </form>
+    </div>
+
+    <div class="mt-8">
+      <div class="alert alert-info">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <div>
+          <h3 class="font-medium">About Feature Flags</h3>
+          <p class="text-sm mt-1">
+            Feature flags allow you to enable experimental features for your team.
+            Changes will take effect immediately for all team members.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock app %}

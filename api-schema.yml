@@ -4,6 +4,186 @@ info:
   version: '1'
   description: Experiments with AI, GPT and LLMs
 paths:
+  /api/chat/{session_id}/{task_id}/poll/:
+    get:
+      operationId: chat_poll_task_response
+      summary: Poll for task updates
+      parameters:
+      - in: path
+        name: session_id
+        schema:
+          type: string
+        description: Session ID
+        required: true
+      - in: path
+        name: task_id
+        schema:
+          type: string
+        description: Check on the status of a specific task
+        required: true
+      tags:
+      - Chat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatTaskPoll'
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatTaskPollError'
+          description: ''
+  /api/chat/{session_id}/message/:
+    post:
+      operationId: chat_send_message
+      description: Send a message to a chat session
+      summary: Send a message to a chat session
+      parameters:
+      - in: path
+        name: session_id
+        schema:
+          type: string
+        description: Session ID
+        required: true
+      tags:
+      - Chat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatSendMessageRequestWithAttachments'
+            examples:
+              SendMessage:
+                value:
+                  message: Hello, how can you help me?
+                summary: Send a message to the bot
+              SendMessageWithAttachments:
+                value:
+                  message: Please review these documents
+                  attachment_ids:
+                  - 123
+                  - 124
+                summary: Send a message with file attachments
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSendMessageResponse'
+          description: ''
+  /api/chat/{session_id}/poll/:
+    get:
+      operationId: chat_poll_response
+      description: Poll for new messages in a chat session
+      summary: Poll for new messages in a chat session. Do not poll more than once
+        every 30 seconds
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: 'Maximum number of messages to return (default: 50)'
+      - in: path
+        name: session_id
+        schema:
+          type: string
+        description: Session ID
+        required: true
+      - in: query
+        name: since
+        schema:
+          type: string
+          format: date-time
+        description: Only return messages after this timestamp
+      tags:
+      - Chat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatPollResponse'
+          description: ''
+  /api/chat/{session_id}/upload/:
+    post:
+      operationId: chat_upload_file
+      summary: Upload files for a chat message
+      parameters:
+      - in: path
+        name: session_id
+        schema:
+          type: string
+        description: Session ID
+        required: true
+      tags:
+      - Chat
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChatUploadFileRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatUploadFileResponse'
+          description: ''
+  /api/chat/start/:
+    post:
+      operationId: chat_start_session
+      description: Start a new chat session for a widget
+      summary: Start a new chat session for a widget
+      tags:
+      - Chat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatStartSessionRequest'
+            examples:
+              StartChatSession:
+                value:
+                  chatbot_id: 123e4567-e89b-12d3-a456-426614174000
+                  session_data:
+                    source: widget
+                    page_url: https://example.com
+                  participant_remote_id: abc
+                  participant_name: participant_name
+                summary: Start a new chat session for an experiment
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStartSessionResponse'
+              examples:
+                StartChatSession:
+                  value:
+                    chatbot_id: 123e4567-e89b-12d3-a456-426614174000
+                    session_data:
+                      source: widget
+                      page_url: https://example.com
+                    participant_remote_id: abc
+                    participant_name: participant_name
+                  summary: Start a new chat session for an experiment
+          description: ''
   /api/experiments/:
     get:
       operationId: experiment_list
@@ -15,6 +195,12 @@ paths:
         description: The pagination cursor value.
         schema:
           type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
       - Experiments
       security:
@@ -258,18 +444,34 @@ paths:
         description: The pagination cursor value.
         schema:
           type: string
+      - in: query
+        name: experiment
+        schema:
+          type: string
+        description: Experiment ID to filter sessions by
       - name: ordering
         required: false
         in: query
         description: Which field to use when ordering the results.
         schema:
           type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       - in: query
         name: tags
         schema:
           type: string
         description: A list of session tags (comma separated) to filter the results
           by
+      - in: query
+        name: versions
+        schema:
+          type: string
+        description: Experiment versions (comma separated) to filter sessions by
       tags:
       - Experiment Sessions
       security:
@@ -396,6 +598,10 @@ paths:
                   experiment: exp1
                   platform: connect_messaging
                   prompt_text: Tell the user to do something
+                  session_data:
+                    key: value
+                  participant_data:
+                    key: value
                 summary: Generates a bot message and sends it to the user
               ParticipantNotFound:
                 value:
@@ -577,6 +783,148 @@ components:
       - assistant
       type: string
       description: '* `assistant` - assistant'
+    ChatPollResponse:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+          title: New messages since last poll
+        has_more:
+          type: boolean
+          title: Whether there are more messages to fetch
+        session_status:
+          allOf:
+          - $ref: '#/components/schemas/SessionStatusEnum'
+          title: Current session status
+      required:
+      - has_more
+      - messages
+      - session_status
+    ChatSendMessageRequestWithAttachments:
+      type: object
+      properties:
+        message:
+          type: string
+          title: Message content
+        attachment_ids:
+          type: array
+          items:
+            type: integer
+          description: List of file IDs from prior upload
+      required:
+      - message
+    ChatSendMessageResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          description: The ID of the task that is processing the message
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ChatSendMessageResponseStatusEnum'
+          title: Processing status
+        error:
+          type: string
+          title: Error message
+      required:
+      - status
+      - task_id
+    ChatSendMessageResponseStatusEnum:
+      enum:
+      - processing
+      - completed
+      - error
+      type: string
+      description: |-
+        * `processing` - Processing
+        * `completed` - Completed
+        * `error` - Error
+    ChatStartSessionRequest:
+      type: object
+      properties:
+        chatbot_id:
+          type: string
+          format: uuid
+        session_data:
+          type: object
+          additionalProperties: {}
+          title: Initial session data
+          description: Optional initial state data for the session. This field will
+            be ignored if the request is not authenticated.
+        participant_remote_id:
+          type: string
+          default: ''
+          description: Optional ID for the participant from remote systems
+        participant_name:
+          type: string
+          title: Paricipant Name
+          description: Optional participant name
+      required:
+      - chatbot_id
+    ChatStartSessionResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        chatbot:
+          allOf:
+          - $ref: '#/components/schemas/Experiment'
+          readOnly: true
+        participant:
+          allOf:
+          - $ref: '#/components/schemas/Participant'
+          readOnly: true
+        seed_message_task_id:
+          type: string
+          readOnly: true
+      required:
+      - chatbot
+      - participant
+      - seed_message_task_id
+      - session_id
+    ChatTaskPoll:
+      type: object
+      properties:
+        message:
+          $ref: '#/components/schemas/Message'
+        status:
+          $ref: '#/components/schemas/ChatTaskPollStatusEnum'
+    ChatTaskPollError:
+      type: object
+      properties:
+        error:
+          type: string
+    ChatTaskPollStatusEnum:
+      enum:
+      - processing
+      - complete
+      type: string
+      description: |-
+        * `processing` - processing
+        * `complete` - complete
+    ChatUploadFileRequest:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            type: string
+            format: uri
+          description: Files to upload (max 50MB each, 50MB total)
+      required:
+      - files
+    ChatUploadFileResponse:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/UploadedFile'
+      required:
+      - files
     CreateChatCompletionRequest:
       type: object
       properties:
@@ -664,11 +1012,16 @@ components:
           type: string
           format: date-time
           readOnly: true
+        tags:
+          type: array
+          items:
+            type: string
       required:
       - created_at
       - experiment
       - id
       - participant
+      - tags
       - team
       - updated_at
       - url
@@ -732,12 +1085,17 @@ components:
           items:
             $ref: '#/components/schemas/Message'
           readOnly: true
+        tags:
+          type: array
+          items:
+            type: string
       required:
       - created_at
       - experiment
       - id
       - messages
       - participant
+      - tags
       - team
       - updated_at
       - url
@@ -870,6 +1228,9 @@ components:
         identifier:
           type: string
           maxLength: 320
+        remote_id:
+          type: string
+          maxLength: 255
     ParticipantDataUpdateRequest:
       type: object
       properties:
@@ -945,6 +1306,7 @@ components:
       - api
       - slack
       - commcare_connect
+      - evaluations
       type: string
       description: |-
         * `telegram` - Telegram
@@ -955,6 +1317,15 @@ components:
         * `api` - API
         * `slack` - Slack
         * `commcare_connect` - CommCare Connect
+        * `evaluations` - Evaluations
+    SessionStatusEnum:
+      enum:
+      - active
+      - ended
+      type: string
+      description: |-
+        * `active` - Active
+        * `ended` - Ended
     Team:
       type: object
       properties:
@@ -989,11 +1360,37 @@ components:
           type: boolean
           default: false
           title: Starts a new session
+        session_data:
+          type: object
+          additionalProperties: {}
+          description: Update session data. This will be merged with existing session
+            data
+        participant_data:
+          type: object
+          additionalProperties: {}
+          description: Update Participant data. This will be merged with existing
+            participant data
       required:
       - experiment
       - identifier
       - platform
       - prompt_text
+    UploadedFile:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        size:
+          type: integer
+        content_type:
+          type: string
+      required:
+      - content_type
+      - id
+      - name
+      - size
     update_state_response:
       type: object
       properties:
@@ -1010,6 +1407,14 @@ components:
       type: apiKey
       in: header
       name: X-api-key
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
     tokenAuth:
       type: http
       scheme: bearer
+tags:
+- name: Chat
+  description: "\n                The Chat API is designed to be used for integrating\
+    \ chatbots into external systems.\n            "

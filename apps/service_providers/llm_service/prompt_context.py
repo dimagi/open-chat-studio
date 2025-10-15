@@ -2,17 +2,26 @@ from typing import Any, Self
 
 from django.utils import timezone
 
-from apps.experiments.models import ParticipantData
 from apps.utils.time import pretty_date
 
 
 class PromptTemplateContext:
-    def __init__(self, session, source_material_id: int = None, collection_id: int = None):
+    def __init__(
+        self,
+        session,
+        source_material_id: int = None,
+        collection_id: int = None,
+        extra: dict = None,
+        participant_data: dict = None,
+    ):
         self.session = session
         self.source_material_id = source_material_id
         self.collection_id = collection_id
+        self.extra = extra or {}
         self.context_cache = {}
-        self.participant_data_proxy = ParticipantDataProxy(self.session)
+        if participant_data is None:
+            participant_data = session.participant_data_from_experiment
+        self.participant_data_proxy = ParticipantDataProxy({"participant_data": participant_data}, self.session)
 
     @property
     def factories(self):
@@ -27,10 +36,15 @@ class PromptTemplateContext:
         context = {}
         for key, factory in self.factories.items():
             # allow partial matches to support format specifiers
-            if any(key in var for var in variables):
+            if any(var.startswith(key) for var in variables):
                 if key not in self.context_cache:
                     self.context_cache[key] = factory()
                 context[key] = self.context_cache[key]
+
+        # add any extra context provided
+        for key, value in self.extra.items():
+            if key not in context:
+                context[key] = SafeAccessWrapper(value)
         return context
 
     def get_source_material(self):
@@ -153,42 +167,69 @@ EMPTY = SafeAccessWrapper(None)
 class ParticipantDataProxy:
     """Allows multiple access without needing to re-fetch from the DB"""
 
-    def __init__(self, experiment_session):
+    def __init__(self, pipeline_state: dict, experiment_session):
         self.session = experiment_session
         self.experiment = self.session.experiment if self.session else None
-        self._participant_data = None
+        self._participant_data = pipeline_state.setdefault("participant_data", {})
         self._scheduled_messages = None
 
     @classmethod
     def from_state(cls, pipeline_state) -> Self:
-        # using `.get` here for the sake of tests. In practice the session should always be present
-        return cls(pipeline_state.get("experiment_session"))
-
-    def _get_db_object(self):
-        if not self._participant_data:
-            self._participant_data, _ = ParticipantData.objects.get_or_create(
-                participant_id=self.session.participant_id,
-                experiment_id=self.session.experiment_id,
-                team_id=self.session.team_id,
-            )
-        return self._participant_data
+        return cls(pipeline_state, pipeline_state.get("experiment_session"))
 
     def get(self):
-        data = self._get_db_object().data
-        return self.session.participant.global_data | data
+        """Returns the current participant's data as a dictionary."""
+        return self.session.participant.global_data | self._participant_data
 
     def set(self, data):
+        """Updates the current participant's data with the provided dictionary.
+        This will overwrite any existing data."""
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary")
-        participant_data = self._get_db_object()
-        participant_data.data = data
-        participant_data.save(update_fields=["data"])
+        self._participant_data.update(data)
 
-        self.session.participant.update_name_from_data(data)
+    def set_key(self, key: str, value: Any):
+        """Set a single key in the participant data."""
+        self._participant_data[key] = value
+
+    def append_to_key(self, key: str, value: Any) -> list[Any]:
+        """
+        Append a value to a list at the specified key in the participant data. If the current value is not a list,
+        it will convert it to a list before appending.
+        """
+        existing_data = self._participant_data
+        value_at_key = existing_data.get(key, [])
+        if not isinstance(value_at_key, list):
+            value_at_key = [value_at_key]
+
+        if isinstance(value, list):
+            value_at_key.extend(value)
+        else:
+            value_at_key.append(value)
+
+        existing_data[key] = value_at_key
+        self.set(existing_data)
+        return value_at_key
+
+    def increment_key(self, key: str, increment: int = 1) -> int:
+        """
+        Increment a numeric value at the specified key in the participant data.
+        If the current value is not a number, it will be initialized to 0 before incrementing.
+        """
+        existing_data = self._participant_data
+        current_value = existing_data.get(key, 0)
+
+        if not isinstance(current_value, int | float):
+            current_value = 0
+
+        new_value = current_value + increment
+        existing_data[key] = new_value
+        self.set(existing_data)
+        return new_value
 
     def get_schedules(self):
         """
-        Returns all active scheduled messages for the participant in the current experiment session.
+        Returns all active scheduled messages for the participant in the current chat session.
         """
         if self._scheduled_messages is None:
             self._scheduled_messages = self.session.participant.get_schedules_for_experiment(
@@ -198,5 +239,4 @@ class ParticipantDataProxy:
 
     def get_timezone(self):
         """Returns the participant's timezone"""
-        participant_data = self._get_db_object()
-        return participant_data.data.get("timezone")
+        return self._participant_data.get("timezone")

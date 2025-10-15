@@ -17,6 +17,9 @@ from apps.experiments.models import (
     SyntheticVoice,
 )
 from apps.generics.help import render_help_with_link
+from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
+from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.utils import get_llm_provider_by_team, get_models_by_provider
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 
 
@@ -179,8 +182,7 @@ class ExperimentForm(forms.ModelForm):
         if flag_is_active(request, "flag_open_ai_voice_engine"):
             exclude_services = []
 
-        if flag_is_active(request, "flag_pipelines-v2"):
-            self.fields["type"].choices += [("pipeline", gettext("Pipeline"))]
+        self.fields["type"].choices += [("pipeline", gettext("Pipeline"))]
 
         # Limit to team's data
         self.fields["llm_provider"].queryset = team.llmprovider_set
@@ -274,11 +276,72 @@ class ExperimentForm(forms.ModelForm):
         return experiment
 
 
-class ExperimentVersionForm(forms.ModelForm):
+class ExperimentVersionForm(forms.Form):
     version_description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     is_default_version = forms.BooleanField(required=False, label="Set as Published Version")
 
     class Meta:
-        model = Experiment
         fields = ["version_description", "is_default_version"]
         help_texts = {"version_description": "A description of this version, or what changed from the previous version"}
+
+
+class TranslateMessagesForm(forms.Form):
+    target_language = forms.ChoiceField(
+        choices=[],
+        required=True,
+        label="Select Language",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-language"}),
+    )
+    llm_provider = forms.ChoiceField(
+        choices=[],
+        required=True,
+        label="Select LLM Provider",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider"}),
+    )
+    llm_provider_model = forms.ChoiceField(
+        choices=[],
+        required=True,
+        label="Select LLM Model",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full", "id": "translation-provider-model"}),
+    )
+
+    def __init__(self, *args, team, translatable_languages, is_translate_all_form=False, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        providers = get_llm_provider_by_team(team)
+        provider_choices = [(provider.id, str(provider)) for provider in providers]
+
+        self.fields["llm_provider"].choices = [("", "Choose a model for translation")] + provider_choices
+        if provider_choices:
+            self.fields["llm_provider"].choices = provider_choices
+            self.fields["llm_provider"].initial = provider_choices[0][0]
+            first_provider = providers[0]
+            models_list = get_models_by_provider(first_provider.type, team)
+            model_choices = [(model["value"], model["label"]) for model in models_list]
+            self.fields["llm_provider_model"].choices = model_choices
+            default_model_name_dict = get_default_translation_models_by_provider()
+            default_model_name = default_model_name_dict.get(str(LlmProviderTypes[first_provider.type].label))
+            default_model_value = next((value for value, label in model_choices if label == default_model_name), None)
+            if default_model_value is not None:
+                self.fields["llm_provider_model"].initial = default_model_value
+
+        if is_translate_all_form:
+            self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-all"
+            self.fields["llm_provider_model"].widget.attrs["id"] = "translation-provider-model-all"
+        else:
+            self.fields["llm_provider"].widget.attrs["id"] = "translation-provider-remaining"
+            self.fields["llm_provider_model"].widget.attrs["id"] = "translation-provider-model-remaining"
+
+        language_choices = [(code, name) for code, name in translatable_languages if code]
+        if any(code == "eng" for code, _ in translatable_languages):
+            self.fields["target_language"].choices = language_choices
+            self.fields["target_language"].initial = "eng"
+        else:
+            self.fields["target_language"].choices = [("", "Choose a language")] + language_choices
+
+        if is_translate_all_form:
+            self.fields["target_language"].label = "Target Language for All Messages"
+            self.fields["llm_provider"].label = "LLM Provider for Translation"
+        else:
+            self.fields["target_language"].label = "Target Language for Remaining Messages"
+            self.fields["llm_provider"].label = "LLM Provider for Remaining Messages"

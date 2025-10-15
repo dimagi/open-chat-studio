@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.fields import DateTimeField
 
-from apps.annotations.models import Tag
+from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatAttachment
 from apps.experiments.models import ExperimentSession, Team
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -58,7 +58,10 @@ def test_list_sessions_with_tag(experiment):
     # Filter by tag
     response = client.get(reverse("api:session-list") + "?tags=interesting,awesome")
     assert response.status_code == 200
-    expected_results = [get_session_json(session2), get_session_json(session1)]
+    expected_results = [
+        get_session_json(session2, expected_tags=["awesome"]),
+        get_session_json(session1, expected_tags=["interesting"]),
+    ]
     assert response.json() == {
         "next": None,
         "previous": None,
@@ -67,7 +70,11 @@ def test_list_sessions_with_tag(experiment):
 
     # Remove filters by tag
     response = client.get(reverse("api:session-list"))
-    expected_results = [get_session_json(sessions[2]), get_session_json(session2), get_session_json(session1)]
+    expected_results = [
+        get_session_json(sessions[2]),
+        get_session_json(session2, expected_tags=["awesome"]),
+        get_session_json(session1, expected_tags=["interesting"]),
+    ]
     assert response.json() == {
         "next": None,
         "previous": None,
@@ -75,7 +82,7 @@ def test_list_sessions_with_tag(experiment):
     }
 
 
-def get_session_json(session, expected_messages=None):
+def get_session_json(session, expected_messages=None, expected_tags=None):
     experiment = session.experiment
     data = {
         "url": f"http://testserver/api/sessions/{session.external_id}/",
@@ -86,7 +93,7 @@ def get_session_json(session, expected_messages=None):
             "version_number": 1,
             "versions": [],
         },
-        "participant": {"identifier": session.participant.identifier},
+        "participant": {"identifier": session.participant.identifier, "remote_id": ""},
         "id": str(session.external_id),
         "team": {
             "name": session.team.name,
@@ -94,6 +101,7 @@ def get_session_json(session, expected_messages=None):
         },
         "created_at": DateTimeField().to_representation(session.created_at),
         "updated_at": DateTimeField().to_representation(session.updated_at),
+        "tags": expected_tags if expected_tags is not None else [],
     }
     if expected_messages is not None:
         data["messages"] = expected_messages
@@ -115,6 +123,8 @@ def test_retrieve_session(session):
     message1 = session.chat.messages.create(message_type="human", content="hello")
     files = _create_attachments(session.chat, message1)
 
+    session.chat.add_tag(tags[0], session.team, user)
+
     message = session.chat.messages.create(message_type="human", content="rabbit in a hat", summary="Abracadabra")
     message.add_tag(tags[0], session.team, user)
     message.add_tag(tags[1], session.team, user)
@@ -126,6 +136,7 @@ def test_retrieve_session(session):
 
     for message in response_json.get("messages", []):
         message["created_at"] = "fake date"
+        message["attachments"] = sorted(message["attachments"], key=lambda x: x["name"])
 
     assert response_json == get_session_json(
         session,
@@ -176,6 +187,7 @@ def test_retrieve_session(session):
                 "attachments": [],
             },
         ],
+        expected_tags=["tag1"],
     )
 
 
@@ -192,6 +204,136 @@ def _create_attachments(chat, message):
     message.metadata = {"openai_file_ids": file_ids}
     message.save()
     return files
+
+
+@pytest.mark.django_db()
+def test_list_sessions_with_experiment_filter(experiment):
+    team = experiment.team
+    user = experiment.team.members.first()
+
+    # Create another experiment in the same team
+    experiment2 = ExperimentFactory(team=team)
+
+    # Create sessions for both experiments
+    session1 = ExperimentSessionFactory(experiment=experiment)
+    session2 = ExperimentSessionFactory(experiment=experiment2)
+    session3 = ExperimentSessionFactory(experiment=experiment)
+
+    client = ApiTestClient(user, team)
+
+    # Filter by first experiment
+    response = client.get(reverse("api:session-list") + f"?experiment={experiment.public_id}")
+    assert response.status_code == 200
+    expected_results = [
+        get_session_json(session3),
+        get_session_json(session1),
+    ]
+    assert response.json() == {
+        "next": None,
+        "previous": None,
+        "results": expected_results,
+    }
+
+    # Filter by second experiment
+    response = client.get(reverse("api:session-list") + f"?experiment={experiment2.public_id}")
+    assert response.status_code == 200
+    expected_results = [
+        get_session_json(session2),
+    ]
+    assert response.json() == {
+        "next": None,
+        "previous": None,
+        "results": expected_results,
+    }
+
+
+@pytest.mark.django_db()
+def test_list_sessions_with_version_filter(experiment):
+    team = experiment.team
+    user = experiment.team.members.first()
+
+    # Create sessions with messages that have version tags
+    session1 = ExperimentSessionFactory(experiment=experiment)
+    session2 = ExperimentSessionFactory(experiment=experiment)
+    session3 = ExperimentSessionFactory(experiment=experiment)
+
+    # Add messages with version tags to sessions
+    message1 = session1.chat.messages.create(message_type="ai", content="test response v1")
+    message2 = session2.chat.messages.create(message_type="ai", content="test response v2")
+    message3 = session3.chat.messages.create(message_type="ai", content="test response v1")
+
+    # Create version tags and add them to messages
+    session1.chat.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+    message1.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+
+    session2.chat.create_and_add_tag("v2.0", team, TagCategories.EXPERIMENT_VERSION)
+    message2.create_and_add_tag("v2.0", team, TagCategories.EXPERIMENT_VERSION)
+
+    session3.chat.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+    message3.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+
+    client = ApiTestClient(user, team)
+
+    # Filter by v1.0 - should return session1 and session3
+    response = client.get(reverse("api:session-list") + "?versions=v1.0")
+    assert response.status_code == 200
+    data = response.json()
+    session_ids = [result["id"] for result in data["results"]]
+    assert len(session_ids) == 2
+    assert str(session1.external_id) in session_ids
+    assert str(session3.external_id) in session_ids
+    assert str(session2.external_id) not in session_ids
+
+    # Filter by v2.0 - should return only session2
+    response = client.get(reverse("api:session-list") + "?versions=v2.0")
+    assert response.status_code == 200
+    data = response.json()
+    session_ids = [result["id"] for result in data["results"]]
+    assert len(session_ids) == 1
+    assert str(session2.external_id) in session_ids
+
+    # Filter by multiple versions - should return all sessions
+    response = client.get(reverse("api:session-list") + "?versions=v1.0,v2.0")
+    assert response.status_code == 200
+    data = response.json()
+    session_ids = [result["id"] for result in data["results"]]
+    assert len(session_ids) == 3
+
+
+@pytest.mark.django_db()
+def test_list_sessions_with_combined_filters(experiment):
+    from apps.annotations.models import TagCategories
+
+    team = experiment.team
+    user = experiment.team.members.first()
+
+    # Create another experiment for testing
+    experiment2 = ExperimentFactory(team=team)
+
+    # Create sessions
+    session1 = ExperimentSessionFactory(experiment=experiment)  # exp1, v1.0
+    session2 = ExperimentSessionFactory(experiment=experiment2)  # exp2, v1.0
+    session3 = ExperimentSessionFactory(experiment=experiment)  # exp1, v2.0
+
+    # Add version tags
+    message1 = session1.chat.messages.create(message_type="ai", content="test")
+    message2 = session2.chat.messages.create(message_type="ai", content="test")
+    message3 = session3.chat.messages.create(message_type="ai", content="test")
+
+    message1.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+    message2.create_and_add_tag("v1.0", team, TagCategories.EXPERIMENT_VERSION)
+    message3.create_and_add_tag("v2.0", team, TagCategories.EXPERIMENT_VERSION)
+
+    client = ApiTestClient(user, team)
+
+    # Test combining experiment and version filters
+    response = client.get(reverse("api:session-list") + f"?experiment={experiment.public_id}&versions=v1.0")
+    assert response.status_code == 200
+    data = response.json()
+    session_ids = [result["id"] for result in data["results"]]
+    # Should only return session1 (experiment1 + v1.0)
+    assert len(session_ids) == 1
+    assert str(session1.external_id) in session_ids
 
 
 @pytest.mark.django_db()

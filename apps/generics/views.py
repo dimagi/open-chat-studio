@@ -1,18 +1,15 @@
-import json
-
 from django import views
 from django.contrib import messages
+from django.db.models import Prefetch
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
-from django.urls import reverse
 from django.utils.translation import gettext
 
-from apps.annotations.models import Tag
+from apps.annotations.models import CustomTaggedItem, Tag
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.models import ExperimentSession
 from apps.files.forms import get_file_formset
-from apps.generics.help import render_help_with_link
 from apps.generics.type_select_form import TypeSelectForm
 
 
@@ -91,35 +88,18 @@ class BaseTypeSelectFormView(views.View):
         raise NotImplementedError
 
 
-HELP_TEXT_KEYS = {
-    "Experiments": "experiment",
-    "Chatbots": "chatbots",
-}
-
-
-def generic_home(request, team_slug: str, title: str, table_url_name: str, new_url: str):
-    help_key = HELP_TEXT_KEYS.get(title, title.lower())  # Default to lowercase if missing
-    return TemplateResponse(
-        request,
-        "generic/object_home.html",
-        {
-            "active_tab": title.lower(),
-            "title": title,
-            "title_help_content": render_help_with_link("", help_key),
-            "new_object_url": reverse(new_url, args=[team_slug]),
-            "table_url": reverse(table_url_name, args=[team_slug]),
-            "enable_search": True,
-            "toggle_archived": True,
-        },
-    )
-
-
 def render_session_details(
     request, team_slug, experiment_id, session_id, active_tab, template_path, session_type="Experiment"
 ):
-    session = request.experiment_session
+    session = ExperimentSession.objects.prefetch_related(
+        Prefetch(
+            "chat__tagged_items",
+            queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+            to_attr="prefetched_tagged_items",
+        )
+    ).get(external_id=session_id, team__slug=team_slug)
     experiment = request.experiment
-
+    participant = session.participant
     return TemplateResponse(
         request,
         template_path,
@@ -129,6 +109,7 @@ def render_session_details(
             "active_tab": active_tab,
             "details": [
                 (gettext("Participant"), session.get_participant_chip()),
+                (gettext("Remote ID"), participant.remote_id if participant and participant.remote_id else "-"),
                 (gettext("Status"), session.get_status_display),
                 (gettext("Started"), session.consent_date or session.created_at),
                 (gettext("Ended"), session.ended_at or "-"),
@@ -142,7 +123,6 @@ def render_session_details(
                 }
                 for trigger in experiment.event_triggers
             ],
-            "participant_data": json.dumps(session.participant_data_from_experiment, indent=4),
             "participant_schedules": session.participant.get_schedules_for_experiment(
                 experiment, as_dict=True, include_inactive=True
             ),

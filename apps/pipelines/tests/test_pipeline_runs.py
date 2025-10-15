@@ -1,15 +1,14 @@
-from unittest import mock
-
 import pytest
 
 from apps.annotations.models import TagCategories
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.bots import PipelineBot
+from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.tests.mock_tracer import MockTracer
 from apps.service_providers.tracing import TracingService
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.pytest import django_db_transactional
 
@@ -20,21 +19,21 @@ def pipeline():
 
 
 @pytest.fixture()
-def session():
-    return ExperimentSessionFactory()
+def experiment(pipeline):
+    return ExperimentFactory(pipeline=pipeline)
+
+
+@pytest.fixture()
+def session(experiment):
+    return ExperimentSessionFactory(experiment=experiment)
 
 
 @django_db_transactional()
 @pytest.mark.parametrize("save_input_to_history", [True, False])
 def test_save_input_to_history(save_input_to_history, pipeline: Pipeline, session: ExperimentSession):
     input = "Hi"
-    pipeline.invoke(
-        PipelineState(messages=[input]),
-        session,
-        session.experiment,
-        TracingService.empty(),
-        save_input_to_history=save_input_to_history,
-    )
+    bot = PipelineBot(session=session, experiment=session.experiment, trace_service=TracingService.empty())
+    bot.process_input(input, save_input_to_history=save_input_to_history)
     assert (
         session.chat.messages.filter(content="Hi", message_type=ChatMessageType.HUMAN).exists() == save_input_to_history
     )
@@ -42,9 +41,10 @@ def test_save_input_to_history(save_input_to_history, pipeline: Pipeline, sessio
 
 @django_db_transactional()
 def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
-    trace_service = TracingService([MockTracer()])
-    with trace_service.trace("test", "123", "bob"):
-        pipeline.invoke(PipelineState(messages=["Hi"]), session, session.experiment, trace_service)
+    trace_service = TracingService([MockTracer()], 1, 1)
+    with trace_service.trace("test", session):
+        bot = PipelineBot(session=session, experiment=session.experiment, trace_service=trace_service)
+        bot.process_input("Hi")
     human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).first()
     assert "trace_info" in human_message.metadata
     ai_message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
@@ -52,14 +52,31 @@ def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
 
 
 @pytest.mark.django_db()
-def test_save_metadata_and_tagging(pipeline: Pipeline, session: ExperimentSession):
-    output_message_tags = [("test_tag_1", TagCategories.BOT_RESPONSE)]
+def test_output_message_tagging(pipeline: Pipeline, session: ExperimentSession):
+    output_message_tags = [("test_tag_1", TagCategories.BOT_RESPONSE.value), ("user_tag", None)]
     pipeline_state = PipelineState(messages=["Hi"], output_message_tags=output_message_tags)
 
-    with mock.patch.object(ChatMessage, "create_and_add_tag") as mock_add_system_tag:
-        pipeline.invoke(pipeline_state, session, session.experiment, TracingService.empty())
-        for tag_value, category in output_message_tags:
-            mock_add_system_tag.assert_any_call(tag_value, category or "")
+    bot = PipelineBot(session=session, experiment=session.experiment, trace_service=TracingService.empty())
+    result = bot.invoke_pipeline(input_state=pipeline_state, pipeline=pipeline)
 
-        # add version tag also calls add system tag
-        assert mock_add_system_tag.call_count == len(output_message_tags) + 1
+    tags = list(result.tags.all())
+    version_tag = (f"v{session.experiment.version_number}-unreleased", TagCategories.EXPERIMENT_VERSION.value)
+    _assert_tags(tags, output_message_tags + [version_tag])
+
+
+@pytest.mark.django_db()
+def test_session_tagging(pipeline: Pipeline, session: ExperimentSession):
+    output_message_tags = [("test_tag_1", None), ("user_tag", "")]
+    pipeline_state = PipelineState(messages=["Hi"], session_tags=output_message_tags)
+
+    bot = PipelineBot(session=session, experiment=session.experiment, trace_service=TracingService.empty())
+    bot.invoke_pipeline(input_state=pipeline_state, pipeline=pipeline)
+
+    tags = list(session.chat.tags.all())
+    _assert_tags(tags, output_message_tags)
+
+
+def _assert_tags(object_tags, expected: list[tuple[str, str]]):
+    assert len(object_tags) == len(expected)
+    created_tags = set((tag.name, tag.category) for tag in object_tags)
+    assert created_tags == set((name, category or "") for name, category in expected)

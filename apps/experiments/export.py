@@ -1,10 +1,12 @@
 import csv
 import io
 
+from apps.analysis.translation import get_message_content
 from apps.annotations.models import Tag, UserComment
-from apps.experiments.filters import apply_dynamic_filters
+from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 def _format_tags(tags: list[Tag]) -> str:
@@ -19,14 +21,17 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     return " | ".join([str(comment) for comment in user_comments])
 
 
-def get_filtered_sessions(request, experiment, query_params, timezone):
+def get_filtered_sessions(experiment, query_params, timezone):
     sessions_queryset = ExperimentSession.objects.filter(experiment=experiment).select_related("participant__user")
-    sessions_queryset = apply_dynamic_filters(sessions_queryset, request, parsed_params=query_params, timezone=timezone)
+    session_filter = ExperimentSessionFilter()
+    sessions_queryset = session_filter.apply(
+        sessions_queryset, filter_params=FilterParams(query_params), timezone=timezone
+    )
 
     return sessions_queryset
 
 
-def filtered_export_to_csv(experiment, sessions_queryset):
+def filtered_export_to_csv(experiment, sessions_queryset, translation_language=None):
     csv_in_memory = io.StringIO()
     writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
@@ -59,16 +64,24 @@ def filtered_export_to_csv(experiment, sessions_queryset):
         "Message Comments",
         "Trace ID",
     ]
+    if translation_language:
+        header.append("Message Language")
+        header.append("Original Message")
+
     writer.writerow(header)
 
     for session in queryset:
         for message in session.chat.messages.all():
+            if translation_language:
+                content = get_message_content(message, translation_language)
+            else:
+                content = message.content
             trace_id = _get_trace_id_for_export(message)
             row = [
                 message.id,
                 message.created_at,
                 message.message_type,
-                message.content,
+                content,
                 session.get_platform_name(),
                 _format_tags(message.chat.tags.all()),
                 _format_comments(message.chat.comments.all()),
@@ -83,6 +96,9 @@ def filtered_export_to_csv(experiment, sessions_queryset):
                 _format_comments(message.comments.all()),
                 trace_id,
             ]
+            if translation_language:
+                row.append(translation_language)
+                row.append(message.content)
             writer.writerow(row)
     return csv_in_memory
 

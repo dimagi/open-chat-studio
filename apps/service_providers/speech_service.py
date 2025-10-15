@@ -49,7 +49,7 @@ class SpeechService(pydantic.BaseModel):
 
     def transcribe_audio(self, audio: BytesIO) -> str:
         try:
-            self._transcribe_audio(audio)
+            return self._transcribe_audio(audio)
         except Exception as e:
             log.exception(e)
             raise AudioTranscriptionException(f"Unable to transcribe audio. Error: {e}") from e
@@ -135,6 +135,7 @@ class AzureSpeechService(SpeechService):
                     if cancellation_details.error_details:
                         msg += f". Error details: {cancellation_details.error_details}"
                 raise AudioSynthesizeException(msg)
+            raise AudioSynthesizeException(f"Unexpected result: {result}")
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
@@ -160,6 +161,7 @@ class AzureSpeechService(SpeechService):
                 if cancellation_details.error_details:
                     msg += f". Error details: {cancellation_details.error_details}"
             raise AudioTranscriptionException(msg)
+        raise AudioTranscriptionException(f"Unexpected result: {result}")
 
 
 class OpenAISpeechService(SpeechService):

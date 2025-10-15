@@ -1,0 +1,397 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+
+{% block app %}
+  <section class="app-card">
+    <div>
+      <a href="{% url 'ocs_admin:flags_home' %}" class="text-sm text-base-content/70 hover:text-base-content mb-2 inline-block">
+        ← {% translate "Back to Flags" %}
+      </a>
+      <h1 class="pg-title">{{ flag.name }}</h1>
+      {% if flag_info %}
+        <p class="text-base-content/80 mt-2">{{ flag_info.description }}</p>
+        {% if flag_info.docs_url %}
+          <a href="{{ flag_info.docs_url }}" target="_blank" class="text-sm text-primary hover:text-primary-focus mt-1 inline-flex items-center">
+            <i class="fa fa-external-link mr-1" aria-hidden="true"></i>
+            View Documentation
+          </a>
+        {% endif %}
+        {% if flag_info.removed %}
+          <div role="alert" class="alert alert-error">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <span>This flag has been removed and is no longer in use.</span>
+            </div>
+          </div>
+        {% endif %}
+        {% if flag_info.requires %}
+          <div role="alert" class="alert alert-warning">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <span>This flag depends on the following flags:</span>
+              <ul class="list-inside list-disc">
+                {% for requires in flag_info.requires %}
+                  <li><a href="{% url "ocs_admin:flag_detail" requires %}">{{ requires }}</a></li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        {% endif %}
+      {% else %}
+        <p class="text-warning text-sm mt-2">
+          <i class="fa fa-warning mr-1" aria-hidden="true"></i>
+          No description defined for this flag
+        </p>
+      {% endif %}
+    </div>
+
+    <div
+      x-data="flagManager({
+              flagId: {{ flag.id }},
+              flagName: '{{ flag.name }}',
+              initialData: {
+              everyone: {{ flag.everyone|yesno:'true,false' }},
+              testing: {{ flag.testing|yesno:'true,false' }},
+              superusers: {{ flag.superusers|yesno:'true,false' }},
+              rollout: {{ flag.rollout|yesno:'true,false' }},
+              percent: {{ flag.percent|default:'null' }},
+              teams: [{% for team in flag.teams.all %}{{ team.id }}{% if not forloop.last %},{% endif %}{% endfor %}],
+              users: [{% for user in flag.users.all %}{{ user.id }}{% if not forloop.last %},{% endif %}{% endfor %}]
+              }
+              })"
+    >
+      <form @submit.prevent="save()" class="space-y-6">
+        {% csrf_token %}
+
+      <!-- Basic Flags Section -->
+        <div class="bg-base-100 shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-base-content mb-4">
+              {% translate "Basic Settings" %}
+            </h3>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label class="flex items-center">
+                <input
+                  type="checkbox"
+                  x-model="formData.everyone"
+                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                />
+                <span class="ml-2 text-sm text-base-content">
+                  {% translate "Everyone" %}
+                  <span class="block text-xs text-base-content/70">{% translate "Enable for all users" %}</span>
+                </span>
+              </label>
+
+              <label class="flex items-center">
+                <input
+                  type="checkbox"
+                  x-model="formData.testing"
+                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                />
+                <span class="ml-2 text-sm text-base-content">
+                  {% translate "Testing" %}
+                  <span class="block text-xs text-base-content/70">{% translate "Enable for testing" %}</span>
+                </span>
+              </label>
+
+              <label class="flex items-center">
+                <input
+                  type="checkbox"
+                  x-model="formData.superusers"
+                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                />
+                <span class="ml-2 text-sm text-base-content">
+                  {% translate "Superusers" %}
+                  <span class="block text-xs text-base-content/70">{% translate "Enable for superusers" %}</span>
+                </span>
+              </label>
+
+              <div class="space-y-3">
+                <label class="flex items-center">
+                  <input
+                    type="checkbox"
+                    x-model="formData.rollout"
+                    class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                  />
+                  <span class="ml-2 text-sm text-base-content">
+                    {% translate "Rollout" %}
+                    <span class="block text-xs text-base-content/70">{% translate "Enable rollout mode" %}</span>
+                  </span>
+                </label>
+
+                <div x-show="formData.rollout" class="ml-6 space-y-2 mt-2" x-cloak>
+                  <div class="flex items-center justify-between">
+                    <label class="block text-sm font-medium text-base-content">
+                      {% translate "Percentage" %}
+                    </label>
+                    <span class="text-sm font-medium text-base-content" x-text="(formData.percent || 0) + '%'"></span>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    x-model="formData.percent"
+                    class="range range-primary w-full"
+                    step="1"
+                  />
+
+                  <div class="flex justify-between text-xs text-base-content/70">
+                    <span>0%</span>
+                    <span>25%</span>
+                    <span>50%</span>
+                    <span>75%</span>
+                    <span>100%</span>
+                  </div>
+
+                  <p class="text-xs text-base-content/70">
+                    {% translate "Adjust the slider to set the percentage of users who will see this flag" %}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <!-- Teams Section -->
+        <div class="bg-base-100 shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-base-content mb-4">
+              {% translate "Teams" %}
+            </h3>
+
+            <select
+              id="teams-select"
+              multiple
+              x-ref="teamsSelect"
+              class="w-full"
+            >
+              {% for team in flag.teams.all %}
+                <option value="{{ team.id }}" selected>{{ team.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+      <!-- Users Section -->
+        <div class="bg-base-100 shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-base-content mb-4">
+              {% translate "Users" %}
+            </h3>
+
+            <select
+              id="users-select"
+              multiple
+              x-ref="usersSelect"
+              class="w-full"
+            >
+              {% for user in flag.users.all %}
+                <option value="{{ user.id }}" selected>{{ user.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+      <!-- Save Button -->
+        <div class="flex justify-end">
+          <button
+            type="submit"
+            class="btn btn-primary"
+            {% if flag_info.removed %}
+              disabled="true"
+            {% else %}
+            :disabled="loading || !hasChanges()"
+            {% endif %}
+            :class="{ 'opacity-50': loading || !hasChanges() }"
+          >
+            <span x-show="!loading">{% translate "Save Changes" %}</span>
+            <span x-show="loading">{% translate "Saving..." %}</span>
+          </button>
+        </div>
+
+      <!-- Change History Section -->
+        <div class="bg-base-100 shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg leading-6 font-medium text-base-content mb-4">
+              {% translate "Change History" %}
+            </h3>
+
+            <div
+              id="flag-history-section"
+              hx-get="{% url 'ocs_admin:flag_history' flag.name %}"
+              hx-trigger="load, refreshHistory from:body"
+              hx-swap="innerHTML"
+            >
+              <!-- History table will be loaded here -->
+              <div class="text-center py-4">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p class="text-sm text-base-content/70 mt-2">{% translate "Loading history..." %}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <!-- Error Display -->
+        <div x-show="error" class="alert alert-error">
+          <p class="text-sm" x-text="error"></p>
+        </div>
+
+      <!-- Success Display -->
+        <div x-show="success" class="alert alert-success">
+          <p class="text-sm">{% translate "Flag updated successfully!" %}</p>
+        </div>
+      </form>
+    </div>
+  </section>
+
+{% endblock app %}
+
+{% block page_js %}
+  <script>
+    function flagManager(config) {
+      return {
+        flagId: config.flagId,
+        flagName: config.flagName,
+        formData: { ...config.initialData },
+        originalData: { ...config.initialData },
+        loading: false,
+        error: null,
+        success: false,
+        teamsSelect: null,
+        usersSelect: null,
+
+        init() {
+          this.normalizeFormData();
+          this.$nextTick(() => this.initTomSelect());
+        },
+
+        normalizeFormData() {
+          ['teams', 'users'].forEach(field => {
+            this.formData[field] = this.formData[field].map(id => parseInt(id));
+            this.originalData[field] = this.originalData[field].map(id => parseInt(id));
+          });
+        },
+
+        initTomSelect() {
+          this.teamsSelect = this.createTomSelect(this.$refs.teamsSelect, 'teams', '/admin/api/teams/');
+          this.usersSelect = this.createTomSelect(this.$refs.usersSelect, 'users', '/admin/api/users/');
+        },
+
+        createTomSelect(element, field, apiUrl) {
+          return new TomSelect(element, {
+            plugins: ['remove_button'],
+            maxItems: null,
+            valueField: 'value',
+            labelField: 'text',
+            searchField: 'text',
+            load: this.loadOptions(apiUrl),
+            render: {
+              option: (data, escape) => `<div>${escape(data.text)}</div>`
+            },
+            onChange: (values) => {
+              this.formData[field] = values.map(id => parseInt(id));
+            }
+          });
+        },
+
+        loadOptions(apiUrl) {
+          return (query, callback) => {
+            if (!query.length) {
+              callback();
+              return;
+            }
+
+            fetch(`${apiUrl}?q=${encodeURIComponent(query)}`)
+              .then(response => {
+                if (!response.ok) {
+                  throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+              })
+              .then(callback)
+              .catch(() => callback());
+          };
+        },
+
+        hasChanges() {
+          return JSON.stringify(this.formData) !== JSON.stringify(this.originalData);
+        },
+
+        async save() {
+          this.loading = true;
+          this.error = null;
+          this.success = false;
+
+          try {
+            const formData = this.buildFormData();
+            const response = await fetch(`/admin/flags/${this.flagName}/update/`, {
+              method: 'POST',
+              body: formData
+            });
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            let data;
+            try {
+              data = await response.json();
+            } catch (jsonErr) {
+              throw new Error('Invalid JSON response from server');
+            }
+
+            this.handleResponse(data);
+          } catch (err) {
+            this.error = err.message || 'Network error occurred';
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        buildFormData() {
+          const formData = new FormData();
+          const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+          if (!csrfToken) {
+            throw new Error('CSRF token not found');
+          }
+          formData.append('csrfmiddlewaretoken', csrfToken.value);
+
+          // Add boolean flags
+          ['everyone', 'testing', 'superusers', 'rollout'].forEach(field => {
+            if (this.formData[field]) formData.append(field, 'on');
+          });
+
+          // Add percentage if set
+          if (this.formData.percent !== null && this.formData.percent !== '') {
+            formData.append('percent', this.formData.percent);
+          }
+
+          // Add arrays
+          ['teams', 'users'].forEach(field => {
+            this.formData[field].forEach(id => formData.append(field, id));
+          });
+
+          return formData;
+        },
+
+        handleResponse(data) {
+          if (data.success) {
+            this.success = true;
+            this.originalData = { ...this.formData };
+            // Trigger HTMX to refresh the history section
+            htmx.trigger(document.body, 'refreshHistory');
+            setTimeout(() => this.success = false, 3000);
+          } else {
+            this.error = data.error || 'An error occurred';
+          }
+        }
+      };
+    }
+  </script>
+{% endblock page_js %}

@@ -1,11 +1,11 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
-from functools import cached_property
 from io import BytesIO
 from typing import ClassVar
 from urllib.parse import urljoin
 
+import backoff
 import boto3
 import pydantic
 import requests
@@ -16,6 +16,7 @@ from slack_sdk.errors import SlackApiError
 from telebot.util import smart_split
 from turn import TurnClient
 from twilio.rest import Client
+from twilio.rest.api.v2010.account.message import MessageContext, MessageInstance
 
 from apps.channels import audio
 from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
@@ -117,11 +118,43 @@ class TwilioService(MessagingService):
         prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
         return f"{prefix}:{from_}", f"{prefix}:{to}"
 
+    @backoff.on_predicate(
+        backoff.constant,
+        lambda status: status not in [MessageInstance.Status.DELIVERED, MessageInstance.Status.READ],
+        max_time=10,
+        interval=2,
+        jitter=None,
+    )
+    def block_until_delivered(self, current_chunk_sid: str) -> bool:
+        """
+        Checks if the current message chunk has been delivered.
+
+        See https://shorturl.at/EZocp for a list of possible statuses.
+        """
+        message_context: MessageContext = self.client.messages.get(current_chunk_sid)
+        message = message_context.fetch()
+        return message.status
+
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        """
+        Sends a text message to the user. If the message is too long, it will be split into chunks of
+        `MESSAGE_CHARACTER_LIMIT` characters and sent as multiple messages. Sending chunks is done sequentially,
+        waiting for the previous chunk to be delivered before sending the next one.
+
+        See https://shorturl.at/valat for more information.
+        """
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
 
-        for message_text in smart_split(message, chars_per_string=self.MESSAGE_CHARACTER_LIMIT):
-            self.client.messages.create(from_=from_, body=message_text, to=to)
+        chunks = smart_split(message, chars_per_string=self.MESSAGE_CHARACTER_LIMIT)
+        num_chunks = len(chunks)
+        for message_text in chunks:
+            response: MessageInstance = self.client.messages.create(from_=from_, body=message_text, to=to)
+            message_id = response.sid
+
+            if num_chunks == 1:
+                return
+
+            self.block_until_delivered(message_id)
 
     def send_voice_message(
         self,
@@ -155,9 +188,9 @@ class TwilioService(MessagingService):
 
         return number in self._get_account_numbers()
 
-    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file_name: str, download_link: str):
+    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
-        self.client.messages.create(from_=from_, to=to, body=file_name, media_url=download_link)
+        self.client.messages.create(from_=from_, to=to, body=file.name, media_url=download_link)
 
     def can_send_file(self, file: File) -> bool:
         return file.content_type in supported_mime_types.TWILIO and file.size_mb <= self.max_file_size_mb
@@ -168,6 +201,7 @@ class TurnIOService(MessagingService):
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
     voice_replies_supported: ClassVar[bool] = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+    supports_multimedia = True
 
     auth_token: str
 
@@ -183,8 +217,12 @@ class TurnIOService(MessagingService):
     ):
         # OGG must use the opus codec: https://whatsapp.turn.io/docs/api/media#uploading-media
         voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
-        media_id = self.client.media.upload_media(voice_audio_bytes, content_type="audio/ogg")
-        self.client.messages.send_audio(whatsapp_id=to, media_id=media_id)
+        audio_file = BytesIO(voice_audio_bytes)
+        audio_file.name = "voice_message.ogg"
+
+        self.client.messages.send_media(
+            whatsapp_id=to, file=audio_file, content_type="audio/ogg", media_type="audio", caption=None
+        )
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
         response = self.client.media.get_media(message.media_id)
@@ -192,8 +230,43 @@ class TurnIOService(MessagingService):
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
     def can_send_file(self, file: File) -> bool:
-        # When support for Turn.IO is added, this should be updated
-        return False
+        mime = file.content_type
+        size = file.content_size or 0  # in bytes
+
+        if mime is None:
+            return False
+
+        if mime.startswith("image/"):
+            return size <= 5 * 1024 * 1024  # 5 MB
+        elif mime.startswith(("video/", "audio/")):
+            return size <= 16 * 1024 * 1024  # 16 MB
+        elif mime.startswith("application/"):
+            return size <= 100 * 1024 * 1024  # 100 MB
+        else:
+            return False
+
+    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
+        mime_type = file.content_type
+
+        if mime_type.startswith("image/"):
+            media_type = "image"
+        elif mime_type.startswith("video/"):
+            media_type = "video"
+        elif mime_type.startswith("audio/"):
+            media_type = "audio"
+        else:
+            media_type = "document"
+
+        with file.file.open("rb") as file_obj:
+            message_id = self.client.messages.send_media(
+                whatsapp_id=to,
+                file=file_obj,
+                content_type=mime_type,
+                media_type=media_type,
+                caption=None,
+            )
+
+        return message_id
 
 
 class SureAdhereService(MessagingService):
@@ -236,6 +309,7 @@ class SlackService(MessagingService):
 
     slack_team_id: str
     slack_installation_id: int
+    _client: WebClient | None = pydantic.PrivateAttr(default=None)
 
     def send_text_message(
         self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str = None, **kwargs
@@ -246,11 +320,17 @@ class SlackService(MessagingService):
             thread_ts=thread_ts,
         )
 
-    @cached_property
+    @property
     def client(self) -> WebClient:
-        from apps.slack.client import get_slack_client
+        if not self._client:
+            from apps.slack.client import get_slack_client
 
-        return get_slack_client(self.slack_installation_id)
+            self._client = get_slack_client(self.slack_installation_id)
+        return self._client
+
+    @client.setter
+    def client(self, value: WebClient):
+        self._client = value
 
     def iter_channels(self):
         for page in self.client.conversations_list():
@@ -270,3 +350,15 @@ class SlackService(MessagingService):
             raise ServiceProviderConfigError(self._type, message) from e
 
         self.client.conversations_join(channel=channel_id)
+
+    def send_file_message(self, file: File, to: str, thread_ts: str):
+        file_bytes = BytesIO(file.file.read())
+        file_bytes.seek(0)
+
+        self.client.files_upload_v2(
+            channels=to,
+            file=file_bytes,
+            filename=file.name,
+            thread_ts=thread_ts,
+            title=file.name,
+        )

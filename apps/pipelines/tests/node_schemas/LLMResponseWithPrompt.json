@@ -1,5 +1,5 @@
 {
-  "description": "Uses and LLM to respond to the input.",
+  "description": "Uses an LLM to respond to the input.",
   "properties": {
     "tag": {
       "default": "",
@@ -39,7 +39,7 @@
       ],
       "title": "PipelineChatHistoryTypes",
       "type": "string",
-      "default": "none",
+      "default": "global",
       "ui:enumLabels": [
         "Node",
         "Named",
@@ -98,12 +98,12 @@
       "default": "You are a helpful assistant. Answer the user's query as best you can",
       "title": "Prompt",
       "type": "string",
-      "ui:widget": "expandable_text"
+      "ui:optionsSource": "text_editor_autocomplete_vars_llm_node",
+      "ui:widget": "text_editor_widget"
     },
     "collection_id": {
       "default": null,
       "title": "Media",
-      "ui:flagRequired": "flag_pipelines-v2",
       "ui:optionsSource": "collection",
       "ui:widget": "select",
       "type": "integer"
@@ -111,10 +111,23 @@
     "collection_index_id": {
       "default": null,
       "title": "Collection Index",
-      "ui:flagRequired": "flag_pipelines-v2",
       "ui:optionsSource": "collection_index",
       "ui:widget": "select",
       "type": "integer"
+    },
+    "max_results": {
+      "default": 20,
+      "description": "The maximum number of results to retrieve from the index",
+      "title": "Max Results",
+      "ui:widget": "range",
+      "type": "integer"
+    },
+    "generate_citations": {
+      "default": true,
+      "description": "Allow files from this collection to be referenced in LLM responses and downloaded by users",
+      "title": "Generate Citations",
+      "type": "boolean",
+      "ui:widget": "toggle"
     },
     "tools": {
       "description": "The tools to enable for the bot",
@@ -205,6 +218,23 @@
       "type": "object",
       "ui:discriminatorField": "llm_provider_type",
       "ui:widget": "built_in_tools_config"
+    },
+    "mcp_tools": {
+      "description": "MCP tools to enable for the bot",
+      "items": {
+        "type": "string"
+      },
+      "title": "MCP Tools",
+      "type": "array",
+      "ui:flagRequired": "flag_mcp",
+      "ui:optionsSource": "mcp_tools",
+      "ui:widget": "multiselect"
+    },
+    "synthetic_voice_id": {
+      "default": null,
+      "title": "Voice Model",
+      "ui:widget": "voice_widget",
+      "type": "integer"
     }
   },
   "required": [

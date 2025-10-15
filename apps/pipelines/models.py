@@ -12,17 +12,14 @@ from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import Experiment, ExperimentSession, SourceMaterial
+from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
-from apps.pipelines.executor import patch_executor
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
-from apps.pipelines.helper import duplicate_pipeline_with_new_ids
-from apps.pipelines.nodes.base import PipelineState
-from apps.pipelines.nodes.helpers import temporary_session
+from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 
@@ -120,31 +117,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     @classmethod
     def create_default(cls, team, name=None, llm_provider_id=None, llm_provider_model=None):
-        from apps.pipelines.nodes.nodes import EndNode, StartNode
-
         default_name = "New Pipeline" if name is None else name
         existing_pipeline_count = cls.objects.filter(team=team, name__startswith=default_name).count()
 
-        start_id = str(uuid4())
-        start_node = FlowNode(
-            id=start_id,
-            type="startNode",
-            position={
-                "x": -200,
-                "y": 200,
-            },
-            data=FlowNodeData(id=start_id, type=StartNode.__name__, params={"name": "start"}),
-        )
-        end_id = str(uuid4())
-        end_node = FlowNode(
-            id=end_id,
-            type="endNode",
-            position={"x": 1000, "y": 200},
-            data=FlowNodeData(id=end_id, type=EndNode.__name__, params={"name": "end"}),
-        )
+        node = None
         if llm_provider_id and llm_provider_model:
             llm_id = f"LLMResponseWithPrompt-{uuid4().hex[:5]}"
-            llm_node = FlowNode(
+            node = FlowNode(
                 id=llm_id,
                 type="pipelineNode",
                 position={"x": 300, "y": 0},
@@ -157,7 +136,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                         "llm_provider_id": llm_provider_id,
                         "llm_provider_model_id": llm_provider_model.id,
                         "llm_temperature": 0.7,
-                        "history_type": "none",
+                        "history_type": "global",
                         "history_name": None,
                         "history_mode": "summarize",
                         "user_max_token_limit": llm_provider_model.max_token_limit,
@@ -170,36 +149,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     },
                 ),
             )
-            edges = [
-                {
-                    "id": f"edge-{start_id}-{llm_id}",
-                    "source": start_id,
-                    "target": llm_id,
-                    "sourceHandle": "output",
-                    "targetHandle": "input",
-                },
-                {
-                    "id": f"edge-{llm_id}-{end_id}",
-                    "source": llm_id,
-                    "target": end_id,
-                    "sourceHandle": "output",
-                    "targetHandle": "input",
-                },
-            ]
-        else:
-            llm_node = None
-            edges = []
-        default_nodes = [start_node.model_dump()]
-        if llm_node:
-            default_nodes.append(llm_node.model_dump())
-        default_nodes.append(end_node.model_dump())
-        new_pipeline = cls.objects.create(
-            team=team,
-            data={"nodes": default_nodes, "edges": edges},
-            name=default_name if name else f"New Pipeline {existing_pipeline_count + 1}",
-        )
-        new_pipeline.update_nodes_from_data()
-        return new_pipeline
+
+        final_name = default_name if name else f"New Pipeline {existing_pipeline_count + 1}"
+        return create_pipeline_with_nodes(team=team, name=final_name, middle_node=node)
 
     def get_absolute_url(self):
         return reverse("pipelines:edit", args=[self.team.slug, self.id])
@@ -298,83 +250,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def node_ids(self):
         return self.node_set.order_by("created_at").values_list("flow_id", flat=True).all()
 
-    def simple_invoke(self, input: str, user_id: int) -> PipelineState:
-        """Invoke the pipeline without a session or the ability to save the run to history"""
-        from apps.pipelines.graph import PipelineGraph
-
-        with temporary_session(self.team, user_id) as session:
-            runnable = PipelineGraph.build_runnable_from_pipeline(self)
-            input = PipelineState(messages=[input], experiment_session=session)
-            with patch_executor():
-                output = runnable.invoke(input, config={"max_concurrency": 1})
-            output = PipelineState(**output).json_safe()
-        return output
-
-    def invoke(
-        self,
-        input: PipelineState,
-        session: ExperimentSession,
-        experiment: Experiment,
-        trace_service,
-        save_run_to_history=True,
-        save_input_to_history=True,
-        disable_reminder_tools=False,
-    ) -> ChatMessage:
-        from apps.experiments.models import AgentTools
-        from apps.pipelines.graph import PipelineGraph
-
-        graph = PipelineGraph.build_from_pipeline(self)
-        config = trace_service.get_langchain_config(
-            configurable={
-                "disabled_tools": AgentTools.reminder_tools() if disable_reminder_tools else [],
-            },
-            run_name_map=graph.node_id_to_name_mapping,
-            filter_patterns=graph.filter_patterns,
-        )
-        runnable = graph.build_runnable()
-        raw_output = runnable.invoke(input, config=config)
-        output = PipelineState(**raw_output).json_safe()
-        if save_run_to_history and session is not None:
-            input_metadata = output.get("input_message_metadata", {})
-            output_metadata = output.get("output_message_metadata", {})
-            trace_metadata = trace_service.get_trace_metadata() if trace_service else None
-            if trace_metadata:
-                input_metadata.update(trace_metadata)
-                output_metadata.update(trace_metadata)
-
-            if save_input_to_history:
-                self._save_message_to_history(
-                    session, input["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
-                )
-            ai_message = self._save_message_to_history(
-                session,
-                output["messages"][-1],
-                ChatMessageType.AI,
-                metadata=output_metadata,
-                tags=output.get("output_message_tags"),
-            )
-            ai_message.add_version_tag(version_number=experiment.version_number, is_a_version=experiment.is_a_version)
-            return ai_message
-        else:
-            return ChatMessage(content=output)
-
-    def _save_message_to_history(
-        self,
-        session: ExperimentSession,
-        message: str,
-        type_: ChatMessageType,
-        metadata: dict,
-        tags: list[tuple] = None,
-    ) -> ChatMessage:
-        chat_message = ChatMessage.objects.create(
-            chat=session.chat, message_type=type_.value, content=message, metadata=metadata
-        )
-
-        if tags:
-            for tag_value, category in tags:
-                chat_message.create_and_add_tag(tag_value, category or "")
-        return chat_message
-
     @transaction.atomic()
     def create_new_version(self, is_copy: bool = False):
         version_number = 1 if is_copy else self.version_number
@@ -436,8 +311,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             .values("trigger_experiment_id")
         )
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         reserved_types = ["StartNode", "EndNode"]
 
         def node_name(node):
@@ -478,6 +352,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def __str__(self):
         return self.flow_id
 
+    @property
+    def name(self):
+        return self.params.get("name", None)
+
     def create_new_version(self, is_copy=False, new_flow_id=None):
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
@@ -507,7 +385,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             _set_versioned_param_value(new_version, "collection_index_id", Collection)
 
         new_version.save()
-        self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
+        if self.params.get("custom_actions"):
+            self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
 
         return new_version
 
@@ -535,8 +414,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
         self._archive_related_params()
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         from apps.assistants.models import OpenAiAssistant
         from apps.documents.models import Collection
         from apps.experiments.models import VersionFieldDisplayFormatters
@@ -579,7 +457,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
             )
 
-        if self.type == LLMResponseWithPrompt.__name__:
+        if self.type == LLMResponseWithPrompt.__name__ and self.params.get("custom_actions"):
             param_versions.append(
                 VersionField(
                     group_name=node_name,

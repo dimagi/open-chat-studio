@@ -1,0 +1,62 @@
+{% extends "generic/object_form.html" %}
+{% load form_tags i18n %}
+
+{% block form %}
+  <div>
+    {{ form.non_field_errors }}
+
+    {% render_form_fields form "name" %}
+    {% render_form_fields form "dataset" %}
+    {% render_form_fields form "evaluators" %}
+
+    <div class="fieldset w-full">
+      <label class="label font-bold" for="{{ form.experiment.id_for_label }}">
+        <div>
+          {{ form.experiment.label }}
+          {% if form.experiment.help_text %}
+            <small class="form-text text-muted">
+              {% include "generic/help.html" with help_content=form.experiment.help_text %}
+            </small>
+          {% endif %}
+        </div>
+      </label>
+      <select name="{{ form.experiment.name }}"
+              id="{{ form.experiment.id_for_label }}"
+              class="select w-full"
+              hx-get="{% url 'evaluations:load_experiment_versions' team.slug %}"
+              hx-target="#version-select-container"
+              hx-trigger="change[target.value != '']"
+              hx-include="[name='{{ form.experiment.name }}']"
+              hx-swap="outerHTML show:#version-select-container"
+              hx-indicator="#version-loading"
+              onchange="
+                        // hide the version select box whenever a new item is selected
+                        const container = document.getElementById('version-select-container');
+                        container.style.display = 'none';
+                       ">
+        {% if form.experiment.empty_label %}
+          <option value="">{{ form.experiment.empty_label }}</option>
+        {% endif %}
+        {% for value, label in form.experiment.field.choices %}
+          <option value="{{ value }}" {% if form.experiment.value == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      {{ form.experiment.errors }}
+    </div>
+
+    {# The version select field starts hidden in the "new" form until the user selects an experiment #}
+    <div id="version-select-container" {% if not form.experiment.value %}style="display: none;"{% endif %}>
+      {% render_form_fields form "experiment_version" %}
+    </div>
+
+    <div id="version-loading" class="fieldset w-full htmx-indicator flex items-center gap-2 mt-2">
+      <div class="flex items-center">
+        <span class="loading loading-spinner loading-sm"></span>
+        <span class="ml-2">{% trans "Loading chatbot versions..." %}</span>
+      </div>
+    </div>
+
+  </div>
+
+{% endblock form %}
+

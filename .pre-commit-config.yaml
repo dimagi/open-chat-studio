@@ -1,6 +1,6 @@
 exclude: ^static/.*|/migrations/.*|\.min\.js$|\.min\.css$|\.css\.map$|\.min\.js$|\.js\.map$|\.svg$
 default_language_version:
-  python: python3.11
+  python: python3.13
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.7
@@ -8,15 +8,11 @@ repos:
       - id: ruff
         args: [ --fix, --show-fixes ]
       - id: ruff-format
-  - repo: https://github.com/rtts/djhtml
-    rev: '3.0.6'
+  - repo: https://github.com/djlint/djLint
+    rev: v1.36.4
     hooks:
-      - id: djhtml
-        files: templates/.*\.html$
-      - id: djcss
-        exclude: mode_modules/.*|assets/.*
-      - id: djjs
-        exclude: mode_modules/.*|assets/.*
+#      - id: djlint-reformat-django enable once format changes have been applied
+      - id: djlint-django
   - repo: https://github.com/pre-commit/mirrors-eslint
     rev: 'v8.56.0'
     hooks:

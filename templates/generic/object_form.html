@@ -1,8 +1,8 @@
 {# Generic template for rendering an object form (e.g. create / update) #}
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load form_tags %}
 {% block app %}
-  <div class="app-card max-w-5xl mx-auto">
+  <div class="app-card max-w-full mx-auto">
     <div class="flex">
       <div class="flex-1">
         <h1 class="pg-title">{{ title }}</h1>
@@ -23,10 +23,10 @@
         {% endblock form %}
         {% block form_actions %}
           <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
-        {% endblock %}
+        {% endblock form_actions %}
       </form>
       {% block post_form %}
       {% endblock post_form %}
     </div>
   </div>
-{% endblock %}
+{% endblock app %}

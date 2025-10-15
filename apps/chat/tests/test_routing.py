@@ -5,7 +5,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from apps.chat.bots import TopicBot
 from apps.chat.models import ChatMessageType
-from apps.experiments.models import ExperimentRoute
+from apps.experiments.models import ExperimentRoute, ExperimentRouteType
 from apps.service_providers.tests.mock_tracer import MockTracer
 from apps.service_providers.tracing import TracingService
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -46,9 +46,9 @@ def test_experiment_routing(with_default, routing_response, expected_tag):
 def test_experiment_routing_with_tracing():
     experiment = _make_experiment_with_routing()
     session = ExperimentSessionFactory(experiment=experiment)
-    trace_service = TracingService([MockTracer()])
+    trace_service = TracingService([MockTracer()], experiment.id, experiment.team_id)
     with (
-        trace_service.trace("test", "123", "bob"),
+        trace_service.trace("test", session),
         mock_llm(responses=["anything", "How can I help today?"], token_counts=[0]) as fake_service,
     ):
         bot = TopicBot(session, experiment, trace_service)
@@ -100,27 +100,31 @@ def test_experiment_routing_with_assistant(
     assert set(message.tags.values_list("name", flat=True)) == set([expected_tag, "v1-unreleased"])
 
 
-def _make_experiment_with_routing(with_default=True, assistant_children=False):
+def _make_experiment_with_routing(with_default=True, assistant_children=False, with_terminal=False):
     team = TeamFactory()
-    experiments = ExperimentFactory.create_batch(4, team=team)
+    experiments = ExperimentFactory.create_batch(5 if with_terminal else 4, team=team)
     router = experiments[0]
     if assistant_children:
         for exp in experiments[1:]:
             exp.assistant = OpenAiAssistantFactory(team=team)
             exp.save()
 
-    ExperimentRoute.objects.bulk_create(
-        [
-            ExperimentRoute(team=team, parent=router, child=experiments[1], keyword="keyword1", is_default=False),
-            ExperimentRoute(
-                # make the middle one the default to avoid first / last false positives
-                team=team,
-                parent=router,
-                child=experiments[2],
-                keyword="keyword2",
-                is_default=with_default,
-            ),
-            ExperimentRoute(team=team, parent=router, child=experiments[3], keyword="keyword3", is_default=False),
-        ]
-    )
+    children = [
+        ExperimentRoute(team=team, parent=router, child=experiments[1], keyword="keyword1", is_default=False),
+        ExperimentRoute(
+            # make the middle one the default to avoid first / last false positives
+            team=team,
+            parent=router,
+            child=experiments[2],
+            keyword="keyword2",
+            is_default=with_default,
+        ),
+        ExperimentRoute(team=team, parent=router, child=experiments[3], keyword="keyword3", is_default=False),
+    ]
+    if with_terminal:
+        children.append(
+            ExperimentRoute(team=team, parent=router, child=experiments[4], type=ExperimentRouteType.TERMINAL)
+        )
+    ExperimentRoute.objects.bulk_create(children)
+
     return router

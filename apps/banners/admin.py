@@ -40,7 +40,10 @@ class BannerAdmin(admin.ModelAdmin):
         ),
         (
             "Duration",
-            {"fields": ("start_date", "end_date", "is_active"), "description": "Control when the banner is displayed"},
+            {
+                "fields": ("start_date", "end_date", "dismiss_timeout", "is_active"),
+                "description": "Control when the banner is displayed",
+            },
         ),
     )
 

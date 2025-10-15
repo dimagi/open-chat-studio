@@ -33,7 +33,7 @@
       ],
       "title": "PipelineChatHistoryTypes",
       "type": "string",
-      "default": "none",
+      "default": "node",
       "ui:enumLabels": [
         "Node",
         "Named",
@@ -107,7 +107,8 @@
       "minLength": 1,
       "title": "Prompt",
       "type": "string",
-      "ui:widget": "expandable_text"
+      "ui:optionsSource": "text_editor_autocomplete_vars_router_node",
+      "ui:widget": "text_editor_widget"
     }
   },
   "required": [

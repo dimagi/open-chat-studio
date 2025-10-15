@@ -14,4 +14,6 @@ urlpatterns = [
     path("timeout/<int:trigger_id>/delete", views.delete_timeout_event_view, name="timeout_event_delete"),
     path("static/<int:trigger_id>/logs", views.static_logs_view, name="static_logs_view"),
     path("timeout/<int:trigger_id>/logs", views.timeout_logs_view, name="timeout_logs_view"),
+    path("static/<int:trigger_id>/toggle-active", views.toggle_static_active_status, name="static_event_toggle"),
+    path("timeout/<int:trigger_id>/toggle-active", views.toggle_timeout_active_status, name="timeout_event_toggle"),
 ]

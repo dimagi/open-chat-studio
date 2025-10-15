@@ -1,5 +1,30 @@
 {% load i18n %}
 {% load django_tables2 %}
+{% if show_modal_or_banner %}
+  <dialog id="creation-redirect-modal" class="modal">
+    <div class="modal-box">
+      <div class="flex items-center">
+        <h3 class="font-bold text-lg">Experiments are Deprecated</h3>
+      </div>
+      <div class="flex items-start">
+        <div>
+          <p class="p-2">Experiments are being replaced with Chatbots for a more streamlined bot building experience! The creation of new Experiments has been disabled. Please create a Chatbot instead.</p>
+          <a href="https://docs.openchatstudio.com/concepts/chatbots/" target="_blank" rel="noopener noreferrer" class="link link-primary">
+            Learn More →
+          </a>
+        </div>
+      </div>
+      <div class="modal-action">
+        <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" class="btn btn-primary">
+          Go to Chatbots
+        </a>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+{% endif %}
 <div class="app-card">
   <div class="grid grid-cols-6">
     <div class="col-span-5">
@@ -14,8 +39,8 @@
       <span class="text-neutral-500">{{ subtitle }}</span>
     </div>
     {% if allow_new|default_if_none:True or actions %}
-      <div class="justify-self-end">
-        {% if allow_new|default_if_none:True %}
+      <div class="justify-self-end join">
+        {% if new_object_url %}
           <a class="btn btn-sm {{ button_style|default:"btn-primary" }}"
              href="{{ new_object_url }}">Add new
           </a>
@@ -26,6 +51,22 @@
       </div>
     {% endif %}
   </div>
+
+  {% if show_modal_or_banner %}
+    <div>
+      <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
+        <div>
+          Your Pipeline Experiments have moved! You can access them in the new Chatbots section. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a>
+        </div>
+        <div>
+          <a href="{% url 'chatbots:chatbots_home' request.team.slug %}"
+             class="btn btn-primary">
+            Go to Chatbots
+          </a>
+        </div>
+      </div>
+    </div>
+  {% endif %}
 
   {% if enable_search and not toggle_archived %}
     <div class="my-2">
@@ -65,12 +106,44 @@
         </div>
       </div>
     </form>
+  {% elif df_filter_columns %}
+    <div class="my-2 flex justify-between">
+      {% include "experiments/filters.html" %}
+    </div>
   {% else %}
     <hr class="my-2">
   {% endif %}
 
-  <div hx-get="{{ table_url }}{% querystring %}"
-       hx-trigger="load" hx-swap="outerHTML">
-    {% include "table/table_placeholder.html" %}
+    {% if df_filter_columns %}
+    <div id="data-table">
+      {% include "table/table_placeholder.html" %}
+    </div>
+    {% else %}
+    <div id="data-table">
+      <div hx-get="{{ table_url }}{% querystring %}"
+        hx-trigger="load" hx-swap="outerHTML">
+      {% include "table/table_placeholder.html" %}
+    </div>
+    {% endif %}
   </div>
 </div>
+
+{% if show_modal_or_banner %}
+  <script>
+    function showModal() {
+      const modal = document.getElementById('creation-redirect-modal');
+      if (modal) {
+        modal.showModal();
+      }
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+      const newButton = document.querySelector('a[href="{{ new_object_url }}"]');
+      if (newButton) {
+        newButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          showModal();
+        });
+      }
+    });
+  </script>
+{% endif %}

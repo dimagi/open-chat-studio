@@ -3,7 +3,7 @@
 {% load tz %}
 {% block page_js %}
     <script src="{% static 'js/tokenCounter-bundle.js' %}"></script>
-{% endblock %}
+{% endblock page_js %}
 {% block body_wrapper %}
     <div class="container flex flex-row" id="prompt-builder-container" x-data
          @keydown.window="checkForSendShortcutKeypress($event)">
@@ -11,7 +11,7 @@
             <div class="w-64 hidden 2xl:flex">
                 {% block sidebar-nav %}
                     {% include "web/components/app_nav.html" %}
-                {% endblock %}
+                {% endblock sidebar-nav %}
             </div>
         {% endif %}
         <div class="w-full h-screen flex flex-row py-4">
@@ -239,4 +239,4 @@
 
     </script>
 
-{% endblock %}
+{% endblock body_wrapper %}

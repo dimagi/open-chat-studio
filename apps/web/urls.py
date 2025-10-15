@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 from django.views.generic import TemplateView
 
 from . import views
@@ -12,6 +12,7 @@ urlpatterns = [
     path("sudo/<slug:slug>/", views.acquire_superuser_powers, name="sudo"),
     path("sudo/<slug:slug>/release/", views.release_superuser_powers, name="release_sudo"),
     path("search", views.global_search, name="global_search"),
+    re_path(r"celery_group_status/(?P<group_id>[\w-]+)/", views.celery_task_group_status, name="celery_group_status"),
 ]
 
 team_urlpatterns = (

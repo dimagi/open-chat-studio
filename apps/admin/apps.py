@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class AdminConfig(AppConfig):
+class SiteAdminConfig(AppConfig):
     name = "apps.admin"
-    label = "admin"
+    label = "site_admin"

@@ -12,9 +12,11 @@ from django_tables2 import tables
 from apps.generics.type_select_form import TypeSelectForm
 
 from . import const
+from .llm_service.default_models import get_default_model
 from .models import (
     AuthProvider,
     AuthProviderType,
+    EmbeddingProviderModel,
     LlmProvider,
     LlmProviderModel,
     LlmProviderTypes,
@@ -141,6 +143,30 @@ def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]
     return providers
 
 
+def get_dropdown_llm_model_choices(team) -> list[tuple[str, str]]:
+    """Get LLM provider model dropdown choices for the team"""
+    llm_providers = LlmProvider.objects.filter(team=team).all()
+    llm_provider_models_by_type = {}
+    for model in LlmProviderModel.objects.for_team(team):
+        llm_provider_models_by_type.setdefault(model.type, []).append(model)
+
+    model_choices = []
+    for provider in llm_providers:
+        for model in llm_provider_models_by_type.get(provider.type, []):
+            model_choices.append((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
+    return model_choices
+
+
+def get_embedding_provider_choices(team) -> dict[str, list[dict[str, Any]]]:
+    """Group embedding models by LLM provider type for dynamic selection in forms"""
+    provider_types = defaultdict(list)
+
+    for embedding_model in EmbeddingProviderModel.objects.for_team(team):
+        provider_types[embedding_model.type].append({"value": embedding_model.id, "text": str(embedding_model)})
+
+    return provider_types
+
+
 def get_first_llm_provider_by_team(team_id):
     try:
         return LlmProvider.objects.filter(team_id=team_id).order_by("id").first()
@@ -151,7 +177,32 @@ def get_first_llm_provider_by_team(team_id):
 def get_first_llm_provider_model(llm_provider, team_id):
     try:
         if llm_provider:
-            model = LlmProviderModel.objects.filter(type=llm_provider.type, team_id=team_id).order_by("id").first()
-            return model
+            provider_models = LlmProviderModel.objects.for_team(team_id).filter(type=llm_provider.type).order_by("id")
+            if default_model := get_default_model(llm_provider.type):
+                provider_models = provider_models.filter(name=default_model.name)
+            return provider_models.first()
+        return None
     except LlmProviderModel.DoesNotExist:
         return None
+
+
+def get_llm_provider_by_team(team):
+    return LlmProvider.objects.filter(team=team).order_by("id")
+
+
+def get_models_by_provider(provider, team):
+    model_objects = LlmProviderModel.objects.for_team(team).filter(type=provider)
+    return [{"value": model.id, "label": model.display_name} for model in model_objects]
+
+
+def get_models_by_team_grouped_by_provider(team):
+    provider_types = LlmProvider.objects.filter(team=team).values_list("type", flat=True)
+    model_objects = LlmProviderModel.objects.for_team(team).filter(type__in=provider_types)
+
+    provider_dict = defaultdict(list)
+    for model in model_objects:
+        type_enum = LlmProviderTypes[model.type]
+        provider_label = str(type_enum.label)
+        provider_dict[provider_label].append(model.display_name)
+
+    return dict(provider_dict)

@@ -33,10 +33,11 @@ def set_current_team(team) -> Token:
     ```
     """
     team = _unwrap_lazy(team)
-    existing_team = get_current_team()
-    if team is not None and existing_team is not None:
-        if existing_team != team:
-            log.error("Trying to set a different team in the current context: %s != %s", team, existing_team)
+    # existing_team = get_current_team()
+    # Commented out to avoid noise in logs
+    # if team is not None and existing_team is not None:
+    #     if existing_team != team:
+    #         log.error("Trying to set a different team in the current context: %s != %s", team, existing_team)
 
     token = _context.set(team)
     if team:

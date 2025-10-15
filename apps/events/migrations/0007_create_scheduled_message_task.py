@@ -2,24 +2,6 @@
 
 from django.db import migrations
 
-def create_periodic_task(apps, schema_editor):
-    IntervalSchedule = apps.get_model("django_celery_beat", "IntervalSchedule")
-    PeriodicTask = apps.get_model("django_celery_beat", "PeriodicTask")
-
-    schedule, _ = IntervalSchedule.objects.get_or_create(
-        every=60,
-        period="seconds",
-    )
-    PeriodicTask.objects.get_or_create(
-        name="events.tasks.poll_scheduled_messages",
-        task="apps.events.tasks.poll_scheduled_messages",
-        interval=schedule,
-    )
-
-
-def delete_periodic_task(apps, schema_editor):
-    PeriodicTask = apps.get_model("django_celery_beat", "PeriodicTask")
-    PeriodicTask.objects.filter(name="chat.tasks.poll_scheduled_messages").delete()
 
 class Migration(migrations.Migration):
 
@@ -27,4 +9,3 @@ class Migration(migrations.Migration):
         ('events', '0006_alter_eventaction_action_type_scheduledmessage'),
     ]
 
-    operations = [migrations.RunPython(create_periodic_task, delete_periodic_task)]

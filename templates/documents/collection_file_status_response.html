@@ -1,0 +1,7 @@
+{% include "documents/collection_file_status.html" %}
+
+{% if collection.is_index and not collection.is_remote_index %}
+  <div id="chunk_count_{{ collection_file.id }}" class="flex flex-row items-center gap-2" hx-swap-oob="outerHTML">
+    <span class="text-xs text-base-content/70">{{ collection_file.chunk_count|default:0 }} chunks</span>
+  </div>
+{% endif %}

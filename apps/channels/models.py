@@ -1,11 +1,10 @@
 import uuid
+from typing import Self
 
 from django.conf import settings
 from django.db import models
 from django.db.models import JSONField, Q
 from django.urls import reverse
-from django.utils.html import format_html
-from django.utils.translation import gettext as _
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
@@ -31,18 +30,19 @@ class ChannelPlatform(models.TextChoices):
     API = "api", "API"
     SLACK = "slack", "Slack"
     COMMCARE_CONNECT = "commcare_connect", "CommCare Connect"
+    EVALUATIONS = "evaluations", "Evaluations"
 
     @classmethod
     def team_global_platforms(cls):
         """These platforms should only ever have one channel per team"""
-        return [cls.API, cls.WEB]
+        return [cls.API, cls.WEB, cls.EVALUATIONS]
 
     @classmethod
-    def for_dropdown(cls, used_platforms, team) -> dict:
+    def for_dropdown(cls, used_platforms, team) -> dict[Self, bool]:
         """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
         from apps.service_providers.models import MessagingProvider
 
-        all_platforms = cls.as_list(exclude=[cls.API, cls.WEB])
+        all_platforms = cls.as_list(exclude=[cls.API, cls.WEB, cls.EVALUATIONS])
         platform_availability = {platform: False for platform in all_platforms}
         platform_availability[cls.TELEGRAM] = True
 
@@ -71,29 +71,26 @@ class ChannelPlatform(models.TextChoices):
 
         return ChannelForm(initial={"platform": self}, experiment=experiment)
 
-    def extra_form(self, *args, **kwargs):
+    def extra_form(self, **kwargs):
         from apps.channels import forms
 
         match self:
             case self.TELEGRAM:
-                kwargs.pop("channel", None)
-                return forms.TelegramChannelForm(*args, **kwargs)
+                return forms.TelegramChannelForm(**kwargs)
             case self.WHATSAPP:
-                return forms.WhatsappChannelForm(*args, **kwargs)
+                return forms.WhatsappChannelForm(**kwargs)
             case self.FACEBOOK:
-                return forms.FacebookChannelForm(*args, **kwargs)
+                return forms.FacebookChannelForm(**kwargs)
             case self.SUREADHERE:
-                return forms.SureAdhereChannelForm(*args, **kwargs)
+                return forms.SureAdhereChannelForm(**kwargs)
             case self.SLACK:
-                kwargs.pop("channel", None)
-                return forms.SlackChannelForm(*args, **kwargs)
+                return forms.SlackChannelForm(**kwargs)
             case self.COMMCARE_CONNECT:
-                kwargs.pop("channel", None)
-                return forms.CommCareConnectChannelForm(*args, **kwargs)
+                return forms.CommCareConnectChannelForm(**kwargs)
         return None
 
     @property
-    def channel_identifier_key(self) -> str:
+    def channel_identifier_key(self) -> str | None:
         match self:
             case self.TELEGRAM:
                 return "bot_token"
@@ -104,7 +101,8 @@ class ChannelPlatform(models.TextChoices):
             case self.SUREADHERE:
                 return "sureadhere_tenant_id"
             case self.SLACK:
-                return "slack_channel_id"
+                # handled by the slack form directly
+                return None
             case self.COMMCARE_CONNECT:
                 # The bot_name will be shown to the user, which is how they'll know which bot it is. We use the bot name
                 # here to prevent other bots from using the same name in order to mitigate confusion.
@@ -121,7 +119,14 @@ class ChannelPlatform(models.TextChoices):
         platforms_with_labels = [platform.label for platform in platforms]
         platforms_with_labels.append(cls.API.label)
         platforms_with_labels.append(cls.WEB.label)
+        platforms_with_labels.append(cls.EVALUATIONS.label)
         return sorted(platforms_with_labels)
+
+    def normalize_identifier(self, identifier: str) -> str:
+        match self:
+            case self.COMMCARE_CONNECT:
+                return identifier.lower()
+        return identifier
 
 
 class ExperimentChannelObjectManager(AuditingManager):
@@ -141,6 +146,12 @@ class ExperimentChannelObjectManager(AuditingManager):
 
     def get_team_web_channel(self, team):
         channel, _ = self.get_or_create(team=team, platform=ChannelPlatform.WEB, name=f"{team.slug}-web-channel")
+        return channel
+
+    def get_team_evaluations_channel(self, team):
+        channel, _ = self.get_or_create(
+            team=team, platform=ChannelPlatform.EVALUATIONS, name=f"{team.slug}-evaluations-channel"
+        )
         return channel
 
 
@@ -164,6 +175,7 @@ class ExperimentChannel(BaseTeamModel):
     )
 
     class Meta:
+        db_table = "channels_experimentchannel"
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(
@@ -185,17 +197,10 @@ class ExperimentChannel(BaseTeamModel):
     def platform_enum(self):
         return ChannelPlatform(self.platform)
 
-    def form(self, *args, **kwargs):
-        from apps.channels.forms import ChannelForm
-
-        kwargs["instance"] = self
-        kwargs["experiment"] = self.experiment
-        return ChannelForm(*args, **kwargs)
-
-    def extra_form(self, *args, **kwargs):
-        kwargs["initial"] = self.extra_data
-        kwargs["channel"] = self
-        return self.platform_enum.extra_form(*args, **kwargs)
+    def extra_form(self, experiment, data: dict = None):
+        if not experiment.id == self.experiment_id:
+            raise ValueError("Experiment ID does not match channel experiment ID")
+        return self.platform_enum.extra_form(experiment=experiment, channel=self, initial=self.extra_data, data=data)
 
     @staticmethod
     def check_usage_by_another_experiment(platform: ChannelPlatform, identifier: str, new_experiment: Experiment):
@@ -204,18 +209,18 @@ class ExperimentChannel(BaseTeamModel):
         by its `identifier` and `platform`. Raises `ChannelAlreadyUtilizedException` error when another
         experiment uses it.
         """
-
         filter_params = {f"extra_data__{platform.channel_identifier_key}": identifier}
-        channel = ExperimentChannel.objects.filter(**filter_params).first()
-        if channel and channel.experiment != new_experiment:
-            # TODO: check if it's in a different team and if the user has access to that team
-            url = reverse(
-                "experiments:single_experiment_home",
-                kwargs={"team_slug": channel.experiment.team.slug, "experiment_id": channel.experiment.id},
-            )
-            raise ChannelAlreadyUtilizedException(
-                format_html(_("This channel is already used in <a href={}><u>another experiment</u></a>"), url)
-            )
+        existing_channels = (
+            ExperimentChannel.objects.filter(**filter_params, platform=platform, deleted=False)
+            .exclude(experiment=new_experiment)
+            .select_related("team")
+        )
+
+        channel = existing_channels.first()
+        if channel:
+            if channel.team_id == new_experiment.team_id:
+                raise ChannelAlreadyUtilizedException(ChannelAlreadyUtilizedException.get_message_for_channel(channel))
+            raise ChannelAlreadyUtilizedException()
 
     @property
     def webhook_url(self) -> str:

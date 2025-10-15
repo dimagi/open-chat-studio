@@ -8,25 +8,92 @@ import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
     interface OpenChatStudioWidget {
         /**
-          * The URL of the bot to connect to.
+          * Allow the user to attach files to their messages.
+          * @default false
          */
-        "botUrl": string;
+        "allowAttachments": boolean;
+        /**
+          * Allow the user to make the chat window full screen.
+          * @default true
+         */
+        "allowFullScreen": boolean;
+        /**
+          * The base URL for the API.
+          * @default "https://www.openchatstudio.com"
+         */
+        "apiBaseUrl"?: string;
+        /**
+          * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
+          * @default 'square'
+         */
+        "buttonShape": 'round' | 'square';
         /**
           * The text to display on the button.
          */
-        "buttonText": string;
+        "buttonText"?: string;
         /**
-          * Whether the chat widget is initially expanded.
+          * The ID of the chatbot to connect to.
          */
-        "expanded": boolean;
+        "chatbotId": string;
+        /**
+          * The text to place in the header.
+         */
+        "headerText": '';
+        /**
+          * URL of the icon to display on the button. If not provided, uses the default OCS logo.
+         */
+        "iconUrl"?: string;
+        /**
+          * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
+         */
+        "language"?: string;
+        /**
+          * The message to display in the new chat confirmation dialog.
+          * @default "Starting a new chat will clear your current conversation. Continue?"
+         */
+        "newChatConfirmationMessage"?: string;
+        /**
+          * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+          * @default true
+         */
+        "persistentSession": boolean;
+        /**
+          * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
+          * @default 60 * 24
+         */
+        "persistentSessionExpire": number;
         /**
           * The initial position of the chat widget on the screen.
+          * @default 'right'
          */
         "position": 'left' | 'center' | 'right';
         /**
+          * Array of starter questions that users can click to send (JSON array of strings)
+         */
+        "starterQuestions"?: string;
+        "translationsUrl"?: string;
+        /**
+          * The text to display while the assistant is typing/preparing a response.
+          * @default "Preparing response"
+         */
+        "typingIndicatorText"?: string;
+        /**
+          * Used to associate chat sessions with a specific user across multiple visits/sessions
+         */
+        "userId"?: string;
+        /**
+          * Display name for the user.
+         */
+        "userName"?: string;
+        /**
           * Whether the chat widget is visible on load.
+          * @default false
          */
         "visible": boolean;
+        /**
+          * Welcome messages to display above starter questions (JSON array of strings)
+         */
+        "welcomeMessages"?: string;
     }
 }
 declare global {
@@ -43,25 +110,92 @@ declare global {
 declare namespace LocalJSX {
     interface OpenChatStudioWidget {
         /**
-          * The URL of the bot to connect to.
+          * Allow the user to attach files to their messages.
+          * @default false
          */
-        "botUrl": string;
+        "allowAttachments"?: boolean;
+        /**
+          * Allow the user to make the chat window full screen.
+          * @default true
+         */
+        "allowFullScreen"?: boolean;
+        /**
+          * The base URL for the API.
+          * @default "https://www.openchatstudio.com"
+         */
+        "apiBaseUrl"?: string;
+        /**
+          * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
+          * @default 'square'
+         */
+        "buttonShape"?: 'round' | 'square';
         /**
           * The text to display on the button.
          */
         "buttonText"?: string;
         /**
-          * Whether the chat widget is initially expanded.
+          * The ID of the chatbot to connect to.
          */
-        "expanded"?: boolean;
+        "chatbotId": string;
+        /**
+          * The text to place in the header.
+         */
+        "headerText"?: '';
+        /**
+          * URL of the icon to display on the button. If not provided, uses the default OCS logo.
+         */
+        "iconUrl"?: string;
+        /**
+          * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
+         */
+        "language"?: string;
+        /**
+          * The message to display in the new chat confirmation dialog.
+          * @default "Starting a new chat will clear your current conversation. Continue?"
+         */
+        "newChatConfirmationMessage"?: string;
+        /**
+          * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+          * @default true
+         */
+        "persistentSession"?: boolean;
+        /**
+          * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
+          * @default 60 * 24
+         */
+        "persistentSessionExpire"?: number;
         /**
           * The initial position of the chat widget on the screen.
+          * @default 'right'
          */
         "position"?: 'left' | 'center' | 'right';
         /**
+          * Array of starter questions that users can click to send (JSON array of strings)
+         */
+        "starterQuestions"?: string;
+        "translationsUrl"?: string;
+        /**
+          * The text to display while the assistant is typing/preparing a response.
+          * @default "Preparing response"
+         */
+        "typingIndicatorText"?: string;
+        /**
+          * Used to associate chat sessions with a specific user across multiple visits/sessions
+         */
+        "userId"?: string;
+        /**
+          * Display name for the user.
+         */
+        "userName"?: string;
+        /**
           * Whether the chat widget is visible on load.
+          * @default false
          */
         "visible"?: boolean;
+        /**
+          * Welcome messages to display above starter questions (JSON array of strings)
+         */
+        "welcomeMessages"?: string;
     }
     interface IntrinsicElements {
         "open-chat-studio-widget": OpenChatStudioWidget;

@@ -1,0 +1,9 @@
+{% with classes="btn btn-sm btn-soft btn-primary" %}
+{% if url %}
+  <a href="{{ chip.url }}" class="{{ classes }}">
+    {{ label }}
+  </a>
+{% elif label %}
+  <div class="{{ classes }} no-animation">{{ chip.label }}</div>
+{% endif %}
+{% endwith %}

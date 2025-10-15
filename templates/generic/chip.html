@@ -1,10 +1,5 @@
-{% if chip.url %}
-  <a href="{{ chip.url }}" class="btn btn-sm">
-    {{ chip.label }}
-    <i class="fa-solid fa-external-link"></i>
-  </a>
-{% elif chip.label %}
-  <div class="btn btn-sm">{{ chip.label }}</div>
+{% if chip.url or chip.label %}
+  {% include "generic/chip_button.html" with url=chip.url label=chip.label %}
 {% else %}
   {{ chip }}
 {% endif %}

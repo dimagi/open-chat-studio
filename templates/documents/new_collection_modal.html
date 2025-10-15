@@ -1,15 +1,15 @@
-{% extends 'documents/shared/modal_body.html' %}
+{% extends "documents/shared/modal_body.html" %}
 {% load form_tags %}
 
 {% block modal_body %}
     <div class="mt-2 flex flex-row gap-5 fieldset w-full">
         {% render_form_fields form %}
     </div>
-{% endblock %}
+{% endblock modal_body %}
 
 {% block submit_button %}
     <button class="btn btn-primary mt-2" :disabled="name.length === 0">Create</button>
-{% endblock %}
+{% endblock submit_button %}
 
 
 {% block extra_js %}
@@ -20,4 +20,4 @@
             }))
         })
     </script>
-{% endblock %}
+{% endblock extra_js %}

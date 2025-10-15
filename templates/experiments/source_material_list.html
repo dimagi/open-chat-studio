@@ -3,7 +3,7 @@
     {% for source_material in source_materials %}
         <li>
             <a
-                @click.stop="setSourceMaterial({{source_material.id}})">{{ source_material.topic }}</a>
+                @click.stop="setSourceMaterial({{ source_material.id }})">{{ source_material.topic }}</a>
         </li>
     {% endfor %}
 </ul>

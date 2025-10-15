@@ -1,0 +1,65 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+
+{% block breadcrumbs %}
+    <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+        <ul>
+            <li><a href="{% url 'documents:collection_home' request.team.slug %}">Collections</a></li>
+            <li><a href="{% url 'documents:single_collection_home' request.team.slug collection.id %}">{{ collection.name }}</a></li>
+            <li class="pg-breadcrumb-active" aria-current="page">Inspect</li>
+        </ul>
+    </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+    <div class="app-card">
+        <div class="flex flex-col gap-2">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h1 class="pg-title">Index Inspector</h1>
+                </div>
+            </div>
+        </div>
+        <h2 class="flex-1 pg-subtitle">Test your vector search embeddings and explore semantic similarity results</h2>
+    </div>
+    <div class="app-card">
+        <div class="flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+                <label class="label font-bold">Search Query</label>
+                <div class="flex items-center gap-2">
+                    <label class="label text-sm" for="top_k">Results:</label>
+                    <input class="input input-bordered input-sm w-20" id="top_k" name="top_k" type="number" min="1" max="50" value="5"/>
+                </div>
+            </div>
+
+            <label class="input w-full">
+                <i class="fas fa-search"></i>
+                <input
+                    class="w-full"
+                    id="query-input"
+                    type="text"
+                    name="query"
+                    placeholder="Search for content using natural language..."
+                    hx-get="{% url 'documents:collection_query' request.team.slug collection.id %}"
+                    hx-target="#query-results"
+                    hx-swap="innerHTML"
+                    hx-indicator="#search-indicator"
+                    hx-trigger="keyup keyup[key=='Enter'] changed delay:450ms"
+                    hx-include="#top_k"
+                />
+                <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
+                    <span id="search-indicator" class="htmx-indicator loading loading-spinner loading-sm"></span>
+                </div>
+            </label>
+
+            <small class="text-sm text-gray-500">
+                Try natural language queries - the system will find content with similar meaning
+            </small>
+        </div>
+    </div>
+
+    <div class="mt-4 app-card">
+        <h2 class="text-lg font-semibold">Search Results</h2>
+        <div id="query-results" class="grid grid-cols-1 gap-4 mt-2"></div>
+    </div>
+{% endblock app %}

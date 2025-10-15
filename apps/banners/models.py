@@ -1,5 +1,10 @@
+import logging
+
 from django.db import models
+from django.template import engines
 from django.utils import timezone
+
+logger = logging.getLogger("ocs.banners")
 
 
 class Banner(models.Model):
@@ -14,8 +19,6 @@ class Banner(models.Model):
     # Pre-defined locations must match those in the middleware.py
     LOCATIONS = (
         ("global", "Global (All Pages)"),
-        ("experiments_home", "Experiments Home"),
-        ("experiments_new", "New Experiments"),
         ("pipelines", "Pipelines Home"),
         ("pipelines_new", "New Pipelines"),
         ("chatbots_home", "Chatbots Home"),
@@ -42,6 +45,9 @@ class Banner(models.Model):
         null=True,
         help_text="Banner will only show if team has the flag enabled",
     )
+    dismiss_timeout = models.PositiveSmallIntegerField(
+        default=0, help_text="The banner will re-appear this many days after being dismissed"
+    )
 
     class Meta:
         ordering = ["-end_date"]
@@ -65,3 +71,25 @@ class Banner(models.Model):
     def is_visible(self):
         now = timezone.now()
         return self.is_active and self.start_date <= now and self.end_date > now
+
+    def get_formatted_message(self, request):
+        try:
+            django_engine = engines["django"]
+            template = django_engine.from_string(self.message)
+            return template.render({"request": request})
+        except Exception as e:
+            logger.exception("Error rendering banner")
+            if request.user.is_superuser:
+                return f"ERROR: {str(e)}"
+
+        return ""
+
+    @property
+    def cookie_expires(self):
+        """The cookie should expire when the banner expires
+        or at after `dismiss_timeout` days, whichever is sooner."""
+        expires_delta = self.end_date - timezone.now()
+        delta_days = expires_delta.days + 1  # approximate
+        if not self.dismiss_timeout:
+            return delta_days
+        return min(delta_days, self.dismiss_timeout)

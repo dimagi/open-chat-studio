@@ -12,9 +12,11 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 from django.utils.translation import gettext_lazy
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -30,8 +32,9 @@ env.read_env(os.path.join(BASE_DIR, ".env"))
 SECRET_KEY = env("SECRET_KEY", default="YNAazYQdzqQWddeZmFZfBfROzqlzvLEwVxoOjGgK")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env.bool("DEBUG", default=True)
 IS_TESTING = "pytest" in sys.modules
+USE_DEBUG_TOOLBAR = DEBUG and not IS_TESTING
 
 ALLOWED_HOSTS = ["*"]
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
@@ -53,6 +56,7 @@ DJANGO_APPS = [
 
 # Put your third-party apps here
 THIRD_PARTY_APPS = [
+    "corsheaders",
     "allauth",  # allauth account/registration management
     "allauth.account",
     "allauth.socialaccount",
@@ -82,6 +86,7 @@ THIRD_PARTY_APPS = [
 
 PROJECT_APPS = [
     "apps.web.apps.OcsAdminConfig",
+    "apps.admin.apps.SiteAdminConfig",
     "apps.audit",
     "apps.help",
     "apps.users",
@@ -106,36 +111,49 @@ PROJECT_APPS = [
     "apps.participants",
     "apps.chatbots",
     "apps.banners",
+    "apps.dashboard",
+    "apps.evaluations",
+    "apps.trace",
+    "apps.mcp_integrations",
 ]
 
-SPECIAL_APPS = [
-    "django_cleanup"  # according to the docs, this should be the last app installed
-]
-
+SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
+SPECIAL_APPS.append("django_cleanup")  # according to the docs, this should be the last app installed
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS + SPECIAL_APPS
 
-MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "allauth.account.middleware.AccountMiddleware",
-    "django.middleware.locale.LocaleMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django_otp.middleware.OTPMiddleware",
-    "apps.teams.middleware.TeamsMiddleware",
-    "apps.web.scope_middleware.RequestContextMiddleware",
-    "apps.web.locale_middleware.UserLocaleMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "waffle.middleware.WaffleMiddleware",
-    "field_audit.middleware.FieldAuditMiddleware",
-    "apps.audit.middleware.AuditTransactionMiddleware",
-    "apps.web.htmx_middleware.HtmxMessageMiddleware",
-    "tz_detect.middleware.TimezoneMiddleware",
-    "apps.generics.middleware.OriginDetectionMiddleware",
-    "apps.banners.middleware.BannerLocationMiddleware",
+MIDDLEWARE = list(
+    filter(
+        None,
+        [
+            "corsheaders.middleware.CorsMiddleware",
+            "django.middleware.security.SecurityMiddleware",
+            "whitenoise.middleware.WhiteNoiseMiddleware",
+            "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
+            "django.contrib.sessions.middleware.SessionMiddleware",
+            "allauth.account.middleware.AccountMiddleware",
+            "django.middleware.locale.LocaleMiddleware",
+            "django.middleware.common.CommonMiddleware",
+            "django.middleware.csrf.CsrfViewMiddleware",
+            "django.contrib.auth.middleware.AuthenticationMiddleware",
+            "django_otp.middleware.OTPMiddleware",
+            "apps.teams.middleware.TeamsMiddleware",
+            "apps.web.scope_middleware.RequestContextMiddleware",
+            "apps.web.locale_middleware.UserLocaleMiddleware",
+            "django.contrib.messages.middleware.MessageMiddleware",
+            "django.middleware.clickjacking.XFrameOptionsMiddleware",
+            "waffle.middleware.WaffleMiddleware",
+            "field_audit.middleware.FieldAuditMiddleware",
+            "apps.audit.middleware.AuditTransactionMiddleware",
+            "apps.web.htmx_middleware.HtmxMessageMiddleware",
+            "tz_detect.middleware.TimezoneMiddleware",
+            "apps.generics.middleware.OriginDetectionMiddleware",
+            "apps.banners.middleware.BannerLocationMiddleware",
+        ],
+    )
+)
+
+INTERNAL_IPS = [
+    "127.0.0.1",  # Django debug toolbar
 ]
 
 ROOT_URLCONF = "gpt_playground.urls"
@@ -168,6 +186,7 @@ TEMPLATES = [
                 # this line can be removed if not using google analytics
                 "apps.web.context_processors.google_analytics_id",
                 "apps.banners.context_processors.banner_context",
+                "apps.admin.context_processors.ocs_config",
             ],
             "loaders": _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS,
             "builtins": [
@@ -199,6 +218,18 @@ else:
             "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
         }
     }
+
+db_options = DATABASES["default"].setdefault("OPTIONS", {})
+if env.bool("DJANGO_DATABASE_USE_POOL", True):
+    DATABASES["default"].pop("CONN_MAX_AGE", None)
+    # See https://www.psycopg.org/psycopg3/docs/api/pool.html#psycopg_pool.ConnectionPool
+    db_options["pool"] = {
+        "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
+        "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=35),
+        "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
+    }
+else:
+    DATABASES["default"]["CONN_MAX_AGE"] = env.int("DJANGO_DATABASE_CONN_MAX_AGE", 0)
 
 # Auth / login stuff
 
@@ -367,7 +398,10 @@ REST_FRAMEWORK = {
         "apps.api.permissions.ApiKeyAuthentication",
         "apps.api.permissions.BearerTokenAuthentication",
     ],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+        "apps.api.permissions.ReadOnlyAPIKeyPermission",
+    ],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -383,6 +417,14 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
+    "TAGS": [
+        {
+            "name": "Chat",
+            "description": """
+                The Chat API is designed to be used for integrating chatbots into external systems.
+            """,
+        },
+    ],
 }
 
 # Celery setup (using redis)
@@ -401,6 +443,42 @@ if REDIS_URL.startswith("rediss"):
 
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# see https://docs.celeryq.dev/en/stable/userguide/workers.html#soft-shutdown
+CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = 10
+CELERY_WORKER_ENABLE_SOFT_SHUTDOWN_ON_IDLE = True
+
+SCHEDULED_TASKS = {
+    "files.tasks.clean_up_expired_files": {
+        "task": "apps.files.tasks.clean_up_expired_files",
+        "schedule": timedelta(days=1),
+    },
+    "events.tasks.poll_scheduled_messages": {
+        "task": "apps.events.tasks.poll_scheduled_messages",
+        "schedule": 60,
+    },
+    "events.tasks.enqueue_timed_out_events": {
+        "task": "apps.events.tasks.enqueue_timed_out_events",
+        "schedule": 10,
+    },
+    "dashboard.tasks.cleanup_expired_cache_entries": {
+        "task": "apps.dashboard.tasks.cleanup_expired_cache_entries",
+        "schedule": timedelta(days=1),
+    },
+    "evaluations.tasks.cleanup_old_evaluation_data": {
+        "task": "apps.evaluations.tasks.cleanup_old_evaluation_data",
+        "schedule": timedelta(days=1),
+    },
+    "evaluations.tasks.cleanup_old_preview_evaluation_runs": {
+        "task": "apps.evaluations.tasks.cleanup_old_preview_evaluation_runs",
+        "schedule": timedelta(days=1),
+    },
+    "documents.tasks.sync_all_document_sources_task": {
+        # sync doc sources once per week
+        "task": "apps.documents.tasks.sync_all_document_sources_task",
+        "schedule": crontab(minute="0", hour="0", day_of_week="0"),
+    },
+}
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -425,6 +503,7 @@ PROJECT_METADATA = {
     "IMAGE": "https://chatbots.dimagi.com/static/images/logo.png",
     "TERMS_URL": env("TERMS_URL", default=""),
     "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
+    "DOCS_URL": env("DOCS_URL", default="https://docs.openchatstudio.com"),
 }
 
 USE_HTTPS_IN_ABSOLUTE_URLS = False  # set this to True in production to have URLs generated with https instead of http
@@ -503,6 +582,10 @@ LOGGING = {
         "console": {"class": "logging.StreamHandler", "formatter": "verbose"},
     },
     "loggers": {
+        "": {  # Root logger
+            "handlers": ["console"],
+            "level": "WARN",
+        },
         "django": {
             "handlers": ["console"],
             "level": env("DJANGO_LOG_LEVEL", default="INFO"),
@@ -520,8 +603,8 @@ TELEGRAM_SECRET_TOKEN = env("TELEGRAM_SECRET_TOKEN", default="")
 
 DJANGO_TABLES2_TEMPLATE = "table/tailwind.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
-    "class": "w-full table-fixed",
-    "thead": {"class": "bg-base-200 base-content uppercase text-sm leading-normal"},
+    "class": "w-full table table-zebra",
+    "thead": {"class": "bg-base-200 base-content text-sm leading-normal"},
     "th": {"class": "py-3 px-3 text-left"},
     "td": {"class": "py-3 px-3 text-left overflow-hidden"},
 }
@@ -546,7 +629,7 @@ TAGGIT_CASE_INSENSITIVE = True
 DOCUMENTATION_LINKS = {
     # Try to make these keys grep-able so that usages are easy to find
     "consent": "/concepts/consent/",
-    "embed": "/how-to/embed/",
+    "chat_widget": "/chat_widget/",
     "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "/concepts/experiment/",
     "pipelines": "/concepts/pipelines/",
@@ -563,6 +646,7 @@ DOCUMENTATION_LINKS = {
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data",
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
+    "migrate_from_assistant": "/how-to/assistants_migration/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
@@ -582,6 +666,7 @@ FIELD_AUDIT_REQUEST_ID_HEADERS = [
     "X-Amzn-Trace-Id",  # Amazon
     "traceparent",  # W3C Trace Context (Google)
 ]
+FIELD_AUDIT_SERVICE_CLASS = "apps.audit.service.AuditService"
 TEST_NON_SERIALIZED_APPS = [
     "field_audit",
 ]
@@ -639,15 +724,60 @@ COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo
 
 # AI helper
 AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")
+AI_HELPER_API_MODEL = env("AI_HELPER_API_MODEL", default="claude-sonnet-4-20250514")
 
 
 # Document Management
 MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
+EMBEDDING_VECTOR_SIZE = 1024
 SUPPORTED_FILE_TYPES = {
     "file_search": (
         ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
     ),
     "collections": ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav",
 }
+
+# CORS configuration for chat widget
+# Use URL regex to allow CORS only for specific endpoints (chat API)
+CORS_URLS_REGEX = r"^/api/chat/.*$"
+
+# Allow all origins for chat API endpoints since we don't know which domains will embed the widget
+# This is secure because CORS_URLS_REGEX limits it to only chat API endpoints
+CORS_ALLOW_ALL_ORIGINS = True
+
+# CORS settings
+CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    # "x-csrftoken",
+    "x-requested-with",
+    "x-ocs-widget-version",
+]
+
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
+# Additional CORS settings for security
+CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight for 24 hours
+
+# Analytics settings
+ANALYTICS_MAX_SESSIONS = 750
+
+# Experiment Trend cache settings
+EXPERIMENT_TREND_CACHE_TIMEOUT = 900  # 15 minutes
+
+# Dynamic Filter configs
+MAX_FILTER_PARAMS = 30

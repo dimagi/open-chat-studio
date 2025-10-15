@@ -2,9 +2,10 @@ from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
+import time_machine
 from django.db.utils import IntegrityError
 from django.utils import timezone
-from freezegun import freeze_time
+from time_machine import travel
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import ToolResources
@@ -15,12 +16,14 @@ from apps.experiments.models import (
     ConsentForm,
     Experiment,
     ExperimentRoute,
+    ExperimentSession,
     ParticipantData,
     SafetyLayer,
     SyntheticVoice,
 )
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.tracing import TraceInfo
+from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
     EventActionFactory,
@@ -129,7 +132,7 @@ class TestExperimentSession:
             "experiment_id": experiment_id,
         }
 
-    @freeze_time("2024-01-01")
+    @travel("2024-01-01", tick=False)
     def test_get_participant_scheduled_messages_custom_params(self):
         session = ExperimentSessionFactory()
         experiment = session.experiment
@@ -176,6 +179,7 @@ class TestExperimentSession:
                 "triggers_remaining": 1,
                 "prompt": "hi",
                 "is_cancelled": False,
+                "attempts": [],
             }
 
         expected_dict_version = [
@@ -217,7 +221,7 @@ class TestExperimentSession:
         assert schedule["total_triggers"] == total_triggers
         assert schedule["triggers_remaining"] == expected_triggers_remaining
 
-    @freeze_time("2024-01-01")
+    @travel("2024-01-01", tick=False)
     @pytest.mark.parametrize(
         ("time_period", "repetitions", "total_triggers", "expected"),
         [
@@ -310,9 +314,11 @@ class TestExperimentSession:
         assert len(participant.get_schedules_for_experiment(session.experiment)) == 2
 
     @pytest.mark.parametrize("use_custom_experiment", [False, True])
-    def test_scheduled_message_experiment(self, use_custom_experiment):
+    @patch.object(ExperimentSession, "ad_hoc_bot_message")
+    def test_scheduled_message_experiment(self, mock_ad_hoc, use_custom_experiment):
         """ScheduledMessages should use the experiment specified in the linked action's params"""
         custom_experiment = ExperimentFactory() if use_custom_experiment else None
+        mock_ad_hoc.return_value = {}
         session = ExperimentSessionFactory()
         event_action_kwargs = {"time_period": TimePeriod.DAYS, "experiment_id": session.experiment.id}
         if custom_experiment:
@@ -322,7 +328,6 @@ class TestExperimentSession:
         trigger_action = ScheduleTriggerAction()
         trigger_action.invoke(session, action=event_action)
 
-        session.ad_hoc_bot_message = Mock()
         message = ScheduledMessage.objects.get(action=event_action)
         message.participant.get_latest_session = lambda *args, **kwargs: session
         message.safe_trigger()
@@ -357,23 +362,17 @@ class TestExperimentSession:
     def test_get_participant_data_name(self):
         participant = ParticipantFactory()
         session = ExperimentSessionFactory(participant=participant, team=participant.team)
-        participant_data = ParticipantData.objects.create(
-            experiment=session.experiment,
-            participant=participant,
-            team=participant.team,
-            data={"first_name": "Jimmy"},
-        )
-        data_proxy = ParticipantDataProxy(session)
+        data = {"first_name": "Jimmy"}
+        data_proxy = ParticipantDataProxy({"participant_data": data}, session)
         data = data_proxy.get()
         assert data == {
             "name": participant.name,
             "first_name": "Jimmy",
         }
 
-        participant_data.data["name"] = "James Newman"
-        participant_data.save()
+        data["name"] = "James Newman"
 
-        data_proxy = ParticipantDataProxy(session)
+        data_proxy = ParticipantDataProxy({"participant_data": data}, session)
         data = data_proxy.get()
         assert data == {
             "name": "James Newman",
@@ -382,14 +381,14 @@ class TestExperimentSession:
 
     @pytest.mark.parametrize("fail_silently", [True, False])
     @patch("apps.chat.channels.ChannelBase.from_experiment_session")
-    @patch("apps.chat.bots.EventBot.get_user_message")
-    def test_ad_hoc_message(self, get_user_message, from_experiment_session, fail_silently, experiment_session):
+    @patch.object(ExperimentSession, "_bot_prompt_for_user")
+    def test_ad_hoc_message(self, mock_bot_prompt, from_experiment_session, fail_silently, experiment_session):
         mock_channel = Mock()
         mock_channel.send_message_to_user = Mock()
         if not fail_silently:
             mock_channel.send_message_to_user.side_effect = Exception("Cannot send message")
         from_experiment_session.return_value = mock_channel
-        get_user_message.return_value = "We're testing"
+        mock_bot_prompt.return_value = "We're testing"
 
         def _test():
             experiment_session.ad_hoc_bot_message(
@@ -404,6 +403,42 @@ class TestExperimentSession:
         else:
             _test()
 
+    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch.object(ExperimentSession, "_bot_prompt_for_user")
+    def test_ad_hoc_message_transaction_rollback(self, mock_bot_prompt, from_experiment_session, experiment_session):
+        """Test that the @transaction.atomic() decorator on ad_hoc_bot_message
+        rolls back database changes when an exception occurs."""
+        # Set up initial state
+        initial_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
+
+        # Mock the bot to return a message
+        mock_bot_prompt.return_value = "Test message"
+        # Mock channel to create a message then raise an exception on send
+        mock_channel = Mock()
+        from_experiment_session.return_value = mock_channel
+
+        def mock_send_with_db_change(message):
+            # Simulate creating a chat message before the exception
+            # This should be rolled back due to the transaction decorator
+            ChatMessage.objects.create(
+                message_type=ChatMessageType.AI,
+                content="Message created before exception",
+                chat=experiment_session.chat,
+            )
+            raise Exception("Send failed - should rollback")
+
+        mock_channel.send_message_to_user = mock_send_with_db_change
+
+        # Call ad_hoc_bot_message with fail_silently=False so exception propagates
+        with pytest.raises(Exception, match="Send failed - should rollback"):
+            experiment_session.ad_hoc_bot_message(
+                "Tell the user we're testing", TraceInfo(name="test"), fail_silently=False
+            )
+
+        # Verify that the database changes were rolled back
+        final_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
+        assert final_message_count == initial_message_count, "Transaction should have rolled back the message creation"
+
     @pytest.mark.parametrize(
         ("versions_chatted_to", "expected_display_val"),
         [
@@ -411,14 +446,18 @@ class TestExperimentSession:
             ([1], "v1"),
         ],
     )
-    def test_experiment_version_for_display(self, versions_chatted_to, expected_display_val, experiment_session):
+    def test_experiment_versions_from_prefetched_data(
+        self, versions_chatted_to, expected_display_val, experiment_session
+    ):
         for version in versions_chatted_to:
             message = ChatMessage.objects.create(
                 message_type=ChatMessageType.AI, content="", chat=experiment_session.chat
             )
-            message.create_and_add_tag(tag=f"v{version}", tag_category=TagCategories.EXPERIMENT_VERSION)
+            message.create_and_add_tag(
+                f"v{version}", experiment_session.team, tag_category=TagCategories.EXPERIMENT_VERSION
+            )
 
-        assert experiment_session.experiment_version_for_display == expected_display_val
+        assert experiment_session.experiment_versions_from_prefetched_data == expected_display_val
 
     @pytest.mark.parametrize("participant_data_injected", [True, False])
     def test_requires_participant_data(self, participant_data_injected):
@@ -676,9 +715,6 @@ class TestExperimentModel:
         working_child = ExperimentFactory(team=team)
         ExperimentRoute(team=team, parent=experiment, child=working_child, keyword="working")
 
-        # Setup Files
-        experiment.files.set(FileFactory.create_batch(3))
-
         # Setup Static Trigger
         StaticTriggerFactory(experiment=experiment)
 
@@ -753,7 +789,6 @@ class TestExperimentModel:
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_routes_are_duplicated(original_experiment, new_version)
-        self._assert_files_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
         self._assert_attribute_duplicated("source_material", original_experiment, new_version)
@@ -846,11 +881,6 @@ class TestExperimentModel:
             assert route.parent.working_version == original_experiment
             assert route.working_version.parent == original_experiment
             assert route.child.is_a_version is True
-
-    def _assert_files_are_duplicated(self, original_experiment, new_version):
-        new_version_file_ids = set(new_version.files.all().values_list("id", flat=True))
-        original_experiment = set(original_experiment.files.all().values_list("id", flat=True))
-        assert new_version_file_ids - original_experiment == set()
 
     def _assert_triggers_are_duplicated(self, trigger_type, original_experiment, new_version):
         assert trigger_type in ["static", "timeout"], "Unknown trigger type"
@@ -1029,6 +1059,111 @@ class TestExperimentObjectManager:
 
         # To get all experiment,s use the dedicated object method
         assert Experiment.objects.get_all().count() == 2
+
+
+@pytest.mark.django_db()
+class TestExperimentTrends:
+    def test_get_trend_data_returns_data_from_all_versions(self, experiment):
+        """Test that get_trend_data aggregates traces from all versions of an experiment"""
+        # Create some versions of the experiment
+        version1 = experiment.create_new_version()
+        version2 = experiment.create_new_version()
+
+        curr_time = timezone.now()
+        Trace.objects.create(
+            experiment=experiment, team=experiment.team, status=TraceStatus.SUCCESS, timestamp=curr_time, duration=1
+        )
+        # Trace for version1
+        Trace.objects.create(
+            experiment=version1, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+        )
+        # Trace for version2
+        Trace.objects.create(
+            experiment=version2, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+        )
+
+        success, errors = experiment.get_trend_data()
+
+        # Should aggregate traces from all versions: 1 success + 2 errors
+        assert sum(success) == 1, f"Expected 1 success, got {sum(success)}"
+        assert sum(errors) == 2, f"Expected 2 errors, got {sum(errors)}"
+
+    def test_get_experiment_trend_data_with_no_errors(self, experiment):
+        """Test that the function returns an array of zeros when there are no error traces"""
+        success, errors = experiment.get_trend_data()
+        empty_data = [0] * 49
+        assert errors == empty_data
+        assert success == empty_data
+
+    def test_get_experiment_trend_data_with_errors(self, experiment):
+        """Test that the function returns error counts when there are error traces"""
+        # Create traces with error status
+        with time_machine.travel("2025-01-01 12:00:00") as curr_time:
+            Trace.objects.create(
+                experiment=experiment, team=experiment.team, status=TraceStatus.SUCCESS, timestamp=curr_time, duration=1
+            )
+            Trace.objects.create(
+                experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+            )
+
+        with time_machine.travel("2025-01-01 10:00:00"):
+            Trace.objects.create(
+                experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+            )
+
+        with time_machine.travel("2025-01-01 7:00:00"):
+            Trace.objects.create(
+                experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+            )
+
+        with time_machine.travel("2025-01-01 13:00:00") as curr_time:
+            success, errors = experiment.get_trend_data()
+
+        # Should return actual error counts (2 errors in one hour, 1 in another)
+        assert isinstance(errors, list)
+        assert sum(errors) == 3
+        assert sum(success) == 1
+
+    def test_get_experiment_trend_data_only_recent_errors(self, experiment):
+        """Test that only errors within the last 2 days are counted"""
+        # Mock current time
+        with time_machine.travel("2025-08-15 12:00:00"):
+            # Create an error trace outside the 2-day window
+            Trace.objects.create(experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, duration=1)
+
+        # Create an error trace within the 2-day window
+        with time_machine.travel("2025-08-21 12:00:00"):
+            # Create an error trace outside the 2-day window
+            Trace.objects.create(experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, duration=1)
+
+            Trace.objects.create(experiment=experiment, team=experiment.team, status=TraceStatus.ERROR, duration=1)
+
+            success, error = experiment.get_trend_data()
+
+            # Should only count the recent error
+            assert sum(error) == 2
+            assert experiment.traces.filter(status=TraceStatus.ERROR).count() == 3
+            assert sum(success) == 0
+
+    @patch("apps.experiments.models.cache")
+    @patch("apps.experiments.models.Experiment._calculate_trends")
+    def test_trend_data_caching(self, _calculate_trends, cache, experiment):
+        trends = ([1, 2, 3], [4, 5, 6])
+
+        # Nothing in the cache
+        _calculate_trends.return_value = trends
+        cache.get.return_value = None
+        _, errors = experiment.get_trend_data()
+        assert errors == [4, 5, 6]
+        _calculate_trends.assert_called()
+        cache.set.assert_called()
+
+        # Simulate cache hit
+        _calculate_trends.reset_mock()
+        cache.get.return_value = trends
+        _, errors = experiment.get_trend_data()
+        assert errors == [4, 5, 6]
+        _calculate_trends.assert_not_called()
 
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:

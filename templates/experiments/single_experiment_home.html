@@ -1,18 +1,57 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load waffle_tags %}
 {% load team_tags %}
 {% load static %}
 {% load form_tags %}
 {% load django_tables2 %}
 {% block breadcrumbs %}
-
+{% if experiment.pipeline %}
+  <div>
+    <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
+      <div>
+        We're migrating Experiments to a new interface for a more streamlined bot building experience. You can access the new interface in the Chatbots section. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a>
+      </div>
+      <div>
+        <a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}"
+           class="btn btn-primary">
+          Go to Chatbot
+        </a>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div>
+    <div class="alert alert-info alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
+      <div>
+        <p>Your experiment is ready to migrate to a chatbot! Chatbots is a new interface for a more streamlined bot building experience. This is a safe operation that will not change the existing functionality. <a href="https://docs.openchatstudio.com/concepts/chatbots/" class="italic" target="_blank" rel="noopener noreferrer">Learn More →</a></p>
+        {% if first_parent_id %}
+          <p><br/>However, since this is a 'child' of another experiment, you must migrate the parent which will migrate all the children.</p>
+        {% endif %}
+      </div>
+      <div>
+        {% if first_parent_id %}
+          <a class="btn btn-primary" href="{% url 'experiments:single_experiment_home' request.team.slug first_parent_id %}">
+            Go to Parent
+          </a>
+        {% else %}
+          <form method="post" action="{% url 'experiments:migrate_experiment' request.team.slug experiment.id %}" style="display: inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+              Migrate Experiment
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endif %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
       <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <div class="app-card">
     <div class="flex">
@@ -125,88 +164,14 @@
         {% if experiment.is_public %}
           {% include "experiments/share/dialog.html" %}
         {% endif %}
-      {#  Commented elements included for Tailwind processing #}
-      {#  <i class="fa-brands fa-telegram"></i> #}
-      {#  <i class="fa-brands fa-whatsapp"></i> #}
-        {% for channel in channels %}
-          <div class="btn btn-ghost btn-sm normal-case!" onclick="channel_{{ channel.id }}_modal.showModal()">
-            <span class="tooltip" data-tip="{{ channel.name }}"><i class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
-          </div>
-          <dialog id="channel_{{ channel.id }}_modal" class="modal">
-            <div class="modal-box">
-              <h3 class="font-bold text-lg">Edit {{ platform.label }} Channel</h3>
-              <form method="post" action="{% url "experiments:update_channel" request.team.slug experiment.id channel.id %}"
-                    {# debounce the submit event handler so that disabling the button only happens after submit and the 'action' param is submitted #}
-                    x-data="{ buttonDisabled: false }" x-on:submit.debounce="buttonDisabled = true">
-                {% csrf_token %}
-                {% render_form_fields channel.form %}
-                {% if channel.extra_form %}
-                  <div {% include "generic/attrs.html" with attrs=channel.extra_form.form_attrs %}>
-                    {% render_form_fields channel.extra_form %}
-                  </div>
-                {% endif %}
-                <div class="modal-action">
-                  <button class="btn btn-primary" type="submit" name="action" value="update" x-bind:disabled="buttonDisabled">Update</button>
-                  <button class="btn btn-error" type="submit" name="action" value="delete" x-bind:disabled="buttonDisabled">Delete</button>
-                  <button class="btn" type="button" onclick="channel_{{ channel.id }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
-                </div>
-              </form>
-            </div>
-          </dialog>
-        {% endfor %}
-        {% if platforms %}
-          <div class="dropdown">
-            <button tabindex="0" class="btn btn-ghost btn-sm">
-              <i class="fa-regular fa-plus"></i>
-            </button>
-            <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow-sm bg-base-100 rounded-box w-52 border">
-              {% for platform, available in platforms.items %}
-                <li>
-                  <button
-                    class="disabled:text-gray-600 tooltip tooltip-right"
-                    {% if not available %}
-                      disabled
-                      data-tip="You need to configure your {{ platform|capfirst }} provider to use this channel"
-                    {% endif %}
-                    onclick="{{ platform.value }}_modal.showModal()"
-
-                  >
-                    {{ platform.label }} {% if not available %}
-                    {% endif %}
-                  </button>
-                </li>
-              {% endfor %}
-            </ul>
-          </div>
-          {% for platform, available in platforms.items %}
-            {% if available %}
-              <dialog id="{{ platform.value }}_modal" class="modal">
-                <div class="modal-box">
-                  <h3 class="font-bold text-lg">Link with {{ platform.label }}</h3>
-                  <form method="post" action="{% url "experiments:create_channel" request.team.slug experiment.id %}"
-                        x-data="{ buttonDisabled: false }" x-on:submit="buttonDisabled = true">
-                    {% csrf_token %}
-                    {% render_form_fields platform_forms|dict_lookup:platform %}
-                    {% if platform.extra_form %}
-                      <div {% include "generic/attrs.html" with attrs=platform.extra_form.form_attrs %}>
-                        {% render_form_fields platform.extra_form %}
-                      </div>
-                    {% endif %}
-                    <div class="modal-action">
-                      <span class="loading loading-spinner loading-sm p-3 ml-4" x-show="buttonDisabled" x-cloak></span>
-                      <button class="btn btn-primary" type="submit" x-bind:disabled="buttonDisabled">Create</button>
-                      <button class="btn" type="button" onclick="{{ platform.value }}_modal.close()" x-bind:disabled="buttonDisabled">Close</button>
-                    </div>
-                  </form>
-                </div>
-              </dialog>
-            {% endif %}
-          {% endfor %}
-        {% endif %}
+        <div id="dynamic-channels" class="inline">
+        {% include "chatbots/components/channel_buttons.html" with origin="experiments" %}
+        </div>
+        <div id="channel_create_edit_modal_placeholder"></div>
       </div>
     {% endif %}
     {% if bot_type_chip %}
-      {% include 'generic/chip.html' with chip=bot_type_chip %}
+      {% include "generic/chip.html" with chip=bot_type_chip %}
     {% endif %}
 
     {% if not can_make_child_routes %}
@@ -238,24 +203,9 @@
 
     {% if perms.chat.view_chat %}
       <div role="tabpanel" class="tab-content" id="content-allsessions">
-        <div class="app-card">
-          <div class="relative">
-            <div class="flex items-center gap-4">
-              {{ available_tags|default:""|json_script:"available-tags-data" }}
-              {{ experiment_versions|default:""|json_script:"experiment-versions-data" }}
-              {{ channel_list|default:"[]"|json_script:"channel-list-data" }}
-              {% if perms.experiments.download_chats %}
-                {% include "experiments/components/exports.html" %}
-              {% endif %}
-              {% include "experiments/filters.html"%}
-            </div>
-          </div>
-        </div>
-        <div id="sessions-table"
-             hx-get="{% url 'experiments:sessions-list' request.team.slug experiment.id %}"
-             hx-trigger="none"
-             hx-target="this"
-             hx-swap="innerHTML">
+        {% include "chatbots/components/session_table_actions.html" %}
+        <div id="sessions-table">
+          {% include "table/table_placeholder.html" %}
         </div>
       </div>
       </div>
@@ -299,7 +249,7 @@
       </div>
       <div role="tabpanel" class="tab-content" id="content-terminal_bots">
         <div class="app-card">
-          {% if terminal_bots_table.data|length == 0 and experiment.is_editable%}
+          {% if terminal_bots_table.data|length == 0 and experiment.is_editable %}
             <a class="btn btn-sm btn-outline btn-primary mb-2" href="{% url 'experiments:experiment_route_new' team.slug experiment.id 'terminal' %}"><i class="fa-regular fa-plus"></i> Add terminal bot</a>
           {% endif %}
           {% render_table terminal_bots_table %}
@@ -343,4 +293,4 @@
     });
     window.addEventListener('hashchange', selectTabFromHash);
   </script>
-{% endblock %}
+{% endblock app %}

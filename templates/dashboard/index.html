@@ -1,0 +1,429 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}{% trans "Dashboard" %} - {{ block.super }}{% endblock title %}
+
+{% block app %}
+  <div class="container mx-auto px-4 py-6" x-data="dashboard()">
+  <!-- Dashboard Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">{% trans "Team Dashboard" %}</h1>
+        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          {% trans "Comprehensive analytics for your chatbots" %}
+        </p>
+      </div>
+
+    <!-- Actions -->
+      <div class="mt-4 lg:mt-0 flex gap-2">
+        <button type="button" class="btn btn-outline btn-sm" @click="document.getElementById('filtersModal').showModal()">
+          <i class="fas fa-bookmark me-1"></i>
+          {% trans "Save Filters" %}
+        </button>
+      </div>
+    </div>
+
+  <!-- Filters Section -->
+    <div class="card bg-base-100 shadow-xl mb-8">
+      <div class="card-body">
+        <div class="card-title flex items-center justify-between">
+          <span>{% trans "Filters" %}</span>
+          <button type="button" class="btn btn-xs btn-outline" @click="resetFilters()">
+            {% trans "Reset" %}
+          </button>
+        </div>
+
+        <form id="filterForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4" @change="handleFilterChange()">
+          <div class="form-control">
+            <label class="label label-text">{% trans "Date Range" %}</label>
+            {{ filter_form.date_range }}
+          </div>
+
+          <div class="form-control" x-show="filters.date_range === 'custom'" x-transition x-cloak="">
+            <label class="label label-text">{% trans "Start Date" %}</label>
+            {{ filter_form.start_date }}
+          </div>
+
+          <div class="form-control" x-show="filters.date_range === 'custom'" x-transition x-cloak="">
+            <label class="label label-text">{% trans "End Date" %}</label>
+            {{ filter_form.end_date }}
+          </div>
+
+          <div class="form-control">
+            <label class="label label-text">{% trans "Granularity" %}</label>
+            {{ filter_form.granularity }}
+          </div>
+
+          <div class="form-control">
+            <label class="label label-text">{% trans "Channels" %}</label>
+            {% with field=filter_form.channels %}
+              {% partialdef "select_filter" inline=True %}
+                <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
+                  {% if not field.field.required %}
+                    <option value="">---------</option>
+                  {% endif %}
+                  {% for option in field %}
+                    {{ option }}
+                  {% endfor %}
+                </select>
+              {% endpartialdef %}
+            {% endwith %}
+          </div>
+
+          <div class="form-control col-span-2">
+            <label class="label label-text">{% trans "Chatbots" %}</label>
+            {% with field=filter_form.experiments %}{% partial "select_filter" %}
+            {% endwith %}
+          </div>
+          <div class="form-control col-span-2">
+            <label class="label label-text">{% trans "Participants" %}</label>
+            {% with field=filter_form.participants %}{% partial "select_filter" %}{% endwith %}
+          </div>
+          <div class="form-control col-span-2">
+            <label class="label label-text">{% trans "Tags" %}</label>
+            {% with field=filter_form.tags %}
+              {% partial "select_filter" %}
+            {% endwith %}
+          </div>
+        </form>
+
+      <!-- Saved Filters -->
+        {% if saved_filters %}
+          <div class="mt-4">
+            <h3 class="text-sm font-medium mb-2">{% trans "Saved Filters" %}</h3>
+            <div class="flex flex-wrap gap-2">
+              {% for filter in saved_filters %}
+                <div class="flex items-center gap-1">
+                  <div class="hover:bg-base-300 hover:cursor-pointer border rounded pl-2 py-1"
+                       @click="loadSavedFilter({{ filter.id }})"
+                       :class="{ 'btn-active': activeFilterId === {{ filter.id }} }">
+                    {{ filter.filter_name }}
+                    {% if filter.is_default %}<i class="fas fa-star ml-1 text-yellow-500"></i>{% endif %}
+                    <button type="button" class="btn btn-xs btn-ghost hover:text-red-500 ml-1"
+                            @click="deleteSavedFilter({{ filter.id }}, '{{ filter.filter_name }}')"
+                            title="{% trans "Delete filter" %}">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+  <!-- Overview Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <template x-for="stat in overviewStats" :key="stat.label">
+        <div class="stat-card fade-in">
+          <div class="flex items-center justify-between">
+            <div>
+              <div>
+                <span class="stat-value" x-text="formatNumber(stat.numerator)"></span>
+                <template x-if="stat.denominator">
+                  <span class="text-2xl font-bold text-gray-500 dark:text-gray-500" x-text="'/ ' + formatNumber(stat.denominator)"></span>
+                </template>
+              </div>
+              <div class="stat-label" x-text="stat.label"></div>
+            </div>
+            <div class="text-2xl" :class="stat.color">
+              <i :class="stat.icon"></i>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  <!-- Charts Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+
+    <!-- Active Participants Chart -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="card-title flex items-center justify-between">
+            <span>{% trans "Active Participants" %}</span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.activeParticipants"></div>
+          </div>
+          <div class="h-80">
+            <canvas id="activeParticipantsChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+    <!-- Session Analytics Chart -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="card-title flex items-center justify-between">
+            <span>{% trans "Active Sessions" %}</span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.sessionAnalytics"></div>
+          </div>
+          <div class="h-80">
+            <canvas id="sessionAnalyticsChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+    <!-- Message Volume Chart -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="card-title flex items-center justify-between">
+            <span>{% trans "Message Volume Trends" %}</span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.messageVolume"></div>
+          </div>
+          <div class="h-80">
+            <canvas id="messageVolumeChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+    <!-- Channel Breakdown Chart -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="card-title flex items-center justify-between">
+            <span>{% trans "Channel Breakdown" %}</span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.channelBreakdown"></div>
+          </div>
+          <div class="h-80">
+            <canvas id="channelBreakdownChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Avg Response Time chart -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="card-title flex items-center justify-between">
+            <span>{% trans "Average Response Time" %}</span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.averageResponseTime"></div>
+          </div>
+          <div class="h-80">
+            <canvas id="averageResponseTimeChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <!-- Bot Performance Table -->
+    <div class="card bg-base-100 shadow-xl mb-8">
+      <div class="card-body">
+        <div class="card-title flex items-center justify-between">
+          <span>{% trans "Bot Performance Summary" %}</span>
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-500" x-text="`${botPerformancePagination.total_count} total bots`"></span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.botPerformance"></div>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="table table-zebra w-full" id="botPerformanceTable">
+            <thead>
+              <tr>
+                <th>{% trans "Chatbot" %}</th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('participants')">
+                  <div class="flex items-center gap-1">
+                    {% trans "Participants" %}
+                    <i :class="getSortIcon('participants')" class="text-xs"></i>
+                  </div>
+                </th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('sessions')">
+                  <div class="flex items-center gap-1">
+                    {% trans "Sessions" %}
+                    <i :class="getSortIcon('sessions')" class="text-xs"></i>
+                  </div>
+                </th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('messages')">
+                  <div class="flex items-center gap-1">
+                    {% trans "Messages" %}
+                    <i :class="getSortIcon('messages')" class="text-xs"></i>
+                  </div>
+                </th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('avg_session_duration')">
+                  <div class="flex items-center gap-1">
+                    {% trans "Avg Duration" %}
+                    <i :class="getSortIcon('avg_session_duration')" class="text-xs"></i>
+                  </div>
+                </th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('completion_rate')">
+                  <div class="flex items-center gap-1">
+                    {% trans "Completion Rate" %}
+                    <i :class="getSortIcon('completion_rate')" class="text-xs"></i>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="item in botPerformanceData" :key="item.experiment_id">
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <td>
+                    {# Note: Keep the styling consistent with `generic/chip_button.html` #}
+                    <a :href="item.experiment_url" class="btn btn-sm btn-soft btn-primary">
+                      <span x-text="item.experiment_name"></span>
+                    </a>
+                  </td>
+                  <td x-text="formatNumber(item.participants)"></td>
+                  <td x-text="formatNumber(item.sessions)"></td>
+                  <td x-text="formatNumber(item.messages)"></td>
+                  <td x-text="item.avg_session_duration ? formatDuration(item.avg_session_duration) : '-'"></td>
+                  <td>
+                    <div class="flex items-center gap-2">
+                      <div class="dashboard-progress-bar flex-1">
+                        <div class="progress-bar-fill success" :style="`width: ${(item.completion_rate * 100).toFixed(1)}%`"></div>
+                      </div>
+                      <span class="text-xs" x-text="`${(item.completion_rate * 100).toFixed(1)}%`"></span>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div class="flex justify-between items-center mt-4" x-show="botPerformancePagination.total_pages > 1">
+          <div class="text-sm text-gray-500">
+            <span x-text="`Showing ${((botPerformancePagination.page - 1) * botPerformancePagination.page_size) + 1}-${Math.min(botPerformancePagination.page * botPerformancePagination.page_size, botPerformancePagination.total_count)} of ${botPerformancePagination.total_count} bots`"></span>
+          </div>
+          <div class="join">
+            <button class="join-item btn btn-sm"
+                    :disabled="!botPerformancePagination.has_previous"
+                    @click="changeBotPerformancePage(botPerformancePagination.page - 1)">
+              <i class="fas fa-chevron-left"></i>
+            </button>
+            <template x-for="pageNum in getBotPerformancePageNumbers()" :key="pageNum">
+              <button class="join-item btn btn-sm"
+                      :class="{ 'btn-active': pageNum === botPerformancePagination.page }"
+                      @click="changeBotPerformancePage(pageNum)"
+                      x-text="pageNum">
+              </button>
+            </template>
+            <button class="join-item btn btn-sm"
+                    :disabled="!botPerformancePagination.has_next"
+                    @click="changeBotPerformancePage(botPerformancePagination.page + 1)">
+              <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <!-- User Engagement Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+
+    <!-- Most Active Participants -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="card-title flex items-center justify-between">
+            <span>{% trans "Most Active Participants" %}</span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.userEngagement"></div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="table table-sm" id="mostActiveTable">
+              <thead>
+                <tr>
+                  <th>{% trans "Participant" %}</th>
+                  <th>{% trans "Messages" %}</th>
+                  <th>{% trans "Sessions" %}</th>
+                  <th>{% trans "Last Activity" %}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="participant in userEngagementData" :key="participant.participant_id">
+                  <tr>
+                    <td class="font-medium">
+                      <a :href="participant.participant_url" class="btn btn-sm">
+                        <span x-text="participant.participant_name"></span>
+                        <i class="fa-solid fa-external-link"></i>
+                      </a>
+                    </td>
+                    <td x-text="formatNumber(participant.total_messages)"></td>
+                    <td x-text="formatNumber(participant.total_sessions)"></td>
+                    <td x-text="`${formatDate(participant.last_activity)} ago`"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    <!-- Session Length Distribution -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="card-title">{% trans "Session Length Distribution" %}</div>
+          <div class="h-64">
+            <canvas id="sessionLengthChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <!-- Tag Analytics (if applicable) -->
+    <div class="card bg-base-100 shadow-xl" x-show="tagAnalyticsData.total_tagged_messages > 0" x-transition>
+      <div class="card-body">
+        <div class="card-title flex items-center justify-between">
+          <span>{% trans "Tag Analytics" %}</span>
+          <div class="loading loading-spinner loading-sm" x-show="loadingStates.tagAnalytics"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <template x-for="[category, tags] in Object.entries(tagAnalyticsData.tag_categories || {})" :key="category">
+            <div class="tag-category">
+              <h4 class="tag-category-title" x-text="category"></h4>
+              <div class="tag-list">
+                <template x-for="[tagName, count] in Object.entries(tags)" :key="tagName">
+                  <a :href="getDynamicFiltersUrl('{% url 'chatbots:all_sessions_home' team_slug=request.team.slug %}', tagName)">
+                    <div class="tag-item">
+                      <span class="tag-name" x-text="tagName"></span>
+                      <span class="tag-count" x-text="count"></span>
+                    </div>
+                  </a>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+
+<!-- Save Filters Modal -->
+    <dialog class="modal" id="filtersModal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg">{% trans "Save Filter Preset" %}</h3>
+        <form id="saveFilterForm" class="py-4" @submit.prevent="handleSaveFilter()">
+          {% csrf_token %}
+          <div class="form-control mb-4">
+            <label class="label">{% trans "Preset Name" %}<span x-text="saving"></span></label>
+            {{ saved_filter_form.name }}
+          </div>
+
+          <div class="form-control mb-4">
+            <label class="label cursor-pointer">
+              {{ saved_filter_form.is_default }}
+              <span class="label-text ml-2">{% trans "Set as default" %}</span>
+            </label>
+          </div>
+
+          {{ saved_filter_form.filter_data }}
+        </form>
+
+        <div class="modal-action">
+          <form method="dialog">
+            <button class="btn btn-outline">
+              {% trans "Cancel" %}
+            </button>
+          </form>
+          <button type="submit" form="saveFilterForm" class="btn btn-primary" :disabled="saving">
+            <span x-show="!saving">{% trans "Save" %}</span>
+            <span x-show="saving" x-cloak class="loading loading-spinner loading-xs"></span>
+          </button>
+        </div>
+      </div>
+    </dialog>
+
+  </div>
+{% endblock app %}
+
+{% block page_js %}
+  <script src="{% static 'js/dashboard-bundle.js' %}"></script>
+{% endblock page_js %}

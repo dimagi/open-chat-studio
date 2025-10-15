@@ -13,7 +13,7 @@ from django.views.generic import CreateView, FormView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.chat.agent.tools import get_assistant_tools
-from apps.files.views import BaseAddMultipleFilesHtmxView, BaseDeleteFileView
+from apps.files.views import BaseAddMultipleFilesHtmxView
 from apps.generics import actions
 from apps.service_providers.models import LlmProvider
 from apps.service_providers.utils import get_llm_provider_choices
@@ -27,11 +27,11 @@ from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFor
 from .models import OpenAiAssistant, ToolResources
 from .sync import (
     OpenAiSyncError,
-    delete_file_from_openai,
     get_diff_with_openai_assistant,
     get_out_of_sync_files,
     import_openai_assistant,
     push_assistant_to_openai,
+    remove_files_from_tool,
     sync_from_openai,
 )
 from .tables import OpenAiAssistantTable
@@ -317,17 +317,24 @@ class AddFileToAssistant(BaseAddMultipleFilesHtmxView):
         )
 
 
-class DeleteFileFromAssistant(BaseDeleteFileView):
-    def get_success_response(self, file):
+class DeleteFileFromAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "files.delete_file"
+
+    @transaction.atomic()
+    def delete(self, request, team_slug: str, **kwargs):
+        """
+        Delete a file from an assistant's resource. Only the connection between the file and the resource is deleted.
+        The file itself is deleted only if it is not used in any other resources.
+        """
+        file = get_object_or_404(File, team=request.team, pk=kwargs["file_id"])
         resource = get_object_or_404(
             ToolResources,
             assistant_id=self.kwargs["pk"],
             id=self.kwargs["resource_id"],
         )
+        remove_files_from_tool(resource, files=[file])
 
-        client = resource.assistant.llm_provider.get_llm_service().get_raw_client()
-        if delete_file_from_openai(client, file):
-            file.save()
+        messages.success(self.request, "File Deleted")
         return HttpResponse()
 
 

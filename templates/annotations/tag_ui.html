@@ -1,11 +1,11 @@
 <div id="tag-ui-{{ object.id }}" class="text-gray-500">
   {% if not edit_mode %}
     <i class="fa-solid fa-tags"></i>
-    {% for tag in object.tags_json %}
+    {% for tag in object.prefetched_tags_json %}
       <div
-        class="
+        class="badge
                {% if not tag.is_system_tag %}
-                 badge badge-neutral
+                  badge-neutral
                  {% if tag.added_by == request.user.email %}
                    ring-1 ring-blue-400
                  {% endif %}
@@ -18,19 +18,25 @@
         data-tip="Added by {% if tag.added_by == request.user.email %}me{% else %}{{ tag.added_by }}{% endif %}"
       >{{ tag.name }}</div>
     {% endfor %}
-    {% if allow_edit|default_if_none:True and perms.annotations.add_customtaggeditem and perms.annotations.add_tag %}
-      <button class="btn btn-xs btn-ghost" title="Edit tags"
-              hx-get="{% url "annotations:tag_ui" request.team.slug %}?edit=1"
-              hx-vals='{{ object.object_info }}'
-              hx-target="#tag-ui-{{ object.id }}"
-              hx-swap="outerHTML"
-      >
-        <i class="fa-solid fa-pencil"></i>
-      </button>
+    {% if allow_edit|default_if_none:True and perms.annotations.add_customtaggeditem %}
+    <button class="btn btn-xs btn-ghost" title="Edit tags"
+            hx-get="{% url 'annotations:tag_ui' request.team.slug %}?edit=1"
+            hx-vals='{{ object.object_info }}'
+            hx-target="#tag-ui-{{ object.id }}"
+            hx-swap="outerHTML"
+            hx-indicator="#indicator-{{ object.id }}"
+            hx-disabled-elt="this"
+    >
+      <span id="indicator-{{ object.id }}">
+        <i class="fa-solid fa-pencil htmx-hide"></i>
+        <span class="loading loading-spinner loading-xs htmx-show"></span>
+      </span>
+    </button>
     {% endif %}
   {% else %}
     <div class="flex place-items-center">
       <select data-info="{{ object.object_info }}" class="tag-multiselect" name="state[]" multiple
+              data-allowCreate="{% if perms.annotations.add_customtaggeditem and perms.annotations.add_tag %}true{% else %}false{% endif %}"
               placeholder="Select a tag..." autocomplete="off"
               hx-get="{% url "annotations:tag_ui" request.team.slug %}"
               hx-vals='{{ object.object_info }}'

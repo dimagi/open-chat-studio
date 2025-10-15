@@ -245,8 +245,8 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
 class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["secret_key"]
 
-    public_key = forms.CharField(label=_("Public Key"))
     secret_key = forms.CharField(label=_("Secret Key"))
+    public_key = forms.CharField(label=_("Public Key"))
     host = forms.URLField(label=_("Host"))
 
 

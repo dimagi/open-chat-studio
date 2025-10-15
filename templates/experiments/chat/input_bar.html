@@ -1,14 +1,14 @@
 {% if embedded %}
-  {% url 'experiments:experiment_session_message_embed' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number as message_url%}
+  {% url 'experiments:experiment_session_message_embed' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number as message_url %}
 {% else %}
-  {% url 'experiments:experiment_session_message' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number as message_url%}
+  {% url 'experiments:experiment_session_message' team_slug=request.team.slug experiment_id=experiment.public_id session_id=session.external_id version_number=session.get_experiment_version_number as message_url %}
 {% endif %}
 <form class="w-full p-2 bg-base-300"
       autocomplete="off"
-      hx-post="{{ message_url}}"
+      hx-post="{{ message_url }}"
       hx-swap="outerHTML"
       hx-indicator="#message-submit"
-      {% if assistant %}enctype="multipart/form-data"{% endif %}
+      enctype="multipart/form-data"
 >
   {% csrf_token %}
   <div class="flex flex-col" x-data="fileUploads">
@@ -69,6 +69,20 @@
           {% partial file-search-input %}
         {% endif %}
       {% endif %}
+      {% if experiment.file_uploads_enabled %}
+        <div role="button" class="btn m-1" @click="$refs.experimentUpload.click()">
+          <i class="fa-solid fa-paperclip"></i>
+        </div>
+        <input
+          x-ref="experimentUpload"
+          hidden
+          name="ocs_attachments"
+          type="file"
+          @change="handleFileChange($event, 'ocs_attachments')"
+          multiple
+          class="file-input file-input-sm w-full max-w-xs"
+        />
+      {% endif %}
       <input x-model="message" name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off" class="input input-primary w-full">
       <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled>Send</button>
     </div>
@@ -87,6 +101,7 @@
             </template>
           </div>
         </div>
+
         <div x-cloak x-show="file_search_files.length > 0">
           <h4 class="font-bold">File Search Files</h4>
           <div class="ml-5">
@@ -94,6 +109,24 @@
               <div class="flex items-center gap-2">
                 <span x-text="index+1"></span><span x-text="file.name"></span>
                 <button type="button" class="btn btn-xs" @click="removeFile(index, 'file_search_files')">
+                  <i class="fa-solid fa-trash htmx-hide"></i>
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if experiment.file_uploads_enabled %}
+      <div class="flex flex-col gap-2 text-slate-500">
+        <div x-cloak x-show="ocs_attachments.length > 0">
+          <h4 class="font-bold">Uploaded Files</h4>
+          <div class="ml-5">
+            <template x-for="(file, index) in ocs_attachments" :key="index">
+              <div class="flex items-center gap-2">
+                <span x-text="index+1"></span><span x-text="file.name"></span>
+                <button type="button" class="btn btn-xs" @click="removeFile(index, 'ocs_attachments')">
                   <i class="fa-solid fa-trash htmx-hide"></i>
                 </button>
               </div>
@@ -114,19 +147,23 @@
       message: "",
       code_interpreter_files: [],
       file_search_files: [],
+      ocs_attachments: [],
       total_upload_size_bytes: 0,
       disableCodeInterpreterUpload: false,
       init() {
-        let fieldsToWatch = ['message']
+        let fieldsToWatch = ['message'];
         if (this.$refs.fileSearch) {
-          fieldsToWatch.push('file_search_files')
+          fieldsToWatch.push('file_search_files');
         }
         if (this.$refs.codeInterpreter) {
-          fieldsToWatch.push('code_interpreter_files')
+          fieldsToWatch.push('code_interpreter_files');
         }
-        this.$watchMany(fieldsToWatch, (message, cfiles, ffiles) => {
+        if (this.$refs.experimentUpload) {
+          fieldsToWatch.push('ocs_attachments');
+        }
+        this.$watchMany(fieldsToWatch, (...args) => {
           const submitButton = document.getElementById('message-submit');
-          if (message || cfiles.length || ffiles.length) {
+          if (args.some(Boolean)) {
             submitButton.removeAttribute('disabled');
           } else {
             submitButton.setAttribute('disabled', 'disabled');
@@ -156,7 +193,7 @@
           return;
         }
 
-        // Evaluate code interpreter file counts
+          // Evaluate code interpreter file counts
         if (targetArray == "code_interpreter_files") {
           let curr_file_count = this[targetArray].length;
           let new_file_count = curr_file_count + files.length;
@@ -192,6 +229,8 @@
 
         } else if (targetArray === 'file_search_files') {
           this.$refs.fileSearch.files = dataTransfer.files;
+        } else if (targetArray === 'ocs_attachments') {
+          this.$refs.experimentUpload.files = dataTransfer.files;
         }
       }
     })

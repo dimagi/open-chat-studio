@@ -1,7 +1,7 @@
-<div x-data="filterComponent" @click.outside="filterData.showFilters = false">
+<div x-data="filterComponent" @click.outside="filterData.showFilters = false" class="relative">
   <!-- Filter Button -->
   <div class="flex items-center">
-    <button @click="toggleFilters()" class="btn btn-sm btn-outline">
+    <button type="button" @click="toggleFilters()" class="btn btn-sm btn-outline">
       <i class="fa-solid fa-filter"></i> Filter
       <span x-show="getActiveFilterCount() > 0" x-cloak>(<span x-text="getActiveFilterCount()"></span>)</span>
     </button>
@@ -12,6 +12,7 @@
 
     <!-- Clear filters button -->
     <button
+      type="button"
       x-show="getActiveFilterCount() > 0 && !filterData.loading"
       @click="clearAllFilters()"
       class="btn btn-square btn-sm btn-ghost"
@@ -19,7 +20,7 @@
       x
     </button>
     <!-- Date Range dropdown filter -->
-    <div x-init="init" class="dropdown">
+    <div class="dropdown">
       <div tabindex="0" role="button" class="btn btn-ghost btn-sm normal-case">
         <i class="fa-regular fa-clock"></i>
         <span x-text="selectedLabel || 'Date Range'" class="dropdown-label"></span>
@@ -78,23 +79,43 @@
           <!-- Value Input (Choice, String, Timestamp) -->
           <template x-if="filter.operator">
             <div class="relative">
-              <template x-if="filterData.columns[filter.column]?.type === 'choice' && ['any of', 'all of', 'excludes'].includes(filter.operator)">
+              <template x-if="['choice', 'string', 'exclusive_choice'].includes(filterData.columns[filter.column]?.type) && ['any of', 'all of', 'excludes'].includes(filter.operator)">
                 <div class="relative">
                   <div @click="filter.showOptions = !filter.showOptions" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
-                    <span x-text="filter.selectedValues.length ? (filter.selectedValues.join(', ').length > 18 ? filter.selectedValues.join(', ').substring(0, 18) + '...' : filter.selectedValues.join(', ')) : 'Select'"></span>
+                    <span x-text="filter.selectedValues.length ? getSelectedDisplayText(filter) : 'Select'"></span>
                     <i class="fa-solid fa-caret-down fa-sm"></i>
                   </div>
-                  <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-base-300" style="z-index: 9999 !important;">
-                    <div class="sticky top-0 bg-base-100 border-b p-2">
+                  <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-48 border border-base-300" style="z-index: 9999 !important;">
+                    <div class="sticky top-0 bg-base-100 border-b p-2 z-1">
                       <div class="relative">
                         <input type="text" x-model="filter.searchQuery" @input="filterDropdownOptions(index)" placeholder="Search..." class="input input-sm w-full pl-8 focus:outline-hidden focus:border-primary">
                       </div>
                     </div>
+                    <div x-show="filter.column === 'tags'" class="border-b p-2 bg-base-50">
+                      <div class="flex gap-2">
+                        <button
+                          type="button"
+                          @click="selectAllTagOptions(index)"
+                          :disabled="areAllTagsSelected(index)"
+                          :class="areAllTagsSelected(index) ? 'btn-disabled' : ''"
+                          class="btn btn-xs btn-outline flex-1">
+                          Select All
+                        </button>
+                        <button
+                          type="button"
+                          @click="clearAllOptions(index)"
+                          :disabled="filter.selectedValues.length === 0"
+                          :class="filter.selectedValues.length === 0 ? 'btn-disabled' : ''"
+                          class="btn btn-xs btn-outline flex-1">
+                          Clear All
+                        </button>
+                      </div>
+                    </div>
                     <div class="py-1">
-                      <template x-for="option in filter.filteredOptions" :key="option">
-                        <label :for="`option-${index}-${option}`" class="flex items-center px-4 py-2 hover:bg-base-200 cursor-pointer text-sm">
-                          <input type="checkbox" :id="`option-${index}-${option}`" :value="option" x-model="filter.selectedValues" @change="triggerFilterChange()" class="checkbox checkbox-xs mr-2">
-                          <span x-text="option"></span>
+                      <template x-for="option in filter.filteredOptions" :key="typeof option === 'object' ? option.id : option">
+                        <label :for="`option-${index}-${typeof option === 'object' ? option.id : option}`" class="flex items-center px-4 py-2 hover:bg-base-200 cursor-pointer text-sm">
+                          <input type="checkbox" :id="`option-${index}-${typeof option === 'object' ? option.id : option}`" :value="typeof option === 'object' ? option.id : option" x-model="filter.selectedValues" @change="triggerFilterChange()" class="checkbox checkbox-xs mr-2">
+                          <span x-text="typeof option === 'object' ? option.label : option"></span>
                         </label>
                       </template>
                       <div x-show="filter.filteredOptions && filter.filteredOptions.length === 0" class="px-4 py-2 text-sm text-gray-500 italic">
@@ -105,7 +126,7 @@
                 </div>
               </template>
 
-              <template x-if="filterData.columns[filter.column]?.type === 'string'">
+              <template x-if="filterData.columns[filter.column]?.type === 'string' && filter.operator !== 'any of'">
                 <input type="text" x-model="filter.value" @input.debounce="triggerFilterChange()" class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm" style="height: 2rem;" placeholder="Enter value...">
               </template>
 
@@ -160,23 +181,20 @@
           </template>
 
           <!-- Remove Filter Button -->
-          <button @click="removeFilter(index)" class="btn btn-square btn-sm btn-ghost" aria-label="Remove filter">×</button>
+          <button type="button" @click="removeFilter(index)" class="btn btn-square btn-sm btn-ghost" aria-label="Remove filter">×</button>
         </div>
       </template>
 
       <!-- Add Filter Button -->
-      <button @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
+      <button type="button" @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
     </div>
   </div>
 </div>
 
-{{ field_type_filters|json_script:"field-type-filters" }}
-{{ date_range_options|json_script:"date-range-options" }}
+{{ df_date_range_options|json_script:"date-range-options" }}
+{{ df_filter_columns|json_script:"filter-columns-data" }}
 <script>
-  const tags = JSON.parse(document.getElementById('available-tags-data').textContent);
-  const versionsList = JSON.parse(document.getElementById('experiment-versions-data').textContent);
-  const fieldTypeFilters = JSON.parse(document.getElementById('field-type-filters').textContent);
-  const channelsList = JSON.parse(document.getElementById('channel-list-data').textContent);
+  const filterColumns = JSON.parse(document.getElementById('filter-columns-data').textContent);
   const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
@@ -185,52 +203,57 @@
         showFilters: false,
         filters: [],
         loading: false,
-        columns: {
-          'participant': {type: 'string', operators: fieldTypeFilters.string, label: 'Participant'},
-          'first_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'First Message',  options: dateRangeOptions},
-          'last_message': {type: 'timestamp', operators: fieldTypeFilters.timestamp, label: 'Last Message',  options: dateRangeOptions},
-          'tags': {type: 'choice', operators: fieldTypeFilters.choice, options: tags, label: 'Tags' },
-          'versions': {type: 'choice', operators: fieldTypeFilters.choice.filter(op => op === 'any of' || op === 'excludes'), options: versionsList, label: 'Versions'},
-          'channels': {type: 'choice', operators: fieldTypeFilters.choice, options: channelsList, label: 'Channels'},
-        }
+        columns: filterColumns,
       },
+      experimentVersionsCache: {}, // Cache experiment ID -> version names
 
       init() {
+        const App = SiteJS.app;
         this.loadFiltersFromUrl();
-        let defaultFilterApplied = false;
-        // set default filter to exclude API sessions
-        if (this.filterData.filters.length === 1 && !this.filterData.filters[0].column) {
-          this.filterData.filters = [{
-            column: 'channels',
-            operator: 'excludes',
-            value: '',
-            selectedValues: ['API'],
-            availableOperators: ['any of', 'all of', 'excludes'],
-            showOptions: false,
-            searchQuery: '',
-            filteredOptions: channelsList
-          }];
-          defaultFilterApplied = true;
-        }
-        const urlParams = new URLSearchParams(window.location.search);
-        const showAllCheckbox = document.querySelector('input[name="show-all"]');
-        if (urlParams.has('show-all') && showAllCheckbox) {
-          showAllCheckbox.checked = true;
-        }
-        if (showAllCheckbox) {
-          showAllCheckbox.addEventListener('change', () => {
-            this.triggerFilterChange();
-          });
-        }
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {
-          this.triggerFilterChange(defaultFilterApplied); // Don't update URL again since we just loaded from it
+          this.triggerFilterChange(false); // Don't update URL again since we just loaded from it
         });
         // for date range dropdown
         this.setLabelFromURL();
         window.addEventListener('popstate', () => {
           this.setLabelFromURL();
         });
+        if (this.filterData.columns.participant || this.filterData.columns.remote_id) {
+          fetch("{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}", {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+              'X-CSRFToken': App.Cookies.get('csrftoken'),
+              'Accept': 'application/json'
+            }
+          })
+            .then(res => res.json())
+            .then(data => {
+              const identifiers = data.identifiers;
+              const remoteIds = data.remote_ids;
+              if (this.filterData.columns.participant) {
+                this.filterData.columns.participant.options = identifiers;
+              }
+              if (this.filterData.columns.remote_id) {
+                this.filterData.columns.remote_id.options = remoteIds;
+              }
+
+              this.filterData.filters.forEach(filter => {
+                if (filter.column === 'participant') {
+                  filter.filteredOptions = [...identifiers];
+                } else if (filter.column === 'remote_id') {
+                  filter.filteredOptions = [...remoteIds];
+                }
+              });
+            })
+            .catch(err => console.error("Failed to load participants", err));
+        }
+        Object.entries(this.filterData.columns).forEach(([key, column]) => {
+          if (column.type === 'string' && !column.options) {
+            column.operators = column.operators.filter(item => item !== 'any of');
+          }
+        })
       },
 
       toggleFilters() {
@@ -253,6 +276,15 @@
         });
       },
 
+      getActiveFilters(filters) {
+        return filters.filter(filter => {
+          return filter.column && filter.operator && (
+            filter.value ||
+            (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
+          )
+        })
+      },
+
       updateOperatorsByColumn(index) {
         const filter = this.filterData.filters[index];
         const column = filter.column;
@@ -262,7 +294,7 @@
           filter.value = '';
           filter.selectedValues = [];
           filter.searchQuery = '';
-          if (this.filterData.columns[column].type === 'choice') {
+          if (['choice', 'string', 'exclusive_choice'].includes(this.filterData.columns[column].type)) {
             filter.filteredOptions = [...this.filterData.columns[column].options || []];
           } else {
             filter.filteredOptions = [];
@@ -283,12 +315,7 @@
         this.triggerFilterChange();
       },
       getActiveFilterCount() {
-        return this.filterData.filters.filter(filter => {
-          return filter.column && filter.operator && (
-            filter.value ||
-            (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
-          );
-        }).length;
+        return this.getActiveFilters(this.filterData.filters).length;
       },
       clearAllFilters() {
         this.filterData.filters = [];
@@ -296,6 +323,27 @@
         this.filterData.showFilters = false;
         this.triggerFilterChange();
       },
+
+      isObjectChoiceFilter(filter) {
+        const options = this.filterData.columns[filter.column].options;
+        return options && options.length > 0 && typeof options[0] === 'object'
+      },
+
+      getSelectedDisplayText(filter) {
+        if (this.isObjectChoiceFilter(filter)) {
+          const displayValues = filter.selectedValues.map(id => {
+            const option = this.filterData.columns[filter.column].options.find(exp => exp.id === parseInt(id));
+            return option ? option.label : id;
+          });
+          const text = displayValues.join(', ');
+          return text.length > 18 ? text.substring(0, 18) + '...' : text;
+        } else {
+          // For other filters, use values directly
+          const text = filter.selectedValues.join(', ');
+          return text.length > 18 ? text.substring(0, 18) + '...' : text;
+        }
+      },
+
       filterDropdownOptions(index) {
         const filter = this.filterData.filters[index];
         const column = filter.column;
@@ -305,9 +353,14 @@
           if (!searchQuery) {
             filter.filteredOptions = [...this.filterData.columns[column].options];
           } else {
-            filter.filteredOptions = this.filterData.columns[column].options.filter(option =>
-              option.toLowerCase().includes(searchQuery)
-            );
+            filter.filteredOptions = this.filterData.columns[column].options.filter(option => {
+              if (typeof option === 'object' && option.label) {
+                return option.label.toLowerCase().includes(searchQuery);
+              } else {
+                // For simple string options
+                return option.toLowerCase().includes(searchQuery);
+              }
+            });
           }
         }
       },
@@ -357,7 +410,14 @@
               }
               else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
                 try {
-                  filter.selectedValues = JSON.parse(valueParam);
+                  const parsedValues = JSON.parse(valueParam);
+                  if (this.isObjectChoiceFilter(filter)) {
+                    filter.selectedValues = parsedValues.filter(id => {
+                      return this.filterData.columns[filter.column].options.findIndex(exp => exp.id === parseInt(id)) >= 0;
+                    });
+                  } else {
+                    filter.selectedValues = parsedValues;
+                  }
                   if (this.filterData.columns[columnParam].options) {
                     filter.filteredOptions = [...this.filterData.columns[columnParam].options];
                   }
@@ -370,25 +430,17 @@
             }
           }
         }
-        this.filterData.filters = filters.filter(filter =>
-          filter.column && filter.operator && (
-            filter.value ||
-            (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
-          )
-        );
+        this.filterData.filters = this.getActiveFilters(filters);
         this.filterData.showFilters = false;
         if (this.filterData.filters.length === 0) {
           this.addFilter();
         }
+        
+        // Fetch experiment versions for any experiment filters loaded from URL
+        this.syncChatbotVersionsField(this.filterData.filters);
       },
 
-      updateUrlWithFilters() {
-        const activeFilters = this.filterData.filters.filter(filter =>
-          filter.column && filter.operator && (
-            filter.value ||
-            (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
-          )
-        );
+      updateUrlWithFilters(activeFilters) {
         const params = new URLSearchParams(window.location.search);
         [...params.keys()].forEach(key => {
           if (key.startsWith('filter_')) {
@@ -401,19 +453,19 @@
 
           if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
-              params.set(`filter_${i}_value`, JSON.stringify(filter.selectedValues));
+              let valuesToSerialize = filter.selectedValues;
+              if (this.isObjectChoiceFilter(filter)) {
+                valuesToSerialize = filter.selectedValues.map(label => {
+                  const option = this.filterData.columns[filter.column].options.find(exp => exp.label === label);
+                  return option ? option.id : label;
+                });
+              }
+              params.set(`filter_${i}_value`, JSON.stringify(valuesToSerialize));
             }
           } else {
             params.set(`filter_${i}_value`, filter.value);
           }
         });
-
-        const showAllCheckbox = document.querySelector('input[name="show-all"]');
-        if (showAllCheckbox && showAllCheckbox.checked) {
-          params.set('show-all', 'on');
-        } else {
-          params.delete('show-all');
-        }
 
         const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
         window.history.replaceState({}, '', newUrl);
@@ -423,49 +475,137 @@
         this.filterData.loading = true;
 
         let filterParams = {};
-        this.filterData.filters.forEach((filter, i) => {
-          if (filter.column && filter.operator && (
-            filter.value ||
-            (Array.isArray(filter.selectedValues) && filter.selectedValues.length > 0)
-          )) {
-            filterParams[`filter_${i}_column`] = filter.column;
-            filterParams[`filter_${i}_operator`] = filter.operator;
+        let activeFilters = this.getActiveFilters(this.filterData.filters);
+        activeFilters.forEach((filter, i) => {
+          filterParams[`filter_${i}_column`] = filter.column;
+          filterParams[`filter_${i}_operator`] = filter.operator;
 
-            if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
-              if (filter.selectedValues && filter.selectedValues.length > 0) {
-                filterParams[`filter_${i}_value`] = JSON.stringify(filter.selectedValues);
+          if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
+            if (filter.selectedValues && filter.selectedValues.length > 0) {
+              let valuesToSend = filter.selectedValues;
+              if (this.isObjectChoiceFilter(filter)) {
+                valuesToSend = filter.selectedValues.map(label => {
+                  const option = this.filterData.columns[filter.column].options.find(exp => exp.label === label);
+                  return option ? option.id : label;
+                });
               }
-            } else {
-              filterParams[`filter_${i}_value`] = filter.value;
+              filterParams[`filter_${i}_value`] = JSON.stringify(valuesToSend);
             }
+          } else {
+            filterParams[`filter_${i}_value`] = filter.value;
           }
         });
-        const sessionsTableUrl = document.getElementById('sessions-table').getAttribute('hx-get');
-        const showAllCheckbox = document.querySelector('input[name="show-all"]');
-        if (showAllCheckbox && showAllCheckbox.checked) {
-          filterParams['show-all'] = 'on';
-        }
+
+        this.syncChatbotVersionsField(activeFilters);
+
+        const dataSourceUrl = "{{df_filter_data_source_url}}";
+        const dataSourceContainerId = "{{df_filter_data_source_container_id}}";
         if (updateUrl) {
-          this.updateUrlWithFilters();
+          this.updateUrlWithFilters(activeFilters);
         }
-        htmx.ajax('GET', sessionsTableUrl, {
-          target: '#sessions-table',
+        htmx.ajax('GET', dataSourceUrl, {
+          target: "#" + dataSourceContainerId,
           swap: 'innerHTML',
           values: filterParams
         }).finally(() => {
           this.filterData.loading = false;
           // remove selected value from date range dropdown if range filter is removed
-          const hasLastMessageRange = this.filterData.filters.some(f => f.column === 'last_message' && f.operator === 'range');
-          if (!hasLastMessageRange) {
+          const hasDateRangeRange = this.filterData.filters.some(f => f.column === '{{ df_date_range_column_name }}' && f.operator === 'range');
+          if (!hasDateRangeRange) {
             this.syncDateRangeDropdown(null);
           }
         });
       },
+
+      syncChatbotVersionsField(activeFilters) {
+        // Update the versions column options based on selected experiments
+        // This uses a cache to avoid refetching versions for experiments that's already loaded
+        const experimentFilters = activeFilters.filter(f => f.column === 'experiment');
+        if (experimentFilters.length === 0) {
+          // Reset available versions to all
+          this.filterData.filters.forEach(filter => {
+            if (filter.column === 'versions') {
+              filter.filteredOptions = this.filterData.columns.versions.options;
+            }
+          });
+          return;
+        }
+
+        let allSelectedExperimentIds = new Set();
+        experimentFilters.forEach(filter => {
+          if (filter.selectedValues && filter.selectedValues.length > 0) {
+            filter.selectedValues.forEach(id => allSelectedExperimentIds.add(id));
+          }
+        });
+
+        // Find experiments that aren't cached yet
+        const uncachedExperimentIds = [...allSelectedExperimentIds].filter(id => !this.experimentVersionsCache[id]);
+
+        // Fetch versions for uncached experiments
+        const fetchPromises = uncachedExperimentIds.map(experimentId => {
+          const fetchUrl = "{% url 'experiments:get_experiment_version_names' team.slug '000' %}";
+          return fetch(fetchUrl.replace('000', experimentId), {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+              'X-CSRFToken': SiteJS.app.Cookies.get('csrftoken'),
+              'Accept': 'application/json'
+            }
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.version_names) {
+              this.experimentVersionsCache[experimentId] = data.version_names;
+            }
+            return data;
+          })
+          .catch(err => {
+            console.error(`Failed to load versions for experiment ${experimentId}:`, err);
+          });
+        });
+
+        Promise.all(fetchPromises).then(() => {
+          let allVersions = new Set();
+          allSelectedExperimentIds.forEach(experimentId => {
+            const versions = this.experimentVersionsCache[experimentId] || [];
+            versions.forEach(version => allVersions.add(version));
+          });
+          this.updateVersionsColumn(
+            Array.from(allVersions).sort((a, b) => 
+              parseInt(b.slice(1)) - parseInt(a.slice(1))
+            )
+          );
+        });
+      },
+
+      updateVersionsColumn(versions) {
+        // Update the versions column options if it exists
+        if (!this.filterData.columns.versions) {
+          return;
+        }
+        // Update available options in the versions column
+
+        // Update available options for existing filters
+        this.filterData.filters.forEach(filter => {
+          if (filter.column === 'versions') {
+            filter.filteredOptions = versions;
+          }
+        });
+
+        // Update selected values to only include those still valid
+        let activeFilters = this.getActiveFilters(this.filterData.filters);
+        const activeVersionsFilter = activeFilters.find(f => f.column === 'versions');
+        if (activeVersionsFilter) {
+          let newSelectedValues = activeVersionsFilter.selectedValues.filter(val => versions.includes(val));
+          activeVersionsFilter.selectedValues = newSelectedValues.sort();
+        }
+      },
+
       // Functions for date range dropdown
       setLabelFromURL() {
         const url = new URL(window.location.href);
         const params = url.searchParams;
-        const matchedIndex = this.getLastMessageFilterIndex(params);
+        const matchedIndex = this.getDateRangeFilterIndex(params);
         if (matchedIndex !== null) {
           const filterValue = params.get(`filter_${matchedIndex}_value`);
           const found = this.dateRangeOptions.find(opt => opt.value === filterValue);
@@ -477,19 +617,45 @@
 
       selectOption(option) {
         this.selectedLabel = option.label;
-        this.filterData.filters = this.filterData.filters.filter(f => f.column !== 'last_message');
-        this.filterData.filters.push({
-          column: 'last_message',
-          operator: 'range',
-          value: option.value,
-          availableOperators: fieldTypeFilters.timestamp,
-        });
+        const column = this.filterData.columns['{{ df_date_range_column_name }}'];
+        if (column) {
+          this.filterData.filters = this.filterData.filters.filter(f => f.column !== column.query_param);
+          this.filterData.filters.push({
+            column: column.query_param,
+            operator: 'range',
+            value: option.value,
+            availableOperators: column.operators,
+          });
+          this.filterData.filters = this.getActiveFilters(this.filterData.filters);
+          this.triggerFilterChange();
+        }
+      },
+
+      selectAllTagOptions(index) {
+        const filter = this.filterData.filters[index];
+        if (filter.column === 'tags') {
+          const allTags = this.filterData.columns['tags'].options || [];
+          filter.selectedValues = [...allTags];
+          this.triggerFilterChange();
+        }
+      },
+
+      clearAllOptions(index) {
+        const filter = this.filterData.filters[index];
+        filter.selectedValues = [];
         this.triggerFilterChange();
       },
 
-      getLastMessageFilterIndex(params) {
+      areAllTagsSelected(index) {
+        const filter = this.filterData.filters[index];
+        if (filter.column !== 'tags') return false;
+        const allTags = this.filterData.columns['tags'].options || [];
+        return allTags.length > 0 && filter.selectedValues.length === allTags.length;
+      },
+
+      getDateRangeFilterIndex(params) {
         for (const [key, val] of params.entries()) {
-          if (key.includes('_column') && val === 'last_message') {
+          if (key.includes('_column') && val === '{{ df_date_range_column_name }}') {
             const match = key.match(/filter_(\d+)_column/);
             if (match) {
               return match[1];

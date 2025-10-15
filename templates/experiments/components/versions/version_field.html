@@ -1,12 +1,11 @@
 <div class="grid {% if field.previous_field_version %}grid-cols-2{% else %}grid-cols-1{% endif %} gap-1">
     {% if field.is_a_version %}
         <div class="col-span-2">
-            {% include 'experiments/components/versions/compare.html' with version_details=field.raw_value_version level=level|add:"1" %}
+            {% include "experiments/components/versions/compare.html" with version_details=field.raw_value_version level=level|add:"1" %}
         </div>
     {% else %}
         {% if field.changed %}
-            {% include 'experiments/components/versions/diff_field.html' with version_field=field.previous_field_version bg_classes="bg-red-400/20" text_highlight_classes="bg-red-600/40" %}
-            {% include 'experiments/components/versions/diff_field.html' with version_field=field bg_classes="bg-green-400/20" text_highlight_classes="bg-green-600/40" %}
+            <div class="col-span-2 diff-view" data-diff-a="{{ field.previous_field_version.display_value|default_if_none:"" }}" data-diff-b="{{ field.display_value|default_if_none:"" }}"></div>
         {% else %}
             {% if field.previous_field_version %}
                 <div class="text-sm col-span-1 px-1">

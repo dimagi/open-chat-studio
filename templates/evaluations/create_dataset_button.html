@@ -1,0 +1,23 @@
+{% load waffle_tags %}
+{% flag "flag_evaluations" %}
+  <a href="{% url 'evaluations:dataset_new' team.slug %}"
+     class="btn btn-sm btn-outline btn-primary"
+     onclick="createDatasetWithFilters(this, '{{ experiment.id }}');">
+    <i class="fas fa-database mr-1"></i> Create Dataset
+  </a>
+{% endflag %}
+
+<script>
+  function createDatasetWithFilters(linkElement, experimentId) {
+    const params = new URLSearchParams(window.location.search);
+  // Find next available filter slot
+    let filterIndex = 0;
+    while (params.has(`filter_${filterIndex}_column`)) {
+      filterIndex++;
+    }
+    params.set(`filter_${filterIndex}_column`, 'experiment');
+    params.set(`filter_${filterIndex}_operator`, 'any of');
+    params.set(`filter_${filterIndex}_value`, JSON.stringify([experimentId]));
+    linkElement.href += '?' + params.toString();
+  }
+</script>

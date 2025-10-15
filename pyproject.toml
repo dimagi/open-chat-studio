@@ -1,7 +1,7 @@
 [project]
 name = "open-chat-studio"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 description = "A web application for building and deploying chatbots."
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -34,7 +34,7 @@ dependencies = [
     "djangorestframework-api-key",
     "drf-spectacular",
     "fbmessenger",
-    "ffmpeg",  # Audio transcription
+    "ffmpeg", # Audio transcription
     "httpx",
     "jinja2",
     "langchain>=0.3,<0.4",
@@ -51,18 +51,18 @@ dependencies = [
     "openapi_pydantic",
     "pandas",
     "psycopg[binary]",
+    "psycopg-pool>=3.2.6",
     "pyTelegramBotAPI==4.12.0",
     "pydantic",
-    "pydub",  # Audio transcription
-    "pypdf",
+    "pydub", # Audio transcription
     "RestrictedPython",
     "sentry-sdk",
     "slack-bolt",
     "taskbadger",
     "tenacity",
     "tiktoken",
-    "transformers>=4.48.0",  # this is required by the tokenizer that langchain uses
-    "turn-python>=0.2.0",
+    "transformers>=4.48.0", # this is required by the tokenizer that langchain uses
+    "turn-python>=1.0.0",
     "twilio",
     "whitenoise[brotli]",
     "phonenumberslite",
@@ -71,9 +71,14 @@ dependencies = [
     "requests>=2.32.3",
     "urllib3>=2.3.0",
     "pycryptodome",
-    "python-docx",
     "django-pydantic-field",
-    "pgvector"
+    "pgvector",
+    "backoff",
+    "django-cors-headers>=4.7.0",
+    "markitdown[pdf, docx, xlsx, xls, outlook, pptx]",
+    "langchain-mcp-adapters",
+    "atlassian-python-api>=4.0.7",
+    "audioop-lts>=0.2.2",
 ]
 
 [project.urls]
@@ -126,9 +131,9 @@ dev = [
     "pre-commit",
     "ruff",
     "mock",
-    "freezegun",
     "invoke",
     "termcolor",
+    "time-machine",
     "watchfiles",
     "pytest",
     "pytest-django",
@@ -136,6 +141,8 @@ dev = [
     "pytest-httpx",
     "pytest-cov",
     "pytest-xdist",
+    "django-debug-toolbar>=5.2.0",
+    "djlint>=1.36.4",
 ]
 docs = [
     "mkdocs-material>=9.6.12",
@@ -143,8 +150,15 @@ docs = [
 
 prod = [
     "gunicorn",
-    "gevent",
+    "gevent==24.*"
 ]
 
 [tool.uv]
 default-groups = ["dev", "docs"]
+
+[tool.djlint]
+profile="django"
+format_attribute_template_tags=true
+use_gitignore=true
+indent=2
+ignore="H030,H031,H021,H006,H013,H014"

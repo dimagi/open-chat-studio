@@ -6,6 +6,9 @@ from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage, ToolCall
 
+from apps.experiments.models import ExperimentSession
+from apps.service_providers.llm_service.datamodels import LlmChatResponse
+
 original_parse = parse_ai_message_to_tool_action
 
 
@@ -77,22 +80,26 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
     return actions
 
 
-def parse_output_for_anthropic(output):
+def parse_output_for_anthropic(output, session: ExperimentSession, include_citations: bool = True) -> LlmChatResponse:
     if output is None or isinstance(output, str):
-        return output or ""
+        return LlmChatResponse(text=output or "")
 
     if isinstance(output, list):
-        return "".join(parse_output_for_anthropic(item) for item in output)
+        chat_response = LlmChatResponse(text="")
+        for item in output:
+            chat_response += parse_output_for_anthropic(item, session=session, include_citations=include_citations)
+        return chat_response
 
     if isinstance(output, dict):
         if "output" in output:
-            return parse_output_for_anthropic(output["output"])
+            return parse_output_for_anthropic(output["output"], session=session, include_citations=include_citations)
         elif output.get("type") == "text":
             text = output.get("text", "")
             for citation in output.get("citations", []):
                 if citation.get("title") and citation.get("url"):
                     text += f" [{citation['title']}]({citation['url']})"
-            return text
+            # TODO: Add cited files
+            return LlmChatResponse(text=text)
         else:
-            return ""
-    return ""
+            return LlmChatResponse(text="")
+    return LlmChatResponse(text="")

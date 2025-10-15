@@ -1,8 +1,8 @@
-{% extends 'error_base.html' %}
+{% extends "error_base.html" %}
 {% load i18n %}
 {% block error_details %}
   <h1 class="pg-title">{% translate "Too many requests" %}</h1>
   <h2 class="pg-subtitle">
     {% translate "You are sending too many requests" %}
   </h2>
-{% endblock %}
+{% endblock error_details %}

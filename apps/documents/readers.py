@@ -1,15 +1,13 @@
 import logging
+from io import BytesIO
 
-import docx
-import pypdf
+from markitdown import MarkItDown
+from markitdown._exceptions import UnsupportedFormatException
 from pydantic import BaseModel, Field
 
-from apps.documents.patch_docx import patch_docx
 from apps.files.models import File
 
 logger = logging.getLogger("ocs.documents")
-
-patch_docx()
 
 
 class FileReadException(Exception):
@@ -54,31 +52,26 @@ def get_file_content_reader(content_type) -> callable:
         return READERS[mime_class]
 
     logger.warning(f"No reader found for content type {content_type}. Using default text reader.")
-    return read_text
+    return markitdown_read
 
 
-def read_text(file_obj) -> Document:
+def markitdown_read(file_obj) -> Document:
+    # markitdown supports text, pdf, docx, xlsx, xls, outlook, pptx which will be handled by the default text reader
+    md = MarkItDown(enable_plugins=False)
+    try:
+        result = md.convert(BytesIO(file_obj.read()))
+        return Document(parts=[DocumentPart(content=result.markdown)])
+    except UnsupportedFormatException:
+        return plaintext_reader(file_obj)
+    except UnicodeDecodeError as e:
+        raise FileReadException("Unable to decode file contents to text") from e
+
+
+def plaintext_reader(file_obj) -> Document:
     try:
         return Document(parts=[DocumentPart(content=file_obj.read().decode())])
     except UnicodeDecodeError as e:
         raise FileReadException("Unable to decode file contents to text") from e
 
 
-def read_pdf(file_obj) -> Document:
-    pages = [
-        DocumentPart(content=page.extract_text(), metadata={"page": i})
-        for i, page in enumerate(pypdf.PdfReader(file_obj).pages)
-    ]
-    return Document(parts=pages)
-
-
-def read_docx(file_obj) -> Document:
-    return Document(parts=[DocumentPart(content=paragraph.text) for paragraph in docx.Document(file_obj).paragraphs])
-
-
-READERS = {
-    "application/pdf": read_pdf,
-    "text": read_text,
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": read_docx,
-    None: read_text,
-}
+READERS = {None: markitdown_read, "text/markdown": plaintext_reader, "text/plain": plaintext_reader}

@@ -15,18 +15,223 @@
       {% endif %}
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block form %}
-  <div x-data="{isIndex: {% if form.instance.is_index %}true{% else %}false{% endif %}, currentProvider: '{{ form.instance.llm_provider_id }}', llmProvider: '{{ form.instance.llm_provider_id }}'}">
-    {% render_form_fields form "name" "is_index" %}
+  <div x-data="collection">
+  <!-- Header with explanation -->
+    <div class="mb-6">
+      <p class="text-base-content/70 text-sm">
+        Collections help your bot work with files. Choose the type that matches what you want to accomplish.
+        Once you create a collection, you can enable your bot to use it by adding it to an LLM node.
+      </p>
+    </div>
 
-    <div x-cloak x-show="isIndex">
-      {% render_field form.llm_provider xmodel="llmProvider" %}
-      {% if form.instance.id %}
-        <div role="alert" class="mt-2 alert alert-warning alert-soft" x-cloak x-show="currentProvider !== llmProvider">
-          <span>Changing the LLM provider will create a new vector store and remove the old vector store. This might take a while. Continue with caution</span>
-        </div>
-      {% endif %}
+  <!-- Collection Type Selection -->
+    <div class="mb-6">
+      <h2 class="text-lg font-semibold">Choose your collection type</h2>
+
+      <div class="grid md:grid-cols-2 gap-4 mb-6 mt-4">
+        <label class="cursor-pointer">
+          <input
+            type="radio"
+            name="collection_type"
+            value="media"
+            @change="isIndex = false"
+            class="sr-only"
+          >
+          <div class="card border-2 transition-all duration-100 hover:border-base-300"
+               :class="!isIndex ? 'border-primary bg-primary/5' : 'border-base-300'">
+            <div class="card-body p-4">
+              <div class="absolute top-4 right-4">
+                <div class="w-4 h-4 rounded-full border-2"
+                     :class="!isIndex ? 'border-primary bg-primary' : 'border-base-content/30'">
+                  <div x-show="!isIndex" class="w-2 h-2 bg-base-100 rounded-full mx-auto mt-0.5"></div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-3 mb-3">
+                <i class="fa-solid fa-download text-success"></i>
+                <div>
+                  <h3 class="font-semibold text-lg">Media Collection</h3>
+                  <p class="text-base-content/60 text-sm">Share files with users</p>
+                </div>
+              </div>
+
+            <!-- Description -->
+              <p class="text-base-content/80 text-sm mb-4 leading-relaxed">
+                Your bot can send files directly to users - perfect for documents, images, videos, and other resources users need to download or view.
+              </p>
+
+            <!-- Examples -->
+              <div class="mb-4">
+                <h4 class="font-medium text-sm mb-2">Perfect for:</h4>
+                <ul class="space-y-1">
+                  <li class="text-base-content/60 text-xs flex items-center gap-2">
+                    <div class="w-1 h-1 bg-base-content/40 rounded-full"></div>
+                    Training videos and tutorials
+                  </li>
+                  <li class="text-base-content/60 text-xs flex items-center gap-2">
+                    <div class="w-1 h-1 bg-base-content/40 rounded-full"></div>
+                    Product catalogs and brochures
+                  </li>
+                  <li class="text-base-content/60 text-xs flex items-center gap-2">
+                    <div class="w-1 h-1 bg-base-content/40 rounded-full"></div>
+                    Reference documents and manuals
+                  </li>
+                </ul>
+              </div>
+
+              <div class="bg-base-200 p-3 rounded text-xs">
+                <span class="font-medium">How it works: </span>
+                <span class="text-base-content/70">Bot analyzes file summaries you provide and attaches relevant files to responses when helpful.</span>
+              </div>
+            </div>
+          </div>
+        </label>
+
+      <!-- Indexed Collection Card -->
+        <label class="cursor-pointer">
+          <input
+            name="collection_type"
+            type="radio"
+            value="indexed"
+            @change="isIndex = true"
+            class="sr-only"
+          >
+          <div class="card border-2 transition-all duration-200 hover:border-base-300"
+               :class="isIndex ? 'border-primary bg-primary/5' : 'border-base-300'">
+            <div class="card-body p-4">
+
+              <div class="absolute top-4 right-4">
+                <div class="w-4 h-4 rounded-full border-2"
+                     :class="isIndex ? 'border-primary bg-primary' : 'border-base-content/30'">
+                  <div x-show="isIndex" class="w-2 h-2 bg-base-100 rounded-full mx-auto mt-0.5"></div>
+                </div>
+              </div>
+
+            <!-- Icon and Title -->
+              <div class="flex items-center gap-3 mb-3">
+                <i class="fas fa-search"></i>
+                <div>
+                  <h3 class="font-semibold text-lg">Indexed Collection (RAG)</h3>
+                  <p class="text-base-content/60 text-sm">Answer questions from document content</p>
+                </div>
+              </div>
+
+            <!-- Description -->
+              <p class="text-base-content/80 text-sm mb-4 leading-relaxed">
+                Your bot searches through and quotes from your documents to provide accurate, grounded answers based on your content.
+              </p>
+
+            <!-- Examples -->
+              <div class="mb-4">
+                <h4 class="font-medium text-sm mb-2">Perfect for:</h4>
+                <ul class="space-y-1">
+                  <li class="text-base-content/60 text-xs flex items-center gap-2">
+                    <div class="w-1 h-1 bg-base-content/40 rounded-full"></div>
+                    Company handbooks and policies
+                  </li>
+                  <li class="text-base-content/60 text-xs flex items-center gap-2">
+                    <div class="w-1 h-1 bg-base-content/40 rounded-full"></div>
+                    Technical documentation
+                  </li>
+                  <li class="text-base-content/60 text-xs flex items-center gap-2">
+                    <div class="w-1 h-1 bg-base-content/40 rounded-full"></div>
+                    FAQ knowledge bases
+                  </li>
+                </ul>
+              </div>
+
+            <!-- How it works -->
+              <div class="bg-base-200 p-3 rounded text-xs">
+                <span class="font-medium">How it works: </span>
+                <span class="text-base-content/70">Documents are broken into searchable chunks. Bot finds relevant sections and uses them to answer questions.</span>
+              </div>
+            </div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+  <!-- Collection Name -->
+    <div class="mb-6">
+      {% render_field form.name %}
+    </div>
+
+  <!-- Indexed Collection Options -->
+    <div x-cloak x-show="isIndex" x-transition>
+      <div class="bg-base-200 border border-base-300 rounded-lg p-4 mb-6">
+        <h3 class="font-semibold mb-4 flex items-center gap-2">
+          <i class="fas fa-search"></i>
+          Indexing Options
+        </h3>
+
+        {% render_field form.is_index %}
+        {% render_field form.llm_provider %}
+        {% render_field form.is_remote_index xshow="showIndexingBackendChoice" %}
+        {% render_field form.embedding_provider_model xshow="!isRemoteIndex" %}
+
+        {% if form.instance.id %}
+          <div role="alert" class="bg-base-200 rounded-lg alert alert-warning alert-soft flex flex-col" x-cloak x-show="initialProviderId !== selectedLlmProviderId">
+            <h3 class="font-semibold mb-2">Continue with caution! Changing the LLM provider will</h3>
+            <ul class="w-full list-disc list-inside space-y-1 text-sm">
+              <li>Remove the current vector store</li>
+              <li>Create a new vector store at the new provider</li>
+              <li>Re-upload the files to the new vector store</li>
+              <li>If this collection was created from an assistant, this operation might break the assistant</li>
+            </ul>
+          </div>
+        {% endif %}
+      </div>
     </div>
   </div>
+
+  {{ embedding_model_options|json_script:"embeddingModelOptions" }}
+  {{ provider_types|json_script:"providerTypes" }}
+  {{ open_ai_provider_ids|json_script:"openAIProviderIds" }}
+  <script>
+    document.addEventListener('alpine:init', () => {
+      const embeddingModelOptions = JSON.parse(document.getElementById("embeddingModelOptions").textContent);
+      const providerTypes = JSON.parse(document.getElementById("providerTypes").textContent);
+
+      Alpine.data('collection', () => ({
+        isIndex: {% if form.instance.is_index %}true{% else %}false{% endif %},
+        initialProviderId: {{ form.instance.llm_provider_id|default:'null' }},
+        selectedLlmProviderId: {{ form.instance.llm_provider_id|default:'null' }},
+        embedding_provider_model: '{{ form.instance.embedding_provider_model_id|default:form.embedding_provider_model.value|default:'null' }}',
+        embedding_provider_model_options: [],
+        openAIProviderIds: JSON.parse(document.getElementById("openAIProviderIds").textContent),
+        showIndexingBackendChoice: false,
+        isRemoteIndex: {% if form.instance.is_remote_index %}true{% else %}false{% endif %},
+        init() {
+          this.updateEmbeddingModels();
+
+          this.$watch('selectedLlmProviderId', () => {
+            this.updateEmbeddingModels();
+          });
+        },
+        updateEmbeddingModels() {
+          this.showIndexingBackendChoice = this.openAIProviderIds.includes(this.selectedLlmProviderId);
+          if (this.selectedLlmProviderId && this.getProviderType()) {
+            const providerType = this.getProviderType();
+            this.embedding_provider_model_options = embeddingModelOptions[providerType] || [];
+
+            // Reset selection if current model is not available for new provider type
+            const currentModelValid = this.embedding_provider_model_options.some(
+              option => option.value == this.embedding_provider_model
+            );
+            if (!currentModelValid) {
+              this.embedding_provider_model = '';
+            }
+          } else {
+            this.embedding_provider_model_options = [];
+            this.embedding_provider_model = '';
+          }
+        },
+        getProviderType() {
+          return providerTypes[this.selectedLlmProviderId];
+        }
+      }));
+    });
+  </script>
 {% endblock form %}

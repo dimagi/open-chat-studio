@@ -48,7 +48,7 @@ def notify_users_of_safety_violations_task(experiment_session_id: int, safety_la
     email_context = {
         "session_link": absolute_url(
             reverse(
-                "experiments:experiment_session_view",
+                "chatbots:chatbot_session_view",
                 kwargs={
                     "session_id": experiment_session.external_id,
                     "experiment_id": experiment.public_id,

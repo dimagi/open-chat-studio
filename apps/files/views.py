@@ -229,6 +229,13 @@ class EditFile(LoginAndTeamRequiredMixin, UpdateView):
         "form_attrs": {"enctype": "multipart/form-data"},
     }
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Add collection chips for the file
+        collections = self.object.get_collection_references()
+        context['collection_chips'] = [Chip(label=col.name, url=col.get_absolute_url()) for col in collections]
+        return context
+
     def get_queryset(self):
         return File.objects.filter(team=self.request.team)
 

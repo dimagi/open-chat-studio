@@ -16,8 +16,10 @@ def test_get_response_for_webchat_task(session):
     """Basic test for the code in the task. Not intended to test the functions called in the task."""
 
     attachments = [
-        Attachment(file_id=1, type="code_interpreter", name="code.py", size=100),
-        Attachment(file_id=2, type="file_search", name="file_search.json", size=100),
+        Attachment(file_id=1, type="code_interpreter", name="code.py", size=100, download_link="http://localhost:8000"),
+        Attachment(
+            file_id=2, type="file_search", name="file_search.json", size=100, download_link="http://localhost:8000"
+        ),
     ]
     with mock_llm(responses=["how can I help?"]):
         response = get_response_for_webchat_task(

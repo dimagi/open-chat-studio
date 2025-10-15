@@ -131,20 +131,36 @@ class PipelineStartAction(EventActionHandlerBase):
         elif input_type == PipelineEventInputs.HISTORY_LAST_SUMMARY:
             messages = session.chat.get_langchain_messages_until_marker(marker=PipelineChatHistoryModes.SUMMARIZE)
         elif input_type == PipelineEventInputs.LAST_MESSAGE:
-            messages = [session.chat.messages.last().to_langchain_message()]
+            last_message = session.chat.messages.last()
+            if last_message:
+                messages = [last_message.to_langchain_message()]
+            else:
+                messages = []
 
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
-        state = PipelineState(messages=[input], experiment_session=session)
+        participant_data = session.participant.global_data | session.participant_data_from_experiment
+        state = PipelineState(
+            messages=[input], experiment_session=session, participant_data=participant_data, session_state=session.state
+        )
         trace_service = TracingService.create_for_experiment(session.experiment)
         with trace_service.trace(
             trace_name=f"{session.experiment.name} - event pipeline execution",
-            session_id=session.id,
-            user_id=session.participant.identifier,
+            session=session,
             inputs={"input": input},
             metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},
         ):
-            output = pipeline.invoke(
-                state, session, session.experiment_version, trace_service, save_run_to_history=False
+            from apps.chat.bots import PipelineBot
+
+            bot = PipelineBot(
+                session=session,
+                experiment=session.experiment_version,
+                trace_service=trace_service,
             )
+            output = bot.invoke_pipeline(
+                input_state=state,
+                pipeline=pipeline,
+                save_run_to_history=False,
+            )
+            # does not support updating participant data or session state
             trace_service.set_current_span_outputs({"response": output.content})
         return output.content

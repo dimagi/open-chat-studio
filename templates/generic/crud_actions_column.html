@@ -1,7 +1,7 @@
 {% load actions %}
 {# This template is used by Tables classes to render edit and delete actions #}
-{% if as_group|default_if_none:True %}<div class="join">{% endif %}
+{% if as_group|default_if_none:True %}<div class="join join-vertical lg:join-horizontal">{% endif %}
 {% for action in actions %}
   {% render_action action %}
 {% endfor %}
-{% if as_group|default:True %}</div>{% endif %}
+{% if as_group|default_if_none:True %}</div>{% endif %}

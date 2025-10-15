@@ -2,6 +2,7 @@
 {% load team_tags %}
 {% load static %}
 {% load i18n %}
+{% load waffle_tags %}
 {% load form_tags %}
 {% block page_head %}
   <style>
@@ -11,35 +12,40 @@
       transition: opacity 1s ease-out;
     }
   </style>
-{% endblock %}
+{% endblock page_head %}
 {% block app %}
   <section class="app-card">
-    <h3 class="pg-subtitle">
-      {% translate "Team Details" %}
-    </h3>
+    {% if not create %}
+      <div class="flex justify-between">
+        <h3 class="pg-subtitle">
+          {% translate "Team Details" %}
+        </h3>
+        <a href="{% url "single_team:feature_flags" request.team.slug %}" class="btn btn-primary">Manage Feature Flags</a>
+      </div>
+    {% endif %}
     <form method="post">
       {% csrf_token %}
       {% render_form_fields team_form %}
       {% if create or request.team_membership.is_team_admin %}
         <div class="pg-inline-buttons">
-          <input class="btn btn-outline" type="submit" value="{% translate 'Save' %}">
+          <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
         </div>
       {% endif %}
     </form>
   </section>
   {% if not create %}
-    {% with button_style="btn-outline" title_class="pg-subtitle" title="LLM and Embedding Model Service Providers" subtitle="Large Language Model and Embedding model services"  %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" title="LLM and Embedding Model Service Providers" subtitle="Large Language Model and Embedding model services" %}
       {% has_perm "service_providers" "add_llmprovider" as allow_new %}
       {% url "service_providers:table" request.team.slug "llm" as table_url %}
       {% url "service_providers:llm_new" request.team.slug as new_object_url %}
       {% include "generic/object_home_content.html" with new_object_url=new_object_url table_url=table_url %}
     {% endwith %}
     {% translate "Speech to text and visa versa" as speech_subtitle %}
-    {% include 'service_providers/service_provider_home.html' with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle perm="add_voiceprovider" %}
+    {% include "service_providers/service_provider_home.html" with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle perm="add_voiceprovider" %}
     {% translate "WhatsApp, SMS etc" as messaging_subtitle %}
-    {% include 'service_providers/service_provider_home.html' with provider_type="messaging" title="Messaging Providers" subtitle=messaging_subtitle perm="add_messagingprovider" %}
+    {% include "service_providers/service_provider_home.html" with provider_type="messaging" title="Messaging Providers" subtitle=messaging_subtitle perm="add_messagingprovider" %}
     {% translate "Authentication credentials for integrations" as auth_subtitle %}
-    {% include 'service_providers/service_provider_home.html' with provider_type="auth" title="Authentication Providers" subtitle=auth_subtitle perm="add_authprovider" %}
+    {% include "service_providers/service_provider_home.html" with provider_type="auth" title="Authentication Providers" subtitle=auth_subtitle perm="add_authprovider" %}
 
     {% has_perm "custom_actions" "add_customaction" as allow_new_action %}
     {% url "custom_actions:table" request.team.slug as actions_table_url %}
@@ -49,11 +55,21 @@
       {% include "generic/object_home_content.html" with new_object_url=actions_new_url title="Custom Actions" table_url=actions_table_url allow_new=allow_new_action subtitle=actions_subtitle %}
     {% endwith %}
 
+    {% flag "flag_mcp" %}
+      {% has_perm "mcp_integrations" "add_mcpserver" as allow_new_mcp %}
+      {% url "mcp_integrations:table" request.team.slug as mcp_table_url %}
+      {% url "mcp_integrations:new" request.team.slug as mcp_new_url %}
+      {% translate "Manage MCP Servers" as mcp_subtitle %}
+      {% with button_style="btn-outline" title_class="pg-subtitle" %}
+        {% include "generic/object_home_content.html" with new_object_url=mcp_new_url title="MCP Integrations" table_url=mcp_table_url allow_new=allow_new_mcp subtitle=mcp_subtitle %}
+      {% endwith %}
+    {% endflag %}
+
     {% translate "Record trace details of bot activity" as trace_subtitle %}
-    {% include 'service_providers/service_provider_home.html' with provider_type="tracing" title="Tracing Providers" subtitle=trace_subtitle perm="add_traceprovider" %}
+    {% include "service_providers/service_provider_home.html" with provider_type="tracing" title="Tracing Providers" subtitle=trace_subtitle perm="add_traceprovider" %}
     <section class="app-card">
       <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
-      <div class='table-responsive'>
+      <div class="table-responsive">
         <table class="table pg-table">
           <thead>
             <tr>
@@ -78,15 +94,15 @@
         </table>
       </div>
     </section>
-    {% include 'teams/components/team_invitations.html' %}
+    {% include "teams/components/team_invitations.html" %}
     {% if request.team_membership.is_team_admin %}
       <section class="app-card">
         <h3 class="pg-subtitle">
           {% translate "Danger Zone" %}
         </h3>
-        <label for="delete-modal" class="pg-button-danger modal-button">{% translate 'Delete Team' %}</label>
+        <label for="delete-modal" class="pg-button-danger modal-button">{% translate "Delete Team" %}</label>
       </section>
-      {% include 'teams/components/delete_team_modal.html' %}
+      {% include "teams/components/delete_team_modal.html" %}
     {% endif %}
   {% endif %}
-{% endblock %}
+{% endblock app %}

@@ -1,17 +1,19 @@
+import platform
 import textwrap
 import time
-from distutils.version import LooseVersion
 from pathlib import Path
 
 import requests
 from invoke import Context, Exit, call, task
+from packaging.version import Version
 from termcolor import cprint
 
 MIN_NODE_VERSION = "18"
 
 
-@task
+@task(help={"command": "Docker command to run: 'up' to start services, 'down' to stop services"})
 def docker(c: Context, command):
+    """Manage Docker services (PostgreSQL and Redis)."""
     if command == "up":
         c.run("docker compose -f docker-compose-dev.yml up -d")
     elif command == "down":
@@ -22,16 +24,24 @@ def docker(c: Context, command):
 
 @task(pre=[call(docker, command="up")])
 def up(c: Context):
+    """Start PostgreSQL and Redis services using Docker."""
     pass
 
 
 @task(pre=[call(docker, command="down")])
 def down(c: Context):
+    """Stop PostgreSQL and Redis services."""
     pass
 
 
-@task
+@task(
+    help={
+        "upgrade_all": "Upgrade all packages to latest versions",
+        "upgrade_package": "Upgrade specific package (e.g. --upgrade-package django)",
+    }
+)
 def requirements(c: Context, upgrade_all=False, upgrade_package=None):
+    """Update Python dependencies using uv lock and optionally sync environment."""
     if upgrade_all and upgrade_package:
         raise Exit("Cannot specify both upgrade and upgrade-package", -1)
     has_uv = c.run("uv -V", hide=True, timeout=1, warn=True)
@@ -59,6 +69,7 @@ def requirements(c: Context, upgrade_all=False, upgrade_package=None):
 
 @task
 def translations(c: Context):
+    """Extract and compile Django translation messages for all languages."""
     c.run("python manage.py makemessages --all --ignore node_modules --ignore venv")
     c.run("python manage.py makemessages -d djangojs --all --ignore node_modules --ignore venv")
     c.run("python manage.py compilemessages")
@@ -66,11 +77,13 @@ def translations(c: Context):
 
 @task
 def schema(c: Context):
+    """Generate OpenAPI schema file for the API."""
     c.run("python manage.py spectacular --file api-schema.yml --validate")
 
 
-@task
+@task(help={"step": "Run setup interactively, confirming each step"})
 def setup_dev_env(c: Context, step=False):
+    """Set up complete development environment: Docker, migrations, assets, pre-commit hooks."""
     cprint("Setting up dev environment", "green")
     if not step and not _confirm(
         textwrap.dedent(
@@ -122,12 +135,13 @@ def _check_node_version(c: Context):
     version = res.stdout.strip()
     if version.startswith("v"):
         version = version[1:]
-    ver = LooseVersion(version)
-    return ver >= LooseVersion(MIN_NODE_VERSION)
+    ver = Version(version)
+    return ver >= Version(MIN_NODE_VERSION)
 
 
 @task
 def ngrok_url(c: Context):
+    """Start ngrok tunnel for local development and return public URL."""
     #  You need to have ngrok installed on your system
     c.run("ngrok http 8000", echo=True, asynchronous=True)
     while True:
@@ -144,17 +158,32 @@ def ngrok_url(c: Context):
     return public_url
 
 
-@task(aliases=["django"])
+@task(aliases=["django"], help={"public": "Expose server publicly via ngrok tunnel"})
 def runserver(c: Context, public=False):
+    """Start Django development server (alias: inv django)."""
     runserver_command = "python manage.py runserver"
     if public:
         public_url = ngrok_url(c)
-        runserver_command = f"SITE_URL_ROOT={public_url} {runserver_command}"
-    c.run(runserver_command, echo=True, pty=True)
+        if platform.system() == "Windows":
+            runserver_command = f"powershell -Command \"$env:SITE_URL_ROOT='{public_url}'; {runserver_command}\""
+            pty = False
+        else:
+            runserver_command = f"SITE_URL_ROOT={public_url} {runserver_command}"
+            pty = True
+    else:
+        pty = True
+
+    c.run(runserver_command, echo=True, pty=pty)
 
 
-@task
+@task(
+    help={
+        "gevent": "Use gevent pool for async tasks (disables beat scheduler)",
+        "beat": "Include beat scheduler for periodic tasks (default: True)",
+    }
+)
 def celery(c: Context, gevent=False, beat=True):
+    """Start Celery worker with auto-reload on code changes."""
     cmd = "celery -A gpt_playground worker -l INFO"
     if gevent:
         cmd += " --pool gevent --concurrency 10"
@@ -168,7 +197,9 @@ def celery(c: Context, gevent=False, beat=True):
     c.run(f'watchfiles --filter python "{cmd}"', echo=True, pty=True)
 
 
-@task
+@task(
+    help={"no_fix": "Only check for issues, don't auto-fix", "unsafe_fixes": "Apply potentially unsafe automatic fixes"}
+)
 def ruff(c: Context, no_fix=False, unsafe_fixes=False):
     """Run ruff checks and formatting. Use --unsafe-fixes to apply unsafe fixes."""
     fix_flag = "" if no_fix else "--fix"
@@ -177,8 +208,14 @@ def ruff(c: Context, no_fix=False, unsafe_fixes=False):
     c.run("ruff format", echo=True, pty=True)
 
 
-@task
+@task(
+    help={
+        "watch": "Build assets and watch for changes (npm run dev-watch)",
+        "install": "Install npm packages before building",
+    }
+)
 def npm(c: Context, watch=False, install=False):
+    """Build frontend assets with webpack. Use --watch for development."""
     if install:
         c.run("npm install", echo=True)
     cmd = "dev-watch" if watch else "dev"

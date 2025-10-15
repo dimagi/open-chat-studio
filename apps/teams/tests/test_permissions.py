@@ -35,14 +35,17 @@ IGNORE_APPS = {
     "celery",  # heath_check.celery
     "celery_progress",
     "contenttypes",
+    "corsheaders",
     "db",  # heath_check.db
     "django_celery_beat",
     "django_cleanup",
     "django_otp",
     "django_tables2",
     "documents",  # ignore for now - may be added later
+    "dashboard",
     "drf_spectacular",
     "field_audit",
+    "audit_tests",
     "forms",
     "generics",
     "health_check",
@@ -57,6 +60,7 @@ IGNORE_APPS = {
     "rest_framework_api_key",
     "runserver_nostatic",
     "sessions",
+    "site_admin",
     "sitemaps",
     "sites",
     "slack",
@@ -95,7 +99,7 @@ def test_group_def():
         "dummy",
         [
             AppPermSetDef("chat", ALL),
-            AppPermSetDef("channels", [VIEW]),
+            AppPermSetDef("bot_channels", [VIEW]),
             ModelPermSetDef("teams", "team", [VIEW, CHANGE]),
         ],
     )

@@ -1,5 +1,7 @@
 {# Generic template to render a list of objects with a 'new' button #}
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
+{% load static %}
+
 {% block app %}
   {% include "generic/object_home_content.html" %}
-{% endblock %}
+{% endblock app %}

@@ -140,6 +140,8 @@ class Command(BaseCommand):
     def _get_source_files(self, root_path):
         """Generator that yields all source files, excluding specified directories."""
         source_extensions = {".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".md", ".txt", ".yml", ".yaml", ".json"}
+        ignored_files = {"flags.py"}
+        ignored_paths = {"apps/teams/flags.py"}
 
         for root, dirs, files in os.walk(root_path):
             # Remove excluded directories from dirs list to avoid walking them
@@ -147,5 +149,9 @@ class Command(BaseCommand):
 
             for file in files:
                 file_path = Path(root) / file
-                if file_path.suffix.lower() in source_extensions:
+
+                if file in ignored_files and str(file_path.relative_to(root_path)) in ignored_paths:
+                    continue
+
+                if file_path.suffix.lower() in source_extensions and file_path not in ignored_files:
                     yield file_path

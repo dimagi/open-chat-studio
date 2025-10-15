@@ -7,3 +7,4 @@ import './alertify';
 import './tom-select';
 import './theme-toggle';
 import './tables'
+import 'open-chat-studio-widget';

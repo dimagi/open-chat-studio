@@ -1,0 +1,47 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% load form_tags %}
+
+{% block app %}
+  <div class="app-card">
+    <div class="grid grid-cols-6">
+      <div class="col-span-5">
+        <div class="flex flex-row">
+          <h1 class="pg-title">{{ title }}</h1>
+          {% include "generic/help.html" with help_content=title_help_content %}
+        </div>
+        <span class="text-neutral-500">Create an indexed collection from an OpenAI assistant's file search tools</span>
+      </div>
+    </div>
+
+    <hr class="my-4">
+
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+
+      {% render_form_fields form "assistant" "collection_name" %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-error">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <div class="flex justify-end space-x-2 pt-4">
+        <a href="{% url 'documents:collection_home' team.slug %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">{{ button_text }}</button>
+      </div>
+    </form>
+
+    <div class="mt-6 p-4 bg-base-200 rounded-lg">
+      <h3 class="font-semibold mb-2">What happens when you create a collection from an assistant?</h3>
+      <ul class="list-disc list-inside space-y-1 text-sm">
+        <li>A new indexed collection will be created using the same LLM provider as the assistant</li>
+        <li>All files from the assistant's file search tools will be copied to the new collection</li>
+        <li>A new vector store will be created at OpenAI for the collection</li>
+        <li>The assistant's original vector store and files remain unchanged</li>
+        <li>The collection can be used independently for RAG and document search</li>
+      </ul>
+    </div>
+  </div>
+{% endblock app %}

@@ -148,7 +148,9 @@ def compress_chat_history(
                     return history
                 else:
                     ChatMessage.objects.filter(id=last_message.additional_kwargs["id"]).update(summary=summary)
-                    return [SystemMessage(content=summary)] + history
+                    if summary:
+                        history.insert(0, SystemMessage(content=summary))
+                    return history
             else:
                 logging.exception(f"last_message is unexpectedly None for chat_id={chat.id}")
         return history

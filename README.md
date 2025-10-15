@@ -11,4 +11,4 @@ Open Chat Studio is a platform for building, deploying, and evaluating AI-powere
 
 ## Contributing
 
-We welcome contributions to Open Chat Studio! If you're interested in contributing, please check out our [contributing guidelines](https://docs.dev.openchatstudio.com/contributing/) for more information on how to get started.
+We welcome contributions to Open Chat Studio! If you're interested in contributing, please check out our [contributing guidelines](https://developers.openchatstudio.com/contributing/) for more information on how to get started.

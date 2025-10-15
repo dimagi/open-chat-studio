@@ -1,5 +1,6 @@
 import uuid
 
+from allauth.account.models import EmailAddress
 from django.conf import settings
 from django.contrib import messages
 from django.http import HttpResponseRedirect
@@ -19,11 +20,18 @@ def accept_invitation(request, invitation_id: uuid.UUID):
         request.session["invitation_id"] = str(invitation_id)
     else:
         clear_invite_from_session(request)
-    if (
-        request.user.is_authenticated
-        and request.user.email.lower() == invitation.email.lower()
-        and is_member(request.user, invitation.team)
-    ):
+    user_email_matches = False
+    if request.user.is_authenticated:
+        user_email_matches = request.user.email.lower() == invitation.email.lower()
+        if not user_email_matches:
+            # If the current user's email doesn't match the invitation,
+            # check if they have an email that does match.
+            # We don't check verified emails since email verification has the
+            # same level of security as invitations.
+            user_email_matches = EmailAddress.objects.filter(
+                email__iexact=invitation.email, user__id=request.user.id
+            ).exists()
+    if user_email_matches and is_member(request.user, invitation.team):
         messages.info(
             request,
             _("It looks like you're already a member of {team}. You've been redirected.").format(
@@ -41,7 +49,7 @@ def accept_invitation(request, invitation_id: uuid.UUID):
             if invitation.is_accepted:
                 messages.error(request, _("Sorry, it looks like that invitation link has expired."))
                 return HttpResponseRedirect(reverse("web:home"))
-            else:
+            elif user_email_matches:
                 process_invitation(invitation, request.user)
                 clear_invite_from_session(request)
                 messages.success(request, _("You successfully joined {}").format(invitation.team.name))
@@ -53,5 +61,6 @@ def accept_invitation(request, invitation_id: uuid.UUID):
         {
             "invitation": invitation,
             "invitation_url": reverse("teams:accept_invitation", args=[invitation_id]),
+            "user_email_matches": user_email_matches,
         },
     )

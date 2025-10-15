@@ -36,11 +36,13 @@ def session(fake_llm_service):
     session.experiment.get_llm_service = lambda: fake_llm_service
     session.experiment.tools = [AgentTools.MOVE_SCHEDULED_MESSAGE_DATE]
     session.get_participant_data = lambda *args, **kwargs: ""
+    session.participant_data_from_experiment = {}
     return session
 
 
 @pytest.mark.django_db()
 @patch("apps.service_providers.llm_service.adapters.get_tools")
+@patch("apps.chat.models.Chat.attach_files", new=Mock())
 def test_simple_runnable_cancellation(get_tools, session, fake_llm_service):
     get_tools.return_value = []
     runnable = _get_runnable_with_mocked_history(session, SimpleLLMChat)
@@ -49,6 +51,7 @@ def test_simple_runnable_cancellation(get_tools, session, fake_llm_service):
 
 @pytest.mark.django_db()
 @patch("apps.service_providers.llm_service.adapters.get_tools")
+@patch("apps.chat.models.Chat.attach_files", new=Mock())
 def test_agent_runnable_cancellation(get_tools, session, fake_llm_service):
     get_tools.return_value = [OneOffReminderTool(experiment_session=session)]
     runnable = _get_runnable_with_mocked_history(session, AgentLLMChat)

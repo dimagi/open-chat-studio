@@ -1,0 +1,122 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+
+{% block page_head %}
+  {{ block.super }}
+  {% if group_job_id %}
+    <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+  {% elif evaluation_run.status == "pending" or evaluation_run.status == "processing" %}
+     <meta http-equiv="refresh" content="2" />
+  {% endif %}
+{% endblock page_head %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'evaluations:home' request.team.slug %}">Evaluations</a></li>
+      <li><a href="{% url 'evaluations:evaluation_runs_home' request.team.slug evaluation_run.config_id %}">{{ evaluation_run.config.name }} Runs</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">Run {{ evaluation_run.id }}</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+  <div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold">{{ title }}</h1>
+      {% if evaluation_run.status == "completed" %}
+        <div class="flex gap-2">
+          {% if evaluation_run.type == "preview" %}
+            <a href="{% url 'evaluations:create_evaluation_run' request.team.slug evaluation_run.config_id %}"
+               class="btn btn-primary">
+              <i class="fa-solid fa-play"></i>
+              Run evaluation ({{ evaluation_run.config.dataset.messages.count }} messages)
+            </a>
+          {% endif %}
+          <a href="{% url 'evaluations:evaluation_run_download' request.team.slug evaluation_run.config_id evaluation_run.id %}"
+             class="btn btn-primary">
+            <i class="fa-solid fa-download"></i>
+            Download Results
+          </a>
+          <a href="{% url 'evaluations:evaluation_run_update' request.team.slug evaluation_run.config_id evaluation_run.id %}"
+             class="btn btn-outline">
+            <i class="fa-solid fa-upload"></i>
+            Edit Results
+          </a>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h2 class="text-lg font-semibold mb-2">Run Details</h2>
+          <p><strong>Status:</strong>
+            {% if evaluation_run.status == "pending" %}
+              <span class="badge badge-warning">{{ evaluation_run.get_status_display }}</span>
+            {% elif evaluation_run.status == "processing" %}
+              <span class="badge badge-info">{{ evaluation_run.get_status_display }}</span>
+            {% elif evaluation_run.status == "completed" %}
+              <span class="badge badge-success">{{ evaluation_run.get_status_display }}</span>
+            {% elif evaluation_run.status == "failed" %}
+              <span class="badge badge-error">{{ evaluation_run.get_status_display }}</span>
+            {% endif %}
+          </p>
+          <p><strong>Configuration:</strong>
+            <a href="{% url 'evaluations:edit' request.team.slug evaluation_run.config.id %}" class="link">
+              {{ evaluation_run.config.name }}
+            </a>
+          </p>
+          <p><strong>Dataset:</strong>
+            <a href="{% url 'evaluations:dataset_edit' request.team.slug evaluation_run.config.dataset.id %}" class="link">
+              {{ evaluation_run.config.dataset.name }}
+            </a>
+          </p>
+          <p><strong>Evaluators:</strong>
+            {% for evaluator in evaluation_run.config.evaluators.all %}
+              <a href="{% url 'evaluations:evaluator_edit' request.team.slug evaluator.id %}" class="link">
+                {{ evaluator.name }}
+              </a>{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+          </p>
+          {% if evaluation_run.generation_experiment %}
+            <p><strong>Generation Chatbot:</strong>
+              <a href="{% url 'chatbots:single_chatbot_home' request.team.slug evaluation_run.generation_experiment.id %}" class="link">
+                {{ evaluation_run.generation_experiment.name }}
+                {% if evaluation_run.generation_experiment.version_display %}({{ evaluation_run.generation_experiment.version_display }}){% endif %}
+              </a>
+            </p>
+          {% else %}
+            <p><strong>Generation Chatbot:</strong> <span class="text-gray-500">None configured</span></p>
+          {% endif %}
+          {% if evaluation_run.error_message %}
+            <p><strong>Error:</strong> <span class="text-error">{{ evaluation_run.error_message }}</span></p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if group_job_id %}
+      {% include "evaluations/components/progress.html" %}
+    {% elif evaluation_run.status == "completed" %}
+      <div class="mb-6">
+        <h2 class="text-lg font-semibold mb-4">Results {% if evaluation_run.type == "preview" %}(Preview){% endif %}</h2>
+        <div id="results-table" hx-get="{{ table_url }}" hx-trigger="load"></div>
+      </div>
+    {% elif evaluation_run.status == "failed" %}
+      <div class="alert alert-error">
+        <div>
+          <h3 class="font-bold">Evaluation Failed</h3>
+          <div class="text-xs">{{ evaluation_run.error_message|default:"An unknown error occurred." }}</div>
+        </div>
+      </div>
+    {% else %}
+      <div class="alert alert-info">
+        <div>
+          <h3 class="font-bold">No Results Yet</h3>
+          <div class="text-xs">This evaluation run hasn't been started yet.</div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+{% endblock app %}

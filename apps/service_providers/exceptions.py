@@ -4,5 +4,5 @@ class ServiceProviderConfigError(Exception):
         super().__init__(f"[{provider_type}] provider config error: {message}")
 
 
-class OpenAiUnableToLinkFileError(Exception):
+class UnableToLinkFileException(Exception):
     pass

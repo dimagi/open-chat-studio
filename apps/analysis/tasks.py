@@ -10,6 +10,7 @@ from django.core.files.base import ContentFile
 from apps.teams.utils import current_team
 
 from .models import AnalysisStatus, TranscriptAnalysis
+from .translation import get_message_content, translate_messages_with_llm
 
 logger = logging.getLogger("ocs.analysis")
 
@@ -36,6 +37,10 @@ def process_transcript_analysis(self, analysis_id):
             model_name = analysis.llm_provider_model.name
             llm = llm_service.get_chat_model(model_name, temperature=0.1)  # Low temperature for analysis
 
+            translation_language = analysis.translation_language
+            translation_llm_provider = analysis.translation_llm_provider
+            translation_llm_provider_model = analysis.translation_llm_provider_model
+
             # Prepare results container
             results = []
             header_row = ["Session ID", "Participant"]
@@ -61,11 +66,25 @@ def process_transcript_analysis(self, analysis_id):
                 progress_recorder.set_progress(
                     progress_value, 100, description=f"Processing session {index + 1}/{total_sessions}"
                 )
-
+                messages_queryset = session.chat.messages.all().order_by("created_at")
+                if translation_language and translation_llm_provider:
+                    progress_recorder.set_progress(
+                        progress_value, 100, description=f"Translating session {index + 1}/{total_sessions}"
+                    )
+                    messages = list(messages_queryset)
+                    messages = translate_messages_with_llm(
+                        messages,
+                        translation_language,
+                        translation_llm_provider,
+                        translation_llm_provider_model,
+                    )
+                else:
+                    messages = messages_queryset.iterator(chunk_size=100)
                 out = StringIO()
                 writer = csv.writer(out)
-                for message in session.chat.messages.all().order_by("created_at"):
-                    writer.writerow([f"{message.created_at:%Y-%m-%d %H:%M}", message.role, message.content])
+                for message in messages:
+                    content = get_message_content(message, translation_language)
+                    writer.writerow([f"{message.created_at:%Y-%m-%d %H:%M}", message.role, content])
 
                 transcript = out.getvalue().strip()
 
@@ -88,12 +107,12 @@ def process_transcript_analysis(self, analysis_id):
 
                     prompt = f"""
                     Analyze the following conversation transcript according to this query:
-                    
+
                     QUERY: {sanitized_query}
-                    
+
                     TRANSCRIPT as CSV:
                     {transcript}
-                    
+
                     Please provide a concise, objective response to the query based only on the transcript content.
                     """
 

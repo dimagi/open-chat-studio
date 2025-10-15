@@ -1,0 +1,60 @@
+{% load static %}
+
+{% if record.status == "processing" and record.job_id %}
+  <div class="evaluation-run-progress" data-job-id="{{ record.job_id }}">
+    <div class="flex items-center space-x-2">
+      <span class="badge badge-info">Processing</span>
+      <div class="progress-bar w-24 h-2 bg-gray-200 rounded-full">
+        <div class="progress-fill h-full bg-blue-500 rounded-full" style="width: 0%"></div>
+      </div>
+      <span class="progress-text text-xs text-gray-600">0%</span>
+    </div>
+  </div>
+{% elif record.status == "pending" %}
+  <span class="badge badge-warning">{{ record.get_status_display }}</span>
+{% elif record.status == "completed" %}
+  <span class="badge badge-success">{{ record.get_status_display }}</span>
+{% elif record.status == "failed" %}
+  <span class="badge badge-error">{{ record.get_status_display }}</span>
+{% else %}
+  <span class="badge badge-neutral">{{ record.get_status_display }}</span>
+{% endif %}
+
+{% if record.status == "processing" and record.job_id %}
+  <script>
+    (function() {
+      const progressElement = document.querySelector('[data-job-id="{{ record.job_id }}"]');
+      if (!progressElement) return;
+
+      const progressBar = progressElement.querySelector('.progress-fill');
+      const progressText = progressElement.querySelector('.progress-text');
+      const badge = progressElement.querySelector('.badge');
+
+      function updateProgress() {
+        fetch("{% url 'celery_progress:task_status' record.job_id %}")
+          .then(response => response.json())
+          .then(data => {
+            if (data.complete) {
+              location.reload();
+              return;
+            }
+
+            const percent = data.progress ? data.progress.percent : 0;
+            progressBar.style.width = percent + '%';
+            progressText.textContent = percent + '%';
+
+            if (data.progress && data.progress.description) {
+              badge.textContent = data.progress.description;
+              setTimeout(updateProgress, 2000);
+            }
+          }).catch(error => {
+            console.error('Progress update failed:', error);
+            setTimeout(updateProgress, 5000);
+          });
+      }
+
+      // Start polling
+      setTimeout(updateProgress, 1000);
+      })();
+  </script>
+{% endif %}

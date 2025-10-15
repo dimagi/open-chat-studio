@@ -1,54 +1,132 @@
+import functools
+import json
 import logging
-from collections.abc import Callable
+from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Union
 
+from asgiref.sync import async_to_sync
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
-from langchain_core.tools import BaseTool
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import BaseTool, StructuredTool
+from langgraph.types import Command
+from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
+from apps.chat.agent.calculator import calculate
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
-from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData
+from apps.experiments.models import AgentTools, Experiment, ExperimentSession
+from apps.files.models import FileChunkEmbedding
 from apps.pipelines.models import Node
+from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
+from apps.teams.models import Team
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
     from apps.assistants.models import OpenAiAssistant
+    from apps.pipelines.models import Node
 
+logger = logging.getLogger("ocs.tools")
 
-SUCCESSFUL_ATTACHMENT_MESSAGE: str = "File {file_id} ({name}) is attached to your response"
+OCS_CITATION_PATTERN = r"<CIT\s+(?P<file_id>\d+)\s*/>"
 
-CREATE_LINK_TEXT = """You can use this markdown link to reference it in your response:
-    `[{name}](file:{team_slug}:{session_id}:{file_id})` or `![](file:{team_slug}:{session_id}:{file_id})`
-    if it is an image.
+SUCCESSFUL_ATTACHMENT_MESSAGE = "* {file_id} ({name}): attached."
+
+FILE_LINK_TEXT = "Reference link: `[{name}](file:{team_slug}:{session_id}:{file_id})`"
+IMAGE_LINK_TEXT = "Reference link: `![](file:{team_slug}:{session_id}:{file_id})`"
+
+CHUNK_TEMPLATE = """
+<file>
+  <file_id>{file_id}</file_id>
+  <filename>{file_name}</filename>
+  <context>
+    <![CDATA[{chunk}]]>
+  </context>
+</file>
 """
+
+CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
+
+You MUST cite all information using this exact format: <CIT file-id />
+
+**Citation Rules:**
+- Place citations immediately after each sentence or claim that references retrieved content
+- Use the specific file ID from the source document
+- Example: "The revenue increased by 15% last quarter <CIT 123 />.". In this example, "123" is the file ID of the
+source document.
+- NEVER provide information from retrieved files without proper citations
+
+**Response Structure:**
+1. Answer the user's question thoroughly
+2. Support each claim with evidence from the files
+3. Ensure every factual statement includes a citation
+4. If no relevant information exists in the files, explicitly state this
+
+Failure to include proper citations will result in an incomplete response.
+"""
+
+SEARCH_TOOL_HEADER = (
+    "A semantic search was executed and retrieved the following context inside <context></context> XML tags."
+)
+SEARCH_TOOL_BASE_FOOTER = """Use the context as your learned knowledge to better answer the user.
+
+In your response, remember to follow these guidelines:
+- If you don't know the answer, simply say that you don't know.
+- If you are unsure how to answer, ask for clarification.
+{citations_note}"""
+
+
+def _get_search_tool_footer(with_citations: bool):
+    citations_note = (
+        "- Include citations for relevant files."
+        if with_citations
+        else "- Avoid mentioning that you obtained the information from the context."
+    )
+    return SEARCH_TOOL_BASE_FOOTER.format(citations_note=citations_note)
+
+
+@dataclass
+class SearchToolConfig:
+    index_id: int
+    max_results: int = 5
+    generate_citations: bool = True
+
+    def get_index(self):
+        from apps.documents.models import Collection
+
+        return Collection.objects.get(id=self.index_id)
 
 
 class CustomBaseTool(BaseTool):
+    requires_callbacks: ClassVar[bool] = False
+
     experiment_session: ExperimentSession | None = None
     # Some tools like the reminder requires a chat session id in order to get back to the user later
     requires_session: bool = False
+    tool_callbacks: ToolCallbacks | None = None
 
     def _run(self, *args, **kwargs):
         if self.requires_session and not self.experiment_session:
             return "I am unable to do this"
         try:
             return self.action(*args, **kwargs)
-        except Exception as e:
-            logging.exception(e)
+        except Exception:
+            logger.exception("Error executing tool: %s", self.name)
             return "Something went wrong"
 
     async def _arun(self, *args, **kwargs) -> str:
         """Use the tool asynchronously."""
-        raise NotImplementedError("custom_search does not support async")
+        return self._run(*args, **kwargs)
 
-    def action(*args, **kwargs):
+    def action(self, *args, **kwargs):
         raise Exception("Not implemented")
 
 
@@ -137,7 +215,7 @@ class MoveScheduledMessageDateTool(CustomBaseTool):
             )
         message.save()
 
-        return f"The new datetime is {pretty_date(message.next_trigger_date)}"
+        return f"The schedule has been moved. The updated schedule datetime is {pretty_date(message.next_trigger_date)}"
 
 
 class DeleteReminderTool(CustomBaseTool):
@@ -156,7 +234,7 @@ class DeleteReminderTool(CustomBaseTool):
             return "Could not find this reminder"
 
         scheduled_message.cancel()
-        return "Success"
+        return "The reminder has been successfully deleted."
 
 
 class UpdateParticipantDataTool(CustomBaseTool):
@@ -165,30 +243,82 @@ class UpdateParticipantDataTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.UpdateUserDataSchema] = schemas.UpdateUserDataSchema
 
-    @transaction.atomic
-    def action(self, key: str, value: Any):
-        try:
-            participant_data = ParticipantData.objects.for_experiment(self.experiment_session.experiment).get(
-                participant=self.experiment_session.participant
-            )
-            participant_data.data[key] = value
-            participant_data.save()
-        except ParticipantData.DoesNotExist:
-            ParticipantData.objects.create(
-                participant=self.experiment_session.participant,
-                experiment=self.experiment_session.experiment,
-                team=self.experiment_session.team,
-                data={key: value},
-            )
-        return "Success"
+    def action(self, key: str, value: Any, tool_call_id: str):
+        return Command(
+            update={
+                "participant_data": {key: value},
+                "messages": [ToolMessage("The new value has been set in user data.", tool_call_id=tool_call_id)],
+            }
+        )
+
+
+class AppendToParticipantDataTool(CustomBaseTool):
+    name: str = AgentTools.APPEND_TO_PARTICIPANT_DATA
+    description: str = (
+        "Append a value to user data at a specific key. This will convert any existing "
+        "value to a list and append the new value to the end of the list. Use this tool to "
+        "track lists of items e.g. questions asked."
+    )
+    requires_session: bool = True
+    args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
+
+    def action(self, key: str, value: str | int | list, tool_call_id: str, graph_state: dict):
+        data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
+        new_value = data_proxy.append_to_key(key, value)
+        if len(new_value) > 10:
+            new_value_msg = f"The last 10 items in the list are: {new_value[-10:]}"
+        else:
+            new_value_msg = f"The new list is: {new_value}"
+        message = f"The value was appended to the end of the list. {new_value_msg}"
+        return Command(
+            update={
+                "participant_data": {key: new_value},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
+
+
+class IncrementCounterTool(CustomBaseTool):
+    name: str = AgentTools.INCREMENT_COUNTER
+    description: str = "Increment the value of a counter."
+    requires_session: bool = True
+    args_schema: type[schemas.IncrementCounterSchema] = schemas.IncrementCounterSchema
+
+    def action(self, counter: str, value: int, tool_call_id: str, graph_state: dict):
+        namespaced_key = f"_counter_{counter}"
+        data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
+        new_value = data_proxy.increment_key(namespaced_key, value)
+        message = f"The '{counter}' counter has been successfully incremented. The new value is {new_value}."
+        return Command(
+            update={
+                "participant_data": {namespaced_key: new_value},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
+
+
+class EndSessionTool(CustomBaseTool):
+    requires_callbacks: ClassVar[bool] = True
+    name: str = AgentTools.END_SESSION
+    description: str = (
+        "End the current chat session. "
+        "This will mark the session as completed. "
+        "New messages will result in a new session being created."
+    )
+
+    def action(self, *args, **kwargs):
+        from apps.pipelines.nodes.base import Intents
+
+        self.tool_callbacks.register_intent(Intents.END_SESSION)
+        return "Your intent to end the session has been registered."
 
 
 class AttachMediaTool(CustomBaseTool):
+    requires_callbacks: ClassVar[bool] = True
     name: str = AgentTools.ATTACH_MEDIA
     description: str = "Attach a media file to your response"
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
-    callback: Callable[[str], None]
 
     @cached_property
     def chat_attachment(self) -> ChatAttachment:
@@ -198,34 +328,170 @@ class AttachMediaTool(CustomBaseTool):
         return chat_attachment
 
     @transaction.atomic
-    def action(self, file_id: int) -> str:
+    def action(self, file_ids: list[int]) -> str:
+        if len(file_ids) > 5:
+            return "A maximum of 5 files can be attached."
+
         from apps.files.models import File
 
-        try:
-            file = File.objects.get(id=file_id)
-            self.chat_attachment.files.add(file_id)
-            self.callback(file_id)
-            response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
+        response = []
+        include_links = self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB
+        for file_id in file_ids:
+            try:
+                file = File.objects.get(id=file_id)
+                self.chat_attachment.files.add(file_id)
+                self.tool_callbacks.attach_file(file_id)
+                file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
 
-            if self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB:
-                # Only the web platform is able to render these links
-                link_text = CREATE_LINK_TEXT.format(
-                    name=file.name, file_id=file_id, session_id=self.experiment_session.id, team_slug=file.team.slug
-                )
-                response = f"{response}. {link_text}"
-            else:
-                response = f"{response}. Do not use markdown links to reference the file."
-            return response
-        except File.DoesNotExist:
-            return f"File '{file_id}' does not exist"
-        except utils.IntegrityError:
-            return f"Unable to attach file '{file_id}' to the message"
+                if include_links:
+                    # Only the web platform is able to render these links
+                    if file.is_image:
+                        link_text = IMAGE_LINK_TEXT.format(
+                            file_id=file_id,
+                            session_id=self.experiment_session.id,
+                            team_slug=file.team.slug,
+                        )
+                    else:
+                        link_text = FILE_LINK_TEXT.format(
+                            name=file.name,
+                            file_id=file_id,
+                            session_id=self.experiment_session.id,
+                            team_slug=file.team.slug,
+                        )
+                    file_response = f"{file_response} {link_text}"
+                response.append(file_response)
+            except File.DoesNotExist:
+                response.append(f"* {file_id}: File not found.")
+            except utils.IntegrityError:
+                response.append(f"* {file_id}: Error fetching file.")
+
+        resp = "File Attachment Results:\n" + "\n".join(response)
+        if include_links:
+            return f"{resp}\nYou may use the markdown links in your output to reference the attachments."
+        return f"{resp}\nDo not use markdown links to reference the files."
+
+
+class SearchIndexTool(CustomBaseTool):
+    name: str = AgentTools.SEARCH_INDEX
+    description: str = (
+        "Performs semantic search across available documents using natural language queries. "
+        "This tool analyzes the content of the documents to find relevant information, quotes, "
+        "and passages that best match your query. Use this to extract specific information "
+        "or find relevant sections within the available documents."
+    )
+    requires_session: bool = False
+    args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
+    search_config: SearchToolConfig
+
+    @transaction.atomic
+    def action(self, query: str) -> str:
+        """
+        Do a simple search for the top most relevant file chunks based on the query provided by the user. A little query
+        rewriting is automatically done by the LLM, since it decides what query to use when invoking this tool.
+        """
+        # - [ ] Generate references
+        index = self.search_config.get_index()
+        max_results = self.search_config.max_results
+
+        query_vector = index.get_query_vector(query)
+        # This query is automatically team scoped
+        embeddings = list(
+            FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
+            .filter(collection_id=index.id)
+            .order_by("distance")
+            .select_related("file")
+            .only("text", "file__name")[:max_results]
+        )
+        if not embeddings:
+            return "\nThe semantic search did not return any results."
+
+        retrieved_chunks = "\n".join([self._format_result(embedding) for embedding in embeddings])
+        response_template = """
+{header}
+{citation_prompt}
+<context>
+{retrieved_chunks}
+</context>
+{footer}
+"""
+        citation_prompt = CITATION_PROMPT if self.search_config.generate_citations else ""
+        return response_template.format(
+            header=SEARCH_TOOL_HEADER,
+            footer=_get_search_tool_footer(self.search_config.generate_citations),
+            retrieved_chunks=retrieved_chunks,
+            citation_prompt=citation_prompt,
+        )
+
+    def _format_result(self, embedding: FileChunkEmbedding) -> str:
+        """
+        Format the result from the search index into a more structured format.
+        """
+
+        return CHUNK_TEMPLATE.format(
+            file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+        ).strip()
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
     current_weekday = date.weekday()
     day_diff = new_weekday - current_weekday
     return date.replace(hour=new_hour, minute=new_minute, second=0) + timedelta(days=day_diff)
+
+
+class SetSessionStateTool(CustomBaseTool):
+    name: str = AgentTools.SET_SESSION_STATE
+    description: str = "Set a value in the session state that persists across the entire experiment session"
+    requires_session: bool = True
+    args_schema: type[schemas.SetSessionStateSchema] = schemas.SetSessionStateSchema
+
+    def action(self, key: str, value: Any, tool_call_id: str):
+        if key in {"user_input", "outputs", "attachments"}:
+            return f"Cannot set the '{key}' key in session state - this is read-only"
+
+        try:
+            json_value = json.dumps(value)
+            message = f"The value has been set in session state for key '{key}':\n{json_value}"
+        except (TypeError, ValueError):
+            return "Error: The value was not JSON serializable"
+
+        return Command(
+            update={
+                "session_state": {key: value},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
+
+
+class GetSessionStateTool(CustomBaseTool):
+    name: str = AgentTools.GET_SESSION_STATE
+    description: str = "Get a value from the session state that persists across the entire experiment session"
+    requires_session: bool = True
+    args_schema: type[schemas.GetSessionStateSchema] = schemas.GetSessionStateSchema
+
+    def action(self, key: str, graph_state: dict):
+        state = graph_state.get("session_state") or {}
+        value = state.get(key)
+        if value is None:
+            return f"No value found for key '{key}' in session state."
+        return f"The value for key '{key}' is: {value}"
+
+
+class CalculatorTool(CustomBaseTool):
+    name: str = AgentTools.CALCULATOR
+    description: str = (
+        "Evaluates mathematical expressions and returns numerical results. "
+        "Supports basic arithmetic operations (+, -, *, /, //, %, **), "
+        "mathematical functions (sin, cos, tan, log, sqrt, etc.), and constants (pi, e). "
+        "Handles functions like min, max, sum, abs, and range. "
+        "IMPORTANT: Uses period (.) for decimals - expressions with commas like '2,5 + 3,7' will be "
+        "treated as separate values and return a tuple like (2, 8, 7). "
+        "For decimal calculations, use '2.5 + 3.7' instead."
+    )
+    requires_session: bool = False
+    args_schema: type[schemas.CalculatorSchema] = schemas.CalculatorSchema
+
+    def action(self, expression: str):
+        return calculate(expression)
 
 
 def create_schedule_message(
@@ -270,8 +536,8 @@ def create_schedule_message(
                 )
             return "Success: scheduled message created"
         except Experiment.DoesNotExist:
-            return "Experiment does not exist! Could not create scheduled message"
-    logging.exception(f"Could not create one-off reminder. Form errors: {form.errors}")
+            return "Could not create scheduled message"
+    logger.exception(f"Could not create one-off reminder. Form errors: {form.errors}")
     return "Could not create scheduled message"
 
 
@@ -281,6 +547,14 @@ TOOL_CLASS_MAP = {
     AgentTools.RECURRING_REMINDER: RecurringReminderTool,
     AgentTools.DELETE_REMINDER: DeleteReminderTool,
     AgentTools.UPDATE_PARTICIPANT_DATA: UpdateParticipantDataTool,
+    AgentTools.APPEND_TO_PARTICIPANT_DATA: AppendToParticipantDataTool,
+    AgentTools.INCREMENT_COUNTER: IncrementCounterTool,
+    AgentTools.END_SESSION: EndSessionTool,
+    AgentTools.ATTACH_MEDIA: AttachMediaTool,
+    AgentTools.SEARCH_INDEX: SearchIndexTool,
+    AgentTools.SET_SESSION_STATE: SetSessionStateTool,
+    AgentTools.GET_SESSION_STATE: GetSessionStateTool,
+    AgentTools.CALCULATOR: CalculatorTool,
 }
 
 
@@ -298,25 +572,51 @@ def get_assistant_tools(assistant, experiment_session: ExperimentSession | None 
 
 
 def get_node_tools(
-    node: Node, experiment_session: ExperimentSession | None = None, attachment_callback: Callable | None = None
+    node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
-    tools = get_tool_instances(node.params.get("tools") or [], experiment_session)
-    tools.extend(get_custom_action_tools(node))
+    tool_names = node.params.get("tools") or []
     if node.requires_attachment_tool():
-        tools.append(AttachMediaTool(experiment_session=experiment_session, callback=attachment_callback))
-
+        tool_names.append(AgentTools.ATTACH_MEDIA)
+    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
+    tools.extend(get_custom_action_tools(node))
+    tools.extend(get_mcp_tool_instances(node, experiment_session.team))
     return tools
 
 
-def get_tool_instances(tools_list, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
+def get_mcp_tool_instances(node: Node, team: Team):
+    """Fetch tools from MCP servers based on the selected tools in the node parameters."""
+
+    mcp_tools = node.params.get("mcp_tools", [])
+    if not mcp_tools:
+        return []
+
+    server_tools = defaultdict(list)
+    for tool in mcp_tools:
+        mcp_server_id, tool_name = tool.split(":")
+        server_tools[int(mcp_server_id)].append(tool_name)
+
+    final_tool_instances = []
+    for server in team.mcpserver_set.filter(id__in=server_tools.keys()):
+        remote_tools = server.fetch_tools()
+        tool_instances = [_convert_to_sync_tool(tool) for tool in remote_tools if tool.name in server_tools[server.id]]
+        final_tool_instances.extend(tool_instances)
+
+    return final_tool_instances
+
+
+def get_tool_instances(
+    tools_list, experiment_session: ExperimentSession | None = None, tool_callbacks=None
+) -> list[BaseTool]:
     tools = []
     for tool_name in tools_list:
         tool_cls = TOOL_CLASS_MAP[tool_name]
-        tools.append(tool_cls(experiment_session=experiment_session))
+        if tool_cls.requires_callbacks and not tool_callbacks:
+            raise ValueError(f"Tool {tool_name} requires callbacks but none were provided")
+        tools.append(tool_cls(experiment_session=experiment_session, tool_callbacks=tool_callbacks))
     return tools
 
 
-def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant"]) -> list[BaseTool]:
+def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant", "Node"]) -> list[BaseTool]:
     operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
     return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
 
@@ -332,3 +632,19 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
     return function_def.build_tool(auth_service)
+
+
+def _convert_to_sync_tool(tool: StructuredTool) -> StructuredTool:
+    tool.func = _create_sync_wrapper(tool.coroutine)
+    tool.coroutine = None
+    return tool
+
+
+def _create_sync_wrapper(coroutine_func):
+    """Create a synchronous wrapper that preserves the original function signature."""
+
+    @functools.wraps(coroutine_func)
+    def sync_wrapper(*args, **kwargs):
+        return async_to_sync(coroutine_func)(*args, **kwargs)
+
+    return sync_wrapper

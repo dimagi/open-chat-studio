@@ -1,0 +1,104 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'documents:collection_home' request.team.slug %}">Collections</a></li>
+      <li><a href="{% url 'documents:single_collection_home' request.team.slug collection.id %}">{{ collection.name }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{{ file.name }} Chunks</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+  <div class="app-card">
+    <div class="flex flex-col gap-2">
+      <div class="flex justify-between items-start">
+        <div>
+          <h1 class="pg-title">{{ file.name }} Chunks</h1>
+          <div class="text-sm text-base-content/60 mt-1">
+            <span>
+              <i class="fa fa-file-o" aria-hidden="true"></i>
+              <span class="font-bold">{{ page_obj.paginator.count }}</span> chunks from
+              <span class="font-bold">{{ file.name }}</span> in
+              <span class="font-bold">{{ collection.name }}</span>
+            </span>
+          </div>
+          {% if chunk_size or chunk_overlap %}
+            <div class="text-sm text-base-content/60 mt-2 flex flex-wrap gap-4">
+              {% if chunk_size %}
+                <span>
+                  <span class="font-medium">Chunk Size:</span> {{ chunk_size }} tokens
+                </span>
+              {% endif %}
+              {% if chunk_overlap %}
+                <span>
+                  <span class="font-medium">Overlap:</span> {{ chunk_overlap }}
+                </span>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+        <div class="flex items-center">
+          <div class="tooltip" data-tip="Back to Collection">
+            <a class="btn btn-sm"
+               href="{% url 'documents:single_collection_home' team.slug collection.id %}">
+              <i class="fa-solid fa-arrow-left"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-card">
+    <div class="flex flex-col gap-4">
+      <div class="flex justify-between items-center">
+        <h2 class="text-lg font-semibold">File Chunks</h2>
+        <div class="text-sm text-base-content/60">
+          <span>{{ page_obj.paginator.count }} total chunks</span>
+        </div>
+      </div>
+
+      {% include "documents/partials/pagination_controls.html" %}
+
+      <div class="grid grid-cols-1 gap-4">
+        {% for chunk in chunks %}
+          <div class="card bg-base-200 shadow-sm border border-base-300">
+            <div class="card-body p-4">
+              <div class="flex justify-between items-start mb-3">
+                <div class="flex items-center gap-2">
+                  <div class="badge badge-primary badge-sm">Chunk {{ chunk.chunk_number }}</div>
+                  {% if chunk.page_number %}
+                    <div class="badge badge-ghost badge-sm">Page {{ chunk.page_number }}</div>
+                  {% endif %}
+                </div>
+                <div class="text-xs text-base-content/60">
+                  {{ chunk.text|length }} characters
+                </div>
+              </div>
+
+              <div class="prose prose-sm max-w-none">
+                <div class="text-sm leading-relaxed whitespace-pre-wrap">{{ chunk.text }}</div>
+              </div>
+            </div>
+          </div>
+        {% empty %}
+          <div class="text-center text-base-content/60 py-8">
+            <div class="flex flex-col items-center gap-3">
+              <i class="fa-solid fa-cube text-4xl opacity-50"></i>
+              <div>
+                <div class="text-lg font-medium">No chunks found</div>
+                <div class="text-sm">This file hasn't been chunked yet or chunks may still be processing.</div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  {% include "documents/partials/pagination_controls.html" %}
+{% endblock app %}

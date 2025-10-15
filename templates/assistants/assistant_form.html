@@ -11,7 +11,7 @@
       {% endif %}
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block pre_form %}
   {% if object.id %}
     <h2 class="text-l pg-text-muted">Assistant ID:
@@ -54,7 +54,7 @@
       {% include "files/partials/file_formset.html" with form_title="Code Interpreter Files" prefix="code_interpreter" %}
     </div>
     <div class="mt-2" x-show="builtinTools.indexOf('file_search') >= 0" x-cloak>
-      {% include "files/partials/file_formset.html"  with form_title="File Search Files" prefix="file_search" %}
+      {% include "files/partials/file_formset.html" with form_title="File Search Files" prefix="file_search" %}
     </div>
   {% endif %}
 {% endblock form %}
@@ -67,7 +67,7 @@
           {% url "assistants:add_file" request.team.slug object.id resource.id as upload_url %}
           {% url "assistants:remove_file" request.team.slug object.id resource.id '000' as delete_url %}
           {% with files_title=resource.label|add:" Files" %}
-            {% include "files/partials/file_list.html" with files=resource.files.all nested=False prefix=resource.tool_type multiple=True%}
+            {% include "files/partials/file_list.html" with files=resource.files.all nested=False prefix=resource.tool_type multiple=True %}
           {% endwith %}
         </div>
       {% endfor %}

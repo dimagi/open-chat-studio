@@ -1,0 +1,17 @@
+{% load waffle_tags %}
+<div class="my-3">
+  <div class="relative">
+    <div class="flex items-center gap-1">
+      {% if perms.experiments.download_chats %}
+        {% include "experiments/components/exports.html" %}
+      {% endif %}
+       {% flag "flag_session-analysis" %}
+        <a href="{% url 'analysis:create' team.slug experiment.id %}" class="btn btn-sm btn-outline btn-primary">
+            <i class="fa-solid fa-table-list"></i> Analyze Transcripts
+        </a>
+      {% endflag %}
+      {% include "evaluations/create_dataset_button.html" %}
+      {% include "experiments/filters.html" %}
+    </div>
+  </div>
+</div>

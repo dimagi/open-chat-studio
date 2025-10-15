@@ -1,4 +1,5 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
+{% load json_tags %}
 {% load form_tags %}
 {% load static %}
 {% load waffle_tags %}
@@ -13,7 +14,7 @@
       </ul>
     </div>
   {% endif %}
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <div class="app-card">
     <div class="flex">
@@ -28,7 +29,7 @@
                href="{{ paginate_url }}?dir=prev">
               <i class="fa-solid fa-backward-step"></i> Older
             </a>
-            <a class="btn join-item rounded-r-full"
+            <a class="btn join-item"
                href="{{ paginate_url }}?dir=next">
               Newer <i class="fa-solid fa-forward-step"></i>
             </a>
@@ -36,13 +37,13 @@
         </div>
       {% endif %}
     </div>
-    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Chatbot details</h3>
+    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Session details</h3>
     <div class="max-w-5xl mt-4 border rounded-2xl">
       {% include "experiments/components/experiment_details.html" %}
     </div>
 
     <div role="tablist" class="mt-4 tabs tabs-border max-w-5xl">
-      <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Messages" checked/>
+      <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Messages" checked/>
       <div role="tabpanel" class="tab-content pt-3">
         <div id="messages-container" class="min-w-full"
              hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
@@ -54,21 +55,27 @@
         </div>
       </div>
       {% if perms.experiments.view_participantdata %}
-        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Data" />
+        <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Data" />
         <div role="tabpanel" class="tab-content pt-3">
           <div class="p-3 border rounded-lg">
-            <pre><code class="text-sm">{{ participant_data|escape }}</code></pre>
+          <pre><code class="text-sm">{{ experiment_session.participant_data_from_experiment|to_json }}</code></pre>
           </div>
         </div>
-        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
+        <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
         <div role="tabpanel" class="tab-content pt-3">
           <div class="border rounded-lg divide-y">
             {% include "participants/partials/participant_schedules.html" %}
           </div>
         </div>
       {% endif %}
+      <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Session State" />
+      <div role="tabpanel" class="tab-content pt-3">
+        <div class="p-3 border rounded-lg">
+          <pre><code class="text-sm">{{ experiment_session.state|to_json }}</code></pre>
+        </div>
+      </div>
       {% if perms.events.view_eventlog %}
-        <input type="radio" name="experiment_tabs-{{ session.id }}" role="tab" class="tab" aria-label="Chatbot Events"/>
+        <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Chatbot Events"/>
         <div role="tabpanel" class="tab-content pt-3">
           {% for event_trigger in event_triggers %}
             <div class="max-w-5xl mt-4 border rounded-2xl">
@@ -80,10 +87,10 @@
     </div>
 
   </div>
-{% endblock %}
+{% endblock app %}
 
 {% block page_js %}
-  {{ block.super  }}
+  {{ block.super }}
   <script
     id="tag-multiselect"
     src="{% static "js/tagMultiselect-bundle.js" %}"
@@ -91,5 +98,9 @@
     data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
   >
   </script>
-  <script>SiteJS.tagMultiselect.setupTagSelects();</script>
-{% endblock %}
+  <script>
+    window.addEventListener('load', () => {
+      SiteJS.tagMultiselect.setupTagSelects();
+    });
+  </script>
+{% endblock page_js %}

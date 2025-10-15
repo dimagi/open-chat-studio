@@ -205,8 +205,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             or self.get_related_experiments_with_pipeline_queryset().exists()
         )
 
-    @property
-    def version_details(self) -> VersionDetails:
+    def _get_version_details(self) -> VersionDetails:
         from apps.experiments.models import VersionFieldDisplayFormatters
 
         return VersionDetails(

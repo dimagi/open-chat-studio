@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 import emoji
 import requests
+from django.conf import settings
 from django.db import transaction
 from django.http import Http404
 from telebot import TeleBot
@@ -21,7 +22,7 @@ from apps.annotations.models import TagCategories
 from apps.channels import audio
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.bots import EventBot, get_bot
+from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.exceptions import (
     AudioSynthesizeException,
     ChannelException,
@@ -63,6 +64,9 @@ DEFAULT_ERROR_RESPONSE_TEXT = "Sorry, something went wrong while processing your
 # The regex from https://stackoverflow.com/a/6041965 is used, but tweaked to remove capturing groups
 URL_REGEX = r"(?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])"
 
+# Matches [^2]: [file_name](https://example.com)
+MARKDOWN_REF_PATTERN = r"^\[(?P<ref>.+?)\]:\s*\[(?P<file_name>[^\]]+)\]\((?P<download_link>.*)\)"
+
 
 def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
     """Strips any URLs in `text` and appends them to the end of the text. Emoji's are filtered out"""
@@ -90,9 +94,6 @@ class ChannelBase(ABC):
     This class defines a set of common functions that all channels
     must implement. It provides a blueprint for tuning the behavior of the handler to suit specific channels.
 
-    Attributes:
-        voice_replies_supported: Indicates whether the channel supports voice messages
-
     Args:
         experiment: An Experiment object representing the experiment associated with the handler.
         experiment_channel: An ExperimentChannel object representing the channel associated with the handler.
@@ -102,7 +103,9 @@ class ChannelBase(ABC):
         ChannelException: If both 'experiment_channel' and 'experiment_session' arguments are not provided.
 
     Class variables:
+        voice_replies_supported: Indicates whether the channel supports voice messages
         supported_message_types: A list of message content types that are supported by this channel
+        supports_conversational_consent_flow: Indicates whether the channel supports a conversational consent flow.
 
     Abstract methods:
         send_voice_to_user: (Optional) An abstract method to send a voice message to the user. This must be implemented
@@ -121,6 +124,7 @@ class ChannelBase(ABC):
 
     voice_replies_supported: ClassVar[bool] = False
     supported_message_types: ClassVar[str] = []
+    supports_conversational_consent_flow: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -134,8 +138,13 @@ class ChannelBase(ABC):
         self._message: BaseMessage = None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
-
         self.trace_service = TracingService.create_for_experiment(self.experiment)
+
+    @property
+    def participant_id(self) -> int | None:
+        if self.experiment_session:
+            return self.experiment_session.participant.id
+        return None
 
     @classmethod
     def start_new_session(
@@ -301,6 +310,8 @@ class ChannelBase(ABC):
             channel_cls = SlackChannel
         elif platform == "commcare_connect":
             channel_cls = CommCareConnectChannel
+        # elif platform == "evaluations":
+        #  evals channel can't be called this way
         else:
             raise Exception(f"Unsupported platform type {platform}")
         return channel_cls
@@ -351,8 +362,7 @@ class ChannelBase(ABC):
             try:
                 with self.trace_service.trace(
                     trace_name=self.experiment.name,
-                    session_id=str(self.experiment_session.external_id),
-                    user_id=self.participant_identifier,
+                    session=self.experiment_session,
                     inputs={"input": self.message.model_dump()},
                 ):
                     response = self._new_user_message()
@@ -372,7 +382,7 @@ class ChannelBase(ABC):
                 resp = self._handle_unsupported_message()
                 return ChatMessage(content=resp)
 
-            if self.experiment_channel.platform != ChannelPlatform.WEB:
+            if self.supports_conversational_consent_flow:
                 # Webchats' statuses are updated through an "external" flow
                 if self._is_reset_conversation_request():
                     return ChatMessage(content="Conversation reset")
@@ -434,9 +444,9 @@ class ChannelBase(ABC):
         return None
 
     def _send_seed_message(self) -> str:
-        with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}):
+        with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}) as span:
             bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
-            self.trace_service.set_current_span_outputs({"response": bot_response.content})
+            span.set_current_span_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
             return bot_response.content
 
@@ -506,6 +516,11 @@ class ChannelBase(ABC):
             unsupported_files = files
 
         if reply_text:
+            bot_message, uncited_files = self._format_reference_section(bot_message, files=files)
+            # Cited file links are already included in the bot message, so we only need to append the list of
+            # unsupported files that are also uncited
+            unsupported_files = [file for file in unsupported_files if file in uncited_files]
+
             bot_message = self.append_attachment_links(bot_message, linkify_files=unsupported_files)
             self.send_text_to_user(bot_message)
         else:
@@ -526,6 +541,76 @@ class ChannelBase(ABC):
         if supported_files:
             self._send_files_to_user(supported_files)
 
+    def _format_reference_section(self, text: str, files: list[File]) -> tuple[str, list[File]]:
+        """
+        Formats file references in text to be channel-appropriate.
+
+        This method processes markdown-style file references in text and adapts them based on
+        the channel's file-sending capabilities. It handles both inline citations and reference
+        sections at the end of the text.
+
+        Processing steps:
+        1. Convert footnote citations [^1] to regular citations [1] for non-web channels
+        2. Process reference entries like "[1]: [filename.txt](http://example.com/file.txt)"
+        3. For files that CAN be sent through the channel: show only filename
+        4. For files that CANNOT be sent: show filename with download link in parentheses
+
+        Args:
+            text: The text containing markdown file references
+            files: List of File objects that may be referenced in the text
+
+        Returns:
+            tuple: (formatted_text, uncited_files)
+                - formatted_text: Text with references adapted for the channel
+                - uncited_files: Files from the input list that weren't referenced in text
+
+        Example:
+            Input text (assuming .txt files can't be sent, .pdf files can):
+            ```
+            Here's a fact [^1] and another [^2].
+
+            [^1]: [report.txt](http://example.com/report.txt)
+            [^2]: [summary.pdf](http://example.com/summary.pdf)
+            ```
+
+            Output text:
+            ```
+            Here's a fact [1] and another [2].
+
+            [1]: report.txt (http://example.com/report.txt)
+            [2]: summary.pdf
+            ```
+        """
+        text = re.sub(r"\[\^([^\]]+)\]", r"[\1]", text)
+
+        cited_files = set()
+        if not files:
+            return text, []
+
+        files_by_name = {file.name: file for file in files}
+
+        def format_citation_match(match):
+            ref_id = match.groupdict()["ref"]
+            file_name = match.groupdict()["file_name"]
+            download_link = match.groupdict()["download_link"]
+            file = files_by_name.get(file_name)
+
+            if not file:
+                return match.group(0)
+
+            cited_files.add(file)
+
+            if self._can_send_file(file):
+                return f"[{ref_id}]: {file.name}"
+            else:
+                return f"[{ref_id}]: {file.name} ({download_link})"
+
+        markdown_ref_pattern = re.compile(MARKDOWN_REF_PATTERN, re.MULTILINE)
+        text = markdown_ref_pattern.sub(format_citation_match, text)
+
+        uncited_files = [file for file in files if file not in cited_files]
+        return text, uncited_files
+
     def _send_files_to_user(self, files: list[File]):
         """
         Try sending each attachment separately. If it fails, send the download link to the user instead.
@@ -540,15 +625,19 @@ class ChannelBase(ABC):
                 self.send_text_to_user(download_link)
 
     def _handle_supported_message(self):
-        with self.trace_service.span("process_message", inputs={"input": self.user_query}):
+        with self.trace_service.span("Process Message", inputs={"input": self.user_query}) as span:
             self.submit_input_to_llm()
             ai_message = self._get_bot_response(message=self.user_query)
 
             files = ai_message.get_attached_files() or []
-            self.trace_service.set_current_span_outputs(
+            span.set_current_span_outputs(
                 {"response": ai_message.content, "attachments": [file.name for file in files]}
             )
-            self.send_message_to_user(bot_message=ai_message.content, files=files)
+
+            with self.trace_service.span(
+                "Send message to user", inputs={"bot_message": ai_message.content, "files": [str(f) for f in files]}
+            ):
+                self.send_message_to_user(bot_message=ai_message.content, files=files)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
@@ -562,11 +651,9 @@ class ChannelBase(ABC):
     def _reply_voice_message(self, text: str):
         voice_provider = self.experiment.voice_provider
         synthetic_voice = self.experiment.synthetic_voice
-        if self.experiment.use_processor_bot_voice and (
-            self.bot.processor_experiment and self.bot.processor_experiment.voice_provider
-        ):
-            voice_provider = self.bot.processor_experiment.voice_provider
-            synthetic_voice = self.bot.processor_experiment.synthetic_voice
+        voice = self.bot.synthesize_voice()
+        if voice:
+            synthetic_voice = voice
 
         speech_service = voice_provider.get_speech_service()
         synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
@@ -585,7 +672,7 @@ class ChannelBase(ABC):
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
         llm_service = self.experiment.get_llm_service()
-        if llm_service.supports_transcription:
+        if llm_service and llm_service.supports_transcription:
             return llm_service.transcribe_audio(audio)
         elif self.experiment.voice_provider:
             speech_service = self.experiment.voice_provider.get_speech_service()
@@ -594,7 +681,8 @@ class ChannelBase(ABC):
         return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> ChatMessage:
-        return self.bot.process_input(message, attachments=self.message.attachments)
+        chat_message = self.bot.process_input(message, attachments=self.message.attachments)
+        return chat_message
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""
@@ -708,7 +796,7 @@ class ChannelBase(ABC):
         chat_message = ChatMessage.objects.create(
             chat=self.experiment_session.chat, message_type=ChatMessageType.AI, content=self.message.message_text
         )
-        chat_message.create_and_add_tag("unsupported_message_type", TagCategories.ERROR)
+        chat_message.create_and_add_tag("unsupported_message_type", self.experiment.team, TagCategories.ERROR)
         return EventBot(self.experiment_session, self.experiment, trace_info, history_manager).get_user_message(
             UNSUPPORTED_MESSAGE_BOT_PROMPT.format(supported_types=self.supported_message_types)
         )
@@ -773,6 +861,7 @@ class WebChannel(ChannelBase):
 
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
+    supports_conversational_consent_flow: bool = False
 
     def send_text_to_user(self, bot_message: str):
         # Bot responses are returned by the task and picked up by a periodic request from the browser.
@@ -833,6 +922,7 @@ class WebChannel(ChannelBase):
 class TelegramChannel(ChannelBase):
     voice_replies_supported = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+    supports_multimedia = True
 
     def __init__(
         self,
@@ -895,6 +985,41 @@ class TelegramChannel(ChannelBase):
             self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
         )
 
+    def _can_send_file(self, file: File) -> bool:
+        mime = file.content_type
+        size = file.content_size or 0  # in bytes
+
+        if mime.startswith("image/"):
+            return size <= 10 * 1024 * 1024  # 10 MB for images
+        elif mime.startswith(("video/", "audio/", "application/")):
+            return size <= 50 * 1024 * 1024  # 50 MB for other supported types
+        else:
+            return False
+
+    def send_file_to_user(self, file: File):
+        chat_id = self.participant_identifier
+        mime = file.content_type
+        file_data = file.file
+
+        main_type = mime.split("/")[0]
+        arg_name = ""
+
+        match main_type:
+            case "image":
+                method = self.telegram_bot.send_photo
+                arg_name = "photo"
+            case "video":
+                method = self.telegram_bot.send_video
+                arg_name = "video"
+            case "audio":
+                method = self.telegram_bot.send_audio
+                arg_name = "audio"
+            case _:
+                method = self.telegram_bot.send_document
+                arg_name = "document"
+
+        antiflood(method, chat_id, **{arg_name: file_data})
+
 
 class WhatsappChannel(ChannelBase):
     @property
@@ -939,7 +1064,7 @@ class WhatsappChannel(ChannelBase):
             from_=from_number,
             to=to_number,
             platform=ChannelPlatform.WHATSAPP,
-            file_name=file.name,
+            file=file,
             download_link=file.download_link(experiment_session_id=self.experiment_session.id),
         )
 
@@ -1023,33 +1148,30 @@ class ApiChannel(ChannelBase):
 class SlackChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
+    supports_multimedia = True
 
     def __init__(
         self,
         experiment: Experiment,
         experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession,
-        send_response_to_user: bool = True,
+        messaging_service=None,
     ):
-        """
-        Args:
-            send_response_to_user: A boolean indicating whether the handler should send the response to the user.
-                This is useful when the message sending happens as part of the slack event handler
-                (e.g., in a slack event listener)
-        """
         super().__init__(experiment, experiment_channel, experiment_session)
-        self.send_response_to_user = send_response_to_user
+        self._messaging_service = messaging_service
+
+    @property
+    def messaging_service(self):
+        if not self._messaging_service:
+            self._messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+        return self._messaging_service
 
     def send_text_to_user(self, text: str):
-        if not self.send_response_to_user:
-            return
-
         if not self.message:
             channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
         else:
             channel_id = self.message.channel_id
             thread_ts = self.message.thread_ts
-
         self.messaging_service.send_text_message(
             text,
             from_="",
@@ -1061,6 +1183,25 @@ class SlackChannel(ChannelBase):
     def _ensure_sessions_exists(self):
         if not self.experiment_session:
             raise ChannelException("WebChannel requires an existing session")
+
+    def _can_send_file(self, file: File) -> bool:
+        mime = file.content_type
+        size = file.content_size or 0
+        # slack allows 1 GB, but keeping it to 50MB as we can only upload file upto 50MB in collections
+        max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+        return mime.startswith(("image/", "video/", "audio/", "application/")) and size <= max_size
+
+    def send_file_to_user(self, file: File):
+        if not self.message:
+            channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
+        else:
+            channel_id = self.message.channel_id
+            thread_ts = self.message.thread_ts
+        self.messaging_service.send_file_message(
+            file=file,
+            to=channel_id,
+            thread_ts=thread_ts,
+        )
 
 
 class CommCareConnectChannel(ChannelBase):
@@ -1127,7 +1268,7 @@ def _start_experiment_session(
     with transaction.atomic():
         participant, created = Participant.objects.get_or_create(
             team=team,
-            identifier=participant_identifier,
+            identifier=experiment_channel.platform_enum.normalize_identifier(participant_identifier),
             platform=experiment_channel.platform,
             defaults={"user": participant_user},
         )
@@ -1141,14 +1282,16 @@ def _start_experiment_session(
             metadata=metadata or {},
         )
 
-        session = ExperimentSession.objects.create(
-            team=team,
-            experiment=working_experiment,
-            experiment_channel=experiment_channel,
-            status=session_status,
-            participant=participant,
+        session, _ = ExperimentSession.objects.get_or_create(
             external_id=session_external_id,
-            chat=chat,
+            defaults={
+                "team": team,
+                "experiment": working_experiment,
+                "experiment_channel": experiment_channel,
+                "status": session_status,
+                "participant": participant,
+                "chat": chat,
+            },
         )
 
         # Record the participant's timezone
@@ -1159,3 +1302,37 @@ def _start_experiment_session(
         enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
     enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return session
+
+
+class EvaluationChannel(ChannelBase):
+    """Message Handler for Evaluations"""
+
+    voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    def __init__(
+        self,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        experiment_session: ExperimentSession,
+        participant_data: dict,
+    ):
+        super().__init__(experiment, experiment_channel, experiment_session)
+        if not self.experiment_session:
+            raise ChannelException("EvaluationChannel requires an existing session")
+        self._participant_data = participant_data
+
+        self.trace_service = TracingService.empty()
+
+    def send_text_to_user(self, bot_message: str):
+        # The bot cannot send messages to this client, since evaluations are run internally
+        pass
+
+    @property
+    def bot(self):
+        return EvalsBot(
+            self.experiment_session,
+            self.experiment,
+            self.trace_service,
+            participant_data=self._participant_data,
+        )

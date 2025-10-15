@@ -16,7 +16,7 @@ def test_pipline_state_json_serializable():
         temp_state={
             "user_input": "input",
             "outputs": {"a": "a", "b": "b", "c": "c"},
-            "attachments": [Attachment(file_id=1, type="code_interpreter", name="file1", size=5)],
+            "attachments": [Attachment(file_id=1, type="code_interpreter", name="file1", size=5, download_link="")],
             "date": datetime.datetime.now(datetime.UTC),
         },
     ).json_safe()

@@ -1,0 +1,73 @@
+/* Dashboard specific styles */
+
+/* Stats cards */
+.stat-card {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  @apply shadow-md;
+  transform: translateY(-2px);
+}
+
+.stat-value {
+  @apply text-3xl font-bold text-gray-900 dark:text-gray-100;
+}
+
+.stat-label {
+  @apply text-sm text-gray-600 dark:text-gray-400 uppercase tracking-wide;
+}
+
+/* Progress bars */
+.dashboard-progress-bar {
+  @apply w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2;
+}
+
+.progress-bar-fill {
+  @apply h-2 rounded-full transition-all duration-500 ease-out;
+}
+
+.progress-bar-fill.success {
+  @apply bg-green-500;
+}
+
+/* Animation classes */
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Tag analytics styles */
+.tag-category {
+  @apply space-y-2;
+}
+
+.tag-category-title {
+  @apply text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide;
+}
+
+.tag-list {
+  @apply space-y-1;
+}
+
+.tag-item {
+  @apply flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-md;
+}
+
+.tag-name {
+  @apply text-sm text-gray-700 dark:text-gray-300;
+}
+
+.tag-count {
+  @apply text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-gray-600;
+  @apply px-2 py-1 rounded-full;
+}

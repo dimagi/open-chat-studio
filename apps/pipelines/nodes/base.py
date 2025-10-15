@@ -2,10 +2,13 @@ import logging
 import operator
 from abc import ABC
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal, Self, cast
 
+import sentry_sdk
 from langchain_core.runnables import RunnableConfig
+from langgraph.constants import END
 from langgraph.types import Command
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.config import JsonDict
@@ -13,8 +16,8 @@ from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import TypedDict
 
 from apps.experiments.models import ExperimentSession
+from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
-from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -46,7 +49,7 @@ def add_temp_state_messages(left: dict, right: dict):
     return output
 
 
-def merge_dicts(left: dict, right: dict):
+def merge_dict_values_as_lists(left: dict, right: dict):
     """
     Merge two dictionaries, combining values for the same key into a list. The value of any key is expected to be a list
     """
@@ -64,6 +67,12 @@ def merge_dicts(left: dict, right: dict):
     return output
 
 
+class Intents(StrEnum):
+    """Intents capture actions which should be taken after the pipeline has run."""
+
+    END_SESSION = "end_session"
+
+
 class TempState(TypedDict):
     user_input: str
     outputs: dict
@@ -75,10 +84,11 @@ class PipelineState(dict):
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     temp_state: Annotated[TempState, add_temp_state_messages]
-    input_message_metadata: Annotated[dict, merge_dicts]
-    output_message_metadata: Annotated[dict, merge_dicts]
+    input_message_metadata: Annotated[dict, merge_dict_values_as_lists]
+    output_message_metadata: Annotated[dict, merge_dict_values_as_lists]
     attachments: list = Field(default=[])
-    output_message_tags: Annotated[list[str], operator.add]
+    output_message_tags: Annotated[list[tuple[str, str]], operator.add]
+    session_tags: Annotated[list[tuple[str, str]], operator.add]
 
     # List of (previous, current, next) tuples used for aiding in routing decisions.
     path: Annotated[Sequence[tuple[str | None, str, list[str]]], operator.add]
@@ -86,6 +96,12 @@ class PipelineState(dict):
     node_input: str
     # source node for the current node
     node_source: str
+
+    intents: Annotated[list[Intents], operator.add]
+    synthetic_voice_id: int | None
+
+    participant_data: Annotated[dict, operator.or_]
+    session_state: Annotated[dict, operator.or_]
 
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
@@ -95,16 +111,42 @@ class PipelineState(dict):
 
         if "attachments" in copy.get("temp_state", {}):
             copy["temp_state"]["attachments"] = [att.model_dump() for att in copy["temp_state"]["attachments"]]
+
+        if interrupt := copy.pop("__interrupt__", None):
+            copy["interrupt"] = interrupt[0].value
         return copy
 
     @classmethod
-    def from_node_output(cls, node_name: str, node_id: str, output: Any = None, **kwargs) -> Self:
+    def clone(cls, state):
+        """Make a copy of the state."""
+        copied = state.copy()
+        # Don't deepcopy Django models
+        session = copied.pop("experiment_session")
+        copied = deepcopy(copied)
+        copied["experiment_session"] = session
+        return PipelineState(copied)
+
+    @classmethod
+    def from_node_output(
+        cls,
+        node_name: str,
+        node_id: str,
+        output: Any = None,
+        **kwargs,
+    ) -> Self:
         kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
-        kwargs["temp_state"] = {"outputs": {node_name: output}}
+        kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
-
         return cls(**kwargs)
+
+    def add_message_tag(self, tag: str):
+        """Adds a tag to the output message."""
+        self.setdefault("output_message_tags", []).append((tag, ""))
+
+    def add_session_tag(self, tag: str):
+        """Adds the tag to the chat session."""
+        self.setdefault("session_tags", []).append((tag, ""))
 
     def get_node_id(self, node_name: str):
         """
@@ -123,7 +165,8 @@ class PipelineState(dict):
 
     def get_selected_route(self, node_name: str) -> str | None:
         """
-        Gets the route selected by a specific router node.
+        Returns the route keyword selected by a specific router node with the given name.
+        If the node does not exist or has no route defined, it returns `None`.
         """
         outputs = self.get("outputs", {})
         if node_name in outputs and "route" in outputs[node_name]:
@@ -156,9 +199,19 @@ class PipelineState(dict):
 
         return path
 
+    def get_execution_flow(self):
+        """Returns the execution flow of the pipeline as a list of tuples.
+        Each tuple contains the previous node name, the current node name, and a list of destination node names.
+        """
+        return [
+            (self.get_node_name(prev), self.get_node_name(source), [self.get_node_name(x) for x in dest])
+            for prev, source, dest in self.get("path", [])
+        ]
+
     def get_all_routes(self) -> dict:
         """
-        Gets all routing decisions in the pipeline.
+        Returns a dictionary containing all routing decisions in the pipeline.
+        The keys are the node names and the values are the route keywords chosen by each router node.
         """
         routes_dict = {}
         outputs = self.get("outputs", {})
@@ -167,6 +220,44 @@ class PipelineState(dict):
                 routes_dict[node_name] = node_data["route"]
 
         return routes_dict
+
+    def get_node_output_by_name(self, node_name: str) -> Any:
+        """
+        Returns the output of the specified node if it has been executed.
+        If the node has not been executed, it returns `None`.
+        """
+        output = self["outputs"].get(node_name)
+        if output:
+            return output["message"]
+        return None
+
+    def get_node_output(self, node_id: str) -> Any:
+        """
+        Get the output of a node by its ID.
+        """
+        for output in self["outputs"].values():
+            if output.get("node_id") == node_id:
+                return output["message"]
+        return None
+
+    def get_node_inputs(self, node_id: str, incoming_nodes: list[str]) -> dict[str, Any]:
+        """
+        Get the inputs for the given node based on the node's incoming edges.
+
+        Returns:
+            A dictionary mapping incoming node IDs to their respective outputs in the state.
+            If there is no output for an incoming edge or if that edge was not targeted,
+            the value in the output will be None.
+        """
+        inputs = {}
+        for incoming_node_id in incoming_nodes:
+            targets = [step[2] for step in self["path"] if step[1] == incoming_node_id]
+            if targets and node_id in targets[0]:
+                # only include outputs from nodes that targeted the current node
+                inputs[incoming_node_id] = self.get_node_output(incoming_node_id)
+            else:
+                inputs[incoming_node_id] = None
+        return inputs
 
     @classmethod
     def from_router_output(
@@ -190,26 +281,22 @@ class PipelineState(dict):
 class BasePipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    _config: RunnableConfig | None = None
+    _config: RunnableConfig = None
+    _incoming_nodes: list[str] = None
+    _outgoing_nodes: list[str] = None
 
     node_id: SkipJsonSchema[str] = Field(exclude=True)
     django_node: SkipJsonSchema[Any] = Field(exclude=True)
 
     name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
 
-    def _prepare_state(self, node_id: str, incoming_edges: list, state: PipelineState):
+    def _prepare_state(self, node_id: str, incoming_nodes: list, state: PipelineState):
         """This function initializes the state before executing the node function. This is primarily
         determining which output to select from the state as this node's input.
         """
         from apps.channels.datamodels import Attachment
 
-        def _get_output(node_id):
-            for output in state["outputs"].values():
-                if output.get("node_id") == node_id:
-                    return output["message"]
-            raise Exception(f"unable to determine output for {node_id}")
-
-        if not incoming_edges:
+        if not incoming_nodes:
             # This is the first node in the graph
             state["node_input"] = state["messages"][-1]
             state["node_source"] = None
@@ -219,44 +306,24 @@ class BasePipelineNode(BaseModel, ABC):
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
-        elif len(incoming_edges) == 1:
-            incoming_edge = incoming_edges[0]
-            state["node_input"] = _get_output(incoming_edge)
-            state["node_source"] = incoming_edge
         else:
-            # state.path is a list of tuples (previous, current, next)
-            for path in reversed(state["path"]):
-                candidate_node_ids = path[2]
-                for candidate_node_id in candidate_node_ids:
-                    if candidate_node_id == node_id:
-                        previous_node_id = path[1]
-                        state["node_input"] = _get_output(previous_node_id)
-                        state["node_source"] = previous_node_id
-                        break
-                else:
-                    continue
-                break
+            for incoming_node_id, output in reversed(state.get_node_inputs(node_id, incoming_nodes).items()):
+                if output is not None:
+                    state["node_input"] = output
+                    state["node_source"] = incoming_node_id
+                    break
             else:
-                # This shouldn't happen, but keeping it here for now to avoid breaking
-                logger.warning(f"Cannot determine which input to use for node {node_id}. Switching to fallback.")
-                for incoming_edge in reversed(incoming_edges):
-                    if incoming_edge in state["outputs"]:
-                        state["node_input"] = _get_output(incoming_edge)
-                        state["node_source"] = incoming_edge
-                        break
-                else:
-                    raise PipelineNodeRunError(
-                        f"Cannot determine which input to use for node {node_id}",
-                        {
-                            "node_id": node_id,
-                            "edge_ids": incoming_edges,
-                            "state_outputs": state["outputs"],
-                        },
-                    )
+                raise PipelineNodeRunError(
+                    f"Cannot determine which input to use for node {node_id}",
+                    {
+                        "node_name": self.name,
+                        "node_id": node_id,
+                        "incoming_node_ids": incoming_nodes,
+                        "state_outputs": state["outputs"],
+                        "pipeline_path": state["path"],
+                    },
+                )
         return state
-
-    def get_participant_data_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
-        return ParticipantDataProxy.from_state(state)
 
     @property
     def disabled_tools(self) -> set[str] | None:
@@ -289,20 +356,40 @@ class PipelineNode(BasePipelineNode, ABC):
     """
 
     def process(
-        self, incoming_edges: list, outgoing_edges: list, state: PipelineState, config: RunnableConfig
-    ) -> PipelineState:
+        self, incoming_nodes: list, outgoing_nodes: list, state: PipelineState, config: RunnableConfig
+    ) -> PipelineState | Command:
         self._config = config
-        state = self._prepare_state(self.node_id, incoming_edges, state)
-        output = self._process(input=state["node_input"], state=state)
-        output["path"] = [(state["node_source"], self.node_id, outgoing_edges)]
+        self._incoming_nodes = incoming_nodes
+        self._outgoing_nodes = outgoing_nodes
+        state = PipelineState(state)
+        state = self._prepare_state(self.node_id, incoming_nodes, state)
+
+        # Sentry context for error tracking
+        process_params = {"input": state["node_input"], "state": state}
+        sentry_context = {
+            "node_id": self.node_id,
+            "node_name": self.name,
+            "node_type": self.__class__.__name__,
+            "params": process_params,
+        }
+        sentry_sdk.set_context("Node", sentry_context)
+
+        output = self._process(**process_params)
+        if isinstance(output, Command) and output.goto != END:
+            return Command(goto=output.goto, update=self._augment_output(state, cast(PipelineState, output.update)))
+        if not isinstance(output, dict):
+            return output
+        return self._augment_output(state, output)
+
+    def _augment_output(self, state, output: PipelineState) -> PipelineState:
+        output["path"] = [(state["node_source"], self.node_id, self._outgoing_nodes)]
         get_output_tags_fn = getattr(self, "get_output_tags", None)
+        output.setdefault("output_message_tags", [])
         if callable(get_output_tags_fn):
-            output["output_message_tags"] = get_output_tags_fn()
-        else:
-            output["output_message_tags"] = []
+            output["output_message_tags"].extend(get_output_tags_fn())
         return output
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState:
+    def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
@@ -317,19 +404,21 @@ class PipelineRouterNode(BasePipelineNode):
         def router(state: PipelineState, config: RunnableConfig) -> ReturnType:
             self._config = config
 
+            state = PipelineState(state)
             state = self._prepare_state(self.node_id, incoming_edges, state)
 
             conditional_branch, is_default_keyword = self._process_conditional(state)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch, is_default_keyword)
-            target_node_id = edge_map[conditional_branch]
-            route_path = (state["node_source"], self.node_id, [target_node_id])
+            # edge map won't contain the conditional branch if that handle isn't connected to another node
+            target_node_id = edge_map.get(conditional_branch)
+            route_path = (state["node_source"], self.node_id, [target_node_id] if target_node_id else [])
             output = PipelineState.from_router_output(
                 self.node_id, self.name, state["node_input"], output_handle, tags, route_path, conditional_branch
             )
             return Command(
                 update=output,
-                goto=target_node_id,
+                goto=[target_node_id] if target_node_id else [],
             )
 
         return router
@@ -360,6 +449,9 @@ class Widgets(StrEnum):
     keywords = "keywords"
     history_mode = "history_mode"
     built_in_tools_config = "built_in_tools_config"
+    key_value_pairs = "key_value_pairs"
+    text_editor = "text_editor_widget"
+    voice_widget = "voice_widget"
 
 
 class OptionsSource(StrEnum):
@@ -368,7 +460,12 @@ class OptionsSource(StrEnum):
     agent_tools = "agent_tools"
     custom_actions = "custom_actions"
     collection = "collection"
+    mcp_tools = "mcp_tools"
     collection_index = "collection_index"
+    text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
+    text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
+    voice_provider_id = "voice_provider_id"
+    synthetic_voice_id = "synthetic_voice_id"
 
 
 class UiSchema(BaseModel):
@@ -446,13 +543,16 @@ class NodeSchema(BaseModel):
             schema["ui:icon"] = self.icon
 
 
-def deprecated_node(cls=None, *, message=None):
+def deprecated_node(cls=None, *, message=None, docs_link=None):
     """Class decorator for deprecating a node"""
 
     def _inner(cls):
+        notice = message or ""
+        if docs_link:
+            notice = render_help_with_link(notice, docs_link)
         schema = cls.model_config["json_schema_extra"]
         schema.deprecated = True
-        schema.deprecation_message = message
+        schema.deprecation_message = notice
         schema.can_add = False
         return cls
 

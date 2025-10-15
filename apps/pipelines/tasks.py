@@ -2,6 +2,7 @@ from celery.app import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
 
+from apps.chat.bots import PipelineTestBot
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
 from apps.service_providers.llm_service.runnables import GenerationError
@@ -29,8 +30,9 @@ def get_response_for_pipeline_test_message(pipeline_id: int, message_text: str, 
     errors = pipeline.validate(full=False)
     if errors:
         return {"error": "There are errors in the pipeline configuration. Please correct those before running a test."}
+    bot = PipelineTestBot(pipeline=pipeline, user_id=user_id)
     try:
-        return pipeline.simple_invoke(message_text, user_id)
+        return bot.process_input(message_text)
     except PipelineBuildError as e:
         return {"error": e.message}
     except (GenerationError, PipelineNodeBuildError) as e:

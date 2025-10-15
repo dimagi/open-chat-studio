@@ -124,7 +124,10 @@ class TestTwilio:
 class TestTurnio:
     @pytest.mark.parametrize(
         ("message", "message_type"),
-        [(turnio_messages.text_message(), "text"), (turnio_messages.voice_message(), "voice")],
+        [
+            (turnio_messages.text_message(), "text"),
+            (turnio_messages.voice_message(), "voice"),
+        ],
     )
     def test_parse_text_message(self, message, message_type):
         message = TurnWhatsappMessage.parse(message)

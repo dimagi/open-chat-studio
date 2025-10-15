@@ -15,8 +15,8 @@ from openai.types.file_object import FileObject
 
 from apps.assistants.models import ToolResources
 from apps.channels.datamodels import Attachment
-from apps.chat.agent.tools import TOOL_CLASS_MAP
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
+from apps.experiments.models import AgentTools
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import (
@@ -32,6 +32,7 @@ from apps.utils.factories.files import FileFactory
 from apps.utils.langchain import mock_llm
 
 ASSISTANT_ID = "test_assistant_id"
+LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTICIPANT_DATA]
 
 
 @pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
@@ -39,9 +40,10 @@ def session(request):
     chat = Chat()
     chat.save = lambda: None
     session = ExperimentSessionFactory.build(chat=chat)
+    session.participant_data_from_experiment = {}
     local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID, include_file_info=False)
     if request.param:
-        local_assistant.tools = list(TOOL_CLASS_MAP.keys())
+        local_assistant.tools = LEGACY_EXPERIMENT_TOOLS
 
     local_assistant.has_custom_actions = lambda *args, **kwargs: False
 
@@ -52,7 +54,7 @@ def session(request):
 @pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
 def db_session(request):
     local_assistant = OpenAiAssistantFactory(
-        assistant_id=ASSISTANT_ID, tools=list(TOOL_CLASS_MAP.keys()) if request.param else []
+        assistant_id=ASSISTANT_ID, tools=LEGACY_EXPERIMENT_TOOLS if request.param else []
     )
     session = ExperimentSessionFactory()
     session.experiment.assistant = local_assistant
@@ -322,8 +324,8 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
 
     assistant = create_experiment_runnable(session.experiment, session, TracingService.empty())
     attachments = [
-        Attachment.from_file(files[0], "code_interpreter"),
-        Attachment.from_file(files[1], "file_search"),
+        Attachment.from_file(files[0], "code_interpreter", session.id),
+        Attachment.from_file(files[1], "file_search", session.id),
     ]
 
     result = assistant.invoke("test", attachments=attachments)

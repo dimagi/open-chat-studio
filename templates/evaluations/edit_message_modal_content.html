@@ -1,0 +1,37 @@
+{% load i18n %}
+<div class="modal-box max-w-none w-1/2"{% if errors %} data-has-errors="true"{% endif %}>
+  <h3 class="font-bold text-lg mb-4">{% trans "Edit Message Pair" %}</h3>
+  <form method="dialog">
+    <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onclick="document.getElementById('editMessageModal').close()">✕</button>
+  </form>
+
+  <!-- Form content -->
+  <form
+    hx-post="{{ update_url }}"
+    hx-target="#editMessageModal"
+    hx-swap="innerHTML"
+    class="space-y-6"
+  >
+    {% csrf_token %}
+
+    {% include "evaluations/components/message_pair_form.html" with human_value=form_data.human ai_value=form_data.ai context_value=form_data.context history_text_value=form_data.history_text participant_data_value=form_data.participant_data session_state_value=form_data.session_state disable_button_id="save-button" errors=errors %}
+
+    <!-- Actions -->
+    <div class="modal-action">
+      <button
+        type="button"
+        class="btn btn-ghost"
+        onclick="document.getElementById('editMessageModal').close()"
+      >
+        {% trans "Cancel" %}
+      </button>
+      <button
+        type="submit"
+        class="btn btn-primary"
+        id="save-button"
+      >
+        {% trans "Save Changes" %}
+      </button>
+    </div>
+  </form>
+</div>

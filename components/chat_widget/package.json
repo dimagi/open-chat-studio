@@ -1,15 +1,16 @@
 {
   "name": "open-chat-studio-widget",
-  "version": "0.3.1",
+  "version": "0.4.8",
   "description": "Chat component for Open Chat Studio",
   "main": "dist/index.cjs.js",
+  "exports": "./dist/esm/open-chat-studio-widget.js",
+  "unpkg": "dist/open-chat-studio-widget/open-chat-studio-widget.esm.js",
   "module": "dist/index.js",
   "es2015": "dist/esm/index.mjs",
   "es2017": "dist/esm/index.mjs",
   "types": "dist/types/index.d.ts",
   "collection": "dist/collection/collection-manifest.json",
   "collection:main": "dist/collection/index.js",
-  "unpkg": "dist/open-chat-studio-widget/open-chat-studio-widget.esm.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/dimagi/open-chat-studio.git"
@@ -21,8 +22,6 @@
   "scripts": {
     "build": "stencil build --docs",
     "start": "stencil build --dev --watch --serve",
-    "test": "stencil test --spec --e2e",
-    "test.watch": "stencil test --spec --e2e --watchAll",
     "generate": "stencil generate",
     "use:npmReadme": "mv 'README.md' 'git.README.md' && cp 'src/components/ocs-chat/readme.md' 'README.md'",
     "use:gitReadme": "mv 'git.README.md' 'README.md'",
@@ -30,20 +29,26 @@
     "postpublish": "npm run use:gitReadme"
   },
   "dependencies": {
-    "@stencil/core": "^4.26.0",
+    "@stencil/core": "^4.27.0",
+    "dompurify": "^3.0.5",
+    "js-cookie": "^3.0.5",
+    "marked": "^4.3.0",
     "npmrc": "^1.1.1"
   },
   "devDependencies": {
     "@stencil-community/postcss": "^2.2.0",
+    "@tailwindcss/postcss": "^4.1.12",
+    "@tailwindcss/typography": "^0.5.16",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.13.4",
     "autoprefixer": "^10.4.20",
     "jest": "^29.7.0",
     "jest-cli": "^29.7.0",
+    "npm-run-all": "^4.1.5",
     "postcss-import": "^16.1.0",
     "puppeteer": "^24.2.0",
-    "npm-run-all": "^4.1.5",
-    "tailwindcss": "^3.4.17",
+    "stencil-tailwind-plugin": "^2.0.5",
+    "tailwindcss": "^4.1.12",
     "typescript": "^5.7.3"
   },
   "license": "MIT"

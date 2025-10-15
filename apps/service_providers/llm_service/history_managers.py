@@ -6,10 +6,9 @@ from typing import Self
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from apps.annotations.models import Tag, TagCategories
-from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
+from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
-from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 
 
 class BaseHistoryManager(metaclass=ABCMeta):
@@ -143,106 +142,16 @@ class ExperimentHistoryManager(BaseHistoryManager):
         return self.trace_service.get_trace_metadata()
 
 
-class PipelineHistoryManager(BaseHistoryManager):
-    def __init__(
-        self,
-        session: ExperimentSession | None = None,
-        node_id: str | None = None,
-        history_type: PipelineChatHistoryTypes = PipelineChatHistoryTypes.GLOBAL,
-        history_name: str | None = None,
-        max_token_limit: int | None = None,
-        chat_model: BaseChatModel | None = None,
-        history_mode: str | None = None,
-    ):
-        self.session = session
-        self.node_id = node_id
-        self.history_type = history_type
-        self.history_name = history_name
-        self.max_token_limit = max_token_limit
-        self.chat_model = chat_model
-        self.ai_message = None
-
+class AssistantPipelineHistoryManager(BaseHistoryManager):
+    def __init__(self):
         self.input_message_metadata = {}
         self.output_message_metadata = {}
-        self.history_mode = history_mode
-
-    def attach_file_id(self, file_id: str):
-        """Callback method used by a tool to attach a file id to the output message"""
-        if "ocs_attachment_file_ids" not in self.output_message_metadata:
-            self.output_message_metadata["ocs_attachment_file_ids"] = []
-
-        self.output_message_metadata["ocs_attachment_file_ids"].append(file_id)
-
-    @classmethod
-    def for_llm_chat(
-        cls,
-        session: ExperimentSession,
-        node_id: str,
-        history_type: PipelineChatHistoryTypes,
-        history_name: str,
-        max_token_limit: int,
-        chat_model: BaseChatModel,
-    ) -> Self:
-        return cls(
-            session=session,
-            node_id=node_id,
-            history_type=history_type,
-            history_name=history_name,
-            max_token_limit=max_token_limit,
-            chat_model=chat_model,
-        )
-
-    @classmethod
-    def for_assistant(cls) -> Self:
-        return cls()
 
     def get_chat_history(self, input_messages: list):
-        if self.history_type == PipelineChatHistoryTypes.NONE or self.session is None:
-            return []
-
-        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
-            return compress_chat_history(
-                chat=self.session.chat,
-                llm=self.chat_model,
-                max_token_limit=self.max_token_limit,
-                input_messages=input_messages,
-            )
-
-        try:
-            history: PipelineChatHistory = self.session.pipeline_chat_history.get(
-                type=self.history_type, name=self._get_history_name()
-            )
-        except PipelineChatHistory.DoesNotExist:
-            return []
-        return compress_pipeline_chat_history(
-            pipeline_chat_history=history,
-            max_token_limit=self.max_token_limit,
-            llm=self.chat_model,
-            input_messages=input_messages,
-        )
-
-    def _get_history_name(self):
-        if self.history_type == PipelineChatHistoryTypes.NAMED:
-            return self.history_name
-        return self.node_id
+        raise NotImplementedError()
 
     def add_messages_to_history(
         self, input: str, input_message_metadata: dict, output: str, output_message_metadata: dict, *args, **kwargs
     ):
         self.input_message_metadata = input_message_metadata
         self.output_message_metadata = self.output_message_metadata | output_message_metadata
-
-        if self.history_type == PipelineChatHistoryTypes.NONE:
-            return
-
-        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
-            # Global History is saved outside of the node
-            return
-
-        history, _ = self.session.pipeline_chat_history.get_or_create(
-            type=self.history_type, name=self._get_history_name()
-        )
-
-        output = output or ""  # generation likely errored resulting in a None output
-        message = history.messages.create(human_message=input, ai_message=output, node_id=self.node_id)
-        return message

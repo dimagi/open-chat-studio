@@ -1,0 +1,15 @@
+<div id="document_source_{{ document_source.id }}">
+  <div id="document_source_header_{{ document_source.id }}">
+    {% include "documents/partials/document_source_header.html" %}
+  </div>
+  <div
+      id="document_source_files_{{ document_source.id }}"
+      hx-get="{% url 'documents:document_source_files_list' team.slug collection.id document_source.id %}"
+      hx-trigger="load, search-files from:body"
+      hx-target="this"
+      hx-swap="innerHTML"
+      hx-include="#search-input"
+  >
+    <span class="loading loading-spinner"></span>
+  </div>
+</div>

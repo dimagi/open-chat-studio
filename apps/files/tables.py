@@ -10,7 +10,6 @@ class FilesTable(tables.Table):
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(url_name="files:file_edit"),
-            actions.delete_action(url_name="files:file_delete", confirm_message="Are you sure?"),
         ]
     )
 

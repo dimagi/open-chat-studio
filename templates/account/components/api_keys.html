@@ -22,7 +22,7 @@
   {% endif %}
   {% for key in api_keys %}
     {% if forloop.first %}
-      <div class='table-responsive'>
+      <div class="table-responsive">
         <table class="table pg-table">
           <thead>
             <tr>
@@ -30,6 +30,7 @@
               <th>{% translate "Name" %}</th>
               <th>{% translate "Prefix" %}</th>
               <th>{% translate "Created" %}</th>
+              <th>{% translate "Read Only" %}</th>
               <th></th>
             </tr>
           </thead>
@@ -40,6 +41,7 @@
       <td>{{ key.name }}</td>
       <td>{{ key.prefix }}</td>
       <td>{{ key.created.date }}</td>
+      <td>{{ key.read_only|yesno:"True,False" }}</td>
       <td>
         <form method="post" action="{% url 'users:revoke_api_key' %}">
           {% csrf_token %}

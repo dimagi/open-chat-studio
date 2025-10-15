@@ -1,7 +1,7 @@
-{% extends 'error_base.html' %}
+{% extends "error_base.html" %}
 {% load i18n %}
 {% block top_nav %}{% endblock top_nav %}
-{% block notices %}{% endblock %}
+{% block notices %}{% endblock notices %}
 {% block error_details %}
   <h1 class="pg-title">{% translate "Shucks. We couldn't find that." %}</h1>
   <h2 class="pg-subtitle">
@@ -34,4 +34,4 @@
       </div>
     </div>
   {% endif %}
-{% endblock %}
+{% endblock error_details %}

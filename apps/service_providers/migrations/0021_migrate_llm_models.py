@@ -39,8 +39,3 @@ class Migration(migrations.Migration):
     dependencies = [
         ('service_providers', '0020_auto_20241111_1113'),
     ]
-
-    operations = [
-        migrations.RunPython(_update_default_models),
-        migrations.RunPython(_update_groq_perplexity),
-    ]

@@ -11,9 +11,11 @@ const config = {
     app: './assets/javascript/app.js',  // logged-in javascript
     'pipeline': './assets/javascript/apps/pipeline.tsx',
     adminDashboard: './assets/javascript/admin-dashboard.js',
+    trends: './assets/javascript/trends.js',
+    dashboard: './assets/javascript/dashboard.js',  // dashboard analytics
     'tagMultiselect': './assets/javascript/tag-multiselect.js',
     'tokenCounter': './assets/javascript/tiktoken.js',
-    'jsonEditor': './assets/javascript/json-editor.js',
+    'editors': './assets/javascript/editors.js',
   },
 
   output: {

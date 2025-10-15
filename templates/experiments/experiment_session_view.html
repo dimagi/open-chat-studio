@@ -1,4 +1,5 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
+{% load json_tags %}
 {% load form_tags %}
 {% load static %}
 {% load waffle_tags %}
@@ -13,7 +14,7 @@
       </ul>
     </div>
   {% endif %}
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <div class="app-card">
     <div class="flex">
@@ -28,7 +29,7 @@
                href="{{ paginate_url }}?dir=prev">
               <i class="fa-solid fa-backward-step"></i> Older
             </a>
-            <a class="btn join-item rounded-r-full"
+            <a class="btn join-item"
                href="{{ paginate_url }}?dir=next">
               Newer <i class="fa-solid fa-forward-step"></i>
             </a>
@@ -57,7 +58,7 @@
         <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Data" />
         <div role="tabpanel" class="tab-content pt-3">
           <div class="p-3 border rounded-lg">
-          <pre><code class="text-sm">{{ participant_data|escape }}</code></pre>
+          <pre><code class="text-sm">{{ experiment_session.participant_data_from_experiment|to_json }}</code></pre>
           </div>
         </div>
         <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
@@ -70,7 +71,7 @@
       <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Session State" />
       <div role="tabpanel" class="tab-content pt-3">
         <div class="p-3 border rounded-lg">
-          <pre><code class="text-sm">{{ experiment_session.state|escape }}</code></pre>
+          <pre><code class="text-sm">{{ experiment_session.state|to_json }}</code></pre>
         </div>
       </div>
       {% if perms.events.view_eventlog %}
@@ -85,10 +86,10 @@
       {% endif %}
     </div>
   </div>
-{% endblock %}
+{% endblock app %}
 
 {% block page_js %}
-  {{ block.super  }}
+  {{ block.super }}
   <script
     id="tag-multiselect"
     src="{% static "js/tagMultiselect-bundle.js" %}"
@@ -96,5 +97,9 @@
     data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
   >
   </script>
-  <script>SiteJS.tagMultiselect.setupTagSelects();</script>
-{% endblock %}
+  <script>
+    window.addEventListener('load', () => {
+      SiteJS.tagMultiselect.setupTagSelects();
+    });
+  </script>
+{% endblock page_js %}

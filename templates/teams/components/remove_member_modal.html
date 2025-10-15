@@ -14,7 +14,7 @@
     </p>
     <footer class="modal-card-foot">
       <div class="modal-action">
-        <form action="{% url 'single_team:remove_team_membership' request.team.slug membership.pk %} " method="post">
+        <form action="{% url 'single_team:remove_team_membership' request.team.slug membership.pk %}" method="post">
           {% csrf_token %}
           <button class="btn btn-error" type="submit">
             {% if editing_self %}{% translate "I understand, leave team" %}{% else %}{% translate "I understand, remove team member" %}{% endif %}

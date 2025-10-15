@@ -25,7 +25,7 @@ logger = logging.getLogger("ocs.experiments")
 @shared_task(bind=True, base=TaskbadgerTask)
 def async_export_chat(self, experiment_id: int, query_params: dict, time_zone) -> dict:
     experiment = Experiment.objects.get(id=experiment_id)
-    filtered_sessions = get_filtered_sessions(self.request, experiment, query_params, time_zone)
+    filtered_sessions = get_filtered_sessions(experiment, query_params, time_zone)
     csv_in_memory = filtered_export_to_csv(experiment, filtered_sessions)
     filename = f"{experiment.name} Chat Export {timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
     file_obj = File.objects.create(
@@ -65,8 +65,9 @@ def get_response_for_webchat_task(
             experiment_session=experiment_session,
         )
         message_attachments = []
-        for file_entry in attachments:
-            message_attachments.append(Attachment.model_validate(file_entry))
+        if attachments:
+            for file_entry in attachments:
+                message_attachments.append(Attachment.model_validate(file_entry))
 
         message = BaseMessage(
             participant_id=experiment_session.participant.identifier,
@@ -75,11 +76,16 @@ def get_response_for_webchat_task(
         )
         update_taskbadger_data(self, web_channel, message)
         chat_message = web_channel.new_user_message(message)
+        # In some instances, the ChatMessage is not saved to the DB e.g. errors
+        # so add the response here as well as the message ID
         response["response"] = chat_message.content
         response["message_id"] = chat_message.id
     except Exception as e:
         logger.exception(e)
         response["error"] = str(e)
+    finally:
+        experiment_session.seed_task_id = ""
+        experiment_session.save(update_fields=["seed_task_id"])
 
     return response
 

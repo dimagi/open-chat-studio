@@ -40,8 +40,9 @@ urlpatterns = [
     ),
     # experiments
     path("new/", views.CreateExperiment.as_view(), name="new"),
-    path("table/", views.ExperimentTableView.as_view(), name="table"),
+    path("table/", views.ExperimentTableView.as_view(), {"is_experiment": True}, name="table"),
     path("e/<int:experiment_id>/", views.single_experiment_home, name="single_experiment_home"),
+    path("e/<int:experiment_id>/trends/data", views.trends_data, name="trends_data"),
     path("e/<int:experiment_id>/sessions-table/", views.ExperimentSessionsTableView.as_view(), name="sessions-list"),
     path("e/<int:experiment_id>/versions/", views.ExperimentVersionsTableView.as_view(), name="versions-list"),
     path(
@@ -68,15 +69,11 @@ urlpatterns = [
     path("e/<int:experiment_id>/versions/status", views.version_create_status, name="check_version_creation_status"),
     path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path("e/<int:pk>/delete/", views.delete_experiment, name="delete"),
-    path("e/<int:pk>/add_file/", views.AddFileToExperiment.as_view(), name="add_file"),
-    path("e/<int:pk>/delete_file/<int:file_id>/", views.DeleteFileFromExperiment.as_view(), name="remove_file"),
     path(
         "e/<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
         views.start_authed_web_session,
         name="start_authed_web_session",
     ),
-    path("e/<int:experiment_id>/create_channel/", views.create_channel, name="create_channel"),
-    path("e/<int:experiment_id>/update_channel/<int:channel_id>/", views.update_delete_channel, name="update_channel"),
     path(
         "e/<int:experiment_id>/v/<int:version_number>/session/<int:session_id>/",
         views.experiment_chat_session,
@@ -189,6 +186,7 @@ urlpatterns = [
         name="experiment_route_delete",
     ),
     path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
+    path("<int:session_id>/image/<int:pk>/html/", views.get_image_html, name="get_image_html"),
     path(
         "e/<uuid:experiment_id>/verify_token/<str:token>/",
         views.verify_public_chat_token,
@@ -203,6 +201,21 @@ urlpatterns = [
         "e/<int:experiment_id>/release_status_badge",
         views.get_release_status_badge,
         name="get_release_status_badge",
+    ),
+    path(
+        "e/<int:experiment_id>/migrate/",
+        views.migrate_experiment_view,
+        name="migrate_experiment",
+    ),
+    path(
+        "experiment/<uuid:experiment_id>/session/<str:session_id>/translate-messages/",
+        views.translate_messages_view,
+        name="translate_messages",
+    ),
+    path(
+        "experiment/<int:experiment_id>/versions",
+        views.get_experiment_version_names,
+        name="get_experiment_version_names",
     ),
 ]
 

@@ -1,0 +1,95 @@
+# This workflow automatically updates the API schema file (api-schema.yml) when API-related code changes.
+# It runs on pull requests that modify API views, serializers, URLs, or settings files.
+# The schema is generated using Django's spectacular management command and committed back to the PR branch if changes are detected.
+# This ensures the schema stays in sync with API changes and prevents CI failures from the schema validation test.
+
+name: Update API Schema
+permissions:
+  contents: write
+
+on:
+  pull_request:
+    paths:
+      - 'apps/api/**'
+      - 'apps/**/serializers.py'
+      - 'apps/**/views.py'
+      - 'apps/**/views/**.py'
+      - 'apps/**/urls.py'
+      - 'gpt_playground/urls.py'
+      - 'gpt_playground/settings.py'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHON_VERSION: '3.13'
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      
+      - name: Install Dependencies
+        run: |
+          uv venv
+          uv sync --locked --dev
+      
+      - name: Generate API Schema
+        env:
+          DJANGO_DATABASE_USER: postgres
+          DJANGO_DATABASE_PASSWORD: postgres_password
+        run: uv run python manage.py spectacular --file api-schema.yml
+      
+      - name: Check for changes
+        id: verify-changed-files
+        run: |
+          if git diff --exit-code api-schema.yml; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit API schema changes
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add api-schema.yml
+          git commit -m "Update API schema"
+          git push

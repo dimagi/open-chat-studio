@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from apps.channels.models import ExperimentChannel
+from apps.chat.bots import PipelineTestBot
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
@@ -15,7 +16,6 @@ from apps.pipelines.tests.utils import (
     render_template_node,
     start_node,
 )
-from apps.service_providers.llm_service.index_managers import OpenAIVectorStoreManager
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
@@ -31,14 +31,6 @@ from apps.utils.langchain import (
     build_fake_llm_service,
 )
 from apps.utils.pytest import django_db_with_data
-
-
-@pytest.fixture()
-def index_manager_mock():
-    index_manager = Mock(spec=OpenAIVectorStoreManager)
-    with patch("apps.service_providers.models.LlmProvider.get_index_manager") as get_index_manager:
-        get_index_manager.return_value = index_manager
-        yield index_manager
 
 
 @pytest.mark.django_db()
@@ -113,7 +105,12 @@ class TestVersioningNodes:
         assert node_version.params["source_material_id"] == str(source_material_version.id)
 
     def test_version_llm_with_prompt_node_with_multiple_dependencies(self):
-        """Test that LLMResponseWithPrompt node properly handles versioning of multiple dependent resources"""
+        """
+        Test that LLMResponseWithPrompt node properly handles versioning of multiple dependent resources.
+
+        When a resource is versioned, it should create versions of only those dependencies that have changed.
+        If a dependency has not changed, it should attach the latest version of that dependency to the new node version.
+        """
         node_type = LLMResponseWithPrompt.__name__
         collection = CollectionFactory()
         collection_index = CollectionFactory(is_index=True)
@@ -167,7 +164,8 @@ class TestArchivingNodes:
         archive_related_params.assert_called()
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_archive_related_objects(self, index_manager_mock):
+    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
+    def test_archive_related_objects(self, create_remote_index):
         # Setup related objects
         assistant = OpenAiAssistantFactory()
         collection = CollectionFactory()
@@ -176,7 +174,7 @@ class TestArchivingNodes:
         )
 
         # Setup mocks
-        index_manager_mock.create_vector_store.return_value = "v-456"
+        create_remote_index.return_value = "v-456"
 
         # Build the pipeline
         pipeline = PipelineFactory()
@@ -237,7 +235,8 @@ class TestPipeline:
         for model in temporary_instance_models:
             assert model.objects.count() == 0
 
-        pipeline.simple_invoke("test", requesting_user.id)
+        bot = PipelineTestBot(pipeline=pipeline, user_id=requesting_user.id)
+        bot.process_input("test")
 
         for model in temporary_instance_models:
             assert model.objects.count() == 0
@@ -269,9 +268,13 @@ class TestPipeline:
 
         user_input = "The User Input"
         user = UserFactory()
-        pipeline.simple_invoke(user_input, user.id)["messages"][-1]
+        bot = PipelineTestBot(pipeline=pipeline, user_id=user.id)
+        bot.process_input(user_input)
         expected_call_messages = [
-            [("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: "), ("human", user_input)],
+            [
+                ("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: "),
+                ("human", [{"text": user_input, "type": "text"}]),
+            ],
         ]
         assert [
             [(message.type, message.content) for message in call] for call in llm.get_call_messages()

@@ -1,4 +1,5 @@
 import json
+import logging
 from functools import cached_property
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
@@ -13,6 +14,8 @@ from taggit.models import GenericTaggedItemBase, TagBase
 
 from apps.teams.models import BaseTeamModel, Team
 from apps.users.models import CustomUser
+
+logger = logging.getLogger("ocs.annotations")
 
 
 class TagCategories(models.TextChoices):
@@ -43,6 +46,10 @@ class Tag(TagBase, BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("annotations:tag_edit", args=[self.team.slug, self.id])
+
+    @property
+    def label(self):
+        return TagCategories(self.category).label if self.category else "User Defined"
 
 
 @audit_fields(
@@ -91,37 +98,46 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
 
     tags = TaggableManager(through=CustomTaggedItem)
 
-    def add_tags(self, tags: list[str], team: Team, added_by: CustomUser):
+    def add_tags(self, tags: list[str], team: Team, added_by: CustomUser = None):
         tag_objs = Tag.objects.filter(team=team, name__in=tags)
         for tag in tag_objs:
             self.add_tag(tag, team, added_by)
 
-    def add_tag(self, tag: Tag, team: Team, added_by: CustomUser):
+    def create_and_add_tag(self, tag: str, team: Team, tag_category: TagCategories, added_by: CustomUser = None):
+        tag, _ = Tag.objects.get_or_create(
+            name=tag,
+            team=team,
+            is_system_tag=bool(tag_category),
+            category=tag_category or "",
+        )
+        self.add_tag(tag, team=team, added_by=added_by)
+
+    def add_tag(self, tag: Tag, team: Team, added_by: CustomUser = None):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     def user_tag_names(self):
-        return {tag["name"] for tag in self.tags_json if not tag["is_system_tag"]}
+        return {tag["name"] for tag in self.prefetched_tags_json if not tag["is_system_tag"]}
 
     def system_tags_names(self):
-        return {(tag["name"], tag["category"]) for tag in self.tags_json if tag["is_system_tag"]}
+        return {(tag["name"], tag["category"]) for tag in self.prefetched_tags_json if tag["is_system_tag"]}
 
     def all_tag_names(self):
-        return [tag["name"] for tag in self.tags_json]
+        return [tag["name"] for tag in self.prefetched_tags_json]
 
     @cached_property
-    def tags_json(self):
-        tagged_items = CustomTaggedItem.objects.filter(
-            content_type__model=self._meta.model_name, content_type__app_label=self._meta.app_label, object_id=self.id
-        ).prefetch_related("tag", "user")
+    def prefetched_tags_json(self):
+        if not hasattr(self, "prefetched_tagged_items"):
+            logger.warning("Warning: unable to prefectch tags")
+            return []
+
         tags = []
-        for tagged_item in tagged_items:
+        for tagged_item in self.prefetched_tagged_items:
             if tagged_item.tag.is_system_tag:
                 added_by = "System"
             elif tagged_item.user and tagged_item.user.email:
                 added_by = tagged_item.user.email
             else:
                 added_by = "Participant"
-
             tags.append(
                 {
                     "name": tagged_item.tag.name,

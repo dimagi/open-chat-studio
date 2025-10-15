@@ -1,17 +1,20 @@
+import json
 import re
 
+from celery.result import GroupResult
+from celery_progress.backend import GroupProgress
 from django import forms
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.http import Http404, HttpResponseBadRequest, HttpResponseRedirect
-from django.shortcuts import render
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
+from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from health_check.views import MainView
-from waffle import flag_is_active
 
 from apps.teams.decorators import check_superuser_team_access, login_and_team_required
 from apps.teams.models import Membership, Team
@@ -27,9 +30,7 @@ def home(request):
     if request.user.is_authenticated:
         team = request.team
         if team:
-            if flag_is_active(request, "flag_chatbots"):
-                return HttpResponseRedirect(reverse("chatbots:chatbots_home", args=[team.slug]))
-            return HttpResponseRedirect(reverse("experiments:experiments_home", args=[team.slug]))
+            return redirect("dashboard:index", team_slug=team.slug)
         else:
             messages.info(
                 request,
@@ -42,16 +43,7 @@ def home(request):
 
 @login_and_team_required
 def team_home(request, team_slug):
-    assert request.team.slug == team_slug
-    return render(
-        request,
-        "web/app_home.html",
-        context={
-            "team": request.team,
-            "active_tab": "dashboard",
-            "page_title": _("{team} Dashboard").format(team=request.team),
-        },
-    )
+    return redirect("dashboard:index", team_slug=request.team.slug)
 
 
 class HealthCheck(MainView):
@@ -136,3 +128,23 @@ def global_search(request):
             return HttpResponseRedirect(result.get_absolute_url())
 
     raise Http404
+
+
+@never_cache
+@login_required
+def celery_task_group_status(request, group_id):
+    group_result = GroupResult.restore(group_id)
+    if group_result:
+        group_progress = GroupProgress(group_result).get_info()
+    else:
+        group_progress = {
+            "complete": False,
+            "success": False,
+            "progress": {
+                "pending": True,
+                "total": 0,
+                "current": 0,
+                "percent": 0,
+            },
+        }
+    return HttpResponse(json.dumps(group_progress), content_type="application/json")

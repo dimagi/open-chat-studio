@@ -2,19 +2,32 @@
 {% load form_tags %}
 
 {% block app %}
-    <div class="container mx-auto px-4 py-8">
+    <div class="container mx-auto px-4 py-8" x-data="analysis">
         <h1 class="text-2xl font-bold mb-6">Create Transcript Analysis</h1>
 
         <div class="p-6">
             <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
-                {% render_form_fields form %}
+                {% render_form_fields form "name" "description" "query_file" "provider_model" "translation_language" "translation_provider_model" %}
+
+                <div class="border border-gray-200 p-4 rounded-lg">
+                    <h2 class="text-lg font-semibold mb-4">Select Sessions to Analyze</h2>
+                    <div class="flex flex-col mb-2">
+                        <span x-cloak x-show="limitReached" class="text-warning">Session limit reached. You can only select {{ session_limit }} sessions</span>
+                        <div>
+                            <button type="button" class="btn btn-xs btn-outline" @click="deselectAll()">
+                                Deselect All
+                            </button>
+                        </div>
+                    </div>
+                    {% render_field form.sessions %}
+                </div>
 
                 <div class="mt-6">
                     <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
                         Create Analysis
                     </button>
-                    <a href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}" class="ml-2 text-gray-600 hover:text-gray-800">
+                    <a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}" class="ml-2 text-gray-600 hover:text-gray-800">
                         Cancel
                     </a>
                 </div>
@@ -42,4 +55,53 @@ Solution Quality,Rate the quality of the solution provided by the bot on a scale
             </div>
         </div>
     </div>
-{% endblock %}
+
+    {{ session_limit|json_script:"sessionLimit" }}
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('analysis', () => ({
+                sessionLimit: parseInt(JSON.parse(document.getElementById("sessionLimit").textContent)),
+                limitReached: false,
+                init() {
+                    this.checkLimits();
+                },
+                checkLimits() {
+                    let checkedCount = 0;
+                    const checkboxes = document.querySelectorAll('.session-checkbox');
+                    checkboxes.forEach(checkbox => {
+                        if (checkbox.checked) {
+                            checkedCount++;
+                        }
+                    });
+                    this.limitReached = checkedCount >= this.sessionLimit;
+                    if (this.limitReached) {
+                        this.disableNonSelectedCheckboxes();
+                    } else {
+                        this.enableAll();
+                    }
+                },
+                disableNonSelectedCheckboxes() {
+                    const checkboxes = document.querySelectorAll('.session-checkbox');
+                    checkboxes.forEach(checkbox => {
+                        if (!checkbox.checked) {
+                            checkbox.disabled = true;
+                        }
+                    });
+                },
+                enableAll() {
+                    const checkboxes = document.querySelectorAll('.session-checkbox');
+                    checkboxes.forEach(checkbox => {
+                        checkbox.disabled = false;
+                    });
+                },
+                deselectAll() {
+                    const checkboxes = document.querySelectorAll('.session-checkbox');
+                    checkboxes.forEach(checkbox => {
+                        checkbox.checked = false;
+                    });
+                    this.checkLimits();
+                },
+            }))
+        })
+    </script>
+{% endblock app %}

@@ -1,8 +1,1 @@
-{% if object.get_absolute_url %}
-  <a href="{{ object.get_absolute_url }}" class="btn btn-sm">
-    {{ object }}
-    <i class="fa-solid fa-external-link"></i>
-  </a>
-{% else %}
-  <div class="btn btn-sm no-animation">{{ object }}</div>
-{% endif %}
+{% include "generic/chip_button.html" with url=object.get_absolute_url label=object %}

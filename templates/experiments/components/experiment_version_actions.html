@@ -5,7 +5,7 @@
         <i class="fas fa-comment"></i>
       </button>
     {% else %}
-      <form method="post" action="{% if origin == 'chatbots' %} {% url 'chatbots:start_authed_web_session' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}{% else %}{% url 'experiments:start_authed_web_session' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}{% endif %}" class="inline">
+      <form method="post" action="{% url 'chatbots:start_authed_web_session' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}" class="inline">
         {% csrf_token %}
         <div class="tooltip" data-tip="Start web chat with v{{ record.version_number }}">
 
@@ -16,7 +16,7 @@
       </form>
     {% endif %}
     <button class="btn btn-sm btn-outline btn-primary"
-            hx-get="{% if origin == 'chatbots' %}{% url 'chatbots:version-details' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}{% else %}{% url 'experiments:experiment-version-details' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}{% endif %}"
+            hx-get="{% url 'chatbots:version-details' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}"
             hx-target="#modal-content"
             hx-trigger="click"
             hx-swap="innerHTML"
@@ -25,7 +25,7 @@
     </button>
   {% else %}
     {% if record.is_editable %}
-      {% include 'experiments/create_version_button.html' with experiment=record origin=origin %}
+      {% include "experiments/create_version_button.html" with experiment=record %}
     {% endif %}
   {% endif %}
 </div>

@@ -10,18 +10,25 @@ on:
     paths-ignore:
       - 'components/**'
       - 'docs/**'
+      - 'mkdocs.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PYTHON_VERSION: '3.13'
+
+permissions:
+  contents: read
+
 jobs:
   build-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22.x
       - name: Install dependencies
@@ -34,28 +41,32 @@ jobs:
   code-style:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          python-version: 3.11
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22.x
       - name: Install JS dependencies
         run: npm install
+      - id: file_changes
+        uses: trilom/file-changes-action@v1.2.4
       - name: Run pre-commit hooks
         uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --files ${{ steps.file_changes.outputs.files }}
 
   check-uv-lock:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          python-version: 3.11
+          python-version: ${{ env.PYTHON_VERSION }}
       - uses: astral-sh/setup-uv@v6
       - name: Check lockfile
         run: uv lock --check --offline
@@ -63,8 +74,6 @@ jobs:
   python-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    env:
-      PYTHON_VERSION: '3.11'
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -88,9 +97,9 @@ jobs:
         ports:
           - 6379:6379
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - uses: astral-sh/setup-uv@v6

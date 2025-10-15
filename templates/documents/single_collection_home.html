@@ -1,128 +1,129 @@
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 {% load waffle_tags %}
 {% load team_tags %}
 {% load static %}
 {% load form_tags %}
 {% load django_tables2 %}
 {% block breadcrumbs %}
-
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'documents:collection_home' request.team.slug %}">Collections</a></li>
       <li class="pg-breadcrumb-active" aria-current="page">{{ collection.name }}</li>
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <div class="app-card">
     <div class="flex flex-col gap-2">
       <div class="flex justify-between items-start">
         <div>
-          <h1 class="pg-title">{{ collection.name }} {% if collection.is_index %}<span class="badge badge-sm badge-ghost">Collection Index</span>{% endif %}</h1>
+          <h1 class="pg-title">{{ collection.name }} {% if collection.is_index %}<span class="badge badge-sm badge-ghost">Collection Index</span>{% endif %}{% if read_only %} <span class="text-sm text-gray-500"> (Read-Only) </span> {% endif %}</h1>
           <div class="text-sm text-base-content/60 mt-1">
-            {% if collection.is_index %}
+            {% if collection.is_remote_index %}
               <span class="pg-text-muted">OpenAI vector store id: {% include "generic/copy_chip.html" with copy_element_id="copy_vector_store_id" copy_value=collection.openai_vector_store_id extra_styles="btn-ghost" %}</span>
 
             {% endif %}
           </div>
           <div class="text-sm text-base-content/60 mt-1">
-            <span>
-              <i class="fa fa-file-o" aria-hidden="true"></i> <span class="font-bold">{{ collection_files_count }}</span> uploaded, <span class="font-bold">{{ files_remaining }}</span> remaining
-            </span>
+            <i class="fa fa-file-o" aria-hidden="true"></i> <span class="font-bold">{{ collection_files_count }}</span> uploaded, <span class="font-bold">{{ files_remaining }}</span> remaining
           </div>
+          {% if collection_files_count == max_files_per_collection %}
+            <div class="text-sm text-base-content/60 mt-1">
+              <i class="fa-solid fa-triangle-exclamation text-warning" aria-hidden="true"></i> File limit reached
+            </div>
+          {% endif %}
         </div>
         <div class="join flex items-center">
-          <div class="tooltip" data-tip="Edit">
-            <a class="btn btn-sm join-item"
-               href="{% url 'documents:collection_edit' team.slug collection.id %}">
-              <i class="fa-solid fa-pencil"></i>
-            </a>
-          </div>
+          {% if not read_only %}
+            <div class="tooltip" data-tip="Edit">
+              <a class="btn btn-sm join-item"
+                 href="{% url 'documents:collection_edit' team.slug collection.id %}">
+                <i class="fa-solid fa-pencil"></i>
+              </a>
+            </div>
+          {% endif %}
+          {% if collection.is_index and not collection.is_remote_index %}
+            <div class="tooltip" data-tip="Sematic Search">
+              <a class="btn btn-sm join-item"
+                 href="{% url 'documents:query_collection_view' team.slug collection.id %}">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </a>
+            </div>
+          {% endif %}
         </div>
       </div>
-    </div>
-  </div>
+
   <div class="app-card">
     <div class="flex flex-col gap-4">
       <div class="flex justify-between items-center">
-        <h2 class="text-lg font-semibold">Files</h2>
-        <div class="join">
-          {% if collection.has_failed_index_uploads %}
-            <form class="join-item" action="{% url 'documents:retry_failed_uploads' team.slug collection.id %}" method="POST">
-              {% csrf_token %}
-              <button class="btn btn-sm btn-primary">
-                <i class="fa-solid fa-repeat"></i> Retry Failed Uploads
-              </button>
-            </form>
-          {% endif %}
-          <div {% if collection_files_count == max_files_per_collection %} class="tooltip"  data-tip="File limit reached" {% endif %}>
-            <button class="join-item btn btn-sm btn-primary" {% if collection_files_count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
-              <i class="fa-solid fa-plus"></i> Add Files
-            </button>
+        <div class="flex items-center gap-2">
+          <div class="w-full max-w-md">
+            <input
+              class="input input-bordered w-full"
+              type="search"
+              name="search"
+              id="search-input"
+              placeholder="Search files..."
+              hx-on:input="document.body.dispatchEvent(new CustomEvent('search-files'))"
+              hx-trigger="input changed delay:500ms"
+            >
           </div>
+          <i class="htmx-indicator fa fa-spinner fa-pulse hidden"></i>
         </div>
+          <div class="join">
+            {% if not read_only %}
+              {% if collection.has_failed_index_uploads %}
+                <form class="join-item" action="{% url 'documents:retry_failed_uploads' team.slug collection.id %}" method="post">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-primary">
+                    <i class="fa-solid fa-repeat"></i> Retry Failed Uploads
+                  </button>
+                </form>
+              {% endif %}
+              <button class="join-item btn btn-sm btn-primary" {% if collection_files_count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
+                <i class="fa-regular fa-file"></i> Add Files
+              </button>
+          {% if collection.is_index %}
+                <div class="dropdown">
+                  <div tabindex="0" role="button" class="join-item btn btn-sm btn-primary"
+                    {% if collection_files_count == max_files_per_collection %} disabled {% endif %}
+                  >
+                    <i class="fa-solid fa-upload"></i> Add Document Source
+                  </div>
+                  <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
+                    {% for source_type in document_source_types %}
+                    <li><a
+                        hx-get="{% url "documents:create_document_source" team.slug collection.id %}?source_type={{ source_type.value }}"
+                        hx-target="#document_source_modal"
+                        hx-swap="innerHTML"
+                      >{{ source_type.label }}</a>
+                    </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+          {% endif %}
+            {% endif %}
+          </div>
       </div>
 
-      {% include 'documents/file_upload_modal.html' %}
+      <div id="document_source_modal"></div>
+      {% include "documents/file_upload_modal.html" %}
 
       <div class="grid grid-cols-1 gap-4">
-        {% for collection_file in collection_files %}
-          <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
-            <div class="flex flex-col flex-1 gap-1">
-              <div class="flex items-center gap-2">
-                {% if collection_file.status %}
-                  <div class="tooltip" data-tip="{{ collection_file.status_enum.label }}">
-                    {% if collection_file.status == 'pending' %}
-                      <span class="status"></span>
-                    {% elif collection_file.status == 'in_progress' %}
-                      <div class="inline-grid *:[grid-area:1/1]">
-                        <div aria-label="warning" class="status status-warning animate-ping"></div>
-                        <div aria-label="warning" class="status status-warning"></div>
-                      </div>
-                    {% elif collection_file.status == 'completed' %}
-                      <div class="inline-grid *:[grid-area:1/1]">
-                        <div aria-label="success" class="status status-success"></div>
-                      </div>
-                    {% else %}
-                      <div class="inline-grid *:[grid-area:1/1]">
-                        <div aria-label="error" class="status status-error"></div>
-                      </div>
-                    {% endif %}
-                  </div>
-                {% endif %}
-                <span class="text-sm font-medium">{% include "generic/chip.html" with chip=collection_file.file.as_chip %}</span>
-                <div class="text-xs badge badge-ghost">{{ collection_file.file_size_mb }} MB</div>
-              </div>
-              {% if collection.is_index %}
-                <div class="flex flex-row items-center gap-2">
-                  <span class="text-xs text-base-content/70">Chunking Strategy:</span>
-                  <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.chunk_size }} tokens</div>
-                  <div class="badge badge-sm badge-ghost">Overlap: {{ collection_file.chunking_strategy.chunk_overlap }} tokens</div>
-                </div>
-              {% else %}
-                <span class="text-xs text-base-content/70">{{ collection_file.file.summary|default:'No summary available' }}</span>
-              {% endif %}
-            </div>
-            <div class="flex items-center gap-2 ml-4">
-              <a href="{% url 'files:base' team.slug collection_file.file.id %}" class="btn btn-sm">
-                <i class="fa-solid fa-eye"></i>
-              </a>
-              <form action="{% url 'documents:delete_collection_file' team.slug collection.id collection_file.file.id %}" method="POST" class="inline">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm">
-                  <i class="fa-solid fa-trash"></i>
-                </button>
-              </form>
-            </div>
-          </div>
-        {% empty %}
-          <div class="text-center text-base-content/60 py-8">
-            No files in this collection
-          </div>
+        {% for document_source in document_sources %}
+          {% include "documents/partials/document_source.html" %}
         {% endfor %}
+      </div>
+
+      <h2 class="text-lg font-semibold"><i class="fa-regular fa-file"></i> Files</h2>
+      <div id="collection-files-container"
+           hx-get="{% url 'documents:collection_files_list' request.team.slug collection.id %}"
+           hx-trigger="search-files from:body, load"
+           hx-target="#collection-files-container"
+           hx-swap="innerHTML"
+           hx-include="#search-input">
+        <span class="loading loading-spinner"></span>
       </div>
     </div>
   </div>
-{% endblock %}
-
-
+{% endblock app %}

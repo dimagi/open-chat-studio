@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("channels", "0007_alter_experimentchannel_platform"),
+        ("bot_channels", "0007_alter_experimentchannel_platform"),
         ("experiments", "0034_alter_experiment_safety_layers"),
     ]
 
@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="experiment_sessions",
-                to="channels.experimentchannel",
+                to="bot_channels.experimentchannel",
             ),
         ),
         migrations.AddField(

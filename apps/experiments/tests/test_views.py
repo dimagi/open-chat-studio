@@ -13,7 +13,6 @@ from django.urls import reverse
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat
 from apps.experiments.models import (
-    AgentTools,
     Experiment,
     ExperimentSession,
     Participant,
@@ -32,45 +31,10 @@ from apps.utils.factories.experiment import (
     ExperimentFactory,
     ExperimentSessionFactory,
     ParticipantFactory,
-    SourceMaterialFactory,
 )
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
 from apps.utils.prompt import get_root_var, validate_prompt_variables
-
-
-@pytest.mark.django_db()
-def test_create_experiment_success(client, team_with_users):
-    user = team_with_users.members.first()
-    source_material = SourceMaterialFactory(team=team_with_users)
-    consent_form = ConsentFormFactory(team=team_with_users)
-    LlmProviderFactory(team=team_with_users)
-    client.force_login(user)
-
-    post_data = {
-        "name": "some name",
-        "description": "Some description",
-        "type": "llm",
-        "prompt_text": """
-            You are a helpful assistant. The current date time is {current_datetime}.
-            Participant data: {participant_data}.
-            Source material: {source_material}.
-        """,
-        "source_material": source_material.id if source_material else "",
-        "consent_form": consent_form.id,
-        "temperature": 0.7,
-        "llm_provider": LlmProviderFactory(team=team_with_users).id,
-        "llm_provider_model": LlmProviderModelFactory(team=team_with_users).id,
-        "max_token_limit": 100,
-        "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
-        "tools": [AgentTools.ONE_OFF_REMINDER],
-    }
-
-    response = client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
-    assert response.status_code == 302, response.context["form"].errors
-    experiment = Experiment.objects.filter(owner=user).first()
-    assert experiment is not None
-    assert experiment.tools == [AgentTools.ONE_OFF_REMINDER]
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
@@ -92,7 +56,7 @@ def test_create_experiment_creates_first_version(client, team_with_users):
         "max_token_limit": 100,
         "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
     }
-    client.post(reverse("experiments:new", args=[team_with_users.slug]), data=post_data)
+    client.post(reverse("chatbots:new", args=[team_with_users.slug]), data=post_data)
     experiments = Experiment.objects.filter(owner=user).all()
     assert len(experiments) == 2
     working_verison = experiments.filter(working_version=None).first()
@@ -439,6 +403,7 @@ class TestExperimentTableView:
         request.team = team
         view = ExperimentTableView()
         view.request = request
+        view.kwargs = {}
         assert list(view.get_queryset().all()) == [experiment]
 
 
@@ -652,7 +617,9 @@ class TestCreateExperimentVersionView:
     def test_create_version_with_assistant(self, delay, messages, in_sync_with_openai, client):
         delay.return_value = "a7a82d12-0abe-4466-92c7-95e4ed8eaf5c"
         team = TeamWithUsersFactory()
-        experiment = ExperimentFactory(assistant=OpenAiAssistantFactory(), owner=team.members.first(), team=team)
+        experiment = ExperimentFactory(
+            assistant=OpenAiAssistantFactory(team=team), owner=team.members.first(), team=team
+        )
         client.force_login(experiment.owner)
         post_data = {"version_description": "Some description", "is_default_version": True}
         url = reverse("experiments:create_version", args=[experiment.team.slug, experiment.id])

@@ -1,0 +1,81 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags %}
+{% load i18n %}
+
+{% block app %}
+  <section class="app-card">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="pg-title">{% translate "Site Configuration" %}</h1>
+      <a href="{% url 'ocs_admin:home' %}" class="btn btn-outline">
+        {% translate "Back to Dashboard" %}
+      </a>
+    </div>
+
+    {% if not config_instance %}
+      <div class="alert alert-info">
+        <span>{% translate "No configuration exists yet. Creating a new configuration will use default values." %}</span>
+      </div>
+    {% endif %}
+
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">{% translate "Chat Widget Configuration" %}</h2>
+
+          <div class="alert alert-info">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none"
+                 viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div>
+              <h3 class="font-bold">{% translate "About Chat Widget" %}</h3>
+              <div class="text-sm">
+                {% blocktranslate %}
+                  The chat widget configuration applies to the 'help bot' available on every page. For more information see the
+                  <a href="https://docs.openchatstudio.com/chat_widget/" target="_blank" class="link">Chat Widget Docs</a>.
+                {% endblocktranslate %}
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Basic Settings -->
+            <div class="space-y-4">
+              <h3 class="text-lg font-semibold">{% translate "Basic Settings" %}</h3>
+
+              {% render_form_fields form "chat_widget_enabled" "button_text" %}
+              <div class="flex">
+                {% render_field form.chatbot_id %}
+                {% if form.chatbot_id.initial %}
+                  <a href="{% url "web:global_search" %}{% querystring q=form.chatbot_id.initial %}"
+                     class="btn btn-ghost self-end mb-1" target="_blank">
+                    <i class="fa-solid fa-link"></i>
+                  </a>
+                {% endif %}
+              </div>
+              {% render_form_fields form "button_text" "position" %}
+            </div>
+
+            <!-- Messages -->
+            <div class="space-y-4">
+              <h3 class="text-lg font-semibold">{% translate "Messages & Questions" %}</h3>
+              {% render_form_fields form "welcome_messages" "starter_questions" %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <a href="{% url 'ocs_admin:home' %}" class="btn btn-outline">
+          {% translate "Cancel" %}
+        </a>
+        <button type="submit" class="btn btn-primary">
+          {% translate "Save Configuration" %}
+        </button>
+      </div>
+    </form>
+  </section>
+{% endblock app %}

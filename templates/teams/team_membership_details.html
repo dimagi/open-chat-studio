@@ -5,11 +5,11 @@
 {% block breadcrumbs %}
   <nav aria-label="breadcrumbs">
     <ol class="pg-breadcrumbs">
-      <li class=""><a href="{% url 'single_team:manage_team' request.team.slug %}">{{ request.team.name }}</a></li>
+      <li><a href="{% url 'single_team:manage_team' request.team.slug %}">{{ request.team.name }}</a></li>
       <li class="pg-breadcrumb-active" aria-current="page">{{ membership.user.get_display_name }}</li>
     </ol>
   </nav>
-{% endblock %}
+{% endblock breadcrumbs %}
 {% block app %}
   <section class="app-card">
     <div class="pg-columns">
@@ -33,7 +33,7 @@
           {% render_form_fields membership_form %}
           {% if not editing_self %}
             <div class="mt-2">
-              <input type="submit" class="btn btn-outline" value="{% translate 'Update Role' %}">
+              <input type="submit" class="btn btn-outline" value="{% translate "Update Role" %}">
             </div>
           {% else %}
             <p class="pg-help">{% translate "You are not allowed to modify your own role." %}</p>
@@ -41,14 +41,14 @@
           <hr class="my-2">
           <label for="remove-member-modal" class="pg-button-danger modal-button">
             {% if editing_self %}
-              {% translate 'Leave Team' %}
+              {% translate "Leave Team" %}
             {% else %}
-              {% translate 'Remove from Team' %}
+              {% translate "Remove from Team" %}
             {% endif %}
           </label>
         </form>
       </div>
     </div>
   </section>
-  {% include 'teams/components/remove_member_modal.html' %}
-{% endblock %}
+  {% include "teams/components/remove_member_modal.html" %}
+{% endblock app %}

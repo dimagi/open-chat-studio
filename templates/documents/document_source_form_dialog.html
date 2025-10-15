@@ -1,0 +1,39 @@
+{% load i18n %}
+{% load form_tags %}
+
+<dialog id="new_document_source_modal" class="modal" open>
+  <div class="modal-box">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <h3 class="text-lg font-bold"><i class="{{ source_type.css_logo }}"></i> Import data from {{ source_type.label }}</h3>
+    <form id="create-document-source-form"
+          {% if object %}
+          hx-post="{% url 'documents:edit_document_source' request.team.slug collection.id object.id %}"
+          {% else %}
+          hx-post="{% url 'documents:create_document_source' request.team.slug collection.id %}"
+          {% endif %}
+          hx-target="#new_document_source_modal"
+          hx-disabled-elt="input, select, button[type='submit']"
+          hx-indicator="#form_saving_indicator"
+          hx-swap="outerHTML"
+    >
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% if form.custom_template %}
+        {% include form.custom_template with form=form %}
+      {% else %}
+        {% render_form_fields form %}
+      {% endif %}
+    </form>
+
+    <div class="modal-action">
+      <span id="form_saving_indicator" class="htmx-indicator loading loading-spinner loading-sm"></span>
+      <button type="submit" class="btn btn-primary" form="create-document-source-form">Save</button>
+      <form method="dialog">
+        <button class="btn">Cancel</button>
+      </form>
+    </div>
+
+  </div>
+</dialog>

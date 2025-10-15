@@ -40,5 +40,11 @@
         {% translate "Admin" %}
       </a>
     </li>
+    <li>
+      <a href="{% url 'ocs_admin:flags_home' %}" {% if active_tab == 'flags' %}class="menu-active"{% endif %}>
+        <i class="fa-solid fa-flag h-4 w-4"></i>
+        {% translate "Feature Flags" %}
+      </a>
+    </li>
   </ul>
 {% endif %}

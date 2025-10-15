@@ -1,0 +1,13 @@
+{% load i18n %}
+<div class="text-xs">
+  {% if record.metadata.session_id and record.metadata.experiment_id %}
+    <a href="{% url 'chatbots:chatbot_session_view' request.team.slug record.metadata.experiment_id record.metadata.session_id %}" class="btn btn-sm join-item ">
+      Session
+      <i class="fa-solid fa-external-link"></i>
+    </a>
+  {% else %}
+    <span class="text-gray-400">
+      {% trans "Manual entry" %}
+    </span>
+  {% endif %}
+</div>

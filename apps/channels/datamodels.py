@@ -10,7 +10,7 @@ from apps.chat.channels import MESSAGE_TYPES
 
 logger = logging.getLogger("ocs.channels")
 
-AttachmentType = Literal["code_interpreter", "file_search"]
+AttachmentType = Literal["code_interpreter", "file_search", "ocs_attachments"]
 
 
 class Attachment(BaseModel):
@@ -19,19 +19,21 @@ class Attachment(BaseModel):
     name: str
     size: int = Field(..., ge=0)
     content_type: str = "application/octet-stream"
+    download_link: str
 
     upload_to_assistant: bool = False
     """Setting this to True will cause the Assistant Node to send the attachment
     as a file attachment with the message."""
 
     @classmethod
-    def from_file(cls, file, type: AttachmentType):
+    def from_file(cls, file, type: AttachmentType, session_id: int):
         return cls(
             file_id=file.id,
             type=type,
             name=file.name,
             size=file.content_size,
             content_type=file.content_type,
+            download_link=file.download_link(session_id),
         )
 
     @property

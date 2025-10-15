@@ -1,12 +1,10 @@
 import logging
 import re
 import time
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 import openai
 from django.db import transaction
-from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.agents.output_parsers import tools as lc_tools_parser
@@ -28,9 +26,14 @@ from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
-from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager, PipelineHistoryManager
-from apps.service_providers.llm_service.main import AnthropicBuiltinTool, OpenAIAssistantRunnable, OpenAIBuiltinTool
+from apps.service_providers.llm_service.datamodels import LlmChatResponse
+from apps.service_providers.llm_service.history_managers import (
+    AssistantPipelineHistoryManager,
+    ExperimentHistoryManager,
+)
+from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.parsers import custom_parse_ai_message
+from apps.service_providers.llm_service.utils import format_multimodal_input
 from apps.utils.prompt import OcsPromptTemplate
 
 lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
@@ -38,12 +41,6 @@ if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
 
 logger = logging.getLogger("ocs.runnables")
-
-
-@dataclass
-class LlmChatResponse:
-    text: str
-    cited_files: list[File]
 
 
 class GenerationError(Exception):
@@ -119,7 +116,7 @@ class ChainOutput(Serializable):
 
 class LLMChat(RunnableSerializable[str, ChainOutput]):
     adapter: ChatAdapter
-    history_manager: ExperimentHistoryManager | PipelineHistoryManager
+    history_manager: ExperimentHistoryManager
     experiment: Experiment | None = None
     history: list[BaseMessage] = []
     cancelled: bool = False
@@ -132,7 +129,14 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
     def is_lc_serializable(cls) -> bool:
         return False
 
-    def invoke(self, input: str, config: RunnableConfig | None = None, *args, **kwargs) -> ChainOutput:
+    def invoke(
+        self,
+        input: str,
+        config: RunnableConfig | None = None,
+        attachments: list = None,
+        *args,
+        **kwargs,
+    ) -> ChainOutput:
         ai_message = None
         ai_message_metadata = {}
         callback = self.adapter.callback_handler
@@ -145,12 +149,22 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
         experiment_tag = configurable.get("experiment_tag")
 
         try:
+            if attachments:
+                input = format_multimodal_input(message=input, attachments=attachments)
             if include_conversation_history:
                 self._populate_memory(input)
 
             llm_response = self._get_output_check_cancellation(input, merged_config)
             ai_message = llm_response.text
-            ai_message_metadata = self.adapter.get_output_message_metadata(llm_response.cited_files)
+            ai_message_metadata = self.adapter.get_output_message_metadata(
+                cited_files=llm_response.cited_files, generated_files=llm_response.generated_files
+            )
+            if self.adapter.expect_citations:
+                ai_message = self.adapter.add_citation_section_from_cited_files(
+                    ai_message, cited_files=llm_response.cited_files
+                )
+            else:
+                ai_message = self.adapter.remove_file_citations(ai_message)
 
             result = ChainOutput(
                 output=ai_message, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
@@ -175,25 +189,18 @@ class LLMChat(RunnableSerializable[str, ChainOutput]):
 
     def _get_output_check_cancellation(self, input, config) -> LlmChatResponse:
         chain = self._build_chain().with_config(run_name="get_llm_response")
-
-        output = ""
         context = self._get_input_chain_context()
 
-        cited_files = []
-        for token in chain.stream({**self._get_input(input), **context}, config):
-            output += self._parse_output(token)
-            cited_files.extend(self._get_cited_files(token))
+        chat_response = LlmChatResponse(text="")
+        for output in chain.stream({**self._get_input(input), **context}, config):
+            chat_response += self._parse_output(output)
             if self._chat_is_cancelled():
                 break
 
-        return LlmChatResponse(text=output, cited_files=cited_files)
+        return chat_response
 
-    def _parse_output(self, output):
-        return output
-
-    def _get_cited_files(self, token: str | dict) -> list[File]:
-        # Files are referenced by agents only
-        return []
+    def _parse_output(self, output) -> LlmChatResponse:
+        return LlmChatResponse(text=output)
 
     def _chat_is_cancelled(self):
         if self.cancelled:
@@ -250,29 +257,19 @@ class SimpleLLMChat(LLMChat):
 
 
 class AgentLLMChat(LLMChat):
-    def _parse_output(self, output):
+    def _parse_output(self, output) -> LlmChatResponse:
         output_parser = self.adapter.get_llm_service().get_output_parser()
-        return output_parser(output)
-
-    def _get_cited_files(self, token: str | dict) -> list[File]:
-        cited_files_parser = self.adapter.get_llm_service().get_cited_files_parser()
-        return cited_files_parser(token)
+        return output_parser(output, session=self.adapter.session, include_citations=self.adapter.expect_citations)
 
     def _build_chain(self) -> Runnable[dict[str, Any], dict]:
-        tools = self.adapter.get_allowed_tools()
-        agent = create_tool_calling_agent(llm=self.adapter.get_chat_model(), tools=tools, prompt=self.prompt)
-        tools = self._remove_builtin_tools(tools)
+        agent = create_tool_calling_agent(
+            llm=self.adapter.get_chat_model(), tools=self.adapter.get_allowed_tools(), prompt=self.prompt
+        )
         return AgentExecutor.from_agent_and_tools(
             agent=agent,
-            tools=tools,
+            tools=self.adapter.get_callable_tools(),
             max_execution_time=120,
         )
-
-    def _remove_builtin_tools(self, tools: list):
-        """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
-        remove all tools that are run by the LLM provider
-        """
-        return [t for t in tools if not isinstance(t, (OpenAIBuiltinTool | GenAITool | AnthropicBuiltinTool))]
 
     @property
     def prompt(self):
@@ -282,7 +279,7 @@ class AgentLLMChat(LLMChat):
 
 class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     adapter: AssistantAdapter
-    history_manager: ExperimentHistoryManager | PipelineHistoryManager
+    history_manager: ExperimentHistoryManager | AssistantPipelineHistoryManager
     experiment: Experiment | None = None
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)

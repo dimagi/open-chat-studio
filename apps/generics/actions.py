@@ -27,6 +27,7 @@ class Action:
     button_style: str = None
     extra_context: dict = None
     required_permissions: list = dataclasses.field(default_factory=list)
+    open_url_in_new_tab: bool = False
     display_condition: Callable[[Any, Any], bool] = None
     """A callable that takes a request and a record and returns a boolean indicating
     whether the action should be displayed."""
@@ -66,6 +67,7 @@ class Action:
             "label": label or "",
             "title": self.title or "",
             "disabled": not self.is_enabled(request, record),
+            "open_url_in_new_tab": self.open_url_in_new_tab,
         }
         if self.button_style:
             ctxt["button_style"] = self.button_style
@@ -101,6 +103,25 @@ class AjaxAction(Action):
         ctxt = super().get_context(request, record, value)
         ctxt.update(
             {"hx_method": self.hx_method, "confirm_message": self.confirm_message, "action_id": uuid.uuid4().hex}
+        )
+        return ctxt
+
+
+@dataclasses.dataclass
+class ModalAction(Action):
+    """Action that will open a modal."""
+
+    template: str = "generic/action_modal.html"
+    modal_template: str = "generic/modal.html"
+    modal_context: dict = None
+
+    def get_context(self, request, record, value):
+        ctxt = super().get_context(request, record, value)
+        action_id = uuid.uuid4().hex
+        modal_id = f"modal_{action_id}"
+        ctxt.update(
+            **{"action_id": action_id, "modal_id": modal_id, "modal_template": self.modal_template},
+            **(self.modal_context or {}),
         )
         return ctxt
 
@@ -154,12 +175,15 @@ def chip_action(
     required_permissions: list = None,
     display_condition: callable = None,
     url_factory: Callable[[Any, Any, Any, Any], str] = None,
+    icon_class: str = None,
+    button_style: str = "",
+    open_url_in_new_tab: bool = False,
 ):
     """Action to display a chip-style link that links to another page.
 
     This must be used with objects that implement the `get_absolute_url` method.
 
-    Note: Keep the styling consistent with`generic/chip.html`"""
+    Note: Keep the styling consistent with `generic/chip_button.html`"""
     if not label and not label_factory:
 
         def label_factory(record, value):
@@ -177,10 +201,11 @@ def chip_action(
         url_factory=url_factory,
         label=label,
         label_factory=label_factory,
-        icon_class="fa-solid fa-external-link",
-        button_style="",
+        icon_class=icon_class,
+        button_style=button_style,
         required_permissions=required_permissions,
         display_condition=display_condition,
+        open_url_in_new_tab=open_url_in_new_tab,
     )
 
 

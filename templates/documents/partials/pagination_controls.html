@@ -1,0 +1,44 @@
+{% if page_obj and page_obj.paginator.num_pages > 1 %}
+    <div class="flex flex-col gap-2">
+        <div class="flex justify-start">
+            <div class="join">
+            <!-- Previous Page Button -->
+                {% if page_obj.has_previous %}
+                    <a class="join-item btn" href="?page={{ page_obj.previous_page_number }}">
+                        <i class="fa-solid fa-chevron-left"></i>
+                        <span class="hidden sm:inline">Previous</span>
+                    </a>
+                {% else %}
+                    <button class="join-item btn btn-disabled" disabled>
+                        <i class="fa-solid fa-chevron-left"></i>
+                        <span class="hidden sm:inline">Previous</span>
+                    </button>
+                {% endif %}
+
+            <!-- Page Info -->
+                <div class="join-item btn btn-ghost">
+                    <span class="text-sm">
+                        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                    </span>
+                </div>
+
+            <!-- Next Page Button -->
+                {% if page_obj.has_next %}
+                    <a class="join-item btn"
+                       href="?page={{ page_obj.next_page_number }}">
+                        <span class="hidden sm:inline">Next</span>
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </a>
+                {% else %}
+                    <button class="join-item btn btn-disabled" disabled>
+                        <span class="hidden sm:inline">Next</span>
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+        <div class="text-sm text-base-content/60 mt-3 text-center">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} chunks
+        </div>
+    </div>
+{% endif %}

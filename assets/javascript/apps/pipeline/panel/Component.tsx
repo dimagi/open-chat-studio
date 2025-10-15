@@ -4,7 +4,7 @@ type ComponentProps = {
   label: string;
   onClick: MouseEventHandler<HTMLDivElement>;
   onDragStart: DragEventHandler<HTMLDivElement>;
-  parentRef: React.RefObject<HTMLDivElement>;
+  parentRef: React.RefObject<HTMLDivElement | null>;
   hasHelp: boolean;
   toggleHelp: () => void;
 }

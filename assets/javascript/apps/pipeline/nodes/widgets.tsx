@@ -1,16 +1,14 @@
-import React, {ChangeEvent, ChangeEventHandler, ReactNode, useEffect, useId, useState,} from "react";
-import CodeMirror from '@uiw/react-codemirror';
-import {python} from "@codemirror/lang-python";
-import {githubDark, githubLight} from "@uiw/codemirror-theme-github";
-import {CompletionContext, snippetCompletion as snip} from '@codemirror/autocomplete'
-import {TypedOption, LlmProviderModel, Option} from "../types/nodeParameterValues";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useEffect, useId, useState, useMemo} from "react";
+import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
 import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
 import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
-import { produce } from "immer";
+import {produce} from "immer";
+import {CodeNodeEditor, PromptEditor} from "../components/CodeMirrorEditor";
+
 
 export function getWidget(name: string, params: PropertySchema) {
   switch (name) {
@@ -40,6 +38,10 @@ export function getWidget(name: string, params: PropertySchema) {
       return NodeNameWidget
     case "built_in_tools_config":
       return BuiltInToolsConfigWidget
+    case "text_editor_widget":
+        return TextEditorWidget
+    case "voice_widget":
+        return VoiceWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -61,6 +63,7 @@ interface WidgetParams {
   nodeSchema: JsonSchema
   required: boolean,
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
+  readOnly: boolean,
 }
 
 interface ToggleWidgetParams extends Omit<WidgetParams, 'paramValue'> {
@@ -78,6 +81,7 @@ function DefaultWidget(props: WidgetParams) {
         value={props.paramValue}
         type="text"
         required={props.required}
+        readOnly={props.readOnly}
       ></input>
     </InputField>
   );
@@ -109,6 +113,7 @@ function NodeNameWidget(props: WidgetParams) {
         value={inputValue}
         type="text"
         required={props.required}
+        readOnly={props.readOnly}
       ></input>
     </InputField>
   );
@@ -124,6 +129,7 @@ function FloatWidget(props: WidgetParams) {
       type="number"
       step=".1"
       required={props.required}
+      readOnly={props.readOnly}
     ></input>
   </InputField>
 }
@@ -145,6 +151,7 @@ function RangeWidget(props: WidgetParams) {
       type="number"
       step=".1"
       required={props.required}
+      readOnly={props.readOnly}
     ></input>
     <input
       className="range range-xs w-full"
@@ -156,6 +163,7 @@ function RangeWidget(props: WidgetParams) {
       max={getPropOrOther("maximum", "exclusiveMaximum")}
       step=".1"
       required={props.required}
+      disabled={props.readOnly}
     ></input>
   </InputField>
 }
@@ -169,6 +177,7 @@ function ToggleWidget(props: ToggleWidgetParams) {
         onChange={props.updateParamValue}
         checked={props.paramValue}
         type="checkbox"
+        disabled={props.readOnly}
       ></input>
     </InputField>
   );
@@ -214,6 +223,7 @@ function SelectWidget(props: WidgetParams) {
         onChange={onUpdate}
         value={props.paramValue}
         required={props.required}
+        disabled={props.readOnly}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -277,6 +287,7 @@ function MultiSelectWidget(props: WidgetParams) {
             id={option.value}
             key={option.value}
             type="checkbox"
+            disabled={props.readOnly}
           />
           <span className="ml-2">{option.label}</span>
         </div>
@@ -286,7 +297,6 @@ function MultiSelectWidget(props: WidgetParams) {
 }
 
 export function CodeWidget(props: WidgetParams) {
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const setNode = usePipelineStore((state) => state.setNode);
   const onChangeCallback = (value: string) => {
     setNode(props.nodeId, (old) => ({
@@ -300,22 +310,6 @@ export function CodeWidget(props: WidgetParams) {
       },
     }));
   };
-
-    useEffect(() => {
-        // Set dark / light mode
-      setIsDarkMode(document.body.getAttribute("data-theme") === 'dark')
-      const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-          if (mutation.type === "attributes") {
-            setIsDarkMode(document.body.getAttribute("data-theme") === 'dark')
-          }
-        });
-      });
-
-      observer.observe(document.body, {attributes: true});
-
-    return () => observer.disconnect()
-  }, []);
 
   const modalId = useId();
   const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()
@@ -335,7 +329,7 @@ export function CodeWidget(props: WidgetParams) {
         <div className="relative w-full">
           <textarea
             className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y"
-            disabled={true}
+            readOnly={true}
             rows={3}
             wrap="off"
             name={props.name}
@@ -352,23 +346,23 @@ export function CodeWidget(props: WidgetParams) {
         humanName={props.label}
         value={concatenate(props.paramValue)}
         onChange={onChangeCallback}
-        isDarkMode={isDarkMode}
         inputError={props.inputError}
         documentationLink={getDocumentationLink(props.nodeSchema)}
+        readOnly={props.readOnly}
       />
     </>
   );
 }
 
 export function CodeModal(
-  { modalId, humanName, value, onChange, isDarkMode, inputError, documentationLink }: {
+  { modalId, humanName, value, onChange, inputError, documentationLink, readOnly }: {
     modalId: string;
     humanName: string;
     value: string;
     onChange: (value: string) => void;
-    isDarkMode: boolean;
     inputError: string | undefined;
     documentationLink: string | null;
+    readOnly: boolean;
   }) {
 
   const [showGenerate, setShowGenerate] = useState(false);
@@ -393,21 +387,20 @@ export function CodeModal(
                 <i className="fa-regular fa-circle-question fa-sm"></i>
               </a>}
             </h4>
-            <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
+            {!readOnly && <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
               <i className="fa-solid fa-wand-magic-sparkles"></i>Help
-            </button>
+            </button>}
           </div>
-          <GenerateCodeSection
+          {!readOnly && <GenerateCodeSection
             showGenerate={showGenerate}
             setShowGenerate={setShowGenerate}
-            isDarkMode={isDarkMode}
             onAccept={onChange}
             currentCode={value}
-          />
+          />}
           <CodeNodeEditor
             value={value}
             onChange={onChange}
-            isDarkMode={isDarkMode}
+            readOnly={readOnly}
             />
         </div>
         <div className="flex flex-col">
@@ -425,13 +418,11 @@ export function CodeModal(
 function GenerateCodeSection({
   showGenerate,
   setShowGenerate,
-  isDarkMode,
   onAccept,
   currentCode,
 }: {
   showGenerate: boolean;
   setShowGenerate: (value: boolean) => void;
-  isDarkMode: boolean;
   onAccept: (value: string) => void;
   currentCode: string;
 }) {
@@ -491,7 +482,7 @@ function GenerateCodeSection({
           <CodeNodeEditor
             value={generated}
             onChange={setGenerated}
-            isDarkMode={isDarkMode}
+            readOnly={false}
             />
         <div className={"my-2 join"}>
           <button className={"btn btn-sm btn-success join-item"} onClick={() => {
@@ -517,114 +508,14 @@ function GenerateCodeSection({
   );
 }
 
-function CodeNodeEditor(
-  {value, onChange, isDarkMode}: {
-    value: string;
-    onChange: (value: string) => void;
-    isDarkMode: boolean;
-  }
-) {
-  const customCompletions = {
-    get_participant_data: snip("get_participant_data()", {
-      label: "get_participant_data",
-      type: "keyword",
-      detail: "Gets participant data for the current participant",
-      boost: 1
-    }),
-    set_participant_data: snip("set_participant_data(${data})", {
-      label: "set_participant_data",
-      type: "keyword",
-      detail: "Overwrites the participant data with the value provided",
-      boost: 1
-    }),
-    set_temp_state_key: snip("set_temp_state_key(\"${key_name}\", ${data})", {
-      label: "set_temp_state_key",
-      type: "keyword",
-      detail: "Sets the given key in the temporary state. Overwrites the current value",
-      boost: 1
-    }),
-    get_temp_state_key: snip("get_temp_state_key(\"${key_name}\")", {
-      label: "get_temp_state_key",
-      type: "keyword",
-      detail: "Gets the value for the given key from the temporary state",
-      boost: 1
-    }),
-    get_session_state: snip("get_session_state_key(\"${key_name}\")", {
-      label: "get_session_state_key",
-      type: "keyword",
-      detail: "Gets the value for the given key from the session's state",
-      boost: 1
-    }),
-    set_session_state: snip("set_session_state_key(\"${key_name}\", ${data})", {
-      label: "set_session_state_key",
-      type: "keyword",
-      detail: "Sets the given key in the session's state. Overwrites the current value",
-      boost: 1
-    }),
-    get_selected_route: snip("get_selected_route(\"${router_node_name}\")", {
-      label: "get_selected_route",
-      type: "keyword",
-      detail: "Gets the route selected by a specific router node",
-      boost: 1
-    }),
-
-    get_node_path: snip("get_node_path(\"${node_name}\")", {
-      label: "get_node_path",
-      type: "keyword",
-      detail: "Gets the path (list of node names) leading to the specified node",
-      boost: 1
-    }),
-
-    get_all_routes: snip("get_all_routes()", {
-      label: "get_all_routes",
-      type: "keyword",
-      detail: "Gets all routing decisions in the pipeline",
-      boost: 1
-    }),
-  }
-
-  function pythonCompletions(context: CompletionContext) {
-    const word = context.matchBefore(/\w*/)
-    if (!word || (word.from == word.to && !context.explicit))
-      return null
-    return {
-      from: word.from,
-      options: Object.values(customCompletions).filter(completion =>
-        completion.label.toLowerCase().startsWith(word.text.toLowerCase())
-      )
-    }
-  }
-
-  return <CodeMirror
-    value={value}
-    onChange={onChange}
-    className="textarea textarea-bordered h-full w-full grow min-h-48"
-    height="100%"
-    width="100%"
-    theme={isDarkMode ? githubDark : githubLight}
-    extensions={[
-      python(),
-      python().language.data.of({
-        autocomplete: pythonCompletions
-      })
-    ]}
-    basicSetup={{
-      lineNumbers: true,
-      tabSize: 4,
-      indentOnInput: true,
-    }}
-  />
-}
-
-
-
 export function TextModal(
-  {modalId, humanName, name, value, onChange}: {
+  {modalId, humanName, name, value, onChange, readOnly}: {
     modalId: string;
     humanName: string;
     name: string;
     value: string | string[];
     onChange: ChangeEventHandler;
+    readOnly: boolean;
   }) {
   return (
     <dialog
@@ -646,6 +537,7 @@ export function TextModal(
             name={name}
             onChange={onChange}
             value={value}
+            readOnly={readOnly}
           ></textarea>
         </div>
       </div>
@@ -677,13 +569,16 @@ export function ExpandableTextWidget(props: WidgetParams) {
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
+        readOnly={props.readOnly}
       ></textarea>
       <TextModal
         modalId={modalId}
         humanName={props.label}
         name={props.name}
         value={props.paramValue}
-        onChange={props.updateParamValue}>
+        onChange={props.updateParamValue}
+        readOnly={props.readOnly}
+      >
       </TextModal>
     </InputField>
   );
@@ -797,7 +692,7 @@ export function KeywordsWidget(props: WidgetParams) {
                   {label}
                   <div className="pl-2 tooltip" data-tip={isDefault ? "Default" : "Set as Default"}>
                     <span
-                      onClick={() => !isDefault && setAsDefault(index)}
+                      onClick={() => !props.readOnly && !isDefault && setAsDefault(index)}
                       style={{ cursor: isDefault ? 'default' : 'pointer' }}
                     >
                       {isDefault ? (
@@ -808,17 +703,18 @@ export function KeywordsWidget(props: WidgetParams) {
                     </span>
                   </div>
                 </label>
-                <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
+                {!props.readOnly && <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
                   <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>
                   </button>
-                </div>
+                </div>}
               </div>
               <input
                 className={classNames("input w-full", value ? "" : "input-error")}
                 name="keywords"
                 onChange={(event) => updateKeyword(index, event.target.value)}
                 value={value}
+                readOnly={props.readOnly}
               ></input>
             </div>
           );
@@ -867,13 +763,14 @@ export function LlmWidget(props: WidgetParams) {
         name={props.name}
         onChange={updateParamValue}
         value={value}
+        disabled={props.readOnly}
       >
         <option value="" disabled>
           Select a model
         </option>
         {parameterValues.LlmProviderId.map((provider) => {
           const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
-          
+
           return providerModelsByType[provider.type] &&
             providerModelsByType[provider.type].map((providerModel) => (
               <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
@@ -892,6 +789,82 @@ export function HistoryTypeWidget(props: WidgetParams) {
   const historyName = concatenate(props.nodeParams["history_name"]);
   const historyNameError = props.getNodeFieldError(props.nodeId, "history_name");
 
+  const nodes = usePipelineStore((state) => state.nodes);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const historyNameOptions = useMemo(() => {
+    const historyNames = new Set<string>();
+    nodes.forEach((node) => {
+      const type = node?.data?.type;
+      const params = node?.data?.params;
+      const isRelevantType = type === "LLMResponseWithPrompt" || type === "RouterNode";
+      if (isRelevantType && params?.history_name?.trim()) {
+        historyNames.add(params.history_name);
+      }
+    });
+    return Array.from(historyNames).sort();
+  }, [nodes]);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm || !isDropdownOpen) return historyNameOptions;
+    return historyNameOptions.filter(name =>
+      name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [historyNameOptions, searchTerm, isDropdownOpen]);
+
+  const showCreateOption = searchTerm.trim() &&
+    !historyNameOptions.some(name => name.toLowerCase() === searchTerm.toLowerCase());
+
+  const displayValue = (isDropdownOpen && searchTerm !== "") ? searchTerm : (historyName || "");
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    if (!isDropdownOpen) {
+      setIsDropdownOpen(true);
+    }
+    if (e.target.value === "") {
+      handleOptionSelect("")
+    }
+  };
+
+  const handleOptionSelect = (value: string) => {
+    const syntheticEvent = {
+      target: {
+        name: "history_name",
+        value,
+      },
+    };
+    props.updateParamValue?.(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+    setSearchTerm("");
+    setIsDropdownOpen(false);
+  };
+
+  const handleCreateNew = () => {
+    const newName = searchTerm.trim();
+    if (newName) {
+      handleOptionSelect(newName);
+    }
+  };
+
+  const handleInputClick = () => {
+    setIsDropdownOpen(true);
+    setSearchTerm("");
+  };
+
+  const handleClearClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    handleOptionSelect("");
+  };
+
+  const handleDropdownToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDropdownOpen(!isDropdownOpen);
+    if (!isDropdownOpen) {
+      setSearchTerm("");
+    }
+  };
+
   return (
     <>
       <div className="flex join">
@@ -901,6 +874,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
             name={props.name}
             onChange={props.updateParamValue}
             value={historyType}
+            disabled={props.readOnly}
           >
             {options.map((option) => (
               <option key={option.value} value={option.value}>
@@ -911,12 +885,69 @@ export function HistoryTypeWidget(props: WidgetParams) {
         </InputField>
         {historyType == "named" && (
           <InputField label="History Name" help_text={props.helpText}>
-            <input
-              className="input join-item"
-              name="history_name"
-              onChange={props.updateParamValue}
-              value={historyName || ""}
-            ></input>
+            <div className="w-64 relative">
+              <input
+                type="text"
+                className="input w-full pr-8"
+                value={displayValue}
+                onChange={handleInputChange}
+                onClick={handleInputClick}
+                placeholder="Type to search or create..."
+              />
+
+              {/* Icons container */}
+              <div className="absolute inset-y-0 right-0 flex items-center pr-2">
+                {/* Clear icon */}
+                {(historyName || searchTerm) && (
+                  <button
+                    type="button"
+                    className="p-1 hover:bg-gray-200 rounded"
+                    onClick={handleClearClick}
+                  >
+                    <i className="fa fa-times text-gray-400 hover:text-gray-600" />
+                  </button>
+                )}
+
+                {/* Dropdown icon */}
+                <button
+                  type="button"
+                  className="p-1 ml-1"
+                  onClick={handleDropdownToggle}
+                >
+                  <i className={`fa fa-chevron-down text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
+              {isDropdownOpen && (
+                <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto normal-case">
+                  {!searchTerm && historyNameOptions.length == 0 && (
+                    <div
+                      className="px-3 py-2 text-gray-500 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleOptionSelect("")}>
+                      -- Select --
+                    </div>
+                  )}
+                  {filteredOptions.map((name) => (
+                    <div
+                      key={name}
+                      className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleOptionSelect(name)}
+                    >
+                      {name}
+                    </div>
+                  ))}
+
+                  {showCreateOption && (
+                    <div
+                      className="px-3 py-2 cursor-pointer hover:bg-gray-100 text-blue-600 font-medium"
+                      onClick={handleCreateNew}
+                    >
+                      + Create "{searchTerm}"
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </InputField>
         )}
       </div>
@@ -956,6 +987,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               props.updateParamValue(e);
             }}
             value={historyMode}
+            disabled={props.readOnly}
           >
             {options.map((option) => (
               <option key={option.value} value={option.value}>
@@ -976,6 +1008,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               type="number"
               onChange={props.updateParamValue}
               value={userMaxTokenLimit || defaultMaxTokens || ""}
+              readOnly={props.readOnly}
             />
             <small className ="text-muted mt-2">Maximum number of tokens before messages are summarized or truncated.</small>
           </InputField>
@@ -991,6 +1024,7 @@ export function HistoryModeWidget(props: WidgetParams) {
               type="number"
               onChange={props.updateParamValue}
               value={maxHistoryLength || ""}
+              readOnly={props.readOnly}
             />
             <small className ="text-muted mt-2">Chat history will only keep the most recent messages up to max history length.</small>
           </InputField>
@@ -1044,7 +1078,11 @@ function BuiltInToolsConfigWidget(props: WidgetParams) {
       if (!next.data.params.tool_config[toolName]) {
         next.data.params.tool_config[toolName] = {};
       }
-      next.data.params.tool_config[toolName][name] = value.split(" ").map(value => value.trim()).filter(value => value.length > 0);
+      next.data.params.tool_config[toolName][name] = value.split("\n").map(url => {
+        const trimmedUrl = url.trim();
+        // Strip http:// or https:// prefixes
+        return trimmedUrl.replace(/^https?:\/\//, '');
+      }).filter(value => value.length > 0);
     }))
   }
 
@@ -1079,7 +1117,7 @@ function BuiltInToolsConfigWidget(props: WidgetParams) {
                 name: name,
                 label: widgetSchema.title || name,
                 helpText: widgetSchema.description || "",
-                paramValue: Array.isArray(value) ? value.join(" ") : value,
+                paramValue: Array.isArray(value) ? value.join("\n") : value,
                 inputError: error,
                 updateParamValue: (event) => onConfigUpdate(toolKey, event),
                 schema: widgetSchema,
@@ -1087,6 +1125,7 @@ function BuiltInToolsConfigWidget(props: WidgetParams) {
                 nodeSchema: props.nodeSchema,
                 required: requiredProperties.includes(name),
                 getNodeFieldError: props.getNodeFieldError,
+                readOnly: props.readOnly,
               }
               const widgetOrType = widgetSchema["ui:widget"] || widgetSchema.type;
               const WidgetComponent = getWidget(widgetOrType, widgetSchema) as React.ComponentType<WidgetParams>;
@@ -1096,5 +1135,162 @@ function BuiltInToolsConfigWidget(props: WidgetParams) {
         )
       })}
     </React.Fragment>
-  )
+  );
+}
+
+export function TextEditorWidget(props: WidgetParams) {
+  const autocomplete_vars_list: string[] = getAutoCompleteList(getSelectOptions(props.schema));
+  const modalId = useId();
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  const onChangeCallback = (value: string) => {
+  setNode(
+    props.nodeId,
+    produce((draft) => {
+      draft.data.params[props.name] = value;
+    })
+  );
+};
+
+  const openModal = () => {
+    (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
+    }
+
+  const label = (
+    <>
+      {props.label}
+        <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
+        <button
+          type="button"
+          className="btn btn-xs btn-ghost float-right"
+          onClick={openModal}
+        >
+          <i className="fa-solid fa-expand-alt"></i>
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      <InputField
+        label={label}
+        help_text={props.helpText}
+        inputError={props.inputError}
+      >
+        <div className="relative w-full">
+          <textarea className="textarea textarea-bordered resize-none textarea-sm w-full"
+            readOnly={true}
+            rows={3}
+            value={props.paramValue}
+            name={props.name}
+          ></textarea>
+          <div
+            className="absolute inset-0 cursor-pointer"
+            onClick={openModal}
+          ></div>
+        </div>
+      </InputField>
+
+      <TextEditorModal
+        modalId={modalId}
+        value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
+        onChange={onChangeCallback}
+        label={props.label}
+        inputError={props.inputError}
+        autocomplete_vars_list={autocomplete_vars_list}
+        readOnly={props.readOnly}
+      />
+    </>
+  );
+}
+
+function TextEditorModal({
+  modalId,
+  value,
+  onChange,
+  label,
+  inputError,
+  autocomplete_vars_list,
+  readOnly,
+}: {
+  modalId: string;
+  value: string;
+  onChange: (val: string) => void;
+  label: string;
+  inputError?: string;
+  autocomplete_vars_list: string[];
+  readOnly: boolean;
+}) {
+  return (
+    <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
+      <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
+        <form method="dialog">
+          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+            ✕
+          </button>
+        </form>
+
+        <div className="grow h-full w-full flex flex-col">
+          <h4 className="mb-4 font-bold text-lg capitalize">{label}</h4>
+          <PromptEditor value={value} onChange={onChange} readOnly={readOnly} autocompleteVars={autocomplete_vars_list}/>
+        </div>
+
+        {inputError && <div className="text-red-500">{inputError}</div>}
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
+  );
+}
+
+function getAutoCompleteList(list: Array<Option>) {
+    return Array.isArray(list) ? list.map((v: Option) => v.value) : []
+}
+
+export function VoiceWidget(props: WidgetParams) {
+  const { parameterValues } = getCachedData();
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
+    const { value } = event.target;
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        next.data.params.synthetic_voice_id = value;
+      })
+    );
+  };
+
+  const syntheticVoiceId = concatenate(props.nodeParams.synthetic_voice_id);
+
+  // Only render if voice is enabled
+  if(!(parameterValues.synthetic_voice_id?.length)) {
+    return null;
+  }
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <select
+        className="select w-full"
+        name={props.name}
+        onChange={updateParamValue}
+        value={syntheticVoiceId}
+        disabled={props.readOnly}
+      >
+        <option value="" disabled>
+          Select a voice
+        </option>
+
+        {parameterValues.synthetic_voice_id.map((voice) => (
+          <option
+            key={voice.value}
+            value={voice.value}
+          >
+            {voice.label} ({(voice as TypedOption).type})
+          </option>
+        ))}
+      </select>
+    </InputField>
+  );
 }

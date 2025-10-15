@@ -13,7 +13,7 @@ type GetWidgetsParams = {
 }
 
 type GetWidgetParamsGeneric = GetWidgetsParams & {
-  widgetGenerator: (params: InputWidgetParams) => React.ReactElement;
+  widgetGenerator: (params: InputWidgetParams) => React.ReactElement<any>;
 }
 
 
@@ -47,7 +47,7 @@ export const getWidgets = (
 }
 
 /**
- * Retrieves the list of widgets for the given schema which should be displayed ona node
+ * Retrieves the list of widgets for the given schema which should be displayed on a node
  */
 export const getWidgetsForNode = (
   {schema, nodeId, nodeData, updateParamValue}: GetWidgetsParams
@@ -142,6 +142,7 @@ export const getInputWidget = (params: InputWidgetParams) => {
   }
 
   const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
+  const readOnly = usePipelineStore((state) => state.readOnly);
   const Widget = getWidget(widgetOrType, widgetSchema)
   let fieldError = getNodeFieldError(params.id, params.name);
   const paramValue = params.params[params.name];
@@ -162,6 +163,7 @@ export const getInputWidget = (params: InputWidgetParams) => {
       nodeSchema={params.schema}
       required={params.required}
       getNodeFieldError={getNodeFieldError}
+      readOnly={readOnly}
     />
-  )
+  );
 };

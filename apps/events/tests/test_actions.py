@@ -73,6 +73,10 @@ def test_end_conversation_runs_pipeline(session, pipeline):
             "input_message_metadata": {},
             "output_message_metadata": {},
             "output_message_tags": [],
+            "session_tags": [],
             "path": [(None, "start", ["end"]), ("start", "end", [])],
+            "intents": [],
+            "participant_data": session.participant.global_data,
+            "session_state": {},
         }
     )

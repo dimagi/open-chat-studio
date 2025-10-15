@@ -14,6 +14,21 @@ class PromptVars(models.TextChoices):
     CURRENT_DATETIME = "current_datetime"
     MEDIA = "media"
 
+    @staticmethod
+    def pipeline_extra_known_vars() -> set[str]:
+        return {"temp_state", "session_state"}
+
+    @staticmethod
+    def get_all_prompt_vars() -> list[dict]:
+        base_vars = [v.value for v in PromptVars]
+        all_vars = base_vars + list(PromptVars.pipeline_extra_known_vars())
+        return [{"label": v, "value": v} for v in all_vars]
+
+    @staticmethod
+    def get_router_prompt_vars() -> list[dict]:
+        prompt_vars = {"participant_data"} | PromptVars.pipeline_extra_known_vars()
+        return [{"label": v, "value": v} for v in prompt_vars]
+
 
 PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.DELETE_REMINDER: [PromptVars.PARTICIPANT_DATA],
@@ -21,6 +36,7 @@ PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.ONE_OFF_REMINDER: [PromptVars.CURRENT_DATETIME],
     AgentTools.RECURRING_REMINDER: [PromptVars.CURRENT_DATETIME],
     AgentTools.UPDATE_PARTICIPANT_DATA: [PromptVars.PARTICIPANT_DATA],
+    AgentTools.APPEND_TO_PARTICIPANT_DATA: [PromptVars.PARTICIPANT_DATA],
 }
 
 # These prompt variables require resources to be specified by the user
@@ -78,7 +94,8 @@ def _ensure_tool_variables_are_present(prompt_text, prompt_variables, tools, pro
 
     required_prompt_variables = []
     for tool_name in tools:
-        required_prompt_variables.extend(PROMPT_VARS_REQUIRED_BY_TOOL[AgentTools(tool_name)])
+        tool_vars = PROMPT_VARS_REQUIRED_BY_TOOL.get(AgentTools(tool_name)) or {}
+        required_prompt_variables.extend(tool_vars)
     missing_vars = set(required_prompt_variables) - prompt_variables
     if missing_vars:
         raise ValidationError(
@@ -106,11 +123,11 @@ def _ensure_variable_components_are_present(context: dict, prompt_variables: set
 
 def get_root_var(var: str) -> str:
     """Returns the root variable name from a nested variable name.
-    Only `participant_data` is supported.
 
     See `apps.service_providers.llm_service.prompt_context.SafeAccessWrapper`
     """
-    if not var.startswith(PromptVars.PARTICIPANT_DATA.value):
+    vars_with_nested_data = {PromptVars.PARTICIPANT_DATA.value, "temp_state", "session_state"}
+    if not any(var.startswith(nested) for nested in vars_with_nested_data):
         return var
 
     var_root = var.split(".")[0]

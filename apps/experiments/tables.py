@@ -22,6 +22,10 @@ class ExperimentTable(tables.Table):
     description = columns.Column(verbose_name="Description")
     owner = columns.Column(accessor="owner__username", verbose_name="Created By")
     type = columns.Column(orderable=False, empty_values=())
+    trends = columns.TemplateColumn(
+        verbose_name="Trends (last 48h)",
+        template_name="table/trends_chart.html",
+    )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
         extra_context={"type": "experiments"},
@@ -146,14 +150,18 @@ def session_chat_url(url_name, request, record, value):
 
 
 def _show_chat_button(request, record):
-    return record.participant.user == request.user and not record.is_complete() and record.experiment.is_editable()
+    return record.participant.user == request.user and not record.is_complete and record.experiment.is_editable
 
 
 class ExperimentSessionsTable(tables.Table):
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html", orderable=False)
-    versions = columns.Column(verbose_name="Versions", accessor="experiment_version_for_display", orderable=False)
+    versions = columns.Column(
+        verbose_name="Versions", accessor="experiment_versions_from_prefetched_data", orderable=False
+    )
+    state = columns.Column(verbose_name="State", accessor="status", orderable=True)
+    remote_id = columns.Column(verbose_name="Remote Id", accessor="participant.remote_id")
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(
@@ -215,11 +223,6 @@ class ExperimentVersionsTable(tables.Table):
 
     def render_created_at(self, record):
         return record.created_at if record.working_version_id else ""
-
-    def __init__(self, *args, **kwargs):
-        origin = kwargs.pop("entity_type", "experiments")
-        self.base_columns["actions"].extra_context = {"origin": origin}
-        super().__init__(*args, **kwargs)
 
 
 def _get_route_url(url_name, request, record, value):

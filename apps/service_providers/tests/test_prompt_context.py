@@ -94,11 +94,13 @@ def test_retrieves_media_successfully(mock_session):
     file2 = FileFactory(summary="summary2", team_id=collection.team_id)
     collection.files.add(file1, file2)
     context = PromptTemplateContext(session=mock_session, collection_id=collection.id)
-    expected_media_summaries = (
-        f"* File (id={file1.id}, content_type={file1.content_type}): {file1.summary}\n\n"
-        f"* File (id={file2.id}, content_type={file2.content_type}): {file2.summary}\n"
-    )
-    assert context.get_media_summaries() == expected_media_summaries
+    expected_media_summaries = [
+        f"* File (id={file1.id}, content_type={file1.content_type}): {file1.summary}\n",
+        f"* File (id={file2.id}, content_type={file2.content_type}): {file2.summary}\n",
+    ]
+    summaries = context.get_media_summaries()
+    assert expected_media_summaries[0] in summaries
+    assert expected_media_summaries[1] in summaries
 
 
 @patch("apps.documents.models.Collection.objects.get")
@@ -157,3 +159,14 @@ def test_invalid_conversion_and_specifier_caught():
 
     with pytest.raises(ValidationError, match="Invalid prompt variable '{var!r:xyz}'. Remove the '!r:xyz'."):
         validate_prompt_variables(form_data, prompt_key, known_vars)
+
+
+def test_extra_context_is_included(mock_session):
+    extra_context = {"custom_var": "custom_value"}
+    context = PromptTemplateContext(mock_session, extra=extra_context)
+    result = context.get_context(["custom_var"])
+    assert result == {"custom_var": "custom_value"}
+
+    # Ensure other context variables are still available
+    result = context.get_context(["participant_data"])
+    assert "participant_data" in result

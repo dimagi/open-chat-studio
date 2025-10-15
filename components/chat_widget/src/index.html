@@ -1,20 +1,150 @@
 <!DOCTYPE html>
 <html dir="ltr" lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0" />
-    <title>Stencil Component Starter</title>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0"/>
+  <title>Stencil Component Starter</title>
 
-    <script type="module" src="/build/open-chat-studio-widget.esm.js"></script>
-    <script nomodule src="/build/open-chat-studio-widget.js"></script>
-  </head>
-  <body style="background-color: #98dbcc">
-    <open-chat-studio-widget
-      visible="false"
-      bot-url="http://localhost:8000/a/demo/experiments/e/183312ac-cbe5-4c91-9e7b-d9df96b088e4/embed/start/"
-      button-text="Let's Chat"
-      expanded="true"
-      position="center"
-    ></open-chat-studio-widget>
-  </body>
+  <script type="module" src="/build/open-chat-studio-widget.esm.js"></script>
+  <script nomodule src="/build/open-chat-studio-widget.js"></script>
+</head>
+<style>
+  .light {
+    /* forces light color-scheme */
+    color-scheme: light;
+  }
+  .dark {
+    /* forces dark color-scheme */
+    color-scheme: dark;
+  }
+
+  .widget-demo {
+    margin-left: 20px;
+    margin-button: 20px;
+    padding: 0px 10px 20px 10px;
+    border: 1px solid black;
+    border-radius: 5px;
+    max-width: 300px;
+  }
+
+  .widget {
+    position: static;
+  }
+
+  .regular-button {
+    --chat-window-height: 80%;
+  }
+
+  .large-button {
+    --button-font-size: 2em;
+    --chat-window-bg-color: #00dfff;
+  }
+
+  .round-button {
+    --chat-window-font-size: 1.5rem;
+    --chat-window-width: 50%;
+    --chat-window-fullscreen-width: 100%;
+    --chat-window-height: 80%;
+  }
+
+  .square-button-large {
+    --button-font-size: 2rem;
+    --message-assistant-text-color: red;
+    --message-user-text-color: #50008f;
+  }
+</style>
+<body style="background-color: #98dbcc; gap: 10px; display: flex; flex-direction: column;">
+<div class="widget-demo light">
+  <p>Connected to www.openchatstudio.com</p>
+  <open-chat-studio-widget
+    class="widget"
+    visible="false"
+    chatbot-id="cdec8c04-ff39-4175-bffb-f7d872e2eb3a"
+    persistent-session="true"
+    persistent-session-expire="100"
+    allow-attachments="true"
+  ></open-chat-studio-widget>
+</div>
+
+<div class="widget-demo light">
+  <p>Regular button, default styling, light mode</p>
+  <open-chat-studio-widget
+    class="widget regular-button"
+    api-base-url="http://localhost:8000"
+    visible="false"
+    chatbot-id="183312ac-cbe5-4c91-9e7b-d9df96b088e4"
+    button-text="Let's Chat Light"
+    header-text="Regular, light mode"
+    position="center"
+    welcome-messages="['Hi there! Welcome to OpenChatStudio! This is a very long welcome message used to illustrate the max message width.', 'How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    starter-questions="['I would like a OpenChatStudio demo', 'How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    persistent-session="true"
+    persistent-session-expire="100"
+    allow-attachments="true"
+  ></open-chat-studio-widget>
+</div>
+
+<div class="widget-demo dark">
+  <p>Regular button, default styling, dark mode</p>
+  <open-chat-studio-widget
+    class="widget regular-button"
+    api-base-url="http://localhost:8000"
+    visible="false"
+    chatbot-id="183312ac-cbe5-4c91-9e7b-d9df96b088e4"
+    button-text="Let's Chat Dark"
+    header-text="Regular, dark mode"
+    position="center"
+    welcome-messages="['Hi there! Welcome to OpenChatStudio! This is a very long welcome message used to illustrate the max message width.', 'How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    starter-questions="['I would like a OpenChatStudio demo', 'How can we help you [today](#tonowhere)? With a [link](#tonowhere)\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    persistent-session="true"
+    persistent-session-expire="100"
+    allow-attachments="true"
+  ></open-chat-studio-widget>
+</div>
+
+<div class="widget-demo">
+  <p>Large button, blue window background</p>
+  <open-chat-studio-widget
+    class="widget large-button"
+    api-base-url="http://localhost:8000"
+    visible="false"
+    chatbot-id="183312ac-cbe5-4c91-9e7b-d9df96b088e4"
+    button-text="Let's Chat"
+    header-text="Large button, bg blue"
+    welcome-messages="['Hi there! Welcome to OpenChatStudio! This is a very long welcome message used to illustrate the max message width.', 'How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    starter-questions="['I would like a OpenChatStudio demo', 'How can we help you [today](#tonowhere)? With a [link](#tonowhere)\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    allow-attachments="true"
+  ></open-chat-studio-widget>
+</div>
+
+<div class="widget-demo">
+  <p>Round button, large window font, wide window, max fullscreen</p>
+  <open-chat-studio-widget
+    class="widget round-button"
+    api-base-url="http://localhost:8000"
+    visible="false"
+    chatbot-id="183312ac-cbe5-4c91-9e7b-d9df96b088e4"
+    button-text=""
+    button-shape="round"
+    header-text="Round button, large font, wide window, max fullscreen"
+    welcome-messages="['Hi there! Welcome to OpenChatStudio! This is a very long welcome message used to illustrate the max message width.', 'How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    starter-questions="['I would like a OpenChatStudio demo', 'How can we help you [today](#tonowhere)? With a [link](#tonowhere)\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    allow-attachments="true"
+  ></open-chat-studio-widget>
+</div>
+<div class="widget-demo">
+  <p>Large square button, red & purple message font</p>
+  <open-chat-studio-widget
+    class="widget square-button-large"
+    api-base-url="http://localhost:8000"
+    visible="false"
+    chatbot-id="183312ac-cbe5-4c91-9e7b-d9df96b088e4"
+    button-text=""
+    header-text="Square button, red & purple font"
+    welcome-messages="['Hi there! Welcome to OpenChatStudio! This is a very long welcome message used to illustrate the max message width.', 'How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    starter-questions="['I would like a OpenChatStudio demo', 'How can we help you [today](#tonowhere)? With a [link](#tonowhere)\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    allow-attachments="true"
+  ></open-chat-studio-widget>
+</div>
+</body>
 </html>

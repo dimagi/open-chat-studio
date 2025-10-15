@@ -4,6 +4,7 @@ from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 
+from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import Tracer
 from apps.service_providers.tracing.const import SpanLevel
 
@@ -13,6 +14,7 @@ class MockTracer(Tracer):
         super().__init__("mock", {})
         self.trace = None
         self.spans: dict[UUID, dict] = {}
+        self.tags = None
 
     @property
     def ready(self) -> bool:
@@ -22,17 +24,16 @@ class MockTracer(Tracer):
         self,
         trace_name: str,
         trace_id: UUID,
-        session_id: str,
-        user_id: str,
+        session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        super().start_trace(trace_name=trace_name, trace_id=trace_id, session_id=session_id, user_id=user_id)
+        super().start_trace(trace_name=trace_name, trace_id=trace_id, session=session)
         self.trace = {
             "name": trace_name,
             "id": trace_id,
-            "session_id": session_id,
-            "user_id": user_id,
+            "session_id": session.id,
+            "user_id": session.participant.identifier,
             "inputs": inputs or {},
             "metadata": metadata or {},
         }
@@ -72,3 +73,12 @@ class MockTracer(Tracer):
 
     def get_trace_metadata(self) -> dict[str, str]:
         return {"trace_id": str(self.trace["id"])}
+
+    def add_trace_tags(self, tags: list[str]) -> None:
+        self.tags = tags
+
+    def set_output_message_id(self, message_id: int):
+        pass
+
+    def set_input_message_id(self, message_id: int):
+        pass
