@@ -50,7 +50,7 @@ const FilterDialog = {
         <div class="flex items-start justify-between">
           <div class="flex-1">
             <div class="font-medium cursor-pointer hover:text-primary"
-                 onclick="FilterDialog.apply(${f.id}, ${JSON.stringify(f.filter_params)})"
+                 onclick="FilterDialog.apply(${f.id}, '${f.filter_query_string}')"
                  title="Click to apply">${this.escape(f.name)}</div>
             <button class="link link-primary text-xs" onclick="FilterDialog.update(${f.id})">Update</button>
           </div>
@@ -85,10 +85,7 @@ const FilterDialog = {
   // ---- ACTIONS ----
   apply(id, params) {
     const url = new URL(window.location);
-    const q = new URLSearchParams(url.search);
-    [...q.keys()].filter(k=>k.startsWith("filter_")).forEach(k=>q.delete(k));
-    Object.entries(params).forEach(([k,v])=>q.set(k,v));
-    window.location.href = `${url.pathname}?${q}`;
+    window.location.href = `${url.pathname}${params}`;
   },
 
   async update(id) {

@@ -635,10 +635,8 @@
 
       async maybeApplyDefaultFilters() {
         try {
-          const urlParams = new URLSearchParams(window.location.search);
-          const hasExistingFilters = [...urlParams.keys()].some(key => key.startsWith('filter_'));
-          
-          if (hasExistingFilters) return;
+          // Do nothing if there are already active filters
+          if (this.filterData.filters.length > 0) return;
 
           const savedFilters = await this.fetchSavedFilters();
           const defaultFilter = savedFilters.find(fs => fs.is_default_for_user) || 
