@@ -222,14 +222,13 @@
         columns: filterColumns,
       },
       starredFilters: [],
-      filterSets: null,
-
+      savedFilters: null,
       init() {
         const App = SiteJS.app;
-        this.loadFiltersFromUrl();
+        this.loadFiltersFromQueryString(window.location.search);
 
         // Default filters set by user or team
-        this.loadDefaultFilters();
+        this.maybeApplyDefaultFilters();
         
         // Load starred filters on initialization
         this.loadStarredFilters();
@@ -283,7 +282,9 @@
       toggleFilters() {
         this.filterData.showFilters = !this.filterData.showFilters;
         if (this.filterData.showFilters) {
-          this.loadStarredFilters();
+          if (!this.starredFilters.length) {
+            this.loadStarredFilters();
+          }
           if (this.filterData.filters.length === 0) {
             this.addFilter();
           }
@@ -391,8 +392,8 @@
           }
         }
       },
-      loadFiltersFromUrl() {
-        const urlParams = new URLSearchParams(window.location.search);
+      loadFiltersFromQueryString(queryString) {
+        const urlParams = new URLSearchParams(queryString);
         const filters = [];
         let maxIndex = -1;
         for (const [key, value] of urlParams.entries()) {
@@ -606,53 +607,53 @@
         this.selectedLabel = selected ? selected.label : '';
       },
 
-      async loadFilterSets() {
-        if (this.filterSets) return this.filterSets;
+      async fetchSavedFilters() {
+        if (this.savedFilters) return this.savedFilters;
         try {
           const url = '{% url "filters:list_filter_set" request.team.slug df_table_type %}';
           const res = await fetch(url, { credentials: 'same-origin' });
           const data = await res.json();
-          this.filterSets = data.results || [];
-          return this.filterSets;
+          this.savedFilters = data.results || [];
+          return this.savedFilters;
         } catch (error) {
           console.error('Failed to load filter sets:', error);
-          this.filterSets = [];
+          this.savedFilters = [];
           return [];
         }
       },
 
       async loadStarredFilters() {
         try {
-          const filterSets = await this.loadFilterSets();
-          this.starredFilters = filterSets.filter(fs => fs.is_starred);
+          const savedFilters = await this.fetchSavedFilters();
+          this.starredFilters = savedFilters.filter(fs => fs.is_starred);
         } catch (error) {
           console.error('Failed to load starred filters:', error);
           this.starredFilters = [];
         }
       },
 
-      async loadDefaultFilters() {
+      async maybeApplyDefaultFilters() {
         try {
           const urlParams = new URLSearchParams(window.location.search);
           const hasExistingFilters = [...urlParams.keys()].some(key => key.startsWith('filter_'));
           
           if (hasExistingFilters) return;
 
-          const filterSets = await this.loadFilterSets();
-          const defaultFilterSet = filterSets.find(fs => fs.is_default_for_user) || 
-                                 filterSets.find(fs => fs.is_default_for_team);
+          const savedFilters = await this.fetchSavedFilters();
+          const defaultFilter = savedFilters.find(fs => fs.is_default_for_user) || 
+                                 savedFilters.find(fs => fs.is_default_for_team);
           
-          if (defaultFilterSet?.filter_params && Object.keys(defaultFilterSet.filter_params).length > 0) {
-            this.applyDefaultFilterSet(defaultFilterSet);
+          if (defaultFilter?.filter_params && Object.keys(defaultFilter.filter_params).length > 0) {
+            this.applyDefaultFilter(defaultFilter);
           }
         } catch (error) {
           console.error('Failed to load default filters:', error);
         }
       },
 
-      applyDefaultFilterSet(filterSet) {
+      applyDefaultFilter(savedFilter) {
         this.filterData.filters = [];
-        this.parseAndApplyFilterParams(filterSet.filter_params);
+        this.parseAndApplyFilterParams(savedFilter.filter_params);
         this.updateUrlWithFilters(this.getActiveFilters(this.filterData.filters));
         this.triggerFilterChange(false);
       },
@@ -705,12 +706,12 @@
 
       async applyStarredFilter(filterSetId, filterSetName) {
         try {
-          const filterSets = await this.loadFilterSets();
-          const filterSet = filterSets.find(fs => fs.id === filterSetId);
-          if (!filterSet) return;
+          const savedFilters = await this.fetchSavedFilters();
+          const starredFilter = savedFilters.find(fs => fs.id === filterSetId);
+          if (!starredFilter) return;
           
           this.filterData.filters = [];
-          this.parseAndApplyFilterParams(filterSet.filter_params);
+          this.parseAndApplyFilterParams(starredFilter.filter_params);
           this.updateUrlWithFilters(this.getActiveFilters(this.filterData.filters));
           this.triggerFilterChange(false);
         } catch (error) {

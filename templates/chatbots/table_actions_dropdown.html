@@ -6,7 +6,7 @@
       </div>
       <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48">
         <li>
-          <a href="#" @click.prevent="openFilterDialog()">
+          <a href="#" @click.prevent="savedFiltersDialog.showModal()">
             <i class="fa-solid fa-filter"></i>
             Saved Filters
           </a>
@@ -27,20 +27,7 @@
 {% endwith %}
 
 <script>
-    function openFilterDialog() {
-      const dialog = document.getElementById('savedFiltersDialog');
-      if (dialog) {
-        dialog.showModal();
-        setTimeout(() => {
-          if (typeof loadSavedFilters === 'function') {
-            loadSavedFilters();
-          }
-        }, 100);
-      }
-    }
-
     function createDatasetWithFilters(linkElement, experimentId) {
-      
       const params = new URLSearchParams(window.location.search);
       let filterIndex = 0;
       while (params.has(`filter_${filterIndex}_column`)) {
