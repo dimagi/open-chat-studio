@@ -23,7 +23,12 @@
       
       <div class="flex justify-end gap-3">
         <form method="dialog">
-          <button type="button" class="btn btn-ghost text-base-content hover:bg-base-200">{% trans "Cancel" %}</button>
+          <button
+            type="button"
+            onclick="saveFilterDialog.close()"
+            class="btn btn-ghost text-base-content hover:bg-base-200">
+            {% trans "Cancel" %}
+          </button>
         </form>
         <button type="submit" class="btn btn-primary" id="saveFilterBtn">
           <span id="saveFilterText">{% trans "Save" %}</span>
