@@ -183,21 +183,28 @@ function ToggleWidget(props: ToggleWidgetParams) {
   );
 }
 
+/**
+ * Get select options and apply any conditional filtering based on the schema and related node params.
+ *
+ * This uses "ui:enumConditionalValues" and "ui:conditionalField" shema properties.
+ *
+ * @param schema The schema of the current field.
+ * @param nodeParams The node data.
+ */
 function conditionalOptions(schema: PropertySchema, nodeParams: NodeParams): Option[] {
   const allOptions = getSelectOptions(schema);
   if (!schema["ui:enumConditionalValues"]) {
     return allOptions;
   }
 
+  const conditionalField = schema["ui:conditionalField"];
+    if (!conditionalField) {
+      return allOptions;
+    }
+
   const [options, setOptions] = useState(allOptions);
 
   useEffect(() => {
-    const conditionalField = schema["ui:conditionalField"];
-    if (!conditionalField) {
-      return;
-    }
-
-
     const conditionalValue = nodeParams[conditionalField!];
     if (!conditionalValue) {
       setOptions([]);
