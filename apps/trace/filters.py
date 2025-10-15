@@ -70,7 +70,7 @@ class MessageTagsFilter(ChoiceColumnFilter):
             input_tags_condition = Q(input_message__tags__name=tag)
             output_tags_condition = Q(output_message__tags__name=tag)
             queryset = queryset.filter(input_tags_condition | output_tags_condition)
-        return queryset
+        return queryset.distinct()
 
     def apply_excludes(self, queryset, value, timezone=None):
         input_tags_condition = Q(input_message__tags__name__in=value)
