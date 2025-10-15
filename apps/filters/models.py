@@ -1,9 +1,8 @@
+from django.conf import settings
+from django.db import models
 from django.db.models import Q
 
 from apps.teams.models import BaseTeamModel
-from django.db import models
-from django.conf import settings
-
 
 
 class FilterSet(BaseTeamModel):
@@ -14,7 +13,7 @@ class FilterSet(BaseTeamModel):
     name = models.CharField(max_length=256)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     table_type = models.CharField(max_length=50, choices=TableType.choices)
-    filter_params = models.JSONField(default=dict)
+    filter_query_string = models.CharField(blank=False)
     is_shared = models.BooleanField(default=False)
     is_starred = models.BooleanField(default=False)
     is_default_for_user = models.BooleanField(default=False)

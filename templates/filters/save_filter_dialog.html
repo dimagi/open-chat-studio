@@ -55,11 +55,9 @@ function submitFilterSet(event) {
   saveText.classList.add('hidden');
   saveSpinner.classList.remove('hidden');
   
-  const currentFilterParams = getCurrentFilterParams();
-  
   const payload = {
     name: name,
-    filter_params: currentFilterParams,
+    filter_query_string: window.location.search,
   };
 
   const url = '{% url "filters:create_filter_set" request.team.slug df_table_type %}';
@@ -101,16 +99,6 @@ function submitFilterSet(event) {
     saveSpinner.classList.add('hidden');
   });
 }
-
-function getCurrentFilterParams() {
-  const params = new URLSearchParams(window.location.search);
-  const obj = {};
-  params.forEach((value, key) => {
-    if (key.startsWith('filter_')) obj[key] = value;
-  });
-  return obj;
-}
-
 
 function loadSavedFilters() {
   if (typeof FilterDialog !== 'undefined' && FilterDialog.load) {

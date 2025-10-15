@@ -8,7 +8,7 @@ class FilterSetCreateUpdateSerializer(serializers.Serializer):
     """
 
     name = serializers.CharField(max_length=256, required=False, allow_blank=False)
-    filter_params = serializers.JSONField(required=False)
+    filter_query_string = serializers.JSONField(required=True)
     is_shared = serializers.BooleanField(required=False)
     is_starred = serializers.BooleanField(required=False)
     is_default_for_user = serializers.BooleanField(required=False)

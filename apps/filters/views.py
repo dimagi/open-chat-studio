@@ -14,7 +14,7 @@ def _to_dict(fs: FilterSet) -> dict:
         "id": fs.id,
         "name": fs.name,
         "table_type": fs.table_type,
-        "filter_params": fs.filter_params,
+        "filter_query_string": fs.filter_query_string,
         "is_shared": fs.is_shared,
         "is_starred": fs.is_starred,
         "is_default_for_user": fs.is_default_for_user,
@@ -65,7 +65,7 @@ def create_filter_set(request, team_slug: str, table_type: str):
             user=request.user,
             name=validated.get("name", "").strip(),
             table_type=table_type,
-            filter_params=validated.get("filter_params", {}),
+            filter_query_string=validated.get("filter_query_string", ""),
             is_shared=validated.get("is_shared", False),
             is_starred=validated.get("is_starred", False),
             is_default_for_user=validated.get("is_default_for_user", False),
@@ -103,9 +103,9 @@ def edit_or_delete_filter_set(request, team_slug: str, pk: int):
 
     with transaction.atomic():
         updates = []
-        if "filter_params" in validated:
-            fs.filter_params = validated["filter_params"]
-            updates.append("filter_params")
+        if "filter_query_string" in validated:
+            fs.filter_query_string = validated["filter_query_string"]
+            updates.append("filter_query_string")
         if "is_shared" in validated:
             fs.is_shared = bool(validated["is_shared"])
             updates.append("is_shared")

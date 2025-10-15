@@ -644,61 +644,15 @@
           const defaultFilter = savedFilters.find(fs => fs.is_default_for_user) || 
                                  savedFilters.find(fs => fs.is_default_for_team);
           
-          if (defaultFilter?.filter_params && Object.keys(defaultFilter.filter_params).length > 0) {
+          if (defaultFilter?.filter_query_string) {
             this.filterData.filters = [];
-            this.parseAndApplyFilterParams(defaultFilter.filter_params);
+            this.loadFiltersFromQueryString(defaultFilter.filter_query_string);
             this.updateUrlWithFilters();
             this.triggerFilterChange(false);
           }
         } catch (error) {
           console.error('Failed to load default filters:', error);
         }
-      },
-
-      parseAndApplyFilterParams(filterParams) {
-        const filterEntries = Object.entries(filterParams)
-          .filter(([key]) => key.startsWith('filter_'))
-          .reduce((acc, [key, value]) => {
-            const match = key.match(/filter_(\d+)_(.+)/);
-            if (match) {
-              const [, index, param] = match;
-              if (!acc[index]) acc[index] = {};
-              acc[index][param] = value;
-            }
-            return acc;
-          }, {});
-
-        Object.values(filterEntries).forEach((filterData) => {
-          if (filterData.column && filterData.operator) {
-            const filter = {
-              column: filterData.column,
-              operator: '',
-              value: '',
-              selectedValues: [],
-              availableOperators: [],
-              showOptions: false,
-              searchQuery: '',
-              filteredOptions: []
-            };
-
-            this.filterData.filters.push(filter);
-            const filterIndex = this.filterData.filters.length - 1;
-            
-            this.updateOperatorsByColumn(filterIndex);
-            
-            const currentFilter = this.filterData.filters[filterIndex];
-            currentFilter.operator = filterData.operator;
-            currentFilter.value = filterData.value || '';
-
-            if (['any of', 'all of', 'excludes'].includes(filterData.operator)) {
-              try {
-                currentFilter.selectedValues = JSON.parse(filterData.value || '[]');
-              } catch (e) {
-                currentFilter.selectedValues = [];
-              }
-            }
-          }
-        });
       },
 
       async applyStarredFilter(filterSetId, filterSetName) {
@@ -708,7 +662,7 @@
           if (!starredFilter) return;
           
           this.filterData.filters = [];
-          this.parseAndApplyFilterParams(starredFilter.filter_params);
+          this.loadFiltersFromQueryString(starredFilter.filter_query_string);
           this.updateUrlWithFilters();
           this.triggerFilterChange(false);
         } catch (error) {
