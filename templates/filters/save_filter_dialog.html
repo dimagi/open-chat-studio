@@ -10,15 +10,22 @@
     </div>
 
     <!-- Create New Filter Set Form -->
-    <form id="createFilterSetForm" onsubmit="submitFilterSet(event)">
+    <form id="createFilterSetForm" 
+          hx-post="{% url 'filters:create_filter_set' request.team.slug df_table_type %}"
+          hx-indicator="#saveFilterBtn"
+          hx-swap="none"
+          hx-on:htmx:after-request="afterRequest(event);">
       {% csrf_token %}
+      <input type="hidden" name="filter_query_string" value="{{ request.GET.urlencode }}" />
       <div class="mb-6">
         <label class="block text-sm font-medium text-base-content mb-2">{% trans "Name" %}</label>
-        <input type="text" 
-               id="filterSetName" 
-               class="input input-bordered w-full bg-base-100 border-base-300 text-base-content placeholder-base-content/60 focus:border-primary" 
-               placeholder='{% trans "Name" %}'
-               required>
+        <input
+          type="text" 
+          name="name"
+          id="filterSetName" 
+          class="input input-bordered w-full bg-base-100 border-base-300 text-base-content placeholder-base-content/60 focus:border-primary" 
+          placeholder='{% trans "Name" %}'
+          required>
       </div>
       
       <div class="flex justify-end gap-3">
@@ -32,7 +39,6 @@
         </form>
         <button type="submit" class="btn btn-primary" id="saveFilterBtn">
           <span id="saveFilterText">{% trans "Save" %}</span>
-          <span id="saveFilterSpinner" class="loading loading-spinner loading-xs hidden"></span>
         </button>
       </div>
     </form>
@@ -41,74 +47,16 @@
     <button>close</button>
   </form>
 </dialog>
-
 <script>
-function submitFilterSet(event) {
-  event.preventDefault();
-  
-  const nameInput = document.getElementById('filterSetName');
-  const saveBtn = document.getElementById('saveFilterBtn');
-  const saveText = document.getElementById('saveFilterText');
-  const saveSpinner = document.getElementById('saveFilterSpinner');
-  
-  const name = nameInput.value.trim();
-  if (!name) {
-    alertify.notify('Please enter a name for the filter set', 'error', 10);
-    return;
-  }
-  saveBtn.disabled = true;
-  saveText.classList.add('hidden');
-  saveSpinner.classList.remove('hidden');
-  
-  const payload = {
-    name: name,
-    filter_query_string: window.location.search,
-  };
-
-  const url = '{% url "filters:create_filter_set" request.team.slug df_table_type %}';
-
-  fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': SiteJS.app.Cookies.get('csrftoken')
-    },
-    credentials: 'same-origin',
-    body: JSON.stringify(payload)
-  })
-  .then(response => {
-    if (!response.ok) {
-      return response.text().then(text => {
-        throw new Error(`Failed to save filter set: ${response.status} ${text}`);
-      });
+  function afterRequest(event) {
+    if(event.detail.successful) {
+      alertify.notify(`Filter saved!`, 'success', 10);
+    } else {
+      alertify.notify('Failed to save filter', 'error', 10);
     }
-    return response.json();
-  })
-  .then(data => {
-    const filterSetName = nameInput.value.trim();
-    nameInput.value = '';
-    window.refreshFilterSets?.() || loadSavedFilters?.();
-    if (typeof FilterDialog !== 'undefined') {
-      FilterDialog.load();
-    }
-    document.getElementById('saveFilterDialog').close();
-    alertify.notify(`Filter set "${filterSetName}" saved successfully`, 'success', 10);
-  })
-  .catch(error => {
-    console.error('Error saving filter set:', error);
-    alertify.notify('Failed to save filter set: ' + error.message, 'error', 10);
-  })
-  .finally(() => {
-    saveBtn.disabled = false;
-    saveText.classList.remove('hidden');
-    saveSpinner.classList.add('hidden');
-  });
-}
 
-function loadSavedFilters() {
-  if (typeof FilterDialog !== 'undefined' && FilterDialog.load) {
-    FilterDialog.load();
+    saveFilterDialog.close();
+    savedFiltersDialog.close();
   }
-}
 </script>
 {% endwith %}

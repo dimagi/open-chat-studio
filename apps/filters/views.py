@@ -1,7 +1,7 @@
 import json
 
 from django.db import models, transaction
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from apps.filters.models import FilterSet
@@ -41,10 +41,9 @@ def list_filter_sets(request, team_slug: str, table_type: str):
 @require_http_methods(["POST"])
 @login_and_team_required
 def create_filter_set(request, team_slug: str, table_type: str):
-    payload = json.loads(request.body)
-
+    data = {"name": request.POST.get("name"), "filter_query_string": request.POST.get("filter_query_string")}
     serializer = FilterSetCreateUpdateSerializer(
-        data=payload, context={"is_team_admin": request.team_membership.is_team_admin}
+        data=data, context={"is_team_admin": request.team_membership.is_team_admin}
     )
     if not serializer.is_valid():
         return JsonResponse(serializer.errors, status=400)
@@ -60,7 +59,7 @@ def create_filter_set(request, team_slug: str, table_type: str):
             FilterSet.objects.filter(team=request.team, table_type=table_type, is_default_for_team=True).update(
                 is_default_for_team=False
             )
-        fs = FilterSet.objects.create(
+        FilterSet.objects.create(
             team=request.team,
             user=request.user,
             name=validated.get("name", "").strip(),
@@ -71,7 +70,7 @@ def create_filter_set(request, team_slug: str, table_type: str):
             is_default_for_user=validated.get("is_default_for_user", False),
             is_default_for_team=validated.get("is_default_for_team", False),
         )
-    return JsonResponse({"result": _to_dict(fs)}, status=201)
+    return HttpResponse()
 
 
 @require_http_methods(["PATCH", "DELETE"])
