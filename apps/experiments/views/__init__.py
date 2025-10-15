@@ -34,6 +34,7 @@ from .experiment import (  # noqa: F401
     experiment_version_details,
     experiments_home,
     generate_chat_export,
+    get_experiment_version_names,
     get_export_download_link,
     get_image_html,
     get_message_response,
