@@ -647,8 +647,7 @@
           if (defaultFilter?.filter_query_string) {
             this.filterData.filters = [];
             this.loadFiltersFromQueryString(defaultFilter.filter_query_string);
-            this.updateUrlWithFilters();
-            this.triggerFilterChange(false);
+            this.triggerFilterChange();
           }
         } catch (error) {
           console.error('Failed to load default filters:', error);
@@ -663,8 +662,7 @@
           
           this.filterData.filters = [];
           this.loadFiltersFromQueryString(starredFilter.filter_query_string);
-          this.updateUrlWithFilters();
-          this.triggerFilterChange(false);
+          this.triggerFilterChange();
         } catch (error) {
           console.error('Error applying starred filter:', error);
         }
