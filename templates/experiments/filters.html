@@ -465,7 +465,8 @@
         }
       },
 
-      updateUrlWithFilters(activeFilters) {
+      updateUrlWithFilters() {
+        let activeFilters = this.getActiveFilters(this.filterData.filters);
         const params = new URLSearchParams(window.location.search);
         [...params.keys()].forEach(key => {
           if (key.startsWith('filter_')) {
@@ -523,7 +524,7 @@
         const dataSourceUrl = "{{df_filter_data_source_url}}";
         const dataSourceContainerId = "{{df_filter_data_source_container_id}}";
         if (updateUrl) {
-          this.updateUrlWithFilters(activeFilters);
+          this.updateUrlWithFilters();
         }
         htmx.ajax('GET', dataSourceUrl, {
           target: "#" + dataSourceContainerId,
@@ -654,7 +655,7 @@
       applyDefaultFilter(savedFilter) {
         this.filterData.filters = [];
         this.parseAndApplyFilterParams(savedFilter.filter_params);
-        this.updateUrlWithFilters(this.getActiveFilters(this.filterData.filters));
+        this.updateUrlWithFilters();
         this.triggerFilterChange(false);
       },
 
@@ -712,7 +713,7 @@
           
           this.filterData.filters = [];
           this.parseAndApplyFilterParams(starredFilter.filter_params);
-          this.updateUrlWithFilters(this.getActiveFilters(this.filterData.filters));
+          this.updateUrlWithFilters();
           this.triggerFilterChange(false);
         } catch (error) {
           console.error('Error applying starred filter:', error);
