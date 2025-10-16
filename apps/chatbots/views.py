@@ -38,6 +38,7 @@ from apps.experiments.views.experiment import (
     start_session_public_embed,
     version_create_status,
 )
+from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
@@ -470,6 +471,6 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "allow_new": False,
             "table_url": table_url,
             "use_dynamic_filters": True,
-            "df_table_type": "all-sessions",
+            "df_table_type": FilterSet.TableType.ALL_SESSIONS,
             **filter_context,
         }

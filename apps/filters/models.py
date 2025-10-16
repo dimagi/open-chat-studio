@@ -7,6 +7,11 @@ from apps.teams.models import BaseTeamModel
 
 class FilterSet(BaseTeamModel):
     class TableType(models.TextChoices):
+        """
+        Defines the allowed table types for filters.
+        Always use these constants when setting df_table_type in views.
+        """
+
         SESSIONS = "sessions"
         DATASETS = "datasets"
         ALL_SESSIONS = "all_sessions"
@@ -42,3 +47,13 @@ class FilterSet(BaseTeamModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.table_type})"
+
+    @classmethod
+    def is_valid_table_type(cls, table_type: str) -> bool:
+        """Check if a given table_type is valid."""
+        return table_type in dict(cls.TableType.choices)
+
+    @classmethod
+    def get_table_type_choices(cls) -> list:
+        """Get all valid table type values."""
+        return [choice[0] for choice in cls.TableType.choices]

@@ -27,6 +27,10 @@ def _to_dict(fs: FilterSet) -> dict:
 @require_http_methods(["GET"])
 @login_and_team_required
 def list_filter_sets(request, team_slug: str, table_type: str):
+    # Validate table_type against allowed choices
+    if not FilterSet.is_valid_table_type(table_type):
+        return JsonResponse({"error": "Invalid table_type"}, status=400)
+
     qs = (
         FilterSet.objects.filter(
             team=request.team,
@@ -42,6 +46,10 @@ def list_filter_sets(request, team_slug: str, table_type: str):
 @require_http_methods(["POST"])
 @login_and_team_required
 def create_filter_set(request, team_slug: str, table_type: str):
+    # Validate table_type against allowed choices
+    if not FilterSet.is_valid_table_type(table_type):
+        return JsonResponse({"error": "Invalid table_type"}, status=400)
+
     data = {"name": request.POST.get("name"), "filter_query_string": request.POST.get("filter_query_string")}
     serializer = FilterSetCreateUpdateSerializer(
         data=data, context={"is_team_admin": request.team_membership.is_team_admin}

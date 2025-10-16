@@ -7,6 +7,7 @@ from django.views.generic import DetailView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.annotations.models import CustomTaggedItem
+from apps.filters.models import FilterSet
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.filters import TraceFilter, get_trace_filter_context_data
 from apps.trace.models import Span, Trace, TraceStatus
@@ -21,7 +22,7 @@ class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "traces",
             "title": "Traces",
-            "df_table_type": "traces",
+            "df_table_type": FilterSet.TableType.TRACES,
             "table_url": reverse("trace:table", args=[team_slug]),
             **get_trace_filter_context_data(self.request.team),
         }

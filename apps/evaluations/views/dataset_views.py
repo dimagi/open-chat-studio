@@ -30,6 +30,7 @@ from apps.experiments.filters import (
     get_filter_context_data,
 )
 from apps.experiments.models import ExperimentSession
+from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -110,6 +111,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         "title": "Create Dataset",
         "button_text": "Create Dataset",
         "active_tab": "evaluation_datasets",
+        "df_table_type": FilterSet.TableType.DATASETS,
         "form_attrs": {"id": "dataset-create-form"},
     }
 

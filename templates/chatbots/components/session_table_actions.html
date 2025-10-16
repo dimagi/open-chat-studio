@@ -17,7 +17,7 @@
         {% if perms.experiments.download_chats %}
           {% include "experiments/components/exports.html" %}
         {% endif %}
-        {% include "experiments/filters.html" with df_table_type="sessions" %}
+        {% include "experiments/filters.html" %}
       </div>
       
       <div class="ml-4">

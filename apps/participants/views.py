@@ -12,6 +12,7 @@ from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
+from apps.filters.models import FilterSet
 from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -48,7 +49,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "title": "Participants",
             "allow_new": False,
             "table_url": table_url,
-            "df_table_type": "participants",
+            "df_table_type": FilterSet.TableType.PARTICIPANTS,
             "actions": [
                 actions.Action(
                     "participants:import",
