@@ -262,7 +262,8 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
             outputs={"123": {"message": "a"}},
             messages=["a"],
             experiment_session=experiment_session,
-            node_input="a",
+            node_inputs=["a"],
+            last_node_input="a",
             participant_data=participant_data,
         ),
     )
@@ -1229,7 +1230,11 @@ def test_router_node_openai_refusal_uses_default_keyword(get_llm_service, provid
     )
     node.default_keyword_index = 0
     state = PipelineState(
-        outputs={"123": {"message": "a"}}, messages=["a"], experiment_session=experiment_session, node_input="a"
+        outputs={"123": {"message": "a"}},
+        messages=["a"],
+        experiment_session=experiment_session,
+        node_inputs=["a"],
+        last_node_input="a",
     )
 
     keyword, is_default_keyword = node._process_conditional(state)

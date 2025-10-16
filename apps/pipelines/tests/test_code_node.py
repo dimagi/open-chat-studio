@@ -45,7 +45,7 @@ def main(input, **kwargs):
 
 # @django_db_with_data(available_apps=("apps.service_providers",))
 @pytest.mark.parametrize(
-    ("code", "input", "output"),
+    ("code", "user_input", "output"),
     [
         ("def main(input, **kwargs):\n\treturn f'Hello, {input}!'", "World", "Hello, World!"),
         ("", "foo", "foo"),  # No code just returns the input
@@ -53,9 +53,9 @@ def main(input, **kwargs):
         (IMPORTS, json.dumps({"a": "b"}), str(json.loads('{"a": "b"}'))),  # Importing json will work
     ],
 )
-def test_code_node(code, input, output):
+def test_code_node(code, user_input, output):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node_output = node._process(input, PipelineState(outputs={}, experiment_session=None))
+    node_output = node._process(PipelineState(outputs={}, experiment_session=None, last_node_input=user_input))
     assert node_output.update["messages"][-1] == output
 
 
@@ -100,7 +100,7 @@ def test_code_node_build_errors(code, input, error):
 
 
 @pytest.mark.parametrize(
-    ("code", "input", "error"),
+    ("code", "user_input", "error"),
     [
         (
             "import collections\ndef main(input, **kwargs):\n\treturn input",
@@ -110,10 +110,10 @@ def test_code_node_build_errors(code, input, error):
         ("def main(input, **kwargs):\n\treturn f'Hello, {blah}!'", "", "name 'blah' is not defined"),
     ],
 )
-def test_code_node_runtime_errors(code, input, error):
+def test_code_node_runtime_errors(code, user_input, error):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     with pytest.raises(CodeNodeRunError, match=error):
-        node._process(input, PipelineState(outputs={}, experiment_session=None))
+        node._process(PipelineState(outputs={}, experiment_session=None, last_node_input=user_input))
 
 
 @pytest.mark.django_db()
@@ -124,8 +124,8 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     node_output = node._process(
-        "hi",
         PipelineState(
+            last_node_input="hi",
             outputs={},
             experiment_session=experiment_session,
             participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
@@ -147,8 +147,8 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     node_output = node._process(
-        "Hi",
         PipelineState(
+            last_node_input="hi",
             outputs={},
             experiment_session=experiment_session,
             participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
@@ -241,7 +241,7 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
     with pytest.raises(CodeNodeRunError, match="Cannot set the 'outputs' key of the temporary state"):
-        node._process("hi", PipelineState(outputs={}, experiment_session=None))
+        node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi"))
 
 
 def test_temp_state_user_input():
@@ -391,7 +391,7 @@ def main(input, **kwargs):
     return input
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
-    output = node._process("hi", PipelineState(outputs={}, experiment_session=None))
+    output = node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi"))
     assert output.update["output_message_tags"] == [("message-tag", "")]
     assert output.update["session_tags"] == [("session-tag", "")]
 
@@ -416,7 +416,7 @@ def main(input, **kwargs):
     """
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
-    node_output = node._process("hi", PipelineState(outputs={}, experiment_session=None))
+    node_output = node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi"))
     assert node_output.update["messages"][-1] == "3,4 - {1, 2}"
 
 
@@ -433,7 +433,7 @@ def main(input, **kwargs):
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
     with pytest.raises(CodeNodeRunError) as exc_info:
-        node._process("hi", PipelineState(outputs={}, experiment_session=None))
+        node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi"))
     assert (
         str(exc_info.value)
         == """Error: NameError("name 'fail' is not defined")
