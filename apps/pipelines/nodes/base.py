@@ -236,6 +236,14 @@ class PipelineState(dict):
         Get the output of a node by its ID.
         """
         for output in self["outputs"].values():
+            if not output:
+                return None
+            # Handle the edge case where a node is downstream of a 'join' node connected to multiple parallel nodes
+            # This isn't really a supported workflow but by taking the last message we at least get different
+            # outputs for each invocation of the node in the case where the parallel branches are of different
+            # lengths.
+            if isinstance(output, list):
+                output = output[-1]
             if output.get("node_id") == node_id:
                 return output["message"]
         return None

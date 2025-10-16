@@ -63,6 +63,46 @@ def test_parallel_branch_pipeline(pipeline, experiment_session):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
+def test_parallel_branch_with_merge(pipeline, experiment_session):
+    """
+    Illustrate and validate what happens with parallel branches with an aggregator node.
+
+    start -> A -----> D -> end
+          -> B -> C --^
+
+    Node D gets called twice, once with the output from A and once with the output of C.
+    'end' also gets
+    """
+    start = start_node()
+    template_a = render_template_node("A ({{ input }})", name="A")
+    template_b = render_template_node("B ({{ input }})", name="B")
+    template_c = render_template_node("C ({{ input }})", name="C")
+    template_d = render_template_node("D ({{ input }})", name="D")
+    end = end_node()
+    nodes = [start, template_a, template_b, template_c, template_d, end]
+    edges = ["start - A", "start - B", "B - C", "A - D", "C - D", "D - end"]
+    user_input = "The Input"
+    output = create_runnable(pipeline, nodes, edges).invoke(
+        PipelineState(messages=[user_input], experiment_session=experiment_session)
+    )["outputs"]
+    expected_output = {
+        "start": {"message": user_input, "node_id": start["id"]},
+        template_a["params"]["name"]: {"message": f"A ({user_input})", "node_id": template_a["id"]},
+        template_b["params"]["name"]: {"message": f"B ({user_input})", "node_id": template_b["id"]},
+        template_c["params"]["name"]: {"message": f"C (B ({user_input}))", "node_id": template_c["id"]},
+        template_d["params"]["name"]: [
+            {"message": f"D (A ({user_input}))", "node_id": template_d["id"]},
+            {"message": f"D (C (B ({user_input})))", "node_id": template_d["id"]},
+        ],
+        "end": [
+            {"message": f"D (A ({user_input}))", "node_id": end["id"]},
+            {"message": f"D (C (B ({user_input})))", "node_id": end["id"]},
+        ],
+    }
+    assert output == expected_output
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
 def test_parallel_branch_with_dangling_node(pipeline, experiment_session):
     """Node A does not connect to the end node, but it is still executed.
 
