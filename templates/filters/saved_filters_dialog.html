@@ -21,26 +21,38 @@
                      x-text="filter.name"></div>
               </div>
               <div class="flex gap-1">
-                <button class="btn btn-ghost btn-xs" @click="updateSavedFilterQueryString(filter.id)">Update</button>
+                <button
+                  class="btn btn-ghost btn-xs"
+                  x-cloak
+                  x-show="filter.is_user_filter"
+                  @click="updateSavedFilterQueryString(filter.id)">
+                  Update
+                </button>
                 <!-- Personal Default -->
                 <button class="btn btn-ghost btn-xs"
                         title="Personal Default"
+                        x-cloak
+                        x-show="filter.is_user_filter"
                         @click="toggleSavedFilterDefault(filter.id, 'user')"
-                        :style="filter.is_default_for_user ? 'color:#f59e0b;' : ''">
+                        :class="filter.is_default_for_user ? 'text-gray-500' : ''">
                   <i class="fa-regular fa-user"></i>
                 </button>
                 
                 <!-- Team Default -->
                 <button class="btn btn-ghost btn-xs"
                         title="Team Default"
+                        x-cloak
+                        x-show="filter.is_user_filter"
                         @click="toggleSavedFilterDefault(filter.id, 'team')"
-                        :style="filter.is_default_for_team ? 'color:#f59e0b;' : ''">
+                        :class="filter.is_default_for_team ? 'text-gray-500' : ''">
                   <i class="fa-solid fa-users"></i>
                 </button>
                 
                 <!-- Share -->
                 <button class="btn btn-ghost btn-xs"
                         title="Share"
+                        x-cloak
+                        x-show="filter.is_user_filter"
                         @click="shareSavedFilter(filter.id)">
                   <i class="fa-solid fa-share-nodes"></i>
                 </button>
@@ -57,6 +69,8 @@
                 <!-- Delete -->
                 <button class="btn btn-ghost btn-xs text-error"
                         title="Delete"
+                        x-cloak
+                        x-show="filter.is_user_filter"
                         @click="deleteSavedFilter(filter.id, filter.name)">
                   <i class="fa-regular fa-trash-can"></i>
                 </button>

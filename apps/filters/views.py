@@ -12,7 +12,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-def _to_dict(fs: FilterSet) -> dict:
+def _to_dict(fs: FilterSet, request_user) -> dict:
     return {
         "id": fs.id,
         "name": fs.name,
@@ -22,6 +22,7 @@ def _to_dict(fs: FilterSet) -> dict:
         "is_starred": fs.is_starred,
         "is_default_for_user": fs.is_default_for_user,
         "is_default_for_team": fs.is_default_for_team,
+        "is_user_filter": fs.user == request_user,
     }
 
 
@@ -40,7 +41,7 @@ def list_filter_sets(request, team_slug: str, table_type: str):
         .filter(models.Q(user=request.user) | models.Q(is_shared=True))
         .order_by("-is_starred", "name")
     )
-    data = [_to_dict(fs) for fs in qs.all()]
+    data = [_to_dict(fs, request_user=request.user) for fs in qs.all()]
     return JsonResponse({"results": data})
 
 
@@ -82,7 +83,7 @@ def create_filter_set(request, team_slug: str, table_type: str):
                 is_default_for_user=validated.get("is_default_for_user", False),
                 is_default_for_team=validated.get("is_default_for_team", False),
             )
-            return JsonResponse({"success": True, "filter_set": _to_dict(filter_set)})
+            return JsonResponse({"success": True, "filter_set": _to_dict(filter_set, request.user)})
         except IntegrityError:
             return JsonResponse({"error": "Unable to create filter set"}, status=400)
 
@@ -137,7 +138,7 @@ class FilterSetView(LoginAndTeamRequiredMixin, View):
             if updates:
                 fs.save(update_fields=updates)
 
-        return JsonResponse({"result": _to_dict(fs)})
+        return JsonResponse({"result": _to_dict(fs, request.user)})
 
     def delete(self, request, team_slug: str, pk: int):
         """Handle DELETE request to delete a filter set."""
