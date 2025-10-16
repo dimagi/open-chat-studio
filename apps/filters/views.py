@@ -1,6 +1,6 @@
 import json
 
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.http import JsonResponse
 from django.views import View
 from django.views.decorators.http import require_http_methods
@@ -68,18 +68,22 @@ def create_filter_set(request, team_slug: str, table_type: str):
             FilterSet.objects.filter(team=request.team, table_type=table_type, is_default_for_team=True).update(
                 is_default_for_team=False
             )
-        filter_set = FilterSet.objects.create(
-            team=request.team,
-            user=request.user,
-            name=validated.get("name", "").strip(),
-            table_type=table_type,
-            filter_query_string=validated.get("filter_query_string", ""),
-            is_shared=validated.get("is_shared", False),
-            is_starred=validated.get("is_starred", False),
-            is_default_for_user=validated.get("is_default_for_user", False),
-            is_default_for_team=validated.get("is_default_for_team", False),
-        )
-    return JsonResponse({"success": True, "filter_set": _to_dict(filter_set)})
+
+        try:
+            filter_set = FilterSet.objects.create(
+                team=request.team,
+                user=request.user,
+                name=validated.get("name", "").strip(),
+                table_type=table_type,
+                filter_query_string=validated.get("filter_query_string", ""),
+                is_shared=validated.get("is_shared", False),
+                is_starred=validated.get("is_starred", False),
+                is_default_for_user=validated.get("is_default_for_user", False),
+                is_default_for_team=validated.get("is_default_for_team", False),
+            )
+            return JsonResponse({"success": True, "filter_set": _to_dict(filter_set)})
+        except IntegrityError:
+            return JsonResponse({"error": "Unable to create filter set"}, status=400)
 
 
 class FilterSetView(LoginAndTeamRequiredMixin, View):
