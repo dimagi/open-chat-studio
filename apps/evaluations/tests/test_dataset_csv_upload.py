@@ -261,6 +261,40 @@ class TestCSVUploadCreate:
         assert "user_name" in context4_field_names
         assert "score" in context4_field_names
 
+    def test_csv_column_suggestions_with_prefixed_columns(self):
+        """Test that prefixed columns (from downloaded CSVs) are correctly categorized."""
+        columns = [
+            "input",
+            "output",
+            "context.topic",
+            "context.difficulty",
+            "participant_data.age",
+            "participant_data.name",
+            "session_state.step",
+            "session_state.completed",
+            "history",
+        ]
+        suggestions = generate_csv_column_suggestions(columns)
+
+        assert suggestions["input"] == "input"
+        assert suggestions["output"] == "output"
+        assert suggestions["history"] == "history"
+
+        assert "context" in suggestions
+        context_mappings = {m["fieldName"]: m["csvColumn"] for m in suggestions["context"]}
+        assert context_mappings["topic"] == "context.topic"
+        assert context_mappings["difficulty"] == "context.difficulty"
+
+        assert "participant_data" in suggestions
+        pd_mappings = {m["fieldName"]: m["csvColumn"] for m in suggestions["participant_data"]}
+        assert pd_mappings["age"] == "participant_data.age"
+        assert pd_mappings["name"] == "participant_data.name"
+
+        assert "session_state" in suggestions
+        ss_mappings = {m["fieldName"]: m["csvColumn"] for m in suggestions["session_state"]}
+        assert ss_mappings["step"] == "session_state.step"
+        assert ss_mappings["completed"] == "session_state.completed"
+
     def test_csv_with_empty_rows_handling(self, client_with_user, team_with_users):
         """Test CSV upload handles empty or invalid rows correctly."""
         csv_data = [
