@@ -52,8 +52,3 @@ class FilterSet(BaseTeamModel):
     def is_valid_table_type(cls, table_type: str) -> bool:
         """Check if a given table_type is valid."""
         return table_type in dict(cls.TableType.choices)
-
-    @classmethod
-    def get_table_type_choices(cls) -> list:
-        """Get all valid table type values."""
-        return [choice[0] for choice in cls.TableType.choices]
