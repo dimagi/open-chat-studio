@@ -705,11 +705,11 @@
         window.location.href = `${url.pathname}?${params}`;
       },
 
-      async updateSavedFilter(id) {
+      async updateSavedFilterQueryString(id) {
         const filterSetName = this.getSavedFilterSetName(id);
         
         try {
-          await this.savedFilterApi(id, "PATCH", { filter_query_string: window.location.search.substring(1) });
+          await this.makeSavedFilterUpdateRequest(id, { filter_query_string: window.location.search.substring(1) });
           await this.reloadSavedFilters(); 
           this.notifyUser(`"${filterSetName}" updated`, "success");
         } catch (error) {
@@ -738,7 +738,7 @@
             payload[`clear_other_${type}_defaults`] = true;
           }
           
-          await this.savedFilterApi(id, "PATCH", payload);
+          await this.makeSavedFilterUpdateRequest(id, payload);
           
           if (newValue) {
             this.notifyUser(`"${filterSetName}" set as ${type} default`, "success");
@@ -767,7 +767,7 @@
           this.updateFilterProperty(id, 'is_shared', newValue);
           
           // Make API call
-          await this.savedFilterApi(id, "PATCH", { is_shared: newValue });
+          await this.makeSavedFilterUpdateRequest(id, { is_shared: newValue });
           
           if (newValue) {
             this.notifyUser(`"${filterSetName}" shared`, "success");
@@ -796,7 +796,7 @@
           this.updateFilterProperty(id, 'is_starred', newValue);
           
           // Make API call
-          await this.savedFilterApi(id, "PATCH", { is_starred: newValue });
+          await this.makeSavedFilterUpdateRequest(id, { is_starred: newValue });
           
           // Update starred filters list
           await this.loadStarredFilters();
@@ -819,7 +819,7 @@
         if(!confirm(`Delete "${name}"?`)) return;
         
         try {
-          await this.savedFilterApi(id, "DELETE");
+          await this.makeSavedFilterDeleteRequest(id);
           await this.reloadSavedFilters();
           this.notifyUser(`"${name}" deleted`, "success");
         } catch (error) {
@@ -839,7 +839,18 @@
         await this.loadStarredFilters();
       },
 
-      async savedFilterApi(filterId, method, body) {
+      async makeSavedFilterUpdateRequest(filterId, updateBody) {
+        this.savedFilterRequest(filterId, "PATCH", updateBody);
+      },
+
+      async makeSavedFilterDeleteRequest(filterId) {
+        this.savedFilterRequest(filterId, "DELETE");
+      },
+
+      // async createSavedFilter(filterId, updateBody) {
+      //   this.savedFilterRequest(filterId, "PATCH", updateBody);
+      // },
+      async savedFilterRequest(filterId, method, body) {
         const base = "{% url 'filters:filter_set' request.team.slug '000' %}";
         const url = base.replace("000", filterId);
         const opts = {method, credentials:"same-origin", headers: { "X-CSRFToken": SiteJS.app.Cookies.get("csrftoken")}

@@ -5,7 +5,7 @@ from . import views
 app_name = "filters"
 urlpatterns = [
     path(
-        "/<int:pk>/",
+        "<int:pk>",
         views.FilterSetView.as_view(),
         name="filter_set",
     ),
