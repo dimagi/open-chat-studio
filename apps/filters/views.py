@@ -2,6 +2,7 @@ import json
 
 from django.db import IntegrityError, models, transaction
 from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
 from django.views import View
 from django.views.decorators.http import require_http_methods
 
@@ -89,18 +90,9 @@ def create_filter_set(request, team_slug: str, table_type: str):
 class FilterSetView(LoginAndTeamRequiredMixin, View):
     """Handle PATCH (edit) and DELETE operations for FilterSet objects."""
 
-    def get_object(self, request, pk):
-        """Get the FilterSet object or return None if not found."""
-        try:
-            return FilterSet.objects.get(team=request.team, id=pk)
-        except FilterSet.DoesNotExist:
-            return None
-
     def patch(self, request, team_slug: str, pk: int):
         """Handle PATCH request to edit a filter set."""
-        fs = self.get_object(request, pk)
-        if not fs:
-            return JsonResponse({"error": "Not found"}, status=404)
+        fs = get_object_or_404(FilterSet, team=request.team, id=pk, user=request.user)
 
         payload = json.loads(request.body or b"{}")
         serializer = FilterSetCreateUpdateSerializer(
@@ -149,16 +141,6 @@ class FilterSetView(LoginAndTeamRequiredMixin, View):
 
     def delete(self, request, team_slug: str, pk: int):
         """Handle DELETE request to delete a filter set."""
-        fs = self.get_object(request, pk)
-        if not fs:
-            return JsonResponse({"error": "Not found"}, status=404)
-
-        is_owner = fs.user == request.user
-        is_team_admin = request.team_membership.is_team_admin
-
-        # Only owner or team admin can delete
-        if not (is_owner or is_team_admin):
-            return JsonResponse({"error": "You don't have permission to delete this filter set"}, status=403)
-
+        fs = get_object_or_404(FilterSet, team=request.team, id=pk, user=request.user)
         fs.delete()
         return JsonResponse({"success": True})
