@@ -1,11 +1,17 @@
 {% extends "generic/object_form.html" %}
 {% load i18n %}
 {% load static %}
+{% load form_tags %}
 
 {% block page_head %}
   {{ block.super }}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
 {% endblock page_head %}
+
+{% block form %}
+  {{ form.non_field_errors }}
+  {% render_form_fields form "name" %}
+{% endblock form %}
 
 {% block post_form %}
   <h2 class="pg-subtitle">{% trans "Dataset Messages" %}</h2>
@@ -19,50 +25,119 @@
     </div>
   </div>
 
-  {% include "evaluations/components/add_message_form.html" %}
+  <div x-data="datasetModeSelector({ defaultMode: 'manual' })" x-init="init()" class="mt-6">
+    <h3 class="text-lg font-semibold mb-4">{% trans "Add Messages to Dataset" %}</h3>
 
-  <div class="mt-8">
-    <h3 class="text-lg font-medium mb-4">{% trans "Upload CSV" %}</h3>
-    <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-      <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        {% trans "Upload a CSV file to update this dataset. Include an 'id' column to update existing messages, or omit it to create new messages." %}
-      </p>
+    <!-- Mode selection -->
+    <div class="form-control mb-4">
+      {{ form.mode }}
+    </div>
 
-      <form id="csv-upload-form" enctype="multipart/form-data">
-        {% csrf_token %}
-        <div class="mb-4">
-          <label for="csv-file" class="block text-sm font-medium mb-2">{% trans "CSV File" %}</label>
-          <input type="file"
-                 id="csv-file"
-                 name="csv_file"
-                 accept=".csv"
-                 class="file-input file-input-bordered w-full"
-                 required>
-        </div>
+    <div x-show="!loaded" class="text-center py-8">
+      <i class="fa-solid fa-spinner fa-spin fa-2x text-primary"></i>
+    </div>
 
-        <div class="flex gap-2">
+    <div x-show="loaded" x-cloak>
+      <!-- Clone from sessions mode -->
+      <div x-show="mode === 'clone'" class="w-full mt-4">
+        <form method="post" action="{% url 'evaluations:dataset_edit' request.team.slug object.id %}" x-ref="cloneForm">
+          {% csrf_token %}
+          <input type="hidden" name="name" value="{{ object.name }}">
+          <input type="hidden" name="mode" value="clone">
+          <input type="hidden" name="session_ids" x-ref="sessionIds">
+          <input type="hidden" name="filtered_session_ids" x-ref="filteredSessionIds">
+
+          <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
+            <h4 class="text-base font-semibold mb-4">{% trans "Select Sessions to Clone Messages From" %}</h4>
+            <p class="text-sm text-gray-600 mb-4">
+              {% trans "Select one or more experiment sessions. All message pairs (human-AI) from the selected sessions will be added to this dataset. Duplicate messages (based on message IDs) will be automatically skipped." %}
+            </p>
+
+            <div class="mb-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  {% include "experiments/filters.html" %}
+                </div>
+                <div x-show="selectedSessionIds.size + filteredSessionIds.size > 0" class="text-sm font-medium ml-4">
+                  <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> selected
+                  <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
+                    Clear
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div id="sessions-table" class="overflow-x-auto w-full" data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
+              {% include "table/table_placeholder.html" %}
+            </div>
+          </div>
+
           <button type="submit" class="btn btn-primary">
-            <i class="fa-solid fa-upload"></i> {% trans "Upload CSV" %}
+            <i class="fa-solid fa-plus mr-2"></i>
+            {% trans "Clone Messages to Dataset" %}
           </button>
-          <a href="{% url 'evaluations:dataset_download' request.team.slug object.id %}" class="btn btn-secondary">
-            <i class="fa-solid fa-download"></i> {% trans "Download Template" %}
-          </a>
-        </div>
-      </form>
+        </form>
+      </div>
 
-      <div id="upload-status" class="mt-4 hidden">
-        <div class="alert" id="upload-alert">
-          <div id="upload-message"></div>
+      <!-- Manual mode -->
+      <div x-show="mode === 'manual'" class="w-full mt-4">
+        {% include "evaluations/components/add_message_form.html" %}
+      </div>
+
+      <!-- CSV mode -->
+      <div x-show="mode === 'csv'" class="w-full mt-4">
+        <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            {% trans "Upload a CSV file to update this dataset. Include an 'id' column to update existing messages, or omit it to create new messages." %}
+          </p>
+
+          <form id="csv-upload-form" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="mb-4">
+              <label for="csv-file" class="block text-sm font-medium mb-2">{% trans "CSV File" %}</label>
+              <input type="file"
+                     id="csv-file"
+                     name="csv_file"
+                     accept=".csv"
+                     class="file-input file-input-bordered w-full"
+                     required>
+            </div>
+
+            <div class="flex gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="fa-solid fa-upload"></i> {% trans "Upload CSV" %}
+              </button>
+              <a href="{% url 'evaluations:dataset_download' request.team.slug object.id %}" class="btn btn-secondary">
+                <i class="fa-solid fa-download"></i> {% trans "Download Template" %}
+              </a>
+            </div>
+          </form>
+
+          <div id="upload-status" class="mt-4 hidden">
+            <div class="alert" id="upload-alert">
+              <div id="upload-message"></div>
+            </div>
+          </div>
+
+          <div id="progress-wrapper" class="mt-4 hidden">
+            <div class="progress-wrapper">
+              <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
+                <div class="bg-blue-600 dark:bg-blue-400 h-full transition-all duration-300" style="width: 0%"></div>
+              </div>
+            </div>
+            <div id="progress-bar-message" class="mt-2 text-sm text-center">Processing CSV...</div>
+          </div>
         </div>
       </div>
 
-      <div id="progress-wrapper" class="mt-4 hidden">
-        <div class="progress-wrapper">
-          <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
-            <div class="bg-blue-600 dark:bg-blue-400 h-full transition-all duration-300" style="width: 0%"></div>
-          </div>
+      <!-- Error messages -->
+      <div x-show="errorMessages.length" class="alert alert-error mb-4 mt-4">
+        <i class="fa-solid fa-exclamation-triangle"></i>
+        <div>
+          <template x-for="error in errorMessages || []">
+            <p x-text="error"></p>
+          </template>
         </div>
-        <div id="progress-bar-message" class="mt-2 text-sm text-center">Processing CSV...</div>
       </div>
     </div>
   </div>
@@ -72,6 +147,7 @@
 
 {% block page_js %}
   {{ block.super }}
+  <script src="{% static 'js/evaluations-bundle.js' %}"></script>
   <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
     window.addEventListener('load', () => {

@@ -16,6 +16,7 @@ const config = {
     'tagMultiselect': './assets/javascript/tag-multiselect.js',
     'tokenCounter': './assets/javascript/tiktoken.js',
     'editors': './assets/javascript/editors.js',
+    'evaluations': './assets/javascript/apps/evaluations/dataset-mode-selector.js',
   },
 
   output: {
