@@ -709,7 +709,7 @@
         const filterSetName = this.getSavedFilterSetName(id);
         
         try {
-          await this.savedFilterApi(`/${id}/edit/`, "PATCH", { filter_query_string: window.location.search.substring(1) });
+          await this.savedFilterApi(id, "PATCH", { filter_query_string: window.location.search.substring(1) });
           await this.reloadSavedFilters(); 
           this.notifyUser(`"${filterSetName}" updated`, "success");
         } catch (error) {
@@ -738,7 +738,7 @@
             payload[`clear_other_${type}_defaults`] = true;
           }
           
-          await this.savedFilterApi(`/${id}/edit/`, "PATCH", payload);
+          await this.savedFilterApi(id, "PATCH", payload);
           
           if (newValue) {
             this.notifyUser(`"${filterSetName}" set as ${type} default`, "success");
@@ -767,7 +767,7 @@
           this.updateFilterProperty(id, 'is_shared', newValue);
           
           // Make API call
-          await this.savedFilterApi(`/${id}/edit/`, "PATCH", { is_shared: newValue });
+          await this.savedFilterApi(id, "PATCH", { is_shared: newValue });
           
           if (newValue) {
             this.notifyUser(`"${filterSetName}" shared`, "success");
@@ -796,7 +796,7 @@
           this.updateFilterProperty(id, 'is_starred', newValue);
           
           // Make API call
-          await this.savedFilterApi(`/${id}/edit/`, "PATCH", { is_starred: newValue });
+          await this.savedFilterApi(id, "PATCH", { is_starred: newValue });
           
           // Update starred filters list
           await this.loadStarredFilters();
@@ -819,7 +819,7 @@
         if(!confirm(`Delete "${name}"?`)) return;
         
         try {
-          await this.savedFilterApi(`/${id}/edit/`, "DELETE");
+          await this.savedFilterApi(id, "DELETE");
           await this.reloadSavedFilters();
           this.notifyUser(`"${name}" deleted`, "success");
         } catch (error) {
@@ -839,15 +839,16 @@
         await this.loadStarredFilters();
       },
 
-      async savedFilterApi(endpoint, method, body) {
-        const base = "{% url 'filters:edit_filter_set' request.team.slug 0 %}";
-        const url = base.replace("/0/edit/", endpoint);
-        const opts = {
-          method, credentials:"same-origin",
-          headers:{ "X-CSRFToken": SiteJS.app.Cookies.get("csrftoken") }
+      async savedFilterApi(filterId, method, body) {
+        const base = "{% url 'filters:filter_set' request.team.slug '000' %}";
+        const url = base.replace("000", filterId);
+        const opts = {method, credentials:"same-origin", headers: { "X-CSRFToken": SiteJS.app.Cookies.get("csrftoken")}
         };
-        if(body){ opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(body);}
-        const r = await fetch(url,opts);
+        if (body) {
+          opts.headers["Content-Type"]="application/json";
+          opts.body=JSON.stringify(body);
+        }
+        const r = await fetch(url, opts);
         if(!r.ok) throw new Error("API failed");
         return r.json().catch(()=>({}));
       },
@@ -876,18 +877,4 @@
       
     }));
     });
-
-    window.refreshFilterSets = async function() {
-      try {
-        const filterComponent = document.querySelector('[x-data*="filterComponent"]');
-        if (filterComponent?.__x) {
-          const component = filterComponent.__x.$data;
-          component.savedFilters = null; // Clear cache to force refresh
-          await component.fetchSavedFilters();
-          await component.loadStarredFilters();
-        }
-      } catch (error) {
-        console.error('Error refreshing filter sets:', error);
-      }
-    };
   </script>

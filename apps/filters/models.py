@@ -18,7 +18,6 @@ class FilterSet(BaseTeamModel):
     is_starred = models.BooleanField(default=False)
     is_default_for_user = models.BooleanField(default=False)
     is_default_for_team = models.BooleanField(default=False)
-    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
@@ -28,12 +27,12 @@ class FilterSet(BaseTeamModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["team", "user", "table_type"],
-                condition=Q(is_default_for_user=True, is_deleted=False),
+                condition=Q(is_default_for_user=True),
                 name="unique_default_filterset_per_user_table_type",
             ),
             models.UniqueConstraint(
                 fields=["team", "table_type"],
-                condition=Q(is_default_for_team=True, is_deleted=False),
+                condition=Q(is_default_for_team=True),
                 name="unique_default_filterset_per_team_table_type",
             ),
         ]

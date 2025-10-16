@@ -2,6 +2,8 @@ import json
 
 from django.db import models, transaction
 from django.http import JsonResponse
+from django.utils.decorators import method_decorator
+from django.views import View
 from django.views.decorators.http import require_http_methods
 
 from apps.filters.models import FilterSet
@@ -29,7 +31,6 @@ def list_filter_sets(request, team_slug: str, table_type: str):
         FilterSet.objects.filter(
             team=request.team,
             table_type=table_type,
-            is_deleted=False,
         )
         .filter(models.Q(user=request.user) | models.Q(is_shared=True))
         .order_by("-is_starred", "name")
@@ -73,64 +74,80 @@ def create_filter_set(request, team_slug: str, table_type: str):
     return JsonResponse({"success": True, "filter_set": _to_dict(filter_set)})
 
 
-@require_http_methods(["PATCH", "DELETE"])
-@login_and_team_required
-def edit_or_delete_filter_set(request, team_slug: str, pk: int):
-    try:
-        fs = FilterSet.objects.get(team=request.team, id=pk, is_deleted=False)
-    except FilterSet.DoesNotExist:
-        return JsonResponse({"error": "Not found"}, status=404)
+@method_decorator(login_and_team_required, name="dispatch")
+class FilterSetView(View):
+    """Handle PATCH (edit) and DELETE operations for FilterSet objects."""
 
-    is_owner = fs.user == request.user
-    is_team_admin = request.team_membership.is_team_admin
+    def get_object(self, request, pk):
+        """Get the FilterSet object or return None if not found."""
+        try:
+            return FilterSet.objects.get(team=request.team, id=pk)
+        except FilterSet.DoesNotExist:
+            return None
 
-    if request.method == "DELETE":
+    def patch(self, request, team_slug: str, pk: int):
+        """Handle PATCH request to edit a filter set."""
+        fs = self.get_object(request, pk)
+        if not fs:
+            return JsonResponse({"error": "Not found"}, status=404)
+
+        payload = json.loads(request.body or b"{}")
+        serializer = FilterSetCreateUpdateSerializer(
+            data=payload, partial=True, context={"is_team_admin": request.team_membership.is_team_admin}
+        )
+        if not serializer.is_valid():
+            return JsonResponse(serializer.errors, status=400)
+        validated = serializer.validated_data
+
+        with transaction.atomic():
+            updates = []
+            if "filter_query_string" in validated:
+                fs.filter_query_string = validated["filter_query_string"]
+                updates.append("filter_query_string")
+            if "is_shared" in validated:
+                fs.is_shared = bool(validated["is_shared"])
+                updates.append("is_shared")
+            if "is_starred" in validated:
+                fs.is_starred = bool(validated["is_starred"])
+                updates.append("is_starred")
+
+            if validated.get("is_default_for_user") is True:
+                FilterSet.objects.filter(
+                    team=request.team, user=request.user, table_type=fs.table_type, is_default_for_user=True
+                ).exclude(id=fs.id).update(is_default_for_user=False)
+                fs.is_default_for_user = True
+                updates.append("is_default_for_user")
+            elif validated.get("is_default_for_user") is False:
+                fs.is_default_for_user = False
+                updates.append("is_default_for_user")
+
+            if validated.get("is_default_for_team") is True:
+                FilterSet.objects.filter(team=request.team, table_type=fs.table_type, is_default_for_team=True).exclude(
+                    id=fs.id
+                ).update(is_default_for_team=False)
+                fs.is_default_for_team = True
+                updates.append("is_default_for_team")
+            elif validated.get("is_default_for_team") is False:
+                fs.is_default_for_team = False
+                updates.append("is_default_for_team")
+
+            if updates:
+                fs.save(update_fields=updates)
+
+        return JsonResponse({"result": _to_dict(fs)})
+
+    def delete(self, request, team_slug: str, pk: int):
+        """Handle DELETE request to delete a filter set."""
+        fs = self.get_object(request, pk)
+        if not fs:
+            return JsonResponse({"error": "Not found"}, status=404)
+
+        is_owner = fs.user == request.user
+        is_team_admin = request.team_membership.is_team_admin
+
         # Only owner or team admin can delete
         if not (is_owner or is_team_admin):
             return JsonResponse({"error": "You don't have permission to delete this filter set"}, status=403)
-        fs.is_deleted = True
-        fs.save(update_fields=["is_deleted"])
+
+        fs.delete()
         return JsonResponse({"success": True})
-
-    payload = json.loads(request.body or b"{}")
-    serializer = FilterSetCreateUpdateSerializer(
-        data=payload, partial=True, context={"is_team_admin": request.team_membership.is_team_admin}
-    )
-    if not serializer.is_valid():
-        return JsonResponse(serializer.errors, status=400)
-    validated = serializer.validated_data
-
-    with transaction.atomic():
-        updates = []
-        if "filter_query_string" in validated:
-            fs.filter_query_string = validated["filter_query_string"]
-            updates.append("filter_query_string")
-        if "is_shared" in validated:
-            fs.is_shared = bool(validated["is_shared"])
-            updates.append("is_shared")
-        if "is_starred" in validated:
-            fs.is_starred = bool(validated["is_starred"])
-            updates.append("is_starred")
-        if validated.get("is_default_for_user") is True:
-            FilterSet.objects.filter(
-                team=request.team, user=request.user, table_type=fs.table_type, is_default_for_user=True
-            ).exclude(id=fs.id).update(is_default_for_user=False)
-            fs.is_default_for_user = True
-            updates.append("is_default_for_user")
-        elif validated.get("is_default_for_user") is False:
-            fs.is_default_for_user = False
-            updates.append("is_default_for_user")
-        if validated.get("is_default_for_team") is True:
-            FilterSet.objects.filter(team=request.team, table_type=fs.table_type, is_default_for_team=True).exclude(
-                id=fs.id
-            ).update(is_default_for_team=False)
-            fs.is_default_for_team = True
-            updates.append("is_default_for_team")
-        elif validated.get("is_default_for_team") is False:
-            fs.is_default_for_team = False
-            updates.append("is_default_for_team")
-
-        if updates:
-            fs.save(update_fields=updates)
-
-    return JsonResponse({"result": _to_dict(fs)})
