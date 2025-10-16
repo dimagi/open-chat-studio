@@ -1,24 +1,22 @@
 {% load waffle_tags %}
-{% with df_table_type=table_type %}
-    <div class="dropdown dropdown-end" x-data="filterComponent">
-      <div tabindex="0" role="button" class="btn btn-square btn-sm btn-ghost">
-        <i class="fa-solid fa-ellipsis-vertical"></i>
-      </div>
-      <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48">
-        {% if table_type == "sessions" %}
-        {% flag "flag_evaluations" %}
-        <li>
-          <a href="{% url 'evaluations:dataset_new' team.slug %}"
-         onclick="createDatasetWithFilters(this, '{{ experiment.id }}');">
-        <i class="fa-solid fa-database"></i>
-        Create dataset
-      </a>
-        </li>
-        {% endflag %}
-        {% endif %}
-      </ul>
+  <div class="dropdown dropdown-end" x-data="filterComponent">
+    <div tabindex="0" role="button" class="btn btn-square btn-sm btn-ghost">
+      <i class="fa-solid fa-ellipsis-vertical"></i>
     </div>
-{% endwith %}
+    <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48">
+      {% if table_type == "sessions" %}
+      {% flag "flag_evaluations" %}
+      <li>
+        <a href="{% url 'evaluations:dataset_new' team.slug %}"
+        onclick="createDatasetWithFilters(this, '{{ experiment.id }}');">
+      <i class="fa-solid fa-database"></i>
+      Create dataset
+    </a>
+      </li>
+      {% endflag %}
+      {% endif %}
+    </ul>
+  </div>
 
 <script>
     function createDatasetWithFilters(linkElement, experimentId) {

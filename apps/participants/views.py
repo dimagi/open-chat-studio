@@ -48,6 +48,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "title": "Participants",
             "allow_new": False,
             "table_url": table_url,
+            "df_table_type": "participants",
             "actions": [
                 actions.Action(
                     "participants:import",

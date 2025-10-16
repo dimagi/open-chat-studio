@@ -21,6 +21,7 @@ class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "traces",
             "title": "Traces",
+            "df_table_type": "traces",
             "table_url": reverse("trace:table", args=[team_slug]),
             **get_trace_filter_context_data(self.request.team),
         }

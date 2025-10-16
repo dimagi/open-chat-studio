@@ -470,5 +470,6 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "allow_new": False,
             "table_url": table_url,
             "use_dynamic_filters": True,
+            "df_table_type": "all-sessions",
             **filter_context,
         }

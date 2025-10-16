@@ -1,5 +1,4 @@
 {% load waffle_tags %}
-{% with table_type=table_type|default:"sessions" df_table_type=table_type|default:"sessions" %}
 <div class="my-3">
   <div class="relative">
     <div class="flex items-center justify-between w-full">
@@ -23,7 +22,7 @@
               <i class="fa-solid fa-table-list"></i> Analyze Transcripts
           </a>
         {% endflag %}
-        {% include "experiments/filters.html" with df_table_type=df_table_type %}
+        {% include "experiments/filters.html" with df_table_type="sessions" %}
       </div>
       
       <div class="ml-4">
@@ -32,4 +31,3 @@
     </div>
   </div>
 </div>
-{% endwith %}

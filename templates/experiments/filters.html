@@ -1,4 +1,3 @@
-{% with df_table_type=df_table_type %}
 <div x-data="filterComponent" @click.outside="filterData.showFilters = false" class="relative">
   <!-- Filter Button -->
   <div class="flex items-center">
@@ -225,8 +224,8 @@
       </div>
     </div>
   </div>
-  {% include "filters/saved_filters_dialog.html" with df_table_type=df_table_type %}
-  {% include "filters/save_filter_dialog.html" with df_table_type=df_table_type %}
+  {% include "filters/saved_filters_dialog.html" %}
+  {% include "filters/save_filter_dialog.html" %}
 </div>
 
 {{ df_date_range_options|json_script:"date-range-options" }}
@@ -892,4 +891,3 @@
       }
     };
   </script>
-{% endwith %}
