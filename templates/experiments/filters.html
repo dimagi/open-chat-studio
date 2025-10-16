@@ -933,16 +933,12 @@
       },
 
       async makeSavedFilterUpdateRequest(filterId, updateBody) {
-        this.savedFilterRequest(filterId, "PATCH", updateBody);
+        await this.savedFilterRequest(filterId, "PATCH", updateBody);
       },
 
       async makeSavedFilterDeleteRequest(filterId) {
-        this.savedFilterRequest(filterId, "DELETE");
+        await this.savedFilterRequest(filterId, "DELETE");
       },
-
-      // async createSavedFilter(filterId, updateBody) {
-      //   this.savedFilterRequest(filterId, "PATCH", updateBody);
-      // },
       async savedFilterRequest(filterId, method, body) {
         const base = "{% url 'filters:filter_set' request.team.slug '000' %}";
         const url = base.replace("000", filterId);
