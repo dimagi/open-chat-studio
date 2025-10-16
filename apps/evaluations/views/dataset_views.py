@@ -23,7 +23,7 @@ from apps.evaluations.tables import (
     EvaluationSessionsSelectionTable,
 )
 from apps.evaluations.tasks import upload_dataset_csv_task
-from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
+from apps.evaluations.utils import generate_csv_column_suggestions, normalize_json_quotes, parse_history_text
 from apps.experiments.filters import (
     ChatMessageFilter,
     ExperimentSessionFilter,
@@ -404,6 +404,14 @@ def parse_csv_columns(request, team_slug: str):
         columns = csv_reader.fieldnames or []
 
         all_rows = list(csv_reader)
+
+        for row in all_rows:
+            for key, value in row.items():
+                if isinstance(value, str):
+                    value_stripped = value.strip()
+                    if value_stripped.startswith(("{", "[")):
+                        row[key] = normalize_json_quotes(value)
+
         sample_rows = all_rows[:3]
         total_rows = len(all_rows)
         suggestions = generate_csv_column_suggestions(columns)

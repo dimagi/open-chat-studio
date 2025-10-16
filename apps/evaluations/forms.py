@@ -14,7 +14,7 @@ from apps.evaluations.models import (
     Evaluator,
     ExperimentVersionSelection,
 )
-from apps.evaluations.utils import parse_history_text
+from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 
 
@@ -566,19 +566,19 @@ class EvaluationDatasetForm(forms.ModelForm):
             if context_mapping := column_mapping.get("context"):
                 for field_name, csv_column in context_mapping.items():
                     if csv_column in row:
-                        context[field_name] = row[csv_column]
+                        context[field_name] = parse_csv_value_as_json(row[csv_column])
 
             participant_data = {}
             if participant_data_mapping := column_mapping.get("participant_data"):
                 for field_name, csv_column in participant_data_mapping.items():
                     if csv_column in row:
-                        participant_data[field_name] = row[csv_column]
+                        participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
 
             session_state = {}
             if session_state_mapping := column_mapping.get("session_state"):
                 for field_name, csv_column in session_state_mapping.items():
                     if csv_column in row:
-                        session_state[field_name] = row[csv_column]
+                        session_state[field_name] = parse_csv_value_as_json(row[csv_column])
 
             message_history = []
             if populate_history:

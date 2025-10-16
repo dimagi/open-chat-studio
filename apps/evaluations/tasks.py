@@ -1,5 +1,4 @@
 import csv
-import json
 import logging
 import math
 from collections import defaultdict
@@ -28,7 +27,7 @@ from apps.evaluations.models import (
     EvaluationRunType,
     Evaluator,
 )
-from apps.evaluations.utils import parse_history_text
+from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.utils import current_team
 
@@ -297,39 +296,26 @@ def _extract_row_data(row):
     if not input_content or not output_content:
         raise ValueError("Missing input or output content")
 
-    def _parse_value(value):
-        """Parse value as JSON if it's an object or array, otherwise return as-is."""
-        if not value:
-            return value
-        # Only parse if it looks like a JSON object or array
-        value_stripped = value.strip()
-        if value_stripped.startswith(("{", "[")):
-            try:
-                return json.loads(value)
-            except (json.JSONDecodeError, TypeError):
-                return value
-        return value
-
     # Extract context from context.* columns
     context = {}
     for col_name, value in row.items():
         if col_name.startswith("context.") and value:
             context_key = col_name[8:]  # Remove "context." prefix
-            context[context_key] = _parse_value(value)
+            context[context_key] = parse_csv_value_as_json(value)
 
     # Extract participant_data from participant_data.* columns
     participant_data = {}
     for col_name, value in row.items():
         if col_name.startswith("participant_data.") and value:
             key = col_name[17:]  # Remove "participant_data." prefix
-            participant_data[key] = _parse_value(value)
+            participant_data[key] = parse_csv_value_as_json(value)
 
     # Extract session_state from session_state.* columns
     session_state = {}
     for col_name, value in row.items():
         if col_name.startswith("session_state.") and value:
             key = col_name[14:]  # Remove "session_state." prefix
-            session_state[key] = _parse_value(value)
+            session_state[key] = parse_csv_value_as_json(value)
 
     # Parse history if present
     history = []

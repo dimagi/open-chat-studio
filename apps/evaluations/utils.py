@@ -1,4 +1,5 @@
 import inspect
+import json
 import re
 from typing import TYPE_CHECKING
 
@@ -297,3 +298,25 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                 i += 1
 
     return new_messages
+
+
+def normalize_json_quotes(text):
+    """Normalize fancy quotes to regular quotes for JSON parsing."""
+    text = text.replace("“", '"').replace("”", '"')
+    text = text.replace("‘", "'").replace("’", "'")
+    return text
+
+
+def parse_csv_value_as_json(value):
+    """Parse value as JSON if it's an object or array, otherwise return as-is."""
+    if not value:
+        return value
+    # Only parse if it looks like a JSON object or array
+    value_stripped = value.strip()
+    if value_stripped.startswith(("{", "[")):
+        try:
+            normalized_value = normalize_json_quotes(value)
+            return json.loads(normalized_value)
+        except (json.JSONDecodeError, TypeError):
+            return value
+    return value
