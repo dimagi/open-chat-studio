@@ -4,17 +4,22 @@
       <i class="fa-solid fa-ellipsis-vertical"></i>
     </div>
     <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48">
-      {% if table_type == "sessions" %}
       {% flag "flag_evaluations" %}
-      <li>
-        <a href="{% url 'evaluations:dataset_new' team.slug %}"
-        onclick="createDatasetWithFilters(this, '{{ experiment.id }}');">
-      <i class="fa-solid fa-database"></i>
-      Create dataset
-    </a>
-      </li>
+        <li>
+          <a href="{% url 'evaluations:dataset_new' team.slug %}"
+            onclick="createDatasetWithFilters(this, '{{ experiment.id }}');">
+            <i class="fa-solid fa-database"></i>
+            Create dataset
+          </a>
+        </li>
       {% endflag %}
-      {% endif %}
+      {% flag "flag_session-analysis" %}
+        <li>
+          <a href="{% url 'analysis:create' team.slug experiment.id %}">
+              <i class="fa-solid fa-table-list"></i> Analyze Transcripts
+          </a>
+        </li>
+      {% endflag %}
     </ul>
   </div>
 

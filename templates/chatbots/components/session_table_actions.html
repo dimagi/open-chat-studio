@@ -17,16 +17,11 @@
         {% if perms.experiments.download_chats %}
           {% include "experiments/components/exports.html" %}
         {% endif %}
-         {% flag "flag_session-analysis" %}
-          <a href="{% url 'analysis:create' team.slug experiment.id %}" class="btn btn-sm btn-outline btn-primary">
-              <i class="fa-solid fa-table-list"></i> Analyze Transcripts
-          </a>
-        {% endflag %}
         {% include "experiments/filters.html" with df_table_type="sessions" %}
       </div>
       
       <div class="ml-4">
-        {% include "chatbots/table_actions_dropdown.html" with table_type=table_type %}
+        {% include "chatbots/table_actions_dropdown.html" %}
       </div>
     </div>
   </div>
