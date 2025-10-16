@@ -1,0 +1,43 @@
+{% load i18n %}
+<!-- Reusable field mapping section for context, participant_data, and session_state -->
+<div>
+  <div class="flex items-center justify-between mb-2">
+    <label class="block text-sm font-medium">{{ label }}</label>
+    <button type="button"
+            class="btn btn-xs btn-outline"
+            @click="addMapping('{{ field_type }}')">
+      <i class="fa-solid fa-plus"></i> {% trans "Add Field" %}
+    </button>
+  </div>
+  <div class="space-y-2">
+    <template x-for="(mapping, index) in getMappingArray('{{ field_type }}')" :key="index">
+      <div class="flex gap-2 items-center">
+        <div class="flex-1">
+          <input type="text"
+                 x-model="mapping.fieldName"
+                 @input="validateFieldName('{{ field_type }}', index); updateColumnMapping()"
+                 class="input input-bordered input-sm w-full"
+                 :class="mapping.fieldNameError ? 'input-error' : ''"
+                 placeholder="{{ placeholder }}">
+          <div x-show="mapping.fieldNameError" class="text-error text-xs mt-1" x-text="mapping.fieldNameError"></div>
+        </div>
+        <select x-model="mapping.csvColumn"
+                @change="updateColumnMapping()"
+                class="select select-bordered select-sm flex-1">
+          <option value="">{% trans "Select column..." %}</option>
+          <template x-for="column in csvData?.columns || []">
+            <option :value="column" x-text="column" :selected="mapping.csvColumn === column"></option>
+          </template>
+        </select>
+        <button type="button"
+                class="btn btn-xs"
+                @click="removeMapping('{{ field_type }}', index)">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </div>
+    </template>
+    <div x-show="getMappingArray('{{ field_type }}').length === 0" class="text-sm text-gray-500 italic">
+      {{ empty_message }}
+    </div>
+  </div>
+</div>

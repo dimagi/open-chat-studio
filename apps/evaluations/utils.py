@@ -1,4 +1,5 @@
 import inspect
+import json
 import re
 from typing import TYPE_CHECKING
 
@@ -127,11 +128,13 @@ def parse_history_text(history_text: str) -> list:
 
 def generate_csv_column_suggestions(columns):
     """Generate smart suggestions for column mapping based on column names."""
-    suggestions = {}
+    suggestions = {
+        "context": [],
+        "participant_data": [],
+        "session_state": [],
+    }
     input_patterns = {"input", "human", "user", "question", "prompt", "message", "query"}
     output_patterns = {"output", "ai", "assistant", "response", "answer", "reply", "completion"}
-
-    context_columns = []
 
     for col in columns:
         col_lower = col.lower().strip()
@@ -140,27 +143,30 @@ def generate_csv_column_suggestions(columns):
         elif "output" not in suggestions and any(pattern in col_lower for pattern in output_patterns):
             suggestions["output"] = col
         elif col_lower == "id":
-            # Skip suggesting ID columns as context
+            # Skip suggesting ID columns
             continue
         elif col_lower == "history":
             # History has its own suggestion mechanism
             suggestions["history"] = col
+        elif col.startswith("context."):
+            field_name = _clean_field_name(col[8:])  # Remove 'context.' prefix
+            suggestions["context"].append({"fieldName": field_name, "csvColumn": col})
+        elif col.startswith("participant_data."):
+            field_name = _clean_field_name(col[17:])  # Remove 'participant_data.' prefix
+            suggestions["participant_data"].append({"fieldName": field_name, "csvColumn": col})
+        elif col.startswith("session_state."):
+            field_name = _clean_field_name(col[14:])  # Remove 'session_state.' prefix
+            suggestions["session_state"].append({"fieldName": field_name, "csvColumn": col})
         else:
-            # Clean up column name for context field suggestion
-            clean_name = _clean_context_field_name(col)
-            context_columns.append({"fieldName": clean_name, "csvColumn": col})
-
-    if context_columns:
-        suggestions["context"] = context_columns
+            # Fall back to suggesting unknown fields as context fields
+            field_name = _clean_field_name(col)
+            suggestions["context"].append({"fieldName": field_name, "csvColumn": col})
 
     return suggestions
 
 
-def _clean_context_field_name(field_name):
+def _clean_field_name(field_name):
     """Clean a field name to be a valid Python identifier."""
-    if field_name.lower().startswith("context."):
-        field_name = field_name[8:]  # Remove 'context.' prefix
-
     # Convert spaces to underscores and remove invalid characters
     field_name = re.sub(r"[^\w]", "_", field_name)
 
@@ -292,3 +298,25 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
                 i += 1
 
     return new_messages
+
+
+def normalize_json_quotes(text):
+    """Normalize fancy quotes to regular quotes for JSON parsing."""
+    text = text.replace("“", '"').replace("”", '"')
+    text = text.replace("‘", "'").replace("’", "'")
+    return text
+
+
+def parse_csv_value_as_json(value):
+    """Parse value as JSON if it's an object or array, otherwise return as-is."""
+    if not value:
+        return value
+    # Only parse if it looks like a JSON object or array
+    value_stripped = value.strip()
+    if value_stripped.startswith(("{", "[")):
+        try:
+            normalized_value = normalize_json_quotes(value)
+            return json.loads(normalized_value)
+        except (json.JSONDecodeError, TypeError):
+            return value
+    return value
