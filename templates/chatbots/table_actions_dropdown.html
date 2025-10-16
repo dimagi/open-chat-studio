@@ -5,12 +5,6 @@
         <i class="fa-solid fa-ellipsis-vertical"></i>
       </div>
       <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48">
-        <li>
-          <a href="#" @click.prevent="savedFiltersDialog.showModal()">
-            <i class="fa-solid fa-filter"></i>
-            Saved Filters
-          </a>
-        </li>
         {% if table_type == "sessions" %}
         {% flag "flag_evaluations" %}
         <li>
