@@ -21,7 +21,7 @@ class FilterSet(BaseTeamModel):
     name = models.CharField(max_length=256)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     table_type = models.CharField(max_length=50, choices=TableType.choices)
-    filter_query_string = models.CharField(blank=False)
+    filter_query_string = models.TextField(blank=False)
     is_shared = models.BooleanField(default=False)
     is_starred = models.BooleanField(default=False)
     is_default_for_user = models.BooleanField(default=False)
