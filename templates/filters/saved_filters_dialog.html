@@ -34,7 +34,7 @@
                         x-cloak
                         x-show="filter.is_user_filter"
                         @click="toggleSavedFilterDefault(filter.id, 'user')"
-                        :class="filter.is_default_for_user ? 'text-gray-500' : ''">
+                        :class="filter.is_default_for_user ? 'text-yellow-500' : ''">
                   <i class="fa-regular fa-user"></i>
                 </button>
                 
@@ -44,7 +44,7 @@
                         x-cloak
                         x-show="filter.is_user_filter"
                         @click="toggleSavedFilterDefault(filter.id, 'team')"
-                        :class="filter.is_default_for_team ? 'text-gray-500' : ''">
+                        :class="filter.is_default_for_team ? 'text-yellow-500' : ''">
                   <i class="fa-solid fa-users"></i>
                 </button>
                 
