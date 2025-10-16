@@ -71,7 +71,7 @@ def test_parallel_branch_with_merge(pipeline, experiment_session):
           -> B -> C --^
 
     Node D gets called twice, once with the output from A and once with the output of C.
-    'end' also gets
+    'end' also gets called twice.
     """
     start = start_node()
     template_a = render_template_node("A ({{ input }})", name="A")
