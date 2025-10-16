@@ -2,13 +2,13 @@ import json
 
 from django.db import models, transaction
 from django.http import JsonResponse
-from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.http import require_http_methods
 
 from apps.filters.models import FilterSet
 from apps.filters.serializers import FilterSetCreateUpdateSerializer
 from apps.teams.decorators import login_and_team_required
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
 def _to_dict(fs: FilterSet) -> dict:
@@ -74,8 +74,7 @@ def create_filter_set(request, team_slug: str, table_type: str):
     return JsonResponse({"success": True, "filter_set": _to_dict(filter_set)})
 
 
-@method_decorator(login_and_team_required, name="dispatch")
-class FilterSetView(View):
+class FilterSetView(LoginAndTeamRequiredMixin, View):
     """Handle PATCH (edit) and DELETE operations for FilterSet objects."""
 
     def get_object(self, request, pk):
