@@ -1,0 +1,107 @@
+{% load i18n %}
+<div x-data="saveFilterDialogData()">
+  <dialog id="saveFilterDialog" class="modal">
+    <div class="modal-box max-w-md bg-base-100 border border-base-300">
+      <div class="flex items-center justify-between mb-6">
+        <h3 class="font-bold text-lg text-base-content">{% trans "Create Filter Set" %}</h3>
+        <form method="dialog">
+          <button class="btn btn-sm btn-ghost text-base-content hover:bg-base-200">✕</button>
+        </form>
+      </div>
+
+      <!-- Create New Filter Set Form -->
+      <form @submit.prevent="submitFilter" id="createFilterSetForm">
+        {% csrf_token %}
+        <input type="hidden" name="filter_query_string" value="{{ request.GET.urlencode }}" />
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-base-content mb-2">{% trans "Name" %}</label>
+          <input
+            type="text" 
+            x-model="filterName"
+            id="filterSetName" 
+            class="input input-bordered w-full bg-base-100 border-base-300 text-base-content placeholder-base-content/60 focus:border-primary" 
+            placeholder='{% trans "Name" %}'
+            required>
+        </div>
+        
+        <div class="flex justify-end gap-3">
+          <form method="dialog">
+            <button
+              type="button"
+              @click="closeDialog()"
+              class="btn btn-ghost text-base-content hover:bg-base-200">
+              {% trans "Cancel" %}
+            </button>
+          </form>
+          <button 
+            type="submit" 
+            class="btn btn-primary" 
+            :class="{ 'loading': isLoading }"
+            :disabled="isLoading"
+            id="saveFilterBtn">
+            <span x-show="!isLoading">{% trans "Save" %}</span>
+            <span x-show="isLoading">Saving...</span>
+          </button>
+        </div>
+      </form>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+</div>
+
+<script>
+  function saveFilterDialogData() {
+    return {
+      filterName: '',
+      isLoading: false,
+      response: null,
+      error: null,
+
+      async submitFilter() {
+        this.isLoading = true;
+        this.error = null;
+        
+        try {
+          const formData = new FormData();
+          formData.append('name', this.filterName);
+          formData.append('filter_query_string', window.location.search.substring(1));
+          formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+          const response = await fetch('{% url "filters:create_filter_set" request.team.slug df_table_type %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+            }
+          });
+          this.response = await response.json();
+          this.savedFilters.push(this.response.filter_set)
+          
+          if (response.ok) {
+            alertify.notify('Filter saved!', 'success', 10);
+            this.closeDialog();
+            if (window.savedFiltersDialog) {
+              savedFiltersDialog.close();
+            }
+          } else {
+            throw new Error(this.response.message || 'Failed to save filter');
+          }
+        } catch (error) {
+          this.error = error.message;
+          alertify.notify('Failed to save filter', 'error', 10);
+        } finally {
+          this.isLoading = false;
+        }
+      },
+
+      closeDialog() {
+        saveFilterDialog.close();
+        this.filterName = '';
+        this.response = null;
+        this.error = null;
+      }
+    }
+  }
+</script>

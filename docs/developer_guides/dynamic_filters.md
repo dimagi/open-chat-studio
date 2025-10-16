@@ -236,7 +236,7 @@ Create the template that includes the filter interface:
 <div class="container mx-auto px-4 py-8">
     <h1 class="text-2xl font-bold mb-6">Product Inventory</h1>
     <!-- Include the dynamic filters -->
-    {% include "experiments/filters.html" %}
+    {% include "experiments/filters.html" with df_table_type="your-table-type" %}
     <!-- Rest of the page -->
 </div>
 

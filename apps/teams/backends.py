@@ -76,6 +76,7 @@ CONTENT_TYPES = {
         "syntheticvoice",
     ],
     "files": ["file", "filechunkembedding"],
+    "filters": ["filterset"],
     "pipelines": ["pipeline", "pipelinechathistory", "pipelinechatmessages", "node"],
     "service_providers": [
         "authprovider",

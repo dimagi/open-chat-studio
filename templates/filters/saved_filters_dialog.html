@@ -1,0 +1,92 @@
+<dialog id="savedFiltersDialog" class="modal">
+  <div class="modal-box max-w-xl">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="font-bold text-lg">Saved Filters</h3>
+      <button class="btn btn-sm btn-ghost" onclick="this.closest('dialog').close()">✕</button>
+    </div>
+
+    <div id="filtersContent">
+      <template x-if="!savedFilters || savedFilters.length === 0">
+        <div class="text-center text-gray-500 py-4">No saved filter sets</div>
+      </template>
+      
+      <template x-if="savedFilters && savedFilters.length > 0">
+        <div class="space-y-4">
+          <template x-for="filter in savedFilters" :key="filter.id">
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <div class="font-medium cursor-pointer hover:text-primary hover:bg-base-200 hover:border-base-300 p-2 rounded"
+                     @click="applySavedFilterById(filter.id, filter.filter_query_string)"
+                     title="Click to apply"
+                     x-text="filter.name"></div>
+              </div>
+              <div class="flex gap-1">
+                <button
+                  class="btn btn-ghost btn-xs"
+                  x-cloak
+                  x-show="filter.is_user_filter"
+                  @click="updateSavedFilterQueryString(filter.id)">
+                  Update
+                </button>
+                <!-- Personal Default -->
+                <button class="btn btn-ghost btn-xs"
+                        type="button"
+                        title="Personal Default"
+                        x-cloak
+                        x-show="filter.is_user_filter"
+                        @click="toggleSavedFilterDefault(filter.id, 'user')"
+                        :class="filter.is_default_for_user ? 'text-yellow-500' : ''">
+                  <i class="fa-regular fa-user"></i>
+                </button>
+                
+                <!-- Team Default -->
+                <button class="btn btn-ghost btn-xs"
+                        type="button"        
+                        title="Team Default"
+                        x-cloak
+                        x-show="filter.is_user_filter"
+                        @click="toggleSavedFilterDefault(filter.id, 'team')"
+                        :class="filter.is_default_for_team ? 'text-yellow-500' : ''">
+                  <i class="fa-solid fa-users"></i>
+                </button>
+                
+                <!-- Share -->
+                <button class="btn btn-ghost btn-xs"
+                        type="button"
+                        title="Share"
+                        x-cloak
+                        x-show="filter.is_user_filter"
+                        @click="shareSavedFilter(filter.id)">
+                  <i class="fa-solid fa-share-nodes"></i>
+                </button>
+                
+                <!-- Star -->
+                <button class="btn btn-ghost btn-xs"
+                        type="button"
+                        title="Star"
+                        @click="toggleSavedFilterStar(filter.id)"
+                        :class="filter.is_starred ? 'text-yellow-500' : ''">
+                  <i x-show="!filter.is_starred" class="fa-regular fa-star"></i>
+                  <i x-cloak x-show="filter.is_starred" class="fa-solid fa-star"></i>
+                </button>
+                
+                <!-- Delete -->
+                <button class="btn btn-ghost btn-xs text-error"
+                        type="button"
+                        title="Delete"
+                        x-cloak
+                        x-show="filter.is_user_filter"
+                        @click="deleteSavedFilter(filter.id, filter.name)">
+                  <i class="fa-regular fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+
