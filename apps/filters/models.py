@@ -7,8 +7,11 @@ from apps.teams.models import BaseTeamModel
 
 class FilterSet(BaseTeamModel):
     class TableType(models.TextChoices):
-        SESSIONS = "sessions", "Sessions"
-        DATASETS = "datasets", "Datasets"
+        SESSIONS = "sessions"
+        DATASETS = "datasets"
+        ALL_SESSIONS = "all_sessions"
+        PARTICIPANTS = "participants"
+        TRACES = "traces"
 
     name = models.CharField(max_length=256)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
