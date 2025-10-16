@@ -15,14 +15,13 @@
           <template x-for="filter in savedFilters" :key="filter.id">
             <div class="flex items-start justify-between">
               <div class="flex-1">
-                <div class="font-medium cursor-pointer hover:text-primary"
+                <div class="font-medium cursor-pointer hover:text-primary hover:bg-base-200 hover:border-base-300 p-2 rounded"
                      @click="applySavedFilterById(filter.id, filter.filter_query_string)"
                      title="Click to apply"
                      x-text="filter.name"></div>
-                <button class="link link-primary text-xs" 
-                        @click="updateSavedFilter(filter.id)">Update</button>
               </div>
               <div class="flex gap-1">
+                <button class="btn btn-ghost btn-xs" @click="updateSavedFilter(filter.id)">Update</button>
                 <!-- Personal Default -->
                 <button class="btn btn-ghost btn-xs"
                         title="Personal Default"
@@ -50,8 +49,9 @@
                 <button class="btn btn-ghost btn-xs"
                         title="Star"
                         @click="toggleSavedFilterStar(filter.id)"
-                        :style="filter.is_starred ? 'color:#f59e0b;' : ''">
-                  <i class="fa-regular fa-star"></i>
+                        :class="filter.is_starred ? 'text-yellow-500' : ''">
+                  <i x-show="!filter.is_starred" class="fa-regular fa-star"></i>
+                  <i x-cloak x-show="filter.is_starred" class="fa-solid fa-star"></i>
                 </button>
                 
                 <!-- Delete -->

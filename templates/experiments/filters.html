@@ -38,7 +38,7 @@
   </div>
 
   <!-- Filters Panel -->
-  <div x-show="filterData.showFilters" class="absolute left-0 mt-2 p-4 bg-base-100 border border-base-200 rounded-lg shadow-lg z-10 w-fit" x-cloak>
+  <div x-show="filterData.showFilters" class="absolute left-0 mt-2 p-4 bg-base-100 border border-base-200 rounded-lg shadow-lg z-10 min-w-max max-w-screen-lg" x-cloak>
     <div class="space-y-2">
       <template x-for="(filter, index) in filterData.filters" :key="index">
         <div class="flex items-center gap-2">
@@ -188,19 +188,10 @@
 
       <!-- Add Filter Button -->
       <div class="flex justify-between items-center gap-2">
-        <div class="flex items-center gap-2">
-          <button type="button" @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
-          <select class="select select-sm" x-model="selectedSavedFilterId">
-            <option value="---" selected>Load saved...</option>
-            <template x-for="filter in savedFilters">
-              <option x-text="filter.name" :value="filter.id"></option>
-            </template>
-          </select>
-          <button x-show="selectedSavedFilterId" x-cloak type="button" @click="clearAllFilters()" class="btn btn-square btn-sm btn-ghost" aria-label="Remove filter">×</button>
-        </div>
+        <button type="button" @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
         <div class="flex gap-1">
-          <button type="button" @click="saveFilterDialog.show()" class="btn btn-sm btn-outline">Save</button>
-          <button type="button" @click="savedFiltersDialog.show()" class="btn btn-sm btn-outline">Saved Filters</button>
+          <button type="button" @click="saveFilterDialog.show()" class="btn btn-sm btn-outline">Save Filter</button>
+          <button type="button" @click="savedFiltersDialog.show()" class="btn btn-sm btn-outline">My Saved Filters</button>
         </div>
       </div>
     </div>
@@ -208,14 +199,26 @@
     <!-- Starred Filters as Small Tabs -->
     <div class="mt-4">
       <div class="flex flex-wrap gap-2">
-        <template x-for="filterSet in starredFilters" :key="filterSet.id">
-          <div
-              class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
-              :class="selectedSavedFilterId === filterSet.id ? 'bg-primary text-white hover:bg-primary' : ''"
-              @click="applyStarredFilter(filterSet.id, filterSet.name)">
-            <span class="text-base-content" x-text="filterSet.name"></span>
+        <div x-show="starredFilters.length > 0" class="flex flex-col">
+          <div class="flex items-center">
+            <div class="flex p-2 text-gray-500 text-sm">
+              Starred filters
+            </div>
+            <button x-show="selectedSavedFilterId" x-cloak type="button" @click="clearAllFilters()" class="btn btn-square btn-sm btn-ghost" aria-label="Clear">
+              Clear
+            </button>
           </div>
-        </template>
+          <div class="grid grid-cols-4 gap-1">
+            <template x-for="filterSet in starredFilters" :key="filterSet.id">
+              <div
+                  class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
+                  :class="selectedSavedFilterId === filterSet.id ? 'bg-primary text-white hover:bg-primary' : ''"
+                  @click="applyStarredFilter(filterSet.id, filterSet.name)">
+                <span class="text-base-content" x-text="filterSet.name"></span>
+              </div>
+            </template>
+          </div>
+        </div>
         <div x-show="starredFilters.length === 0" class="flex justify-center items-center p-2 text-gray-500 text-sm">
           No starred filters
         </div>
@@ -700,7 +703,7 @@
       // ---- Saved Filter Actions ----
       applySavedFilterById(id, params) {
         const url = new URL(window.location);
-        window.location.href = `${url.pathname}${params}`;
+        window.location.href = `${url.pathname}?${params}`;
       },
 
       async updateSavedFilter(id) {
