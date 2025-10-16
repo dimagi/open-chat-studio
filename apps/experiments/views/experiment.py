@@ -106,6 +106,7 @@ from apps.experiments.tasks import (
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
+from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.views import paginate_session, render_session_details
@@ -520,7 +521,9 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
 
     columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
-    context.update(get_filter_context_data(request.team, columns, "last_message", session_table_url, "sessions-table"))
+    filter_context = get_filter_context_data(request.team, columns, "last_message", session_table_url, "sessions-table")
+    filter_context["df_table_type"] = FilterSet.TableType.SESSIONS
+    context.update(filter_context)
 
     return TemplateResponse(request, template_name, context)
 

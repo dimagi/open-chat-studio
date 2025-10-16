@@ -464,6 +464,7 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             table_url=table_url,
             table_container_id="data-table",
         )
+        filter_context["df_table_type"] = FilterSet.TableType.ALL_SESSIONS
 
         return {
             "active_tab": "all_sessions",
@@ -471,6 +472,5 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "allow_new": False,
             "table_url": table_url,
             "use_dynamic_filters": True,
-            "df_table_type": FilterSet.TableType.ALL_SESSIONS,
             **filter_context,
         }

@@ -111,7 +111,6 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         "title": "Create Dataset",
         "button_text": "Create Dataset",
         "active_tab": "evaluation_datasets",
-        "df_table_type": FilterSet.TableType.DATASETS,
         "form_attrs": {"id": "dataset-create-form"},
     }
 
@@ -153,13 +152,15 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 
     def _get_filter_context_data(self):
         table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
-        return get_filter_context_data(
+        context = get_filter_context_data(
             self.request.team,
             ExperimentSessionFilter.columns(self.request.team),
             "last_message",
             table_url,
             "sessions-table",
         )
+        context["df_table_type"] = FilterSet.TableType.DATASETS
+        return context
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

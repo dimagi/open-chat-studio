@@ -43,13 +43,13 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
         filter_context = get_filter_context_data(
             self.request.team, ParticipantFilter.columns(self.request.team), "created_on", table_url, "data-table"
         )
+        filter_context["df_table_type"] = FilterSet.TableType.PARTICIPANTS
 
         return {
             "active_tab": "participants",
             "title": "Participants",
             "allow_new": False,
             "table_url": table_url,
-            "df_table_type": FilterSet.TableType.PARTICIPANTS,
             "actions": [
                 actions.Action(
                     "participants:import",

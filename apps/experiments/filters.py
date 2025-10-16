@@ -9,7 +9,6 @@ from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import Experiment
-from apps.filters.models import FilterSet
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
     TYPE_CHOICE,
@@ -38,7 +37,6 @@ def get_filter_context_data(
         "df_date_range_column_name": date_range_column,
         "df_filter_data_source_url": table_url,
         "df_filter_data_source_container_id": table_container_id,
-        "df_table_type": FilterSet.TableType.SESSIONS,
     }
 
 
