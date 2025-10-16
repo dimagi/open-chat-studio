@@ -6,212 +6,68 @@
     </div>
 
     <div id="filtersContent">
-      <div class="flex justify-center p-4">
-        <span class="loading loading-spinner loading-sm"></span>
-      </div>
-    </div>
-
-    <div class="mt-4">
-      <button class="btn btn-outline btn-sm" onclick="saveFilterDialog.showModal()">
-        <i class="fa-solid fa-plus mr-2"></i> Create new
-      </button>
+      <template x-if="!savedFilters || savedFilters.length === 0">
+        <div class="text-center text-gray-500 py-4">No saved filter sets</div>
+      </template>
+      
+      <template x-if="savedFilters && savedFilters.length > 0">
+        <div class="space-y-4">
+          <template x-for="filter in savedFilters" :key="filter.id">
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <div class="font-medium cursor-pointer hover:text-primary"
+                     @click="applySavedFilterById(filter.id, filter.filter_query_string)"
+                     title="Click to apply"
+                     x-text="filter.name"></div>
+                <button class="link link-primary text-xs" 
+                        @click="updateSavedFilter(filter.id)">Update</button>
+              </div>
+              <div class="flex gap-1">
+                <!-- Personal Default -->
+                <button class="btn btn-ghost btn-xs"
+                        title="Personal Default"
+                        @click="toggleSavedFilterDefault(filter.id, 'user')"
+                        :style="filter.is_default_for_user ? 'color:#f59e0b;' : ''">
+                  <i class="fa-regular fa-user"></i>
+                </button>
+                
+                <!-- Team Default -->
+                <button class="btn btn-ghost btn-xs"
+                        title="Team Default"
+                        @click="toggleSavedFilterDefault(filter.id, 'team')"
+                        :style="filter.is_default_for_team ? 'color:#f59e0b;' : ''">
+                  <i class="fa-solid fa-users"></i>
+                </button>
+                
+                <!-- Share -->
+                <button class="btn btn-ghost btn-xs"
+                        title="Share"
+                        @click="shareSavedFilter(filter.id)">
+                  <i class="fa-solid fa-share-nodes"></i>
+                </button>
+                
+                <!-- Star -->
+                <button class="btn btn-ghost btn-xs"
+                        title="Star"
+                        @click="toggleSavedFilterStar(filter.id)"
+                        :style="filter.is_starred ? 'color:#f59e0b;' : ''">
+                  <i class="fa-regular fa-star"></i>
+                </button>
+                
+                <!-- Delete -->
+                <button class="btn btn-ghost btn-xs text-error"
+                        title="Delete"
+                        @click="deleteSavedFilter(filter.id, filter.name)">
+                  <i class="fa-regular fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
     </div>
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 
-<script>
-const FilterDialog = {
-  isLoading: false,
-  filters: [], // Store the loaded filters
 
-  async load() {
-    if (this.isLoading) return;
-    this.isLoading = true;
-    const content = document.getElementById('filtersContent');
-    content.innerHTML = '<div class="flex justify-center p-4"><span class="loading loading-spinner loading-sm"></span></div>';
-
-    try {
-      const filters = await this.apiCall("{% url 'filters:list_filter_set' request.team.slug df_table_type %}");
-      this.filters = filters.results || []; // Store the filters
-      content.innerHTML = this.filters.length
-        ? this.renderFilters(this.filters)
-        : '<div class="text-center text-gray-500 py-4">No saved filter sets</div>';
-    } catch (e) {
-      content.innerHTML = '<div class="text-center text-red-500 py-4">Failed to load filter sets</div>';
-    } finally {
-      this.isLoading = false;
-    }
-  },
-
-  renderFilters(filters) {
-    return `<div class="space-y-4">
-      ${filters.map(f => `
-        <div class="flex items-start justify-between">
-          <div class="flex-1">
-            <div class="font-medium cursor-pointer hover:text-primary"
-                 onclick="FilterDialog.apply(${f.id}, '${f.filter_query_string}')"
-                 title="Click to apply">${this.escape(f.name)}</div>
-            <button class="link link-primary text-xs" onclick="FilterDialog.update(${f.id})">Update</button>
-          </div>
-          <div class="flex gap-1">
-            ${this.buttons(f)}
-          </div>
-        </div>`).join('')}
-    </div>`;
-  },
-
-  buttons(f) {
-    const btns = [
-      { icon: "fa-user",   title: "Personal Default", action: `FilterDialog.toggleDefault(${f.id},'user')`,   active: f.is_default_for_user },
-      { icon: "fa-users",  title: "Team Default",     action: `FilterDialog.toggleDefault(${f.id},'team')`,   active: f.is_default_for_team },
-      { icon: "fa-share-nodes", title: "Share",       action: `FilterDialog.share(${f.id})` },
-      { icon: "fa-star",   title: "Star",             action: `FilterDialog.toggleStar(${f.id})`,             active: f.is_starred },
-      { icon: "fa-trash-can", title: "Delete",        action: `FilterDialog.delete(${f.id},'${this.escape(f.name)}')`, extra: "text-error" }
-    ];
-
-    return btns.map(b => this.renderButton(b)).join("");
-  },
-
-  renderButton({icon,title,action,active=false,extra=""}) {
-    const color = active ? 'style="color:#f59e0b;"' : '';
-    const className = `btn btn-ghost btn-xs ${extra}`;
-    const iconClass = ['fa-users','fa-share-nodes'].includes(icon) ? 'fa-solid' : 'fa-regular';
-    return `<button class="${className}" title="${title}" onclick="${action}" ${color}>
-      <i class="${iconClass} ${icon}"></i>
-    </button>`;
-  },
-
-  // ---- ACTIONS ----
-  apply(id, params) {
-    const url = new URL(window.location);
-    window.location.href = `${url.pathname}${params}`;
-  },
-
-  async update(id) {
-    const filterSetName = this.getFilterSetName(id);
-    
-    await this.api(`/${id}/edit/`, "PATCH", { filter_params: this.currentFilters() });
-    this.load(); 
-    window.refreshFilterSets?.();
-    alertify.notify(`"${filterSetName}" updated`, "success", 10);
-  },
-
-  async toggleDefault(id,type) {
-    const filterSetName = this.getFilterSetName(id);
-    const filterSet = this.filters.find(f => f.id === id);
-    
-    if (!filterSet) return;
-    
-    const field = `is_default_for_${type}`;
-    const isCurrentlyDefault = filterSet[field];
-    
-    if (isCurrentlyDefault) {
-      await this.api(`/${id}/edit/`,"PATCH",{ [field]:false });
-      this.notify(`"${filterSetName}" removed as ${type} default`,"success");
-    } else {
-      await this.api(`/${id}/edit/`,"PATCH",{ [field]:true, [`clear_other_${type}_defaults`]:true });
-      this.notify(`"${filterSetName}" set as ${type} default`,"success");
-    }
-    
-    this.load(); 
-    window.refreshFilterSets?.();
-  },
-
-  async share(id) {
-    const filterSetName = this.getFilterSetName(id);
-    const filterSet = this.filters.find(f => f.id === id);
-    
-    if (!filterSet) return;
-    
-    const isCurrentlyShared = filterSet.is_shared;
-    
-    if (isCurrentlyShared) {
-      // Unshare
-      await this.api(`/${id}/edit/`,"PATCH",{ is_shared:false });
-      this.notify(`"${filterSetName}" unshared`,"success");
-    } else {
-      // Share
-      await this.api(`/${id}/edit/`,"PATCH",{ is_shared:true });
-      this.notify(`"${filterSetName}" shared`,"success");
-    }
-    
-    this.load(); 
-  },
-
-  async toggleStar(id) {
-    const filterSetName = this.getFilterSetName(id);
-    const filterSet = this.filters.find(f => f.id === id);
-    
-    if (!filterSet) return;
-    
-    const isCurrentlyStarred = filterSet.is_starred;
-    
-    if (isCurrentlyStarred) {
-      // Unstar
-      await this.api(`/${id}/edit/`,"PATCH",{ is_starred:false });
-      this.notify(`"${filterSetName}" unstarred`,"success");
-    } else {
-      // Star
-      await this.api(`/${id}/edit/`,"PATCH",{ is_starred:true });
-      this.notify(`"${filterSetName}" starred`,"success");
-    }
-    
-    this.load(); 
-    window.refreshFilterSets?.();
-  },
-
-  async delete(id,name) {
-    if(!confirm(`Delete "${name}"?`)) return;
-    await this.api(`/${id}/edit/`,"DELETE");
-    this.load(); 
-    window.refreshFilterSets?.();
-    this.notify(`"${name}" deleted`,"success");
-  },
-
-  getFilterSetName(id) {
-    const filterSet = this.filters.find(f => f.id === id);
-    console.log('Looking for filter set with id:', id, 'Found:', filterSet);
-    return filterSet?.name || 'Filter set';
-  },
-
-  async apiCall(url) {
-    const r = await fetch(url,{credentials:"same-origin"});
-    if(!r.ok) throw new Error(r.statusText);
-    return r.json();
-  },
-
-  async api(endpoint, method, body) {
-    const base = "{% url 'filters:edit_filter_set' request.team.slug 0 %}";
-    const url = base.replace("/0/edit/", endpoint);
-    const opts = {
-      method, credentials:"same-origin",
-      headers:{ "X-CSRFToken": SiteJS.app.Cookies.get("csrftoken") }
-    };
-    if(body){ opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(body);}
-    const r = await fetch(url,opts);
-    if(!r.ok) throw new Error("API failed");
-    return r.json().catch(()=>({}));
-  },
-
-  currentFilters() {
-    const q=new URLSearchParams(window.location.search), out={};
-    q.forEach((v,k)=>{ if(k.startsWith("filter_")) out[k]=v; });
-    return out;
-  },
-
-  notify(msg,type="info") {
-    alertify.notify(msg, type, 10);
-  },
-
-  escape(str) {
-    const div=document.createElement("div"); div.textContent=str; return div.innerHTML;
-  }
-};
-
-document.addEventListener("DOMContentLoaded",()=>FilterDialog.load());
-
-function openCreateFilterDialog() {
-  document.getElementById('saveFilterDialog')?.showModal();
-}
-</script>

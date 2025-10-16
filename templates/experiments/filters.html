@@ -187,7 +187,22 @@
       </template>
 
       <!-- Add Filter Button -->
-      <button type="button" @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
+      <div class="flex justify-between items-center gap-2">
+        <div class="flex items-center gap-2">
+          <button type="button" @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
+          <select class="select select-sm" x-model="selectedSavedFilterId">
+            <option value="---" selected>Load saved...</option>
+            <template x-for="filter in savedFilters">
+              <option x-text="filter.name" :value="filter.id"></option>
+            </template>
+          </select>
+          <button x-show="selectedSavedFilterId" x-cloak type="button" @click="clearAllFilters()" class="btn btn-square btn-sm btn-ghost" aria-label="Remove filter">×</button>
+        </div>
+        <div class="flex gap-1">
+          <button type="button" @click="saveFilterDialog.show()" class="btn btn-sm btn-outline">Save</button>
+          <button type="button" @click="savedFiltersDialog.show()" class="btn btn-sm btn-outline">Saved Filters</button>
+        </div>
+      </div>
     </div>
     
     <!-- Starred Filters as Small Tabs -->
@@ -196,7 +211,7 @@
         <template x-for="filterSet in starredFilters" :key="filterSet.id">
           <div
               class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
-              :class="activeStarredFilter === filterSet.id ? 'bg-primary text-white hover:bg-primary' : ''"
+              :class="selectedSavedFilterId === filterSet.id ? 'bg-primary text-white hover:bg-primary' : ''"
               @click="applyStarredFilter(filterSet.id, filterSet.name)">
             <span class="text-base-content" x-text="filterSet.name"></span>
           </div>
@@ -207,6 +222,8 @@
       </div>
     </div>
   </div>
+  {% include "filters/saved_filters_dialog.html" with df_table_type=df_table_type %}
+  {% include "filters/save_filter_dialog.html" with df_table_type=df_table_type %}
 </div>
 
 {{ df_date_range_options|json_script:"date-range-options" }}
@@ -225,8 +242,16 @@
       },
       starredFilters: [],
       savedFilters: null,
-      activeStarredFilter: null,
+      selectedSavedFilterId: null,
       init() {
+        this.$watch('selectedSavedFilterId', (selectedSavedFilterId) => {
+          if (selectedSavedFilterId) {
+            const selectedSavedFilter = this.savedFilters.find(filter => filter.id === parseInt(selectedSavedFilterId));
+            this.applySavedFilter(selectedSavedFilter);
+          }
+        })
+        
+
         const App = SiteJS.app;
         this.loadFiltersFromQueryString(window.location.search);
 
@@ -353,6 +378,7 @@
         this.addFilter();
         this.filterData.showFilters = false;
         this.triggerFilterChange();
+        this.selectedSavedFilterId = null;
       },
 
       isObjectChoiceFilter(filter) {
@@ -501,7 +527,6 @@
       },
 
       triggerFilterChange(updateUrl = true) {
-        this.activeStarredFilter = null;
         this.filterData.loading = true;
 
         let filterParams = {};
@@ -640,7 +665,7 @@
       async maybeApplyDefaultFilters() {
         try {
           // Do nothing if there are already active filters
-          if (this.filterData.filters.length > 0) return;
+          if (this.getActiveFilters(this.filterData.filters).length > 0) return;
 
           const savedFilters = await this.fetchSavedFilters();
           const defaultFilter = savedFilters.find(fs => fs.is_default_for_user) || 
@@ -648,8 +673,7 @@
           
           if (defaultFilter?.filter_query_string) {
             this.filterData.filters = [];
-            this.loadFiltersFromQueryString(defaultFilter.filter_query_string);
-            this.triggerFilterChange();
+            this.applySavedFilter(defaultFilter);
           }
         } catch (error) {
           console.error('Failed to load default filters:', error);
@@ -662,13 +686,192 @@
           const starredFilter = savedFilters.find(fs => fs.id === filterSetId);
           if (!starredFilter) return;
           this.filterData.filters = [];
-          this.loadFiltersFromQueryString(starredFilter.filter_query_string);
-          this.triggerFilterChange();
-          this.activeStarredFilter = starredFilter.id;
+          this.applySavedFilter(starredFilter);
+          this.selectedSavedFilterId = starredFilter.id;
         } catch (error) {
           console.error('Error applying starred filter:', error);
         }
       },
+      async applySavedFilter(savedFilter) {
+        this.loadFiltersFromQueryString(savedFilter.filter_query_string);
+        this.triggerFilterChange();
+      },
+
+      // ---- Saved Filter Actions ----
+      applySavedFilterById(id, params) {
+        const url = new URL(window.location);
+        window.location.href = `${url.pathname}${params}`;
+      },
+
+      async updateSavedFilter(id) {
+        const filterSetName = this.getSavedFilterSetName(id);
+        
+        try {
+          await this.savedFilterApi(`/${id}/edit/`, "PATCH", { filter_query_string: window.location.search.substring(1) });
+          await this.reloadSavedFilters(); 
+          this.notifyUser(`"${filterSetName}" updated`, "success");
+        } catch (error) {
+          console.error('Error updating filter:', error);
+          this.notifyUser('Failed to update filter', 'error');
+        }
+      },
+
+      async toggleSavedFilterDefault(id, type) {
+        const filterSetName = this.getSavedFilterSetName(id);
+        const filterSet = this.savedFilters.find(f => f.id === id);
+        
+        if (!filterSet) return;
+        
+        const field = `is_default_for_${type}`;
+        const isCurrentlyDefault = filterSet[field];
+        const newValue = !isCurrentlyDefault;
+        
+        try {
+          // Update UI immediately
+          this.updateFilterProperty(id, field, newValue);
+          
+          // Make API call
+          const payload = { [field]: newValue };
+          if (newValue) {
+            payload[`clear_other_${type}_defaults`] = true;
+          }
+          
+          await this.savedFilterApi(`/${id}/edit/`, "PATCH", payload);
+          
+          if (newValue) {
+            this.notifyUser(`"${filterSetName}" set as ${type} default`, "success");
+          } else {
+            this.notifyUser(`"${filterSetName}" removed as ${type} default`, "success");
+          }
+        } catch (error) {
+          console.error('Error toggling default:', error);
+          // Revert UI changes on error
+          this.updateFilterProperty(id, field, isCurrentlyDefault);
+          this.notifyUser('Failed to update default setting', 'error');
+        }
+      },
+
+      async shareSavedFilter(id) {
+        const filterSetName = this.getSavedFilterSetName(id);
+        const filterSet = this.savedFilters.find(f => f.id === id);
+        
+        if (!filterSet) return;
+        
+        const isCurrentlyShared = filterSet.is_shared;
+        const newValue = !isCurrentlyShared;
+        
+        try {
+          // Update UI immediately
+          this.updateFilterProperty(id, 'is_shared', newValue);
+          
+          // Make API call
+          await this.savedFilterApi(`/${id}/edit/`, "PATCH", { is_shared: newValue });
+          
+          if (newValue) {
+            this.notifyUser(`"${filterSetName}" shared`, "success");
+          } else {
+            this.notifyUser(`"${filterSetName}" unshared`, "success");
+          }
+        } catch (error) {
+          console.error('Error toggling share:', error);
+          // Revert UI changes on error
+          this.updateFilterProperty(id, 'is_shared', isCurrentlyShared);
+          this.notifyUser('Failed to update share setting', 'error');
+        }
+      },
+
+      async toggleSavedFilterStar(id) {
+        const filterSetName = this.getSavedFilterSetName(id);
+        const filterSet = this.savedFilters.find(f => f.id === id);
+        
+        if (!filterSet) return;
+        
+        const isCurrentlyStarred = filterSet.is_starred;
+        const newValue = !isCurrentlyStarred;
+        
+        try {
+          // Update UI immediately
+          this.updateFilterProperty(id, 'is_starred', newValue);
+          
+          // Make API call
+          await this.savedFilterApi(`/${id}/edit/`, "PATCH", { is_starred: newValue });
+          
+          // Update starred filters list
+          await this.loadStarredFilters();
+          
+          if (newValue) {
+            this.notifyUser(`"${filterSetName}" starred`, "success");
+          } else {
+            this.notifyUser(`"${filterSetName}" unstarred`, "success");
+          }
+        } catch (error) {
+          console.error('Error toggling star:', error);
+          // Revert UI changes on error
+          this.updateFilterProperty(id, 'is_starred', isCurrentlyStarred);
+          await this.loadStarredFilters(); // Reload to revert starred filters list
+          this.notifyUser('Failed to update star setting', 'error');
+        }
+      },
+
+      async deleteSavedFilter(id, name) {
+        if(!confirm(`Delete "${name}"?`)) return;
+        
+        try {
+          await this.savedFilterApi(`/${id}/edit/`, "DELETE");
+          await this.reloadSavedFilters();
+          this.notifyUser(`"${name}" deleted`, "success");
+        } catch (error) {
+          console.error('Error deleting filter:', error);
+          this.notifyUser('Failed to delete filter', 'error');
+        }
+      },
+
+      getSavedFilterSetName(id) {
+        const filterSet = this.savedFilters.find(f => f.id === id);
+        return filterSet?.name || 'Filter set';
+      },
+
+      async reloadSavedFilters() {
+        this.savedFilters = null; // Clear cache to force refresh
+        await this.fetchSavedFilters();
+        await this.loadStarredFilters();
+      },
+
+      async savedFilterApi(endpoint, method, body) {
+        const base = "{% url 'filters:edit_filter_set' request.team.slug 0 %}";
+        const url = base.replace("/0/edit/", endpoint);
+        const opts = {
+          method, credentials:"same-origin",
+          headers:{ "X-CSRFToken": SiteJS.app.Cookies.get("csrftoken") }
+        };
+        if(body){ opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(body);}
+        const r = await fetch(url,opts);
+        if(!r.ok) throw new Error("API failed");
+        return r.json().catch(()=>({}));
+      },
+
+      notifyUser(msg, type="info") {
+        alertify.notify(msg, type, 10);
+      },
+
+      // Helper method to update filter properties locally
+      updateFilterProperty(filterId, property, value) {
+        const filter = this.savedFilters.find(f => f.id === filterId);
+        if (filter) {
+          filter[property] = value;
+          
+          // Handle clearing other defaults when setting a new default
+          if ((property === 'is_default_for_user' || property === 'is_default_for_team') && value) {
+            this.savedFilters.forEach(f => {
+              if (f.id !== filterId) {
+                f[property] = false;
+              }
+            });
+          }
+        }
+      },
+
+      
     }));
     });
 
@@ -677,6 +880,8 @@
         const filterComponent = document.querySelector('[x-data*="filterComponent"]');
         if (filterComponent?.__x) {
           const component = filterComponent.__x.$data;
+          component.savedFilters = null; // Clear cache to force refresh
+          await component.fetchSavedFilters();
           await component.loadStarredFilters();
         }
       } catch (error) {

@@ -1,7 +1,7 @@
 import json
 
 from django.db import models, transaction
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from apps.filters.models import FilterSet
@@ -59,7 +59,7 @@ def create_filter_set(request, team_slug: str, table_type: str):
             FilterSet.objects.filter(team=request.team, table_type=table_type, is_default_for_team=True).update(
                 is_default_for_team=False
             )
-        FilterSet.objects.create(
+        filter_set = FilterSet.objects.create(
             team=request.team,
             user=request.user,
             name=validated.get("name", "").strip(),
@@ -70,7 +70,7 @@ def create_filter_set(request, team_slug: str, table_type: str):
             is_default_for_user=validated.get("is_default_for_user", False),
             is_default_for_team=validated.get("is_default_for_team", False),
         )
-    return HttpResponse()
+    return JsonResponse({"success": True, "filter_set": _to_dict(filter_set)})
 
 
 @require_http_methods(["PATCH", "DELETE"])
