@@ -105,6 +105,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         try:
             content = {
                 "input": state["last_node_input"],
+                "node_inputs": state["node_inputs"],
                 "temp_state": state.get("temp_state", {}),
                 "session_state": state.get("session_state", {}),
             }
@@ -998,6 +999,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             result = self.compile_and_execute_code(
                 additional_globals=self._get_custom_functions(state, output_state),
                 input=state["last_node_input"],
+                node_inputs=state["node_inputs"],
             )
         except WaitForNextInput:
             return Command(goto=END)
