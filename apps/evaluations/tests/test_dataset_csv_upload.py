@@ -97,7 +97,11 @@ class TestCSVUploadCreate:
 
     def test_csv_dataset_creation_without_history(self, client_with_user, team_with_users, sample_csv_data):
         """Test creating dataset from CSV without populate_history."""
-        column_mapping = {"input": "input", "output": "output", "context_field": "context_field", "date": "date"}
+        column_mapping = {
+            "input": "input",
+            "output": "output",
+            "context": {"context_field": "context_field", "date": "date"},
+        }
 
         form_data = {
             "name": "Test CSV Dataset",
@@ -131,7 +135,11 @@ class TestCSVUploadCreate:
 
     def test_csv_dataset_creation_with_history(self, client_with_user, team_with_users, sample_csv_data):
         """Test creating dataset from CSV with populate_history enabled."""
-        column_mapping = {"input": "input", "output": "output", "context_field": "context_field", "date": "date"}
+        column_mapping = {
+            "input": "input",
+            "output": "output",
+            "context": {"context_field": "context_field", "date": "date"},
+        }
 
         form_data = {
             "name": "Test CSV Dataset with History",
@@ -266,7 +274,7 @@ class TestCSVUploadCreate:
             "name": "Dataset with Empty Rows",
             "mode": "csv",
             "csv_data": json.dumps(csv_data),
-            "column_mapping": json.dumps({"input": "input", "output": "output", "context": "context"}),
+            "column_mapping": json.dumps({"input": "input", "output": "output", "context": {"context": "context"}}),
             "populate_history": False,
         }
 
@@ -300,7 +308,7 @@ class TestCSVUploadCreate:
             },
         ]
 
-        column_mapping = {"input": "input", "output": "output", "topic": "topic"}
+        column_mapping = {"input": "input", "output": "output", "context": {"topic": "topic"}}
 
         form_data = {
             "name": "Test CSV Dataset with History Column",
@@ -340,6 +348,68 @@ class TestCSVUploadCreate:
         # Verify context data is still stored correctly
         assert messages[0].context["topic"] == "weather"
         assert messages[1].context["topic"] == "humor"
+
+    def test_csv_dataset_creation_with_participant_data_and_session_state(self, client_with_user, team_with_users):
+        """Test creating dataset from CSV with participant_data and session_state fields."""
+        csv_data = [
+            {
+                "input": "What is AI?",
+                "output": "AI stands for Artificial Intelligence",
+                "age": "25",
+                "name": "John",
+                "step": "1",
+                "completed": "false",
+            },
+            {
+                "input": "Tell me more",
+                "output": "AI is used in many applications",
+                "age": "30",
+                "name": "Jane",
+                "step": "2",
+                "completed": "true",
+            },
+        ]
+
+        # Map columns to participant_data and session_state using nested structure
+        column_mapping = {
+            "input": "input",
+            "output": "output",
+            "participant_data": {"age": "age", "name": "name"},
+            "session_state": {"step": "step", "completed": "completed"},
+        }
+
+        form_data = {
+            "name": "Test Dataset with Participant Data",
+            "mode": "csv",
+            "csv_data": json.dumps(csv_data),
+            "column_mapping": json.dumps(column_mapping),
+            "populate_history": False,
+        }
+
+        url = reverse("evaluations:dataset_new", args=[team_with_users.slug])
+        response = client_with_user.post(url, form_data)
+
+        assert response.status_code == 302
+
+        dataset = EvaluationDataset.objects.get(name="Test Dataset with Participant Data", team=team_with_users)
+        assert dataset.messages.count() == 2
+
+        messages = list(dataset.messages.all().order_by("id"))
+
+        # First message
+        first_message = messages[0]
+        assert first_message.input["content"] == "What is AI?"
+        assert first_message.output["content"] == "AI stands for Artificial Intelligence"
+        assert first_message.participant_data == {"age": "25", "name": "John"}
+        assert first_message.session_state == {"step": "1", "completed": "false"}
+        assert first_message.context == {}  # No context fields
+
+        # Second message
+        second_message = messages[1]
+        assert second_message.input["content"] == "Tell me more"
+        assert second_message.output["content"] == "AI is used in many applications"
+        assert second_message.participant_data == {"age": "30", "name": "Jane"}
+        assert second_message.session_state == {"step": "2", "completed": "true"}
 
 
 @pytest.mark.django_db()
