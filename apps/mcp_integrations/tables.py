@@ -1,20 +1,20 @@
+import django_tables2 as tables
 from django.conf import settings
 from django.urls import reverse
-from django_tables2 import tables
 
 from apps.generics import actions
 from apps.mcp_integrations.models import McpServer
 
 
 class McpServerTable(tables.Table):
-    name = tables.columns.Column(
+    name = tables.Column(
         linkify=True,
         attrs={
             "a": {"class": "link"},
         },
         orderable=True,
     )
-    tool_count = tables.columns.Column(verbose_name="Tools")
+    tool_count = tables.Column(verbose_name="Tools")
     actions = actions.ActionsColumn(
         actions=[
             actions.chip_action(

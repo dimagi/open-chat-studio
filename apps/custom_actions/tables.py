@@ -1,12 +1,12 @@
+import django_tables2 as tables
 from django.conf import settings
-from django_tables2 import tables
 
 from apps.custom_actions.models import CustomAction
 from apps.generics import actions
 
 
 class CustomActionTable(tables.Table):
-    name = tables.columns.Column(
+    name = tables.Column(
         linkify=True,
         attrs={
             "a": {"class": "link"},
