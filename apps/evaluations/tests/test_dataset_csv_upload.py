@@ -621,3 +621,139 @@ def test_csv_upload_context_changes(dataset):
         "new_field": "context_only_change",  # changed
     }
     assert "old_field" not in existing_message.context
+
+
+@pytest.mark.django_db()
+def test_csv_upload_with_participant_data_and_session_state(dataset):
+    """Test CSV upload with participant_data and session_state fields."""
+    mock_progress_recorder = MockProgressRecorder()
+
+    columns = [
+        "id",
+        "input_content",
+        "output_content",
+        "context.topic",
+        "participant_data.age",
+        "participant_data.name",
+        "session_state.step",
+        "session_state.completed",
+        "history",
+    ]
+    rows = [
+        {
+            "id": "",
+            "input_content": "What is AI?",
+            "output_content": "AI stands for Artificial Intelligence",
+            "context.topic": "technology",
+            "participant_data.age": "25",
+            "participant_data.name": "John",
+            "session_state.step": "1",
+            "session_state.completed": "false",
+            "history": "",
+        }
+    ]
+
+    stats = process_csv_rows(dataset, rows, columns, mock_progress_recorder, dataset.team)
+    assert stats["created_count"] == 1
+    assert stats["updated_count"] == 0
+    assert len(stats["error_messages"]) == 0
+
+    # Get the newly created message (not the one from the factory)
+    message = dataset.messages.order_by("-id").first()
+    assert message.input["content"] == "What is AI?"
+    assert message.context == {"topic": "technology"}
+    assert message.participant_data == {"age": "25", "name": "John"}
+    assert message.session_state == {"step": "1", "completed": "false"}
+
+
+@pytest.mark.django_db()
+def test_csv_upload_updates_participant_data_and_session_state(dataset):
+    """Test CSV upload updates existing messages with new participant_data and session_state."""
+    mock_progress_recorder = MockProgressRecorder()
+
+    existing_message = EvaluationMessage.objects.create(
+        input=EvaluationMessageContent(content="Test question", role="human").model_dump(),
+        output=EvaluationMessageContent(content="Test answer", role="ai").model_dump(),
+        context={"topic": "test"},
+        participant_data={"age": "20", "old_field": "remove_me"},
+        session_state={"step": "0"},
+        history=[],
+        metadata={"created_mode": "manual"},
+    )
+    dataset.messages.add(existing_message)
+
+    columns = [
+        "id",
+        "input_content",
+        "output_content",
+        "context.topic",
+        "participant_data.age",
+        "participant_data.name",
+        "session_state.step",
+        "session_state.completed",
+        "history",
+    ]
+    rows = [
+        {
+            "id": str(existing_message.id),
+            "input_content": "Test question",
+            "output_content": "Test answer",
+            "context.topic": "test",
+            "participant_data.age": "25",  # updated
+            "participant_data.name": "John",  # new field
+            "session_state.step": "1",  # updated
+            "session_state.completed": "true",  # new field
+            "history": "",
+        }
+    ]
+
+    stats = process_csv_rows(dataset, rows, columns, mock_progress_recorder, dataset.team)
+    assert stats["created_count"] == 0
+    assert stats["updated_count"] == 1
+    assert len(stats["error_messages"]) == 0
+
+    existing_message.refresh_from_db()
+    assert existing_message.participant_data == {"age": "25", "name": "John"}
+    assert "old_field" not in existing_message.participant_data
+    assert existing_message.session_state == {"step": "1", "completed": "true"}
+
+
+@pytest.mark.django_db()
+def test_csv_upload_with_nested_json_values(dataset):
+    """Test CSV upload handles nested JSON values in participant_data and session_state."""
+    import json
+
+    mock_progress_recorder = MockProgressRecorder()
+
+    nested_preferences = {"theme": "dark", "notifications": {"email": True, "sms": False}}
+    nested_workflow = {"steps": ["start", "middle", "end"], "current": 1}
+
+    columns = [
+        "id",
+        "input_content",
+        "output_content",
+        "participant_data.preferences",
+        "session_state.workflow",
+        "history",
+    ]
+    rows = [
+        {
+            "id": "",
+            "input_content": "Complex data",
+            "output_content": "Understood",
+            "participant_data.preferences": json.dumps(nested_preferences),
+            "session_state.workflow": json.dumps(nested_workflow),
+            "history": "",
+        }
+    ]
+
+    stats = process_csv_rows(dataset, rows, columns, mock_progress_recorder, dataset.team)
+    assert stats["created_count"] == 1
+    assert stats["updated_count"] == 0
+    assert len(stats["error_messages"]) == 0
+
+    # Get the newly created message (not the one from the factory)
+    message = dataset.messages.order_by("-id").first()
+    assert message.input["content"] == "Complex data"
+    assert message.participant_data == {"preferences": nested_preferences}
+    assert message.session_state == {"workflow": nested_workflow}
