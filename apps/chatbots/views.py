@@ -344,7 +344,7 @@ def chatbot_session_details_view(request, team_slug: str, experiment_id: uuid.UU
 
 
 @login_and_team_required
-def chatbot_chat_session(request, team_slug: str, experiment_id: int, session_id: int, version_number: int):
+def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_number: int, session_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     session = get_object_or_404(
         ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
