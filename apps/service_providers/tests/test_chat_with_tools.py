@@ -7,9 +7,8 @@ from langchain_core.messages.tool import ToolMessage, tool_call_chunk
 from langchain_core.tools import BaseTool, Tool
 
 from apps.chat.agent.openapi_tool import ToolArtifact
+from apps.experiments.runnables import AgentLLMChat, ExperimentHistoryManager
 from apps.service_providers.llm_service.adapters import ChatAdapter
-from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
-from apps.service_providers.llm_service.runnables import AgentLLMChat
 from apps.service_providers.tracing import TracingService
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import build_fake_llm_service

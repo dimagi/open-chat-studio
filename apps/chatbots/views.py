@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db.models import Count, F, Max, Q
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
@@ -33,7 +33,6 @@ from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView
 from apps.experiments.views.experiment import (
     CreateExperimentVersion,
     base_single_experiment_view,
-    start_session_public,
 )
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
@@ -378,22 +377,6 @@ def chatbot_session_pagination_view(request, team_slug: str, experiment_id: uuid
     )
 
 
-@require_POST
-@login_and_team_required
-def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = WebChannel.start_new_session(
-        working_experiment=experiment,
-        participant_user=request.user,
-        participant_identifier=request.user.email,
-        timezone=request.session.get("detected_tz", None),
-        version=version_number,
-    )
-    return HttpResponseRedirect(
-        reverse("chatbots:chatbot_chat_session", args=[team_slug, experiment_id, version_number, session.id])
-    )
-
-
 @login_and_team_required
 @permission_required("experiments.invite_participants", raise_exception=True)
 def chatbot_invitations(request, team_slug: str, experiment_id: int):
@@ -445,40 +428,10 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
     )
 
 
-@team_required
-def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UUID):
-    return start_session_public(request, team_slug, experiment_id)
-
-
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     return _chatbot_chat_ui(request)
-
-
-@xframe_options_exempt
-@team_required
-def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
-    """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and pre-surveys and
-    will ALWAYS create anonymous participants."""
-    try:
-        chatbot = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    except ValidationError:
-        # old links dont have uuids
-        raise Http404() from None
-
-    chatbot_version = chatbot.default_version
-    if not chatbot_version.is_public:
-        raise Http404
-
-    participant = Participant.create_anonymous(request.team, ChannelPlatform.WEB)
-    session = WebChannel.start_new_session(
-        working_experiment=chatbot,
-        participant_identifier=participant.identifier,
-        timezone=request.session.get("detected_tz", None),
-        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
-    )
-    return redirect("chatbots:chatbot_chat_embed", team_slug, chatbot.public_id, session.external_id)
 
 
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
@@ -506,11 +459,36 @@ def _chatbot_chat_ui(request, embedded=False):
         {
             "experiment": request.experiment,
             "session": request.experiment_session,
-            "active_tab": "chatbots",
+            "active_tab": "chatbots" if request.origin == "chatbots" else "experiments",
             "embedded": embedded,
             **version_specific_vars,
         },
     )
+
+
+@xframe_options_exempt
+@team_required
+def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
+    """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and pre-surveys and
+    will ALWAYS create anonymous participants."""
+    try:
+        chatbot = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+    except ValidationError:
+        # old links dont have uuids
+        raise Http404() from None
+
+    chatbot_version = chatbot.default_version
+    if not chatbot_version.is_public:
+        raise Http404
+
+    participant = Participant.create_anonymous(request.team, ChannelPlatform.WEB)
+    session = WebChannel.start_new_session(
+        working_experiment=chatbot,
+        participant_identifier=participant.identifier,
+        timezone=request.session.get("detected_tz", None),
+        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
+    )
+    return redirect("chatbots:chatbot_chat_embed", team_slug, chatbot.public_id, session.external_id)
 
 
 @login_and_team_required
