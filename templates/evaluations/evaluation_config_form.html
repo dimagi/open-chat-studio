@@ -8,24 +8,7 @@
     {% render_form_fields form "name" %}
     {% render_form_fields form "dataset" %}
     {% render_form_fields form "evaluators" %}
-
-    <div class="fieldset w-full">
-      <label class="label font-bold" for="">
-        <div>Generation Configuration</div>
-      </label>
-
-      <div id="id_evaluators">
-        <div>
-          <label for="id_run_generation">
-            <input class="checkbox " type="checkbox" name="run_generation" id="id_run_generation"
-                   {% if form.run_generation.value %}checked="checked"{% endif %}
-                   x-model="runGeneration">
-            Run generation step before evaluation
-          </label>
-        {{ form.run_generation.errors }}
-        </div>
-      </div>
-    </div>
+    {% render_form_fields form "run_generation" %}
 
     <div class="fieldset w-full" x-show="runGeneration" x-cloak x-collapse>
       <label class="label font-bold" for="{{ form.experiment.id_for_label }}">
