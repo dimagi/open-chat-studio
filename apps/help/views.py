@@ -137,7 +137,7 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
             def main(input, **kwargs):
                 a = get_node_output("a")
                 b = get_node_output("b")
-                if not a and not b:
+                if a is None and b is None:
                     wait_for_next_input()
                 # do something with a or b
         ```

@@ -169,7 +169,8 @@ class PipelineState(dict):
         Helper method to get a node name from a node ID.
         """
         for name, output in self.get("outputs", {}).items():
-            output = output[0] if output and isinstance(output, list) else output
+            if isinstance(output, list):
+                output = output[0] if output else None
             if output and output.get("node_id") == node_id:
                 return name
         return None
@@ -256,7 +257,7 @@ class PipelineState(dict):
         """
         for outputs in self["outputs"].values():
             output = outputs if isinstance(outputs, list) else [outputs]
-            if output[0].get("node_id") == node_id:
+            if output and output[0].get("node_id") == node_id:
                 return [out["message"] for out in output]
         return None
 
