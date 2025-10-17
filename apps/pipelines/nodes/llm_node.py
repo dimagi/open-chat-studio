@@ -27,7 +27,8 @@ class StateSchema(AgentState):
     session_state: Annotated[dict, operator.or_]
 
 
-def execute_sub_agent(node, state: PipelineState, user_input: str):
+def execute_sub_agent(node, state: PipelineState):
+    user_input = state["last_node_input"]
     session: ExperimentSession | None = state.get("experiment_session")
     tool_callbacks = ToolCallbacks()
     agent = build_node_agent(node, state, session, tool_callbacks)
