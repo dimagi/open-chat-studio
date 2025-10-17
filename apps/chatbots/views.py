@@ -3,6 +3,7 @@ import uuid
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db.models import Count, F, Max, Q
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
@@ -15,7 +16,9 @@ from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
+from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
@@ -23,7 +26,7 @@ from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
-from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
 from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
@@ -458,12 +461,6 @@ def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: 
 def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
     """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and pre-surveys and
     will ALWAYS create anonymous participants."""
-    from django.core.exceptions import ValidationError
-
-    from apps.channels.models import ChannelPlatform
-    from apps.chat.models import Chat
-    from apps.participants.models import Participant
-
     try:
         chatbot = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
