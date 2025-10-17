@@ -332,9 +332,10 @@ class BasePipelineNode(BaseModel, ABC):
             for incoming_node_id, outputs in reversed(state.get_node_inputs(node_id, incoming_nodes).items()):
                 if outputs is not None:
                     # Handle the edge case where a node is downstream of a 'join' node connected to
-                    # multiple parallel nodes. This isn't really a supported workflow, but by taking the
-                    # last message, we at least get different outputs for each invocation of the node in the
-                    # case where the parallel branches are of different lengths.
+                    # multiple parallel nodes. This isn't really a supported workflow, and it's hard to detect
+                    # in the pipeline during the build step.
+                    # By taking the last message, we at least get different outputs for each invocation of
+                    # the node in the case where the parallel branches are of different lengths.
                     state["last_node_input"] = outputs[-1]
                     state["node_inputs"] = outputs
                     state["node_source"] = incoming_node_id
