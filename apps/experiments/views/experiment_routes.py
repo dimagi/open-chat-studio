@@ -37,7 +37,7 @@ class CreateExperimentRoute(LoginAndTeamRequiredMixin, CreateView, PermissionReq
         return form
 
     def get_success_url(self):
-        url = reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.kwargs["experiment_id"]])
+        url = reverse("chatbots:single_chatbot_home", args=[self.request.team.slug, self.kwargs["experiment_id"]])
         tab = "routes" if self.kwargs["type"] == ExperimentRouteType.PROCESSOR else "terminal_bots"
         return f"{url}#{tab}"
 
@@ -76,7 +76,7 @@ class EditExperimentRoute(LoginAndTeamRequiredMixin, UpdateView, PermissionRequi
         return form
 
     def get_success_url(self):
-        url = reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.kwargs["experiment_id"]])
+        url = reverse("chatbots:single_chatbot_home", args=[self.request.team.slug, self.kwargs["experiment_id"]])
         return f"{url}#routes"
 
 
