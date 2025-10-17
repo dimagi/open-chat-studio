@@ -224,6 +224,38 @@ def main(input, **kwargs):
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
+def test_code_node_wait_for_inputs_manually(pipeline, experiment_session):
+    """Similar to the previous test but uses `wait_for_next_input`.
+
+    start -> A -> B -> Code -> end
+          -> C --------^
+    """
+    start = start_node()
+    node_a = render_template_node("A: {{ input }}", "A")
+    node_b = render_template_node("B: {{ input }}", "B")
+    node_c = render_template_node("C: {{ input }}", "C")
+    code = code_node(
+        code="""
+def main(input, **kwargs):
+    c = get_node_output("C")
+    b = get_node_output("B")
+    if not b and c:
+        wait_for_next_input()
+    return f"{b},{c}"
+    """,
+        name="Code",
+    )
+    end = end_node()
+    nodes = [start, node_a, node_b, code, node_c, end]
+    edges = ["start - A", "start - C", "A - B", "B - Code", "C - Code", "Code - end"]
+    output = create_runnable(pipeline, nodes, edges).invoke(
+        PipelineState(messages=["Hi"], experiment_session=experiment_session)
+    )
+    output_state = PipelineState(output)
+    assert output_state.get_node_output_by_name("end") == "B: A: Hi,C: Hi"
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
 def test_dangling_node_abort_terminates_early(pipeline, experiment_session):
     """Test that an abort from a dangling node does actually abort the pipeline.
 

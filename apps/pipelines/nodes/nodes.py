@@ -1056,6 +1056,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             # control flow
             "abort_with_message": self._abort_pipeline(),
             "require_node_outputs": self._require_node_outputs(state),
+            "wait_for_next_input": self.wait_for_next_input,
         }
 
     def _abort_pipeline(self):
@@ -1087,6 +1088,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                     raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
 
         return require_node_outputs
+
+    def wait_for_next_input(self):
+        """Advanced utility that will abort the current execution. This is similar to `require_node_outputs` but
+        used where some node outputs may be optional."""
+        raise WaitForNextInput("Waiting for next input")
 
     def _get_session_state_key(self, state: PipelineState):
         def get_session_state_key(key_name: str):

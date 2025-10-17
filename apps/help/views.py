@@ -128,6 +128,18 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
             the node will not execute and the pipeline will wait for the required nodes to complete.
             
             This should be called at the start of the main function.
+            
+        def wait_for_next_input():
+            Advanced utility that will abort the current execution. This is similar to `require_node_outputs` but 
+            used where some node outputs may be optional.
+            
+            Example:
+            def main(input, **kwargs):
+                a = get_node_output("a")
+                b = get_node_output("b")
+                if not a and not b:
+                    wait_for_next_input()
+                # do something with a or b
         ```
 
         Return only the Python code and nothing else. Do not enclose it in triple quotes or have any other
