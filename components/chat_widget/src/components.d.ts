@@ -44,10 +44,6 @@ export namespace Components {
          */
         "iconUrl"?: string;
         /**
-          * Authentication key for embedded channels
-         */
-        "embedKey"?: string;
-        /**
           * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
          */
         "language"?: string;
@@ -149,10 +145,6 @@ declare namespace LocalJSX {
           * URL of the icon to display on the button. If not provided, uses the default OCS logo.
          */
         "iconUrl"?: string;
-        /**
-          * Authentication key for embedded channels
-          */
-        "embedKey"?: string;
         /**
           * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
          */
