@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID
 
+import sentry_sdk
 from langchain_core.runnables import RunnableConfig
 
 from .base import Tracer
@@ -49,9 +50,11 @@ class TracingService:
     def create_for_experiment(cls, experiment) -> Self:
         from apps.service_providers.tracing.ocs_tracer import OCSTracer
 
-        ocs_tracer = OCSTracer(experiment.id, experiment.team_id)
+        tracers = []
+        if experiment and experiment.id and experiment.team_id:
+            ocs_tracer = OCSTracer(experiment.id, experiment.team_id)
+            tracers.append(ocs_tracer)
 
-        tracers = [ocs_tracer]
         if experiment and experiment.trace_provider:
             try:
                 tracers.append(experiment.trace_provider.get_service())
@@ -119,6 +122,8 @@ class TracingService:
                 )
             except Exception:  # noqa BLE001
                 logger.exception("Error initializing tracer %s", tracer.__class__.__name__)
+
+        sentry_sdk.set_context("Traces", self.get_trace_metadata())
 
     def _end_traces(self, error: Exception | None = None):
         for tracer in self._active_tracers:

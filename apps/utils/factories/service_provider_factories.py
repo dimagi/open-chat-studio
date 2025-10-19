@@ -19,7 +19,7 @@ class MessagingProviderFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = MessagingProvider
 
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Messaging Provider {n}")
     team = factory.SubFactory(TeamFactory)
 
 
@@ -29,7 +29,7 @@ class LlmProviderFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     type = str(LlmProviderTypes.openai)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test LLM Provider {n}")
     config = {"openai_api_key": "123"}
 
 
@@ -39,7 +39,7 @@ class LlmProviderModelFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     type = str(LlmProviderTypes.openai)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"test-model-{n}")
     deprecated = False
 
 
@@ -58,7 +58,7 @@ class VoiceProviderFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     type = VoiceProviderType.aws
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Voice Provider {n}")
     config = {"aws_access_key_id": "123", "aws_secret_access_key": "123", "aws_region": "us-east-1"}
 
 
@@ -67,7 +67,7 @@ class AuthProviderFactory(factory.django.DjangoModelFactory):
         model = AuthProvider
 
     team = factory.SubFactory(TeamFactory)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Auth Provider {n}")
     type = AuthProviderType.commcare
     config = {"username": "user", "api_key": "key"}
 
@@ -77,6 +77,6 @@ class TraceProviderFactory(factory.django.DjangoModelFactory):
         model = TraceProvider
 
     team = factory.SubFactory(TeamFactory)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Trace Provider {n}")
     type = AuthProviderType.commcare
     config = {"public_key": "123", "secret_key": "***", "host": "https://example.com"}

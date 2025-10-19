@@ -22,7 +22,7 @@ from apps.annotations.models import TagCategories
 from apps.channels import audio
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.bots import EventBot, get_bot
+from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.exceptions import (
     AudioSynthesizeException,
     ChannelException,
@@ -310,8 +310,8 @@ class ChannelBase(ABC):
             channel_cls = SlackChannel
         elif platform == "commcare_connect":
             channel_cls = CommCareConnectChannel
-        elif platform == "evaluations":
-            channel_cls = EvaluationChannel
+        # elif platform == "evaluations":
+        #  evals channel can't be called this way
         elif platform == "embedded_widget":
             channel_cls = ApiChannel
         else:
@@ -1317,11 +1317,24 @@ class EvaluationChannel(ChannelBase):
         experiment: Experiment,
         experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession,
+        participant_data: dict,
     ):
         super().__init__(experiment, experiment_channel, experiment_session)
         if not self.experiment_session:
             raise ChannelException("EvaluationChannel requires an existing session")
+        self._participant_data = participant_data
+
+        self.trace_service = TracingService.empty()
 
     def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since evaluations are run internally
         pass
+
+    @property
+    def bot(self):
+        return EvalsBot(
+            self.experiment_session,
+            self.experiment,
+            self.trace_service,
+            participant_data=self._participant_data,
+        )

@@ -443,6 +443,9 @@ if REDIS_URL.startswith("rediss"):
 
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# see https://docs.celeryq.dev/en/stable/userguide/workers.html#soft-shutdown
+CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = 10
+CELERY_WORKER_ENABLE_SOFT_SHUTDOWN_ON_IDLE = True
 
 SCHEDULED_TASKS = {
     "files.tasks.clean_up_expired_files": {

@@ -2,7 +2,7 @@ import React, {useEffect, useState} from "react";
 
 export default function ComponentHelp({label, parentRef, scrollPosition, showHelp, children}: {
   label: string,
-  parentRef: React.RefObject<HTMLDivElement>,
+  parentRef: React.RefObject<HTMLDivElement | null>,
   scrollPosition: number
   showHelp: boolean | undefined
   children?: React.ReactNode

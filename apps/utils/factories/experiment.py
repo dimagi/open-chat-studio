@@ -2,6 +2,7 @@ import factory
 
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments import models
+from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
@@ -45,7 +46,7 @@ class SyntheticVoiceFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.SyntheticVoice
 
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Voice Provider {n}")
     neural = True
     language = "English"
     language_code = "en"
@@ -59,7 +60,7 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     owner = factory.SubFactory(UserFactory)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Experiment {n}")
     prompt_text = "You are a helpful assistant"
     consent_form = factory.SubFactory(ConsentFormFactory, team=factory.SelfAttribute("..team"))
     llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
@@ -68,6 +69,19 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     public_id = factory.Faker("uuid4")
     synthetic_voice = factory.SubFactory(SyntheticVoiceFactory)
     voice_provider = factory.SubFactory(VoiceProviderFactory)
+
+
+class ChatbotFactory(factory.django.DjangoModelFactory):
+    """Creates an Experiment with a Pipline that has 2 nodes: start -> end"""
+
+    class Meta:
+        model = models.Experiment
+
+    team = factory.SubFactory(TeamFactory)
+    owner = factory.SubFactory(UserFactory)
+    name = factory.Sequence(lambda n: f"Test Chatbot {n}")
+    public_id = factory.Faker("uuid4")
+    pipeline = factory.SubFactory(PipelineFactory, team=factory.SelfAttribute("..team"))
 
 
 class VersionedExperimentFactory(ExperimentFactory):
@@ -93,7 +107,7 @@ class ParticipantFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     identifier = factory.Faker("uuid4")
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Participant {n}")
 
 
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):

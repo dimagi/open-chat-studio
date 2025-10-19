@@ -6,6 +6,7 @@ from copy import deepcopy
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Self, cast
 
+import sentry_sdk
 from langchain_core.runnables import RunnableConfig
 from langgraph.constants import END
 from langgraph.types import Command
@@ -17,7 +18,6 @@ from typing_extensions import TypedDict
 from apps.experiments.models import ExperimentSession
 from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
-from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -49,7 +49,7 @@ def add_temp_state_messages(left: dict, right: dict):
     return output
 
 
-def merge_dicts(left: dict, right: dict):
+def merge_dict_values_as_lists(left: dict, right: dict):
     """
     Merge two dictionaries, combining values for the same key into a list. The value of any key is expected to be a list
     """
@@ -84,8 +84,8 @@ class PipelineState(dict):
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     temp_state: Annotated[TempState, add_temp_state_messages]
-    input_message_metadata: Annotated[dict, merge_dicts]
-    output_message_metadata: Annotated[dict, merge_dicts]
+    input_message_metadata: Annotated[dict, merge_dict_values_as_lists]
+    output_message_metadata: Annotated[dict, merge_dict_values_as_lists]
     attachments: list = Field(default=[])
     output_message_tags: Annotated[list[tuple[str, str]], operator.add]
     session_tags: Annotated[list[tuple[str, str]], operator.add]
@@ -99,6 +99,9 @@ class PipelineState(dict):
 
     intents: Annotated[list[Intents], operator.add]
     synthetic_voice_id: int | None
+
+    participant_data: Annotated[dict, operator.or_]
+    session_state: Annotated[dict, operator.or_]
 
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
@@ -322,9 +325,6 @@ class BasePipelineNode(BaseModel, ABC):
                 )
         return state
 
-    def get_participant_data_proxy(self, state: PipelineState) -> "ParticipantDataProxy":
-        return ParticipantDataProxy.from_state(state)
-
     @property
     def disabled_tools(self) -> set[str] | None:
         if disabled := self._config.get("configurable", {}).get("disabled_tools"):
@@ -363,7 +363,18 @@ class PipelineNode(BasePipelineNode, ABC):
         self._outgoing_nodes = outgoing_nodes
         state = PipelineState(state)
         state = self._prepare_state(self.node_id, incoming_nodes, state)
-        output = self._process(input=state["node_input"], state=state)
+
+        # Sentry context for error tracking
+        process_params = {"input": state["node_input"], "state": state}
+        sentry_context = {
+            "node_id": self.node_id,
+            "node_name": self.name,
+            "node_type": self.__class__.__name__,
+            "params": process_params,
+        }
+        sentry_sdk.set_context("Node", sentry_context)
+
+        output = self._process(**process_params)
         if isinstance(output, Command) and output.goto != END:
             return Command(goto=output.goto, update=self._augment_output(state, cast(PipelineState, output.update)))
         if not isinstance(output, dict):
