@@ -1,3 +1,4 @@
+{% load django_htmx %}
 {% load static %}
 {% load meta_tags %}
 <!DOCTYPE html>
@@ -52,6 +53,7 @@
       ></script>
     {% endif %}
 
+    {% htmx_script %}
     <script src="{% static 'js/site-bundle.js'%}"></script>
     {% block page_head %}
     {% endblock page_head %}
