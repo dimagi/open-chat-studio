@@ -39,6 +39,7 @@ IGNORE_APPS = {
     "db",  # heath_check.db
     "django_celery_beat",
     "django_cleanup",
+    "django_htmx",
     "django_otp",
     "django_tables2",
     "documents",  # ignore for now - may be added later
