@@ -239,7 +239,7 @@ def test_code_node_wait_for_inputs_manually(pipeline, experiment_session):
 def main(input, **kwargs):
     c = get_node_output("C")
     b = get_node_output("B")
-    if not b and c:
+    if not (b and c):
         wait_for_next_input()
     return f"{b},{c}"
     """,
