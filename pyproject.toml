@@ -144,6 +144,7 @@ dev = [
     "django-debug-toolbar>=5.2.0",
     "djlint>=1.36.4",
     "django-watchfiles>=1.4.0",
+    "django-browser-reload>=1.21.0",
 ]
 docs = [
     "mkdocs-material>=9.6.12",
