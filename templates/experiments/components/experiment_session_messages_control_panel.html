@@ -10,14 +10,6 @@
     <input type="hidden" name="search" value="{{ request.GET.search|default:'' }}">
 
     <div class="w-full flex justify-between gap-4">
-      <div>
-        {% if perms.evaluations.add_evaluationdataset %}
-          <a
-            href="{% url 'evaluations:create_from_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
-            class="btn btn-sm btn-primary">Create Dataset</a>
-        {% endif %}
-      </div>
-
       <div class="flex flex-1 flex-col gap-2">
         {% if not hide_translation|default_if_none:False %}
           <div class="flex items-center gap-3 flex-wrap">

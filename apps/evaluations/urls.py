@@ -68,6 +68,11 @@ urlpatterns = [
         name="add_message_to_dataset",
     ),
     path(
+        "add_single_message/session/<uuid:session_id>/",
+        dataset_views.add_single_message_to_dataset_view,
+        name="add_single_message_to_dataset",
+    ),
+    path(
         "message/<int:message_id>/edit_modal/",
         dataset_views.edit_message_modal,
         name="edit_message_modal",
@@ -101,11 +106,6 @@ urlpatterns = [
         "dataset/<int:pk>/upload/",
         dataset_views.upload_dataset_csv,
         name="dataset_upload",
-    ),
-    path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/dataset/create",
-        dataset_views.CreateDatasetFromSessionView.as_view(),
-        name="create_from_messages",
     ),
 ]
 
