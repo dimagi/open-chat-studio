@@ -17,6 +17,7 @@ from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
+from django_htmx.http import HttpResponseClientRedirect, reswap
 from django_tables2 import SingleTableView
 
 from apps.documents import tasks
@@ -230,7 +231,7 @@ class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin)
         task = sync_document_source_task.delay(self.object.id)
         self.object.sync_task_id = task.task_id
         self.object.save(update_fields=["sync_task_id"])
-        return HttpResponse(headers={"HX-Redirect": self.get_success_url()})
+        return HttpResponseClientRedirect(self.get_success_url())
 
 
 class CreateDocumentSource(BaseDocumentSourceView, CreateView):
@@ -554,7 +555,7 @@ class DeleteCollection(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin)
                     "experiments_with_pipeline_nodes": experiment_chips,
                 },
             )
-            return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+            return reswap(HttpResponse(response, status=400), "none")
 
 
 @require_POST

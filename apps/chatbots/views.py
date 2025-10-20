@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
+from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
@@ -257,7 +258,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
 def archive_chatbot(request, team_slug: str, pk: int):
     chatbot = get_object_or_404(Experiment, id=pk, team=request.team)
     chatbot.archive()
-    return HttpResponse(headers={"hx-redirect": reverse("chatbots:chatbots_home", kwargs={"team_slug": team_slug})})
+    return HttpResponseClientRedirect(reverse("chatbots:chatbots_home", kwargs={"team_slug": team_slug}))
 
 
 class CreateChatbotVersion(CreateExperimentVersion):
