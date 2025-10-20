@@ -79,6 +79,7 @@ dependencies = [
     "langchain-mcp-adapters",
     "atlassian-python-api>=4.0.7",
     "audioop-lts>=0.2.2",
+    "django-htmx>=1.26.0",
 ]
 
 [project.urls]
