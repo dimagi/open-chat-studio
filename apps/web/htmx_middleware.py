@@ -13,8 +13,8 @@ class HtmxMessageMiddleware:
         if request.htmx:
             trigger_client_event(
                 response,
-                "messages",
-                [{"message": message.message, "tags": message.tags} for message in get_messages(request)],  # noqa pytype
+                "djangoMessages",
+                {"messages": [{"message": message.message, "tags": message.tags} for message in get_messages(request)]},
             )
 
         return response

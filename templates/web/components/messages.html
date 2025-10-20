@@ -2,8 +2,8 @@
 
 <script>
   (() => {
-    htmx.on("messages", (event) => {
-      event.detail.value.forEach((message) => {
+    htmx.on("djangoMessages", (event) => {
+      event.detail.value.messages.forEach((message) => {
         alertify.notify(message.message, message.tags, 10);
       });
     })
