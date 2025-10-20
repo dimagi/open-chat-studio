@@ -15,6 +15,12 @@ class ColumnWithHelp(tables.Column):
         return format_html("""<span>{header}</span>{help}""", header=self.verbose_name, help=help_html)
 
 
+class TemplateColumnWithHelp(ColumnWithHelp, tables.TemplateColumn):
+    """A TemplateColumn that supports help text in the header."""
+
+    pass
+
+
 class TimeAgoColumn(tables.TemplateColumn):
     """
     A column that renders `datetime` instances using the `naturaltime` filter.

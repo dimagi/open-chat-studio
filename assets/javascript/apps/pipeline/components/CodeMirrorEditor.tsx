@@ -179,6 +179,13 @@ export function CodeNodeEditor(
       detail: "Ensures that the specified nodes have been executed and their outputs are available in the pipeline's state.",
       boost: 1,
       section: "Flow Control",
+    }),
+    wait_for_next_input: snip("wait_for_next_input()", {
+      label: "wait_for_next_input",
+      type: "function",
+      detail: "Abort the current node execution and wait until the node is executed again.",
+      boost: 1,
+      section: "Flow Control",
     })
   }
 
@@ -238,5 +245,3 @@ export function PromptEditor(
   }
   return <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions}/>;
 }
-
-

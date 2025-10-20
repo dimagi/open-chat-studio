@@ -1,7 +1,11 @@
 import pytest
 
+from apps.chat.models import ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
-from apps.evaluations.utils import parse_history_text
+from apps.evaluations.utils import make_evaluation_messages_from_sessions, parse_history_text
+from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.traces import TraceFactory
 
 
 def test_parse_history_functionality():
@@ -72,3 +76,138 @@ def test_parse_history_functionality():
     assert result[0]["content"] == "Hello with whitespace"
     assert result[1]["message_type"] == "ai"
     assert result[1]["content"] == "Response"
+
+
+@pytest.mark.django_db()
+def test_make_evaluation_messages_from_sessions():
+    """Test the make_evaluation_messages_from_sessions function with various message configurations."""
+    # Setup
+    team = TeamFactory()
+    session = ExperimentSessionFactory(team=team)
+    chat = session.chat
+
+    # 1. Human message + AI message pair
+    human_msg_1 = ChatMessageFactory(
+        chat=chat,
+        message_type=ChatMessageType.HUMAN,
+        content="First human message",
+    )
+    ai_msg_1 = ChatMessageFactory(
+        chat=chat,
+        message_type=ChatMessageType.AI,
+        content="First AI response",
+    )
+
+    # 2. Human message without AI message (orphaned human)
+    human_msg_2 = ChatMessageFactory(
+        chat=chat,
+        message_type=ChatMessageType.HUMAN,
+        content="Second human message without response",
+    )
+
+    # 3. Another human + AI message pair (so there are two human messages next to each other)
+    # This human message will have a trace with participant and session data
+    human_msg_3 = ChatMessageFactory(
+        chat=chat,
+        message_type=ChatMessageType.HUMAN,
+        content="Third human message",
+    )
+    # Let's add a trace with participant and session data
+    TraceFactory(
+        team=team,
+        experiment=session.experiment,
+        session=session,
+        participant=session.participant,
+        input_message=human_msg_3,
+        duration=100,
+        participant_data={"name": "John Doe", "age": 30, "location": "New York"},
+        session_state={"current_step": 3, "total_interactions": 5, "session_score": 85},
+    )
+
+    ai_msg_3 = ChatMessageFactory(
+        chat=chat,
+        message_type=ChatMessageType.AI,
+        content="Third AI response",
+    )
+
+    # 4. AI message without human message (orphaned AI)
+    ai_msg_4 = ChatMessageFactory(
+        chat=chat,
+        message_type=ChatMessageType.AI,
+        content="Fourth AI message without human input",
+    )
+
+    # Execute
+    message_ids_per_session = {
+        session.external_id: [
+            human_msg_1.id,
+            ai_msg_1.id,
+            human_msg_2.id,
+            human_msg_3.id,
+            ai_msg_3.id,
+            ai_msg_4.id,
+        ]
+    }
+
+    result = make_evaluation_messages_from_sessions(message_ids_per_session)
+
+    # Assertions
+    # We should have 4 evaluation messages created
+    assert len(result) == 4
+
+    # Test message 1: Human + AI pair
+    eval_msg_1 = result[0]
+    assert eval_msg_1.input_chat_message == human_msg_1
+    assert eval_msg_1.expected_output_chat_message == ai_msg_1
+    assert eval_msg_1.input["content"] == "First human message"
+    assert eval_msg_1.input["role"] == "human"
+    assert eval_msg_1.output["content"] == "First AI response"
+    assert eval_msg_1.output["role"] == "ai"
+    assert eval_msg_1.metadata["session_id"] == session.external_id
+    assert eval_msg_1.metadata["experiment_id"] == str(session.experiment.public_id)
+    assert eval_msg_1.history == []  # First message, no history
+    assert eval_msg_1.participant_data == {}  # No trace data
+    assert eval_msg_1.session_state == {}  # No trace data
+
+    # Test message 2: Orphaned human message
+    eval_msg_2 = result[1]
+    assert eval_msg_2.input_chat_message == human_msg_2
+    assert eval_msg_2.expected_output_chat_message is None
+    assert eval_msg_2.input["content"] == "Second human message without response"
+    assert eval_msg_2.input["role"] == "human"
+    assert eval_msg_2.output == {}  # No output for orphaned human
+    assert eval_msg_2.metadata["session_id"] == session.external_id
+    assert len(eval_msg_2.history) == 2  # Previous human + AI pair should be in history
+    assert eval_msg_2.history[0]["message_type"] == ChatMessageType.HUMAN
+    assert eval_msg_2.history[0]["content"] == "First human message"
+    assert eval_msg_2.history[1]["message_type"] == ChatMessageType.AI
+    assert eval_msg_2.history[1]["content"] == "First AI response"
+
+    # Test message 3: Human + AI pair with trace data
+    eval_msg_3 = result[2]
+    assert eval_msg_3.input_chat_message == human_msg_3
+    assert eval_msg_3.expected_output_chat_message == ai_msg_3
+    assert eval_msg_3.input["content"] == "Third human message"
+    assert eval_msg_3.input["role"] == "human"
+    assert eval_msg_3.output["content"] == "Third AI response"
+    assert eval_msg_3.output["role"] == "ai"
+    assert eval_msg_3.metadata["session_id"] == session.external_id
+    # Verify participant and session data from trace is transferred
+    assert eval_msg_3.participant_data == {"name": "John Doe", "age": 30, "location": "New York"}
+    assert eval_msg_3.session_state == {"current_step": 3, "total_interactions": 5, "session_score": 85}
+    # History should include previous messages
+    assert len(eval_msg_3.history) == 3  # human1, ai1, human2
+    assert eval_msg_3.history[0]["message_type"] == ChatMessageType.HUMAN
+    assert eval_msg_3.history[1]["message_type"] == ChatMessageType.AI
+    assert eval_msg_3.history[2]["message_type"] == ChatMessageType.HUMAN
+
+    # Test message 4: Orphaned AI message
+    eval_msg_4 = result[3]
+    assert eval_msg_4.input_chat_message is None
+    assert eval_msg_4.expected_output_chat_message == ai_msg_4
+    assert eval_msg_4.input == {}  # No input for orphaned AI
+    assert eval_msg_4.output["content"] == "Fourth AI message without human input"
+    assert eval_msg_4.output["role"] == "ai"
+    assert eval_msg_4.metadata["session_id"] == session.external_id
+    # History should include all previous messages
+    assert len(eval_msg_4.history) == 5  # human1, ai1, human2, human3, ai3

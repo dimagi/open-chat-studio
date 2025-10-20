@@ -1,5 +1,5 @@
 {
-  "description": "Uses and LLM to respond to the input.",
+  "description": "Uses an LLM to respond to the input.",
   "properties": {
     "tag": {
       "default": "",

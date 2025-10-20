@@ -9,7 +9,7 @@
       <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
       {% if experiment.id %}
         <li><a
-          href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}">{{ experiment.name }}</a>
+          href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}">{{ experiment.name }}</a>
         </li>
         <li class="pg-breadcrumb-active" aria-current="page">Edit</li>
       {% else %}

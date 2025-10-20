@@ -31,7 +31,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
   const refMap = schemaList.reduce((acc, schema) => {
     acc[schema.title] = React.createRef();
     return acc;
-  }, {} as Record<string, React.RefObject<HTMLDivElement>>);
+  }, {} as Record<string, React.RefObject<HTMLDivElement | null>>);
 
   function getHelpOffState() {
     return new Map(Array.from(nodeSchemas.keys()).map((key) => [key, false]));

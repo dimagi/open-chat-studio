@@ -1,5 +1,6 @@
 import csv
 import logging
+import math
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import timedelta
@@ -9,6 +10,7 @@ from typing import cast
 from celery import chord, shared_task
 from celery_progress.backend import ProgressRecorder
 from django.utils import timezone
+from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
@@ -32,7 +34,7 @@ from apps.teams.utils import current_team
 logger = logging.getLogger("ocs.evaluations")
 
 
-@shared_task
+@shared_task(base=TaskbadgerTask, rate_limit="0.5/s")
 def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     """
     Run all evaluations over a single message.
@@ -110,7 +112,6 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
             ]
             ChatMessage.objects.bulk_create(history_messages)
 
-        # TODO: Populate participant data?
     except Exception as e:
         logger.exception(f"Error populating eval data {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
@@ -139,7 +140,7 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
         return session.id, None
 
 
-@shared_task
+@shared_task(base=TaskbadgerTask)
 def mark_evaluation_complete(results, evaluation_run_id):
     """
     Callback task that marks an evaluation run as complete.
@@ -157,8 +158,8 @@ def mark_evaluation_complete(results, evaluation_run_id):
         logger.exception(f"Error marking evaluation run {evaluation_run_id} complete: {e}")
 
 
-@shared_task(bind=True)
-def run_evaluation_task(self, evaluation_run_id):
+@shared_task(base=TaskbadgerTask)
+def run_evaluation_task(evaluation_run_id):
     """
     Spawns an evaluator task for each message
     """
@@ -188,9 +189,12 @@ def run_evaluation_task(self, evaluation_run_id):
                 return
 
             # Create chord with group and callback
+            concurrency_limit = 10
+            chunk_size = math.ceil(len(messages) / concurrency_limit)
+            evaluator_ids = [e.id for e in evaluators]
             chord_result = chord(
                 evaluate_single_message_task.chunks(
-                    [(evaluation_run_id, [e.id for e in evaluators], message.id) for message in messages], 5
+                    [(evaluation_run_id, evaluator_ids, message.id) for message in messages], chunk_size
                 ).group()
             )(mark_evaluation_complete.s(evaluation_run_id))
 
@@ -208,7 +212,7 @@ def run_evaluation_task(self, evaluation_run_id):
         evaluation_run.save(update_fields=["status", "error_message", "job_id"])
 
 
-@shared_task
+@shared_task(base=TaskbadgerTask)
 def cleanup_old_evaluation_data():
     """Delete ExperimentSessions that were created during evaluation runs and
     are older than one week.
@@ -228,7 +232,7 @@ def cleanup_old_evaluation_data():
     logger.info(f"Cleanup completed: deleted {deleted_sessions[0]} evaluation sessions")
 
 
-@shared_task
+@shared_task(base=TaskbadgerTask)
 def cleanup_old_preview_evaluation_runs():
     """Delete preview evaluation runs older than 1 day"""
     one_day_ago = timezone.now() - timedelta(days=1)
@@ -243,7 +247,7 @@ def cleanup_old_preview_evaluation_runs():
     logger.info(f"Cleanup completed: deleted {deleted_preview_runs[0]} preview evaluation runs")
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, base=TaskbadgerTask)
 def upload_dataset_csv_task(self, dataset_id, csv_content, team_id):
     """
     Process CSV upload for dataset asynchronously with progress tracking.
@@ -410,7 +414,7 @@ def process_csv_rows(dataset, rows, columns, progress_recorder, team):
     return stats
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, base=TaskbadgerTask)
 def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_id, column_mappings=None):
     """
     Process CSV upload for evaluation run results asynchronously with progress tracking.

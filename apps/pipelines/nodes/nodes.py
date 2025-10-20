@@ -100,11 +100,12 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    def _process(self, input, state: PipelineState, **kwargs) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         env = SandboxedEnvironment()
         try:
             content = {
-                "input": input,
+                "input": state["last_node_input"],
+                "node_inputs": state["node_inputs"],
                 "temp_state": state.get("temp_state", {}),
                 "session_state": state.get("session_state", {}),
             }
@@ -279,9 +280,9 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         llm = self.get_chat_model()
-        output = llm.invoke(input, config=self._config)
+        output = llm.invoke(state["last_node_input"], config=self._config)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
 
 
@@ -317,7 +318,7 @@ class ToolConfigModel(BaseModel):
 
 
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
-    """Uses and LLM to respond to the input."""
+    """Uses an LLM to respond to the input."""
 
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
@@ -436,8 +437,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             )
         return value
 
-    def _process(self, input, state: PipelineState) -> PipelineState:
-        return execute_sub_agent(self, state, input)
+    def _process(self, state: PipelineState) -> PipelineState:
+        return execute_sub_agent(self, state)
 
 
 class SendEmail(PipelineNode, OutputMessageTagMixin):
@@ -464,11 +465,12 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
                 raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses") from None
         return value
 
-    def _process(self, input, **kwargs) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
+        user_input = state["last_node_input"]
         send_email_from_pipeline.delay(
-            recipient_list=self.recipient_list.split(","), subject=self.subject, message=input
+            recipient_list=self.recipient_list.split(","), subject=self.subject, message=user_input
         )
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=input)
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=user_input)
 
 
 class Passthrough(PipelineNode):
@@ -476,8 +478,10 @@ class Passthrough(PipelineNode):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing", can_add=False))
 
-    def _process(self, input, state: PipelineState) -> PipelineState:
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=input)
+    def _process(self, state: PipelineState) -> PipelineState:
+        return PipelineState.from_node_output(
+            node_name=self.name, node_id=self.node_id, output=state["last_node_input"]
+        )
 
 
 class StartNode(Passthrough):
@@ -508,7 +512,7 @@ class BooleanNode(PipelineRouterNode):
     )
 
     def _process_conditional(self, state: PipelineState) -> tuple[Literal["true", "false"], bool]:
-        if self.input_equals == state["node_input"]:
+        if self.input_equals == state["last_node_input"]:
             return "true", False
         return "false", False
 
@@ -619,7 +623,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             ]
         )
         session: ExperimentSession = state["experiment_session"]
-        node_input = state["node_input"]
+        node_input = state["last_node_input"]
         context = {"input": node_input}
         extra_prompt_context = {
             "temp_state": state.get("temp_state", {}),
@@ -722,11 +726,11 @@ class ExtractStructuredDataNodeMixin:
     def extraction_chain(self, tool_class, reference_data):
         return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(tool_class)
 
-    def _process(self, input, state: PipelineState, **kwargs) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         ToolClass = self.get_tool_class(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, ToolClass.model_json_schema())
-        message_chunks = self.chunk_messages(input, prompt_token_count=prompt_token_count)
+        message_chunks = self.chunk_messages(state["last_node_input"], prompt_token_count=prompt_token_count)
 
         new_reference_data = reference_data
         for message_chunk in message_chunks:
@@ -877,7 +881,7 @@ class ExtractParticipantData(
             output_data = {self.key_name: output_data}
 
         return PipelineState.from_node_output(
-            node_name=self.name, node_id=self.node_id, output=state["node_input"], participant_data=output_data
+            node_name=self.name, node_id=self.node_id, output=state["last_node_input"], participant_data=output_data
         )
 
 
@@ -917,7 +921,7 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             if extra_vars:
                 raise PydanticCustomError("invalid_input_formatter", "Only {input} is allowed")
 
-    def _process(self, input, state: PipelineState, **kwargs) -> PipelineState:
+    def _process(self, state: PipelineState) -> PipelineState:
         try:
             assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
         except OpenAiAssistant.DoesNotExist:
@@ -926,7 +930,9 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
         session: ExperimentSession | None = state.get("experiment_session")
         runnable = self._get_assistant_runnable(assistant, session=session)
         attachments = self._get_attachments(state)
-        chain_output: ChainOutput = runnable.invoke(input, config=self._config, attachments=attachments)
+        chain_output: ChainOutput = runnable.invoke(
+            state["last_node_input"], config=self._config, attachments=attachments
+        )
         output = chain_output.output
 
         return PipelineState.from_node_output(
@@ -987,11 +993,13 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
     def _get_function_args(cls) -> list[str]:
         return ["input", "**kwargs"]
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
+    def _process(self, state: PipelineState) -> PipelineState | Command:
         output_state = PipelineState()
         try:
             result = self.compile_and_execute_code(
-                additional_globals=self._get_custom_functions(state, output_state), input=input
+                additional_globals=self._get_custom_functions(state, output_state),
+                input=state["last_node_input"],
+                node_inputs=state["node_inputs"],
             )
         except WaitForNextInput:
             return Command(goto=END)
@@ -1048,6 +1056,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             # control flow
             "abort_with_message": self._abort_pipeline(),
             "require_node_outputs": self._require_node_outputs(state),
+            "wait_for_next_input": self.wait_for_next_input,
         }
 
     def _abort_pipeline(self):
@@ -1079,6 +1088,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                     raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
 
         return require_node_outputs
+
+    def wait_for_next_input(self):
+        """Advanced utility that will abort the current execution. This is similar to `require_node_outputs` but
+        used where some node outputs may be optional."""
+        raise WaitForNextInput("Waiting for next input")
 
     def _get_session_state_key(self, state: PipelineState):
         def get_session_state_key(key_name: str):

@@ -1322,6 +1322,8 @@ class EvaluationChannel(ChannelBase):
             raise ChannelException("EvaluationChannel requires an existing session")
         self._participant_data = participant_data
 
+        self.trace_service = TracingService.empty()
+
     def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since evaluations are run internally
         pass

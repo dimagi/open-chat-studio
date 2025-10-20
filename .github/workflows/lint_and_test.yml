@@ -19,6 +19,9 @@ concurrency:
 env:
   PYTHON_VERSION: '3.13'
 
+permissions:
+  contents: read
+
 jobs:
   build-frontend:
     runs-on: ubuntu-latest

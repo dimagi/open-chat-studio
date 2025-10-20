@@ -25,7 +25,7 @@ const LabeledHandle = React.forwardRef<
   HTMLDivElement,
   HandleProps &
     React.HTMLAttributes<HTMLDivElement> & {
-      label: string | React.ReactElement;
+      label: string | React.ReactElement<any>;
       handleClassName?: string;
       labelClassName?: string;
     }

@@ -131,23 +131,26 @@
         </div>
     </div>
 </div>
-
-<script>
-    document.addEventListener('alpine:init', () => {
-        Alpine.store('spanDrawer', {
-            isOpen: false,
-            spanId: null,
-
-            open(spanId) {
-                this.spanId = spanId;
-                this.isOpen = true;
-            },
-
-            close() {
-                this.isOpen = false;
-                this.spanId = null;
-            }
-        });
-    });
-</script>
 {% endblock app %}
+
+{% block page_head %}
+    {{ block.super }}
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('spanDrawer', {
+                isOpen: false,
+                spanId: null,
+
+                open(spanId) {
+                    this.spanId = spanId;
+                    this.isOpen = true;
+                },
+
+                close() {
+                    this.isOpen = false;
+                    this.spanId = null;
+                }
+            });
+        });
+    </script>
+{% endblock page_head %}
