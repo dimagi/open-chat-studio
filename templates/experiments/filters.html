@@ -208,8 +208,7 @@
             <template x-for="filterSet in starredFilters" :key="filterSet.id">
               <div
                   class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
-                  :class="selectedSavedFilterId === filterSet.id ? 'bg-primary text-white hover:bg-primary' : ''"
-                  @click="applyStarredFilter(filterSet.id, filterSet.name)">
+                  @click="applyStarredFilter(filterSet.id)">
                 <span class="text-base-content" x-text="filterSet.name"></span>
               </div>
             </template>
@@ -772,7 +771,7 @@
         }
       },
 
-      async applyStarredFilter(filterSetId, filterSetName) {
+      async applyStarredFilter(filterSetId) {
         try {
           const savedFilters = await this.fetchSavedFilters();
           const starredFilter = savedFilters.find(fs => fs.id === filterSetId);
