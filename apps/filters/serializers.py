@@ -1,18 +1,32 @@
 from rest_framework import serializers
 
+from apps.filters.models import FilterSet
 
-class FilterSetCreateUpdateSerializer(serializers.Serializer):
+
+class FilterSetSerializer(serializers.ModelSerializer):
     """
     Serializer for creating and updating FilterSet objects.
     Validates the fields that can be set by users.
     """
 
-    name = serializers.CharField(max_length=256, required=False, allow_blank=False)
-    filter_query_string = serializers.JSONField(required=True)
-    is_shared = serializers.BooleanField(required=False)
-    is_starred = serializers.BooleanField(required=False)
-    is_default_for_user = serializers.BooleanField(required=False)
-    is_default_for_team = serializers.BooleanField(required=False)
+    is_user_filter = serializers.SerializerMethodField("get_is_user_filter")
+
+    class Meta:
+        model = FilterSet
+        fields = [
+            "id",
+            "name",
+            "table_type",
+            "filter_query_string",
+            "is_shared",
+            "is_starred",
+            "is_default_for_user",
+            "is_default_for_team",
+            "is_user_filter",
+        ]
+
+    def get_is_user_filter(self, obj):
+        return obj.user == self.context.get("request_user")
 
     def validate_name(self, value):
         """Ensure name is not empty after stripping whitespace."""
