@@ -17,8 +17,8 @@ from apps.assistants.models import ToolResources
 from apps.channels.datamodels import Attachment
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import AgentTools
+from apps.experiments.runnables import ExperimentHistoryManager
 from apps.service_providers.llm_service.adapters import AssistantAdapter
-from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import (
     AssistantChat,
     GenerationCancelled,

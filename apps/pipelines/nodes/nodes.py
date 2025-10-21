@@ -53,11 +53,7 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
-from apps.service_providers.llm_service.runnables import (
-    AgentAssistantChat,
-    AssistantChat,
-    ChainOutput,
-)
+from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
@@ -947,6 +943,8 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
         return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession):
+        from apps.service_providers.llm_service.runnables import AgentAssistantChat, AssistantChat
+
         history_manager = AssistantPipelineHistoryManager()
         adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 

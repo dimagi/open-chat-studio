@@ -116,7 +116,7 @@ def _start_session(client, session):
         )
     else:
         next_url = reverse(
-            "experiments:experiment_chat",
+            "chatbots:chatbot_chat",
             args=[session.experiment.team.slug, session.experiment.public_id, session.external_id],
         )
     assert response.headers["Location"] == next_url
