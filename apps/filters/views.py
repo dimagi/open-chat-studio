@@ -47,7 +47,6 @@ def create_filter_set(request, team_slug: str, table_type: str):
         data=data, context={"is_team_admin": request.team_membership.is_team_admin, "request_user": request.user}
     )
     if not serializer.is_valid():
-        print(serializer.errors)
         return JsonResponse(serializer.errors, status=400)
 
     validated = serializer.validated_data
@@ -63,19 +62,9 @@ def create_filter_set(request, team_slug: str, table_type: str):
             )
 
         try:
-            filter_set = FilterSet.objects.create(
-                team=request.team,
-                user=request.user,
-                name=validated.get("name", "").strip(),
-                table_type=table_type,
-                filter_query_string=validated.get("filter_query_string", ""),
-                is_shared=validated.get("is_shared", False),
-                is_starred=validated.get("is_starred", False),
-                is_default_for_user=validated.get("is_default_for_user", False),
-                is_default_for_team=validated.get("is_default_for_team", False),
-            )
-            serializer = FilterSetSerializer(filter_set, context={"request_user": request.user})
-            return JsonResponse({"success": True, "filter_set": serializer.data})
+            filter_set = serializer.save(team=request.team, user=request.user)
+            result_serializer = FilterSetSerializer(filter_set, context={"request_user": request.user})
+            return JsonResponse({"success": True, "filter_set": result_serializer.data})
         except IntegrityError:
             return JsonResponse({"error": "Unable to create filter set"}, status=400)
 
