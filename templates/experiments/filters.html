@@ -792,12 +792,6 @@
         this.triggerFilterChange();
       },
 
-      // ---- Saved Filter Actions ----
-      applySavedFilterById(id, params) {
-        const url = new URL(window.location);
-        window.location.href = `${url.pathname}?${params}`;
-      },
-
       async updateSavedFilterQueryString(id) {
         const filterSetName = this.getSavedFilterSetName(id);
         
