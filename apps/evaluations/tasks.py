@@ -27,7 +27,7 @@ from apps.evaluations.models import (
     EvaluationRunType,
     Evaluator,
 )
-from apps.evaluations.utils import parse_history_text
+from apps.evaluations.utils import parse_history_text, sanitize_json_data
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.utils import current_team
 
@@ -55,21 +55,25 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
             evaluator = Evaluator.objects.get(id=evaluator_id)
             try:
                 result = evaluator.run(message, bot_response or "")
+                # Sanitize the output to remove null bytes and control characters that PostgreSQL cannot handle
+                sanitized_output = sanitize_json_data(result.model_dump())
                 EvaluationResult.objects.create(
                     message=message,
                     run=evaluation_run,
                     evaluator=evaluator,
-                    output=result.model_dump(),
+                    output=sanitized_output,
                     team=evaluation_run.team,
                     session_id=session_id,
                 )
             except Exception as e:
                 logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
+                # Sanitize the error message as well
+                sanitized_error = sanitize_json_data({"error": str(e)})
                 EvaluationResult.objects.create(
                     message=message,
                     run=evaluation_run,
                     evaluator=evaluator,
-                    output={"error": str(e)},
+                    output=sanitized_error,
                     team=evaluation_run.team,
                     session_id=session_id,
                 )
