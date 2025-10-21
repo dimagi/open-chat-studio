@@ -241,6 +241,13 @@ paths:
       operationId: file_content
       summary: Download File Content
       parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - bin
+          - json
       - in: path
         name: id
         schema:
@@ -255,6 +262,10 @@ paths:
         '200':
           content:
             application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/json:
               schema:
                 type: string
                 format: binary
