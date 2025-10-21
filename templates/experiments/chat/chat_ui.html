@@ -6,7 +6,7 @@
 <div id="message-list" class="chat-pane" data-url="{{ poll_url }}">
   {% if not session.has_display_messages %}
     {% if session.seed_task_id %}
-      {% with session.seed_task_id as task_id %}
+      {% with task_id=session.seed_task_id %}
         {% include "experiments/chat/chat_message_response.html" %}
       {% endwith %}
     {% else %}
@@ -19,8 +19,8 @@
     {% endif %}
   {% endif %}
   {% for message in session.get_messages_for_display %}
-    {% with message.content as message_text %}
-      {% with message.created_at as created_at_datetime %}
+    {% with message_text=message.content %}
+      {% with created_at_datetime=message.created_at %}
         {% if message.is_ai_message %}
           {% include "experiments/chat/ai_message.html" with attachments=message.get_attached_files %}
         {% elif message.is_human_message %}

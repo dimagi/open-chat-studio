@@ -1,7 +1,7 @@
 {% extends "account/base.html" %}
-{% load i18n %}
-{% load form_tags %}
-{% block head_title %}{% translate "E-mail Addresses" %}{% endblock head_title %}
+{% load form_tags i18n %}
+{% block head_title %}{% translate "E-mail Addresses" %}{% endblock %}
+
 {% block content %}
   <h1 class="pg-title">{% translate "E-mail Addresses" %}</h1>
   {% if user.emailaddress_set.all %}
@@ -52,6 +52,7 @@
     </form>
   {% endif %}
 {% endblock content %}
+
 {% block page_js %}
   <script type="text/javascript">
     (function () {

@@ -1,5 +1,4 @@
-{% load i18n %}
-{% load form_tags %}
+{% load form_tags i18n %}
 <form hx-post="{% url 'users:create_api_key' %}">
   {% csrf_token %}
   {% render_form_fields form %}

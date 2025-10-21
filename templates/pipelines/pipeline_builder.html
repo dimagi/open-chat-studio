@@ -20,6 +20,7 @@
     }
   </style>
 {% endblock page_head %}
+
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
@@ -32,11 +33,13 @@
       {% endif %}
     </ul>
   </div>
-{% endblock %}
+{% endblock breadcrumbs %}
+
 {% block app %}
   <div class="max-w-7xl mx-auto" id="pipelineBuilder">
   </div>
-{% endblock %}
+{% endblock app %}
+
 {% block page_js %}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}
@@ -52,4 +55,4 @@
     }
     )
   </script>
-{% endblock %}
+{% endblock page_js %}
