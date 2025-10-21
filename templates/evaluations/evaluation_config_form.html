@@ -39,7 +39,7 @@
           <option value="">{{ form.experiment.empty_label }}</option>
         {% endif %}
         {% for value, label in form.experiment.field.choices %}
-          <option value="{{ value }}" {% if form.experiment.value == value %}selected{% endif %}>{{ label }}</option>
+          <option value="{{ value }}" {% if form.experiment.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
       {{ form.experiment.errors }}

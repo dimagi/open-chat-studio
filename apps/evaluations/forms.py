@@ -147,6 +147,11 @@ class EvaluationConfigForm(forms.ModelForm):
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
 
+        if cleaned_data.get("run_generation") and not experiment:
+            self.add_error("experiment", "Please select a version")
+        elif not cleaned_data.get("run_generation"):
+            cleaned_data["experiment"] = experiment = None
+
         if experiment and not experiment_version:
             self.add_error("experiment_version", "Please select a version")
             return cleaned_data
