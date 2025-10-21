@@ -370,7 +370,7 @@ export class OcsChat {
       } else {
         this.startMessagePolling();
       }
-    } catch (error) {
+    } catch (_error) {
       this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
