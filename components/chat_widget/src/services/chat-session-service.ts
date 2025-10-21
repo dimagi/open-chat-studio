@@ -12,7 +12,7 @@ export interface ChatMessage {
   created_at: string;
   role: ChatRole;
   content: string;
-  metadata?: Record<string, unknown>;
+  metadata?: unknown;
   attachments?: ChatAttachment[];
 }
 
