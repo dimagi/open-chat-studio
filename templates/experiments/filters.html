@@ -821,10 +821,6 @@
           
           // Make API call
           const payload = { [field]: newValue };
-          if (newValue) {
-            payload[`clear_other_${type}_defaults`] = true;
-          }
-          
           await this.makeSavedFilterUpdateRequest(id, payload);
           
           if (newValue) {
