@@ -1,6 +1,7 @@
 {% extends "web/app/app_base.html" %}
+
 {% block sidebar-nav %}
-  {% with "profile" as active_tab %}
+  {% with active_tab="profile" %}
     {{ block.super }}
   {% endwith %}
 {% endblock sidebar-nav %}

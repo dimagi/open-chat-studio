@@ -13,7 +13,8 @@ class ParticipantTable(tables.Table):
             actions.delete_action(
                 url_name="participants:participant_delete",
                 required_permissions=["experiments.delete_participant"],
-                confirm_message="Are you sure you want to delete this participant? All associated data and sessions will be permanently removed.",
+                confirm_message="Are you sure you want to delete this participant? All associated data and sessions"
+                " will be permanently removed.",
             ),
         ],
         orderable=False,

@@ -1,5 +1,4 @@
-{% load static %}
-{% load meta_tags %}
+{% load meta_tags static %}
 <!DOCTYPE html>
 <html lang="en" {% if dark_mode %}class="dark" data-theme="dark"{% endif %}>
   <head>
@@ -10,10 +9,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     {% block meta %}
       {% if project_meta %}
-        {% with project_meta|get_title:page_title as title %}
-          {% with project_meta|get_description:page_description as description %}
-            {% with project_meta|get_image_url:page_image as image %}
-              <title>{% block page_title %}{{ title }}{% endblock page_title %}</title>
+        {% with title=project_meta|get_title:page_title %}
+          {% with description=project_meta|get_description:page_description %}
+            {% with image=project_meta|get_image_url:page_image %}
+              <title>{% block page_title %}{{ title }}{% endblock %}</title>
               <meta name="description" content="{{ description }}">
               <meta name="keywords" content="{{ project_meta.KEYWORDS }}">
       <!-- Twitter Card data -->
@@ -52,7 +51,7 @@
       ></script>
     {% endif %}
 
-    <script src="{% static 'js/site-bundle.js'%}"></script>
+    <script src="{% static 'js/site-bundle.js' %}"></script>
     {% block page_head %}
     {% endblock page_head %}
   </head>

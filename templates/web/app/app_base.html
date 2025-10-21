@@ -4,9 +4,11 @@
   {{ block.super }}
   <script src="{% static 'js/app-bundle.js' %}"></script>
 {% endblock page_head %}
+
 {% block top_nav %}
   {% include "web/components/top_nav_app.html" %}
 {% endblock top_nav %}
+
 {% block body %}
   {% block notifications %}
   {% endblock notifications %}

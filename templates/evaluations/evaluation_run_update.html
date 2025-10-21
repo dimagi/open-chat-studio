@@ -1,6 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load static %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block page_head %}
   {{ block.super }}
@@ -10,10 +9,10 @@
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
-      <li><a href="{% url 'evaluations:home' request.team.slug %}">{% trans "Evaluations" %}</a></li>
-      <li><a href="{% url 'evaluations:evaluation_runs_home' request.team.slug evaluation_run.config_id %}">{{ evaluation_run.config.name }} {% trans "Runs" %}</a></li>
-      <li><a href="{% url 'evaluations:evaluation_results_home' request.team.slug evaluation_run.config_id evaluation_run.id %}">{% trans "Run" %} {{ evaluation_run.id }}</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">{% trans "Edit Results" %}</li>
+      <li><a href="{% url 'evaluations:home' request.team.slug %}">{% translate "Evaluations" %}</a></li>
+      <li><a href="{% url 'evaluations:evaluation_runs_home' request.team.slug evaluation_run.config_id %}">{{ evaluation_run.config.name }} {% translate "Runs" %}</a></li>
+      <li><a href="{% url 'evaluations:evaluation_results_home' request.team.slug evaluation_run.config_id evaluation_run.id %}">{% translate "Run" %} {{ evaluation_run.id }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{% translate "Edit Results" %}</li>
     </ul>
   </div>
 {% endblock breadcrumbs %}
@@ -27,7 +26,7 @@
       <a href="{% url 'evaluations:evaluation_results_home' request.team.slug evaluation_run.config_id evaluation_run.id %}"
          class="btn btn-outline">
         <i class="fa-solid fa-arrow-left"></i>
-        {% trans "Back to Results" %}
+        {% translate "Back to Results" %}
       </a>
     </div>
 
@@ -35,12 +34,12 @@
       <div class="card-body">
       <!-- File Upload Section -->
       <div x-show="!csvParsed">
-        <h2 class="text-lg font-medium mb-4">{% trans "Upload CSV File" %}</h2>
+        <h2 class="text-lg font-medium mb-4">{% translate "Upload CSV File" %}</h2>
 
         <form @submit.prevent="">
           {% csrf_token %}
           <div class="mb-4">
-            <label for="csv-file" class="block text-sm font-medium mb-2">{% trans "CSV File" %}</label>
+            <label for="csv-file" class="block text-sm font-medium mb-2">{% translate "CSV File" %}</label>
             <input type="file"
                    id="csv-file"
                    name="csv_file"
@@ -53,7 +52,7 @@
           <div class="flex gap-2">
             <a href="{% url 'evaluations:evaluation_run_download' request.team.slug evaluation_run.config_id evaluation_run.id %}"
                class="btn btn-outline">
-              <i class="fa-solid fa-download"></i> {% trans "Download Template" %}
+              <i class="fa-solid fa-download"></i> {% translate "Download Template" %}
             </a>
           </div>
         </form>
@@ -63,9 +62,9 @@
       <div x-show="csvParsed" class="space-y-6">
         <div class="card bg-base-200 shadow">
           <div class="card-body">
-            <h4 class="font-medium mb-2">{% trans "CSV Preview" %}</h4>
+            <h4 class="font-medium mb-2">{% translate "CSV Preview" %}</h4>
             <p class="text-sm text-base-content/70 mb-3">
-            {% trans "Found" %} <span x-text="csvData?.total_rows || 0"></span> {% trans "rows" %}
+            {% translate "Found" %} <span x-text="csvData?.total_rows || 0"></span> {% translate "rows" %}
           </p>
 
           <!-- Sample data table -->
@@ -94,14 +93,14 @@
 
         <!-- Column mapping controls -->
         <div class="space-y-4">
-          <h4 class="font-medium">{% trans "Map Result Columns to Evaluators" %}</h4>
+          <h4 class="font-medium">{% translate "Map Result Columns to Evaluators" %}</h4>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
             <div>
-              <h5 class="text-sm font-semibold text-base-content/70">{% trans "CSV Column" %}</h5>
+              <h5 class="text-sm font-semibold text-base-content/70">{% translate "CSV Column" %}</h5>
             </div>
             <div>
-              <h5 class="text-sm font-semibold text-base-content/70">{% trans "Save to Evaluator result" %}</h5>
+              <h5 class="text-sm font-semibold text-base-content/70">{% translate "Save to Evaluator result" %}</h5>
             </div>
           </div>
 
@@ -112,7 +111,7 @@
               </div>
               <div>
                 <select x-model="columnMapping[column]" class="select select-bordered w-full">
-                  <option value="">{% trans "Skip this column" %}</option>
+                  <option value="">{% translate "Skip this column" %}</option>
                   <template x-for="evaluator in evaluators">
                     <option :value="evaluator.id" x-text="evaluator.name"></option>
                   </template>
@@ -128,10 +127,10 @@
                   :disabled="uploading"
                   class="btn btn-primary">
             <i class="fa-solid fa-upload"></i>
-            <span x-text="uploading ? '{% trans "Uploading..." %}' : '{% trans "Upload Results" %}'"></span>
+            <span x-text="uploading ? '{% translate "Uploading..." %}' : '{% translate "Upload Results" %}'"></span>
           </button>
           <button @click="csvParsed = false; csvData = null" class="btn btn-outline">
-            <i class="fa-solid fa-arrow-left"></i> {% trans "Choose Different File" %}
+            <i class="fa-solid fa-arrow-left"></i> {% translate "Choose Different File" %}
           </button>
         </div>
       </div>
@@ -150,7 +149,7 @@
             <div class="bg-blue-600 dark:bg-blue-400 h-full transition-all duration-300" style="width: 0%"></div>
           </div>
         </div>
-        <div id="progress-bar-message" class="mt-2 text-sm text-center">{% trans "Processing CSV..." %}</div>
+        <div id="progress-bar-message" class="mt-2 text-sm text-center">{% translate "Processing CSV..." %}</div>
       </div>
       </div>
     </div>
@@ -190,7 +189,7 @@
             const data = await response.json();
 
             if (!response.ok) {
-              throw new Error(data.error || '{% trans "Failed to parse CSV" %}');
+              throw new Error(data.error || '{% translate "Failed to parse CSV" %}');
             }
 
             this.csvData = data;
@@ -206,7 +205,7 @@
               this.columnMapping = {};
             }
           } catch (error) {
-            alert('{% trans "Error parsing CSV" %}: ' + error.message);
+            alert('{% translate "Error parsing CSV" %}: ' + error.message);
           }
         },
 
@@ -247,12 +246,12 @@
                   if (result && result.success) {
                     this.uploadStatus = {
                       type: 'success',
-                      message: `{% trans "Successfully processed" %} ${result.total_processed} {% trans "results" %}: ${result.updated_count} {% trans "updated" %}, ${result.created_count} {% trans "created" %}.`
+                      message: `{% translate "Successfully processed" %} ${result.total_processed} {% translate "results" %}: ${result.updated_count} {% translate "updated" %}, ${result.created_count} {% translate "created" %}.`
                     };
                   } else {
                     this.uploadStatus = {
                       type: 'error',
-                      message: result?.error || '{% trans "Upload completed with errors" %}'
+                      message: result?.error || '{% translate "Upload completed with errors" %}'
                     };
                   }
                 },
@@ -261,7 +260,7 @@
                   this.uploading = false;
                   this.uploadStatus = {
                     type: 'error',
-                    message: '{% trans "Error during upload" %}: ' + excMessage
+                    message: '{% translate "Error during upload" %}: ' + excMessage
                   };
                 }
               });
@@ -270,7 +269,7 @@
               this.uploading = false;
               this.uploadStatus = {
                 type: 'error',
-                message: data.error || '{% trans "An error occurred while uploading the CSV." %}'
+                message: data.error || '{% translate "An error occurred while uploading the CSV." %}'
               };
             }
           } catch (error) {
@@ -278,7 +277,7 @@
             this.uploading = false;
             this.uploadStatus = {
               type: 'error',
-              message: '{% trans "An error occurred while uploading the CSV." %}'
+              message: '{% translate "An error occurred while uploading the CSV." %}'
             };
           }
         }

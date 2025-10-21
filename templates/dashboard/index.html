@@ -1,17 +1,16 @@
 {% extends "web/app/app_base.html" %}
-{% load i18n %}
-{% load static %}
+{% load i18n static %}
 
-{% block title %}{% trans "Dashboard" %} - {{ block.super }}{% endblock title %}
+{% block title %}{% translate "Dashboard" %} - {{ block.super }}{% endblock %}
 
 {% block app %}
   <div class="container mx-auto px-4 py-6" x-data="dashboard()">
   <!-- Dashboard Header -->
     <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">{% trans "Team Dashboard" %}</h1>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">{% translate "Team Dashboard" %}</h1>
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          {% trans "Comprehensive analytics for your chatbots" %}
+          {% translate "Comprehensive analytics for your chatbots" %}
         </p>
       </div>
 
@@ -19,7 +18,7 @@
       <div class="mt-4 lg:mt-0 flex gap-2">
         <button type="button" class="btn btn-outline btn-sm" @click="document.getElementById('filtersModal').showModal()">
           <i class="fas fa-bookmark me-1"></i>
-          {% trans "Save Filters" %}
+          {% translate "Save Filters" %}
         </button>
       </div>
     </div>
@@ -28,35 +27,35 @@
     <div class="card bg-base-100 shadow-xl mb-8">
       <div class="card-body">
         <div class="card-title flex items-center justify-between">
-          <span>{% trans "Filters" %}</span>
+          <span>{% translate "Filters" %}</span>
           <button type="button" class="btn btn-xs btn-outline" @click="resetFilters()">
-            {% trans "Reset" %}
+            {% translate "Reset" %}
           </button>
         </div>
 
         <form id="filterForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4" @change="handleFilterChange()">
           <div class="form-control">
-            <label class="label label-text">{% trans "Date Range" %}</label>
+            <label class="label label-text">{% translate "Date Range" %}</label>
             {{ filter_form.date_range }}
           </div>
 
           <div class="form-control" x-show="filters.date_range === 'custom'" x-transition x-cloak="">
-            <label class="label label-text">{% trans "Start Date" %}</label>
+            <label class="label label-text">{% translate "Start Date" %}</label>
             {{ filter_form.start_date }}
           </div>
 
           <div class="form-control" x-show="filters.date_range === 'custom'" x-transition x-cloak="">
-            <label class="label label-text">{% trans "End Date" %}</label>
+            <label class="label label-text">{% translate "End Date" %}</label>
             {{ filter_form.end_date }}
           </div>
 
           <div class="form-control">
-            <label class="label label-text">{% trans "Granularity" %}</label>
+            <label class="label label-text">{% translate "Granularity" %}</label>
             {{ filter_form.granularity }}
           </div>
 
           <div class="form-control">
-            <label class="label label-text">{% trans "Channels" %}</label>
+            <label class="label label-text">{% translate "Channels" %}</label>
             {% with field=filter_form.channels %}
               {% partialdef "select_filter" inline=True %}
                 <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
@@ -72,16 +71,16 @@
           </div>
 
           <div class="form-control col-span-2">
-            <label class="label label-text">{% trans "Chatbots" %}</label>
+            <label class="label label-text">{% translate "Chatbots" %}</label>
             {% with field=filter_form.experiments %}{% partial "select_filter" %}
             {% endwith %}
           </div>
           <div class="form-control col-span-2">
-            <label class="label label-text">{% trans "Participants" %}</label>
+            <label class="label label-text">{% translate "Participants" %}</label>
             {% with field=filter_form.participants %}{% partial "select_filter" %}{% endwith %}
           </div>
           <div class="form-control col-span-2">
-            <label class="label label-text">{% trans "Tags" %}</label>
+            <label class="label label-text">{% translate "Tags" %}</label>
             {% with field=filter_form.tags %}
               {% partial "select_filter" %}
             {% endwith %}
@@ -91,7 +90,7 @@
       <!-- Saved Filters -->
         {% if saved_filters %}
           <div class="mt-4">
-            <h3 class="text-sm font-medium mb-2">{% trans "Saved Filters" %}</h3>
+            <h3 class="text-sm font-medium mb-2">{% translate "Saved Filters" %}</h3>
             <div class="flex flex-wrap gap-2">
               {% for filter in saved_filters %}
                 <div class="flex items-center gap-1">
@@ -102,7 +101,7 @@
                     {% if filter.is_default %}<i class="fas fa-star ml-1 text-yellow-500"></i>{% endif %}
                     <button type="button" class="btn btn-xs btn-ghost hover:text-red-500 ml-1"
                             @click="deleteSavedFilter({{ filter.id }}, '{{ filter.filter_name }}')"
-                            title="{% trans "Delete filter" %}">
+                            title="{% translate "Delete filter" %}">
                       <i class="fas fa-times"></i>
                     </button>
                   </div>
@@ -143,7 +142,7 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <div class="card-title flex items-center justify-between">
-            <span>{% trans "Active Participants" %}</span>
+            <span>{% translate "Active Participants" %}</span>
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.activeParticipants"></div>
           </div>
           <div class="h-80">
@@ -156,7 +155,7 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <div class="card-title flex items-center justify-between">
-            <span>{% trans "Active Sessions" %}</span>
+            <span>{% translate "Active Sessions" %}</span>
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.sessionAnalytics"></div>
           </div>
           <div class="h-80">
@@ -169,7 +168,7 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <div class="card-title flex items-center justify-between">
-            <span>{% trans "Message Volume Trends" %}</span>
+            <span>{% translate "Message Volume Trends" %}</span>
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.messageVolume"></div>
           </div>
           <div class="h-80">
@@ -182,7 +181,7 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <div class="card-title flex items-center justify-between">
-            <span>{% trans "Channel Breakdown" %}</span>
+            <span>{% translate "Channel Breakdown" %}</span>
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.channelBreakdown"></div>
           </div>
           <div class="h-80">
@@ -195,7 +194,7 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <div class="card-title flex items-center justify-between">
-            <span>{% trans "Average Response Time" %}</span>
+            <span>{% translate "Average Response Time" %}</span>
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.averageResponseTime"></div>
           </div>
           <div class="h-80">
@@ -209,7 +208,7 @@
     <div class="card bg-base-100 shadow-xl mb-8">
       <div class="card-body">
         <div class="card-title flex items-center justify-between">
-          <span>{% trans "Bot Performance Summary" %}</span>
+          <span>{% translate "Bot Performance Summary" %}</span>
           <div class="flex items-center gap-2">
             <span class="text-sm text-gray-500" x-text="`${botPerformancePagination.total_count} total bots`"></span>
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.botPerformance"></div>
@@ -219,34 +218,34 @@
           <table class="table table-zebra w-full" id="botPerformanceTable">
             <thead>
               <tr>
-                <th>{% trans "Chatbot" %}</th>
+                <th>{% translate "Chatbot" %}</th>
                 <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('participants')">
                   <div class="flex items-center gap-1">
-                    {% trans "Participants" %}
+                    {% translate "Participants" %}
                     <i :class="getSortIcon('participants')" class="text-xs"></i>
                   </div>
                 </th>
                 <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('sessions')">
                   <div class="flex items-center gap-1">
-                    {% trans "Sessions" %}
+                    {% translate "Sessions" %}
                     <i :class="getSortIcon('sessions')" class="text-xs"></i>
                   </div>
                 </th>
                 <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('messages')">
                   <div class="flex items-center gap-1">
-                    {% trans "Messages" %}
+                    {% translate "Messages" %}
                     <i :class="getSortIcon('messages')" class="text-xs"></i>
                   </div>
                 </th>
                 <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('avg_session_duration')">
                   <div class="flex items-center gap-1">
-                    {% trans "Avg Duration" %}
+                    {% translate "Avg Duration" %}
                     <i :class="getSortIcon('avg_session_duration')" class="text-xs"></i>
                   </div>
                 </th>
                 <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" @click="sortBotPerformance('completion_rate')">
                   <div class="flex items-center gap-1">
-                    {% trans "Completion Rate" %}
+                    {% translate "Completion Rate" %}
                     <i :class="getSortIcon('completion_rate')" class="text-xs"></i>
                   </div>
                 </th>
@@ -314,17 +313,17 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <div class="card-title flex items-center justify-between">
-            <span>{% trans "Most Active Participants" %}</span>
+            <span>{% translate "Most Active Participants" %}</span>
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.userEngagement"></div>
           </div>
           <div class="overflow-x-auto">
             <table class="table table-sm" id="mostActiveTable">
               <thead>
                 <tr>
-                  <th>{% trans "Participant" %}</th>
-                  <th>{% trans "Messages" %}</th>
-                  <th>{% trans "Sessions" %}</th>
-                  <th>{% trans "Last Activity" %}</th>
+                  <th>{% translate "Participant" %}</th>
+                  <th>{% translate "Messages" %}</th>
+                  <th>{% translate "Sessions" %}</th>
+                  <th>{% translate "Last Activity" %}</th>
                 </tr>
               </thead>
               <tbody>
@@ -350,7 +349,7 @@
     <!-- Session Length Distribution -->
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <div class="card-title">{% trans "Session Length Distribution" %}</div>
+          <div class="card-title">{% translate "Session Length Distribution" %}</div>
           <div class="h-64">
             <canvas id="sessionLengthChart"></canvas>
           </div>
@@ -362,7 +361,7 @@
     <div class="card bg-base-100 shadow-xl" x-show="tagAnalyticsData.total_tagged_messages > 0" x-transition>
       <div class="card-body">
         <div class="card-title flex items-center justify-between">
-          <span>{% trans "Tag Analytics" %}</span>
+          <span>{% translate "Tag Analytics" %}</span>
           <div class="loading loading-spinner loading-sm" x-show="loadingStates.tagAnalytics"></div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -389,18 +388,18 @@
 <!-- Save Filters Modal -->
     <dialog class="modal" id="filtersModal">
       <div class="modal-box">
-        <h3 class="font-bold text-lg">{% trans "Save Filter Preset" %}</h3>
+        <h3 class="font-bold text-lg">{% translate "Save Filter Preset" %}</h3>
         <form id="saveFilterForm" class="py-4" @submit.prevent="handleSaveFilter()">
           {% csrf_token %}
           <div class="form-control mb-4">
-            <label class="label">{% trans "Preset Name" %}<span x-text="saving"></span></label>
+            <label class="label">{% translate "Preset Name" %}<span x-text="saving"></span></label>
             {{ saved_filter_form.name }}
           </div>
 
           <div class="form-control mb-4">
             <label class="label cursor-pointer">
               {{ saved_filter_form.is_default }}
-              <span class="label-text ml-2">{% trans "Set as default" %}</span>
+              <span class="label-text ml-2">{% translate "Set as default" %}</span>
             </label>
           </div>
 
@@ -410,11 +409,11 @@
         <div class="modal-action">
           <form method="dialog">
             <button class="btn btn-outline">
-              {% trans "Cancel" %}
+              {% translate "Cancel" %}
             </button>
           </form>
           <button type="submit" form="saveFilterForm" class="btn btn-primary" :disabled="saving">
-            <span x-show="!saving">{% trans "Save" %}</span>
+            <span x-show="!saving">{% translate "Save" %}</span>
             <span x-show="saving" x-cloak class="loading loading-spinner loading-xs"></span>
           </button>
         </div>

@@ -1,5 +1,4 @@
-{% load team_tags %}
-{% load i18n %}
+{% load i18n team_tags %}
 <div>
   {% has_perm "service_providers" perm as allow_new %}
   {% url "service_providers:table" request.team.slug provider_type as table_url %}
