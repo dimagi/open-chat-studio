@@ -203,9 +203,6 @@
             <div class="flex p-2 text-gray-500 text-sm">
               Starred filters
             </div>
-            <button x-show="selectedSavedFilterId" x-cloak type="button" @click="clearAllFilters()" class="btn btn-square btn-sm btn-ghost" aria-label="Clear">
-              Clear
-            </button>
           </div>
           <div class="grid grid-cols-4 gap-1">
             <template x-for="filterSet in starredFilters" :key="filterSet.id">
