@@ -2356,6 +2356,7 @@ dependencies = [
     { name = "django-allauth" },
     { name = "django-allauth-2fa" },
     { name = "django-anymail" },
+    { name = "django-browser-reload" },
     { name = "django-celery-beat" },
     { name = "django-cleanup" },
     { name = "django-cors-headers" },
@@ -2420,7 +2421,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "django-browser-reload" },
     { name = "django-debug-toolbar" },
     { name = "django-watchfiles" },
     { name = "djlint" },
@@ -2461,6 +2461,7 @@ requires-dist = [
     { name = "django-allauth" },
     { name = "django-allauth-2fa" },
     { name = "django-anymail" },
+    { name = "django-browser-reload", specifier = ">=1.21.0" },
     { name = "django-celery-beat" },
     { name = "django-cleanup" },
     { name = "django-cors-headers", specifier = ">=4.7.0" },
@@ -2525,7 +2526,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "django-browser-reload", specifier = ">=1.21.0" },
     { name = "django-debug-toolbar", specifier = ">=5.2.0" },
     { name = "django-watchfiles", specifier = ">=1.4.0" },
     { name = "djlint", specifier = ">=1.36.4" },
