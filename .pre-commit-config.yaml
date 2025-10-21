@@ -25,3 +25,8 @@ repos:
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]
+  - repo: https://github.com/adamchainz/djade-pre-commit
+    rev: '1.6.0'
+    hooks:
+      - id: djade
+        args: [--target-version, "5.1"]
