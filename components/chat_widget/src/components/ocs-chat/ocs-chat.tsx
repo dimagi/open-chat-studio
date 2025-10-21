@@ -14,19 +14,10 @@ import {
   MessagePollingHandle,
   TaskPollingHandle
 } from '../../services/chat-session-service';
-
-interface UploadedFile {
-  id: number;
-  name: string;
-  size: number;
-  content_type: string;
-}
-
-interface SelectedFile {
-  file: File;
-  uploaded?: UploadedFile;
-  error?: string;
-}
+import {
+  FileAttachmentManager,
+  SelectedFile
+} from '../../services/file-attachment-manager';
 
 interface PointerEvent {
   clientX: number;
@@ -188,6 +179,11 @@ export class OcsChat {
   private chatService?: ChatSessionService;
   private messagePollingHandle?: MessagePollingHandle;
   private taskPollingHandle?: TaskPollingHandle;
+  private attachmentManager = new FileAttachmentManager({
+    supportedExtensions: OcsChat.SUPPORTED_FILE_EXTENSIONS,
+    maxFileSizeMb: OcsChat.MAX_FILE_SIZE_MB,
+    maxTotalSizeMb: OcsChat.MAX_TOTAL_SIZE_MB,
+  });
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
@@ -377,74 +373,21 @@ export class OcsChat {
     }
   }
 
-  private markPendingFilesWithError(errorMessage: string): void {
-    this.selectedFiles = this.selectedFiles.map(sf => {
-      if (!sf.error && !sf.uploaded) {
-        return { ...sf, error: errorMessage };
-      }
-      return sf;
-    });
-  }
-
   private async uploadFiles(): Promise<number[]> {
     if (this.selectedFiles.length === 0 || !this.sessionId || !this.allowAttachments) {
       return [];
     }
 
     this.isUploadingFiles = true;
-    const uploadedIds: number[] = [];
-
     try {
-      const formData = new FormData();
-
-      // Add all files to form data
-      for (const selectedFile of this.selectedFiles) {
-        if (!selectedFile.error && !selectedFile.uploaded) {
-          formData.append('files', selectedFile.file);
-        } else if (selectedFile.uploaded) {
-          uploadedIds.push(selectedFile.uploaded.id);
-        }
-      }
-
-      // Add user ID and name to the form data
-      const userId = this.getOrGenerateUserId();
-      formData.append('participant_remote_id', userId);
-      if (this.userName) {
-        formData.append('participant_name', this.userName);
-      }
-
-      // Only upload if there are new files
-      if (formData.has('files')) {
-        const response = await fetch(`${this.apiBaseUrl}/api/chat/${this.sessionId}/upload/`, {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          const errorMessage = errorData.error || 'Failed to upload files';
-          this.markPendingFilesWithError(errorMessage);
-          return uploadedIds;
-        }
-
-        const data = await response.json();
-
-        // Update selected files with upload results
-        let fileIndex = 0;
-        this.selectedFiles = this.selectedFiles.map(sf => {
-          if (!sf.error && !sf.uploaded) {
-            return { ...sf, uploaded: data.files[fileIndex++] };
-          }
-          return sf;
-        });
-        uploadedIds.push(...data.files.map((f: UploadedFile) => f.id));
-      }
-
-      return uploadedIds;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to upload files';
-      this.markPendingFilesWithError(errorMessage);
-      return uploadedIds;
+      const uploadResult = await this.attachmentManager.uploadPendingFiles(this.selectedFiles, {
+        apiBaseUrl: this.apiBaseUrl || 'https://www.openchatstudio.com',
+        sessionId: this.sessionId,
+        participantId: this.getOrGenerateUserId(),
+        participantName: this.userName,
+      });
+      this.selectedFiles = uploadResult.selectedFiles;
+      return uploadResult.uploadedIds;
     } finally {
       this.isUploadingFiles = false;
     }
@@ -575,46 +518,13 @@ export class OcsChat {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
 
-    const newFiles: SelectedFile[] = [];
-    let totalSize = this.selectedFiles.reduce((sum, f) => sum + f.file.size, 0);
-
-    for (let i = 0; i < input.files.length; i++) {
-      const file = input.files[i];
-      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-      if (!OcsChat.SUPPORTED_FILE_EXTENSIONS.includes(ext)) {
-        newFiles.push({
-          file,
-          error: `File type ${ext} not supported`
-        });
-        continue;
-      }
-      const fileSizeMB = file.size / (1024 * 1024);
-      if (fileSizeMB > OcsChat.MAX_FILE_SIZE_MB) {
-        newFiles.push({
-          file,
-          error: `File exceeds ${OcsChat.MAX_FILE_SIZE_MB}MB limit`
-        });
-        continue;
-      }
-      totalSize += file.size;
-      const totalSizeMB = totalSize / (1024 * 1024);
-      if (totalSizeMB > OcsChat.MAX_TOTAL_SIZE_MB) {
-        newFiles.push({
-          file,
-          error: `Total size exceeds ${OcsChat.MAX_TOTAL_SIZE_MB}MB limit`
-        });
-        continue;
-      }
-
-      newFiles.push({ file });
-    }
-    this.selectedFiles = [...this.selectedFiles, ...newFiles];
+    this.selectedFiles = this.attachmentManager.addFiles(this.selectedFiles, input.files);
     input.value = '';
   }
 
   private removeSelectedFile(index: number): void {
     if (!this.allowAttachments) return;
-    this.selectedFiles = this.selectedFiles.filter((_, i) => i !== index);
+    this.selectedFiles = this.attachmentManager.removeFile(this.selectedFiles, index);
   }
 
   private formatFileSize(bytes: number): string {
