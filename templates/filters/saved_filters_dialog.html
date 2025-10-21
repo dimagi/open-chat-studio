@@ -35,8 +35,9 @@
                         x-cloak
                         x-show="filter.is_user_filter"
                         @click="toggleSavedFilterDefault(filter.id, 'user')"
-                        :class="filter.is_default_for_user ? 'text-yellow-500' : ''">
-                  <i class="fa-regular fa-user"></i>
+                        :class="filter.is_default_for_user ? 'text-primary' : ''">
+                  <i x-show="!filter.is_default_for_user" class="fa-regular fa-user"></i>
+                  <i x-show="filter.is_default_for_user" x-cloak class="fa-solid fa-user"></i>
                 </button>
                 
                 <!-- Team Default -->
@@ -46,7 +47,7 @@
                         x-cloak
                         x-show="filter.is_user_filter"
                         @click="toggleSavedFilterDefault(filter.id, 'team')"
-                        :class="filter.is_default_for_team ? 'text-yellow-500' : ''">
+                        :class="filter.is_default_for_team ? 'text-primary' : ''">
                   <i class="fa-solid fa-users"></i>
                 </button>
                 
@@ -56,8 +57,10 @@
                         title="Share this filter set with your Team"
                         x-cloak
                         x-show="filter.is_user_filter"
+                        :class="filter.is_shared ? 'text-primary' : ''"
                         @click="shareSavedFilter(filter.id)">
-                  <i class="fa-solid fa-share-nodes"></i>
+                  <i x-show="!filter.is_shared" class="fa-solid fa-share-nodes"></i>
+                  <i x-show="filter.is_shared" x-cloak class="fa-solid fa-share-nodes"></i>
                 </button>
                 
                 <!-- Star -->
@@ -65,7 +68,7 @@
                         type="button"
                         title="Star"
                         @click="toggleSavedFilterStar(filter.id)"
-                        :class="filter.is_starred ? 'text-yellow-500' : ''">
+                        :class="filter.is_starred ? 'text-primary' : ''">
                   <i x-show="!filter.is_starred" class="fa-regular fa-star"></i>
                   <i x-cloak x-show="filter.is_starred" class="fa-solid fa-star"></i>
                 </button>
