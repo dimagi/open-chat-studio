@@ -154,12 +154,12 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
         context = get_filter_context_data(
             self.request.team,
-            ExperimentSessionFilter.columns(self.request.team),
-            "last_message",
-            table_url,
-            "sessions-table",
+            columns=ExperimentSessionFilter.columns(self.request.team),
+            date_range_column="last_message",
+            table_url=table_url,
+            table_container_id="sessions-table",
+            table_type=FilterSet.TableType.DATASETS,
         )
-        context["df_table_type"] = FilterSet.TableType.DATASETS
         return context
 
     def get_context_data(self, **kwargs):

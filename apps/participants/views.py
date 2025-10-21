@@ -41,9 +41,13 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
     def get_context_data(self, team_slug: str, **kwargs):
         table_url = reverse("participants:participant_table", kwargs={"team_slug": team_slug})
         filter_context = get_filter_context_data(
-            self.request.team, ParticipantFilter.columns(self.request.team), "created_on", table_url, "data-table"
+            self.request.team,
+            columns=ParticipantFilter.columns(self.request.team),
+            date_range_column="created_on",
+            table_url=table_url,
+            table_container_id="data-table",
+            table_type=FilterSet.TableType.PARTICIPANTS,
         )
-        filter_context["df_table_type"] = FilterSet.TableType.PARTICIPANTS
 
         return {
             "active_tab": "participants",

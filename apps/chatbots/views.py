@@ -587,8 +587,8 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             date_range_column="last_message",
             table_url=table_url,
             table_container_id="data-table",
+            table_type=FilterSet.TableType.ALL_SESSIONS,
         )
-        filter_context["df_table_type"] = FilterSet.TableType.ALL_SESSIONS
 
         return {
             "active_tab": "all_sessions",

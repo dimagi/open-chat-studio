@@ -21,8 +21,14 @@ from apps.web.dynamic_filters.column_filters import (
 
 def get_trace_filter_context_data(team):
     table_url = reverse("trace:table", args=[team.slug])
-    context = get_filter_context_data(team, TraceFilter.columns(team), "timestamp", table_url, "data-table")
-    context["df_table_type"] = FilterSet.TableType.TRACES
+    context = get_filter_context_data(
+        team,
+        columns=TraceFilter.columns(team),
+        date_range_column="timestamp",
+        table_url=table_url,
+        table_container_id="data-table",
+        table_type=FilterSet.TableType.TRACES,
+    )
     return context
 
 

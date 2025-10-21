@@ -504,8 +504,14 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
 
     columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
-    filter_context = get_filter_context_data(request.team, columns, "last_message", session_table_url, "sessions-table")
-    filter_context["df_table_type"] = FilterSet.TableType.SESSIONS
+    filter_context = get_filter_context_data(
+        request.team,
+        columns=columns,
+        date_range_column="last_message",
+        table_url=session_table_url,
+        table_container_id="sessions-table",
+        table_type=FilterSet.TableType.SESSIONS,
+    )
     context.update(filter_context)
 
     return TemplateResponse(request, template_name, context)
