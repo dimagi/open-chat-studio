@@ -34,7 +34,7 @@ class ChatWidgetConfig(PydanticBaseModel):
             "button-text": self.button_text,
             "welcome-messages": json.dumps(self.welcome_messages),
             "starter-questions": json.dumps(self.starter_questions),
-            "position": self.position
+            "position": self.position,
         }
         return attrs
 

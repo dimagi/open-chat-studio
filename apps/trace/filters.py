@@ -54,10 +54,7 @@ class MessageTagsFilter(ChoiceColumnFilter):
 
     def prepare(self, team, **_):
         self.options = list(
-            team.tag_set.filter(is_system_tag=False)
-            .values_list("name", flat=True)
-            .order_by("name")
-            .distinct()
+            team.tag_set.filter(is_system_tag=False).values_list("name", flat=True).order_by("name").distinct()
         )
 
     def apply_any_of(self, queryset, value, timezone=None):

@@ -233,7 +233,7 @@ class EditFile(LoginAndTeamRequiredMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         # Add collection chips for the file
         collections = self.object.get_collection_references()
-        context['collection_chips'] = [Chip(label=col.name, url=col.get_absolute_url()) for col in collections]
+        context["collection_chips"] = [Chip(label=col.name, url=col.get_absolute_url()) for col in collections]
         return context
 
     def get_queryset(self):

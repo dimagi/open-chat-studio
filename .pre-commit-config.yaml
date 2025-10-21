@@ -13,6 +13,7 @@ repos:
     hooks:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
+        ignore: T003
   - repo: https://github.com/pre-commit/mirrors-eslint
     rev: 'v8.56.0'
     hooks:
