@@ -2372,6 +2372,7 @@ dependencies = [
     { name = "django-template-partials" },
     { name = "django-tz-detect" },
     { name = "django-waffle" },
+    { name = "django-watchfiles" },
     { name = "djangorestframework" },
     { name = "djangorestframework-api-key" },
     { name = "drf-spectacular" },
@@ -2422,7 +2423,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "django-debug-toolbar" },
-    { name = "django-watchfiles" },
     { name = "djlint" },
     { name = "factory-boy" },
     { name = "invoke" },
@@ -2477,6 +2477,7 @@ requires-dist = [
     { name = "django-template-partials" },
     { name = "django-tz-detect" },
     { name = "django-waffle" },
+    { name = "django-watchfiles", specifier = ">=1.4.0" },
     { name = "djangorestframework" },
     { name = "djangorestframework-api-key" },
     { name = "drf-spectacular" },
@@ -2527,7 +2528,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "django-debug-toolbar", specifier = ">=5.2.0" },
-    { name = "django-watchfiles", specifier = ">=1.4.0" },
     { name = "djlint", specifier = ">=1.36.4" },
     { name = "factory-boy" },
     { name = "invoke" },
