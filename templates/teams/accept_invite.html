@@ -1,6 +1,5 @@
 {% extends "web/base.html" %}
-{% load static %}
-{% load i18n %}
+{% load i18n static %}
 {% block body %}
   <section class="mt-7 section">
     <div class="container">
@@ -28,7 +27,7 @@
                   <input type="submit" class="btn btn-primary" value="Accept Invitation"/>
                 {% else %}
                   <p>
-                    {% blocktranslate with invite_email=invitation.email.lower user_email=request.user.email.lower  %}
+                    {% blocktranslate with invite_email=invitation.email.lower user_email=request.user.email.lower %}
                       You're logged in as {{ user_email }}. Please sign out and click the link in the invitation email sent to {{ invite_email }}.
                     {% endblocktranslate %}
                   </p>

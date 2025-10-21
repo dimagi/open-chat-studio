@@ -3,5 +3,7 @@
 {% block message_body %}{% blocktranslate with site_name=current_site.name %}
   Please click the confirmation link below to activate your {{ site_name }} account.
 {% endblocktranslate %}{% endblock message_body %}
-{% block cta_link %}{{ activate_url }}{% endblock cta_link %}
-{% block cta_text %}{% translate "Confirm Email Address" %}{% endblock cta_text %}
+
+{% block cta_link %}{{ activate_url }}{% endblock %}
+
+{% block cta_text %}{% translate "Confirm Email Address" %}{% endblock %}

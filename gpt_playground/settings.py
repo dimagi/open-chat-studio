@@ -62,9 +62,11 @@ THIRD_PARTY_APPS = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.microsoft",
     "django_htmx",
+    "django_browser_reload",
     "django_otp",
     "django_otp.plugins.otp_totp",
     "django_otp.plugins.otp_static",
+    "django_watchfiles",
     "allauth_2fa",
     "rest_framework",
     "drf_spectacular",
@@ -150,6 +152,7 @@ MIDDLEWARE = list(
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.generics.middleware.OriginDetectionMiddleware",
             "apps.banners.middleware.BannerLocationMiddleware",
+            "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],
     )
 )

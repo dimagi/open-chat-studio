@@ -41,7 +41,7 @@
                       {% if field_data.add %}
                         + <span class="text-success">{{ field_data.add|join:", " }}</span>
                       {% elif field_data.remove %}
-                        - <span class="text-error">{{ field_data.remove|join:", "  }}</span>
+                        - <span class="text-error">{{ field_data.remove|join:", " }}</span>
                       {% elif field_data.old != field_data.new %}
                         <span class="text-error">{{ field_data.old|default_if_none:"None" }}</span>
                         →
