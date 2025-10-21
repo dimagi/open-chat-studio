@@ -13,7 +13,7 @@
       <template x-if="savedFilters && savedFilters.length > 0">
         <div class="space-y-4">
           <template x-for="filter in savedFilters" :key="filter.id">
-            <div class="flex items-start justify-between">
+            <div class="flex items-center justify-between">
               <div class="flex-1">
                 <div class="font-medium cursor-pointer hover:text-primary hover:bg-base-200 hover:border-base-300 p-2 rounded"
                      @click="applySavedFilterById(filter.id, filter.filter_query_string)"
