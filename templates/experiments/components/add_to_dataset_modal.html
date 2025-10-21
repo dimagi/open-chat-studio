@@ -18,7 +18,7 @@
     <form
       hx-post="{% url 'evaluations:add_single_message_to_dataset' request.team.slug session_id %}"
       hx-disabled-elt="button[type='submit']"
-      hx-on::after-request="afterRequestHandler(event)"
+      hx-on::after-request="add_to_dataset_modal.close()"
     >
       {% csrf_token %}
       <input type="hidden" name="message_id" x-model="selectedMessageId">
@@ -49,14 +49,3 @@
     <button>close</button>
   </form>
 </dialog>
-
-<script>
-  function afterRequestHandler(event) {
-    if (event.detail.successful) {
-      alertify.success('Message added to dataset');
-    } else {
-      alertify.error('Failed to add message to dataset');
-    }
-    add_to_dataset_modal.close();
-  };
-</script>

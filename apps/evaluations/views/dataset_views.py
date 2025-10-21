@@ -3,6 +3,7 @@ import json
 import logging
 from io import StringIO
 
+from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count, OuterRef, Q
 from django.db.models.functions import Coalesce
@@ -517,13 +518,16 @@ class AddMessageToDatasetView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         dataset = get_object_or_404(EvaluationDataset, id=request.POST["dataset"], team__slug=team_slug)
 
         if not ChatMessage.objects.filter(id=message_id, chat__experiment_session__team__slug=team_slug).exists():
+            messages.error(request, "Invalid message selected.")
             return HttpResponse(status=400)
 
         eval_messages = make_evaluation_messages_from_sessions({str(session_id): [int(message_id)]})
         if not eval_messages:
+            messages.error(request, "No valid messages found to add to dataset.")
             return HttpResponse(status=400)
 
         EvaluationMessage.objects.bulk_create(eval_messages)
         dataset.messages.add(*eval_messages)
 
+        messages.success(request, "Messages added to dataset successfully.")
         return HttpResponse(status=204)
