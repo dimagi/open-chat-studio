@@ -1,4 +1,4 @@
-{% load meta_tags static %}
+{% load django_htmx meta_tags static %}
 <!DOCTYPE html>
 <html lang="en" {% if dark_mode %}class="dark" data-theme="dark"{% endif %}>
   <head>
@@ -51,6 +51,7 @@
       ></script>
     {% endif %}
 
+    {% htmx_script %}
     <script src="{% static 'js/site-bundle.js' %}"></script>
     {% block page_head %}
     {% endblock page_head %}

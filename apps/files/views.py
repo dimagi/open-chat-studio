@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
+from django_htmx.http import reswap
 from django_tables2 import SingleTableView
 
 from apps.documents.models import CollectionFile
@@ -262,7 +263,7 @@ class DeleteFile(LoginAndTeamRequiredMixin, View):
                     "pipeline_nodes": [Chip(label=col.name, url=col.get_absolute_url()) for col in collections],
                 },
             )
-            return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+            return reswap(HttpResponse(response, status=400), "none")
         else:
             file.delete_or_archive()
             messages.success(request, "File deleted")

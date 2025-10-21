@@ -12,6 +12,7 @@ from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from django_htmx.http import push_url
 from field_audit.models import AuditEvent
 
 from apps.admin.forms import DateRangeForm, DateRanges, FlagUpdateForm, OcsConfigurationForm
@@ -68,7 +69,7 @@ def usage_chart(request):
         "end": end,
         "range_type": form.cleaned_data["range_type"],
     }
-    return TemplateResponse(
+    response = TemplateResponse(
         request,
         "admin/usage_chart.html",
         context={
@@ -82,8 +83,8 @@ def usage_chart(request):
                 "end": end.isoformat(),
             },
         },
-        headers={"HX-Push-Url": f"{url}?{urlencode(query_data)}"},
     )
+    return push_url(response, f"{url}?{urlencode(query_data)}")
 
 
 @is_staff

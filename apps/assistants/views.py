@@ -10,6 +10,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
+from django_htmx.http import HttpResponseClientRefresh, reswap
 from django_tables2 import SingleTableView
 
 from apps.chat.agent.tools import get_assistant_tools
@@ -196,7 +197,7 @@ class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
         except Exception as e:
             logger.exception(f"Error syncing assistant. {e}")
             messages.error(request, "Could not sync assistant. Please try again later")
-        return HttpResponse(headers={"HX-Refresh": "true"})
+        return HttpResponseClientRefresh()
 
 
 class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
@@ -253,7 +254,7 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
                     "experiments_with_pipeline_nodes": experiments_with_pipeline_nodes,
                 },
             )
-            return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+            return reswap(HttpResponse(response, status=400), "none")
 
 
 class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):

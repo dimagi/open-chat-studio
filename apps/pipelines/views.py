@@ -16,6 +16,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
+from django_htmx.http import reswap
 from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
@@ -132,7 +133,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
                 },
             )
 
-        return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+        return reswap(HttpResponse(response, status=400), "none")
 
 
 def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, synthetic_voices, include_versions=False):
