@@ -1,0 +1,51 @@
+{% load i18n %}
+
+<dialog id="add_to_dataset_modal" open class="modal">
+  <div class="modal-box">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    
+    <div class="flex items-center gap-3 mb-4">
+      <i class="fa-solid fa-database text-success text-xl"></i>
+      <h3 class="font-bold text-lg">{% trans "Add Message to Dataset" %}</h3>
+    </div>
+    
+    <p class="text-sm text-base-content/70 mb-6">
+      {% trans "Select a dataset to add this message to. The message and its AI response will be added as an evaluation pair." %}
+    </p>
+    
+    <form
+      hx-post="{% url 'evaluations:add_single_message_to_dataset' request.team.slug session_id %}"
+      hx-disabled-elt="button[type='submit']"
+      hx-on::after-request="add_to_dataset_modal.close()"
+    >
+      {% csrf_token %}
+      <input type="hidden" name="message_id" x-model="selectedMessageId">
+      
+      <div class="form-control">
+        <label class="label" for="dataset">
+          <span class="label-text">{% trans "Dataset" %}</span>
+        </label>
+        <select name="dataset" id="dataset" required class="select select-bordered w-full" x-model="selectedDataset">
+          {% for dataset in request.team.evaluationdataset_set.all %}
+            <option value="{{ dataset.id }}">{{ dataset.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <div class="modal-action">
+        <button type="submit" class="btn btn-primary">
+          {% trans "Add to Dataset" %}
+        </button>
+        <button type="button" class="btn">
+          {% trans "Cancel" %}
+        </button>
+      </div>
+    </form>
+  </div>
+  
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
