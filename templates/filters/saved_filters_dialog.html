@@ -25,13 +25,14 @@
                   class="btn btn-ghost btn-xs"
                   x-cloak
                   x-show="filter.is_user_filter"
+                  title="Update this saved filter with the currently applied filters"
                   @click="updateSavedFilterQueryString(filter.id)">
                   Update
                 </button>
                 <!-- Personal Default -->
                 <button class="btn btn-ghost btn-xs"
                         type="button"
-                        title="Set or unset this filter set as your default filters"
+                        title="Set as your personal default filter"
                         x-cloak
                         x-show="filter.is_user_filter"
                         @click="toggleSavedFilterDefault(filter.id, 'user')"
@@ -42,8 +43,8 @@
                 
                 <!-- Team Default -->
                 <button class="btn btn-ghost btn-xs"
-                        type="button"        
-                        title="Set or unset this filter set as default for your Team"
+                        type="button"
+                        title="Set as your team's default filter"
                         x-cloak
                         x-show="filter.is_user_filter"
                         @click="toggleSavedFilterDefault(filter.id, 'team')"
