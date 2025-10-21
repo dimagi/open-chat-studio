@@ -3,7 +3,7 @@
 {% load form_tags %}
 {% load waffle_tags %}
 {% load pagination_tags %}
-<div id="table-top" class="max-w-5xl mt-4 border rounded-2xl" x-data="{selectedMessageId: null, selectedDataset: null}">
+<div id="table-top" class="max-w-5xl mt-4 border rounded-2xl" x-data="{selectedDataset: null}">
   {% include "experiments/components/experiment_session_messages_control_panel.html" %}
 
   <!-- Loading indicator for initial messages -->
@@ -122,7 +122,14 @@
                         {% include "experiments/chat/components/trace_icons.html" with trace_infos=message.trace_info %}
                         {% if perms.evaluations.change_evaluationdataset and message.is_human_message %}
                           <div class="tooltip" data-tip="Add to dataset" @click="selectedMessageId={{ message.id }}">
-                            <button class="btn btn-sm btn-square btn-ghost"><i class="fa-solid fa-database"></i></button>
+                            <button
+                              hx-get="{% url "evaluations:add_single_message_to_dataset" team.slug experiment_session.external_id %}"
+                              hx-target="#update_dataset_modal"
+                              hx-swap="innerHTML"
+                              hx-disabled-elt="this"
+                              class="btn btn-sm btn-square btn-ghost">
+                              <i class="fa-solid fa-database"></i>
+                            </button>
                           </div>
                         {% endif %}
                         {% if perms.annotations.add_usercomment %}
@@ -176,7 +183,7 @@
       </div>
     </div>
   </div>
-  {% include "experiments/components/add_to_dataset_modal.html" %}
+  <div id="update_dataset_modal"></div>
 </div>
 {{ llm_provider_models_dict|json_script:"provider-models-dict" }}
 {{ default_translation_models_by_providers|json_script:"default-translation-models-dict" }}

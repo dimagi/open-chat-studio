@@ -69,7 +69,7 @@ urlpatterns = [
     ),
     path(
         "add_single_message/session/<uuid:session_id>/",
-        dataset_views.add_single_message_to_dataset_view,
+        dataset_views.AddMessageToDatasetView.as_view(),
         name="add_single_message_to_dataset",
     ),
     path(

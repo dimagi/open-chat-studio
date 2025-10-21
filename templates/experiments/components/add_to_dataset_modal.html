@@ -1,10 +1,9 @@
 {% load i18n %}
 
-<!-- Add to Dataset Modal -->
-<dialog x-bind:open="selectedMessageId" class="modal">
+<dialog id="add_to_dataset_modal" open class="modal">
   <div class="modal-box">
     <form method="dialog">
-      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" @click="selectedMessageId = null">✕</button>
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
     </form>
     
     <div class="flex items-center gap-3 mb-4">
@@ -16,39 +15,10 @@
       {% trans "Select a dataset to add this message to. The message and its AI response will be added as an evaluation pair." %}
     </p>
     
-    <form 
-      x-data="{
-        submitForm: function() {
-          const formData = new FormData(this.$el);
-          const jsonData = {
-            dataset: formData.get('dataset'),
-            message_id: selectedMessageId
-          };
-          
-          fetch('{% url 'evaluations:add_single_message_to_dataset' request.team.slug experiment_session.external_id %}', {
-            method: 'POST',
-            body: JSON.stringify(jsonData),
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            }
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.success) {
-              alertify.success('Message added successfully', 3);
-              selectedMessageId = null;
-            } else {
-              alertify.error('An error occurred', 3);
-            }
-          })
-          .catch(error => {
-            console.error('Error:', error);
-            alertify.error('An error occurred', 3);
-          });
-        }
-      }"
-      @submit.prevent="submitForm"
+    <form
+      hx-post="{% url 'evaluations:add_single_message_to_dataset' request.team.slug session_id %}"
+      hx-disabled-elt="button[type='submit']"
+      hx-on::after-request="afterRequestHandler(event)"
     >
       {% csrf_token %}
       <input type="hidden" name="message_id" x-model="selectedMessageId">
@@ -68,7 +38,7 @@
         <button type="submit" class="btn btn-primary">
           {% trans "Add to Dataset" %}
         </button>
-        <button type="button" class="btn" @click="selectedMessageId = null">
+        <button type="button" class="btn">
           {% trans "Cancel" %}
         </button>
       </div>
@@ -76,7 +46,17 @@
   </div>
   
   <form method="dialog" class="modal-backdrop">
-    <button @click="selectedMessageId = null">close</button>
+    <button>close</button>
   </form>
 </dialog>
 
+<script>
+  function afterRequestHandler(event) {
+    if (event.detail.successful) {
+      alertify.success('Message added to dataset');
+    } else {
+      alertify.error('Failed to add message to dataset');
+    }
+    add_to_dataset_modal.close();
+  };
+</script>

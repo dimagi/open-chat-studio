@@ -4,7 +4,6 @@ import logging
 from io import StringIO
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db import transaction
 from django.db.models import Count, OuterRef, Q
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
@@ -503,35 +502,28 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
         return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
 
 
-@login_and_team_required
-@require_POST
-@transaction.atomic
-def add_single_message_to_dataset_view(request, team_slug: str, session_id: str):
-    """
-    Add the selected chat message to an existing dataset
-    """
-    try:
-        json_data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON data"}, status=400)
+class AddMessageToDatasetView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
+    permission_required = "documents.change_documentsource"
+    template_name = "experiments/components/add_to_dataset_modal.html"
 
-    message_id = json_data["message_id"]
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["datasets"] = EvaluationDataset.objects.filter(team=self.request.team)
+        context["session_id"] = self.kwargs.get("session_id")
+        return context
 
-    dataset = get_object_or_404(EvaluationDataset, id=json_data["dataset"], team__slug=team_slug)
+    def post(self, request, team_slug: str, session_id: str):
+        message_id = request.POST["message_id"]
+        dataset = get_object_or_404(EvaluationDataset, id=request.POST["dataset"], team__slug=team_slug)
 
-    if not ChatMessage.objects.filter(id=message_id, chat__experiment_session__team__slug=team_slug).exists():
-        return JsonResponse({"error": "Chat message not found"}, status=404)
+        if not ChatMessage.objects.filter(id=message_id, chat__experiment_session__team__slug=team_slug).exists():
+            return HttpResponse(status=400)
 
-    eval_messages = make_evaluation_messages_from_sessions({str(session_id): [message_id]})
+        eval_messages = make_evaluation_messages_from_sessions({str(session_id): [int(message_id)]})
+        if not eval_messages:
+            return HttpResponse(status=400)
 
-    if not eval_messages:
-        return JsonResponse(
-            {"error": "No valid evaluation messages could be created from the selected message"}, status=400
-        )
+        EvaluationMessage.objects.bulk_create(eval_messages)
+        dataset.messages.add(*eval_messages)
 
-    EvaluationMessage.objects.bulk_create(eval_messages)
-
-    # Add to dataset
-    dataset.messages.add(*eval_messages)
-
-    return JsonResponse({"success": True})
+        return HttpResponse(status=204)
