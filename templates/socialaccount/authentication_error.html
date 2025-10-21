@@ -1,11 +1,13 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n %}
-{% block page_title %}{% translate "Authentication Error" %}{% endblock page_title %}
+{% block page_title %}{% translate "Authentication Error" %}{% endblock %}
+
 {% block sidebar-nav %}
-  {% with "profile" as active_tab %}
+  {% with active_tab="profile" %}
     {{ block.super }}
   {% endwith %}
 {% endblock sidebar-nav %}
+
 {% block app %}
   <div class="app-card">
     <h1 class="pg-title">{% translate "Social Account Login Failure" %}</h1>

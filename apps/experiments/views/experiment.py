@@ -989,7 +989,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: int, origin="
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     timezone = request.session.get("detected_tz", None)
     experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
-    parsed_url = urlparse(request.headers.get("HX-Current-URL"))
+    parsed_url = urlparse(request.htmx.current_url)
     query_params = QueryDict(parsed_url.query)
     task_id = async_export_chat.delay(experiment_id, query_params, timezone)
     return TemplateResponse(

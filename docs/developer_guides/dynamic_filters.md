@@ -231,7 +231,7 @@ Create the template that includes the filter interface:
 {% extends "base.html" %}
 {% load django_tables2 %}
 
-{% block title %}Product Inventory{% endblock %}
+{% block title %}Product Inventory{% endblock title %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
@@ -241,5 +241,5 @@ Create the template that includes the filter interface:
     <!-- Rest of the page -->
 </div>
 
-{% endblock %}
+{% endblock content %}
 ```

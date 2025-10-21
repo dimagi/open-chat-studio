@@ -1,9 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load team_tags %}
-{% load static %}
-{% load i18n %}
-{% load waffle_tags %}
-{% load form_tags %}
+{% load form_tags i18n static team_tags waffle_tags %}
 {% block page_head %}
   <style>
     /* Adds fade out effect when invitations are canceled */
@@ -13,6 +9,7 @@
     }
   </style>
 {% endblock page_head %}
+
 {% block app %}
   <section class="app-card">
     {% if not create %}

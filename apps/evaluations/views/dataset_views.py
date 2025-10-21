@@ -3,6 +3,7 @@ import json
 import logging
 from io import StringIO
 
+from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count, OuterRef, Q
 from django.db.models.functions import Coalesce
@@ -23,7 +24,11 @@ from apps.evaluations.tables import (
     EvaluationSessionsSelectionTable,
 )
 from apps.evaluations.tasks import upload_dataset_csv_task
-from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
+from apps.evaluations.utils import (
+    generate_csv_column_suggestions,
+    make_evaluation_messages_from_sessions,
+    parse_history_text,
+)
 from apps.experiments.filters import (
     ChatMessageFilter,
     ExperimentSessionFilter,
@@ -499,3 +504,33 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
     except Exception as e:
         logger.error(f"Error starting CSV upload for dataset {dataset.id}: {str(e)}")
         return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
+
+
+class AddMessageToDatasetView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
+    permission_required = "documents.change_documentsource"
+    template_name = "experiments/components/add_to_dataset_modal.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["datasets"] = EvaluationDataset.objects.filter(team=self.request.team)
+        context["session_id"] = self.kwargs.get("session_id")
+        return context
+
+    def post(self, request, team_slug: str, session_id: str):
+        message_id = request.POST["message_id"]
+        dataset = get_object_or_404(EvaluationDataset, id=request.POST["dataset"], team__slug=team_slug)
+
+        if not ChatMessage.objects.filter(id=message_id, chat__experiment_session__team__slug=team_slug).exists():
+            messages.error(request, "Invalid message selected.")
+            return HttpResponse(status=400)
+
+        eval_messages = make_evaluation_messages_from_sessions({str(session_id): [int(message_id)]})
+        if not eval_messages:
+            messages.error(request, "No valid messages found to add to dataset.")
+            return HttpResponse(status=400)
+
+        EvaluationMessage.objects.bulk_create(eval_messages)
+        dataset.messages.add(*eval_messages)
+
+        messages.success(request, "Messages added to dataset successfully.")
+        return HttpResponse(status=204)

@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, DetailView
+from django_htmx.http import HttpResponseClientRedirect, HttpResponseClientRefresh
 from django_tables2 import RequestConfig, SingleTableView
 
 from apps.experiments.export import filtered_export_to_csv
@@ -27,7 +28,7 @@ class TranscriptAnalysisListView(LoginAndTeamRequiredMixin, SingleTableView):
     template_name = "analysis/list.html"
 
     def get(self, request, *args, **kwargs):
-        if request.headers.get("hx-request") == "true":
+        if request.htmx:
             table = self.get_table(**self.get_table_kwargs())
             return render(request, "table/single_table.html", {"table": table})
         return super().get(request, *args, **kwargs)
@@ -79,7 +80,7 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
     template_name = "analysis/detail.html"
 
     def get(self, request, *args, **kwargs):
-        if request.headers.get("hx-request") == "true":
+        if request.htmx:
             self.object = self.get_object()
             return render(request, "table/single_table.html", {"table": self.get_table()})
         return super().get(request, *args, **kwargs)
@@ -126,7 +127,7 @@ def run_analysis(request, team_slug, pk):
 
     if analysis.is_processing:
         messages.error(request, "Analysis has already been completed or is in progress.")
-        return HttpResponse(headers={"hx-redirect": analysis.get_absolute_url()})
+        return HttpResponseClientRedirect(analysis.get_absolute_url())
 
     task = process_transcript_analysis.delay(analysis.id)
     analysis.job_id = task.id
@@ -250,7 +251,7 @@ def add_query(request, team_slug, pk):
         order=AnalysisQuery.objects.filter(analysis=analysis).count() + 1,
     )
 
-    return HttpResponse(headers={"HX-Refresh": "true"})
+    return HttpResponseClientRefresh()
 
 
 @login_and_team_required
@@ -262,7 +263,7 @@ def update_query(request, team_slug, pk, query_id):
     if request.method == "DELETE":
         query.delete()
         if not analysis.queries.exists():
-            return HttpResponse(headers={"HX-Refresh": "true"})
+            return HttpResponseClientRefresh()
         return HttpResponse()
     elif request.method == "POST":
         name = request.POST.get("name", "")
