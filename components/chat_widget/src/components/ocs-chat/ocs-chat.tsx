@@ -193,6 +193,7 @@ export class OcsChat {
   private fileInputRef?: HTMLInputElement;
   private buttonRef?: HTMLButtonElement;
   private buttonDragOffset: { x: number; y: number } = { x: 0, y: 0 };
+  private buttonListenersAttached: boolean = false;
   private chatWindowHeight: number = 600;
   private chatWindowWidth: number = 450;
   private chatWindowFullscreenWidth: number = 1024;
@@ -1014,17 +1015,27 @@ export class OcsChat {
   };
 
   private addButtonEventListeners(): void {
+    if (this.buttonListenersAttached) {
+      return;
+    }
+
     document.addEventListener('mousemove', this.handleButtonMouseMove);
     document.addEventListener('mouseup', this.handleButtonMouseUp);
     document.addEventListener('touchmove', this.handleButtonTouchMove, { passive: false });
     document.addEventListener('touchend', this.handleButtonTouchEnd);
+    this.buttonListenersAttached = true;
   }
 
   private removeButtonEventListeners(): void {
+    if (!this.buttonListenersAttached) {
+      return;
+    }
+
     document.removeEventListener('mousemove', this.handleButtonMouseMove);
     document.removeEventListener('mouseup', this.handleButtonMouseUp);
     document.removeEventListener('touchmove', this.handleButtonTouchMove);
     document.removeEventListener('touchend', this.handleButtonTouchEnd);
+    this.buttonListenersAttached = false;
   }
 
   private getDefaultIconUrl(): string {
