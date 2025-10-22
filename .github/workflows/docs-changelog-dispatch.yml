@@ -1,0 +1,38 @@
+name: Docs and Changelog Dispatch
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch Docs and Changelog Update
+    # Only run if PR was merged (not just closed)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository Dispatch
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.OCS_DOCS_PAT }}
+          repository: dimagi/open-chat-studio-docs
+          event-type: ocs_changelog_update
+          client-payload: |
+            {
+              "pr_number": ${{ github.event.pull_request.number }},
+              "pr_title": ${{ toJSON(github.event.pull_request.title) }},
+              "pr_body": ${{ toJSON(github.event.pull_request.body) }},
+              "pr_url": "${{ github.event.pull_request.html_url }}",
+              "pr_author": "${{ github.event.pull_request.user.login }}",
+              "pr_merged_at": "${{ github.event.pull_request.merged_at }}",
+              "pr_labels": ${{ toJSON(github.event.pull_request.labels.*.name) }},
+              "ref": "${{ github.ref }}",
+              "sha": "${{ github.sha }}",
+              "repository": "${{ github.repository }}"
+            }
