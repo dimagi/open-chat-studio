@@ -1107,10 +1107,17 @@ export class OcsChat {
           onMouseDown={(e) => this.handleButtonMouseDown(e)}
           onTouchStart={(e) => this.handleButtonTouchStart(e)}
           aria-label={`Open chat - ${finalButtonText}`}
+          aria-grabbed={this.isButtonDragging}
+          aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
           title={finalButtonText}
         >
           <img src={iconSrc} alt="" />
           <span>{finalButtonText}</span>
+          {isDraggable && (
+            <span id="chat-button-drag-hint" style={{ display: 'none' }}>
+              Draggable. Use mouse or touch to reposition.
+            </span>
+          )}
         </button>
       );
     } else {
@@ -1122,10 +1129,17 @@ export class OcsChat {
           onClick={() => this.handleButtonClick()}
           onMouseDown={(e) => this.handleButtonMouseDown(e)}
           onTouchStart={(e) => this.handleButtonTouchStart(e)}
-          aria-label="Open chat"
-          title="Open chat"
+          aria-label={finalButtonText ? `Open chat - ${finalButtonText}` : 'Open chat'}
+          aria-grabbed={this.isButtonDragging}
+          aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
+          title={finalButtonText ? finalButtonText : 'Open chat'}
         >
           <img src={iconSrc} alt="Chat" />
+          {isDraggable && (
+            <span id="chat-button-drag-hint" style={{ display: 'none' }}>
+              Draggable. Use mouse or touch to reposition.
+            </span>
+          )}
         </button>
       );
     }
