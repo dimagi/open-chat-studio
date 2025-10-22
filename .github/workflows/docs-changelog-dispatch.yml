@@ -17,6 +17,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if widget files changed
+        id: check_widget
+        run: |
+          # Get list of changed files in this PR
+          gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' > /tmp/changed_files.txt
+
+          # Check if any files in components/ folder were changed
+          if grep -q "^components/" /tmp/changed_files.txt; then
+            echo "is_widget_change=true" >> $GITHUB_OUTPUT
+            echo "Widget files were changed"
+          else
+            echo "is_widget_change=false" >> $GITHUB_OUTPUT
+            echo "No widget files changed"
+          fi
+
+          # Get the list of changed files for reference
+          CHANGED_FILES=$(cat /tmp/changed_files.txt | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Repository Dispatch
         uses: peter-evans/repository-dispatch@v3
         with:
@@ -32,6 +58,8 @@ jobs:
               "pr_author": "${{ github.event.pull_request.user.login }}",
               "pr_merged_at": "${{ github.event.pull_request.merged_at }}",
               "pr_labels": ${{ toJSON(github.event.pull_request.labels.*.name) }},
+              "is_widget_change": ${{ steps.check_widget.outputs.is_widget_change }},
+              "changed_files": ${{ steps.check_widget.outputs.changed_files }},
               "ref": "${{ github.ref }}",
               "sha": "${{ github.sha }}",
               "repository": "${{ github.repository }}"
