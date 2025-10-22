@@ -801,15 +801,14 @@
         }
       },
 
-      async toggleSavedFilterDefault(id, type) {
+      async toggleField(id, field) {
         const filterSetName = this.getSavedFilterSetName(id);
         const filterSet = this.savedFilters.find(f => f.id === id);
         
         if (!filterSet) return;
         
-        const field = `is_default_for_${type}`;
-        const isCurrentlyDefault = filterSet[field];
-        const newValue = !isCurrentlyDefault;
+        const currentValue = filterSet[field];
+        const newValue = !currentValue;
         
         try {
           // Update UI immediately
@@ -818,79 +817,12 @@
           // Make API call
           const payload = { [field]: newValue };
           await this.makeSavedFilterUpdateRequest(id, payload);
-          
-          if (newValue) {
-            this.notifyUser(`"${filterSetName}" set as ${type} default`, "success");
-          } else {
-            this.notifyUser(`"${filterSetName}" removed as ${type} default`, "success");
-          }
+          this.notifyUser(`${field} updated for "${filterSetName}"`, "success");
         } catch (error) {
           console.error('Error toggling default:', error);
           // Revert UI changes on error
-          this.updateFilterProperty(id, field, isCurrentlyDefault);
+          this.updateFilterProperty(id, field, currentValue);
           this.notifyUser('Failed to update default setting', 'error');
-        }
-      },
-
-      async shareSavedFilter(id) {
-        const filterSetName = this.getSavedFilterSetName(id);
-        const filterSet = this.savedFilters.find(f => f.id === id);
-        
-        if (!filterSet) return;
-        
-        const isCurrentlyShared = filterSet.is_shared;
-        const newValue = !isCurrentlyShared;
-        
-        try {
-          // Update UI immediately
-          this.updateFilterProperty(id, 'is_shared', newValue);
-          
-          // Make API call
-          await this.makeSavedFilterUpdateRequest(id, { is_shared: newValue });
-          
-          if (newValue) {
-            this.notifyUser(`"${filterSetName}" shared`, "success");
-          } else {
-            this.notifyUser(`"${filterSetName}" unshared`, "success");
-          }
-        } catch (error) {
-          console.error('Error toggling share:', error);
-          // Revert UI changes on error
-          this.updateFilterProperty(id, 'is_shared', isCurrentlyShared);
-          this.notifyUser('Failed to update share setting', 'error');
-        }
-      },
-
-      async toggleSavedFilterStar(id) {
-        const filterSetName = this.getSavedFilterSetName(id);
-        const filterSet = this.savedFilters.find(f => f.id === id);
-        
-        if (!filterSet) return;
-        
-        const isCurrentlyStarred = filterSet.is_starred;
-        const newValue = !isCurrentlyStarred;
-        
-        try {
-          // Update UI immediately
-          this.updateFilterProperty(id, 'is_starred', newValue);
-          
-          // Make API call
-          await this.makeSavedFilterUpdateRequest(id, { is_starred: newValue });
-          
-          // Update starred filters list
-          await this.loadStarredFilters();
-          
-          if (newValue) {
-            this.notifyUser(`"${filterSetName}" starred`, "success");
-          } else {
-            this.notifyUser(`"${filterSetName}" unstarred`, "success");
-          }
-        } catch (error) {
-          console.error('Error toggling star:', error);
-          // Revert UI changes on error
-          this.updateFilterProperty(id, 'is_starred', isCurrentlyStarred);
-          await this.loadStarredFilters(); // Reload to revert starred filters list
-          this.notifyUser('Failed to update star setting', 'error');
         }
       },
 
@@ -925,14 +857,15 @@
       async makeSavedFilterDeleteRequest(filterId) {
         await this.savedFilterRequest(filterId, "DELETE");
       },
+
       async savedFilterRequest(filterId, method, body) {
         const base = "{% url 'filters:filter_set' request.team.slug '000' %}";
         const url = base.replace("000", filterId);
         const opts = {method, credentials:"same-origin", headers: { "X-CSRFToken": SiteJS.app.Cookies.get("csrftoken")}
         };
         if (body) {
-          opts.headers["Content-Type"]="application/json";
-          opts.body=JSON.stringify(body);
+          opts.headers["Content-Type"] = "application/json";
+          opts.body = JSON.stringify(body);
         }
         const r = await fetch(url, opts);
         if(!r.ok) throw new Error("API failed");

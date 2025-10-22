@@ -35,7 +35,7 @@
                         title="Set as your personal default filter"
                         x-cloak
                         x-show="filter.is_user_filter"
-                        @click="toggleSavedFilterDefault(filter.id, 'user')"
+                        @click="toggleField(filter.id, 'is_default_for_user')"
                         :class="filter.is_default_for_user ? 'text-primary' : ''">
                   <i x-show="!filter.is_default_for_user" class="fa-regular fa-user"></i>
                   <i x-show="filter.is_default_for_user" x-cloak class="fa-solid fa-user"></i>
@@ -47,7 +47,7 @@
                         title="Set as your team's default filter"
                         x-cloak
                         x-show="filter.is_user_filter"
-                        @click="toggleSavedFilterDefault(filter.id, 'team')"
+                        @click="toggleField(filter.id, 'is_default_for_team')"
                         :class="filter.is_default_for_team ? 'text-primary' : ''">
                   <i class="fa-solid fa-users"></i>
                 </button>
@@ -59,7 +59,7 @@
                         x-cloak
                         x-show="filter.is_user_filter"
                         :class="filter.is_shared ? 'text-primary' : ''"
-                        @click="shareSavedFilter(filter.id)">
+                        @click="toggleField(filter.id, 'is_shared')">
                   <i x-show="!filter.is_shared" class="fa-solid fa-share-nodes"></i>
                   <i x-show="filter.is_shared" x-cloak class="fa-solid fa-share-nodes"></i>
                 </button>
@@ -68,7 +68,7 @@
                 <button class="btn btn-ghost btn-xs"
                         type="button"
                         title="Star"
-                        @click="toggleSavedFilterStar(filter.id)"
+                        @click="toggleField(filter.id, 'is_starred')"
                         :class="filter.is_starred ? 'text-primary' : ''">
                   <i x-show="!filter.is_starred" class="fa-regular fa-star"></i>
                   <i x-cloak x-show="filter.is_starred" class="fa-solid fa-star"></i>
@@ -92,5 +92,3 @@
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
-
-

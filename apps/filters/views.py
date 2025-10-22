@@ -41,20 +41,9 @@ def create_filter_set(request, team_slug: str, table_type: str):
     if not serializer.is_valid():
         return JsonResponse(serializer.errors, status=400)
 
-    validated = serializer.validated_data
-
     with transaction.atomic():
-        if validated.get("is_default_for_user"):
-            FilterSet.objects.filter(
-                team=request.team, user=request.user, table_type=table_type, is_default_for_user=True
-            ).update(is_default_for_user=False)
-        if validated.get("is_default_for_team"):
-            FilterSet.objects.filter(team=request.team, table_type=table_type, is_default_for_team=True).update(
-                is_default_for_team=False
-            )
-
         try:
-            filter_set = serializer.save(team=request.team, user=request.user)
+            serializer.save(team=request.team, user=request.user)
             return JsonResponse({"success": True, "filter_set": serializer.data})
         except IntegrityError:
             return JsonResponse({"error": "Unable to create filter set"}, status=400)
@@ -69,6 +58,7 @@ class FilterSetView(LoginAndTeamRequiredMixin, View):
 
         payload = json.loads(request.body or b"{}")
         serializer = FilterSetSerializer(
+            filter_set,
             data=payload,
             partial=True,
             context={"is_team_admin": request.team_membership.is_team_admin, "request_user": request.user},
@@ -90,7 +80,6 @@ class FilterSetView(LoginAndTeamRequiredMixin, View):
 
             serializer.update(filter_set, validated)
 
-        serializer = FilterSetSerializer(filter_set, context={"request_user": request.user})
         return JsonResponse({"result": serializer.data})
 
     def delete(self, request, team_slug: str, pk: int):
