@@ -6,12 +6,22 @@ This directory contains comprehensive end-to-end tests for the Open Chat Studio 
 
 The following applications have E2E test coverage (excluding experiments):
 
-- **Chatbots** (`chatbots.cy.js`) - Tests for chatbot creation, management, settings, and sessions
-- **Participants** (`participants.cy.js`) - Tests for participant management, data editing, import/export
-- **Dashboard** (`dashboard.cy.js`) - Tests for analytics dashboard, charts, filters, and data visualization
-- **Assistants** (`assistants.cy.js`) - Tests for OpenAI assistant management, tools, files, and sync
-- **Files & Documents** (`files-documents.cy.js`) - Tests for file uploads, document collections, and integrations
+### Simplified Tests (Recommended)
+These tests are robust and test what actually exists on the pages:
+
+- **`chatbots-simple.cy.js`** - Tests chatbots pages load and display content correctly
+- **`participants-simple.cy.js`** - Tests participants pages load and display content correctly  
+- **`all-apps-simple.cy.js`** - Tests all application pages (dashboard, assistants, files, documents, analysis, help)
 - **Core Pages** (`core-pages.cy.js`) - Basic page load tests for all main sections
+
+### Detailed Tests (Optional)
+These tests make more assumptions about page structure:
+
+- **Chatbots** (`chatbots.cy.js`) - Detailed tests for chatbot features
+- **Participants** (`participants.cy.js`) - Detailed tests for participant features
+- **Dashboard** (`dashboard.cy.js`) - Detailed tests for dashboard features
+- **Assistants** (`assistants.cy.js`) - Detailed tests for assistant features
+- **Files & Documents** (`files-documents.cy.js`) - Detailed tests for file/document features
 
 ## Prerequisites
 
@@ -30,10 +40,64 @@ The following applications have E2E test coverage (excluding experiments):
    }
    ```
 
-3. **Ensure Test Data:**
-   - Create a test team with the slug specified in `TEAM_SLUG`
-   - Create a test user with the credentials specified above
-   - Optionally seed test data (chatbots, participants, files, etc.)
+3. **Create Test User and Team:**
+   
+   **Quick Setup (Recommended):**
+   ```bash
+   python manage.py create_cypress_test_user
+   ```
+   
+   Or alternatively:
+   ```bash
+   python cypress/create_test_user.py
+   ```
+   
+   This will create a test user and team, then show you the credentials to add to `cypress.env.json`.
+   
+   **Manual Setup:**
+   
+   Alternatively, you can create a test user manually. Run these commands:
+   
+   ```bash
+   # Using Django shell
+   python manage.py shell
+   ```
+   
+   Then in the Python shell:
+   ```python
+   from django.contrib.auth import get_user_model
+   from apps.teams.models import Team, Membership
+   
+   # Create test user
+   User = get_user_model()
+   user = User.objects.create_user(
+       username='testuser',
+       email='test@example.com',
+       password='testpassword'
+   )
+   
+   # Create test team
+   team = Team.objects.create(name='Test Team', slug='test-team')
+   
+   # Add user to team
+   Membership.objects.create(user=user, team=team, role='admin')
+   
+   print(f"Created user: {user.email}")
+   print(f"Created team: {team.slug}")
+   ```
+   
+   Then update `cypress.env.json` with:
+   ```json
+   {
+     "TEAM_SLUG": "test-team",
+     "TEST_USER": "test@example.com",
+     "TEST_PASSWORD": "testpassword"
+   }
+   ```
+
+4. **Optionally Seed Test Data:**
+   - Create some chatbots, participants, files, etc. for more meaningful tests
+   - Tests will run even with empty data, they just won't find much content
 
 ## Running Tests
 

@@ -27,31 +27,4 @@ describe('Core Application Pages', () => {
     })
   })
 
-  describe('Documents', () => {
-    it('loads documents page', () => {
-      cy.visit(`/a/${teamSlug}/documents/`)
-      cy.url().should('include', '/documents/')
-    })
-  })
-
-  describe('Files', () => {
-    it('loads files page', () => {
-      cy.visit(`/a/${teamSlug}/files/`)
-      cy.url().should('include', '/files/')
-    })
-  })
-
-  describe('Analysis', () => {
-    it('loads analysis page', () => {
-      cy.visit(`/a/${teamSlug}/analysis/`)
-      cy.url().should('include', '/analysis/')
-    })
-  })
-
-  describe('Help', () => {
-    it('loads help page', () => {
-      cy.visit(`/a/${teamSlug}/help/`)
-      cy.url().should('include', '/help/')
-    })
-  })
 })
