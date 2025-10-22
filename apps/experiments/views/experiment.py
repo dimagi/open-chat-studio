@@ -1378,6 +1378,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
         {
             "experiment": request.experiment,
             "experiment_session": request.experiment_session,
+            "messages": ChatMessage.objects.filter(chat_id=request.experiment_session.chat_id).all(),
             "active_tab": "experiments",
             "form": form,
             "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
