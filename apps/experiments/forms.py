@@ -152,11 +152,18 @@ class ExperimentForm(forms.ModelForm):
             "echo_transcript",
             "use_processor_bot_voice",
             "trace_provider",
+            "participant_access_level",
             "participant_allowlist",
+            "participant_denylist",
             "debug_mode_enabled",
             "citations_enabled",
         ]
-        labels = {"source_material": "Inline Source Material", "participant_allowlist": "Participant allowlist"}
+        labels = {
+            "source_material": "Inline Source Material",
+            "participant_access_level": "Access Control",
+            "participant_allowlist": "Allowed Participants",
+            "participant_denylist": "Denied Participants",
+        }
         help_texts = {
             "source_material": "Use the '{source_material}' tag to inject source material directly into your prompt.",
             "assistant": "If you have an OpenAI assistant, you can select it here to use it for this experiment.",
@@ -164,8 +171,14 @@ class ExperimentForm(forms.ModelForm):
                 "In a multi-bot setup, use the configured voice of the bot that generated the output. If it doesn't "
                 "have one, the router bot's voice will be used."
             ),
+            "participant_access_level": "Choose how to control access to this chatbot",
             "participant_allowlist": (
-                "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789"
+                "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789. "
+                "Only used when Access Control is set to 'Allow List'."
+            ),
+            "participant_denylist": (
+                "Separate identifiers with a comma. Phone numbers should be in E164 format e.g. +27123456789. "
+                "Only used when Access Control is set to 'Deny List'."
             ),
             "debug_mode_enabled": (
                 "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
@@ -220,6 +233,12 @@ class ExperimentForm(forms.ModelForm):
             cleaned_identifiers.append(identifier.replace(" ", ""))
         return cleaned_identifiers
 
+    def clean_participant_denylist(self):
+        cleaned_identifiers = []
+        for identifier in self.cleaned_data["participant_denylist"]:
+            cleaned_identifiers.append(identifier.replace(" ", ""))
+        return cleaned_identifiers
+
     def clean_custom_action_operations(self):
         return clean_custom_action_operations(self)
 
@@ -254,6 +273,27 @@ class ExperimentForm(forms.ModelForm):
 
         if cleaned_data["conversational_consent_enabled"] and not cleaned_data["consent_form"]:
             errors["consent_form"] = "Consent form is required when conversational consent is enabled"
+
+        # Validate access control settings
+        access_level = cleaned_data.get("participant_access_level")
+        allowlist = cleaned_data.get("participant_allowlist", [])
+        denylist = cleaned_data.get("participant_denylist", [])
+        
+        # Clear the appropriate list based on access level
+        if access_level == "open":
+            # Clear both lists when open
+            cleaned_data["participant_allowlist"] = []
+            cleaned_data["participant_denylist"] = []
+        elif access_level == "allow_list":
+            # Clear denylist when using allowlist
+            cleaned_data["participant_denylist"] = []
+            if not allowlist:
+                errors["participant_allowlist"] = "Allow list cannot be empty when Access Control is set to 'Allow List'"
+        elif access_level == "deny_list":
+            # Clear allowlist when using denylist
+            cleaned_data["participant_allowlist"] = []
+            if not denylist:
+                errors["participant_denylist"] = "Deny list cannot be empty when Access Control is set to 'Deny List'"
 
         if errors:
             raise forms.ValidationError(errors)

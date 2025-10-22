@@ -1,3 +1,14 @@
+from django.db import models
+from django.utils.translation import gettext_lazy
+
+
+class ParticipantAccessLevel(models.TextChoices):
+    """Defines how participant access is controlled for an experiment/chatbot"""
+    OPEN = "open", gettext_lazy("Open Access (Public)")
+    ALLOW_LIST = "allow_list", gettext_lazy("Allow List")
+    DENY_LIST = "deny_list", gettext_lazy("Deny List")
+
+
 DEFAULT_CONSENT_TEXT = """
 Welcome to this chatbot built on Open Chat Studio! 
 

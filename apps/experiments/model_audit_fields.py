@@ -17,6 +17,9 @@ EXPERIMENT_FIELDS = [
     "conversational_consent_enabled",
     "team",
     "voice_response_behaviour",
+    "participant_access_level",
+    "participant_allowlist",
+    "participant_denylist",
 ]
 
 SOURCE_MATERIAL_FIELDS = ["owner", "topic", "description", "material", "team"]

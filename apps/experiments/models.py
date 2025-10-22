@@ -37,6 +37,7 @@ from field_audit.models import AuditAction, AuditingManager
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
+from apps.experiments.const import ParticipantAccessLevel
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
 from apps.service_providers.tracing import TraceInfo, TracingService
@@ -734,7 +735,14 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
     )
     use_processor_bot_voice = models.BooleanField(default=False)
+    participant_access_level = models.CharField(
+        max_length=20,
+        choices=ParticipantAccessLevel.choices,
+        default=ParticipantAccessLevel.OPEN,
+        help_text="Controls who can access this chatbot",
+    )
     participant_allowlist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
+    participant_denylist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     # Versioning fields
     working_version = models.ForeignKey(
@@ -1124,12 +1132,31 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     @property
     def is_public(self) -> bool:
         """
-        Whether or not a bot is public depends on the `participant_allowlist`. If it's empty, the bot is public.
+        Whether or not a bot is public depends on the `participant_access_level`.
+        It's only public when access level is OPEN.
         """
-        return len(self.participant_allowlist) == 0
+        return self.participant_access_level == ParticipantAccessLevel.OPEN
 
     def is_participant_allowed(self, identifier: str):
-        return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
+        """
+        Check if a participant is allowed to access this chatbot based on the access level configuration.
+        
+        - OPEN: Everyone is allowed
+        - ALLOW_LIST: Only participants in the allowlist (or team members) are allowed
+        - DENY_LIST: Everyone except those in the denylist is allowed (team members always allowed)
+        """
+        # Team members are always allowed
+        if self.team.members.filter(email=identifier).exists():
+            return True
+            
+        if self.participant_access_level == ParticipantAccessLevel.OPEN:
+            return True
+        elif self.participant_access_level == ParticipantAccessLevel.ALLOW_LIST:
+            return identifier in self.participant_allowlist
+        elif self.participant_access_level == ParticipantAccessLevel.DENY_LIST:
+            return identifier not in self.participant_denylist
+        
+        return False
 
     def _get_version_details(self) -> VersionDetails:
         """
@@ -1140,9 +1167,21 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             VersionField(group_name="General", name="description", raw_value=self.description),
             VersionField(group_name="General", name="seed_message", raw_value=self.seed_message),
             VersionField(
-                group_name="General",
+                group_name="Access Control",
+                name="access_level",
+                raw_value=self.participant_access_level,
+                to_display=lambda x: self.get_participant_access_level_display(),
+            ),
+            VersionField(
+                group_name="Access Control",
                 name="allowlist",
                 raw_value=self.participant_allowlist,
+                to_display=VersionFieldDisplayFormatters.format_array_field,
+            ),
+            VersionField(
+                group_name="Access Control",
+                name="denylist",
+                raw_value=self.participant_denylist,
                 to_display=VersionFieldDisplayFormatters.format_array_field,
             ),
             # Consent

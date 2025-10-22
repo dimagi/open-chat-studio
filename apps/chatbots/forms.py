@@ -45,6 +45,7 @@ class ChatbotSettingsForm(forms.ModelForm):
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     participant_allowlist = forms.CharField(widget=forms.HiddenInput(), required=False)
+    participant_denylist = forms.CharField(widget=forms.HiddenInput(), required=False)
 
     class Meta:
         model = Experiment
@@ -60,16 +61,23 @@ class ChatbotSettingsForm(forms.ModelForm):
             "conversational_consent_enabled",
             "pre_survey",
             "post_survey",
+            "participant_access_level",
             "participant_allowlist",
+            "participant_denylist",
             "seed_message",
             "file_uploads_enabled",
         ]
-        labels = {"participant_allowlist": "Participant allowlist"}
+        labels = {
+            "participant_access_level": "Access Control",
+            "participant_allowlist": "Allowed Participants",
+            "participant_denylist": "Denied Participants",
+        }
         help_texts = {
             "debug_mode_enabled": (
                 "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
                 "This is applicable only for router bots."
             ),
+            "participant_access_level": "Choose how to control access to this chatbot",
         }
 
     def __init__(self, request, *args, **kwargs):
@@ -97,6 +105,44 @@ class ChatbotSettingsForm(forms.ModelForm):
         for identifier in identifiers:
             cleaned_identifiers.append(identifier.replace(" ", ""))
         return cleaned_identifiers
+
+    def clean_participant_denylist(self):
+        cleaned_identifiers = []
+        identifiers = filter(None, self.cleaned_data["participant_denylist"].split(","))
+        for identifier in identifiers:
+            cleaned_identifiers.append(identifier.replace(" ", ""))
+        return cleaned_identifiers
+
+    def clean(self):
+        cleaned_data = super().clean()
+        
+        # Validate access control settings
+        access_level = cleaned_data.get("participant_access_level")
+        allowlist = cleaned_data.get("participant_allowlist", [])
+        denylist = cleaned_data.get("participant_denylist", [])
+        
+        errors = {}
+        
+        # Clear the appropriate list based on access level
+        if access_level == "open":
+            # Clear both lists when open
+            cleaned_data["participant_allowlist"] = []
+            cleaned_data["participant_denylist"] = []
+        elif access_level == "allow_list":
+            # Clear denylist when using allowlist
+            cleaned_data["participant_denylist"] = []
+            if not allowlist:
+                errors["participant_allowlist"] = "Allow list cannot be empty when Access Control is set to 'Allow List'"
+        elif access_level == "deny_list":
+            # Clear allowlist when using denylist
+            cleaned_data["participant_allowlist"] = []
+            if not denylist:
+                errors["participant_denylist"] = "Deny list cannot be empty when Access Control is set to 'Deny List'"
+        
+        if errors:
+            raise forms.ValidationError(errors)
+        
+        return cleaned_data
 
     @transaction.atomic()
     def save(self, commit=True):

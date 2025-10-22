@@ -79,24 +79,65 @@
         </div>
       </div>
 
-      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Allowlist">
+      <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Access Control">
       <div role="tabpanel" class="tab-content">
-        <h3 class="text-md font-bold">{% translate "Please note" %}</h3>
+        <h3 class="text-md font-bold">{% translate "Access Control" %}</h3>
         <p class="py-4 text-sm">
           {% blocktranslate %}
-            To limit the set of particiapants that can chat with this bot, simply add their identifiers in this list.
-            When the list is empty, the bot will accessible via its public link.
+            Control who can interact with this chatbot by selecting an access level and configuring the appropriate list.
           {% endblocktranslate %}
-          <div class="w-96 my-2" x-data="{allowlist: {{ form.initial.participant_allowlist|default:'[]' }} }">
+        </p>
+        
+        {% render_form_fields form "participant_access_level" %}
+        
+        <div x-data="{
+          accessLevel: '{{ form.initial.participant_access_level|default:'open' }}',
+          allowlist: {{ form.initial.participant_allowlist|default:'[]' }},
+          denylist: {{ form.initial.participant_denylist|default:'[]' }}
+        }" x-init="$watch('accessLevel', value => {
+          if (value === 'open') {
+            document.getElementById('allowlist-section').style.display = 'none';
+            document.getElementById('denylist-section').style.display = 'none';
+          } else if (value === 'allow_list') {
+            document.getElementById('allowlist-section').style.display = 'block';
+            document.getElementById('denylist-section').style.display = 'none';
+          } else if (value === 'deny_list') {
+            document.getElementById('allowlist-section').style.display = 'none';
+            document.getElementById('denylist-section').style.display = 'block';
+          }
+        })">
+          <div>
+            <select x-model="accessLevel" name="participant_access_level" id="id_participant_access_level" class="select select-bordered">
+              <option value="open">{% translate "Open Access (Public)" %}</option>
+              <option value="allow_list">{% translate "Allow List" %}</option>
+              <option value="deny_list">{% translate "Deny List" %}</option>
+            </select>
+          </div>
+
+          <div id="allowlist-section" class="w-96 my-4" style="display: {% if form.initial.participant_access_level == 'allow_list' %}block{% else %}none{% endif %};">
+            <h4 class="font-semibold mb-2">{% translate "Allowed Participants" %}</h4>
+            <p class="text-sm mb-2">{% translate "Only these participants (plus team members) can access the bot." %}</p>
             <input type="hidden" name="participant_allowlist" id="id_participant_allowlist" :value="allowlist">
-            <select x-model="allowlist" id="allowlist-multiselect" name="state[]" multiple placeholder="Add participant identifier..." autocomplete="off">
+            <select x-model="allowlist" id="allowlist-multiselect" multiple placeholder="Add participant identifier..." autocomplete="off">
               {% for identifier in team_participant_identifiers %}
                 <option value="{{ identifier }}" {% if identifier in form.initial.participant_allowlist %}selected{% endif %}>{{ identifier }}</option>
               {% endfor %}
             </select>
             {% include "generic/copy_chip.html" with copy_element_id="id_participant_allowlist" action_text="Copy participant list" extra_styles="btn-ghost" %}
           </div>
-        </p>
+
+          <div id="denylist-section" class="w-96 my-4" style="display: {% if form.initial.participant_access_level == 'deny_list' %}block{% else %}none{% endif %};">
+            <h4 class="font-semibold mb-2">{% translate "Denied Participants" %}</h4>
+            <p class="text-sm mb-2">{% translate "These participants are blocked from accessing the bot. Everyone else (including team members) can access it." %}</p>
+            <input type="hidden" name="participant_denylist" id="id_participant_denylist" :value="denylist">
+            <select x-model="denylist" id="denylist-multiselect" multiple placeholder="Add participant identifier..." autocomplete="off">
+              {% for identifier in team_participant_identifiers %}
+                <option value="{{ identifier }}" {% if identifier in form.initial.participant_denylist %}selected{% endif %}>{{ identifier }}</option>
+              {% endfor %}
+            </select>
+            {% include "generic/copy_chip.html" with copy_element_id="id_participant_denylist" action_text="Copy participant list" extra_styles="btn-ghost" %}
+          </div>
+        </div>
       </div>
 
       <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Advanced">
@@ -127,18 +168,35 @@
   {{ llm_options|json_script:"llmModelOptions" }}
   <script>
 
-    let element = document.getElementById('allowlist-multiselect');
-    new TomSelect(element, {
-      plugins: ["remove_button", "caret_position", "input_autogrow"],
-      maxItems: null,
-      create: true,
-      plugins: {
-        'checkbox_options': {
-          'checkedClassNames':   ['ts-checked'],
-          'uncheckedClassNames': ['ts-unchecked'],
-        }
-      },
-    });
+    let allowlistElement = document.getElementById('allowlist-multiselect');
+    if (allowlistElement) {
+      new TomSelect(allowlistElement, {
+        plugins: ["remove_button", "caret_position", "input_autogrow"],
+        maxItems: null,
+        create: true,
+        plugins: {
+          'checkbox_options': {
+            'checkedClassNames':   ['ts-checked'],
+            'uncheckedClassNames': ['ts-unchecked'],
+          }
+        },
+      });
+    }
+
+    let denylistElement = document.getElementById('denylist-multiselect');
+    if (denylistElement) {
+      new TomSelect(denylistElement, {
+        plugins: ["remove_button", "caret_position", "input_autogrow"],
+        maxItems: null,
+        create: true,
+        plugins: {
+          'checkbox_options': {
+            'checkedClassNames':   ['ts-checked'],
+            'uncheckedClassNames': ['ts-unchecked'],
+          }
+        },
+      });
+    }
 
 
     const voiceProviderTypes = JSON.parse(document.getElementById("voiceProviderTypes").textContent);

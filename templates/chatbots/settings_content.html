@@ -169,42 +169,88 @@
     </div>
   </div>
 
-  <div class="mb-6" id="allowlist-section">
-    <h4 class="text-md font-bold mb-2">Participant Allowlist</h4>
+  <div class="mb-6" id="access-control-section">
+    <h4 class="text-md font-bold mb-2">Access Control</h4>
     <div class="p-4 bg-base-200 rounded-md">
       {% if edit_mode %}
-        <div class="form-control">
-          <input type="hidden" name="participant_allowlist" id="id_participant_allowlist"
-                 value="{{ experiment.participant_allowlist|join:',' }}">
-          <select id="allowlist-multiselect" multiple placeholder="Add participant identifier..." autocomplete="off">
-            {% for identifier in team_participant_identifiers %}
-              <option value="{{ identifier }}" {% if identifier in experiment.participant_allowlist %}selected{% endif %}>{{ identifier }}</option>
-            {% endfor %}
-            {% for identifier in experiment.participant_allowlist %}
-              {% if identifier not in team_participant_identifiers %}
-                <option value="{{ identifier }}" selected>{{ identifier }}</option>
-              {% endif %}
-            {% endfor %}
-          </select>
-          {{ form.participant_allowlist.errors }}
-
-          <div class="text-xs text-gray-500 mt-1 mb-2">
-            Add identifiers to limit access to this bot. Phone numbers should be in E164 format e.g. +27123456789.
-            When the list is empty, the bot will be accessible via its public link.
+        <div x-data="{
+          accessLevel: '{{ experiment.participant_access_level|default:'open' }}',
+          allowlist: '{{ experiment.participant_allowlist|join:',' }}',
+          denylist: '{{ experiment.participant_denylist|join:',' }}'
+        }">
+          {% render_form_fields form "participant_access_level" %}
+          
+          <div x-show="accessLevel === 'allow_list'" class="mt-4">
+            <h5 class="font-semibold mb-2">Allowed Participants</h5>
+            <p class="text-sm mb-2">Only these participants (plus team members) can access the bot.</p>
+            <input type="hidden" name="participant_allowlist" id="id_participant_allowlist"
+                   value="{{ experiment.participant_allowlist|join:',' }}">
+            <select x-model="allowlist" id="allowlist-multiselect" multiple placeholder="Add participant identifier..." autocomplete="off">
+              {% for identifier in team_participant_identifiers %}
+                <option value="{{ identifier }}" {% if identifier in experiment.participant_allowlist %}selected{% endif %}>{{ identifier }}</option>
+              {% endfor %}
+              {% for identifier in experiment.participant_allowlist %}
+                {% if identifier not in team_participant_identifiers %}
+                  <option value="{{ identifier }}" selected>{{ identifier }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+            {{ form.participant_allowlist.errors }}
+            <div class="text-xs text-gray-500 mt-1 mb-2">
+              Add identifiers. Phone numbers should be in E164 format e.g. +27123456789.
+            </div>
+            {% include "generic/copy_chip.html" with copy_element_id="id_participant_allowlist" action_text="Copy participant list" extra_styles="btn-ghost" %}
           </div>
-          {% include "generic/copy_chip.html" with copy_element_id="id_participant_allowlist" action_text="Copy participant list" extra_styles="btn-ghost" %}
+
+          <div x-show="accessLevel === 'deny_list'" class="mt-4">
+            <h5 class="font-semibold mb-2">Denied Participants</h5>
+            <p class="text-sm mb-2">These participants are blocked from accessing the bot. Everyone else (including team members) can access it.</p>
+            <input type="hidden" name="participant_denylist" id="id_participant_denylist"
+                   value="{{ experiment.participant_denylist|join:',' }}">
+            <select x-model="denylist" id="denylist-multiselect" multiple placeholder="Add participant identifier..." autocomplete="off">
+              {% for identifier in team_participant_identifiers %}
+                <option value="{{ identifier }}" {% if identifier in experiment.participant_denylist %}selected{% endif %}>{{ identifier }}</option>
+              {% endfor %}
+              {% for identifier in experiment.participant_denylist %}
+                {% if identifier not in team_participant_identifiers %}
+                  <option value="{{ identifier }}" selected>{{ identifier }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+            {{ form.participant_denylist.errors }}
+            <div class="text-xs text-gray-500 mt-1 mb-2">
+              Add identifiers. Phone numbers should be in E164 format e.g. +27123456789.
+            </div>
+            {% include "generic/copy_chip.html" with copy_element_id="id_participant_denylist" action_text="Copy participant list" extra_styles="btn-ghost" %}
+          </div>
         </div>
       {% else %}
-        {% if experiment.participant_allowlist %}
-          <ul class="list-disc list-inside">
-            {% for participant in experiment.participant_allowlist %}
-              <li>{{ participant }}</li>
-            {% empty %}
-              <p>No participants in allowlist. Chatbot is publicly accessible.</p>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p>No allowlist configured. Chatbot is publicly accessible.</p>
+        <div>
+          <span class="font-semibold">Access Level:</span>
+          <span id="access_level-content">{{ experiment.get_participant_access_level_display }}</span>
+        </div>
+        {% if experiment.participant_access_level == 'allow_list' and experiment.participant_allowlist %}
+          <div class="mt-2">
+            <span class="font-semibold">Allowed Participants:</span>
+            <ul class="list-disc list-inside">
+              {% for participant in experiment.participant_allowlist %}
+                <li>{{ participant }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% elif experiment.participant_access_level == 'deny_list' and experiment.participant_denylist %}
+          <div class="mt-2">
+            <span class="font-semibold">Denied Participants:</span>
+            <ul class="list-disc list-inside">
+              {% for participant in experiment.participant_denylist %}
+                <li>{{ participant }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% elif experiment.participant_access_level == 'open' %}
+          <div class="mt-2">
+            <p class="text-sm">This chatbot is publicly accessible to everyone.</p>
+          </div>
         {% endif %}
       {% endif %}
     </div>
@@ -242,19 +288,30 @@
   {% block page_js %}
     <script>
       (function() {
-        if (window.tomSelectInstance) {
+        // Clean up any existing TomSelect instances
+        if (window.tomSelectAllowlistInstance) {
           try {
-            window.tomSelectInstance.destroy();
+            window.tomSelectAllowlistInstance.destroy();
           } catch (e) {
-        //first instance
+            // first instance
           }
-          window.tomSelectInstance = null;
+          window.tomSelectAllowlistInstance = null;
         }
-        let element = document.getElementById('allowlist-multiselect');
-        let hiddenInput = document.getElementById('id_participant_allowlist');
+        if (window.tomSelectDenylistInstance) {
+          try {
+            window.tomSelectDenylistInstance.destroy();
+          } catch (e) {
+            // first instance
+          }
+          window.tomSelectDenylistInstance = null;
+        }
 
-        if (element && hiddenInput) {
-          window.tomSelectInstance = new TomSelect(element, {
+        // Initialize allowlist multiselect
+        let allowlistElement = document.getElementById('allowlist-multiselect');
+        let allowlistHiddenInput = document.getElementById('id_participant_allowlist');
+
+        if (allowlistElement && allowlistHiddenInput) {
+          window.tomSelectAllowlistInstance = new TomSelect(allowlistElement, {
             maxItems: null,
             create: true,
             plugins: {
@@ -267,7 +324,30 @@
               }
             },
             onChange: function(values) {
-              hiddenInput.value = values.join(',');
+              allowlistHiddenInput.value = values.join(',');
+            }
+          });
+        }
+
+        // Initialize denylist multiselect
+        let denylistElement = document.getElementById('denylist-multiselect');
+        let denylistHiddenInput = document.getElementById('id_participant_denylist');
+
+        if (denylistElement && denylistHiddenInput) {
+          window.tomSelectDenylistInstance = new TomSelect(denylistElement, {
+            maxItems: null,
+            create: true,
+            plugins: {
+              'remove_button': {},
+              'caret_position': {},
+              'input_autogrow': {},
+              'checkbox_options': {
+                'checkedClassNames': ['ts-checked'],
+                'uncheckedClassNames': ['ts-unchecked'],
+              }
+            },
+            onChange: function(values) {
+              denylistHiddenInput.value = values.join(',');
             }
           });
         }
