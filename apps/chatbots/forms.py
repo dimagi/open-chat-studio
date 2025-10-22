@@ -58,6 +58,7 @@ class ChatbotSettingsForm(forms.ModelForm):
             "trace_provider",
             "debug_mode_enabled",
             "conversational_consent_enabled",
+            "consent_form",
             "pre_survey",
             "post_survey",
             "participant_allowlist",

@@ -611,7 +611,7 @@ def experiment_chat_session(
     }
     return TemplateResponse(
         request,
-        "experiments/experiment_chat.html",
+        "experiments/chat/web_chat.html",
         {"experiment": experiment, "session": session, "active_tab": active_tab, **version_specific_vars},
     )
 
@@ -1144,7 +1144,7 @@ def _experiment_chat_ui(request, embedded=False):
     }
     return TemplateResponse(
         request,
-        "experiments/experiment_chat.html",
+        "experiments/chat/web_chat.html",
         {
             "experiment": request.experiment,
             "session": request.experiment_session,
@@ -1259,7 +1259,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 
     return TemplateResponse(
         request,
-        "experiments/components/experiment_chat.html",
+        "experiments/components/session_messages.html",
         context,
     )
 
@@ -1378,6 +1378,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
         {
             "experiment": request.experiment,
             "experiment_session": request.experiment_session,
+            "messages": ChatMessage.objects.filter(chat_id=request.experiment_session.chat_id).all(),
             "active_tab": "experiments",
             "form": form,
             "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],

@@ -153,32 +153,34 @@
     </div>
   </form>
 
-<!-- Translation Modal -->
-<dialog id="translateModal" class="modal">
-    <div class="modal-box" x-data="{createNew: true}">
-        <h3 class="font-bold text-lg"></h3>
-        <p class="py-4">
-        This will translate all messages in this session. Select the target language:
-        </p>
-        {% render_form_fields translate_form_all %}
-        <p class="pb-4">This action may take a few moments to complete.</p>
-        <div class="modal-action">
-        <button
-            type="button"
-            data-action="translate-all-messages"
-            class="btn btn-primary"
-            hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
-            hx-vals='{"translate_all": "true"}'
-            hx-include="#control-panel, #translation-provider-all, [name='target_language'], #translation-provider-model-all"
-            hx-target="#messages-container"
-            hx-indicator=".translation-loading-spinner"
-            onclick="translateModal.close()"
-        >Translate All Messages
-        </button>
-        <button class="btn" type="button" onclick="translateModal.close()">Cancel</button>
-        </div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-        <button>close</button>
-    </form>
-</dialog>
+{% if not hide_translation %}
+  <!-- Translation Modal -->
+  <dialog id="translateModal" class="modal">
+      <div class="modal-box" x-data="{createNew: true}">
+          <h3 class="font-bold text-lg"></h3>
+          <p class="py-4">
+          This will translate all messages in this session. Select the target language:
+          </p>
+          {% render_form_fields translate_form_all %}
+          <p class="pb-4">This action may take a few moments to complete.</p>
+          <div class="modal-action">
+          <button
+              type="button"
+              data-action="translate-all-messages"
+              class="btn btn-primary"
+              hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
+              hx-vals='{"translate_all": "true"}'
+              hx-include="#control-panel, #translation-provider-all, [name='target_language'], #translation-provider-model-all"
+              hx-target="#messages-container"
+              hx-indicator=".translation-loading-spinner"
+              onclick="translateModal.close()"
+          >Translate All Messages
+          </button>
+          <button class="btn" type="button" onclick="translateModal.close()">Cancel</button>
+          </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+          <button>close</button>
+      </form>
+  </dialog>
+{% endif %}
