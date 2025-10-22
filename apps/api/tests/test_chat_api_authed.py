@@ -79,7 +79,9 @@ def test_start_chat_session_with_session_state(authed_user, authed_client, exper
 def test_start_chat_session_requires_auth_when_not_public(
     authed_user, authed_client, experiment, participant_remote_id, status_code
 ):
+    from apps.experiments.const import ParticipantAccessLevel
     url = reverse("api:chat:start-session")
+    experiment.participant_access_level = ParticipantAccessLevel.ALLOW_LIST
     experiment.participant_allowlist = [authed_user.email]
     experiment.save()
     data = {"chatbot_id": experiment.public_id}

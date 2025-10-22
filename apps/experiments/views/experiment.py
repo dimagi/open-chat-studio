@@ -205,6 +205,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         disable_version_button = False
         if self.object:
             team_participant_identifiers.extend(self.object.participant_allowlist)
+            team_participant_identifiers.extend(self.object.participant_denylist)
             team_participant_identifiers = set(team_participant_identifiers)
             disable_version_button = self.object.create_version_task_id
 

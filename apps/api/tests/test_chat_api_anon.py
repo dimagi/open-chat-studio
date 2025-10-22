@@ -128,7 +128,9 @@ def test_session_poll_with_messages(api_client, session):
 
 @pytest.mark.django_db()
 def test_start_chat_session_requires_auth_when_not_public(team_with_users, api_client, experiment):
+    from apps.experiments.const import ParticipantAccessLevel
     url = reverse("api:chat:start-session")
+    experiment.participant_access_level = ParticipantAccessLevel.ALLOW_LIST
     experiment.participant_allowlist = ["a", "b"]
     experiment.save()
     data = {"chatbot_id": experiment.public_id}
