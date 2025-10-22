@@ -1,6 +1,5 @@
-import json
-
 from django.contrib.messages import get_messages
+from django_htmx.http import trigger_client_event
 
 
 class HtmxMessageMiddleware:
@@ -10,11 +9,13 @@ class HtmxMessageMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        request.is_htmx = request.headers.get("HX-Request") == "true"
         response = self.get_response(request)
-        if request.is_htmx:
-            response.headers["HX-Trigger"] = json.dumps(
-                {"messages": [{"message": message.message, "tags": message.tags} for message in get_messages(request)]}
+        messages = get_messages(request)
+        if request.htmx and messages:
+            trigger_client_event(
+                response,
+                "djangoMessages",
+                {"messages": [{"message": message.message, "tags": message.tags} for message in messages]},
             )
 
         return response

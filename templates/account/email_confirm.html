@@ -1,6 +1,5 @@
 {% extends "account/base.html" %}
-{% load i18n %}
-{% load account %}
+{% load account i18n %}
 {% block content %}
   {% if confirmation %}
     {% user_display confirmation.email_address.user as user_display %}

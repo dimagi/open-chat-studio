@@ -61,6 +61,7 @@ THIRD_PARTY_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.microsoft",
+    "django_htmx",
     "django_browser_reload",
     "django_otp",
     "django_otp.plugins.otp_totp",
@@ -117,6 +118,7 @@ PROJECT_APPS = [
     "apps.evaluations",
     "apps.trace",
     "apps.mcp_integrations",
+    "apps.filters",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -146,6 +148,7 @@ MIDDLEWARE = list(
             "waffle.middleware.WaffleMiddleware",
             "field_audit.middleware.FieldAuditMiddleware",
             "apps.audit.middleware.AuditTransactionMiddleware",
+            "django_htmx.middleware.HtmxMiddleware",
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.generics.middleware.OriginDetectionMiddleware",
@@ -589,10 +592,7 @@ LOGGING = {
             "handlers": ["console"],
             "level": "WARN",
         },
-        "django": {
-            "handlers": ["console"],
-            "level": env("DJANGO_LOG_LEVEL", default="INFO"),
-        },
+        "django": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
         "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},

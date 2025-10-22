@@ -13,6 +13,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
+from django_htmx.http import HttpResponseClientRedirect
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -264,7 +265,7 @@ class BaseChannelDialogView(View):
                 ),  # override extra form to get 'update' rendering
             }
             return self.render_to_response({**self.get_context_data(form=form), **additional_context})
-        return HttpResponse(headers={"hx-redirect": self.get_success_url()})
+        return HttpResponseClientRedirect(self.get_success_url())
 
 
 class ChannelEditDialogView(BaseChannelDialogView, PermissionRequiredMixin, UpdateView):

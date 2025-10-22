@@ -1,7 +1,5 @@
 {% extends "web/base.html" %}
-{% load i18n %}
-{% load static %}
-{% load form_tags %}
+{% load form_tags i18n static %}
 
 {% block body %}
   <div class="flex justify-center my-8 ">
@@ -9,24 +7,24 @@
       <div>
         {% if process == "connect" %}
           <h2 class="mt-6 text-2xl font-bold text-gray-900 dark:text-gray-200">
-            {% blocktranslate with provider.name as provider %}Connect {{ provider }}{% endblocktranslate %}
+            {% blocktranslate with provider=provider.name %}Connect {{ provider }}{% endblocktranslate %}
           </h2>
 
-          <p>{% blocktranslate with provider.name as provider %}You are about to connect a new third party account from
+          <p>{% blocktranslate with provider=provider.name %}You are about to connect a new third party account from
             {{ provider }}.{% endblocktranslate %}</p>
         {% elif process == "signup" %}
           <h2 class="mt-6 text-2xl font-bold text-gray-900 dark:text-gray-200">
-            {% blocktranslate with provider.name as provider %}Sign Up with {{ provider }}{% endblocktranslate %}
+            {% blocktranslate with provider=provider.name %}Sign Up with {{ provider }}{% endblocktranslate %}
           </h2>
 
-          <p>{% blocktranslate with provider.name as provider %}You are about to sign up using a third party account
+          <p>{% blocktranslate with provider=provider.name %}You are about to sign up using a third party account
             from {{ provider }}.{% endblocktranslate %}</p>
         {% else %}
           <h2 class="mt-6 text-2xl font-bold text-gray-900 dark:text-gray-200">
-            {% blocktranslate with provider.name as provider %}Sign In via {{ provider }}{% endblocktranslate %}
+            {% blocktranslate with provider=provider.name %}Sign In via {{ provider }}{% endblocktranslate %}
           </h2>
 
-          <p>{% blocktranslate with provider.name as provider %}You are about to sign in using a third party account
+          <p>{% blocktranslate with provider=provider.name %}You are about to sign in using a third party account
             from {{ provider }}.{% endblocktranslate %}</p>
         {% endif %}
 

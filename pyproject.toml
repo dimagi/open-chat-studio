@@ -79,6 +79,7 @@ dependencies = [
     "langchain-mcp-adapters",
     "atlassian-python-api>=4.0.7",
     "audioop-lts>=0.2.2",
+    "django-htmx>=1.26.0",
     "django-browser-reload>=1.21.0",
     "django-watchfiles>=1.4.0",
 ]
@@ -163,4 +164,4 @@ profile="django"
 format_attribute_template_tags=true
 use_gitignore=true
 indent=2
-ignore="H030,H031,H021,H006,H013,H014"
+ignore="H030,H031,H021,H006,H013,H014,T003"

@@ -1,8 +1,4 @@
-{% load json_tags %}
-{% load chat_tags %}
-{% load form_tags %}
-{% load waffle_tags %}
-{% load pagination_tags %}
+{% load chat_tags form_tags json_tags pagination_tags waffle_tags %}
 <div id="table-top" class="max-w-5xl mt-4 border rounded-2xl" x-data="{selectedDataset: null}">
   {% include "experiments/components/experiment_session_messages_control_panel.html" %}
 

@@ -1,8 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load json_tags %}
-{% load form_tags %}
-{% load static %}
-{% load waffle_tags %}
+{% load form_tags json_tags static waffle_tags %}
 
 {% block breadcrumbs %}
   {% if request.user.is_authenticated %}
@@ -15,6 +12,7 @@
     </div>
   {% endif %}
 {% endblock breadcrumbs %}
+
 {% block app %}
   <div class="app-card">
     <div class="flex">

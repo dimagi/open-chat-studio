@@ -2,6 +2,11 @@ exclude: ^static/.*|/migrations/.*|\.min\.js$|\.min\.css$|\.css\.map$|\.min\.js$
 default_language_version:
   python: python3.13
 repos:
+  - repo: https://github.com/adamchainz/djade-pre-commit
+    rev: '1.6.0'
+    hooks:
+      - id: djade
+        args: [--target-version, "5.1"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.7
     hooks:

@@ -12,6 +12,7 @@ from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
+from apps.filters.models import FilterSet
 from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -40,7 +41,12 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
     def get_context_data(self, team_slug: str, **kwargs):
         table_url = reverse("participants:participant_table", kwargs={"team_slug": team_slug})
         filter_context = get_filter_context_data(
-            self.request.team, ParticipantFilter.columns(self.request.team), "created_on", table_url, "data-table"
+            self.request.team,
+            columns=ParticipantFilter.columns(self.request.team),
+            date_range_column="created_on",
+            table_url=table_url,
+            table_container_id="data-table",
+            table_type=FilterSet.TableType.PARTICIPANTS,
         )
 
         return {

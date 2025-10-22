@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, render, resolve_url
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
+from django_htmx.http import reswap
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
@@ -93,7 +94,7 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
                 "assistants": related_assistants,
             },
         )
-        return HttpResponse(response, headers={"HX-Reswap": "none"}, status=400)
+        return reswap(HttpResponse(response, status=400), "none")
     service_config.delete()
     return HttpResponse()
 
