@@ -591,10 +591,7 @@ LOGGING = {
             "handlers": ["console"],
             "level": "WARN",
         },
-        "django": {
-            "handlers": ["console"],
-            "level": env("DJANGO_LOG_LEVEL", default="INFO"),
-        },
+        "django": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
         "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
