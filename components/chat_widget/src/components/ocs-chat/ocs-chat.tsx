@@ -864,6 +864,22 @@ export class OcsChat {
   private handleWindowResize = (): void => {
     this.positionInitialized = false;
     this.initializePosition();
+
+    // Revalidate button position after resize to keep it within viewport bounds
+    if (this.isButtonDraggable()) {
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const buttonWidth = this.buttonRef?.offsetWidth || 60;
+      const buttonHeight = this.buttonRef?.offsetHeight || 60;
+      const minPadding = 10;
+
+      this.buttonPosition = {
+        x: Math.max(minPadding, Math.min(this.buttonPosition.x, windowWidth - buttonWidth - minPadding)),
+        y: Math.max(minPadding, Math.min(this.buttonPosition.y, windowHeight - buttonHeight - minPadding))
+      };
+
+      this.updateHostPosition();
+    }
   };
 
   // Button positioning and drag handlers
