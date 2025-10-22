@@ -1415,7 +1415,7 @@ export class OcsChat {
                         <div class="typing-progress"></div>
                       </div>
                       <div class="typing-text">
-                        <span>{this.translationManager.get('status.typing')}</span>
+                        <span>{this.translationManager.get('status.typing') || this.typingIndicatorText}</span>
                         <span class="typing-dots loading"></span>
                       </div>
                     </div>
