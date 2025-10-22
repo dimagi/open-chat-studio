@@ -35,6 +35,7 @@ from apps.experiments.filters import (
     get_filter_context_data,
 )
 from apps.experiments.models import ExperimentSession
+from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -156,13 +157,15 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 
     def _get_filter_context_data(self):
         table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
-        return get_filter_context_data(
+        context = get_filter_context_data(
             self.request.team,
-            ExperimentSessionFilter.columns(self.request.team),
-            "last_message",
-            table_url,
-            "sessions-table",
+            columns=ExperimentSessionFilter.columns(self.request.team),
+            date_range_column="last_message",
+            table_url=table_url,
+            table_container_id="sessions-table",
+            table_type=FilterSet.TableType.DATASETS,
         )
+        return context
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

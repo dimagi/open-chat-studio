@@ -8,6 +8,7 @@ from apps.experiments.filters import (
     get_filter_context_data,
 )
 from apps.experiments.models import Experiment
+from apps.filters.models import FilterSet
 from apps.web.dynamic_filters.base import TYPE_CHOICE, ChoiceColumnFilter, ColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
@@ -20,7 +21,15 @@ from apps.web.dynamic_filters.column_filters import (
 
 def get_trace_filter_context_data(team):
     table_url = reverse("trace:table", args=[team.slug])
-    return get_filter_context_data(team, TraceFilter.columns(team), "timestamp", table_url, "data-table")
+    context = get_filter_context_data(
+        team,
+        columns=TraceFilter.columns(team),
+        date_range_column="timestamp",
+        table_url=table_url,
+        table_container_id="data-table",
+        table_type=FilterSet.TableType.TRACES,
+    )
+    return context
 
 
 class SpanNameFilter(ChoiceColumnFilter):

@@ -36,6 +36,7 @@ from apps.experiments.views.experiment import (
     base_single_experiment_view,
     start_session_public,
 )
+from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
@@ -587,6 +588,7 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             date_range_column="last_message",
             table_url=table_url,
             table_container_id="data-table",
+            table_type=FilterSet.TableType.ALL_SESSIONS,
         )
 
         return {
