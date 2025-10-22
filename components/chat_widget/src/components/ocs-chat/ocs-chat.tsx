@@ -173,6 +173,11 @@ export class OcsChat {
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
+  private buttonPosition: { x: number; y: number } = { x: 30, y: 30 };
+  private buttonHorizontalSide: 'left' | 'right' = 'right';
+  private buttonVerticalSide: 'top' | 'bottom' = 'bottom';
+  @State() isButtonDragging: boolean = false;
+  @State() buttonWasDragged: boolean = false;
 
   translationManager: TranslationManager = new TranslationManager();
 
@@ -188,6 +193,10 @@ export class OcsChat {
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
   private fileInputRef?: HTMLInputElement;
+  private buttonRef?: HTMLButtonElement;
+  private buttonDragOffset: { x: number; y: number } = { x: 0, y: 0 };
+  private rafId: number | null = null;
+  private buttonListenersAttached: boolean = false;
   private chatWindowHeight: number = 600;
   private chatWindowWidth: number = 450;
   private chatWindowFullscreenWidth: number = 1024;
@@ -223,6 +232,10 @@ export class OcsChat {
     this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
+
+    // Initialize button position from computed styles
+    this.initializeButtonPosition();
+
     if (this.visible) {
       this.initializePosition();
     }
@@ -240,6 +253,7 @@ export class OcsChat {
   disconnectedCallback() {
     this.cleanup();
     this.removeEventListeners();
+    this.removeButtonEventListeners();
     window.removeEventListener('resize', this.handleWindowResize);
   }
 
@@ -555,6 +569,12 @@ export class OcsChat {
    */
   @Watch('visible')
   async visibilityHandler(visible: boolean) {
+    if (this.isButtonDragging) {
+      this.isButtonDragging = false;
+      this.buttonWasDragged = false;
+      this.removeButtonEventListeners();
+    }
+
     if (visible) {
       this.initializePosition();
     }
@@ -852,7 +872,272 @@ export class OcsChat {
   private handleWindowResize = (): void => {
     this.positionInitialized = false;
     this.initializePosition();
+
+    // Revalidate button position after resize to keep it within viewport bounds
+    if (this.isButtonDraggable()) {
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const buttonWidth = this.buttonRef?.offsetWidth || 60;
+      const buttonHeight = this.buttonRef?.offsetHeight || 60;
+      const minPadding = 10;
+
+      this.buttonPosition = {
+        x: Math.max(minPadding, Math.min(this.buttonPosition.x, windowWidth - buttonWidth - minPadding)),
+        y: Math.max(minPadding, Math.min(this.buttonPosition.y, windowHeight - buttonHeight - minPadding))
+      };
+
+      this.updateHostPosition();
+    }
   };
+
+  // Button positioning and drag handlers
+  private initializeButtonPosition(): void {
+    const computedStyle = getComputedStyle(this.host);
+    const position = computedStyle.getPropertyValue('position');
+
+    // Only enable dragging if the host element is positioned fixed
+    if (position !== 'fixed') {
+      return;
+    }
+
+    const rect = this.host.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    const left = computedStyle.getPropertyValue('left');
+    const right = computedStyle.getPropertyValue('right');
+    const top = computedStyle.getPropertyValue('top');
+    const bottom = computedStyle.getPropertyValue('bottom');
+
+    const hasLeft = !this.isAutoPosition(left);
+    const hasTop = !this.isAutoPosition(top);
+
+    this.buttonHorizontalSide = hasLeft ? 'left' : 'right';
+    this.buttonVerticalSide = hasTop ? 'top' : 'bottom';
+
+    const resolvedRight = this.getNumericPositionValue(right, Math.max(0, windowWidth - rect.right));
+    const resolvedLeft = this.getNumericPositionValue(left, Math.max(0, rect.left));
+    const resolvedBottom = this.getNumericPositionValue(bottom, Math.max(0, windowHeight - rect.bottom));
+    const resolvedTop = this.getNumericPositionValue(top, Math.max(0, rect.top));
+
+    const horizontalValue = this.buttonHorizontalSide === 'left' ? resolvedLeft : resolvedRight;
+    const verticalValue = this.buttonVerticalSide === 'top' ? resolvedTop : resolvedBottom;
+
+    this.buttonPosition = {
+      x: horizontalValue,
+      y: verticalValue
+    };
+
+    // Apply the position to the host
+    this.updateHostPosition();
+  }
+
+  private updateHostPosition(): void {
+    this.host.style.position = 'fixed';
+    if (this.buttonHorizontalSide === 'left') {
+      this.host.style.left = `${this.buttonPosition.x}px`;
+      this.host.style.right = 'auto';
+    } else {
+      this.host.style.right = `${this.buttonPosition.x}px`;
+      this.host.style.left = 'auto';
+    }
+
+    if (this.buttonVerticalSide === 'top') {
+      this.host.style.top = `${this.buttonPosition.y}px`;
+      this.host.style.bottom = 'auto';
+    } else {
+      this.host.style.bottom = `${this.buttonPosition.y}px`;
+      this.host.style.top = 'auto';
+    }
+  }
+
+  private isButtonDraggable(): boolean {
+    const computedStyle = getComputedStyle(this.host);
+    return computedStyle.getPropertyValue('position') === 'fixed';
+  }
+
+  private handleButtonMouseDown = (event: MouseEvent): void => {
+    if (!this.buttonRef || !this.isButtonDraggable()) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.isButtonDragging = true;
+    this.buttonWasDragged = false; // Reset the drag flag
+    const rect = this.host.getBoundingClientRect();
+    this.buttonDragOffset = {
+      x: pointer.clientX - rect.left,
+      y: pointer.clientY - rect.top
+    };
+
+    this.addButtonEventListeners();
+  };
+
+  private handleButtonTouchStart = (event: TouchEvent): void => {
+    if (!this.buttonRef || !this.isButtonDraggable()) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.isButtonDragging = true;
+    this.buttonWasDragged = false; // Reset the drag flag
+    const rect = this.host.getBoundingClientRect();
+    this.buttonDragOffset = {
+      x: pointer.clientX - rect.left,
+      y: pointer.clientY - rect.top
+    };
+
+    this.addButtonEventListeners();
+  };
+
+  private handleButtonMouseMove = (event: MouseEvent): void => {
+    if (!this.isButtonDragging) return;
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.updateButtonPosition(pointer);
+  };
+
+  private handleButtonTouchMove = (event: TouchEvent): void => {
+    if (!this.isButtonDragging) return;
+
+    event.preventDefault();
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.updateButtonPosition(pointer);
+  };
+
+  private updateButtonPosition(pointer: PointerEvent): void {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    const buttonWidth = this.buttonRef?.offsetWidth || 60;
+    const buttonHeight = this.buttonRef?.offsetHeight || 60;
+    const minPadding = 10;
+
+    const candidateLeft = pointer.clientX - this.buttonDragOffset.x;
+    const candidateTop = pointer.clientY - this.buttonDragOffset.y;
+
+    const minLeft = minPadding;
+    const maxLeft = windowWidth - buttonWidth - minPadding;
+    const minTop = minPadding;
+    const maxTop = windowHeight - buttonHeight - minPadding;
+
+    const constrainedLeft = Math.max(minLeft, Math.min(candidateLeft, maxLeft));
+    const constrainedTop = Math.max(minTop, Math.min(candidateTop, maxTop));
+
+    const newHorizontalValue = this.buttonHorizontalSide === 'left'
+      ? constrainedLeft
+      : Math.max(minPadding, windowWidth - (constrainedLeft + buttonWidth));
+    const newVerticalValue = this.buttonVerticalSide === 'top'
+      ? constrainedTop
+      : Math.max(minPadding, windowHeight - (constrainedTop + buttonHeight));
+
+    if (newHorizontalValue !== this.buttonPosition.x || newVerticalValue !== this.buttonPosition.y) {
+      this.buttonWasDragged = true;
+      this.buttonPosition = { x: newHorizontalValue, y: newVerticalValue };
+
+      if (this.rafId === null) {
+        this.rafId = requestAnimationFrame(() => {
+          this.updateHostPosition();
+          this.rafId = null;
+        });
+      }
+    }
+  }
+
+  private handleButtonMouseUp = (): void => {
+    if (this.isButtonDragging) {
+      this.isButtonDragging = false;
+      this.removeButtonEventListeners();
+    }
+  };
+
+  private handleButtonTouchEnd = (): void => {
+    if (this.isButtonDragging) {
+      this.isButtonDragging = false;
+      this.removeButtonEventListeners();
+    }
+  };
+
+  private handleButtonClick = (): void => {
+    // Only toggle visibility if the button wasn't dragged
+    if (!this.buttonWasDragged) {
+      this.toggleWindowVisibility();
+    }
+    // Reset the flag after handling the click
+    this.buttonWasDragged = false;
+  };
+
+  private addButtonEventListeners(): void {
+    if (this.buttonListenersAttached) {
+      return;
+    }
+
+    document.addEventListener('mousemove', this.handleButtonMouseMove);
+    document.addEventListener('mouseup', this.handleButtonMouseUp);
+    document.addEventListener('touchmove', this.handleButtonTouchMove, { passive: false });
+    document.addEventListener('touchend', this.handleButtonTouchEnd);
+    this.buttonListenersAttached = true;
+  }
+
+  private removeButtonEventListeners(): void {
+    if (!this.buttonListenersAttached) {
+      return;
+    }
+
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+
+    document.removeEventListener('mousemove', this.handleButtonMouseMove);
+    document.removeEventListener('mouseup', this.handleButtonMouseUp);
+    document.removeEventListener('touchmove', this.handleButtonTouchMove);
+    document.removeEventListener('touchend', this.handleButtonTouchEnd);
+    this.buttonListenersAttached = false;
+  }
+
+  private isAutoPosition(value: string): boolean {
+    const trimmed = value.trim();
+    return trimmed === '' || trimmed === 'auto';
+  }
+
+  private parsePixelValue(value: string): number | null {
+    const trimmed = value.trim();
+    if (trimmed === '' || trimmed === 'auto') {
+      return null;
+    }
+
+    if (trimmed.endsWith('px')) {
+      const parsed = parseFloat(trimmed);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+
+    return null;
+  }
+
+  private getNumericPositionValue(value: string, fallback: number): number {
+    const parsed = this.parsePixelValue(value);
+    if (parsed !== null) {
+      return parsed;
+    }
+    return fallback;
+  }
 
   private getDefaultIconUrl(): string {
     return `${this.apiBaseUrl}/static/images/favicons/favicon.svg`;
@@ -887,27 +1172,56 @@ export class OcsChat {
     const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
     const finalButtonText = translatedButtonText || this.buttonText;
+
+    // Only show drag cursor if button is draggable
+    const isDraggable = this.isButtonDraggable();
+    const buttonStyle = isDraggable ? {
+      cursor: this.isButtonDragging ? 'grabbing' : 'grab',
+    } : {};
+
     if (hasText) {
       return (
         <button
+          ref={(el) => this.buttonRef = el}
           class={buttonClasses}
-          onClick={() => this.toggleWindowVisibility()}
+          style={buttonStyle}
+          onClick={() => this.handleButtonClick()}
+          onMouseDown={(e) => this.handleButtonMouseDown(e)}
+          onTouchStart={(e) => this.handleButtonTouchStart(e)}
           aria-label={`Open chat - ${finalButtonText}`}
+          aria-grabbed={this.isButtonDragging}
+          aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
           title={finalButtonText}
         >
           <img src={iconSrc} alt="" />
           <span>{finalButtonText}</span>
+          {isDraggable && (
+            <span id="chat-button-drag-hint" style={{ display: 'none' }}>
+              Draggable. Use mouse or touch to reposition.
+            </span>
+          )}
         </button>
       );
     } else {
       return (
         <button
+          ref={(el) => this.buttonRef = el}
           class={buttonClasses}
-          onClick={() => this.toggleWindowVisibility()}
-          aria-label="Open chat"
-          title="Open chat"
+          style={buttonStyle}
+          onClick={() => this.handleButtonClick()}
+          onMouseDown={(e) => this.handleButtonMouseDown(e)}
+          onTouchStart={(e) => this.handleButtonTouchStart(e)}
+          aria-label={finalButtonText ? `Open chat - ${finalButtonText}` : 'Open chat'}
+          aria-grabbed={this.isButtonDragging}
+          aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
+          title={finalButtonText ? finalButtonText : 'Open chat'}
         >
           <img src={iconSrc} alt="Chat" />
+          {isDraggable && (
+            <span id="chat-button-drag-hint" style={{ display: 'none' }}>
+              Draggable. Use mouse or touch to reposition.
+            </span>
+          )}
         </button>
       );
     }
