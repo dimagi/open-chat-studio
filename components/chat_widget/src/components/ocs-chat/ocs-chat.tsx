@@ -567,6 +567,12 @@ export class OcsChat {
    */
   @Watch('visible')
   async visibilityHandler(visible: boolean) {
+    if (this.isButtonDragging) {
+      this.isButtonDragging = false;
+      this.buttonWasDragged = false;
+      this.removeButtonEventListeners();
+    }
+
     if (visible) {
       this.initializePosition();
     }
