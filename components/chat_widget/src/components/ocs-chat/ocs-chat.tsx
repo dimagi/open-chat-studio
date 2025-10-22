@@ -173,6 +173,9 @@ export class OcsChat {
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
+  @State() buttonPosition: { x: number; y: number } = { x: 30, y: 30 };
+  @State() isButtonDragging: boolean = false;
+  @State() buttonWasDragged: boolean = false;
 
   translationManager: TranslationManager = new TranslationManager();
 
@@ -188,6 +191,8 @@ export class OcsChat {
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
   private fileInputRef?: HTMLInputElement;
+  private buttonRef?: HTMLButtonElement;
+  private buttonDragOffset: { x: number; y: number } = { x: 0, y: 0 };
   private chatWindowHeight: number = 600;
   private chatWindowWidth: number = 450;
   private chatWindowFullscreenWidth: number = 1024;
@@ -223,6 +228,10 @@ export class OcsChat {
     this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
+
+    // Initialize button position from computed styles
+    this.initializeButtonPosition();
+
     if (this.visible) {
       this.initializePosition();
     }
@@ -240,6 +249,7 @@ export class OcsChat {
   disconnectedCallback() {
     this.cleanup();
     this.removeEventListeners();
+    this.removeButtonEventListeners();
     window.removeEventListener('resize', this.handleWindowResize);
   }
 
@@ -854,6 +864,169 @@ export class OcsChat {
     this.initializePosition();
   };
 
+  // Button positioning and drag handlers
+  private initializeButtonPosition(): void {
+    const computedStyle = getComputedStyle(this.host);
+    const position = computedStyle.getPropertyValue('position');
+
+    // Only enable dragging if the host element is positioned fixed
+    if (position !== 'fixed') {
+      return;
+    }
+
+    // Get the initial right and bottom values
+    const right = computedStyle.getPropertyValue('right');
+    const bottom = computedStyle.getPropertyValue('bottom');
+
+    // Parse pixel values (e.g., "30px" -> 30)
+    const rightValue = parseFloat(right) || 30;
+    const bottomValue = parseFloat(bottom) || 30;
+
+    this.buttonPosition = {
+      x: rightValue,
+      y: bottomValue
+    };
+
+    // Apply the position to the host
+    this.updateHostPosition();
+  }
+
+  private updateHostPosition(): void {
+    this.host.style.position = 'fixed';
+    this.host.style.right = `${this.buttonPosition.x}px`;
+    this.host.style.bottom = `${this.buttonPosition.y}px`;
+  }
+
+  private isButtonDraggable(): boolean {
+    const computedStyle = getComputedStyle(this.host);
+    return computedStyle.getPropertyValue('position') === 'fixed';
+  }
+
+  private handleButtonMouseDown = (event: MouseEvent): void => {
+    if (!this.buttonRef || !this.isButtonDraggable()) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.isButtonDragging = true;
+    this.buttonWasDragged = false; // Reset the drag flag
+    this.buttonDragOffset = {
+      x: pointer.clientX - (window.innerWidth - this.buttonPosition.x),
+      y: pointer.clientY - (window.innerHeight - this.buttonPosition.y)
+    };
+
+    this.addButtonEventListeners();
+  };
+
+  private handleButtonTouchStart = (event: TouchEvent): void => {
+    if (!this.buttonRef || !this.isButtonDraggable()) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.isButtonDragging = true;
+    this.buttonWasDragged = false; // Reset the drag flag
+    this.buttonDragOffset = {
+      x: pointer.clientX - (window.innerWidth - this.buttonPosition.x),
+      y: pointer.clientY - (window.innerHeight - this.buttonPosition.y)
+    };
+
+    this.addButtonEventListeners();
+  };
+
+  private handleButtonMouseMove = (event: MouseEvent): void => {
+    if (!this.isButtonDragging) return;
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.updateButtonPosition(pointer);
+  };
+
+  private handleButtonTouchMove = (event: TouchEvent): void => {
+    if (!this.isButtonDragging) return;
+
+    event.preventDefault();
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.updateButtonPosition(pointer);
+  };
+
+  private updateButtonPosition(pointer: PointerEvent): void {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    // Calculate new position from bottom-right
+    const newX = windowWidth - pointer.clientX + this.buttonDragOffset.x;
+    const newY = windowHeight - pointer.clientY + this.buttonDragOffset.y;
+
+    // Constrain button to window (with some padding)
+    const buttonWidth = this.buttonRef?.offsetWidth || 60;
+    const buttonHeight = this.buttonRef?.offsetHeight || 60;
+    const minPadding = 10;
+
+    const constrainedX = Math.max(minPadding, Math.min(newX, windowWidth - buttonWidth - minPadding));
+    const constrainedY = Math.max(minPadding, Math.min(newY, windowHeight - buttonHeight - minPadding));
+
+    // Check if position actually changed (indicating a drag)
+    if (constrainedX !== this.buttonPosition.x || constrainedY !== this.buttonPosition.y) {
+      this.buttonWasDragged = true;
+    }
+
+    this.buttonPosition = {
+      x: constrainedX,
+      y: constrainedY
+    };
+
+    // Update the host element position
+    this.updateHostPosition();
+  }
+
+  private handleButtonMouseUp = (): void => {
+    if (this.isButtonDragging) {
+      this.isButtonDragging = false;
+      this.removeButtonEventListeners();
+    }
+  };
+
+  private handleButtonTouchEnd = (): void => {
+    if (this.isButtonDragging) {
+      this.isButtonDragging = false;
+      this.removeButtonEventListeners();
+    }
+  };
+
+  private handleButtonClick = (): void => {
+    // Only toggle visibility if the button wasn't dragged
+    if (!this.buttonWasDragged) {
+      this.toggleWindowVisibility();
+    }
+    // Reset the flag after handling the click
+    this.buttonWasDragged = false;
+  };
+
+  private addButtonEventListeners(): void {
+    document.addEventListener('mousemove', this.handleButtonMouseMove);
+    document.addEventListener('mouseup', this.handleButtonMouseUp);
+    document.addEventListener('touchmove', this.handleButtonTouchMove, { passive: false });
+    document.addEventListener('touchend', this.handleButtonTouchEnd);
+  }
+
+  private removeButtonEventListeners(): void {
+    document.removeEventListener('mousemove', this.handleButtonMouseMove);
+    document.removeEventListener('mouseup', this.handleButtonMouseUp);
+    document.removeEventListener('touchmove', this.handleButtonTouchMove);
+    document.removeEventListener('touchend', this.handleButtonTouchEnd);
+  }
+
   private getDefaultIconUrl(): string {
     return `${this.apiBaseUrl}/static/images/favicons/favicon.svg`;
   }
@@ -887,11 +1060,22 @@ export class OcsChat {
     const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
     const finalButtonText = translatedButtonText || this.buttonText;
+
+    // Only show drag cursor if button is draggable
+    const isDraggable = this.isButtonDraggable();
+    const buttonStyle = isDraggable ? {
+      cursor: this.isButtonDragging ? 'grabbing' : 'grab',
+    } : {};
+
     if (hasText) {
       return (
         <button
+          ref={(el) => this.buttonRef = el}
           class={buttonClasses}
-          onClick={() => this.toggleWindowVisibility()}
+          style={buttonStyle}
+          onClick={() => this.handleButtonClick()}
+          onMouseDown={(e) => this.handleButtonMouseDown(e)}
+          onTouchStart={(e) => this.handleButtonTouchStart(e)}
           aria-label={`Open chat - ${finalButtonText}`}
           title={finalButtonText}
         >
@@ -902,8 +1086,12 @@ export class OcsChat {
     } else {
       return (
         <button
+          ref={(el) => this.buttonRef = el}
           class={buttonClasses}
-          onClick={() => this.toggleWindowVisibility()}
+          style={buttonStyle}
+          onClick={() => this.handleButtonClick()}
+          onMouseDown={(e) => this.handleButtonMouseDown(e)}
+          onTouchStart={(e) => this.handleButtonTouchStart(e)}
           aria-label="Open chat"
           title="Open chat"
         >
