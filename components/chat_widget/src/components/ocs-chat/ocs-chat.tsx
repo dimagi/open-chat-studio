@@ -174,6 +174,8 @@ export class OcsChat {
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
   private buttonPosition: { x: number; y: number } = { x: 30, y: 30 };
+  private buttonHorizontalSide: 'left' | 'right' = 'right';
+  private buttonVerticalSide: 'top' | 'bottom' = 'bottom';
   @State() isButtonDragging: boolean = false;
   @State() buttonWasDragged: boolean = false;
 
@@ -898,17 +900,32 @@ export class OcsChat {
       return;
     }
 
-    // Get the initial right and bottom values
+    const rect = this.host.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    const left = computedStyle.getPropertyValue('left');
     const right = computedStyle.getPropertyValue('right');
+    const top = computedStyle.getPropertyValue('top');
     const bottom = computedStyle.getPropertyValue('bottom');
 
-    // Parse pixel values (e.g., "30px" -> 30)
-    const rightValue = parseFloat(right) || 30;
-    const bottomValue = parseFloat(bottom) || 30;
+    const hasLeft = !this.isAutoPosition(left);
+    const hasTop = !this.isAutoPosition(top);
+
+    this.buttonHorizontalSide = hasLeft ? 'left' : 'right';
+    this.buttonVerticalSide = hasTop ? 'top' : 'bottom';
+
+    const resolvedRight = this.getNumericPositionValue(right, Math.max(0, windowWidth - rect.right));
+    const resolvedLeft = this.getNumericPositionValue(left, Math.max(0, rect.left));
+    const resolvedBottom = this.getNumericPositionValue(bottom, Math.max(0, windowHeight - rect.bottom));
+    const resolvedTop = this.getNumericPositionValue(top, Math.max(0, rect.top));
+
+    const horizontalValue = this.buttonHorizontalSide === 'left' ? resolvedLeft : resolvedRight;
+    const verticalValue = this.buttonVerticalSide === 'top' ? resolvedTop : resolvedBottom;
 
     this.buttonPosition = {
-      x: rightValue,
-      y: bottomValue
+      x: horizontalValue,
+      y: verticalValue
     };
 
     // Apply the position to the host
@@ -917,8 +934,21 @@ export class OcsChat {
 
   private updateHostPosition(): void {
     this.host.style.position = 'fixed';
-    this.host.style.right = `${this.buttonPosition.x}px`;
-    this.host.style.bottom = `${this.buttonPosition.y}px`;
+    if (this.buttonHorizontalSide === 'left') {
+      this.host.style.left = `${this.buttonPosition.x}px`;
+      this.host.style.right = 'auto';
+    } else {
+      this.host.style.right = `${this.buttonPosition.x}px`;
+      this.host.style.left = 'auto';
+    }
+
+    if (this.buttonVerticalSide === 'top') {
+      this.host.style.top = `${this.buttonPosition.y}px`;
+      this.host.style.bottom = 'auto';
+    } else {
+      this.host.style.bottom = `${this.buttonPosition.y}px`;
+      this.host.style.top = 'auto';
+    }
   }
 
   private isButtonDraggable(): boolean {
@@ -937,9 +967,10 @@ export class OcsChat {
 
     this.isButtonDragging = true;
     this.buttonWasDragged = false; // Reset the drag flag
+    const rect = this.host.getBoundingClientRect();
     this.buttonDragOffset = {
-      x: pointer.clientX - (window.innerWidth - this.buttonPosition.x),
-      y: pointer.clientY - (window.innerHeight - this.buttonPosition.y)
+      x: pointer.clientX - rect.left,
+      y: pointer.clientY - rect.top
     };
 
     this.addButtonEventListeners();
@@ -956,9 +987,10 @@ export class OcsChat {
 
     this.isButtonDragging = true;
     this.buttonWasDragged = false; // Reset the drag flag
+    const rect = this.host.getBoundingClientRect();
     this.buttonDragOffset = {
-      x: pointer.clientX - (window.innerWidth - this.buttonPosition.x),
-      y: pointer.clientY - (window.innerHeight - this.buttonPosition.y)
+      x: pointer.clientX - rect.left,
+      y: pointer.clientY - rect.top
     };
 
     this.addButtonEventListeners();
@@ -988,19 +1020,31 @@ export class OcsChat {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
 
-    const newX = windowWidth - pointer.clientX + this.buttonDragOffset.x;
-    const newY = windowHeight - pointer.clientY + this.buttonDragOffset.y;
-
     const buttonWidth = this.buttonRef?.offsetWidth || 60;
     const buttonHeight = this.buttonRef?.offsetHeight || 60;
     const minPadding = 10;
 
-    const constrainedX = Math.max(minPadding, Math.min(newX, windowWidth - buttonWidth - minPadding));
-    const constrainedY = Math.max(minPadding, Math.min(newY, windowHeight - buttonHeight - minPadding));
+    const candidateLeft = pointer.clientX - this.buttonDragOffset.x;
+    const candidateTop = pointer.clientY - this.buttonDragOffset.y;
 
-    if (constrainedX !== this.buttonPosition.x || constrainedY !== this.buttonPosition.y) {
+    const minLeft = minPadding;
+    const maxLeft = windowWidth - buttonWidth - minPadding;
+    const minTop = minPadding;
+    const maxTop = windowHeight - buttonHeight - minPadding;
+
+    const constrainedLeft = Math.max(minLeft, Math.min(candidateLeft, maxLeft));
+    const constrainedTop = Math.max(minTop, Math.min(candidateTop, maxTop));
+
+    const newHorizontalValue = this.buttonHorizontalSide === 'left'
+      ? constrainedLeft
+      : Math.max(minPadding, windowWidth - (constrainedLeft + buttonWidth));
+    const newVerticalValue = this.buttonVerticalSide === 'top'
+      ? constrainedTop
+      : Math.max(minPadding, windowHeight - (constrainedTop + buttonHeight));
+
+    if (newHorizontalValue !== this.buttonPosition.x || newVerticalValue !== this.buttonPosition.y) {
       this.buttonWasDragged = true;
-      this.buttonPosition = { x: constrainedX, y: constrainedY };
+      this.buttonPosition = { x: newHorizontalValue, y: newVerticalValue };
 
       if (this.rafId === null) {
         this.rafId = requestAnimationFrame(() => {
@@ -1061,6 +1105,38 @@ export class OcsChat {
     document.removeEventListener('touchmove', this.handleButtonTouchMove);
     document.removeEventListener('touchend', this.handleButtonTouchEnd);
     this.buttonListenersAttached = false;
+  }
+
+  private isAutoPosition(value: string): boolean {
+    const trimmed = value.trim();
+    return trimmed === '' || trimmed === 'auto';
+  }
+
+  private parsePixelValue(value: string): number | null {
+    const trimmed = value.trim();
+    if (trimmed === '' || trimmed === 'auto') {
+      return null;
+    }
+
+    if (trimmed.endsWith('px')) {
+      const parsed = parseFloat(trimmed);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+
+    return null;
+  }
+
+  private getNumericPositionValue(value: string, fallback: number): number {
+    const parsed = this.parsePixelValue(value);
+    if (parsed !== null) {
+      return parsed;
+    }
+    return fallback;
   }
 
   private getDefaultIconUrl(): string {
