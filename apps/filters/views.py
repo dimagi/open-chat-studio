@@ -55,8 +55,7 @@ def create_filter_set(request, team_slug: str, table_type: str):
 
         try:
             filter_set = serializer.save(team=request.team, user=request.user)
-            result_serializer = FilterSetSerializer(filter_set, context={"request_user": request.user})
-            return JsonResponse({"success": True, "filter_set": result_serializer.data})
+            return JsonResponse({"success": True, "filter_set": serializer.data})
         except IntegrityError:
             return JsonResponse({"error": "Unable to create filter set"}, status=400)
 
