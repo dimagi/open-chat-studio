@@ -73,12 +73,16 @@ export class TranslationManager {
       : baseTranslations;
   }
 
-  get(key: keyof TranslationStrings): string {
-    const value = this.translations[key] || defaultTranslations[key];
-    if (Array.isArray(value)) {
-      return value[0] || '';
+  get(key: keyof TranslationStrings, override?: string | null): string | undefined {
+    if (override !== undefined && override !== null) {
+      return override;
     }
-    return value || key;
+
+    const value = this.translations[key] ?? defaultTranslations[key];
+    if (Array.isArray(value)) {
+      return value.length > 0 ? value[0] : undefined;
+    }
+    return value ?? undefined;
   }
 
   getAll(): TranslationStrings {

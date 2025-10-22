@@ -1064,27 +1064,29 @@ export class OcsChat {
   }
 
   private getButtonClasses(): string {
-    const translatedButtonText = this.translationManager.get('branding.buttonText');
-    const hasText = (translatedButtonText && translatedButtonText.trim()) || (this.buttonText && this.buttonText.trim());
+    const buttonText = this.translationManager.get('branding.buttonText', this.buttonText);
+    const hasText = !!(buttonText && buttonText.trim());
     const baseClass = hasText ? 'chat-btn-text' : 'chat-btn-icon';
     const shapeClass = this.buttonShape === 'round' ? 'round' : '';
     return `${baseClass} ${shapeClass}`.trim();
   }
 
   private renderButton() {
-    const translatedButtonText = this.translationManager.get('branding.buttonText');
-    const hasText = (translatedButtonText && translatedButtonText.trim()) || (this.buttonText && this.buttonText.trim());
+    const buttonText = this.translationManager.get('branding.buttonText', this.buttonText);
+    const hasText = !!(buttonText && buttonText.trim());
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
     const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
-    const finalButtonText = translatedButtonText || this.buttonText;
+    const finalButtonText = buttonText ?? '';
+    const openLabel = this.translationManager.get('launcher.open') ?? '';
+    const buttonAriaLabel = finalButtonText ? `${openLabel} - ${finalButtonText}` : openLabel;
     if (hasText) {
       return (
         <button
           class={buttonClasses}
           onClick={() => this.toggleWindowVisibility()}
-          aria-label={`${this.translationManager.get('launcher.open')} - ${finalButtonText}`}
-          title={finalButtonText}
+          aria-label={buttonAriaLabel}
+          title={finalButtonText || openLabel}
         >
           <img src={iconSrc} alt="" />
           <span>{finalButtonText}</span>
@@ -1095,8 +1097,8 @@ export class OcsChat {
         <button
           class={buttonClasses}
           onClick={() => this.toggleWindowVisibility()}
-          aria-label={this.translationManager.get('launcher.open')}
-          title={this.translationManager.get('launcher.open')}
+          aria-label={openLabel}
+          title={openLabel}
         >
           <img src={iconSrc} alt="Chat" />
         </button>
@@ -1279,7 +1281,7 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="header-text">{this.translationManager.get('branding.headerText') || this.headerText}</div>
+              <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
               <div class="header-buttons">
                 {/* New Chat button */}
                 {this.messages.length > 0 && (
@@ -1318,7 +1320,7 @@ export class OcsChat {
                   <div class="confirmation-content">
                     <h3 class="confirmation-title">{this.translationManager.get('modal.newChatTitle')}</h3>
                     <p class="confirmation-message">
-                      {this.translationManager.get('modal.newChatBody') || this.newChatConfirmationMessage}
+                      {this.translationManager.get('modal.newChatBody', this.newChatConfirmationMessage)}
                     </p>
                     <div class="confirmation-buttons">
                       <button
@@ -1415,7 +1417,7 @@ export class OcsChat {
                         <div class="typing-progress"></div>
                       </div>
                       <div class="typing-text">
-                        <span>{this.translationManager.get('status.typing') || this.typingIndicatorText}</span>
+                        <span>{this.translationManager.get('status.typing', this.typingIndicatorText)}</span>
                         <span class="typing-dots loading"></span>
                       </div>
                     </div>
