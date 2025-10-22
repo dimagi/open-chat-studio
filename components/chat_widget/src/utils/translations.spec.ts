@@ -117,6 +117,16 @@ describe('TranslationManager', () => {
     expect(manager.get('window.close')).toBe(defaultTranslations['window.close']);
   });
 
+  it('translations return keys if value is blank', async () => {
+    const manager = new translations.TranslationManager('de', {
+      "window.close": "",
+    });
+
+    await waitForAsyncLoad();
+
+    expect(manager.get('window.close')).toBe("");
+  });
+
   it('returns arrays from getArray and wraps strings', async () => {
     const manager = new translations.TranslationManager('en', {
       'content.welcomeMessages': ['Hello', 'Welcome'],
