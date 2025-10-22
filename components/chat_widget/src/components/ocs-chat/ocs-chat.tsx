@@ -173,7 +173,7 @@ export class OcsChat {
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
-  @State() buttonPosition: { x: number; y: number } = { x: 30, y: 30 };
+  private buttonPosition: { x: number; y: number } = { x: 30, y: 30 };
   @State() isButtonDragging: boolean = false;
   @State() buttonWasDragged: boolean = false;
 
@@ -193,6 +193,7 @@ export class OcsChat {
   private fileInputRef?: HTMLInputElement;
   private buttonRef?: HTMLButtonElement;
   private buttonDragOffset: { x: number; y: number } = { x: 0, y: 0 };
+  private rafId: number | null = null;
   private buttonListenersAttached: boolean = false;
   private chatWindowHeight: number = 600;
   private chatWindowWidth: number = 450;
@@ -965,11 +966,9 @@ export class OcsChat {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
 
-    // Calculate new position from bottom-right
     const newX = windowWidth - pointer.clientX + this.buttonDragOffset.x;
     const newY = windowHeight - pointer.clientY + this.buttonDragOffset.y;
 
-    // Constrain button to window (with some padding)
     const buttonWidth = this.buttonRef?.offsetWidth || 60;
     const buttonHeight = this.buttonRef?.offsetHeight || 60;
     const minPadding = 10;
@@ -977,18 +976,17 @@ export class OcsChat {
     const constrainedX = Math.max(minPadding, Math.min(newX, windowWidth - buttonWidth - minPadding));
     const constrainedY = Math.max(minPadding, Math.min(newY, windowHeight - buttonHeight - minPadding));
 
-    // Check if position actually changed (indicating a drag)
     if (constrainedX !== this.buttonPosition.x || constrainedY !== this.buttonPosition.y) {
       this.buttonWasDragged = true;
+      this.buttonPosition = { x: constrainedX, y: constrainedY };
+
+      if (this.rafId === null) {
+        this.rafId = requestAnimationFrame(() => {
+          this.updateHostPosition();
+          this.rafId = null;
+        });
+      }
     }
-
-    this.buttonPosition = {
-      x: constrainedX,
-      y: constrainedY
-    };
-
-    // Update the host element position
-    this.updateHostPosition();
   }
 
   private handleButtonMouseUp = (): void => {
@@ -1029,6 +1027,11 @@ export class OcsChat {
   private removeButtonEventListeners(): void {
     if (!this.buttonListenersAttached) {
       return;
+    }
+
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
     }
 
     document.removeEventListener('mousemove', this.handleButtonMouseMove);
