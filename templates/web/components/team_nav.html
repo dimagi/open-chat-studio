@@ -1,7 +1,4 @@
-{% load waffle_tags %}
-{% load i18n %}
-{% load team_tags %}
-{% load partials %}
+{% load i18n partials team_tags waffle_tags %}
 {% if request.team %}
   <li>
     <a href="{% url 'dashboard:index' request.team.slug %}"

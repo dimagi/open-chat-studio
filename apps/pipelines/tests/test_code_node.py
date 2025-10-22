@@ -5,11 +5,10 @@ from django.core.files.base import ContentFile
 from pydantic import ValidationError
 
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import Participant
 from apps.files.models import File
 from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
-from apps.pipelines.nodes.nodes import CodeNode, RenderTemplate
+from apps.pipelines.nodes.nodes import CodeNode
 from apps.pipelines.tests.utils import (
     code_node,
     create_runnable,
@@ -45,17 +44,20 @@ def main(input, **kwargs):
 
 # @django_db_with_data(available_apps=("apps.service_providers",))
 @pytest.mark.parametrize(
-    ("code", "input", "output"),
+    ("code", "user_input", "output"),
     [
         ("def main(input, **kwargs):\n\treturn f'Hello, {input}!'", "World", "Hello, World!"),
         ("", "foo", "foo"),  # No code just returns the input
         ("def main(input, **kwargs):\n\t'foo'", "", "None"),  # No return value will return "None"
+        ("def main(input, **kwargs):\n\treturn kwargs['node_inputs']", "hi", "['hi']"),  # access node inputs
         (IMPORTS, json.dumps({"a": "b"}), str(json.loads('{"a": "b"}'))),  # Importing json will work
     ],
 )
-def test_code_node(code, input, output):
+def test_code_node(code, user_input, output):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node_output = node._process(input, PipelineState(outputs={}, experiment_session=None))
+    node_output = node._process(
+        PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
+    )
     assert node_output.update["messages"][-1] == output
 
 
@@ -69,38 +71,35 @@ def main(input, **kwargs):
 
 
 @pytest.mark.parametrize(
-    ("code", "input", "error"),
+    ("code", "error"),
     [
-        ("this{}", "", "SyntaxError: invalid syntax at statement: 'this{}"),
+        ("this{}", "SyntaxError: invalid syntax at statement: 'this{}"),
         (
             EXTRA_FUNCTION,
-            "",
             (
                 "You can only define a single function, 'main' at the top level. "
                 "You may use nested functions inside that function if required"
             ),
         ),
-        ("def other(input):\n\treturn input", "", "You must define a 'main' function"),
+        ("def other(input):\n\treturn input", "You must define a 'main' function"),
         (
             "def main(input, others, **kwargs):\n\treturn input",
-            "",
             r"The main function should have the signature main\(input, \*\*kwargs\) only\.",
         ),
         (
             """def main(intput, **kwargs):\n\tget_temp_state_key("attachments")[0]._file.delete()\n\treturn input""",
-            "",
             """"_file" is an invalid attribute name because it starts with "_".""",
         ),
-        ("import PyPDF2\ndef main(input):\n\treturn input", "", "No module named 'PyPDF2'"),
+        ("import PyPDF2\ndef main(input):\n\treturn input", "No module named 'PyPDF2'"),
     ],
 )
-def test_code_node_build_errors(code, input, error):
+def test_code_node_build_errors(code, error):
     with pytest.raises(ValidationError, match=error):
         CodeNode(name="test", node_id="123", django_node=None, code=code)
 
 
 @pytest.mark.parametrize(
-    ("code", "input", "error"),
+    ("code", "user_input", "error"),
     [
         (
             "import collections\ndef main(input, **kwargs):\n\treturn input",
@@ -110,10 +109,12 @@ def test_code_node_build_errors(code, input, error):
         ("def main(input, **kwargs):\n\treturn f'Hello, {blah}!'", "", "name 'blah' is not defined"),
     ],
 )
-def test_code_node_runtime_errors(code, input, error):
+def test_code_node_runtime_errors(code, user_input, error):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     with pytest.raises(CodeNodeRunError, match=error):
-        node._process(input, PipelineState(outputs={}, experiment_session=None))
+        node._process(
+            PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
+        )
 
 
 @pytest.mark.django_db()
@@ -124,8 +125,9 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     node_output = node._process(
-        "hi",
         PipelineState(
+            last_node_input="hi",
+            node_inputs=["hi"],
             outputs={},
             experiment_session=experiment_session,
             participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
@@ -147,8 +149,9 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     node_output = node._process(
-        "Hi",
         PipelineState(
+            last_node_input="hi",
+            node_inputs=["hi"],
             outputs={},
             experiment_session=experiment_session,
             participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
@@ -241,7 +244,7 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
     with pytest.raises(CodeNodeRunError, match="Cannot set the 'outputs' key of the temporary state"):
-        node._process("hi", PipelineState(outputs={}, experiment_session=None))
+        node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
 
 
 def test_temp_state_user_input():
@@ -277,36 +280,6 @@ def main(input, **kwargs):
     )
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
     assert node_output.update["messages"][-1] == "content from file"
-
-
-@pytest.mark.django_db()
-def test_render_template_with_context_keys(pipeline, experiment_session):
-    participant = Participant.objects.create(
-        identifier="participant_123",
-        team=experiment_session.team,
-        platform="web",
-    )
-    experiment_session.participant = participant
-    experiment_session.save()
-    state = PipelineState(
-        experiment_session=experiment_session,
-        messages=["Cycling"],
-        temp_state={"my_key": "example_key"},
-        outputs={},
-        participant_data={"custom_key": "custom_value"},
-    )
-    template = (
-        "input: {{input}}, temp_state.my_key: {{temp_state.my_key}}, "
-        "participant_id: {{participant_details.identifier}}, "
-        "participant_data: {{participant_data.custom_key}}"
-    )
-    node = RenderTemplate(name="test", node_id="123", django_node=None, template_string=template)
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output["messages"][-1] == (
-        "input: Cycling, temp_state.my_key: example_key, "
-        "participant_id: participant_123, "
-        "participant_data: custom_value"
-    )
 
 
 @pytest.mark.django_db()
@@ -391,7 +364,7 @@ def main(input, **kwargs):
     return input
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
-    output = node._process("hi", PipelineState(outputs={}, experiment_session=None))
+    output = node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
     assert output.update["output_message_tags"] == [("message-tag", "")]
     assert output.update["session_tags"] == [("session-tag", "")]
 
@@ -416,7 +389,9 @@ def main(input, **kwargs):
     """
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
-    node_output = node._process("hi", PipelineState(outputs={}, experiment_session=None))
+    node_output = node._process(
+        PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
+    )
     assert node_output.update["messages"][-1] == "3,4 - {1, 2}"
 
 
@@ -433,7 +408,7 @@ def main(input, **kwargs):
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
     with pytest.raises(CodeNodeRunError) as exc_info:
-        node._process("hi", PipelineState(outputs={}, experiment_session=None))
+        node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
     assert (
         str(exc_info.value)
         == """Error: NameError("name 'fail' is not defined")

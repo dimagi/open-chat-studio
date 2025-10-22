@@ -68,6 +68,11 @@ urlpatterns = [
         name="add_message_to_dataset",
     ),
     path(
+        "add_single_message/session/<uuid:session_id>/",
+        dataset_views.AddMessageToDatasetView.as_view(),
+        name="add_single_message_to_dataset",
+    ),
+    path(
         "message/<int:message_id>/edit_modal/",
         dataset_views.edit_message_modal,
         name="edit_message_modal",

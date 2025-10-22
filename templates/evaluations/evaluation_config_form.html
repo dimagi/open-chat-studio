@@ -2,14 +2,15 @@
 {% load form_tags i18n %}
 
 {% block form %}
-  <div>
+  <div x-data="{  runGeneration: {{ form.run_generation.value|yesno:'true,false' }}  }">
     {{ form.non_field_errors }}
 
     {% render_form_fields form "name" %}
     {% render_form_fields form "dataset" %}
     {% render_form_fields form "evaluators" %}
+    {% render_form_fields form "run_generation" %}
 
-    <div class="fieldset w-full">
+    <div class="fieldset w-full" x-show="runGeneration" x-cloak x-collapse>
       <label class="label font-bold" for="{{ form.experiment.id_for_label }}">
         <div>
           {{ form.experiment.label }}
@@ -38,25 +39,26 @@
           <option value="">{{ form.experiment.empty_label }}</option>
         {% endif %}
         {% for value, label in form.experiment.field.choices %}
-          <option value="{{ value }}" {% if form.experiment.value == value %}selected{% endif %}>{{ label }}</option>
+          <option value="{{ value }}" {% if form.experiment.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
       {{ form.experiment.errors }}
     </div>
 
     {# The version select field starts hidden in the "new" form until the user selects an experiment #}
-    <div id="version-select-container" {% if not form.experiment.value %}style="display: none;"{% endif %}>
-      {% render_form_fields form "experiment_version" %}
+    <div x-show="runGeneration" x-cloak x-collapse>
+      <div id="version-select-container" {% if not form.experiment.value %}style="display: none;"{% endif %}>
+        {% render_form_fields form "experiment_version" %}
+      </div>
     </div>
 
     <div id="version-loading" class="fieldset w-full htmx-indicator flex items-center gap-2 mt-2">
       <div class="flex items-center">
         <span class="loading loading-spinner loading-sm"></span>
-        <span class="ml-2">{% trans "Loading chatbot versions..." %}</span>
+        <span class="ml-2">{% translate "Loading chatbot versions..." %}</span>
       </div>
     </div>
 
   </div>
 
 {% endblock form %}
-

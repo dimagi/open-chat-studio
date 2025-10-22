@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import translation
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_http_methods, require_POST
+from django_htmx.http import HttpResponseLocation
 
 from .forms import ApiKeyForm, CustomUserChangeForm, UploadAvatarForm
 from .helpers import require_email_confirmation, user_has_confirmed_email_address
@@ -81,7 +82,7 @@ def create_api_key(request):
         if form.is_valid():
             instance, key = form.save()
             request.session[SESSION_API_KEY] = key
-            return HttpResponse(status=201, headers={"HX-Location": reverse("users:user_profile")})
+            return HttpResponseLocation(reverse("users:user_profile"), status=201)
 
     return render(
         request,

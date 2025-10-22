@@ -1,6 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags %}
-{% load static %}
+{% load form_tags static %}
 
 {% block page_js %}
   {{ block.super }}
@@ -53,6 +52,6 @@
         <p class="mt-2 text-sm text-gray-700">A log of your chat history, in case you'd like to refer to it.</p>
       </div>
     </div>
-    {% include "experiments/components/experiment_chat.html" with hide_translation=True %}
+    {% include "experiments/components/session_messages.html" with hide_translation=True %}
   </div>
 {% endblock body %}

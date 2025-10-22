@@ -81,6 +81,10 @@ class TempState(TypedDict):
 
 class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
+
+    # Outputs from nodes that have already been executed.
+    # Dictionary keyed by node name. Values may be a string or a list of strings if the
+    # node was executed more than once.
     outputs: Annotated[dict, add_messages]
     experiment_session: ExperimentSession
     temp_state: Annotated[TempState, add_temp_state_messages]
@@ -92,8 +96,13 @@ class PipelineState(dict):
 
     # List of (previous, current, next) tuples used for aiding in routing decisions.
     path: Annotated[Sequence[tuple[str | None, str, list[str]]], operator.add]
-    # input to the current node
-    node_input: str
+
+    # inputs to the current node
+    node_inputs: list[str]
+
+    # input from the last executed node prior to this one
+    last_node_input: str
+
     # source node for the current node
     node_source: str
 
@@ -148,18 +157,21 @@ class PipelineState(dict):
         """Adds the tag to the chat session."""
         self.setdefault("session_tags", []).append((tag, ""))
 
-    def get_node_id(self, node_name: str):
+    def get_node_id(self, node_name: str) -> str | None:
         """
         Helper method to get a node ID from a node name.
         """
-        return self.get("outputs", {}).get(node_name, {}).get("node_id")
+        outputs = self.get_node_outputs_by_name(node_name)
+        return outputs[-1]["node_id"] if outputs else None
 
-    def get_node_name(self, node_id: str):
+    def get_node_name(self, node_id: str) -> str | None:
         """
         Helper method to get a node name from a node ID.
         """
         for name, output in self.get("outputs", {}).items():
-            if output.get("node_id") == node_id:
+            if isinstance(output, list):
+                output = output[0] if output else None
+            if output and output.get("node_id") == node_id:
                 return name
         return None
 
@@ -168,11 +180,8 @@ class PipelineState(dict):
         Returns the route keyword selected by a specific router node with the given name.
         If the node does not exist or has no route defined, it returns `None`.
         """
-        outputs = self.get("outputs", {})
-        if node_name in outputs and "route" in outputs[node_name]:
-            return outputs[node_name].get("route")
-
-        return None
+        outputs = self.get_node_outputs_by_name(node_name)
+        return outputs[-1].get("route") if outputs else None
 
     def get_node_path(self, node_name: str) -> list | None:
         """
@@ -210,12 +219,18 @@ class PipelineState(dict):
 
     def get_all_routes(self) -> dict:
         """
-        Returns a dictionary containing all routing decisions in the pipeline.
+        Returns a dictionary containing all routing decisions made in the pipeline up to the current node.
         The keys are the node names and the values are the route keywords chosen by each router node.
+
+        Note that in parallel workflows only the most recent route for a particular node will be returned.
         """
         routes_dict = {}
         outputs = self.get("outputs", {})
         for node_name, node_data in outputs.items():
+            if isinstance(node_data, list):
+                # Unclear how to handle the case where a router gets called twice due to parallel execution
+                # Take the last one for now
+                node_data = node_data[-1]
             if "route" in node_data:
                 routes_dict[node_name] = node_data["route"]
 
@@ -226,18 +241,26 @@ class PipelineState(dict):
         Returns the output of the specified node if it has been executed.
         If the node has not been executed, it returns `None`.
         """
-        output = self["outputs"].get(node_name)
-        if output:
-            return output["message"]
+        outputs = self.get_node_outputs_by_name(node_name)
+        return outputs[-1]["message"] if outputs else None
+
+    def get_node_outputs_by_name(self, node_name: str) -> list[dict] | None:
+        """
+        Get the outputs of a node by its name.
+        """
+        outputs = self["outputs"].get(node_name)
+        if outputs is not None:
+            return outputs if isinstance(outputs, list) else [outputs]
         return None
 
-    def get_node_output(self, node_id: str) -> Any:
+    def get_node_outputs(self, node_id: str) -> list[str] | None:
         """
-        Get the output of a node by its ID.
+        Get the outputs of a node by its ID.
         """
-        for output in self["outputs"].values():
-            if output.get("node_id") == node_id:
-                return output["message"]
+        for outputs in self["outputs"].values():
+            output = outputs if isinstance(outputs, list) else [outputs]
+            if output and output[0].get("node_id") == node_id:
+                return [out["message"] for out in output]
         return None
 
     def get_node_inputs(self, node_id: str, incoming_nodes: list[str]) -> dict[str, Any]:
@@ -254,7 +277,7 @@ class PipelineState(dict):
             targets = [step[2] for step in self["path"] if step[1] == incoming_node_id]
             if targets and node_id in targets[0]:
                 # only include outputs from nodes that targeted the current node
-                inputs[incoming_node_id] = self.get_node_output(incoming_node_id)
+                inputs[incoming_node_id] = self.get_node_outputs(incoming_node_id)
             else:
                 inputs[incoming_node_id] = None
         return inputs
@@ -298,18 +321,25 @@ class BasePipelineNode(BaseModel, ABC):
 
         if not incoming_nodes:
             # This is the first node in the graph
-            state["node_input"] = state["messages"][-1]
+            state["last_node_input"] = state["messages"][-1]
+            state["node_inputs"] = [state["messages"][-1]]
             state["node_source"] = None
 
             # init temp state here to avoid having to do it in each place the pipeline is invoked
-            state["temp_state"]["user_input"] = state["node_input"]
+            state["temp_state"]["user_input"] = state["last_node_input"]
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
         else:
-            for incoming_node_id, output in reversed(state.get_node_inputs(node_id, incoming_nodes).items()):
-                if output is not None:
-                    state["node_input"] = output
+            for incoming_node_id, outputs in reversed(state.get_node_inputs(node_id, incoming_nodes).items()):
+                if outputs is not None:
+                    # Handle the edge case where a node is downstream of a 'join' node connected to
+                    # multiple parallel nodes. This isn't really a supported workflow, and it's hard to detect
+                    # in the pipeline during the build step.
+                    # By taking the last message, we at least get different outputs for each invocation of
+                    # the node in the case where the parallel branches are of different lengths.
+                    state["last_node_input"] = outputs[-1]
+                    state["node_inputs"] = outputs
                     state["node_source"] = incoming_node_id
                     break
             else:
@@ -365,7 +395,7 @@ class PipelineNode(BasePipelineNode, ABC):
         state = self._prepare_state(self.node_id, incoming_nodes, state)
 
         # Sentry context for error tracking
-        process_params = {"input": state["node_input"], "state": state}
+        process_params = {"state": state}
         sentry_context = {
             "node_id": self.node_id,
             "node_name": self.name,
@@ -389,7 +419,7 @@ class PipelineNode(BasePipelineNode, ABC):
             output["output_message_tags"].extend(get_output_tags_fn())
         return output
 
-    def _process(self, input: str, state: PipelineState) -> PipelineState | Command:
+    def _process(self, state: PipelineState) -> PipelineState | Command:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
@@ -414,7 +444,7 @@ class PipelineRouterNode(BasePipelineNode):
             target_node_id = edge_map.get(conditional_branch)
             route_path = (state["node_source"], self.node_id, [target_node_id] if target_node_id else [])
             output = PipelineState.from_router_output(
-                self.node_id, self.name, state["node_input"], output_handle, tags, route_path, conditional_branch
+                self.node_id, self.name, state["last_node_input"], output_handle, tags, route_path, conditional_branch
             )
             return Command(
                 update=output,

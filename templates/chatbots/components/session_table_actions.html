@@ -1,17 +1,27 @@
 {% load waffle_tags %}
 <div class="my-3">
   <div class="relative">
-    <div class="flex items-center gap-1">
-      {% if perms.experiments.download_chats %}
-        {% include "experiments/components/exports.html" %}
-      {% endif %}
-       {% flag "flag_session-analysis" %}
-        <a href="{% url 'analysis:create' team.slug experiment.id %}" class="btn btn-sm btn-outline btn-primary">
-            <i class="fa-solid fa-table-list"></i> Analyze Transcripts
-        </a>
-      {% endflag %}
-      {% include "evaluations/create_dataset_button.html" %}
-      {% include "experiments/filters.html" %}
+    <div class="flex items-center justify-between w-full">
+      <div class="flex items-center gap-1">
+        <button class="btn btn-ghost btn-sm btn-square"
+                hx-get="{% url 'chatbots:sessions-list' request.team.slug experiment.id %}"
+                hx-target="#sessions-table"
+                hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                title="Refresh sessions">
+          <i class="fa-solid fa-rotate htmx-hide"></i>
+          <span class="loading loading-spinner loading-xs htmx-show"></span>
+        </button>
+        
+        {% if perms.experiments.download_chats %}
+          {% include "experiments/components/exports.html" %}
+        {% endif %}
+        {% include "experiments/filters.html" %}
+      </div>
+      
+      <div class="ml-4">
+        {% include "chatbots/table_actions_dropdown.html" %}
+      </div>
     </div>
   </div>
 </div>

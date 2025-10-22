@@ -399,7 +399,7 @@ templates/
 #### Common Template Patterns
 ```html
 <!-- Extend app_base.html overall layout and navigation -->
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 
 {% block page_head %}
   {{ block.super }}
