@@ -21,6 +21,9 @@ SECURE_HSTS_SECONDS = 60
 # # Uncomment these two lines if you are sure that you don't host any subdomains over HTTP.
 # # You will get security warnings if you don't do this.
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+# Be 100% sure that all assets from this and all subdomains can be loaded over HTTPS before enabling preloading.
+# Also see the submission requirements: https://hstspreload.org/#submission-requirements
 # SECURE_HSTS_PRELOAD = True
 
 USE_HTTPS_IN_ABSOLUTE_URLS = True
