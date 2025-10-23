@@ -1,4 +1,5 @@
 from .settings import *  # noqa F401
+from socket import gethostbyname, gethostname
 
 DEBUG = False
 
@@ -26,6 +27,8 @@ USE_HTTPS_IN_ABSOLUTE_URLS = True
 
 # TODO: Remove the default value and make this mandatory
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
+# Add the server's own hostname to ALLOWED_HOSTS
+ALLOWED_HOSTS.append(gethostbyname(gethostname()))
 
 # this defaults to SECRET_KEY
 CRYPTOGRAPHY_KEY = env("CRYPTOGRAPHY_KEY", default=None)
