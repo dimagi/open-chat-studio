@@ -2,9 +2,15 @@
  * Translation utilities for the chat widget
  */
 
+import ar from '../assets/translations/ar.json';
 import en from '../assets/translations/en.json';
 import es from '../assets/translations/es.json';
 import fr from '../assets/translations/fr.json';
+import hi from '../assets/translations/hi.json';
+import it from '../assets/translations/ita.json';
+import pt from '../assets/translations/por.json';
+import sw from '../assets/translations/sw.json';
+import uk from '../assets/translations/uk.json';
 
 export type TranslationStrings = typeof en;
 
@@ -13,9 +19,15 @@ export const defaultTranslations: TranslationStrings = en as TranslationStrings;
 
 // Available translations map
 const translationFiles: Record<string, TranslationStrings> = {
+  ar: ar as TranslationStrings,
   en: en as TranslationStrings,
   es: es as TranslationStrings,
   fr: fr as TranslationStrings,
+  hi: hi as TranslationStrings,
+  it: it as TranslationStrings,
+  pt: pt as TranslationStrings,
+  sw: sw as TranslationStrings,
+  uk: uk as TranslationStrings,
 };
 
 
@@ -73,12 +85,16 @@ export class TranslationManager {
       : baseTranslations;
   }
 
-  get(key: keyof TranslationStrings): string {
-    const value = this.translations[key] || defaultTranslations[key];
-    if (Array.isArray(value)) {
-      return value[0] || '';
+  get(key: keyof TranslationStrings, override?: string | null): string | undefined {
+    if (override !== undefined && override !== null) {
+      return override;
     }
-    return value || key;
+
+    const value = this.translations[key] ?? defaultTranslations[key];
+    if (Array.isArray(value)) {
+      return value.length > 0 ? value[0] : undefined;
+    }
+    return value ?? undefined;
   }
 
   getAll(): TranslationStrings {
