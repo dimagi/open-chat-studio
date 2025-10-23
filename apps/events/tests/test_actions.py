@@ -76,5 +76,7 @@ def test_end_conversation_runs_pipeline(session, pipeline):
             "session_tags": [],
             "path": [(None, "start", ["end"]), ("start", "end", [])],
             "intents": [],
+            "participant_data": session.participant.global_data,
+            "session_state": {},
         }
     )

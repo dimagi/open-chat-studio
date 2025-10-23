@@ -1,8 +1,8 @@
 {# Template fragment for display a file list with ability to add and remove #}
 {# Required template vars: #}
-{#  - upload_url: URL to upload a file #}
-{#  - nested: boolean indicating whether this form is nested withing another form #}
-{#  - See also "files/partials/file_item.html" #}
+{# - upload_url: URL to upload a file #}
+{# - nested: boolean indicating whether this form is nested withing another form #}
+{# - See also "files/partials/file_item.html" #}
 <div x-data="{{ prefix|default:"" }}Data">
   <div class="flex flex-row justify-between mb-4">
     <h3 class="text-lg font-medium">{{ files_title|default:"FILES" }} <span class="text-sm">(<span x-text="file_count"></span>)</span></h3>

@@ -190,7 +190,7 @@ def experiment(team_with_users, db):
 # Use factories for consistent test data
 class MyModelFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f'Test Model {n}')
     
     class Meta:
         model = MyModel
@@ -399,7 +399,7 @@ templates/
 #### Common Template Patterns
 ```html
 <!-- Extend app_base.html overall layout and navigation -->
-{% extends 'web/app/app_base.html' %}
+{% extends "web/app/app_base.html" %}
 
 {% block page_head %}
   {{ block.super }}

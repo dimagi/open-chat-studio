@@ -59,10 +59,7 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
     template_name = "evaluations/evaluation_config_form.html"
     model = EvaluationConfig
     form_class = EvaluationConfigForm
-    extra_context = {
-        "title": "Create Evaluation",
-        "button_text": "Create",
-    }
+    extra_context = {"title": "Create Evaluation", "button_text": "Create", "active_tab": "evaluations"}
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -205,7 +202,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
             if not value or not self.evaluation_run.generation_experiment_id:
                 return ""
             return reverse(
-                "experiments:experiment_session_view",
+                "chatbots:chatbot_session_view",
                 args=[self.kwargs["team_slug"], self.evaluation_run.generation_experiment.public_id, value],
             )
 
@@ -279,12 +276,7 @@ def load_experiment_versions(request, team_slug: str):
         }
         return render(request, "evaluations/partials/version_select.html", context)
 
-    try:
-        Experiment.objects.working_versions_queryset().exists(
-            id=experiment_id,
-            team=request.team,
-        )
-    except Experiment.DoesNotExist:
+    if not Experiment.objects.filter(id=experiment_id, team=request.team, working_version=None).exists():
         context = {
             "empty_message": "Chatbot not found",
             "field_name": "experiment_version",

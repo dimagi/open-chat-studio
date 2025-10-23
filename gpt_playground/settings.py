@@ -61,9 +61,12 @@ THIRD_PARTY_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.microsoft",
+    "django_htmx",
+    "django_browser_reload",
     "django_otp",
     "django_otp.plugins.otp_totp",
     "django_otp.plugins.otp_static",
+    "django_watchfiles",
     "allauth_2fa",
     "rest_framework",
     "drf_spectacular",
@@ -115,6 +118,7 @@ PROJECT_APPS = [
     "apps.evaluations",
     "apps.trace",
     "apps.mcp_integrations",
+    "apps.filters",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -144,10 +148,12 @@ MIDDLEWARE = list(
             "waffle.middleware.WaffleMiddleware",
             "field_audit.middleware.FieldAuditMiddleware",
             "apps.audit.middleware.AuditTransactionMiddleware",
+            "django_htmx.middleware.HtmxMiddleware",
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.generics.middleware.OriginDetectionMiddleware",
             "apps.banners.middleware.BannerLocationMiddleware",
+            "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],
     )
 )
@@ -220,12 +226,16 @@ else:
     }
 
 db_options = DATABASES["default"].setdefault("OPTIONS", {})
-db_options.pop("CONN_MAX_AGE", None)  # remove connection age since it's not compatible with connection pooling
-db_options["pool"] = {
-    "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
-    "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=20),
-    "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
-}
+if env.bool("DJANGO_DATABASE_USE_POOL", True):
+    DATABASES["default"].pop("CONN_MAX_AGE", None)
+    # See https://www.psycopg.org/psycopg3/docs/api/pool.html#psycopg_pool.ConnectionPool
+    db_options["pool"] = {
+        "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
+        "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=35),
+        "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
+    }
+else:
+    DATABASES["default"]["CONN_MAX_AGE"] = env.int("DJANGO_DATABASE_CONN_MAX_AGE", 0)
 
 # Auth / login stuff
 
@@ -439,6 +449,9 @@ if REDIS_URL.startswith("rediss"):
 
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# see https://docs.celeryq.dev/en/stable/userguide/workers.html#soft-shutdown
+CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = 10
+CELERY_WORKER_ENABLE_SOFT_SHUTDOWN_ON_IDLE = True
 
 SCHEDULED_TASKS = {
     "files.tasks.clean_up_expired_files": {
@@ -575,10 +588,11 @@ LOGGING = {
         "console": {"class": "logging.StreamHandler", "formatter": "verbose"},
     },
     "loggers": {
-        "django": {
+        "": {  # Root logger
             "handlers": ["console"],
-            "level": env("DJANGO_LOG_LEVEL", default="INFO"),
+            "level": "WARN",
         },
+        "django": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
         "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},

@@ -1,11 +1,9 @@
 {% extends "generic/object_form.html" %}
-{% load static %}
-{% load form_tags %}
-{% load i18n %}
+{% load form_tags i18n static %}
 
 {% block form %}
   {{ form.non_field_errors }}
-  {% render_form_fields form "name" "mode" "session_ids" "messages_json" "column_mapping" "csv_data" %}
+  {% render_form_fields form "name" "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_data" %}
   <div x-data="datasetBuilder()" x-init="init()">
     <div x-show="!loaded" class="text-center py-8">
       <i class="fa-solid fa-spinner fa-spin fa-2x text-primary"></i>
@@ -14,9 +12,9 @@
     <!-- Clone from sessions mode -->
       <div x-show="mode === 'clone'" class="w-full mt-4">
         <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
-          <h3 class="text-lg font-semibold mb-4">{% trans "Select Sessions to Clone Messages From" %}</h3>
+          <h3 class="text-lg font-semibold mb-4">{% translate "Select Sessions to Clone Messages From" %}</h3>
           <p class="text-sm text-gray-600 mb-4">
-            {% trans "Select one or more experiment sessions. All message pairs (human-AI) from the selected sessions will be cloned into the new dataset." %}
+            {% translate "Select one or more experiment sessions. All message pairs (human-AI) from the selected sessions will be cloned into the new dataset." %}
           </p>
 
           <div class="mb-4">
@@ -24,22 +22,23 @@
               <div>
                 {% include "experiments/filters.html" %}
               </div>
-              <div x-show="selectedSessionIds.length > 0" class="text-sm font-medium ml-4">
-                <span x-text="selectedSessionIds.length"></span> session<span x-show="selectedSessionIds.length !== 1">s</span> selected
-                <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
-                  Clear
-                </button>
-                <button type="button" class="btn btn-xs btn-outline ml-2" @click="toggleAllSelections(1)">
-                  Select all
-                </button>
+
+              <div class="flex items-center gap-3">
+                <div x-show="selectedSessionIds.size + filteredSessionIds.size > 0" class="text-sm font-medium">
+                  <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> selected
+                  <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
+                    Clear
+                  </button>
+                  <button type="button" class="btn btn-xs btn-outline ml-2" @click="toggleAllSelections(1)">
+                    Select all
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
           <div id="sessions-table" data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
-            <div class="text-center py-4">
-              <i class="fa-solid fa-spinner fa-spin"></i> Loading sessions...
-            </div>
+            {% include "table/table_placeholder.html" %}
           </div>
         </div>
       </div>
@@ -47,9 +46,9 @@
     <!-- Manual creation mode -->
       <div x-show="mode === 'manual'" class="w-full mt-4">
         <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
-          <h3 class="text-lg font-semibold mb-4">{% trans "Manually Add Message Pairs" %}</h3>
+          <h3 class="text-lg font-semibold mb-4">{% translate "Manually Add Message Pairs" %}</h3>
           <p class="text-sm text-gray-600 mb-4">
-            {% trans "Add individual message pairs with human messages, AI responses, and optional context data." %}
+            {% translate "Add individual message pairs with human messages, AI responses, and optional context data." %}
           </p>
 
           <input type="hidden" name="messages_json" x-model="messagesJsonString">
@@ -60,18 +59,18 @@
           <!-- Add new message form -->
           <div class="mt-6 pt-6">
             <div class="app-card">
-              <h4 class="text-lg font-semibold mb-4">{% trans "Add New Message Pair" %}</h4>
+              <h4 class="text-lg font-semibold mb-4">{% translate "Add New Message Pair" %}</h4>
               <div id="manual-message-form">
-                {% include "evaluations/components/message_pair_form.html" with context_field_id="manual-context-field" disable_button_id="manual-add-button" %}
+                {% include "evaluations/components/message_pair_form.html" with disable_button_id="manual-add-button" %}
 
                 <div class="flex gap-2 mt-4">
                   <button type="button" class="btn btn-primary" id="manual-add-button" @click="addMessageFromForm()">
                     <i class="fa-solid fa-plus mr-2"></i>
-                    {% trans "Add Message Pair" %}
+                    {% translate "Add Message Pair" %}
                   </button>
-                  <button type="reset" class="btn btn-ghost" @click="clearMessageForm()">
+                  <button type="reset" class="btn btn-ghost" @click="clearManualMessageForm()">
                     <i class="fa-solid fa-times mr-2"></i>
-                    {% trans "Clear Form" %}
+                    {% translate "Clear Form" %}
                   </button>
                 </div>
               </div>
@@ -83,30 +82,30 @@
     <!-- CSV upload mode -->
       <div x-show="mode === 'csv'" class="w-full mt-4">
         <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
-          <h3 class="text-lg font-semibold mb-4">{% trans "Upload CSV File" %}</h3>
+          <h3 class="text-lg font-semibold mb-4">{% translate "Upload CSV File" %}</h3>
           <p class="text-sm text-gray-600 mb-4">
-            {% trans "Upload a CSV file and map the columns to dataset fields. The CSV should contain columns for human messages, AI responses, and any context data." %}
+            {% translate "Upload a CSV file and map the columns to dataset fields. The CSV should contain columns for human messages, AI responses, and any context data." %}
           </p>
 
           <!-- File upload section -->
           <div x-show="!csvParsed" class="mb-6">
-            <label class="block text-sm font-medium mb-2">{% trans "Choose CSV File" %}</label>
+            <label class="block text-sm font-medium mb-2">{% translate "Choose CSV File" %}</label>
             <input type="file"
                    name="csv_file"
                    accept=".csv"
                    @change="uploadCsv($event)"
                    class="file-input file-input-bordered w-full max-w-xs">
             <div x-show="csvUploading" class="mt-2 text-sm text-gray-600">
-              <i class="fa-solid fa-spinner fa-spin"></i> {% trans "Processing CSV..." %}
+              <i class="fa-solid fa-spinner fa-spin"></i> {% translate "Processing CSV..." %}
             </div>
           </div>
 
           <!-- Column mapping section -->
           <div x-show="csvParsed" class="space-y-6">
             <div class="bg-base-50 p-4 rounded">
-              <h4 class="font-medium mb-2">{% trans "CSV Preview" %}</h4>
+              <h4 class="font-medium mb-2">{% translate "CSV Preview" %}</h4>
               <p class="text-sm text-gray-600 mb-3">
-                {% trans "Found" %} <span x-text="csvData?.total_rows || 0"></span> {% trans "rows" %}
+                {% translate "Found" %} <span x-text="csvData?.total_rows || 0"></span> {% translate "rows" %}
               </p>
 
               <!-- Sample data table -->
@@ -134,18 +133,18 @@
 
             <!-- Column mapping controls -->
             <div class="space-y-4">
-              <h4 class="font-medium">{% trans "Map CSV Columns to Dataset Fields" %}</h4>
+              <h4 class="font-medium">{% translate "Map CSV Columns to Dataset Fields" %}</h4>
 
               <!-- Required mappings -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label class="block text-sm font-medium mb-1">
-                    {% trans "Human Message Column" %} <span class="text-red-500">*</span>
+                    {% translate "Human Message Column" %} <span class="text-red-500">*</span>
                   </label>
                   <select x-model="columnMapping.input"
                           class="select select-bordered w-full"
                           @change="updateColumnMapping()">
-                    <option value="">{% trans "Select column..." %}</option>
+                    <option value="">{% translate "Select column..." %}</option>
                     <template x-for="column in csvData?.columns || []">
                       <option :value="column" x-text="column"></option>
                     </template>
@@ -154,12 +153,12 @@
 
                 <div>
                   <label class="block text-sm font-medium mb-1">
-                    {% trans "AI Response Column" %} <span class="text-red-500">*</span>
+                    {% translate "AI Response Column" %} <span class="text-red-500">*</span>
                   </label>
                   <select x-model="columnMapping.output"
                           class="select select-bordered w-full"
                           @change="updateColumnMapping()">
-                    <option value="">{% trans "Select column..." %}</option>
+                    <option value="">{% translate "Select column..." %}</option>
                     <template x-for="column in csvData?.columns || []">
                       <option :value="column" x-text="column"></option>
                     </template>
@@ -171,11 +170,11 @@
               <!-- Context field mappings -->
               <div>
                 <div class="flex items-center justify-between mb-2">
-                  <label class="block text-sm font-medium">{% trans "Context Fields (Optional)" %}</label>
+                  <label class="block text-sm font-medium">{% translate "Context Fields (Optional)" %}</label>
                   <button type="button"
                           class="btn btn-xs btn-outline"
                           @click="addContextMapping()">
-                    <i class="fa-solid fa-plus"></i> {% trans "Add Field" %}
+                    <i class="fa-solid fa-plus"></i> {% translate "Add Field" %}
                   </button>
                 </div>
                 <div class="space-y-2">
@@ -193,7 +192,7 @@
                       <select x-model="mapping.csvColumn"
                               @change="updateColumnMapping()"
                               class="select select-bordered select-sm flex-1">
-                        <option value="">{% trans "Select column..." %}</option>
+                        <option value="">{% translate "Select column..." %}</option>
                         <template x-for="column in csvData?.columns || []">
                           <option :value="column" x-text="column" :selected="mapping.csvColumn === column"></option>
                         </template>
@@ -206,14 +205,14 @@
                     </div>
                   </template>
                   <div x-show="contextMappings.length === 0" class="text-sm text-gray-500 italic">
-                    {% trans "No additional context fields mapped. Click 'Add Field' to map CSV columns to context data." %}
+                    {% translate "No additional context fields mapped. Click 'Add Field' to map CSV columns to context data." %}
                   </div>
                 </div>
               </div>
 
               <!-- History configuration -->
               <div class="pt-4 border-t">
-                <h4 class="font-medium mb-3">{% trans "History Configuration" %}</h4>
+                <h4 class="font-medium mb-3">{% translate "History Configuration" %}</h4>
 
                 <!-- Automatically populate history checkbox -->
                 <div class="form-control mb-4">
@@ -222,19 +221,19 @@
 
                 <!-- History column mapping -->
                 <div class="mb-4">
-                  <label class="block text-sm font-medium mb-1">{% trans "Or select history column from CSV" %}</label>
+                  <label class="block text-sm font-medium mb-1">{% translate "Or select history column from CSV" %}</label>
                   <select x-model="historyColumn"
                           @change="updateHistoryColumn()"
                           :disabled="populateHistory"
                           class="select select-bordered w-full"
                           :class="populateHistory ? 'select-disabled' : ''">
-                    <option value="">{% trans "Select column..." %}</option>
+                    <option value="">{% translate "Select column..." %}</option>
                     <template x-for="column in csvData?.columns || []">
                       <option :value="column" x-text="column"></option>
                     </template>
                   </select>
                   <div class="text-xs text-gray-500 mt-1">
-                    {% trans "Choose a column that contains conversation history text" %}
+                    {% translate "Choose a column that contains conversation history text" %}
                   </div>
                 </div>
 
@@ -248,7 +247,7 @@
               <button type="button"
                       class="btn btn-outline btn-sm"
                       @click="resetCsv()">
-                <i class="fa-solid fa-refresh"></i> {% trans "Upload Different File" %}
+                <i class="fa-solid fa-refresh"></i> {% translate "Upload Different File" %}
               </button>
             </div>
           </div>
@@ -259,27 +258,30 @@
         </div>
       </div>
 
-      <div x-show="showError" class="alert alert-error mb-4">
+      <div x-show="errorMessages.length" class="alert alert-error mb-4">
         <i class="fa-solid fa-exclamation-triangle"></i>
-        <span x-text="errorMessage"></span>
+        <div>
+          <template x-for="error in errorMessages || []">
+            <p x-text="error"></p>
+          </template>
+        </div>
       </div>
     </div> <!-- End of loaded content div -->
 
     <!-- Edit Message Modal - Inside Alpine context, no form nesting -->
     <dialog id="editMessageModal" class="modal">
       <div x-show="isEditingMessage" class="modal-box max-w-none w-1/2">
-        <h3 class="font-bold text-lg mb-4">{% trans "Edit Message Pair" %}</h3>
+        <h3 class="font-bold text-lg mb-4">{% translate "Edit Message Pair" %}</h3>
         <button type="button" class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" @click="cancelEditingMessage()">✕</button>
 
         <!-- Modal content - no form tags to avoid nesting -->
         <div class="space-y-6">
-          {% include "evaluations/components/message_pair_form.html" with context_field_id="edit-modal-context-field" disable_button_id="modal-save-button" use_alpine_model=True %}
+          {% include "evaluations/components/message_pair_form.html" with disable_button_id="modal-save-button" use_alpine_model=True %}
 
           <!-- Error messages -->
-          <div x-show="editingMessageErrors.human" class="text-error text-sm mt-1" x-text="editingMessageErrors.human"></div>
-          <div x-show="editingMessageErrors.ai" class="text-error text-sm mt-1" x-text="editingMessageErrors.ai"></div>
-          <div x-show="editingMessageErrors.context" class="text-error text-sm mt-1" x-text="editingMessageErrors.context"></div>
-          <div x-show="editingMessageErrors.history_text" class="text-error text-sm mt-1" x-text="editingMessageErrors.history_text"></div>
+          <template x-for="error in editingMessageErrors || []">
+            <div class="text-error text-sm mt-1" x-text="error"></div>
+          </template>
 
           <!-- Actions -->
           <div class="modal-action">
@@ -288,7 +290,7 @@
               class="btn btn-ghost"
               @click="cancelEditingMessage()"
             >
-              {% trans "Cancel" %}
+              {% translate "Cancel" %}
             </button>
             <button
               type="button"
@@ -296,7 +298,7 @@
               id="modal-save-button"
               @click="updateEditingMessage()"
             >
-              {% trans "Save Changes" %}
+              {% translate "Save Changes" %}
             </button>
           </div>
         </div>
@@ -312,11 +314,11 @@
       return {
         loaded: false,
         mode: 'clone',
-        selectedSessionIds: [],
+        selectedSessionIds: new Set(),
+        filteredSessionIds: new Set(),
         messages: [],
         messagesJsonString: '[]',
-        showError: false,
-        errorMessage: '',
+        errorMessages: [],
 
         // Modal editing state
         editingMessage: {
@@ -326,7 +328,7 @@
           history_text: ''
         },
         editingMessageIndex: -1,
-        editingMessageErrors: {},
+        editingMessageErrors: [],
         isEditingMessage: false,
 
         // CSV mode properties
@@ -346,16 +348,23 @@
           document.addEventListener('change', (e) => {
             if (e.target.name === 'mode') {
               this.mode = e.target.value;
-              this.showError = false;
+              this.errorMessages = [];
             }
           });
 
           // Initialize session selection for clone mode
           const preselected = document.querySelector('input[name="session_ids"]').value;
           if (preselected) {
-            this.selectedSessionIds = preselected.split(',').filter(id => id.trim());
+            preselected.split(',').filter(id => id.trim()).forEach(id => this.selectedSessionIds.add(id));
           }
           this.updateSessionHiddenField();
+
+          // Initialize filtered session selection
+          const preselectedFiltered = document.querySelector('input[name="filtered_session_ids"]').value;
+          if (preselectedFiltered) {
+            preselectedFiltered.split(',').filter(id => id.trim()).forEach(id => this.filteredSessionIds.add(id));
+          }
+          this.updateFilteredSessionHiddenField();
 
           // Initialize messages for manual mode
           const messagesData = document.querySelector('input[name="messages_json"]').value;
@@ -391,76 +400,86 @@
 
           // Initialize JSON editor for manual message form after DOM is ready
           this.$nextTick(() => {
-            const jsonEditorElement = document.querySelector('#manual-message-form .json-editor');
-            if (jsonEditorElement && window.SiteJS && window.SiteJS.editors) {
-              window.SiteJS.editors.createJsonEditor(jsonEditorElement);
-            }
+            const form = document.getElementById('manual-message-form');
+            window.SiteJS.editors.initJsonEditors(form);
           });
         },
 
         validateForm(e) {
-          this.showError = false;
-          this.errorMessage = '';
+          this.errorMessages = [];
 
           if (this.mode === 'clone') {
-            if (this.selectedSessionIds.length === 0) {
+            if (this.selectedSessionIds.size + this.filteredSessionIds.size === 0) {
               e.preventDefault();
-              this.showError = true;
-              this.errorMessage = 'Please select at least one session to create the dataset.';
+              this.errorMessages.push('Please select at least one session to create the dataset.');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            const intersection = [...this.selectedSessionIds].filter(id => this.filteredSessionIds.has(id));
+            if (intersection.length > 0) {
+              e.preventDefault();
+              this.errorMessages.push('A session cannot be selected in both "All Messages" and "Filtered Messages". Please select each session in only one column.');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           } else if (this.mode === 'manual') {
             if (this.messages.length === 0) {
-              e.preventDefault();
-              this.showError = true;
-              this.errorMessage = 'Please add at least one message pair to create the dataset.';
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              this.errorMessages.push('Please add at least one message pair to create the dataset.');
             } else {
               // Validate that all messages have content
               for (let i = 0; i < this.messages.length; i++) {
                 const msg = this.messages[i];
                 if (!msg.human.trim() || !msg.ai.trim()) {
-                  e.preventDefault();
-                  this.showError = true;
-                  this.errorMessage = `Message pair ${i + 1} is missing required content.`;
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                  return;
+                  this.errorMessages.push(`Message pair ${i + 1} is missing required content.`);
                 }
 
                 // Validate history text format if present
                 if (msg.history_text && msg.history_text.trim()) {
                   const parsedHistory = this.parseHistoryText(msg.history_text);
                   if (parsedHistory.length === 0) {
-                    e.preventDefault();
-                    this.showError = true;
-                    this.errorMessage = `Message pair ${i + 1} has invalid history format. History should contain lines starting with "user:" or "assistant:".`;
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                    return;
+                    this.errorMessages.push(`Message pair ${i + 1} has invalid history format. History should contain lines starting with "user:" or "assistant:".`);
                   }
                 }
               }
             }
           } else if (this.mode === 'csv') {
             if (!this.csvParsed || !this.columnMapping.input || !this.columnMapping.output) {
-              e.preventDefault();
-              this.showError = true;
-              this.errorMessage = 'Please upload a CSV file and map both input and output columns.';
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-              return;
+              this.errorMessages.push('Please upload a CSV file and map both input and output columns.');
             }
 
             // Check for context field validation errors
             for (let i = 0; i < this.contextMappings.length; i++) {
               this.validateContextFieldName(i);
               if (this.contextMappings[i].fieldNameError) {
-                e.preventDefault();
-                this.showError = true;
-                this.errorMessage = 'Please fix context field name errors before submitting.';
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-                return;
+                this.errorMessages.push('Please fix context field name errors before submitting.');
               }
             }
           }
+
+          if (this.errorMessages.length !== 0) {
+            e.preventDefault();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        },
+
+        // Filtered session methods (for per-session filtering)
+        updateFilteredSessions() {
+          const checkboxes = document.querySelectorAll('.filter-checkbox:checked');
+          const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
+          const allCurrentPageCheckboxes = document.querySelectorAll('.filter-checkbox');
+          const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
+
+          this.filteredSessionIds = new Set(
+            [...this.filteredSessionIds].filter(id => !currentPageSessionIds.includes(id))
+          );
+          currentPageSelections.forEach(id => this.filteredSessionIds.add(id));
+
+          this.selectedSessionIds = new Set(
+            [...this.selectedSessionIds].filter(id => !this.filteredSessionIds.has(id))
+          );
+
+          this.updateFilteredSessionHiddenField();
+          this.updateSessionHiddenField();
+          this.uncheckSessionCheckboxes();
         },
 
         // Session selection methods (for clone mode)
@@ -473,18 +492,20 @@
 
           toggleInput.checked = checkboxes.length === allCurrentPageCheckboxes.length;
 
-          this.selectedSessionIds = this.selectedSessionIds.filter(id =>
-            !currentPageSessionIds.includes(id) || currentPageSelections.includes(id)
+          // Remove current page sessions, then add back the checked ones
+          this.selectedSessionIds = new Set(
+            [...this.selectedSessionIds].filter(id => !currentPageSessionIds.includes(id))
+          );
+          currentPageSelections.forEach(id => this.selectedSessionIds.add(id));
+
+          this.filteredSessionIds = new Set(
+            [...this.filteredSessionIds].filter(id => !this.selectedSessionIds.has(id))
           );
 
-          currentPageSelections.forEach(id => {
-            if (!this.selectedSessionIds.includes(id)) {
-              this.selectedSessionIds.push(id);
-            }
-          });
-
           this.updateSessionHiddenField();
-          this.showError = false;
+          this.updateFilteredSessionHiddenField();
+          this.uncheckFilterCheckboxes();
+          this.errorMessages = [];
         },
 
         toggleAllSelections(val) {
@@ -497,124 +518,103 @@
         },
 
         clearAllSelections() {
-          this.selectedSessionIds = [];
+          this.selectedSessionIds = new Set();
+          this.filteredSessionIds = new Set();
           this.updateSessionHiddenField();
+          this.updateFilteredSessionHiddenField();
           document.querySelectorAll('.session-checkbox:checked').forEach(cb => {
+            cb.checked = false;
+          });
+          document.querySelectorAll('.filter-checkbox:checked').forEach(cb => {
             cb.checked = false;
           });
         },
 
         updateSessionHiddenField() {
           const hiddenField = document.querySelector('input[name="session_ids"]');
-          hiddenField.value = this.selectedSessionIds.join(',');
+          hiddenField.value = Array.from(this.selectedSessionIds).join(',');
+        },
+
+        updateFilteredSessionHiddenField() {
+          const hiddenField = document.querySelector('input[name="filtered_session_ids"]');
+          hiddenField.value = Array.from(this.filteredSessionIds).join(',');
+        },
+
+        uncheckFilterCheckboxes() {
+          this.selectedSessionIds.forEach(id => {
+            const checkbox = document.querySelector(`.filter-checkbox[value="${id}"]`);
+            if (checkbox) checkbox.checked = false;
+          });
+        },
+
+        uncheckSessionCheckboxes() {
+          this.filteredSessionIds.forEach(id => {
+            const checkbox = document.querySelector(`.session-checkbox[value="${id}"]`);
+            if (checkbox) checkbox.checked = false;
+          });
         },
 
         // Manual message methods (for manual mode)
         addMessageFromForm() {
           // Get values from the form
-          const humanMessage = document.querySelector('textarea[name="human_message"]').value.trim();
-          const aiMessage = document.querySelector('textarea[name="ai_message"]').value.trim();
-          const contextValue = document.querySelector('#manual-context-field').value || '{}';
-          const historyText = document.querySelector('textarea[name="history_text"]').value.trim();
+          const form = document.getElementById('manual-message-form');
 
-          // Validate required fields
-          if (!humanMessage || !aiMessage) {
-            this.showError = true;
-            this.errorMessage = 'Both human and AI messages are required.';
+          const message = {
+            human: form.querySelector('textarea[name="human_message"]').value.trim(),
+            ai: form.querySelector('textarea[name="ai_message"]').value.trim(),
+            context: form.querySelector('input[type="hidden"][name="context"]').value || '{}',
+            history_text: form.querySelector('textarea[name="history_text"]').value.trim(),
+            participant_data: form.querySelector('input[type="hidden"][name="participant_data"]').value || '{}',
+            session_state: form.querySelector('input[type="hidden"][name="session_state"]').value || '{}',
+          }
+
+          const errors = this.validateMessage(message);
+          if (errors.length !== 0) {
+            this.errorMessages = errors;
             return;
           }
 
-          // Validate JSON context
-          let contextObj = {};
-          if (contextValue.trim() && contextValue !== '{}') {
-            try {
-              contextObj = JSON.parse(contextValue);
-            } catch (e) {
-              this.showError = true;
-              this.errorMessage = 'Invalid JSON format in context field.';
-              return;
-            }
-          }
-
-          // Validate history text format if present
-          if (historyText && historyText.trim()) {
-            const parsedHistory = this.parseHistoryText(historyText);
-            if (parsedHistory.length === 0) {
-              this.showError = true;
-              this.errorMessage = 'Invalid history format. History should contain lines starting with "user:" or "assistant:".';
-              return;
-            }
-          }
-
           // Add message to array
-          this.messages.push({
-            human: humanMessage,
-            ai: aiMessage,
-            context: contextValue,
-            history_text: historyText
-          });
+          this.messages.push(message);
 
           this.updateMessagesJson();
-          this.clearMessageForm();
-          this.showError = false;
+          this.clearManualMessageForm();
+          this.errorMessages = [];
         },
 
-        clearMessageForm() {
+        clearManualMessageForm() {
           // Clear form fields
-          document.querySelector('textarea[name="human_message"]').value = '';
-          document.querySelector('textarea[name="ai_message"]').value = '';
-          document.querySelector('textarea[name="history_text"]').value = '';
-          document.querySelector('#manual-context-field').value = '{}';
+          const form = document.getElementById('manual-message-form');
+          form.querySelector('textarea[name="human_message"]').value = '';
+          form.querySelector('textarea[name="ai_message"]').value = '';
+          form.querySelector('textarea[name="history_text"]').value = '';
+          form.querySelector('input[type="hidden"][name="context"]').value = '{}';
+          form.querySelector('input[type="hidden"][name="participant_data"]').value = '{}';
+          form.querySelector('input[type="hidden"][name="session_state"]').value = '{}';
+          form.querySelectorAll('.json-editor').forEach(editor => {
+            editor.dispatchEvent(new CustomEvent('resetEditor'));
+          });
         },
 
         editMessage(index) {
           // Set up modal editing state
           this.editingMessage = { ...this.messages[index] };
           this.editingMessageIndex = index;
-          this.editingMessageErrors = {};
+          this.editingMessageErrors = [];
           this.isEditingMessage = true;
 
           // Show modal and initialize JSON editor
           this.$nextTick(() => {
-            document.getElementById('editMessageModal').showModal();
-
-            // Initialize JSON editor for modal
-            const jsonEditorElement = document.querySelector('#edit-modal-context-field').parentElement.querySelector('.json-editor');
-            if (jsonEditorElement && window.SiteJS && window.SiteJS.editors) {
-              window.SiteJS.editors.createJsonEditor(jsonEditorElement);
-            }
+            let modal = document.getElementById('editMessageModal');
+            modal.showModal();
+            window.SiteJS.editors.initJsonEditors(modal);
           });
         },
 
         updateEditingMessage() {
-          // Validate required fields
-          if (!this.editingMessage.human.trim() || !this.editingMessage.ai.trim()) {
-            this.editingMessageErrors = {
-              human: !this.editingMessage.human.trim() ? 'Human message is required' : '',
-              ai: !this.editingMessage.ai.trim() ? 'AI message is required' : ''
-            };
+          this.editingMessageErrors = this.validateMessage(this.editingMessage);
+          if (this.editingMessageErrors.length !== 0) {
             return;
-          }
-
-          // Validate JSON context
-          if (this.editingMessage.context.trim() && this.editingMessage.context !== '{}') {
-            try {
-              JSON.parse(this.editingMessage.context);
-            } catch (e) {
-              this.editingMessageErrors = { context: 'Invalid JSON format' };
-              return;
-            }
-          }
-
-          // Validate history text format if present
-          if (this.editingMessage.history_text && this.editingMessage.history_text.trim()) {
-            const parsedHistory = this.parseHistoryText(this.editingMessage.history_text);
-            if (parsedHistory.length === 0) {
-              this.editingMessageErrors = {
-                history_text: 'Invalid history format. History should contain lines starting with "user:" or "assistant:".'
-              };
-              return;
-            }
           }
 
           // Update the message in the array
@@ -625,15 +625,50 @@
           this.cancelEditingMessage();
         },
 
+        validateMessage(message) {
+          let errors = [];
+          if (!message.human.trim()) {
+            errors.push('Human message is required');
+          }
+          if (!message.ai.trim()) {
+            errors.push('AI message is required');
+          }
+
+          const _validateJsonField = (field) => {
+            if (message[field].trim() && message[field] !== '{}') {
+              try {
+                message[field] = JSON.stringify(JSON.parse(message[field]), null, 2);
+              } catch (e) {
+                errors.push(`Invalid JSON format for ${field}`);
+              }
+            }
+          }
+
+          _validateJsonField('context')
+          _validateJsonField('participant_data')
+          _validateJsonField('session_state')
+
+          // Validate history text format if present
+          if (message.history_text && message.history_text.trim()) {
+            const parsedHistory = this.parseHistoryText(message.history_text);
+            if (parsedHistory.length === 0) {
+              errors.push('Invalid history format. History should contain lines starting with "user:" or "assistant:".');
+            }
+          }
+          return errors;
+        },
+
         cancelEditingMessage() {
           this.editingMessage = {
             human: '',
             ai: '',
             context: '{}',
-            history_text: ''
+            history_text: '',
+            participant_data: '{}',
+            session_state: '{}',
           };
           this.editingMessageIndex = -1;
-          this.editingMessageErrors = {};
+          this.editingMessageErrors = [];
           this.isEditingMessage = false;
           document.getElementById('editMessageModal').close();
         },
@@ -668,7 +703,7 @@
           if (!file) return;
 
           this.csvUploading = true;
-          this.showError = false;
+          this.errorMessages = [];
 
           const formData = new FormData();
           formData.append('csv_file', file);
@@ -711,8 +746,7 @@
 
             this.updateColumnMapping();
           } catch (error) {
-            this.showError = true;
-            this.errorMessage = error.message;
+            this.errorMessages.push(error.message);
             this.csvParsed = false;
           } finally {
             this.csvUploading = false;
@@ -868,10 +902,29 @@
       });
     }
 
+    function restoreFilteredCheckboxStates() {
+      const filteredHiddenField = document.querySelector('input[name="filtered_session_ids"]');
+      if (!filteredHiddenField) return;
+
+      const filteredIds = filteredHiddenField.value ? filteredHiddenField.value.split(',').filter(id => id.trim()) : [];
+
+      document.querySelectorAll('.filter-checkbox').forEach(cb => {
+        cb.checked = false;
+      });
+
+      filteredIds.forEach(sessionId => {
+        const checkbox = document.querySelector(`.filter-checkbox[value="${sessionId}"]`);
+        if (checkbox) {
+          checkbox.checked = true;
+        }
+      });
+    }
+
     document.addEventListener('htmx:afterSettle', function(event) {
       if (event.target.id === 'sessions-table') {
         setTimeout(() => {
           restoreCheckboxStates();
+          restoreFilteredCheckboxStates();
         }, 10);
       }
     });
@@ -880,6 +933,7 @@
       if (event.target.id === 'sessions-table') {
         setTimeout(() => {
           restoreCheckboxStates();
+          restoreFilteredCheckboxStates();
         }, 10);
       }
     });

@@ -1,5 +1,4 @@
-{% load i18n %}
-{% load django_tables2 %}
+{% load django_tables2 i18n %}
 {% if show_modal_or_banner %}
   <dialog id="creation-redirect-modal" class="modal">
     <div class="modal-box">
@@ -106,19 +105,25 @@
         </div>
       </div>
     </form>
-  {% elif use_dynamic_filters %}
-    <div class="my-2">
+  {% elif df_filter_columns and df_table_type %}
+    <div class="my-2 flex justify-between">
       {% include "experiments/filters.html" %}
     </div>
   {% else %}
     <hr class="my-2">
   {% endif %}
 
+    {% if df_filter_columns %}
+    <div id="data-table">
+      {% include "table/table_placeholder.html" %}
+    </div>
+    {% else %}
     <div id="data-table">
       <div hx-get="{{ table_url }}{% querystring %}"
         hx-trigger="load" hx-swap="outerHTML">
       {% include "table/table_placeholder.html" %}
     </div>
+    {% endif %}
   </div>
 </div>
 

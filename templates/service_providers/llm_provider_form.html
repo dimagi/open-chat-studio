@@ -1,6 +1,5 @@
 {% extends "generic/type_select_form.html" %}
-{% load form_tags %}
-{% load i18n %}
+{% load form_tags i18n %}
 {% block pre_secondary_form %}
   <div class="my-4 flex flex-col gap-4">
     <div>
@@ -44,6 +43,7 @@
     </div>
   </div>
 {% endblock pre_secondary_form %}
+
 {% block post_form %}
   {# put this outside the form to prevent interaction between the forms #}
   <dialog id="new_custom_model" class="modal">

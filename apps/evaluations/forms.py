@@ -69,9 +69,15 @@ class EvaluationConfigForm(forms.ModelForm):
         queryset=Experiment.objects.none(),
         required=False,
         empty_label="Select a chatbot for generation...",
-        help_text="Select the chatbot to run generation against",
+        help_text="(Optional) Select the chatbot to run generation against",
         widget=forms.Select(attrs={"class": "select w-full"}),
         label="Chatbot",
+    )
+    run_generation = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="Run generation step before evaluation",
+        widget=forms.CheckboxInput(attrs={"x-model": "runGeneration"}),
     )
     experiment_version = None  # Created dynamically based on the queryset
 
@@ -82,6 +88,7 @@ class EvaluationConfigForm(forms.ModelForm):
             "evaluators",
             "dataset",
             "experiment_version",
+            "run_generation",
             "base_experiment",
         ]
         widgets = {
@@ -101,6 +108,8 @@ class EvaluationConfigForm(forms.ModelForm):
         experiment_version_queryset = None
 
         if self.instance and self.instance.pk:
+            self.initial["run_generation"] = self.instance.experiment_version or self.instance.base_experiment
+
             if self.instance.experiment_version:
                 # For specific version, set experiment field based on the experiment_version
                 if working_experiment := self.instance.experiment_version.get_working_version():
@@ -137,6 +146,11 @@ class EvaluationConfigForm(forms.ModelForm):
 
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
+
+        if cleaned_data.get("run_generation") and not experiment:
+            self.add_error("experiment", "Please select a version")
+        elif not cleaned_data.get("run_generation"):
+            cleaned_data["experiment"] = experiment = None
 
         if experiment and not experiment_version:
             self.add_error("experiment_version", "Please select a version")
@@ -259,6 +273,11 @@ class EvaluationDatasetForm(forms.ModelForm):
         required=False,
     )
 
+    filtered_session_ids = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=False,
+    )
+
     messages_json = forms.CharField(
         widget=forms.HiddenInput(),
         required=False,
@@ -291,6 +310,8 @@ class EvaluationDatasetForm(forms.ModelForm):
         fields = ("name",)
 
     def __init__(self, team, *args, **kwargs):
+        self.filter_params = kwargs.pop("filter_params", None)
+        self.timezone = kwargs.pop("timezone", None)
         super().__init__(*args, **kwargs)
         self.team = team
 
@@ -305,7 +326,9 @@ class EvaluationDatasetForm(forms.ModelForm):
         cleaned_data = super().clean()
         mode = cleaned_data.get("mode")
         if mode == "clone":
-            cleaned_data["session_ids"] = self._clean_clone()
+            session_ids, filtered_session_ids = self._clean_clone()
+            cleaned_data["session_ids"] = session_ids
+            cleaned_data["filtered_session_ids"] = filtered_session_ids
         elif mode == "manual":
             cleaned_data["message_pairs"] = self._clean_manual()
         elif mode == "csv":
@@ -320,32 +343,40 @@ class EvaluationDatasetForm(forms.ModelForm):
         session_ids = set(session_ids_str.split(","))
         session_ids.discard("")  # Remove empty strings
 
-        if not session_ids:
+        filtered_session_ids_str = self.data.get("filtered_session_ids", "")
+        filtered_session_ids = set(filtered_session_ids_str.split(","))
+        filtered_session_ids.discard("")  # Remove empty strings
+
+        if not session_ids and not filtered_session_ids:
             raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
 
-        existing_sessions = ExperimentSession.objects.filter(team=self.team, external_id__in=session_ids).values_list(
-            "external_id", flat=True
-        )
+        intersection = session_ids & filtered_session_ids
+        if intersection:
+            raise forms.ValidationError(
+                "A session cannot be selected in both 'All Messages' and 'Filtered Messages'. "
+                f"The following sessions are in both lists: {', '.join(sorted(str(sid) for sid in intersection))}"
+            )
 
-        missing_sessions = set(session_ids) - set(existing_sessions)
+        all_session_ids = session_ids.union(filtered_session_ids)
+        existing_sessions = ExperimentSession.objects.filter(
+            team=self.team, external_id__in=all_session_ids
+        ).values_list("external_id", flat=True)
+
+        missing_sessions = all_session_ids - set(str(sid) for sid in existing_sessions)
         if missing_sessions:
             raise forms.ValidationError(
                 "The following sessions do not exist or you don't have permission to access them: "
-                f"{', '.join(missing_sessions)}"
+                f"{', '.join(sorted(missing_sessions))}"
             )
 
-        return session_ids
+        return session_ids, filtered_session_ids
 
     def _clean_manual(self):
-        message_pairs = []
         messages_json = self.data.get("messages_json", "")
         if not messages_json:
             raise forms.ValidationError("At least one message pair must be added when creating manually.")
 
-        try:
-            message_pairs = json.loads(messages_json)
-        except json.JSONDecodeError as err:
-            raise forms.ValidationError("Messages data is invalid JSON.") from err
+        message_pairs = _clean_json_field("Message data", messages_json)
 
         if not isinstance(message_pairs, list) or len(message_pairs) == 0:
             raise forms.ValidationError("At least one message pair must be added.")
@@ -358,16 +389,14 @@ class EvaluationDatasetForm(forms.ModelForm):
                 raise forms.ValidationError(f"Message pair {i + 1} is missing human message content.")
             if not pair.get("ai", "").strip():
                 raise forms.ValidationError(f"Message pair {i + 1} is missing AI message content.")
-            if pair.get("context"):
-                try:
-                    json.loads(pair.get("context", "{}"))
-                except json.JSONDecodeError as err:
-                    raise forms.ValidationError(f"Context for pair {i + 1} has malformed JSON") from err
+
+            context = _get_message_pair_value("Context", i, pair.get("context"))
+            participant_data = _get_message_pair_value("Participant data", i, pair.get("participant_data"))
+            session_state = _get_message_pair_value("Session state", i, pair.get("session_state"))
 
             # Parse history text if provided
             history = []
-            history_text = pair.get("history_text", "").strip()
-            if history_text:
+            if history_text := pair.get("history_text", "").strip():
                 try:
                     history = parse_history_text(history_text)
                 except Exception as err:
@@ -377,8 +406,10 @@ class EvaluationDatasetForm(forms.ModelForm):
                 {
                     "human": EvaluationMessageContent(content=pair.get("human", "").strip(), role="human").model_dump(),
                     "ai": EvaluationMessageContent(content=pair.get("ai", "").strip(), role="ai").model_dump(),
-                    "context": json.loads(pair.get("context", "{}")) if pair.get("context") else {},
+                    "context": context,
                     "history": history,
+                    "participant_data": participant_data,
+                    "session_state": session_state,
                 }
             )
         return validated_pairs
@@ -485,8 +516,16 @@ class EvaluationDatasetForm(forms.ModelForm):
     def _save_clone(self):
         evaluation_messages = []
         session_ids = self.cleaned_data.get("session_ids", [])
-        if session_ids:
-            evaluation_messages = EvaluationMessage.create_from_sessions(self.team, session_ids)
+        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
+
+        if session_ids or filtered_session_ids:
+            evaluation_messages = EvaluationMessage.create_from_sessions(
+                team=self.team,
+                external_session_ids=session_ids,
+                filtered_session_ids=filtered_session_ids,
+                filter_params=self.filter_params,
+                timezone=self.timezone,
+            )
         return evaluation_messages
 
     def _save_manual(self):
@@ -496,6 +535,8 @@ class EvaluationDatasetForm(forms.ModelForm):
                 output=pair["ai"],
                 context=pair["context"],
                 history=pair.get("history", []),
+                participant_data=pair.get("participant_data", {}),
+                session_state=pair.get("session_state", {}),
                 metadata={"created_mode": "manual"},
             )
             for pair in self.cleaned_data.get("message_pairs", [])
@@ -558,6 +599,19 @@ class EvaluationDatasetForm(forms.ModelForm):
                     }
                 )
         return evaluation_messages
+
+
+def _get_message_pair_value(field_name: str, pair_index: int, field_value: str) -> dict:
+    return _clean_json_field(f"{field_name} for pair {pair_index + 1}", field_value)
+
+
+def _clean_json_field(field_name: str, field_value: str) -> dict:
+    if not field_value.strip():
+        return {}
+    try:
+        return json.loads(field_value)
+    except json.JSONDecodeError as err:
+        raise forms.ValidationError(f"{field_name} is not valid JSON") from err
 
 
 class EvaluationDatasetEditForm(forms.ModelForm):

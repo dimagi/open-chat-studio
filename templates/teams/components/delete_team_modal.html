@@ -4,7 +4,7 @@
   <div class="modal-box w-11/12 max-w-5xl">
     <h3 class="font-bold text-lg">{% translate "Really delete team?" %}</h3>
     <p class="py-4">
-      {% blocktranslate with team_name=request.team.name  %}
+      {% blocktranslate with team_name=request.team.name %}
         This will permanently delete the <em><strong>{{ team_name }}</strong></em> team and all associated data.
         <strong>This action cannot be undone.</strong>
       {% endblocktranslate %}

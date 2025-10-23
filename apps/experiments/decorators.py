@@ -4,7 +4,7 @@ from functools import wraps
 from django.contrib import messages
 from django.core import signing
 from django.http import Http404, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
@@ -88,9 +88,17 @@ def verify_session_access_cookie(view):
     @wraps(view)
     def _inner(request, *args, **kwargs):
         if request.user.is_authenticated:
-            if request.experiment_session.participant.user_id == request.user.id or (
-                request.team_membership and request.user.has_perm("chat.view_chat")
-            ):
+            if request.experiment_session.participant.user_id == request.user.id:
+                return view(request, *args, **kwargs)
+            elif request.resolver_match.url_name in ["experiment_chat", "chatbot_chat"]:
+                # Authenticated users should only be able to access the chat UI for their own sessions
+                return redirect(
+                    reverse(
+                        "chatbots:chatbot_session_view",
+                        args=[request.team.slug, request.experiment.public_id, request.experiment_session.external_id],
+                    )
+                )
+            elif request.team_membership and request.user.has_perm("chat.view_chat"):
                 return view(request, *args, **kwargs)
 
         try:
@@ -127,7 +135,7 @@ def _redirect_for_state(request, team_slug):
         case SessionStatus.PENDING_PRE_SURVEY:
             return HttpResponseRedirect(reverse("experiments:experiment_pre_survey", args=view_args))
         case SessionStatus.ACTIVE:
-            return HttpResponseRedirect(reverse("experiments:experiment_chat", args=view_args))
+            return HttpResponseRedirect(reverse("chatbots:chatbot_chat", args=view_args))
         case SessionStatus.PENDING_REVIEW:
             return HttpResponseRedirect(reverse("experiments:experiment_review", args=view_args))
         case SessionStatus.COMPLETE:
@@ -137,4 +145,4 @@ def _redirect_for_state(request, team_slug):
                 request,
                 "Session was in an unknown/unexpected state. It may be old, or something may have gone wrong.",
             )
-            return HttpResponseRedirect(reverse("experiments:experiment_session_view", args=view_args))
+            return HttpResponseRedirect(reverse("chatbots:chatbot_session_view", args=view_args))

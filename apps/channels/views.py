@@ -13,6 +13,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView
+from django_htmx.http import HttpResponseClientRedirect
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -246,18 +247,15 @@ class BaseChannelDialogView(View):
         return context
 
     def get_success_url(self):
-        origin = self.request.GET.get("origin", "experiments")
         team_slug = self.kwargs["team_slug"]
         experiment_id = self.kwargs["experiment_id"]
-        return get_redirect_url(origin, team_slug, experiment_id)
+        return get_redirect_url(team_slug, experiment_id)
 
     def form_valid(self, form):
         channel = form.save()
         if form.success_message or form.warning_message:
-            origin = self.request.GET.get("origin", "experiments")
             channels, available_platforms = get_channels_context(self.experiment)
             additional_context = {
-                "origin": origin,
                 "save_successful": True,
                 "channels": channels,
                 "platforms": available_platforms,
@@ -267,7 +265,7 @@ class BaseChannelDialogView(View):
                 ),  # override extra form to get 'update' rendering
             }
             return self.render_to_response({**self.get_context_data(form=form), **additional_context})
-        return HttpResponse(headers={"hx-redirect": self.get_success_url()})
+        return HttpResponseClientRedirect(self.get_success_url())
 
 
 class ChannelEditDialogView(BaseChannelDialogView, PermissionRequiredMixin, UpdateView):
@@ -324,11 +322,8 @@ class ChannelCreateDialogView(BaseChannelDialogView, PermissionRequiredMixin, Cr
         return super().get(request, *args, **kwargs)
 
 
-def get_redirect_url(origin: str, team_slug: str, experiment_id: int) -> str:
-    """Return the URL to redirect to based on origin"""
-    if origin == "chatbots":
-        return reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
-    return reverse("experiments:single_experiment_home", args=[team_slug, experiment_id])
+def get_redirect_url(team_slug: str, experiment_id: int) -> str:
+    return reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
 
 
 @login_and_team_required
@@ -340,14 +335,12 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
         experiment__id=experiment_id,
         team__slug=team_slug,
     )
-    origin = request.GET.get("origin")
     channel.soft_delete()
     channels, available_platforms = get_channels_context(channel.experiment)
     return render(
         request,
         "chatbots/partials/channel_buttons_oob.html",
         {
-            "origin": origin,
             "channels": channels,
             "platforms": available_platforms,
             "experiment": channel.experiment,

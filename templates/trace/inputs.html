@@ -1,12 +1,11 @@
-{% load chat_tags %}
+{% load chat_tags json_tags %}
 
 <!-- Inputs & Outputs tab content -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div class="flex flex-col gap-6">
     <!-- Input Data Section -->
     <div class="card bg-base-100 shadow-md">
         <div class="card-header border-b border-base-200 px-6 py-4">
-            <h3 class="text-lg font-semibold text-base-content">Input Data</h3>
-            <p class="text-sm text-base-content/60 mt-1">User query and context provided to the system</p>
+            <h3 class="text-lg font-semibold text-base-content">User Query</h3>
         </div>
         <div class="card-body p-6">
             {% if trace.input_message %}
@@ -38,37 +37,40 @@
         </div>
     </div>
 
-    <!-- Output Data Section -->
+    <!-- Participant Data -->
     <div class="card bg-base-100 shadow-md">
         <div class="card-header border-b border-base-200 px-6 py-4">
-            <h3 class="text-lg font-semibold text-base-content">Output Data</h3>
-            <p class="text-sm text-base-content/60 mt-1">Generated response and metadata</p>
+            <h3 class="text-lg font-semibold text-base-content">Participant Data</h3>
         </div>
         <div class="card-body p-6">
-            {% if trace.output_message %}
-                <div class="space-y-4">
-                    <!-- Message Content -->
-                    <div class="bg-base-50 rounded-lg p-4 border border-base-200">
-                        <div class="prose max-w-none text-sm">
-                            {% if trace.output_message.content %}
-                                {{ trace.output_message.content|render_markdown }}
-                            {% else %}
-                                <span class="text-base-content/50 italic">No content available</span>
-                            {% endif %}
-                        </div>
-                        <span class="text-xs text-base-content/50">
-                            <time datetime="{{ trace.output_message.created_at.isoformat }}" title="{{ trace.output_message.created_at.isoformat }}">
-                              {{ trace.output_message.created_at|date:"DATETIME_FORMAT" }}
-                            </time>
-                        </span>
-                    </div>
-                </div>
+            {% if trace.participant_data %}
+                <pre class="text-sm overflow-x-auto whitespace-pre-wrap"><code>{{ trace.participant_data|to_json }}</code></pre>
             {% else %}
                 <div class="text-center py-8">
                     <div class="text-base-content/40 mb-2">
                         <i class="fas fa-reply text-2xl"></i>
                     </div>
-                    <p class="text-base-content/60">No output message available for this trace</p>
+                    <p class="text-base-content/60">No participant data available for this trace</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+
+    <!-- Session Data -->
+    <div class="card bg-base-100 shadow-md">
+        <div class="card-header border-b border-base-200 px-6 py-4">
+            <h3 class="text-lg font-semibold text-base-content">Session Data</h3>
+        </div>
+        <div class="card-body p-6">
+            {% if trace.session_state %}
+                <pre class="text-sm overflow-x-auto whitespace-pre-wrap"><code>{{ trace.session_state|to_json }}</code></pre>
+            {% else %}
+                <div class="text-center py-8">
+                    <div class="text-base-content/40 mb-2">
+                        <i class="fas fa-reply text-2xl"></i>
+                    </div>
+                    <p class="text-base-content/60">No session data available for this trace</p>
                 </div>
             {% endif %}
         </div>

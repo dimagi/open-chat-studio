@@ -10,9 +10,9 @@ from langchain_openai.chat_models.base import OpenAIRefusalError
 
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
-from apps.experiments.models import AgentTools, ParticipantData
+from apps.experiments.models import AgentTools
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
-from apps.pipelines.nodes.base import Intents, PipelineState, merge_dicts
+from apps.pipelines.nodes.base import Intents, PipelineState, merge_dict_values_as_lists
 from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
 from apps.pipelines.tests.utils import (
     assistant_node,
@@ -31,7 +31,6 @@ from apps.pipelines.tests.utils import (
     start_node,
     state_key_router_node,
 )
-from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -137,12 +136,6 @@ def test_llm_with_prompt_response(
     get_llm_service.return_value = service
 
     user_input = "The User Input"
-    participant_data = ParticipantData.objects.create(
-        team=experiment_session.team,
-        experiment=experiment_session.experiment,
-        participant=experiment_session.participant,
-        data={"name": "A"},
-    )
     nodes = [
         start_node(),
         llm_response_with_prompt_node(
@@ -160,15 +153,19 @@ def test_llm_with_prompt_response(
         ),
         end_node(),
     ]
-    experiment_session.state = {"session_key": "session_value"}
+    participant_data = {"name": "A"}
     output = create_runnable(pipeline, nodes).invoke(
         PipelineState(
-            messages=[user_input], experiment_session=experiment_session, temp_state={"temp_key": "temp_value"}
+            messages=[user_input],
+            experiment_session=experiment_session,
+            temp_state={"temp_key": "temp_value"},
+            participant_data=participant_data,
+            session_state={"session_key": "session_value"},
         )
     )["messages"][-1]
     expected_output = (
         f"Node 2: temp_value session_value Node 1: Use this {source_material.material} to answer questions "
-        f"about {participant_data.data}. {user_input}"
+        f"about {participant_data}. {user_input}"
     )
     assert output == expected_output
 
@@ -259,15 +256,21 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
         llm_provider_id=provider.id,
         llm_provider_model_id=provider_model.id,
     )
+    participant_data = {"participant_data": "b"}
     node._process_conditional(
         PipelineState(
-            outputs={"123": {"message": "a"}}, messages=["a"], experiment_session=experiment_session, node_input="a"
+            outputs={"123": {"message": "a"}},
+            messages=["a"],
+            experiment_session=experiment_session,
+            node_inputs=["a"],
+            last_node_input="a",
+            participant_data=participant_data,
         ),
     )
 
     assert len(service.llm.get_call_messages()[0]) == 2
-    proxy = ParticipantDataProxy(experiment_session)
-    assert str(proxy.get()) in service.llm.get_call_messages()[0][0].content
+    expected_pd = {"name": experiment_session.participant.name} | participant_data
+    assert str(expected_pd) in service.llm.get_call_messages()[0][0].content
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -420,18 +423,6 @@ def test_router_sets_tags_correctly(pipeline, experiment_session):
     "data_source", [StaticRouterNode.DataSource.participant_data, StaticRouterNode.DataSource.session_state]
 )
 def test_static_router_participant_data(data_source, pipeline, experiment_session):
-    def _update_participant_data(session, data):
-        ParticipantDataProxy(session).set(data)
-
-    def _update_session_state(session, data):
-        session.state = data
-        session.save(update_fields=["state"])
-
-    DATA_SOURCE_UPDATERS = {
-        StaticRouterNode.DataSource.participant_data: _update_participant_data,
-        StaticRouterNode.DataSource.session_state: _update_session_state,
-    }
-
     start = start_node()
     router = state_key_router_node("route_to", ["first", "second"], data_source=data_source)
     template_a = render_template_node("A {{ input }}")
@@ -457,17 +448,22 @@ def test_static_router_participant_data(data_source, pipeline, experiment_sessio
     ]
     runnable = create_runnable(pipeline, nodes, edges)
 
-    DATA_SOURCE_UPDATERS[data_source](experiment_session, {"route_to": "first"})
-    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    def _get_state(route):
+        state = PipelineState(messages=["Hi"], experiment_session=experiment_session)
+        if data_source == StaticRouterNode.DataSource.participant_data:
+            state["participant_data"] = route
+        else:
+            state["session_state"] = route
+        return state
+
+    output = runnable.invoke(_get_state({"route_to": "first"}))
     assert output["messages"][-1] == "A Hi"
 
-    DATA_SOURCE_UPDATERS[data_source](experiment_session, {"route_to": "second"})
-    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    output = runnable.invoke(_get_state({"route_to": "second"}))
     assert output["messages"][-1] == "B Hi"
 
     # default route
-    DATA_SOURCE_UPDATERS[data_source](experiment_session, {})
-    output = runnable.invoke(PipelineState(messages=["Hi"], experiment_session=experiment_session))
+    output = runnable.invoke(_get_state({}))
     assert output["messages"][-1] == "A Hi"
 
 
@@ -535,12 +531,6 @@ def test_extract_structured_data_no_chunking(provider, provider_model, pipeline)
 @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
 def test_extract_structured_data_with_chunking(provider, provider_model, pipeline):
     session = ExperimentSessionFactory()
-    ParticipantData.objects.create(
-        team=session.team,
-        experiment=session.experiment,
-        data={"drink": "martini"},
-        participant=session.participant,
-    )
     llm = FakeLlmSimpleTokenCount(
         responses=[
             # the first chunk sees nothing of value
@@ -605,57 +595,50 @@ def test_extract_participant_data(provider, pipeline):
     correctly.
     """
     session = ExperimentSessionFactory()
-    session.participant.team = session.team
-    session.participant.save()
-    # There should be no data
-    participant_data = (
-        ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
-    )
-    assert participant_data is None
 
     # New data should be created
-    _run_data_extract_and_update_pipeline(
+    data = _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
         schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
         extracted_data={"name": "Johnny", "last_name": None},
         key_name="profile",
+        initial_data={},
     )
 
-    participant_data = ParticipantData.objects.for_experiment(session.experiment).get(participant=session.participant)
-    assert participant_data.data == {"profile": {"name": "Johnny", "last_name": None}}
+    assert data == {"profile": {"name": "Johnny", "last_name": None}}
 
     # The "profile" key should be updated
-    _run_data_extract_and_update_pipeline(
+    data = _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
         schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
         extracted_data={"name": "John", "last_name": "Wick"},
         key_name="profile",
+        initial_data=data,
     )
-    participant_data.refresh_from_db()
-    assert participant_data.data == {"profile": {"name": "John", "last_name": "Wick"}}
+    assert data == {"profile": {"name": "John", "last_name": "Wick"}}
 
     # New data should be inserted at the toplevel
-    _run_data_extract_and_update_pipeline(
+    data = _run_data_extract_and_update_pipeline(
         session,
         provider=provider,
         pipeline=pipeline,
         schema='{"has_pets": "whether or not the user has pets"}',
         extracted_data={"has_pets": "false"},
         key_name="",
+        initial_data=data,
     )
-    participant_data.refresh_from_db()
-    assert participant_data.data == {
+    assert data == {
         "profile": {"name": "John", "last_name": "Wick"},
         "has_pets": "false",
     }
 
 
 def _run_data_extract_and_update_pipeline(
-    session, provider, pipeline, extracted_data: dict, schema: dict, key_name: str
+    session, provider, pipeline, extracted_data: dict, schema: str, key_name: str, initial_data: dict
 ):
     tool_call = AIMessage(tool_calls=[ToolCall(name="CustomModel", args=extracted_data, id="123")], content="Hi")
     service = build_fake_llm_service(responses=[tool_call], token_counts=[0])
@@ -676,8 +659,11 @@ def _run_data_extract_and_update_pipeline(
             end_node(),
         ]
         runnable = create_runnable(pipeline, nodes)
-        state = PipelineState(messages=["ai: hi user\nhuman: hi there"], experiment_session=session)
-        runnable.invoke(state)
+        state = PipelineState(
+            messages=["ai: hi user\nhuman: hi there"], experiment_session=session, participant_data=initial_data or {}
+        )
+        result = runnable.invoke(state)
+        return result["participant_data"]
 
 
 def assistant_node_runnable_mock(
@@ -1008,7 +994,7 @@ def test_assistant_node_empty_metadata_handling(get_llm_service, pipeline):
     ],
 )
 def test_merge_dicts(left, right, expected):
-    assert merge_dicts(left, right) == expected
+    assert merge_dict_values_as_lists(left, right) == expected
 
 
 def test_input_with_format_strings():
@@ -1244,7 +1230,11 @@ def test_router_node_openai_refusal_uses_default_keyword(get_llm_service, provid
     )
     node.default_keyword_index = 0
     state = PipelineState(
-        outputs={"123": {"message": "a"}}, messages=["a"], experiment_session=experiment_session, node_input="a"
+        outputs={"123": {"message": "a"}},
+        messages=["a"],
+        experiment_session=experiment_session,
+        node_inputs=["a"],
+        last_node_input="a",
     )
 
     keyword, is_default_keyword = node._process_conditional(state)

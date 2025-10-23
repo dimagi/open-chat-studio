@@ -10,7 +10,12 @@ from apps.files.models import File
 
 class BinaryRenderer(BaseRenderer):
     media_type = "application/octet-stream"
-    format = "bin"
+    format = "binary"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        # For binary content (file downloads), return data as-is
+        # This renderer is only used for successful file responses
+        return data
 
 
 @extend_schema(operation_id="file_content", summary="Download File Content", tags=["Files"], responses=bytes)

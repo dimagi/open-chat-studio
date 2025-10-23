@@ -142,6 +142,12 @@ function dashboard() {
                     }
                 }
             }
+
+            if (this.filters.date_range !== "custom") {
+                // We cannot have a start_date or end_date if the date range is not custom
+                delete this.filters.start_date;
+                delete this.filters.end_date;
+            }
         },
         
         handleFilterChange() {
@@ -204,7 +210,7 @@ function dashboard() {
         updateURL() {
             const url = new URL(window.location);
             const params = new URLSearchParams();
-
+            
             // Add filters to URL params
             for (const [key, value] of Object.entries(this.filters)) {
                 if (value && value !== '' && !(Array.isArray(value) && value.length === 0)) {
@@ -759,7 +765,66 @@ function dashboard() {
                 }
             });
         },
-        
+
+        getDynamicFiltersUrl(allSessionsUrl, tagName) {
+            const urlParams = this.buildBaseTagDynamicFilter(tagName);
+            this.addMappedDynamicFilters(urlParams);
+            return `${allSessionsUrl}?${urlParams.toString()}`;
+        },
+
+        buildBaseTagDynamicFilter(tagName) {
+            const urlParams = new URLSearchParams();
+            urlParams.append("filter_0_column", "tags");
+            urlParams.append("filter_0_value", JSON.stringify([tagName]));
+            urlParams.append("filter_0_operator", "any of");
+            return urlParams;
+        },
+
+        addMappedDynamicFilters(urlParams) {
+            const dynamicFilterParamMapping = {
+                "experiments": "experiment",
+                "start_date": "message_date",
+                "end_date": "message_date",
+                "date_range": "message_date",
+            };
+            let params = this.sanitizeParams(this.filters);
+            Object.entries(params).forEach(([key, value], index) => {
+                if (key === "granularity" || key === "tags" || value === "custom" || key === "participants") {
+                    // dynamic filters do not support granularity, and the tags filter is already added
+                    return;
+                }
+                
+                let parsedValue = "";
+                // Map the filter keys to the expected query params in the all sessions view
+                let keyMapped = dynamicFilterParamMapping[key] || key;
+                let operator = "any of";
+                if (key === "start_date") {
+                    operator = "after";
+                    // To account for filter mismatches, we subtract one day from the start date
+                    parsedValue = this.shiftDay(value, -1); // keep date as string
+                } else if (key === "end_date") {
+                    operator = "before";
+                    // To account for filter mismatches, we add one day to the end date
+                    parsedValue = this.shiftDay(value, 1); // keep date as string
+                } else if (key === "date_range") {
+                    operator = "range";
+                    parsedValue = value + "d";
+                } else {
+                    // Non-date fields expects array values
+                    parsedValue = JSON.stringify((Array.isArray(value) ? value : [value]))
+                }
+                urlParams.append(`filter_${index + 1}_column`, keyMapped);
+                urlParams.append(`filter_${index + 1}_value`, parsedValue);
+                urlParams.append(`filter_${index + 1}_operator`, operator);
+            });
+        },
+
+        shiftDay(dateString, amount) {
+            let date = new Date(dateString + 'T00:00:00.000Z');
+            date.setUTCDate(date.getUTCDate() + amount);
+            return date.toISOString().split('T')[0];
+        },
+
         // Cleanup
         destroy() {
             if (this.refreshTimeout) {

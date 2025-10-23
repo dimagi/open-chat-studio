@@ -42,14 +42,16 @@ class EvaluationMessageFactory(DjangoModelFactory):
             from apps.utils.factories.experiment import ChatFactory
 
             chat = ChatFactory()
-            input_chat_message = ChatMessageFactory(
-                message_type=ChatMessageType.HUMAN, content=self.input["content"], chat=chat
-            )
-            output_chat_message = ChatMessageFactory(
-                message_type=ChatMessageType.AI, content=self.output["content"], chat=chat
-            )
-            self.input_chat_message = input_chat_message
-            self.expected_output_chat_message = output_chat_message
+            if self.input:
+                input_chat_message = ChatMessageFactory(
+                    message_type=ChatMessageType.HUMAN, content=self.input["content"], chat=chat
+                )
+                self.input_chat_message = input_chat_message
+            if self.output:
+                output_chat_message = ChatMessageFactory(
+                    message_type=ChatMessageType.AI, content=self.output["content"], chat=chat
+                )
+                self.expected_output_chat_message = output_chat_message
             self.save()
 
 
@@ -59,7 +61,7 @@ class EvaluationDatasetFactory(DjangoModelFactory):
         skip_postgeneration_save = True
 
     team = factory.SubFactory(TeamFactory)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Dataset {n}")
 
     @factory.post_generation
     def messages(self, create, extracted, **kwargs):
@@ -78,7 +80,7 @@ class EvaluationConfigFactory(DjangoModelFactory):
         skip_postgeneration_save = True
 
     team = factory.SubFactory(TeamFactory)
-    name = factory.Faker("name")
+    name = factory.Sequence(lambda n: f"Test Eval Config {n}")
     dataset = factory.SubFactory(EvaluationDatasetFactory)
 
     @factory.post_generation

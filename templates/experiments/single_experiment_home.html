@@ -1,9 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load waffle_tags %}
-{% load team_tags %}
-{% load static %}
-{% load form_tags %}
-{% load django_tables2 %}
+{% load django_tables2 form_tags static team_tags waffle_tags %}
 {% block breadcrumbs %}
 {% if experiment.pipeline %}
   <div>
@@ -52,6 +48,7 @@
     </ul>
   </div>
 {% endblock breadcrumbs %}
+
 {% block app %}
   <div class="app-card">
     <div class="flex">
@@ -205,6 +202,7 @@
       <div role="tabpanel" class="tab-content" id="content-allsessions">
         {% include "chatbots/components/session_table_actions.html" %}
         <div id="sessions-table">
+          {% include "table/table_placeholder.html" %}
         </div>
       </div>
       </div>

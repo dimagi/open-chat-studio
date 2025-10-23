@@ -25,7 +25,11 @@ from apps.web.dynamic_filters.column_filters import (
 )
 
 
-def get_filter_context_data(team, columns, date_range_column: str, table_url: str, table_container_id: str):
+def get_filter_context_data(
+    team, columns: dict[str, dict], date_range_column: str, table_url: str, table_container_id: str, table_type: str
+):
+    if date_range_column not in columns:
+        raise ValueError("Date range column is not present in list of columns")
     return {
         "df_date_range_options": DATE_RANGE_OPTIONS,
         "df_channel_list": ChannelPlatform.for_filter(team),
@@ -33,6 +37,7 @@ def get_filter_context_data(team, columns, date_range_column: str, table_url: st
         "df_date_range_column_name": date_range_column,
         "df_filter_data_source_url": table_url,
         "df_filter_data_source_container_id": table_container_id,
+        "df_table_type": table_type,
     }
 
 
@@ -80,6 +85,21 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
         return queryset.exclude(chat_tags_condition | message_tags_condition)
 
 
+class MessageTagsFilter(ChatMessageTagsFilter):
+    """Simple tags filter for messages - works directly on message tags."""
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        return queryset.filter(tags__name__in=value)
+
+    def apply_all_of(self, queryset, value, timezone=None):
+        for tag in value:
+            queryset = queryset.filter(tags__name=tag)
+        return queryset
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        return queryset.exclude(tags__name__in=value)
+
+
 class VersionsFilter(ChoiceColumnFilter):
     query_param: str = "versions"
     label: str = "Versions"
@@ -112,6 +132,21 @@ class VersionsFilter(ChoiceColumnFilter):
         return queryset.filter(combined_query)
 
 
+class MessageVersionsFilter(VersionsFilter):
+    """Versions filter for messages - works directly on message version tags."""
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        return queryset.filter(tags__name__in=value, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+
+    def apply_all_of(self, queryset, value, timezone=None):
+        for tag in value:
+            queryset = queryset.filter(tags__name=tag, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+        return queryset
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        return queryset.exclude(tags__name__in=value, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+
+
 class ChannelsFilter(ChoiceColumnFilter):
     query_param: str = "channels"
     label: str = "Channels"
@@ -137,6 +172,7 @@ class ExperimentSessionFilter(MultiColumnFilter):
         ParticipantFilter(),
         TimestampFilter(label="Last Message", column="last_message_created_at", query_param="last_message"),
         TimestampFilter(label="First Message", column="first_message_created_at", query_param="first_message"),
+        TimestampFilter(label="Message Date", column="chat__messages__created_at", query_param="message_date"),
         ChatMessageTagsFilter(),
         VersionsFilter(),
         ChannelsFilter(),
@@ -166,3 +202,13 @@ class ExperimentSessionFilter(MultiColumnFilter):
         queryset = queryset.annotate(first_message_created_at=Subquery(first_message_subquery))
         queryset = queryset.annotate(last_message_created_at=Subquery(last_message_subquery))
         return queryset
+
+
+class ChatMessageFilter(MultiColumnFilter):
+    """Filter for chat messages using tags, timestamps, and versions."""
+
+    filters: ClassVar[Sequence[ColumnFilter]] = [
+        MessageTagsFilter(),
+        TimestampFilter(label="Message Time", column="created_at", query_param="last_message"),
+        MessageVersionsFilter(),
+    ]

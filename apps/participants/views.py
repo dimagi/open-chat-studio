@@ -1,24 +1,37 @@
 import json
 
+from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Q
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
-from apps.participants.forms import ParticipantForm
+from apps.filters.models import FilterSet
+from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
-from ..channels.models import ChannelPlatform
 from ..events.models import ScheduledMessage
+from ..experiments.filters import get_filter_context_data
 from ..experiments.tables import ExperimentSessionsTable
+from ..generics import actions
+from ..web.dynamic_filters.datastructures import FilterParams
+from .filters import ParticipantFilter
+from .import_export import export_participant_data_to_response, process_participant_import
 from .tables import ParticipantTable
+
+IMPORT_PERMISSIONS = [
+    "experiments.add_participant",
+    "experiments.change_participant",
+    "experiments.add_participantdata",
+    "experiments.change_participantdata",
+]
 
 
 class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -26,12 +39,42 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
     permission_required = "experiments.view_participant"
 
     def get_context_data(self, team_slug: str, **kwargs):
+        table_url = reverse("participants:participant_table", kwargs={"team_slug": team_slug})
+        filter_context = get_filter_context_data(
+            self.request.team,
+            columns=ParticipantFilter.columns(self.request.team),
+            date_range_column="created_on",
+            table_url=table_url,
+            table_container_id="data-table",
+            table_type=FilterSet.TableType.PARTICIPANTS,
+        )
+
         return {
             "active_tab": "participants",
             "title": "Participants",
             "allow_new": False,
-            "table_url": reverse("participants:participant_table", args=[team_slug]),
-            "enable_search": True,
+            "table_url": table_url,
+            "actions": [
+                actions.Action(
+                    "participants:import",
+                    label="Import",
+                    icon_class="fa-solid fa-file-import",
+                    title="Import participants",
+                    required_permissions=IMPORT_PERMISSIONS,
+                ),
+                actions.ModalAction(
+                    "participants:export",
+                    label="Export",
+                    icon_class="fa-solid fa-download",
+                    required_permissions=["experiments.view_participant", "experiments.view_participantdata"],
+                    modal_template="participants/components/export_modal.html",
+                    modal_context={
+                        "form": ParticipantExportForm(team=self.request.team),
+                        "modal_title": "Export Participant Data",
+                    },
+                ),
+            ],
+            **filter_context,
         }
 
 
@@ -64,12 +107,9 @@ class ParticipantTableView(LoginAndTeamRequiredMixin, SingleTableView, Permissio
 
     def get_queryset(self):
         query = Participant.objects.filter(team=self.request.team)
-        search = self.request.GET.get("search")
-        if search:
-            if search in {v.lower() for v in ChannelPlatform.values}:
-                query = query.filter(platform__iexact=search)
-            else:
-                query = query.filter(Q(identifier__icontains=search) | Q(name__icontains=search))
+        timezone = self.request.session.get("detected_tz", None)
+        filter_set = ParticipantFilter()
+        query = filter_set.apply(query, filter_params=FilterParams.from_request(self.request), timezone=timezone)
         return query
 
 
@@ -198,3 +238,64 @@ def _get_identifiers_response(queryset):
         },
         safe=False,
     )
+
+
+@permission_required(IMPORT_PERMISSIONS)
+@login_and_team_required
+def import_participants(request, team_slug: str):
+    form = ParticipantImportForm(team=request.team)
+    import_results = None
+
+    if request.method == "POST":
+        form = ParticipantImportForm(request.POST, request.FILES, team=request.team)
+        if form.is_valid():
+            try:
+                import_results = process_participant_import(
+                    form.cleaned_data["file"], form.cleaned_data["experiment"], request.team
+                )
+
+                # Only redirect if there are no errors
+                if not import_results["errors"]:
+                    success_msg = (
+                        f"Successfully imported {import_results['created']} participants, "
+                        f"updated {import_results['updated']} participants"
+                    )
+                    messages.success(request, success_msg)
+                    return redirect("participants:participant_home", team_slug=team_slug)
+            except Exception as e:
+                messages.error(request, f"Import failed: {str(e)}")
+
+    return render(request, "participants/participant_import.html", {"form": form, "import_results": import_results})
+
+
+@permission_required(["experiments.view_participant", "experiments.view_participantdata"])
+@login_and_team_required
+def export_participants(request, team_slug: str):
+    form = ParticipantExportForm(request.POST, team=request.team)
+
+    if not form.is_valid():
+        return HttpResponse("Invalid form data", status=400)
+
+    experiment = form.cleaned_data.get("experiment")
+
+    query = Participant.objects.filter(team=request.team)
+    if experiment:
+        query = query.filter(data_set__experiment=experiment).distinct()
+
+    filter_set = ParticipantFilter()
+    timezone = request.session.get("detected_tz", None)
+    query = filter_set.apply(
+        query, filter_params=FilterParams.from_request_header(request, "referer"), timezone=timezone
+    )
+
+    return export_participant_data_to_response(request.team, experiment, query)
+
+
+class DeleteParticipant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "experiments.delete_participant"
+
+    def delete(self, request, team_slug: str, pk: int):
+        participant = get_object_or_404(Participant, id=pk, team=request.team)
+        participant.delete()
+        messages.success(request, "Participant deleted")
+        return HttpResponse()

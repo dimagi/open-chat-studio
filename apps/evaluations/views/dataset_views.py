@@ -3,15 +3,19 @@ import json
 import logging
 from io import StringIO
 
+from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count
+from django.db.models import Count, OuterRef, Q
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.chat.models import ChatMessage
 from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.tables import (
@@ -20,12 +24,18 @@ from apps.evaluations.tables import (
     EvaluationSessionsSelectionTable,
 )
 from apps.evaluations.tasks import upload_dataset_csv_task
-from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
+from apps.evaluations.utils import (
+    generate_csv_column_suggestions,
+    make_evaluation_messages_from_sessions,
+    parse_history_text,
+)
 from apps.experiments.filters import (
+    ChatMessageFilter,
     ExperimentSessionFilter,
     get_filter_context_data,
 )
 from apps.experiments.models import ExperimentSession
+from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -110,7 +120,14 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     }
 
     def get_form_kwargs(self):
-        return {**super().get_form_kwargs(), "team": self.request.team}
+        kwargs = super().get_form_kwargs()
+        kwargs["team"] = self.request.team
+
+        # Pass current filter parameters to the form
+        kwargs["filter_params"] = FilterParams.from_request(self.request)
+        kwargs["timezone"] = self.request.session.get("detected_tz", None)
+
+        return kwargs
 
     def get_initial(self):
         """Support filters from experiment session list via URL parameters."""
@@ -140,13 +157,15 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 
     def _get_filter_context_data(self):
         table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
-        return get_filter_context_data(
+        context = get_filter_context_data(
             self.request.team,
-            ExperimentSessionFilter.columns(self.request.team),
-            "last_message",
-            table_url,
-            "sessions-table",
+            columns=ExperimentSessionFilter.columns(self.request.team),
+            date_range_column="last_message",
+            table_url=table_url,
+            table_container_id="sessions-table",
+            table_type=FilterSet.TableType.DATASETS,
         )
+        return context
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -172,19 +191,31 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
     permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
+        timezone = self.request.session.get("detected_tz", None)
+        filter_params = FilterParams.from_request(self.request)
+
+        messages_queryset = ChatMessage.objects.filter(chat__experiment_session=OuterRef("pk"))
+        message_filter = ChatMessageFilter()
+        filtered_messages = message_filter.apply(messages_queryset, filter_params, timezone)
+
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
             .filter(team=self.request.team)
             .select_related("participant__user", "chat", "experiment")
-            .annotate(message_count=Count("chat__messages"))
+            .annotate(
+                message_count=Coalesce(
+                    Count("chat__messages", filter=Q(chat__messages__in=filtered_messages.values("pk")), distinct=True),
+                    0,
+                )
+            )
             .filter(message_count__gt=0)
             .order_by("experiment__name")
+            .prefetch_related("chat__messages", "chat__messages__tags")
         )
-        timezone = self.request.session.get("detected_tz", None)
+
         session_filter = ExperimentSessionFilter()
-        query_set = session_filter.apply(
-            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
-        )
+        query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
+
         return query_set
 
 
@@ -214,37 +245,13 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
     try:
         dataset = get_object_or_404(EvaluationDataset, id=dataset_id, team__slug=team_slug)
 
-        human_message = request.POST.get("human_message", "").strip()
-        ai_message = request.POST.get("ai_message", "").strip()
-        context_json = request.POST.get("context", "{}")
-        history_text = request.POST.get("history_text", "").strip()
+        form_data = _get_message_form_data(request)
+        errors, data = _get_message_data_and_errors(form_data)
+        if errors:
+            message = "Errors:\n" + "\n".join([f"{key}: {value}" for key, value in errors.items()])
+            return HttpResponse(escape(message), status=400)
 
-        if not human_message or not ai_message:
-            return HttpResponse("Both human and AI messages are required", status=400)
-
-        if context_json.strip():
-            try:
-                context = json.loads(context_json)
-            except json.JSONDecodeError:
-                return HttpResponse("Invalid JSON format in context", status=400)
-        else:
-            context = {}
-
-        # Parse history text if provided
-        history = []
-        if history_text:
-            try:
-                history = parse_history_text(history_text)
-            except Exception:
-                return HttpResponse("Invalid history format", status=400)
-
-        message = EvaluationMessage.objects.create(
-            input=EvaluationMessageContent(content=human_message, role="human").model_dump(),
-            output=EvaluationMessageContent(content=ai_message, role="ai").model_dump(),
-            context=context,
-            history=history,
-            metadata={"created_mode": "manual"},
-        )
+        message = EvaluationMessage.objects.create(**data, metadata={"created_mode": "manual"})
 
         dataset.messages.add(message)
 
@@ -271,6 +278,8 @@ def edit_message_modal(request, team_slug, message_id):
         "human": message.input.get("content", ""),
         "ai": message.output.get("content", ""),
         "context": json.dumps(message.context, indent=2) if message.context else "{}",
+        "participant_data": json.dumps(message.participant_data, indent=2) if message.participant_data else "{}",
+        "session_state": json.dumps(message.session_state, indent=2) if message.session_state else "{}",
         "history_text": message.full_history,
     }
 
@@ -293,34 +302,10 @@ def update_message(request, team_slug, message_id):
     """Handle form submission to update message"""
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
 
-    human_content = request.POST.get("human_message", "").strip()
-    ai_content = request.POST.get("ai_message", "").strip()
-    context_str = request.POST.get("context", "").strip()
-    history_text = request.POST.get("history_text", "").strip()
-
-    errors = {}
-    if not human_content:
-        errors["human"] = "Human message is required"
-    if not ai_content:
-        errors["ai"] = "AI message is required"
-
-    context_data = {}
-    if context_str:
-        try:
-            context_data = json.loads(context_str)
-        except json.JSONDecodeError:
-            errors["context"] = "Invalid JSON format"
-
-    # Parse history text if provided
-    history_data = []
-    if history_text:
-        try:
-            history_data = parse_history_text(history_text)
-        except Exception:
-            errors["history_text"] = "Invalid history format"
+    form_data = _get_message_form_data(request)
+    errors, data = _get_message_data_and_errors(form_data)
 
     if errors:
-        form_data = {"human": human_content, "ai": ai_content, "context": context_str, "history_text": history_text}
         update_url = reverse("evaluations:update_message", args=[team_slug, message_id])
 
         return render(
@@ -335,10 +320,8 @@ def update_message(request, team_slug, message_id):
             status=200,
         )
 
-    message.input = EvaluationMessageContent(content=human_content, role="human").model_dump()
-    message.output = EvaluationMessageContent(content=ai_content, role="ai").model_dump()
-    message.context = context_data
-    message.history = history_data
+    for attr, val in data.items():
+        setattr(message, attr, val)
 
     # Clear chat message references since this is now manually edited
     message.input_chat_message = None
@@ -350,6 +333,60 @@ def update_message(request, team_slug, message_id):
     message.save()
 
     return HttpResponse("", status=200)
+
+
+def _get_message_data_and_errors(form_data: dict) -> tuple[dict, dict]:
+    errors = {}
+    if not form_data["human"]:
+        errors["human"] = "Human message is required"
+    if not form_data["ai"]:
+        errors["ai"] = "AI message is required"
+
+    def _get_json_var(name):
+        json_val = form_data[name]
+        if json_val.strip():
+            try:
+                return json.loads(json_val)
+            except json.JSONDecodeError:
+                errors[name] = "Invalid JSON format"
+                return None
+        else:
+            return {}
+
+    context = _get_json_var("context")
+    participant_data = _get_json_var("participant_data")
+    session_state = _get_json_var("session_state")
+
+    # Parse history text if provided
+    history_data = []
+    if form_data["history_text"]:
+        try:
+            history_data = parse_history_text(form_data["history_text"])
+        except Exception:
+            errors["history_text"] = "Invalid history format"
+
+    if errors:
+        return errors, {}
+
+    return errors, {
+        "input": EvaluationMessageContent(content=form_data["human"], role="human").model_dump(),
+        "output": EvaluationMessageContent(content=form_data["ai"], role="ai").model_dump(),
+        "context": context,
+        "participant_data": participant_data,
+        "session_state": session_state,
+        "history": history_data,
+    }
+
+
+def _get_message_form_data(request) -> dict:
+    return {
+        "human": request.POST.get("human_message", "").strip(),
+        "ai": request.POST.get("ai_message", "").strip(),
+        "history_text": request.POST.get("history_text", "").strip(),
+        "context": request.POST.get("context", "{}"),
+        "participant_data": request.POST.get("participant_data", "{}"),
+        "session_state": request.POST.get("session_state", "{}"),
+    }
 
 
 @login_and_team_required
@@ -467,3 +504,33 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
     except Exception as e:
         logger.error(f"Error starting CSV upload for dataset {dataset.id}: {str(e)}")
         return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
+
+
+class AddMessageToDatasetView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
+    permission_required = "documents.change_documentsource"
+    template_name = "experiments/components/add_to_dataset_modal.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["datasets"] = EvaluationDataset.objects.filter(team=self.request.team)
+        context["session_id"] = self.kwargs.get("session_id")
+        return context
+
+    def post(self, request, team_slug: str, session_id: str):
+        message_id = request.POST["message_id"]
+        dataset = get_object_or_404(EvaluationDataset, id=request.POST["dataset"], team__slug=team_slug)
+
+        if not ChatMessage.objects.filter(id=message_id, chat__experiment_session__team__slug=team_slug).exists():
+            messages.error(request, "Invalid message selected.")
+            return HttpResponse(status=400)
+
+        eval_messages = make_evaluation_messages_from_sessions({str(session_id): [int(message_id)]})
+        if not eval_messages:
+            messages.error(request, "No valid messages found to add to dataset.")
+            return HttpResponse(status=400)
+
+        EvaluationMessage.objects.bulk_create(eval_messages)
+        dataset.messages.add(*eval_messages)
+
+        messages.success(request, "Messages added to dataset successfully.")
+        return HttpResponse(status=204)

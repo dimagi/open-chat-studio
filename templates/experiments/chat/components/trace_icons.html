@@ -1,5 +1,4 @@
-{% load static %}
-{% load waffle_tags %}
+{% load static waffle_tags %}
 
 {% for trace_info in trace_infos %}
   <div class="tooltip tooltip-right" data-tip="Open Trace on {{ trace_info.trace_provider|title }}">

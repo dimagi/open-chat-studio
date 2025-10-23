@@ -6,61 +6,18 @@ import {
   PaperClipIcon, CheckDocumentIcon, XIcon
 } from './heroicons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
-import { getCSRFToken } from '../../utils/cookies';
 import { varToPixels } from '../../utils/utils';
 import {TranslationStrings, TranslationManager, defaultTranslations} from '../../utils/translations';
-
-interface ChatMessage {
-  created_at: string;
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-  metadata?: any;
-  attachments?: ChatAttachment[];
-}
-
-interface ChatAttachment {
-  name: string;
-  content_type: string;
-  size: number;
-}
-
-interface UploadedFile {
-  id: number;
-  name: string;
-  size: number;
-  content_type: string;
-}
-
-interface SelectedFile {
-  file: File;
-  uploaded?: UploadedFile;
-  error?: string;
-}
-
-interface ChatStartSessionResponse {
-  session_id: string;
-  chatbot: any;
-  participant: any;
-  seed_message_task_id?: string;
-}
-
-interface ChatSendMessageResponse {
-  task_id: string;
-  status: 'processing' | 'completed' | 'error';
-  error?: string;
-}
-
-interface ChatTaskPollResponse {
-  message?: ChatMessage;
-  status: 'processing' | 'complete';
-  error?: string;
-}
-
-interface ChatPollResponse {
-  messages: ChatMessage[];
-  has_more: boolean;
-  session_status: 'active' | 'ended';
-}
+import {
+  ChatSessionService,
+  ChatMessage,
+  MessagePollingHandle,
+  TaskPollingHandle
+} from '../../services/chat-session-service';
+import {
+  FileAttachmentManager,
+  SelectedFile
+} from '../../services/file-attachment-manager';
 
 interface PointerEvent {
   clientX: number;
@@ -115,6 +72,11 @@ export class OcsChat {
    * URL of the icon to display on the button. If not provided, uses the default OCS logo.
    */
   @Prop() iconUrl?: string;
+
+  /**
+   * Authentication key for embedded channels
+   */
+  @Prop() embedKey?: string;
 
   /**
    * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
@@ -214,7 +176,14 @@ export class OcsChat {
 
   translationManager: TranslationManager = new TranslationManager();
 
-  private pollingIntervalRef?: any;
+  private chatService?: ChatSessionService;
+  private messagePollingHandle?: MessagePollingHandle;
+  private taskPollingHandle?: TaskPollingHandle;
+  private attachmentManager = new FileAttachmentManager({
+    supportedExtensions: OcsChat.SUPPORTED_FILE_EXTENSIONS,
+    maxFileSizeMb: OcsChat.MAX_FILE_SIZE_MB,
+    maxTotalSizeMb: OcsChat.MAX_TOTAL_SIZE_MB,
+  });
   private messageListRef?: HTMLDivElement;
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
@@ -263,7 +232,7 @@ export class OcsChat {
       this.startSession();
     } else if (this.visible && this.sessionId) {
       // Resume polling for existing session
-      this.startPolling();
+      this.startMessagePolling();
     }
     window.addEventListener('resize', this.handleWindowResize);
   }
@@ -272,6 +241,20 @@ export class OcsChat {
     this.cleanup();
     this.removeEventListeners();
     window.removeEventListener('resize', this.handleWindowResize);
+  }
+
+  private getChatService(): ChatSessionService {
+    if (!this.chatService) {
+      this.chatService = new ChatSessionService({
+        apiBaseUrl: this.apiBaseUrl || 'https://www.openchatstudio.com',
+        embedKey: this.embedKey,
+        widgetVersion: Env.version,
+        taskPollingIntervalMs: OcsChat.TASK_POLLING_INTERVAL_MS,
+        taskPollingMaxAttempts: OcsChat.TASK_POLLING_MAX_ATTEMPTS,
+        messagePollingIntervalMs: OcsChat.MESSAGE_POLLING_INTERVAL_MS,
+      });
+    }
+    return this.chatService;
   }
 
   private addErrorMessage(errorText: string): void {
@@ -346,25 +329,12 @@ export class OcsChat {
   }
 
   private cleanup() {
-    if (this.pollingIntervalRef) {
-      clearInterval(this.pollingIntervalRef);
-      this.pollingIntervalRef = undefined;
+    this.stopMessagePolling();
+    if (this.taskPollingHandle) {
+      this.taskPollingHandle.cancel();
+      this.taskPollingHandle = undefined;
     }
     this.currentPollTaskId = '';
-  }
-
-  private getApiHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'x-ocs-widget-version': Env.version,
-    };
-
-    const csrfToken = getCSRFToken(this.apiBaseUrl);
-    if (csrfToken) {
-      headers['X-CSRFToken'] = csrfToken;
-    }
-
-    return headers;
   }
 
   private async startSession(): Promise<void> {
@@ -373,7 +343,7 @@ export class OcsChat {
 
       const userId = this.getOrGenerateUserId();
 
-      const requestBody: any = {
+      const requestBody: Record<string, unknown> = {
         chatbot_id: this.chatbotId,
         session_data: {
           source: 'widget',
@@ -386,44 +356,21 @@ export class OcsChat {
         requestBody.participant_name = this.userName;
       }
 
-      const response = await fetch(`${this.apiBaseUrl}/api/chat/start/`, {
-        method: 'POST',
-        headers: this.getApiHeaders(),
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        this.handleError(`Failed to start session: ${response.statusText}`);
-        return;
-      }
-
-      const data: ChatStartSessionResponse = await response.json();
+      const data = await this.getChatService().startSession(requestBody);
       this.sessionId = data.session_id;
       this.saveSessionToStorage();
 
       // Handle seed message if present
       if (data.seed_message_task_id) {
-        this.isTyping = true;  // Show typing indicator for seed message
-        this.currentPollTaskId = data.seed_message_task_id;
-        await this.pollTaskResponse();
+        this.startTaskPolling(data.seed_message_task_id);
+      } else {
+        this.startMessagePolling();
       }
-
-      // Start polling for messages
-      this.startPolling();
-    } catch (error) {
+    } catch (_error) {
       this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
     }
-  }
-
-  private markPendingFilesWithError(errorMessage: string): void {
-    this.selectedFiles = this.selectedFiles.map(sf => {
-      if (!sf.error && !sf.uploaded) {
-        return { ...sf, error: errorMessage };
-      }
-      return sf;
-    });
   }
 
   private async uploadFiles(): Promise<number[]> {
@@ -432,59 +379,15 @@ export class OcsChat {
     }
 
     this.isUploadingFiles = true;
-    const uploadedIds: number[] = [];
-
     try {
-      const formData = new FormData();
-
-      // Add all files to form data
-      for (const selectedFile of this.selectedFiles) {
-        if (!selectedFile.error && !selectedFile.uploaded) {
-          formData.append('files', selectedFile.file);
-        } else if (selectedFile.uploaded) {
-          uploadedIds.push(selectedFile.uploaded.id);
-        }
-      }
-
-      // Add user ID and name to the form data
-      const userId = this.getOrGenerateUserId();
-      formData.append('participant_remote_id', userId);
-      if (this.userName) {
-        formData.append('participant_name', this.userName);
-      }
-
-      // Only upload if there are new files
-      if (formData.has('files')) {
-        const response = await fetch(`${this.apiBaseUrl}/api/chat/${this.sessionId}/upload/`, {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          const errorMessage = errorData.error || 'Failed to upload files';
-          this.markPendingFilesWithError(errorMessage);
-          return uploadedIds;
-        }
-
-        const data = await response.json();
-
-        // Update selected files with upload results
-        let fileIndex = 0;
-        this.selectedFiles = this.selectedFiles.map(sf => {
-          if (!sf.error && !sf.uploaded) {
-            return { ...sf, uploaded: data.files[fileIndex++] };
-          }
-          return sf;
-        });
-        uploadedIds.push(...data.files.map((f: UploadedFile) => f.id));
-      }
-
-      return uploadedIds;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to upload files';
-      this.markPendingFilesWithError(errorMessage);
-      return uploadedIds;
+      const uploadResult = await this.attachmentManager.uploadPendingFiles(this.selectedFiles, {
+        apiBaseUrl: this.apiBaseUrl || 'https://www.openchatstudio.com',
+        sessionId: this.sessionId,
+        participantId: this.getOrGenerateUserId(),
+        participantName: this.userName,
+      });
+      this.selectedFiles = uploadResult.selectedFiles;
+      return uploadResult.uploadedIds;
     } finally {
       this.isUploadingFiles = false;
     }
@@ -541,33 +444,18 @@ export class OcsChat {
       }
       this.scrollToBottom();
 
-      // Start typing indicator - it will stay on during task polling
-      this.isTyping = true;
-
       const requestBody: any = { message: message.trim() };
       if (this.allowAttachments && attachmentIds.length > 0) {
         requestBody.attachment_ids = attachmentIds;
       }
 
-      const response = await fetch(`${this.apiBaseUrl}/api/chat/${this.sessionId}/message/`, {
-        method: 'POST',
-        headers: this.getApiHeaders(),
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to send message: ${response.statusText}`);
-      }
-
-      const data: ChatSendMessageResponse = await response.json();
+      const data = await this.getChatService().sendMessage(this.sessionId, requestBody);
 
       if (data.status === 'error') {
         throw new Error(data.error || 'Failed to send message');
       }
 
-      // Poll for the response - typing indicator will be managed in pollTaskResponse
-      this.currentPollTaskId = data.task_id;
-      await this.pollTaskResponse();
+      this.startTaskPolling(data.task_id);
     } catch (error) {
       const errorText = error instanceof Error ? error.message : 'Failed to send message';
       this.handleError(errorText);
@@ -576,124 +464,6 @@ export class OcsChat {
 
   private handleStarterQuestionClick(question: string): void {
     this.sendMessage(question);
-  }
-
-  private async pollTaskResponse(): Promise<void> {
-    if (!this.sessionId || !this.currentPollTaskId) return;
-
-    // Stop message polling while task polling is active
-    this.pauseMessagePolling();
-
-    let attempts = 0;
-
-    const poll = async (): Promise<void> => {
-      if (!this.sessionId || !this.currentPollTaskId) return;
-
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/api/chat/${this.sessionId}/${this.currentPollTaskId}/poll/`);
-
-        if (!response.ok) {
-          throw new Error(`Failed to poll task: ${response.statusText}`);
-        }
-
-        const data: ChatTaskPollResponse = await response.json();
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        if (data.status === 'complete' && data.message) {
-          this.messages = [...this.messages, data.message];
-          this.saveSessionToStorage();
-          this.scrollToBottom();
-          // Task polling complete, clear typing indicator and resume message polling
-          this.isTyping = false;
-          this.currentPollTaskId = '';
-          this.resumeMessagePolling();
-          this.focusInput();
-          return;
-        }
-
-        if (data.status === 'processing' && attempts < OcsChat.TASK_POLLING_MAX_ATTEMPTS) {
-          attempts++;
-          setTimeout(poll, OcsChat.TASK_POLLING_INTERVAL_MS);
-        } else if (attempts >= OcsChat.TASK_POLLING_MAX_ATTEMPTS) {
-          // Task polling timed out - add timeout message and resume polling
-          const timeoutMessage: ChatMessage = {
-            created_at: new Date().toISOString(),
-            role: 'system',
-            content: 'The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.',
-            attachments: []
-          };
-          this.messages = [...this.messages, timeoutMessage];
-          this.saveSessionToStorage();
-          this.scrollToBottom();
-
-          // Clear typing indicator and resume message polling
-          this.isTyping = false;
-          this.currentPollTaskId = '';
-          this.resumeMessagePolling();
-          this.focusInput();
-        }
-      } catch (error) {
-        const errorText = error instanceof Error ? error.message : 'Failed to get response';
-        this.handleError(errorText);
-        // Clear states and resume polling
-        this.currentPollTaskId = '';
-        this.resumeMessagePolling();
-      }
-    };
-
-    await poll();
-  }
-
-  private startPolling(): void {
-    if (this.pollingIntervalRef) return;
-
-    this.pollingIntervalRef = setInterval(async () => {
-      // Only poll for messages if not currently polling for a task
-      if (!this.currentPollTaskId) {
-        await this.pollForMessages();
-      }
-    }, OcsChat.MESSAGE_POLLING_INTERVAL_MS);
-  }
-
-  private pauseMessagePolling(): void {
-    if (this.pollingIntervalRef) {
-      clearInterval(this.pollingIntervalRef);
-      this.pollingIntervalRef = undefined;
-    }
-  }
-
-  private resumeMessagePolling(): void {
-    // Resume message polling after task polling is complete
-    this.startPolling();
-  }
-
-  private async pollForMessages(): Promise<void> {
-    if (!this.sessionId) return;
-
-    try {
-      const url = new URL(`${this.apiBaseUrl}/api/chat/${this.sessionId}/poll/`);
-      if (this.messages && this.messages.length > 0) {
-        url.searchParams.set('since', this.messages.at(-1).created_at);
-      }
-
-      const response = await fetch(url.toString());
-
-      if (!response.ok) return; // Silently fail for polling
-
-      const data: ChatPollResponse = await response.json();
-
-      if (data.messages.length > 0) {
-        this.messages = [...this.messages, ...data.messages];
-        this.saveSessionToStorage();
-        this.scrollToBottom();
-        this.focusInput();
-      }
-    } catch {
-      // Silently fail for polling
-    }
   }
 
   /**
@@ -748,46 +518,13 @@ export class OcsChat {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
 
-    const newFiles: SelectedFile[] = [];
-    let totalSize = this.selectedFiles.reduce((sum, f) => sum + f.file.size, 0);
-
-    for (let i = 0; i < input.files.length; i++) {
-      const file = input.files[i];
-      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-      if (!OcsChat.SUPPORTED_FILE_EXTENSIONS.includes(ext)) {
-        newFiles.push({
-          file,
-          error: `File type ${ext} not supported`
-        });
-        continue;
-      }
-      const fileSizeMB = file.size / (1024 * 1024);
-      if (fileSizeMB > OcsChat.MAX_FILE_SIZE_MB) {
-        newFiles.push({
-          file,
-          error: `File exceeds ${OcsChat.MAX_FILE_SIZE_MB}MB limit`
-        });
-        continue;
-      }
-      totalSize += file.size;
-      const totalSizeMB = totalSize / (1024 * 1024);
-      if (totalSizeMB > OcsChat.MAX_TOTAL_SIZE_MB) {
-        newFiles.push({
-          file,
-          error: `Total size exceeds ${OcsChat.MAX_TOTAL_SIZE_MB}MB limit`
-        });
-        continue;
-      }
-
-      newFiles.push({ file });
-    }
-    this.selectedFiles = [...this.selectedFiles, ...newFiles];
+    this.selectedFiles = this.attachmentManager.addFiles(this.selectedFiles, input.files);
     input.value = '';
   }
 
   private removeSelectedFile(index: number): void {
     if (!this.allowAttachments) return;
-    this.selectedFiles = this.selectedFiles.filter((_, i) => i !== index);
+    this.selectedFiles = this.attachmentManager.removeFile(this.selectedFiles, index);
   }
 
   private formatFileSize(bytes: number): string {
@@ -824,10 +561,89 @@ export class OcsChat {
     if (visible && !this.sessionId) {
       await this.startSession();
     } else if (!visible) {
-      this.pauseMessagePolling()
+      this.stopMessagePolling();
     } else {
       this.scrollToBottom(true);
-      this.resumeMessagePolling();
+      this.startMessagePolling();
+    }
+  }
+
+  private startTaskPolling(taskId: string): void {
+    if (!this.sessionId) return;
+
+    this.currentPollTaskId = taskId;
+    this.isTyping = true;
+    this.stopMessagePolling();
+
+    if (this.taskPollingHandle) {
+      this.taskPollingHandle.cancel();
+    }
+
+    this.taskPollingHandle = this.getChatService().pollTask(this.sessionId, taskId, {
+      onMessage: (message) => {
+        this.messages = [...this.messages, message];
+        this.saveSessionToStorage();
+        this.scrollToBottom();
+        this.isTyping = false;
+        this.currentPollTaskId = '';
+        this.taskPollingHandle = undefined;
+        this.startMessagePolling();
+        this.focusInput();
+      },
+      onTimeout: () => {
+        const timeoutMessage: ChatMessage = {
+          created_at: new Date().toISOString(),
+          role: 'system',
+          content: 'The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.',
+          attachments: []
+        };
+        this.messages = [...this.messages, timeoutMessage];
+        this.saveSessionToStorage();
+        this.scrollToBottom();
+        this.isTyping = false;
+        this.currentPollTaskId = '';
+        this.taskPollingHandle = undefined;
+        this.startMessagePolling();
+        this.focusInput();
+      },
+      onError: (error) => {
+        this.handleError(error.message);
+        this.taskPollingHandle = undefined;
+        this.startMessagePolling();
+      }
+    });
+  }
+
+  private startMessagePolling(): void {
+    if (!this.sessionId || this.currentPollTaskId || !this.visible) {
+      return;
+    }
+
+    if (this.messagePollingHandle) {
+      return;
+    }
+
+    this.messagePollingHandle = this.getChatService().startMessagePolling(this.sessionId, {
+      getSince: () => this.messages.length > 0 ? this.messages.at(-1)?.created_at : undefined,
+      onMessages: (messages) => {
+        if (messages.length === 0) return;
+        this.messages = [...this.messages, ...messages];
+        this.saveSessionToStorage();
+        this.scrollToBottom();
+        this.focusInput();
+      },
+      onError: () => {
+        // Silently ignore polling errors to match previous behaviour
+      }
+    });
+  }
+
+  private stopMessagePolling(): void {
+    if (this.messagePollingHandle) {
+      this.messagePollingHandle.stop();
+      this.messagePollingHandle = undefined;
+    } else {
+      this.chatService?.stopMessagePolling();
     }
   }
 

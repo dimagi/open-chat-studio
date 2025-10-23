@@ -1,6 +1,6 @@
 import uuid
 
-from anymail.utils import EmailAddress
+from allauth.account.models import EmailAddress
 from django.conf import settings
 from django.contrib import messages
 from django.http import HttpResponseRedirect

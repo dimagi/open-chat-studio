@@ -1,7 +1,7 @@
 {% load i18n %}
 
 <div class="app-card">
-  <h3 class="text-lg font-semibold mb-4">{% trans "Add New Message" %}</h3>
+  <h3 class="text-lg font-semibold mb-4">{% translate "Add New Message" %}</h3>
 
   <form
     hx-post="{% url 'evaluations:add_message_to_dataset' request.team.slug object.id %}"
@@ -12,16 +12,16 @@
   >
     {% csrf_token %}
 
-    {% include "evaluations/components/message_pair_form.html" with context_field_id="add-context-field" disable_button_id="add-message-button" required_fields=True %}
+    {% include "evaluations/components/message_pair_form.html" with disable_button_id="add-message-button" required_fields=True %}
 
     <div class="flex gap-2">
       <button type="submit" class="btn btn-primary" id="add-message-button">
         <i class="fa-solid fa-plus mr-2"></i>
-        {% trans "Add Message" %}
+        {% translate "Add Message" %}
       </button>
       <button type="reset" class="btn btn-ghost">
         <i class="fa-solid fa-times mr-2"></i>
-        {% trans "Clear" %}
+        {% translate "Clear" %}
       </button>
     </div>
   </form>
