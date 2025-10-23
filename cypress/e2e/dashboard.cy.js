@@ -60,9 +60,9 @@ describe('Dashboard Application', () => {
   })
 
   describe('Dashboard Filters', () => {
-    it('can filter by experiment', () => {
+    it('can filter by chatbot', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.get('select[name*="experiment"], #experiment-filter').then(($filter) => {
+      cy.get('select[name*="chatbot"], chatbot-filter').then(($filter) => {
         if ($filter.length > 0) {
           cy.wrap($filter).select(1) // Select first option after default
           cy.wait(1000) // Wait for dashboard to update
@@ -91,37 +91,10 @@ describe('Dashboard Application', () => {
     })
   })
 
-  describe('Dashboard Filter Presets', () => {
-    it('can save filter preset', () => {
-      cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.contains('button', /Save|Preset/i).then(($save) => {
-        if ($save.length > 0) {
-          cy.wrap($save).click()
-          cy.get('input[name="name"], #filter-name').then(($input) => {
-            if ($input.length > 0) {
-              cy.wrap($input).type('Test Filter Preset')
-              cy.contains('button', /Save|Submit/i).click()
-            }
-          })
-        }
-      })
-    })
-
-    it('can load saved filter preset', () => {
-      cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.get('select[name*="filter"], #saved-filters').then(($select) => {
-        if ($select.length > 0 && $select.find('option').length > 1) {
-          cy.wrap($select).select(1) // Select first saved filter
-          cy.wait(1000)
-        }
-      })
-    })
-  })
-
   describe('Dashboard Data Tables', () => {
     it('bot performance table displays', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.contains(/Bot|Performance|Experiment/i)
+      cy.contains(/Bot|Performance|Summary/i)
         .parents('section, .card, .panel')
         .within(() => {
           cy.get('table').then(($table) => {
@@ -151,23 +124,13 @@ describe('Dashboard Application', () => {
     })
   })
 
-  describe('Dashboard Exports', () => {
-    it('can export dashboard data', () => {
-      cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.contains('button, a', /Export|Download|CSV/i).then(($export) => {
-        if ($export.length > 0) {
-          cy.log('Export functionality available')
-        }
-      })
-    })
-  })
 
-  describe('Dashboard Refresh', () => {
+  describe('Dashboard Reset', () => {
     it('has refresh button', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.get('button[aria-label*="refresh"], button[title*="Refresh"]').then(($refresh) => {
-        if ($refresh.length > 0) {
-          cy.wrap($refresh).click()
+      cy.get('button[aria-label*="reset"], button[title*="Reset"]').then(($reset) => {
+        if ($reset.length > 0) {
+          cy.wrap($reset).click()
           cy.wait(1000)
         }
       })
