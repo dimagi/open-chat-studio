@@ -34,6 +34,8 @@ ALLOWED_HOSTS.append(gethostbyname(gethostname()))
 CRYPTOGRAPHY_KEY = env("CRYPTOGRAPHY_KEY", default=None)
 CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
 
+# This is true by default, but let's be explicit
+SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # Your email config goes here.
 # see https://github.com/anymail/django-anymail for more details / examples
