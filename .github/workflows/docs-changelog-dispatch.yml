@@ -36,10 +36,6 @@ jobs:
             echo "is_widget_change=false" >> $GITHUB_OUTPUT
             echo "No widget files changed"
           fi
-
-          # Get the list of changed files for reference
-          CHANGED_FILES=$(cat /tmp/changed_files.txt | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -59,7 +55,6 @@ jobs:
               "pr_merged_at": "${{ github.event.pull_request.merged_at }}",
               "pr_labels": ${{ toJSON(github.event.pull_request.labels.*.name) }},
               "is_widget_change": ${{ steps.check_widget.outputs.is_widget_change }},
-              "changed_files": ${{ steps.check_widget.outputs.changed_files }},
               "ref": "${{ github.ref }}",
               "sha": "${{ github.sha }}",
               "repository": "${{ github.repository }}"
