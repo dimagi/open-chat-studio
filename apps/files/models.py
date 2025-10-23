@@ -13,6 +13,7 @@ from apps.experiments.versioning import VersionDetails, VersionField, VersionsMi
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes, humanize_bytes
+from apps.utils.fields import SanitizedJSONField
 from apps.utils.deletion import get_related_m2m_objects
 from apps.web.meta import absolute_url
 
@@ -44,7 +45,7 @@ class File(BaseTeamModel, VersionsMixin):
         related_name="versions",
     )
     is_archived = models.BooleanField(default=False)
-    metadata = models.JSONField(default=dict)
+    metadata = SanitizedJSONField(default=dict)
 
     objects = FileObjectManager()
 

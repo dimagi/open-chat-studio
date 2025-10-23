@@ -21,6 +21,7 @@ from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.teams.models import BaseTeamModel
+from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 
 versioning_logger = logging.getLogger("ocs.versioning")
@@ -84,7 +85,7 @@ class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
 
 class Pipeline(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)
-    data = models.JSONField()
+    data = SanitizedJSONField()
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -337,7 +338,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
-    params = models.JSONField(default=dict)  # Parameters for the specific node type
+    params = SanitizedJSONField(default=dict)  # Parameters for the specific node type
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
