@@ -59,6 +59,7 @@ class DashboardService:
 
         # Base querysets
         experiments = Experiment.objects.filter(team=self.team, is_archived=False, working_version=None)
+        # CRITICAL: distinct() required because JOIN to messages creates duplicate session rows
         sessions = ExperimentSession.objects.filter(
             team=self.team, chat__messages__created_at__gte=start_date, chat__messages__created_at__lte=end_date
         ).distinct()
@@ -78,13 +79,14 @@ class DashboardService:
             if not any(platform for platform in platform_names if platform in global_platforms):
                 # only filter experiments if we're filtering by non-global platforms since all experiments
                 # will match the global platforms
-                experiments = experiments.filter(experimentchannel__platform__in=platform_names)
+                # CRITICAL: distinct() required when experiment has multiple channels with same platform
+                experiments = experiments.filter(experimentchannel__platform__in=platform_names).distinct()
             sessions = sessions.filter(experiment_channel__platform__in=platform_names)
             messages = messages.filter(chat__experiment_session__experiment_channel__platform__in=platform_names)
             participants = participants.filter(platform__in=platform_names)
 
         if participant_ids:
-            experiments = experiments.filter(sessions__participant__id__in=participant_ids)
+            experiments = experiments.filter(sessions__participant__id__in=participant_ids).distinct()
             sessions = sessions.filter(participant__id__in=participant_ids)
             messages = messages.filter(chat__experiment_session__participant__id__in=participant_ids)
             participants = participants.filter(id__in=participant_ids)
@@ -92,13 +94,15 @@ class DashboardService:
         if tag_ids:
             experiments = experiments.filter(
                 Q(sessions__chat__tags__id__in=tag_ids) | Q(sessions__chat__messages__tags__id__in=tag_ids)
-            )
-            sessions = sessions.filter(Q(chat__tags__id__in=tag_ids) | Q(chat__messages__tags__id__in=tag_ids))
+            ).distinct()
+            sessions = sessions.filter(
+                Q(chat__tags__id__in=tag_ids) | Q(chat__messages__tags__id__in=tag_ids)
+            ).distinct()
             messages = messages.filter(tags__id__in=tag_ids)
             participants = participants.filter(
                 Q(experimentsession__chat__tags__id__in=tag_ids)
                 | Q(experimentsession__chat__messages__tags__id__in=tag_ids)
-            )
+            ).distinct()
 
         return {
             "experiments": experiments,
@@ -155,7 +159,10 @@ class DashboardService:
         session_stats = (
             sessions.annotate(period=trunc_func("chat__messages__created_at"))
             .values("period")
-            .annotate(total_sessions=Count("id"), unique_participants=Count("participant", distinct=True))
+            # CRITICAL: distinct=True prevents inflated counts from JOIN to messages
+            .annotate(
+                total_sessions=Count("id", distinct=True), unique_participants=Count("participant", distinct=True)
+            )
             .order_by("period")
         )
 
