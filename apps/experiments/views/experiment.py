@@ -1353,6 +1353,8 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
     survey_link = None
     survey_text = None
     experiment_version = request.experiment.default_version
+    session = request.experiment_session
+    
     if request.method == "POST":
         # no validation needed
         request.experiment_session.status = SessionStatus.COMPLETE
@@ -1365,6 +1367,30 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
         form = SurveyCompletedForm()
         survey_link = request.experiment_session.get_post_survey_link(experiment_version)
         survey_text = experiment_version.post_survey.confirmation_text.format(survey_link=survey_link)
+
+    # Create translation forms and related context to satisfy the included chat template
+    # even though hide_translation=True means they won't be displayed
+    available_languages, translatable_languages = _get_languages_for_chat(session)
+    translate_form_all = TranslateMessagesForm(
+        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
+    )
+    translate_form_remaining = TranslateMessagesForm(
+        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
+    )
+    
+    # Get all tags for the chat messages
+    chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
+    all_tags = (
+        Tag.objects.filter(
+            annotations_customtaggeditem_items__content_type=chat_message_content_type,
+            annotations_customtaggeditem_items__object_id__in=Subquery(
+                ChatMessage.objects.filter(chat=session.chat).values("id")
+            ),
+        )
+        .annotate(count=Count("annotations_customtaggeditem_items"))
+        .distinct()
+        .order_by(F("category").asc(nulls_first=True), "name")
+    )
 
     version_specific_vars = {
         "experiment.post_survey": experiment_version.post_survey,
@@ -1381,6 +1407,13 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
             "active_tab": "experiments",
             "form": form,
             "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+            "translate_form_all": translate_form_all,
+            "translate_form_remaining": translate_form_remaining,
+            "available_languages": available_languages,
+            "has_missing_translations": False,
+            "all_tags": all_tags,
+            "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
+            "default_translation_models_by_providers": get_default_translation_models_by_provider(),
             **version_specific_vars,
         },
     )
