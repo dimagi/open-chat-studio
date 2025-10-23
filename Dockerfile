@@ -85,11 +85,9 @@ ENV PATH="/code/.venv/bin:$PATH"
 COPY --chown=django:django . /code
 
 ARG SECRET_KEY
-ENV SECRET_KEY=${SECRET_KEY}
 ARG DJANGO_ALLOWED_HOSTS
-ENV DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS}
 
-RUN python manage.py collectstatic --noinput --settings=gpt_playground.settings_production
+RUN SECRET_KEY=${SECRET_KEY} DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS} python manage.py collectstatic --noinput --settings=gpt_playground.settings_production
 RUN chown django:django -R static_root
 
 USER django
