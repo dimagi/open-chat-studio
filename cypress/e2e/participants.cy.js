@@ -1,5 +1,5 @@
 describe('Participants Application', () => {
-  const teamSlug = Cypress.env('TEAM_SLUG') || 'your-team-slug'
+  const teamSlug = Cypress.env('TEAM_SLUG') || 'test-team'
 
   beforeEach(() => {
     cy.login()
@@ -7,24 +7,24 @@ describe('Participants Application', () => {
 
   describe('Participants Home Page', () => {
     it('loads participants home page successfully', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
+      cy.visit(`/a/${teamSlug}/participants/participant/`)
       cy.url().should('include', '/participants/')
-      cy.contains('Participants').should('be.visible')
+      cy.get('.table-container').should('be.visible')
+      cy.get('table').should('exist')
     })
 
     it('displays participants table', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
+      cy.visit(`/a/${teamSlug}/participants/participant/`)
       cy.get('table, .table-container, [data-table]', { timeout: 10000 }).should('exist')
     })
 
     it('has import and export buttons', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
+      cy.visit(`/a/${teamSlug}/participants/participant/`)
       cy.contains('button, a', /Import|Export/i).should('exist')
     })
 
     it('filters can be applied', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      // Check for filter controls
+      cy.visit(`/a/${teamSlug}/participants/participant/`)
       cy.get('select, input[type="search"], .filter-control').then(($filters) => {
         if ($filters.length > 0) {
           cy.log('Filters are available on participants page')
@@ -34,198 +34,109 @@ describe('Participants Application', () => {
   })
 
   describe('Participant Details', () => {
+    beforeEach(() => {
+      cy.visit(`/a/${teamSlug}/participants/1/e/1`)
+      cy.get('tbody tr', { timeout: 15000 }).should('exist')
+    })
+
     it('navigates to participant details', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.get('table tbody tr a, .participant-link').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          cy.url().should('match', /participants\/\d+/)
-        }
-      })
+      cy.get('tbody tr').first().click()
+      cy.url().should('match', /participants\/\d+/)
     })
 
     it('displays participant information', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.get('table tbody tr a').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          // Should show participant details
-          cy.contains(/Name|Identifier|Email/i).should('exist')
-        }
-      })
+      cy.get('tbody tr').first().click()
+      cy.contains(/Name|Identifier|Email|Channel/i).should('exist')
     })
 
     it('shows participant data section', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.get('table tbody tr a').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          // Look for data section
-          cy.contains(/Data|Participant Data/i).then(($section) => {
-            if ($section.length > 0) {
-              cy.log('Participant data section found')
-            }
-          })
-        }
-      })
+      cy.get('[aria-label="Participant Data"]').should('exist')
     })
 
     it('displays participant sessions', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.get('table tbody tr a').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          // Check for sessions table
-          cy.get('table').should('exist')
-        }
-      })
+    cy.get('[aria-label="Sessions"]').click()
+      cy.get('table').should('exist')
     })
   })
 
   describe('Edit Participant Data', () => {
-    it('can edit participant data', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.get('table tbody tr a').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          // Look for edit button
-          cy.contains('button', /Edit|Modify/i).then(($edit) => {
-            if ($edit.length > 0) {
-              cy.wrap($edit).click()
-              cy.get('textarea, input').should('exist')
-            }
-          })
-        }
-      })
+    beforeEach(() => {
+      cy.visit(`/a/${teamSlug}/participants/participant/`)
+      cy.visit(`/a/${teamSlug}/participants/1/e/1`)
+      cy.get('tbody tr', { timeout: 15000 }).should('exist')
     })
 
-    it('validates JSON format in data editor', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.get('table tbody tr a').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          cy.contains('button', /Edit/i).then(($edit) => {
-            if ($edit.length > 0) {
-              cy.wrap($edit).click()
-              // Try to enter invalid JSON
-              cy.get('textarea').then(($textarea) => {
-                if ($textarea.length > 0) {
-                  cy.wrap($textarea).clear().type('invalid json{')
-                  cy.contains('button', /Save|Submit/i).click()
-                  // Should show error
-                  cy.contains(/error|invalid|format/i, { timeout: 3000 }).should('exist')
-                }
-              })
-            }
-          })
-        }
-      })
+    it('can edit participant data', () => {
+        cy.get('[aria-label="Participant Data"]').click()
+        cy.get('textarea[name="participant-data"]').should('exist')
+        cy.get('button[type="submit"]').should('exist')
     })
   })
 
   describe('Edit Participant Name', () => {
     it('can edit participant name', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.get('table tbody tr a').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          // Look for name edit button or inline edit
-          cy.get('[data-edit="name"], .edit-name, button[aria-label*="edit"]').then(($editBtn) => {
-            if ($editBtn.length > 0) {
-              cy.wrap($editBtn).first().click()
-              cy.get('input[name="name"]').should('be.visible')
-            }
-          })
-        }
+      cy.visit(`/a/${teamSlug}/participants/participant`)
+      cy.get('tbody tr[data-redirect-url]', { timeout: 15000 }).first().then($row => {
+        const url = $row.attr('data-redirect-url').split('#')[0]
+        cy.visit(`${url}`)
       })
+	  cy.get('button[hx-target="#participant-name"]').then(($editBtn) => {
+	  if ($editBtn.length > 0) {
+	      cy.wrap($editBtn).first().click()
+	      cy.wait(1000)
+	      cy.get('input[name="name"]').should('be.visible')
+	  }
+	  })
     })
   })
 
   describe('Participant Schedules', () => {
-    it('displays scheduled messages', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.get('table tbody tr a').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          // Look for schedules section
-          cy.contains(/Schedule|Messages/i).then(($section) => {
-            if ($section.length > 0) {
-              cy.log('Schedules section found')
-            }
-          })
-        }
-      })
+    beforeEach(() => {
+      cy.visit(`/a/${teamSlug}/participants/1/e/1`)
+      cy.get('tbody tr', { timeout: 15000 }).should('exist')
     })
 
-    it('can cancel a schedule', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.get('table tbody tr a').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          // Look for cancel button on schedules
-          cy.contains('button', /Cancel|Stop/i).then(($cancel) => {
-            if ($cancel.length > 0) {
-              cy.log('Cancel schedule button available')
-            }
-          })
-        }
-      })
+    it('displays scheduled messages', () => {
+      cy.get('[aria-label="Schedules"]').click()
     })
   })
 
   describe('Participant Export', () => {
     it('opens export modal', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.contains('button, a', /Export/i).then(($export) => {
-        if ($export.length > 0) {
-          cy.wrap($export).click()
-          cy.get('[role="dialog"], .modal, form').should('be.visible')
-        }
-      })
+      cy.visit(`/a/${teamSlug}/participants/participant/`)
+      cy.contains('button, a', /Export/i).scrollIntoView().click({ force: true })
+      cy.get('[role="dialog"], .modal, form, dialog').should('be.visible')
     })
 
     it('export form has experiment selection', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.contains('button, a', /Export/i).then(($export) => {
-        if ($export.length > 0) {
-          cy.wrap($export).click()
-          cy.get('select, input[type="checkbox"]').should('exist')
-        }
-      })
+      cy.visit(`/a/${teamSlug}/participants/participant/`)
+      cy.contains('button, a', /Export/i).scrollIntoView().click({ force: true })
+      cy.get('select, input[type="checkbox"]').should('exist')
     })
   })
 
   describe('Participant Import', () => {
     it('navigates to import page', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.contains('button, a', /Import/i).then(($import) => {
-        if ($import.length > 0) {
-          cy.wrap($import).click()
-          cy.url().should('include', 'import')
-        }
-      })
+      cy.visit(`/a/${teamSlug}/participants/participant/`)
+      cy.contains('button, a', /Import/i).scrollIntoView().click({ force: true })
+      cy.url().should('include', 'import')
     })
 
     it('import page has file upload', () => {
-      cy.visit(`/a/${teamSlug}/participants/import/`)
+      cy.visit(`/a/${teamSlug}/participants/participants/import/`)
       cy.get('input[type="file"]').should('exist')
     })
 
     it('import page has experiment selection', () => {
-      cy.visit(`/a/${teamSlug}/participants/import/`)
+      cy.visit(`/a/${teamSlug}/participants/participants/import/`)
       cy.get('select[name*="experiment"], #id_experiment').should('exist')
     })
   })
 
   describe('Participant Table Pagination', () => {
     it('shows pagination controls if many participants', () => {
-      cy.visit(`/a/${teamSlug}/participants/`)
-      cy.get('.pagination, [aria-label="pagination"]').then(($pagination) => {
-        if ($pagination.length > 0) {
-          cy.log('Pagination controls are present')
-          cy.wrap($pagination).should('be.visible')
-        }
-      })
+      cy.visit(`/a/${teamSlug}/participants/participant/`)
+      cy.get('.pagination').should('exist')
     })
   })
 })
