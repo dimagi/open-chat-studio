@@ -16,7 +16,10 @@ If relevant, include screenshots or a loom video to demonstrate the new behaviou
 -->
 
 ### Docs and Changelog
+- [ ] This PR requires docs/changelog update
+
 <!--
-Note: When this PR is merged, Claude will automatically analyze it and create a changelog entry in the docs repository.
+Note: When this PR is merged and the checkbox above is checked, Claude will automatically analyze it and create a changelog entry in the docs repository.
+
 Add any notes here that will help Claude write the changelog and docs.
 -->

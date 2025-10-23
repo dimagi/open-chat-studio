@@ -39,7 +39,26 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if docs/changelog update is needed
+        id: check_docs_needed
+        run: |
+          # Get PR body
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body --jq '.body')
+
+          # Check for checked checkbox indicating docs/changelog update needed
+          # Looks for: - [x] This PR requires docs/changelog update
+          if echo "$PR_BODY" | grep -qiE '- \[[xX]\].*[Rr]equires (docs|changelog|documentation)'; then
+            echo "needs_docs_update=true" >> $GITHUB_OUTPUT
+            echo "PR indicates docs/changelog update is needed"
+          else
+            echo "needs_docs_update=false" >> $GITHUB_OUTPUT
+            echo "No docs/changelog update needed (checkbox not checked)"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Repository Dispatch
+        if: steps.check_docs_needed.outputs.needs_docs_update == 'true'
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.OCS_DOCS_PAT }}
