@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import datetime, timedelta
 from typing import Any
@@ -618,7 +619,8 @@ class DashboardService:
             return obj
 
         normalized = normalize(filters or {})
-        return json.dumps(normalized, separators=(",", ":"), sort_keys=True)
+        json_str = json.dumps(normalized, separators=(",", ":"), sort_keys=True)
+        return hashlib.sha1(json_str.encode()).hexdigest()
 
     def get_overview_stats(self, **filters) -> dict[str, Any]:
         """Get dashboard overview statistics"""
