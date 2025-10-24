@@ -20,13 +20,16 @@
     "loader/"
   ],
   "scripts": {
+    "test": "stencil test --spec",
     "build": "stencil build --docs",
     "start": "stencil build --dev --watch --serve",
     "generate": "stencil generate",
     "use:npmReadme": "mv 'README.md' 'git.README.md' && cp 'src/components/ocs-chat/readme.md' 'README.md'",
     "use:gitReadme": "mv 'git.README.md' 'README.md'",
     "prepublishOnly": "run-s build use:npmReadme",
-    "postpublish": "npm run use:gitReadme"
+    "postpublish": "npm run use:gitReadme",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint --fix src"
   },
   "dependencies": {
     "@stencil/core": "^4.27.0",

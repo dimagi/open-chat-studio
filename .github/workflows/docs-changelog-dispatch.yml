@@ -1,0 +1,80 @@
+name: Docs and Changelog Dispatch
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch Docs and Changelog Update
+    # Only run if PR was merged (not just closed)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if widget files changed
+        id: check_widget
+        run: |
+          # Get list of changed files in this PR
+          gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' > /tmp/changed_files.txt
+
+          # Check if any files in components/ folder were changed
+          if grep -q "^components/" /tmp/changed_files.txt; then
+            echo "is_widget_change=true" >> $GITHUB_OUTPUT
+            echo "Widget files were changed"
+          else
+            echo "is_widget_change=false" >> $GITHUB_OUTPUT
+            echo "No widget files changed"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if docs/changelog update is needed
+        id: check_docs_needed
+        run: |
+          # Get PR body
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body --jq '.body')
+
+          # Check for checked checkbox indicating docs/changelog update needed
+          # Looks for: - [x] This PR requires docs/changelog update
+          if echo "$PR_BODY" | grep -qiE '- \[[xX]\].*[Rr]equires (docs|changelog|documentation)'; then
+            echo "needs_docs_update=true" >> $GITHUB_OUTPUT
+            echo "PR indicates docs/changelog update is needed"
+          else
+            echo "needs_docs_update=false" >> $GITHUB_OUTPUT
+            echo "No docs/changelog update needed (checkbox not checked)"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Repository Dispatch
+        if: steps.check_docs_needed.outputs.needs_docs_update == 'true'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.OCS_DOCS_PAT }}
+          repository: dimagi/open-chat-studio-docs
+          event-type: ocs_changelog_update
+          client-payload: |
+            {
+              "pr_number": ${{ github.event.pull_request.number }},
+              "pr_title": ${{ toJSON(github.event.pull_request.title) }},
+              "pr_body": ${{ toJSON(github.event.pull_request.body) }},
+              "pr_url": "${{ github.event.pull_request.html_url }}",
+              "pr_author": "${{ github.event.pull_request.user.login }}",
+              "pr_merged_at": "${{ github.event.pull_request.merged_at }}",
+              "pr_labels": ${{ toJSON(github.event.pull_request.labels.*.name) }},
+              "is_widget_change": ${{ steps.check_widget.outputs.is_widget_change }},
+              "ref": "${{ github.ref }}",
+              "sha": "${{ github.sha }}",
+              "repository": "${{ github.repository }}"
+            }

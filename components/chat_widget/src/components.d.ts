@@ -36,6 +36,10 @@ export namespace Components {
          */
         "chatbotId": string;
         /**
+          * Authentication key for embedded channels
+         */
+        "embedKey"?: string;
+        /**
           * The text to place in the header.
          */
         "headerText": '';
@@ -137,6 +141,10 @@ declare namespace LocalJSX {
           * The ID of the chatbot to connect to.
          */
         "chatbotId": string;
+        /**
+          * Authentication key for embedded channels
+         */
+        "embedKey"?: string;
         /**
           * The text to place in the header.
          */

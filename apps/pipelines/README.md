@@ -33,7 +33,8 @@ class FancyNode(PipelineNode):
         widget=Widgets.select, options_source=OptionsSource.source_material
     ))
     
-    def _process(self, input, state: PipelineState) -> str:
-        self.logger.debug(f"Returning input: '{input}' without modification", input=input, output=input)
-        return input
+    def _process(self, state: PipelineState) -> str:
+        user_input = state["last_node_input"]
+        self.logger.debug(f"Returning input: '{user_input}' without modification", input=user_input, output=user_input)
+        return user_input
 ```

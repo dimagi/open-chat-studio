@@ -12,6 +12,7 @@
     </ul>
   </div>
 {% endblock breadcrumbs %}
+
 {% block pre_form %}
   {% if object.id %}
     <h2 class="text-l pg-text-muted">Assistant ID:
@@ -31,6 +32,7 @@
     </div>
   {% endif %}
 {% endblock pre_form %}
+
 {% block form %}
   {{ form.non_field_errors }}
   {% render_form_fields form "name" "instructions" "include_file_info" %}
@@ -58,6 +60,7 @@
     </div>
   {% endif %}
 {% endblock form %}
+
 {% block post_form %}
   {% if object.id %}
     {% with resources=object.tool_resources.all %}
@@ -74,6 +77,7 @@
     {% endwith %}
   {% endif %}
 {% endblock post_form %}
+
 {% block page_js %}
   {{ llm_options|json_script:"llmModelOptions" }}
   <script>
@@ -82,7 +86,7 @@
       Alpine.data('assistant', () => ({
         builtinTools: [],
         llmProvider: null,
-        llm_provider_model: '{{object.llm_provider_model.id|default:form.llm_provider_model.value|default:'null'}}',
+        llm_provider_model: '{{ object.llm_provider_model.id|default:form.llm_provider_model.value|default:'null' }}',
         llm_provider_model_options: [],
         init() {
           this.$watch('llmProvider', () => {

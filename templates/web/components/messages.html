@@ -1,13 +1,13 @@
 {% load markdown %}
 
 <script>
-  (() => {
-    htmx.on("messages", (event) => {
-      event.detail.value.forEach((message) => {
+  document.addEventListener('DOMContentLoaded', function(){
+    htmx.on("djangoMessages", (event) => {
+      event.detail.value.messages.forEach((message) => {
         alertify.notify(message.message, message.tags, 10);
       });
     })
-  })();
+  })
 </script>
 {% if messages %}
   <div>

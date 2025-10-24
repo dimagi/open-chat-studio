@@ -1,7 +1,5 @@
 {% extends "generic/object_form.html" %}
-{% load static %}
-{% load form_tags %}
-{% load i18n %}
+{% load form_tags i18n static %}
 
 {% block form %}
   {{ form.non_field_errors }}
@@ -17,21 +15,24 @@
     <!-- Clone from sessions mode -->
       <div x-show="mode === 'clone'" class="w-full mt-4">
         <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
-          <h3 class="text-lg font-semibold mb-4">{% trans "Select Sessions to Clone Messages From" %}</h3>
+          <h3 class="text-lg font-semibold mb-4">{% translate "Select Sessions to Clone Messages From" %}</h3>
           <p class="text-sm text-gray-600 mb-4">
-            {% trans "Select one or more experiment sessions. All message pairs (human-AI) from the selected sessions will be cloned into the new dataset." %}
+            {% translate "Select one or more experiment sessions. All message pairs (human-AI) from the selected sessions will be cloned into the new dataset." %}
           </p>
 
           <div class="mb-4">
             <div class="flex items-center justify-between">
               <div>
-                {% include "experiments/filters.html" %}
+                {% include "experiments/filters.html" with skip_dialogs=True %}
               </div>
-              <div x-show="selectedSessionIds.size + filteredSessionIds.size > 0" class="text-sm font-medium ml-4">
-                <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> selected
-                <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
-                  Clear
-                </button>
+
+              <div class="flex items-center gap-3">
+                <div x-show="selectedSessionIds.size + filteredSessionIds.size > 0" class="text-sm font-medium">
+                  <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> selected
+                  <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
+                    Clear
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -45,9 +46,9 @@
     <!-- Manual creation mode -->
       <div x-show="mode === 'manual'" class="w-full mt-4">
         <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
-          <h3 class="text-lg font-semibold mb-4">{% trans "Manually Add Message Pairs" %}</h3>
+          <h3 class="text-lg font-semibold mb-4">{% translate "Manually Add Message Pairs" %}</h3>
           <p class="text-sm text-gray-600 mb-4">
-            {% trans "Add individual message pairs with human messages, AI responses, and optional context data." %}
+            {% translate "Add individual message pairs with human messages, AI responses, and optional context data." %}
           </p>
 
           <input type="hidden" name="messages_json" x-model="messagesJsonString">
@@ -58,18 +59,18 @@
           <!-- Add new message form -->
           <div class="mt-6 pt-6">
             <div class="app-card">
-              <h4 class="text-lg font-semibold mb-4">{% trans "Add New Message Pair" %}</h4>
+              <h4 class="text-lg font-semibold mb-4">{% translate "Add New Message Pair" %}</h4>
               <div id="manual-message-form">
                 {% include "evaluations/components/message_pair_form.html" with disable_button_id="manual-add-button" %}
 
                 <div class="flex gap-2 mt-4">
                   <button type="button" class="btn btn-primary" id="manual-add-button" @click="addMessageFromForm()">
                     <i class="fa-solid fa-plus mr-2"></i>
-                    {% trans "Add Message Pair" %}
+                    {% translate "Add Message Pair" %}
                   </button>
                   <button type="reset" class="btn btn-ghost" @click="clearManualMessageForm()">
                     <i class="fa-solid fa-times mr-2"></i>
-                    {% trans "Clear Form" %}
+                    {% translate "Clear Form" %}
                   </button>
                 </div>
               </div>
@@ -81,30 +82,30 @@
     <!-- CSV upload mode -->
       <div x-show="mode === 'csv'" class="w-full mt-4">
         <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
-          <h3 class="text-lg font-semibold mb-4">{% trans "Upload CSV File" %}</h3>
+          <h3 class="text-lg font-semibold mb-4">{% translate "Upload CSV File" %}</h3>
           <p class="text-sm text-gray-600 mb-4">
-            {% trans "Upload a CSV file and map the columns to dataset fields. The CSV should contain columns for human messages, AI responses, and any context data." %}
+            {% translate "Upload a CSV file and map the columns to dataset fields. The CSV should contain columns for human messages, AI responses, and any context data." %}
           </p>
 
           <!-- File upload section -->
           <div x-show="!csvParsed" class="mb-6">
-            <label class="block text-sm font-medium mb-2">{% trans "Choose CSV File" %}</label>
+            <label class="block text-sm font-medium mb-2">{% translate "Choose CSV File" %}</label>
             <input type="file"
                    name="csv_file"
                    accept=".csv"
                    @change="uploadCsv($event)"
                    class="file-input file-input-bordered w-full max-w-xs">
             <div x-show="csvUploading" class="mt-2 text-sm text-gray-600">
-              <i class="fa-solid fa-spinner fa-spin"></i> {% trans "Processing CSV..." %}
+              <i class="fa-solid fa-spinner fa-spin"></i> {% translate "Processing CSV..." %}
             </div>
           </div>
 
           <!-- Column mapping section -->
           <div x-show="csvParsed" class="space-y-6">
             <div class="bg-base-50 p-4 rounded">
-              <h4 class="font-medium mb-2">{% trans "CSV Preview" %}</h4>
+              <h4 class="font-medium mb-2">{% translate "CSV Preview" %}</h4>
               <p class="text-sm text-gray-600 mb-3">
-                {% trans "Found" %} <span x-text="csvData?.total_rows || 0"></span> {% trans "rows" %}
+                {% translate "Found" %} <span x-text="csvData?.total_rows || 0"></span> {% translate "rows" %}
               </p>
 
               <!-- Sample data table -->
@@ -132,18 +133,18 @@
 
             <!-- Column mapping controls -->
             <div class="space-y-4">
-              <h4 class="font-medium">{% trans "Map CSV Columns to Dataset Fields" %}</h4>
+              <h4 class="font-medium">{% translate "Map CSV Columns to Dataset Fields" %}</h4>
 
               <!-- Required mappings -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label class="block text-sm font-medium mb-1">
-                    {% trans "Human Message Column" %} <span class="text-red-500">*</span>
+                    {% translate "Human Message Column" %} <span class="text-red-500">*</span>
                   </label>
                   <select x-model="columnMapping.input"
                           class="select select-bordered w-full"
                           @change="updateColumnMapping()">
-                    <option value="">{% trans "Select column..." %}</option>
+                    <option value="">{% translate "Select column..." %}</option>
                     <template x-for="column in csvData?.columns || []">
                       <option :value="column" x-text="column"></option>
                     </template>
@@ -152,12 +153,12 @@
 
                 <div>
                   <label class="block text-sm font-medium mb-1">
-                    {% trans "AI Response Column" %} <span class="text-red-500">*</span>
+                    {% translate "AI Response Column" %} <span class="text-red-500">*</span>
                   </label>
                   <select x-model="columnMapping.output"
                           class="select select-bordered w-full"
                           @change="updateColumnMapping()">
-                    <option value="">{% trans "Select column..." %}</option>
+                    <option value="">{% translate "Select column..." %}</option>
                     <template x-for="column in csvData?.columns || []">
                       <option :value="column" x-text="column"></option>
                     </template>
@@ -167,51 +168,17 @@
 
 
               <!-- Context field mappings -->
-              <div>
-                <div class="flex items-center justify-between mb-2">
-                  <label class="block text-sm font-medium">{% trans "Context Fields (Optional)" %}</label>
-                  <button type="button"
-                          class="btn btn-xs btn-outline"
-                          @click="addContextMapping()">
-                    <i class="fa-solid fa-plus"></i> {% trans "Add Field" %}
-                  </button>
-                </div>
-                <div class="space-y-2">
-                  <template x-for="(mapping, index) in contextMappings" :key="index">
-                    <div class="flex gap-2 items-center">
-                      <div class="flex-1">
-                        <input type="text"
-                               x-model="mapping.fieldName"
-                               @input="validateContextFieldName(index); updateColumnMapping()"
-                               class="input input-bordered input-sm w-full"
-                               :class="mapping.fieldNameError ? 'input-error' : ''"
-                               placeholder="Context field name">
-                        <div x-show="mapping.fieldNameError" class="text-error text-xs mt-1" x-text="mapping.fieldNameError"></div>
-                      </div>
-                      <select x-model="mapping.csvColumn"
-                              @change="updateColumnMapping()"
-                              class="select select-bordered select-sm flex-1">
-                        <option value="">{% trans "Select column..." %}</option>
-                        <template x-for="column in csvData?.columns || []">
-                          <option :value="column" x-text="column" :selected="mapping.csvColumn === column"></option>
-                        </template>
-                      </select>
-                      <button type="button"
-                              class="btn btn-xs"
-                              @click="removeContextMapping(index)">
-                        <i class="fa-solid fa-trash"></i>
-                      </button>
-                    </div>
-                  </template>
-                  <div x-show="contextMappings.length === 0" class="text-sm text-gray-500 italic">
-                    {% trans "No additional context fields mapped. Click 'Add Field' to map CSV columns to context data." %}
-                  </div>
-                </div>
-              </div>
+              {% include "evaluations/components/field_mapping_section.html" with label="Context Fields (Optional)" field_type="context" placeholder="Context field name" empty_message="No additional context fields mapped. Click 'Add Field' to map CSV columns to context data." %}
+
+              <!-- Participant Data field mappings -->
+              {% include "evaluations/components/field_mapping_section.html" with label="Participant Data Fields (Optional)" field_type="participant_data" placeholder="Participant data field name" empty_message="No participant data fields mapped. Click 'Add Field' to map CSV columns to participant data." %}
+
+              <!-- Session State field mappings -->
+              {% include "evaluations/components/field_mapping_section.html" with label="Session State Fields (Optional)" field_type="session_state" placeholder="Session state field name" empty_message="No session state fields mapped. Click 'Add Field' to map CSV columns to session state." %}
 
               <!-- History configuration -->
               <div class="pt-4 border-t">
-                <h4 class="font-medium mb-3">{% trans "History Configuration" %}</h4>
+                <h4 class="font-medium mb-3">{% translate "History Configuration" %}</h4>
 
                 <!-- Automatically populate history checkbox -->
                 <div class="form-control mb-4">
@@ -220,19 +187,19 @@
 
                 <!-- History column mapping -->
                 <div class="mb-4">
-                  <label class="block text-sm font-medium mb-1">{% trans "Or select history column from CSV" %}</label>
+                  <label class="block text-sm font-medium mb-1">{% translate "Or select history column from CSV" %}</label>
                   <select x-model="historyColumn"
                           @change="updateHistoryColumn()"
                           :disabled="populateHistory"
                           class="select select-bordered w-full"
                           :class="populateHistory ? 'select-disabled' : ''">
-                    <option value="">{% trans "Select column..." %}</option>
+                    <option value="">{% translate "Select column..." %}</option>
                     <template x-for="column in csvData?.columns || []">
                       <option :value="column" x-text="column"></option>
                     </template>
                   </select>
                   <div class="text-xs text-gray-500 mt-1">
-                    {% trans "Choose a column that contains conversation history text" %}
+                    {% translate "Choose a column that contains conversation history text" %}
                   </div>
                 </div>
 
@@ -246,7 +213,7 @@
               <button type="button"
                       class="btn btn-outline btn-sm"
                       @click="resetCsv()">
-                <i class="fa-solid fa-refresh"></i> {% trans "Upload Different File" %}
+                <i class="fa-solid fa-refresh"></i> {% translate "Upload Different File" %}
               </button>
             </div>
           </div>
@@ -270,7 +237,7 @@
     <!-- Edit Message Modal - Inside Alpine context, no form nesting -->
     <dialog id="editMessageModal" class="modal">
       <div x-show="isEditingMessage" class="modal-box max-w-none w-1/2">
-        <h3 class="font-bold text-lg mb-4">{% trans "Edit Message Pair" %}</h3>
+        <h3 class="font-bold text-lg mb-4">{% translate "Edit Message Pair" %}</h3>
         <button type="button" class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" @click="cancelEditingMessage()">✕</button>
 
         <!-- Modal content - no form tags to avoid nesting -->
@@ -289,7 +256,7 @@
               class="btn btn-ghost"
               @click="cancelEditingMessage()"
             >
-              {% trans "Cancel" %}
+              {% translate "Cancel" %}
             </button>
             <button
               type="button"
@@ -297,7 +264,7 @@
               id="modal-save-button"
               @click="updateEditingMessage()"
             >
-              {% trans "Save Changes" %}
+              {% translate "Save Changes" %}
             </button>
           </div>
         </div>
@@ -305,6 +272,15 @@
     </dialog>
   </div> <!-- End of datasetBuilder div -->
 {% endblock form %}
+
+{% block post_form %}
+  {# Filter dialogs must be outside form to avoid nested forms but need filterComponent context #}
+  {# Create a separate filterComponent instance - it will sync via API and URL params #}
+  <div x-data="filterComponent">
+    {% include "filters/saved_filters_dialog.html" %}
+    {% include "filters/save_filter_dialog.html" %}
+  </div>
+{% endblock post_form %}
 
 {% block page_js %}
   <script src="{% static 'js/evaluations-bundle.js' %}"></script>
@@ -339,6 +315,8 @@
         columnMappingJson: '{}',
         csvDataJson: '[]',
         contextMappings: [],
+        participantDataMappings: [],
+        sessionStateMappings: [],
         historyColumn: '',
         populateHistory: false,
 
@@ -406,11 +384,20 @@
               this.errorMessages.push('Please upload a CSV file and map both input and output columns.');
             }
 
-            // Check for context field validation errors
-            for (let i = 0; i < this.contextMappings.length; i++) {
-              this.validateContextFieldName(i);
-              if (this.contextMappings[i].fieldNameError) {
-                this.errorMessages.push('Please fix context field name errors before submitting.');
+            // Check for field validation errors across all field types
+            const fieldTypes = [
+              { name: 'context', mappings: this.contextMappings, label: 'context' },
+              { name: 'participant_data', mappings: this.participantDataMappings, label: 'participant data' },
+              { name: 'session_state', mappings: this.sessionStateMappings, label: 'session state' }
+            ];
+
+            for (const fieldType of fieldTypes) {
+              for (let i = 0; i < fieldType.mappings.length; i++) {
+                this.validateFieldName(fieldType.name, i);
+                if (fieldType.mappings[i].fieldNameError) {
+                  this.errorMessages.push(`Please fix ${fieldType.label} field name errors before submitting.`);
+                  break;
+                }
               }
             }
           }
@@ -597,13 +584,24 @@
               this.columnMapping.input = data.suggestions.input || '';
               this.columnMapping.output = data.suggestions.output || '';
 
-              if (data.suggestions.context && Array.isArray(data.suggestions.context)) {
-                this.contextMappings = data.suggestions.context.map(suggestion => ({
-                  fieldName: suggestion.fieldName,
-                  csvColumn: suggestion.csvColumn,
-                  fieldNameError: ''
-                }));
-              }
+              // Map suggestions to internal format with error tracking
+              this.contextMappings = (data.suggestions.context || []).map(suggestion => ({
+                fieldName: suggestion.fieldName,
+                csvColumn: suggestion.csvColumn,
+                fieldNameError: ''
+              }));
+
+              this.participantDataMappings = (data.suggestions.participant_data || []).map(suggestion => ({
+                fieldName: suggestion.fieldName,
+                csvColumn: suggestion.csvColumn,
+                fieldNameError: ''
+              }));
+
+              this.sessionStateMappings = (data.suggestions.session_state || []).map(suggestion => ({
+                fieldName: suggestion.fieldName,
+                csvColumn: suggestion.csvColumn,
+                fieldNameError: ''
+              }));
 
               // Pre-populate history column if suggested
               if (data.suggestions.history) {
@@ -625,29 +623,43 @@
           this.csvData = null;
           this.columnMapping = { input: '', output: '' };
           this.contextMappings = [];
+          this.participantDataMappings = [];
+          this.sessionStateMappings = [];
           this.historyColumn = '';
           this.updateColumnMapping();
           document.querySelector('input[type="file"]').value = '';
         },
 
-        addContextMapping() {
-          this.contextMappings.push({ fieldName: '', csvColumn: '', fieldNameError: '' });
+        addMapping(fieldType) {
+          const mappingArray = this.getMappingArray(fieldType);
+          mappingArray.push({ fieldName: '', csvColumn: '', fieldNameError: '' });
         },
 
-        removeContextMapping(index) {
-          this.contextMappings.splice(index, 1);
+        removeMapping(fieldType, index) {
+          const mappingArray = this.getMappingArray(fieldType);
+          mappingArray.splice(index, 1);
           this.updateColumnMapping();
         },
 
-        validateContextFieldName(index) {
-          const mapping = this.contextMappings[index];
+        getMappingArray(fieldType) {
+          switch(fieldType) {
+            case 'context': return this.contextMappings;
+            case 'participant_data': return this.participantDataMappings;
+            case 'session_state': return this.sessionStateMappings;
+            default: return [];
+          }
+        },
+
+        validateFieldName(fieldType, index) {
+          const mappingArray = this.getMappingArray(fieldType);
+          const mapping = mappingArray[index];
           let fieldName = mapping.fieldName.trim();
 
           // Clear previous error
           mapping.fieldNameError = '';
 
           if (!fieldName) {
-            return; // Allow empty field names (optional context)
+            return; // Allow empty field names (optional)
           }
 
           // Convert spaces to underscores automatically
@@ -663,9 +675,9 @@
             return;
           }
 
-          // Check for duplicates
-          for (let i = 0; i < this.contextMappings.length; i++) {
-            if (i !== index && this.contextMappings[i].fieldName.trim() === fieldName) {
+          // Check for duplicates within the same field type
+          for (let i = 0; i < mappingArray.length; i++) {
+            if (i !== index && mappingArray[i].fieldName.trim() === fieldName) {
               mapping.fieldNameError = 'Field name already used';
               return;
             }
@@ -684,18 +696,41 @@
         },
 
         updateColumnMapping() {
-          // Build complete column mapping including context fields
           const mapping = {
             input: this.columnMapping.input,
             output: this.columnMapping.output
           };
 
-          // Add valid context mappings
+          // Build nested structures for each field type
+          const contextObj = {};
           this.contextMappings.forEach(ctx => {
             if (ctx.fieldName.trim() && ctx.csvColumn.trim()) {
-              mapping[ctx.fieldName.trim()] = ctx.csvColumn.trim();
+              contextObj[ctx.fieldName.trim()] = ctx.csvColumn.trim();
             }
           });
+          if (Object.keys(contextObj).length > 0) {
+            mapping.context = contextObj;
+          }
+
+          const participantDataObj = {};
+          this.participantDataMappings.forEach(pd => {
+            if (pd.fieldName.trim() && pd.csvColumn.trim()) {
+              participantDataObj[pd.fieldName.trim()] = pd.csvColumn.trim();
+            }
+          });
+          if (Object.keys(participantDataObj).length > 0) {
+            mapping.participant_data = participantDataObj;
+          }
+
+          const sessionStateObj = {};
+          this.sessionStateMappings.forEach(ss => {
+            if (ss.fieldName.trim() && ss.csvColumn.trim()) {
+              sessionStateObj[ss.fieldName.trim()] = ss.csvColumn.trim();
+            }
+          });
+          if (Object.keys(sessionStateObj).length > 0) {
+            mapping.session_state = sessionStateObj;
+          }
 
           this.columnMappingJson = JSON.stringify(mapping);
 

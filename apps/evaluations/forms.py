@@ -14,7 +14,7 @@ from apps.evaluations.models import (
     Evaluator,
     ExperimentVersionSelection,
 )
-from apps.evaluations.utils import parse_history_text
+from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 
 
@@ -74,6 +74,12 @@ class EvaluationConfigForm(forms.ModelForm):
         widget=forms.Select(attrs={"class": "select w-full"}),
         label="Chatbot",
     )
+    run_generation = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="Run generation step before evaluation",
+        widget=forms.CheckboxInput(attrs={"x-model": "runGeneration"}),
+    )
     experiment_version = None  # Created dynamically based on the queryset
 
     class Meta:
@@ -83,6 +89,7 @@ class EvaluationConfigForm(forms.ModelForm):
             "evaluators",
             "dataset",
             "experiment_version",
+            "run_generation",
             "base_experiment",
         ]
         widgets = {
@@ -102,6 +109,8 @@ class EvaluationConfigForm(forms.ModelForm):
         experiment_version_queryset = None
 
         if self.instance and self.instance.pk:
+            self.initial["run_generation"] = self.instance.experiment_version or self.instance.base_experiment
+
             if self.instance.experiment_version:
                 # For specific version, set experiment field based on the experiment_version
                 if working_experiment := self.instance.experiment_version.get_working_version():
@@ -138,6 +147,11 @@ class EvaluationConfigForm(forms.ModelForm):
 
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
+
+        if cleaned_data.get("run_generation") and not experiment:
+            self.add_error("experiment", "Please select a version")
+        elif not cleaned_data.get("run_generation"):
+            cleaned_data["experiment"] = experiment = None
 
         if experiment and not experiment_version:
             self.add_error("experiment_version", "Please select a version")
@@ -446,7 +460,17 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             )
 
         csv_columns = set(csv_data[0].keys()) if csv_data else set()
-        mapped_columns = {col for col in column_mapping.values() if col}
+
+        mapped_columns = set()
+        if input_col := column_mapping.get("input"):
+            mapped_columns.add(input_col)
+        if output_col := column_mapping.get("output"):
+            mapped_columns.add(output_col)
+
+        for field_type in ["context", "participant_data", "session_state"]:
+            if field_mapping := column_mapping.get(field_type):
+                if isinstance(field_mapping, dict):
+                    mapped_columns.update(field_mapping.values())
 
         if history_column:
             mapped_columns.add(history_column)
@@ -455,14 +479,22 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         if missing_columns:
             raise forms.ValidationError(f"Columns not found in CSV file: {', '.join(sorted(missing_columns))}")
 
-        for field_name in column_mapping:
-            if field_name not in ["input", "output"]:
-                if not self._is_valid_python_identifier(field_name):
-                    raise forms.ValidationError(
-                        f"Context field '{field_name}' is not a valid Python identifier. "
-                        "Field names must start with a letter or underscore and contain only letters, digits, "
-                        "and underscores."
-                    )
+        # Validate field names for all nested structures
+        field_type_labels = {
+            "context": "Context",
+            "participant_data": "Participant data",
+            "session_state": "Session state",
+        }
+        for field_type in ["context", "participant_data", "session_state"]:
+            if field_mapping := column_mapping.get(field_type):
+                for field_name in field_mapping:
+                    if not self._is_valid_python_identifier(field_name):
+                        label = field_type_labels.get(field_type, field_type)
+                        raise forms.ValidationError(
+                            f"{label} field '{field_name}' is not a valid Python identifier. "
+                            "Field names must start with a letter or underscore and contain only letters, digits, "
+                            "and underscores."
+                        )
 
         valid_rows = 0
         for i, row in enumerate(csv_data):
@@ -553,9 +585,22 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
                 continue
 
             context = {}
-            for field_name, csv_column in column_mapping.items():
-                if field_name not in ["input", "output"] and csv_column in row:
-                    context[field_name] = row[csv_column]
+            if context_mapping := column_mapping.get("context"):
+                for field_name, csv_column in context_mapping.items():
+                    if csv_column in row:
+                        context[field_name] = parse_csv_value_as_json(row[csv_column])
+
+            participant_data = {}
+            if participant_data_mapping := column_mapping.get("participant_data"):
+                for field_name, csv_column in participant_data_mapping.items():
+                    if csv_column in row:
+                        participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
+
+            session_state = {}
+            if session_state_mapping := column_mapping.get("session_state"):
+                for field_name, csv_column in session_state_mapping.items():
+                    if csv_column in row:
+                        session_state[field_name] = parse_csv_value_as_json(row[csv_column])
 
             message_history = []
             if populate_history:
@@ -572,6 +617,8 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
                     input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
                     output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
                     context=context,
+                    participant_data=participant_data,
+                    session_state=session_state,
                     history=message_history,
                     metadata={"created_mode": "csv"},
                 )

@@ -3,6 +3,7 @@ import json
 import logging
 from io import StringIO
 
+from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count, OuterRef, Q
 from django.db.models.functions import Coalesce
@@ -23,13 +24,19 @@ from apps.evaluations.tables import (
     EvaluationSessionsSelectionTable,
 )
 from apps.evaluations.tasks import upload_dataset_csv_task
-from apps.evaluations.utils import generate_csv_column_suggestions, parse_history_text
+from apps.evaluations.utils import (
+    generate_csv_column_suggestions,
+    make_evaluation_messages_from_sessions,
+    normalize_json_quotes,
+    parse_history_text,
+)
 from apps.experiments.filters import (
     ChatMessageFilter,
     ExperimentSessionFilter,
     get_filter_context_data,
 )
 from apps.experiments.models import ExperimentSession
+from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -180,13 +187,15 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 
     def _get_filter_context_data(self):
         table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
-        return get_filter_context_data(
+        context = get_filter_context_data(
             self.request.team,
-            ExperimentSessionFilter.columns(self.request.team),
-            "last_message",
-            table_url,
-            "sessions-table",
+            columns=ExperimentSessionFilter.columns(self.request.team),
+            date_range_column="last_message",
+            table_url=table_url,
+            table_container_id="sessions-table",
+            table_type=FilterSet.TableType.DATASETS,
         )
+        return context
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -433,6 +442,14 @@ def parse_csv_columns(request, team_slug: str):
         columns = csv_reader.fieldnames or []
 
         all_rows = list(csv_reader)
+
+        for row in all_rows:
+            for key, value in row.items():
+                if isinstance(value, str):
+                    value_stripped = value.strip()
+                    if value_stripped.startswith(("{", "[")):
+                        row[key] = normalize_json_quotes(value)
+
         sample_rows = all_rows[:3]
         total_rows = len(all_rows)
         suggestions = generate_csv_column_suggestions(columns)
@@ -467,10 +484,19 @@ def download_dataset_csv(request, team_slug: str, pk: int):
         return response
 
     context_keys = {key for message in messages if message.context for key in message.context}
+    participant_data_keys = {
+        key for message in messages if message.participant_data for key in message.participant_data
+    }
+    session_state_keys = {key for message in messages if message.session_state for key in message.session_state}
+
     context_keys = sorted(context_keys)
+    participant_data_keys = sorted(participant_data_keys)
+    session_state_keys = sorted(session_state_keys)
 
     headers = ["id", "input_content", "output_content"]
     headers.extend([f"context.{key}" for key in context_keys])
+    headers.extend([f"participant_data.{key}" for key in participant_data_keys])
+    headers.extend([f"session_state.{key}" for key in session_state_keys])
     headers.append("history")
 
     filename = f"{dataset.name}_dataset.csv"
@@ -480,6 +506,12 @@ def download_dataset_csv(request, team_slug: str, pk: int):
 
     writer.writerow(headers)
 
+    def _serialize_value(value):
+        """Serialize a value to string, converting dicts/lists to JSON."""
+        if isinstance(value, dict | list):
+            return json.dumps(value)
+        return str(value) if value is not None else ""
+
     for message in messages:
         row = [
             message.id,
@@ -488,7 +520,17 @@ def download_dataset_csv(request, team_slug: str, pk: int):
         ]
 
         for key in context_keys:
-            row.append(message.context.get(key, "") if message.context else "")
+            value = message.context.get(key, "") if message.context else ""
+            row.append(_serialize_value(value))
+
+        for key in participant_data_keys:
+            value = message.participant_data.get(key, "") if message.participant_data else ""
+            row.append(_serialize_value(value))
+
+        for key in session_state_keys:
+            value = message.session_state.get(key, "") if message.session_state else ""
+            row.append(_serialize_value(value))
+
         row.append(message.full_history)
         writer.writerow(row)
 
@@ -525,3 +567,33 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
     except Exception as e:
         logger.error(f"Error starting CSV upload for dataset {dataset.id}: {str(e)}")
         return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
+
+
+class AddMessageToDatasetView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
+    permission_required = "documents.change_documentsource"
+    template_name = "experiments/components/add_to_dataset_modal.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["datasets"] = EvaluationDataset.objects.filter(team=self.request.team)
+        context["session_id"] = self.kwargs.get("session_id")
+        return context
+
+    def post(self, request, team_slug: str, session_id: str):
+        message_id = request.POST["message_id"]
+        dataset = get_object_or_404(EvaluationDataset, id=request.POST["dataset"], team__slug=team_slug)
+
+        if not ChatMessage.objects.filter(id=message_id, chat__experiment_session__team__slug=team_slug).exists():
+            messages.error(request, "Invalid message selected.")
+            return HttpResponse(status=400)
+
+        eval_messages = make_evaluation_messages_from_sessions({str(session_id): [int(message_id)]})
+        if not eval_messages:
+            messages.error(request, "No valid messages found to add to dataset.")
+            return HttpResponse(status=400)
+
+        EvaluationMessage.objects.bulk_create(eval_messages)
+        dataset.messages.add(*eval_messages)
+
+        messages.success(request, "Messages added to dataset successfully.")
+        return HttpResponse(status=204)

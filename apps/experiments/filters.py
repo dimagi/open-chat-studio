@@ -26,7 +26,7 @@ from apps.web.dynamic_filters.column_filters import (
 
 
 def get_filter_context_data(
-    team, columns: dict[str, dict], date_range_column: str, table_url: str, table_container_id: str
+    team, columns: dict[str, dict], date_range_column: str, table_url: str, table_container_id: str, table_type: str
 ):
     if date_range_column not in columns:
         raise ValueError("Date range column is not present in list of columns")
@@ -37,6 +37,7 @@ def get_filter_context_data(
         "df_date_range_column_name": date_range_column,
         "df_filter_data_source_url": table_url,
         "df_filter_data_source_container_id": table_container_id,
+        "df_table_type": table_type,
     }
 
 

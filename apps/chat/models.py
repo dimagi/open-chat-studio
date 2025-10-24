@@ -10,6 +10,7 @@ from langchain_core.messages import BaseMessage, messages_from_dict
 from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCommentsMixin
 from apps.files.models import File
 from apps.teams.models import BaseTeamModel
+from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 
 
@@ -32,7 +33,7 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         null=True,
         help_text="List of language codes for which translated text is available",
     )
-    metadata = models.JSONField(default=dict)
+    metadata = SanitizedJSONField(default=dict)
 
     @property
     def embed_source(self):
@@ -126,8 +127,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     summary = models.TextField(  # noqa DJ001
         null=True, blank=True, help_text="The summary of the conversation up to this point (not including this message)"
     )
-    translations = models.JSONField(default=dict, help_text="Dictionary of translated text keyed by the language code")
-    metadata = models.JSONField(default=dict)
+    translations = SanitizedJSONField(default=dict, help_text="Dictionary of translated text keyed by the language code")
+    metadata = SanitizedJSONField(default=dict)
 
     class Meta:
         ordering = ["created_at"]
@@ -278,7 +279,7 @@ class ChatAttachment(BaseModel):
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="attachments")
     tool_type = models.CharField(max_length=128)
     files = models.ManyToManyField("files.File", blank=True)
-    extra = models.JSONField(default=dict, blank=True)
+    extra = SanitizedJSONField(default=dict, blank=True)
 
     @property
     def label(self):
