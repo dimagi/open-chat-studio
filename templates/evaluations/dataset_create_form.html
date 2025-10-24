@@ -20,7 +20,7 @@
           <div class="mb-4">
             <div class="flex items-center justify-between">
               <div>
-                {% include "experiments/filters.html" %}
+                {% include "experiments/filters.html" with skip_dialogs=True %}
               </div>
 
               <div class="flex items-center gap-3">
@@ -269,6 +269,15 @@
     </dialog>
   </div> <!-- End of datasetBuilder div -->
 {% endblock form %}
+
+{% block post_form %}
+  {# Filter dialogs must be outside form to avoid nested forms but need filterComponent context #}
+  {# Create a separate filterComponent instance - it will sync via API and URL params #}
+  <div x-data="filterComponent">
+    {% include "filters/saved_filters_dialog.html" %}
+    {% include "filters/save_filter_dialog.html" %}
+  </div>
+{% endblock post_form %}
 
 {% block page_js %}
   <script src="{% static 'js/editors-bundle.js' %}"></script>
