@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Q
+from django.db.models import Avg, Count, DurationField, Exists, ExpressionWrapper, F, Max, OuterRef, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
 from django.utils import timezone
@@ -59,10 +59,17 @@ class DashboardService:
 
         # Base querysets
         experiments = Experiment.objects.filter(team=self.team, is_archived=False, working_version=None)
-        # CRITICAL: distinct() required because JOIN to messages creates duplicate session rows
-        sessions = ExperimentSession.objects.filter(
-            team=self.team, chat__messages__created_at__gte=start_date, chat__messages__created_at__lte=end_date
-        ).distinct()
+        # Use Exists() to avoid join+distinct - prevents row explosion upfront for better performance
+        msg_exists = Exists(
+            ChatMessage.objects.filter(
+                chat=OuterRef("chat"),
+                created_at__gte=start_date,
+                created_at__lte=end_date,
+            )
+        )
+        sessions = (
+            ExperimentSession.objects.filter(team=self.team).annotate(_has_msgs=msg_exists).filter(_has_msgs=True)
+        )
         messages = ChatMessage.objects.filter(chat__team=self.team, **base_filters)
         participants = Participant.objects.filter(team=self.team)
 
