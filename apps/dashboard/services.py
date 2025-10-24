@@ -85,11 +85,18 @@ class DashboardService:
         # Apply platform filter
         if platform_names:
             global_platforms = ChannelPlatform.team_global_platforms()
-            if not any(platform for platform in platform_names if platform in global_platforms):
+            if not any(p in global_platforms for p in platform_names):
                 # only filter experiments if we're filtering by non-global platforms since all experiments
                 # will match the global platforms
-                # CRITICAL: distinct() required when experiment has multiple channels with same platform
-                experiments = experiments.filter(experimentchannel__platform__in=platform_names).distinct()
+                experiments = experiments.filter(
+                    Exists(
+                        ExperimentChannel.objects.filter(
+                            experiment=OuterRef("pk"),
+                            platform__in=platform_names,
+                            deleted=False,
+                        )
+                    )
+                )
             sessions = sessions.filter(experiment_channel__platform__in=platform_names)
             messages = messages.filter(chat__experiment_session__experiment_channel__platform__in=platform_names)
             participants = participants.filter(platform__in=platform_names)
