@@ -685,7 +685,16 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
 
         return cleaned_data
 
-    def clone_messages_to_dataset(self, dataset: EvaluationDataset):
+    def save(self, commit=True):
+        """Save the dataset and clone messages if mode is 'clone'."""
+        instance = super().save(commit=commit)
+
+        if commit and self.cleaned_data.get("mode") == "clone":
+            self._clone_messages_to_dataset(instance)
+
+        return instance
+
+    def _clone_messages_to_dataset(self, dataset: EvaluationDataset):
         """
         Clone messages from sessions into the existing dataset, avoiding duplicates.
         Uses ChatMessage IDs for duplicate detection.
