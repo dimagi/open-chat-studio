@@ -9,6 +9,8 @@ CRITICAL: DO NOT fix these tests - they intentionally fail to expose bugs in the
 Run these tests to verify the service has .distinct() issues that need fixing.
 """
 
+from datetime import timedelta
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -59,12 +61,12 @@ class TestDistinctSessionDuplication:
                 chat=session.chat,
                 message_type=ChatMessageType.HUMAN,
                 content=f"Message {i}",
-                created_at=now - timezone.timedelta(hours=i),
+                created_at=now - timedelta(hours=i),
             )
 
         service = DashboardService(team)
-        start_date = now - timezone.timedelta(days=1)
-        end_date = now + timezone.timedelta(hours=1)
+        start_date = now - timedelta(days=1)
+        end_date = now + timedelta(hours=1)
 
         querysets = service.get_filtered_queryset_base(start_date=start_date, end_date=end_date)
         sessions = querysets["sessions"]
@@ -104,7 +106,7 @@ class TestDistinctSessionDuplication:
             platform=platform,
             name="Channel 1",
         )
-        channel2 = ExperimentChannelFactory(
+        ExperimentChannelFactory(
             team=team,
             experiment=experiment,
             platform=platform,
@@ -112,7 +114,7 @@ class TestDistinctSessionDuplication:
         )
 
         # Create session with one of the channels
-        session = ExperimentSessionFactory(
+        ExperimentSessionFactory(
             experiment=experiment,
             participant=participant,
             team=team,
@@ -153,12 +155,12 @@ class TestDistinctSessionDuplication:
         participant = ParticipantFactory(team=team)
 
         # Create 2 sessions for the same participant
-        session1 = ExperimentSessionFactory(
+        ExperimentSessionFactory(
             experiment=experiment1,
             participant=participant,
             team=team,
         )
-        session2 = ExperimentSessionFactory(
+        ExperimentSessionFactory(
             experiment=experiment2,
             participant=participant,
             team=team,
@@ -213,7 +215,7 @@ class TestDistinctAggregationIssues:
                 chat=session.chat,
                 message_type=ChatMessageType.HUMAN,
                 content=f"Message {i}",
-                created_at=now - timezone.timedelta(hours=i),
+                created_at=now - timedelta(hours=i),
             )
 
         service = DashboardService(team)
@@ -480,7 +482,7 @@ class TestDistinctQueryOptimization:
         experiment = ExperimentFactory(team=team)
 
         # Create multiple channels for same experiment
-        for i in range(2):
+        for _i in range(2):
             ExperimentChannelFactory(
                 team=team,
                 experiment=experiment,
