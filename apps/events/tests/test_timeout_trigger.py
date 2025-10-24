@@ -142,10 +142,13 @@ def test_trigger_count_reached(session):
         session.save()
         frozen_time.shift(delta=timedelta(minutes=11))
 
-        timeout_trigger.event_logs.create(session=session, chat_message=message, status=EventLogStatusChoices.SUCCESS)
         assert len(timeout_trigger.timed_out_sessions()) == 1
+
+        # Suppose there's a failed attempt, then the timeout should still trigger
         timeout_trigger.event_logs.create(session=session, chat_message=message, status=EventLogStatusChoices.FAILURE)
         assert len(timeout_trigger.timed_out_sessions()) == 1
+
+        # Suppose there's a success attempt, then the timeout should not trigger
         timeout_trigger.event_logs.create(session=session, chat_message=message, status=EventLogStatusChoices.SUCCESS)
         assert len(timeout_trigger.timed_out_sessions()) == 0
 
