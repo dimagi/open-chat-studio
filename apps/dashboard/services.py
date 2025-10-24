@@ -225,16 +225,17 @@ class DashboardService:
             return cached_data
 
         querysets = self.get_filtered_queryset_base(**filters)
-        sessions = querysets["sessions"]
+        messages = querysets["messages"]
 
         trunc_func = self._get_trunc_function(granularity)
 
+        # Use messages queryset (already filtered by date) for period grouping
         session_stats = (
-            sessions.annotate(period=trunc_func("chat__messages__created_at"))
+            messages.annotate(period=trunc_func("created_at"))
             .values("period")
-            # CRITICAL: distinct=True prevents inflated counts from JOIN to messages
             .annotate(
-                total_sessions=Count("id", distinct=True), unique_participants=Count("participant", distinct=True)
+                total_sessions=Count("chat__experiment_session", distinct=True),
+                unique_participants=Count("chat__experiment_session__participant", distinct=True),
             )
             .order_by("period")
         )
