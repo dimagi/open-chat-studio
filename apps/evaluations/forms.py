@@ -685,7 +685,7 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
 
         return cleaned_data
 
-    def clone_messages_to_dataset(self, dataset: EvaluationDataset) -> int:
+    def clone_messages_to_dataset(self, dataset: EvaluationDataset):
         """
         Clone messages from sessions into the existing dataset, avoiding duplicates.
         Uses ChatMessage IDs for duplicate detection.
@@ -694,7 +694,7 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
         filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
 
         if not session_ids and not filtered_session_ids:
-            return 0
+            return
 
         new_evaluation_messages = self._create_messages_from_sessions(session_ids, filtered_session_ids)
         existing_chat_message_pairs = set(
@@ -715,5 +715,3 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
         if messages_to_add:
             created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
             dataset.messages.add(*created_messages)
-
-        return len(messages_to_add)
