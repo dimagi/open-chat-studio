@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Avg, Count, DurationField, Exists, ExpressionWrapper, F, Max, OuterRef, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
@@ -626,7 +627,7 @@ class DashboardService:
             return obj
 
         normalized = normalize(filters or {})
-        json_str = json.dumps(normalized, separators=(",", ":"), sort_keys=True)
+        json_str = json.dumps(normalized, separators=(",", ":"), sort_keys=True, cls=DjangoJSONEncoder)
         return hashlib.sha1(json_str.encode()).hexdigest()
 
     def get_overview_stats(self, **filters) -> dict[str, Any]:
