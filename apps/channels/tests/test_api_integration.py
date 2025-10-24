@@ -146,6 +146,7 @@ def test_attachments_returned(mock_response, experiment):
         "attachments": [{"file_name": file.name, "link": file.download_link(session.id)}],
     }
 
+
 @pytest.mark.django_db()
 def test_read_only_key_cannot_post(experiment):
     user = experiment.team.members.first()

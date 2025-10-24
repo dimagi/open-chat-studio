@@ -56,7 +56,7 @@ export function renderMarkdownSync(content: string): string {
         'href', 'target', 'rel', 'class', 'src', 'alt', 'title',
         'width', 'height', 'align', 'colspan', 'rowspan'
       ],
-      ALLOWED_URI_REGEXP: /^(?:(?:https?):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+      ALLOWED_URI_REGEXP: /^(?:(?:https?):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
       ADD_ATTR: ['target'],
       FORBID_TAGS: ['script', 'style', 'form', 'input', 'button'],
       FORBID_ATTR: ['onclick', 'onload', 'onerror', 'onmouseover'],

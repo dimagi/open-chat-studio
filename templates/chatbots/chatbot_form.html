@@ -1,8 +1,5 @@
 {% extends "generic/object_form.html" %}
-{% load i18n %}
-{% load waffle_tags %}
-{% load static %}
-{% load form_tags %}
+{% load form_tags i18n static waffle_tags %}
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
@@ -18,6 +15,7 @@
     </ul>
   </div>
 {% endblock breadcrumbs %}
+
 {% block form %}
   <div>
     {% render_form_fields form "name" "description" %}

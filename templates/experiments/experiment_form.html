@@ -1,15 +1,12 @@
 {% extends "generic/object_form.html" %}
-{% load i18n %}
-{% load waffle_tags %}
-{% load static %}
-{% load form_tags %}
+{% load form_tags i18n static waffle_tags %}
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
       {% if experiment.id %}
         <li><a
-          href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}">{{ experiment.name }}</a>
+          href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}">{{ experiment.name }}</a>
         </li>
         <li class="pg-breadcrumb-active" aria-current="page">Edit</li>
       {% else %}
@@ -18,6 +15,7 @@
     </ul>
   </div>
 {% endblock breadcrumbs %}
+
 {% block form %}
     {% render_form_fields form "name" "description" "consent_form" %}
     <div class="divider"></div>
@@ -27,7 +25,7 @@
       <div x-show="type === 'assistant'" x-cloak>
         {% url "assistants:home" request.team.slug as new_assistant_url %}
         <p class="text-error">{% blocktranslate %}
-          No assistants have been created. <a class="link" href="{{ new_assistant_url  }}">Create one now</a>.
+          No assistants have been created. <a class="link" href="{{ new_assistant_url }}">Create one now</a>.
         {% endblocktranslate %}</p>
       </div>
     {% endif %}
@@ -110,6 +108,7 @@
       </div>
     </div>
 {% endblock form %}
+
 {% block form_actions %}
   {% if not experiment or experiment.is_editable %}
     <div class="mt-2">
@@ -121,6 +120,7 @@
     </div>
   {% endif %}
 {% endblock form_actions %}
+
 {% block page_js %}
   {{ voice_providers_types|json_script:"voiceProviderTypes" }}
   {{ synthetic_voice_options|json_script:"voiceOptions" }}

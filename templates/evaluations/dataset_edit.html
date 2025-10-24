@@ -1,6 +1,5 @@
 {% extends "generic/object_form.html" %}
-{% load i18n %}
-{% load static %}
+{% load i18n static %}
 
 {% block page_head %}
   {{ block.super }}
@@ -8,30 +7,30 @@
 {% endblock page_head %}
 
 {% block post_form %}
-  <h2 class="pg-subtitle">{% trans "Dataset Messages" %}</h2>
+  <h2 class="pg-subtitle">{% translate "Dataset Messages" %}</h2>
   <div id="dataset-messages-table"
        hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}"
        hx-trigger="load, refreshTable from:body"
        hx-target="this"
        hx-swap="innerHTML">
     <div class="text-center py-4">
-      <i class="fa-solid fa-spinner fa-spin"></i> {% trans "Loading messages..." %}
+      <i class="fa-solid fa-spinner fa-spin"></i> {% translate "Loading messages..." %}
     </div>
   </div>
 
   {% include "evaluations/components/add_message_form.html" %}
 
   <div class="mt-8">
-    <h3 class="text-lg font-medium mb-4">{% trans "Upload CSV" %}</h3>
+    <h3 class="text-lg font-medium mb-4">{% translate "Upload CSV" %}</h3>
     <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
       <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        {% trans "Upload a CSV file to update this dataset. Include an 'id' column to update existing messages, or omit it to create new messages." %}
+        {% translate "Upload a CSV file to update this dataset. Include an 'id' column to update existing messages, or omit it to create new messages." %}
       </p>
 
       <form id="csv-upload-form" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="mb-4">
-          <label for="csv-file" class="block text-sm font-medium mb-2">{% trans "CSV File" %}</label>
+          <label for="csv-file" class="block text-sm font-medium mb-2">{% translate "CSV File" %}</label>
           <input type="file"
                  id="csv-file"
                  name="csv_file"
@@ -42,10 +41,10 @@
 
         <div class="flex gap-2">
           <button type="submit" class="btn btn-primary">
-            <i class="fa-solid fa-upload"></i> {% trans "Upload CSV" %}
+            <i class="fa-solid fa-upload"></i> {% translate "Upload CSV" %}
           </button>
           <a href="{% url 'evaluations:dataset_download' request.team.slug object.id %}" class="btn btn-secondary">
-            <i class="fa-solid fa-download"></i> {% trans "Download Template" %}
+            <i class="fa-solid fa-download"></i> {% translate "Download Template" %}
           </a>
         </div>
       </form>

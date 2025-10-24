@@ -1,4 +1,5 @@
 from .settings import *  # noqa F401
+from socket import gethostbyname, gethostname
 
 DEBUG = False
 
@@ -16,20 +17,27 @@ CSRF_COOKIE_SECURE = True
 # https://docs.djangoproject.com/en/3.2/ref/middleware/#http-strict-transport-security
 
 # # Increase this number once you're confident everything works https://stackoverflow.com/a/49168623/8207
-# SECURE_HSTS_SECONDS = 60
+SECURE_HSTS_SECONDS = 60
 # # Uncomment these two lines if you are sure that you don't host any subdomains over HTTP.
 # # You will get security warnings if you don't do this.
-# SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+# Be 100% sure that all assets from this and all subdomains can be loaded over HTTPS before enabling preloading.
+# Also see the submission requirements: https://hstspreload.org/#submission-requirements
 # SECURE_HSTS_PRELOAD = True
 
 USE_HTTPS_IN_ABSOLUTE_URLS = True
 
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
+# Add the server's own hostname to ALLOWED_HOSTS
+ALLOWED_HOSTS.append(gethostbyname(gethostname()))
 
 # this defaults to SECRET_KEY
 CRYPTOGRAPHY_KEY = env("CRYPTOGRAPHY_KEY", default=None)
 CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default=None)
 
+# This is true by default, but let's be explicit
+SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # Your email config goes here.
 # see https://github.com/anymail/django-anymail for more details / examples

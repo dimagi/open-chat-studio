@@ -106,7 +106,7 @@ from apps.experiments.tasks import (
 from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
-from apps.generics import actions
+from apps.filters.models import FilterSet
 from apps.generics.chips import Chip
 from apps.generics.views import paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
@@ -121,24 +121,8 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_home(request, team_slug: str):
-    from apps.chatbots.views import home
-
-    actions_ = [
-        actions.Action(
-            "experiments:new",
-            label="Add New",
-            button_style="btn-primary",
-            required_permissions=["experiments.add_experiment"],
-        )
-    ]
-    return home(
-        request,
-        team_slug,
-        "Experiments",
-        "experiments:table",
-        actions=actions_,
-        show_modal_or_banner=True,
-    )
+    """Redirect to chatbots home - there should be only one main homepage."""
+    return HttpResponseRedirect(reverse("chatbots:chatbots_home", args=[team_slug]))
 
 
 class ExperimentTableView(BaseExperimentTableView):
@@ -239,7 +223,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         }
 
     def get_success_url(self):
-        return reverse("experiments:single_experiment_home", args=[self.request.team.slug, self.object.pk])
+        return reverse("chatbots:single_chatbot_home", args=[self.request.team.slug, self.object.pk])
 
     def get_queryset(self):
         return Experiment.objects.get_all().filter(team=self.request.team)
@@ -462,7 +446,7 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionReq
 
     def get_success_url(self):
         url = reverse(
-            "experiments:single_experiment_home",
+            "chatbots:single_chatbot_home",
             kwargs={
                 "team_slug": self.request.team.slug,
                 "experiment_id": self.kwargs["experiment_id"],
@@ -520,7 +504,15 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
         session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
 
     columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
-    context.update(get_filter_context_data(request.team, columns, "last_message", session_table_url, "sessions-table"))
+    filter_context = get_filter_context_data(
+        request.team,
+        columns=columns,
+        date_range_column="last_message",
+        table_url=session_table_url,
+        table_container_id="sessions-table",
+        table_type=FilterSet.TableType.SESSIONS,
+    )
+    context.update(filter_context)
 
     return TemplateResponse(request, template_name, context)
 
@@ -528,9 +520,8 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_experiment_home(request, team_slug: str, experiment_id: int):
-    return base_single_experiment_view(
-        request, team_slug, experiment_id, "experiments/single_experiment_home.html", "experiments"
-    )
+    """Redirect to single chatbot home - chatbots should be the primary interface for individual experiments."""
+    return HttpResponseRedirect(reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id]))
 
 
 def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
@@ -629,7 +620,7 @@ def experiment_chat_session(
     }
     return TemplateResponse(
         request,
-        "experiments/experiment_chat.html",
+        "experiments/chat/web_chat.html",
         {"experiment": experiment, "session": session, "active_tab": active_tab, **version_specific_vars},
     )
 
@@ -998,7 +989,7 @@ def experiment_invitations(request, team_slug: str, experiment_id: int, origin="
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     timezone = request.session.get("detected_tz", None)
     experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
-    parsed_url = urlparse(request.headers.get("HX-Current-URL"))
+    parsed_url = urlparse(request.htmx.current_url)
     query_params = QueryDict(parsed_url.query)
     task_id = async_export_chat.delay(experiment_id, query_params, timezone)
     return TemplateResponse(
@@ -1162,7 +1153,7 @@ def _experiment_chat_ui(request, embedded=False):
     }
     return TemplateResponse(
         request,
-        "experiments/experiment_chat.html",
+        "experiments/chat/web_chat.html",
         {
             "experiment": request.experiment,
             "session": request.experiment_session,
@@ -1277,7 +1268,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 
     return TemplateResponse(
         request,
-        "experiments/components/experiment_chat.html",
+        "experiments/components/session_messages.html",
         context,
     )
 
@@ -1396,6 +1387,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
         {
             "experiment": request.experiment,
             "experiment_session": request.experiment_session,
+            "messages": ChatMessage.objects.filter(chat_id=request.experiment_session.chat_id).all(),
             "active_tab": "experiments",
             "form": form,
             "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],

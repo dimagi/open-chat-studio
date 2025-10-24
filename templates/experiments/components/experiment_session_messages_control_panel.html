@@ -1,0 +1,186 @@
+{% load form_tags %}
+
+<form 
+    id="control-panel"
+    class="mt-1 max-w-5xl flex justify-between p-3 pb-5 border-b"
+    hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
+    hx-target="#messages-container"
+    hx-trigger="change, submit">
+    <!-- Hidden inputs to maintain search state -->
+    <input type="hidden" name="search" value="{{ request.GET.search|default:'' }}">
+
+    <div class="w-full flex justify-between gap-4">
+      <div class="flex flex-1 flex-col gap-2">
+        {% if not hide_translation|default_if_none:False %}
+          <div class="flex items-center gap-3 flex-wrap">
+            {% if available_languages %}
+            <select
+              name="language"
+              class="select select-sm select-bordered w-48 language-selector htmx-hide"
+              hx-indicator=".language-selector"
+            >
+            {% for lang_code, lang_name in available_languages %}
+              <option value="{{ lang_code }}" {% if request.GET.language == lang_code %}selected{% endif %}>
+                {{ lang_name }}
+              </option>
+            {% endfor %}
+            </select>
+            <div class="language-selector htmx-indicator htmx-show w-48 flex text-center gap-2">
+              <span class="loading loading-spinner loading-sm"></span>
+              <span>Loading...</span>
+            </div>
+            {% endif %}
+
+            <button class="btn btn-sm btn-primary" type="button" onclick="translateModal.showModal()">Translate Messages</button>
+
+            {% if language %}
+              <div class="flex items-center gap-2">
+                <div class="tooltip" data-tip="Messages translated from original language">
+                  <a class="badge badge-info badge-sm" aria-label="Messages translated from original language">
+                    Translated
+                  </a>
+                </div>
+
+                <div class="my-2">
+                  <label id="show_original_messages_checkbox" class="label cursor-pointer space-x-2 text-xs">
+                    Show Original Messages
+                    <input type="checkbox"
+                          name="show_original_translation"
+                          class="toggle"
+                          aria-label="Show original translation alongside translated text"
+                          hx-disabled-elt="this"
+                          hx-indicator="#show_original_messages_checkbox"
+                          {% if request.GET.show_original_translation == "on" %}checked{% else %}unchecked{% endif %}>
+                      <span class="loading loading-spinner loading-sm htmx-indicator"></span>
+                  </label>
+                </div>
+
+                {% if has_missing_translations %}
+                  <label for="translate-remaining-messages-modal" class="btn btn-outline btn-secondary btn-sm">
+                    Translate Remaining Messages
+                  </label>
+
+                  <input type="checkbox" id="translate-remaining-messages-modal" class="modal-toggle" />
+                  <div class="modal">
+                    <div class="modal-box">
+                      <h3 class="font-bold text-lg">Translate Remaining Messages?</h3>
+                      <p class="py-4">
+                        This will translate all messages that don't currently have translations for:
+                        <strong>{% for lang_code, lang_name in available_languages %}
+                          {% if lang_code == language %}{{ lang_name }}{% endif %}
+                        {% endfor %}</strong>
+                      </p>
+
+                      {% render_form_fields translate_form_remaining "llm_provider" "llm_provider_model" %}
+                      <p class="pb-4">This action may take a few moments to complete.</p>
+                      <div class="modal-action">
+                        <button
+                          type="button"
+                          data-action="translate-remaining-messages"
+                          class="btn btn-primary"
+                          hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
+                          hx-vals='{"language": "{{ language }}"}'
+                          hx-include="#control-panel, #translation-provider-remaining, #translation-provider-model-remaining"
+                          hx-target="#messages-container"
+                          hx-indicator=".translation-loading-spinner"
+                          onclick="document.getElementById('translate-remaining-messages-modal').checked = false;"
+                        >Translate Messages
+                        </button>
+                        <label for="translate-remaining-messages-modal" class="btn">Cancel</label>
+                      </div>
+                    </div>
+                  </div>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+        {% endif %}
+        {% if perms.annotations.view_customtaggeditem and all_tags %}
+          <div class="flex items-start gap-4">
+            <div class="flex w-3/4 gap-1 items-center">
+              <p class="text-xs text-gray-500">Tags:</p>
+              <div class="flex flex-wrap gap-1">
+                {% for tag in all_tags %}
+                  <div class="tooltip" data-tip="{{ tag.count }} message{{ tag.count|pluralize }}">
+                  <input
+                      type="checkbox" 
+                      name="tag_filter" 
+                      aria-label="{{ tag.name }}" 
+                      value="{{ tag.name }}"
+                      class="btn btn-xs checked:btn-accent"
+                      {% if tag.name in selected_tags %}checked{% endif %}
+                  >
+                  </div>
+                {% endfor %}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  onclick="this.closest('form').querySelectorAll('input[name=tag_filter]').forEach(cb => cb.checked = false); htmx.trigger(this.closest('form'), 'submit');"
+                >
+                  <i class="fa-solid fa-times"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+
+      <div class="justify-end flex flex-row">
+        {% if total_pages > 1 or request.GET.show_all %}
+          <div>
+            Show all messages
+            <input
+              x-ref="showAllCheckbox"  
+              type="checkbox"
+              name="show_all"
+              class="toggle"
+              hx-indicator="#show_all_spinner"
+              {% if request.GET.show_all == "on" %}checked{% endif %}>
+            <div id="show_all_spinner" class="htmx-show">
+              <span class="loading loading-spinner loading-sm"></span>
+              <span class="ml-2">Loading...</span>
+            </div>
+          </div>
+        {% endif %}
+
+        {% if total_pages > 1 %}
+          <div>
+            {% include "experiments/components/pagination_buttons.html" %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </form>
+
+{% if not hide_translation %}
+  <!-- Translation Modal -->
+  <dialog id="translateModal" class="modal">
+      <div class="modal-box" x-data="{createNew: true}">
+          <h3 class="font-bold text-lg"></h3>
+          <p class="py-4">
+          This will translate all messages in this session. Select the target language:
+          </p>
+          {% render_form_fields translate_form_all %}
+          <p class="pb-4">This action may take a few moments to complete.</p>
+          <div class="modal-action">
+          <button
+              type="button"
+              data-action="translate-all-messages"
+              class="btn btn-primary"
+              hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
+              hx-vals='{"translate_all": "true"}'
+              hx-include="#control-panel, #translation-provider-all, [name='target_language'], #translation-provider-model-all"
+              hx-target="#messages-container"
+              hx-indicator=".translation-loading-spinner"
+              onclick="translateModal.close()"
+          >Translate All Messages
+          </button>
+          <button class="btn" type="button" onclick="translateModal.close()">Cancel</button>
+          </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+          <button>close</button>
+      </form>
+  </dialog>
+{% endif %}

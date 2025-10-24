@@ -3,5 +3,7 @@
 {% block message_body %}
   You've been invited to participate in a Dimagi ChatBot experiment called  {{ experiment_name }}.
 {% endblock message_body %}
-{% block cta_link %}{{ session.get_invite_url }}{% endblock cta_link %}
-{% block cta_text %}{% translate "Start Experiment" %}{% endblock cta_text %}
+
+{% block cta_link %}{{ session.get_invite_url }}{% endblock %}
+
+{% block cta_text %}{% translate "Start Experiment" %}{% endblock %}

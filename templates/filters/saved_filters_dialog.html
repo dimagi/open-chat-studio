@@ -1,0 +1,94 @@
+<dialog id="savedFiltersDialog" class="modal">
+  <div class="modal-box max-w-xl">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="font-bold text-lg">Saved Filters</h3>
+      <button class="btn btn-sm btn-ghost" onclick="this.closest('dialog').close()">✕</button>
+    </div>
+
+    <div id="filtersContent">
+      <template x-if="!savedFilters || savedFilters.length === 0">
+        <div class="text-center text-gray-500 py-4">No saved filter sets</div>
+      </template>
+      
+      <template x-if="savedFilters && savedFilters.length > 0">
+        <div class="space-y-4">
+          <template x-for="filter in savedFilters" :key="filter.id">
+            <div class="flex items-center justify-between">
+              <div class="flex-1">
+                <div class="font-medium cursor-pointer hover:text-primary hover:bg-base-200 hover:border-base-300 p-2 rounded"
+                     @click="applySavedFilter(filter)"
+                     title="Click to apply"
+                     x-text="filter.name"></div>
+              </div>
+              <div class="flex gap-1">
+                <button
+                  class="btn btn-ghost btn-xs"
+                  x-cloak
+                  x-show="filter.is_user_filter"
+                  title="Update this saved filter with the currently applied filters"
+                  @click="updateSavedFilterQueryString(filter.id)">
+                  Update
+                </button>
+                <!-- Personal Default -->
+                <button class="btn btn-ghost btn-xs"
+                        type="button"
+                        title="Set as your personal default filter"
+                        x-cloak
+                        x-show="filter.is_user_filter"
+                        @click="toggleField(filter.id, 'is_default_for_user')"
+                        :class="filter.is_default_for_user ? 'text-primary' : ''">
+                  <i x-show="!filter.is_default_for_user" class="fa-regular fa-user"></i>
+                  <i x-show="filter.is_default_for_user" x-cloak class="fa-solid fa-user"></i>
+                </button>
+                
+                <!-- Team Default -->
+                <button class="btn btn-ghost btn-xs"
+                        type="button"
+                        title="Set as your team's default filter"
+                        x-cloak
+                        x-show="filter.is_user_filter"
+                        @click="toggleField(filter.id, 'is_default_for_team')"
+                        :class="filter.is_default_for_team ? 'text-primary' : ''">
+                  <i class="fa-solid fa-users"></i>
+                </button>
+                
+                <!-- Share -->
+                <button class="btn btn-ghost btn-xs"
+                        type="button"
+                        title="Share this filter set with your Team"
+                        x-cloak
+                        x-show="filter.is_user_filter"
+                        :class="filter.is_shared ? 'text-primary' : ''"
+                        @click="toggleField(filter.id, 'is_shared')">
+                  <i x-show="!filter.is_shared" class="fa-solid fa-share-nodes"></i>
+                  <i x-show="filter.is_shared" x-cloak class="fa-solid fa-share-nodes"></i>
+                </button>
+                
+                <!-- Star -->
+                <button class="btn btn-ghost btn-xs"
+                        type="button"
+                        title="Star"
+                        @click="toggleField(filter.id, 'is_starred')"
+                        :class="filter.is_starred ? 'text-primary' : ''">
+                  <i x-show="!filter.is_starred" class="fa-regular fa-star"></i>
+                  <i x-cloak x-show="filter.is_starred" class="fa-solid fa-star"></i>
+                </button>
+                
+                <!-- Delete -->
+                <button class="btn btn-ghost btn-xs text-error"
+                        type="button"
+                        title="Delete"
+                        x-cloak
+                        x-show="filter.is_user_filter"
+                        @click="deleteSavedFilter(filter.id, filter.name)">
+                  <i class="fa-regular fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>

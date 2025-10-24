@@ -1,7 +1,7 @@
 import inspect
 import json
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import F
 
@@ -10,6 +10,34 @@ from apps.evaluations.exceptions import HistoryParseException
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationMessage
+
+
+def sanitize_json_data(data: Any) -> Any:
+    """
+    Recursively sanitize JSON data by removing null bytes and control characters.
+
+    PostgreSQL's JSONB type cannot store null bytes (\u0000) and some control characters
+    in text values. This function removes these characters from strings throughout the
+    JSON structure.
+
+    Args:
+        data: The data to sanitize (dict, list, str, or primitive)
+
+    Returns:
+        Sanitized copy of the data
+    """
+    if isinstance(data, dict):
+        return {key: sanitize_json_data(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [sanitize_json_data(item) for item in data]
+    elif isinstance(data, str):
+        # Remove null bytes and control characters (except common whitespace like \n, \r, \t)
+        # This removes characters in the range \x00-\x1f except \t (0x09), \n (0x0a), \r (0x0d)
+        sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", data)
+        return sanitized
+    else:
+        # Return primitives (int, float, bool, None) as-is
+        return data
 
 
 def get_evaluator_type_info() -> dict[str, dict[str, str]]:

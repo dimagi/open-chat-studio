@@ -73,6 +73,12 @@ class EvaluationConfigForm(forms.ModelForm):
         widget=forms.Select(attrs={"class": "select w-full"}),
         label="Chatbot",
     )
+    run_generation = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="Run generation step before evaluation",
+        widget=forms.CheckboxInput(attrs={"x-model": "runGeneration"}),
+    )
     experiment_version = None  # Created dynamically based on the queryset
 
     class Meta:
@@ -82,6 +88,7 @@ class EvaluationConfigForm(forms.ModelForm):
             "evaluators",
             "dataset",
             "experiment_version",
+            "run_generation",
             "base_experiment",
         ]
         widgets = {
@@ -101,6 +108,8 @@ class EvaluationConfigForm(forms.ModelForm):
         experiment_version_queryset = None
 
         if self.instance and self.instance.pk:
+            self.initial["run_generation"] = self.instance.experiment_version or self.instance.base_experiment
+
             if self.instance.experiment_version:
                 # For specific version, set experiment field based on the experiment_version
                 if working_experiment := self.instance.experiment_version.get_working_version():
@@ -137,6 +146,11 @@ class EvaluationConfigForm(forms.ModelForm):
 
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
+
+        if cleaned_data.get("run_generation") and not experiment:
+            self.add_error("experiment", "Please select a version")
+        elif not cleaned_data.get("run_generation"):
+            cleaned_data["experiment"] = experiment = None
 
         if experiment and not experiment_version:
             self.add_error("experiment_version", "Please select a version")

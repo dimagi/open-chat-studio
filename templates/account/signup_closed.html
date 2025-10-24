@@ -1,17 +1,17 @@
 {% extends "web/base.html" %}
-{% load i18n %}
-{% load allauth %}
+{% load allauth i18n %}
 {% block page_title %}
-  {% trans "Sign Up Closed" %}
+  {% translate "Sign Up Closed" %}
 {% endblock page_title %}
+
 {% block body %}
   <div class="flex justify-center my-8 ">
     <div class="w-96 px-4 py-4 bg-base-100">
       <div>
         <h2 class="mt-6 text-center text-2xl font-bold">
-          {% trans "Sign Up Closed" %}
+          {% translate "Sign Up Closed" %}
         </h2>
-        <p>{% trans "We are sorry, but the sign up is currently closed." %}</p>
+        <p>{% translate "We are sorry, but the sign up is currently closed." %}</p>
       </div>
     </div>
   </div>
