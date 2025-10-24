@@ -300,21 +300,21 @@ def _extract_row_data(row):
     context = {}
     for col_name, value in row.items():
         if col_name.startswith("context.") and value:
-            context_key = col_name[8:]  # Remove "context." prefix
+            context_key = col_name.removeprefix("context.")
             context[context_key] = parse_csv_value_as_json(value)
 
     # Extract participant_data from participant_data.* columns
     participant_data = {}
     for col_name, value in row.items():
         if col_name.startswith("participant_data.") and value:
-            key = col_name[17:]  # Remove "participant_data." prefix
+            key = col_name.removeprefix("participant_data.")
             participant_data[key] = parse_csv_value_as_json(value)
 
     # Extract session_state from session_state.* columns
     session_state = {}
     for col_name, value in row.items():
         if col_name.startswith("session_state.") and value:
-            key = col_name[14:]  # Remove "session_state." prefix
+            key = col_name.removeprefix("session_state.")
             session_state[key] = parse_csv_value_as_json(value)
 
     # Parse history if present

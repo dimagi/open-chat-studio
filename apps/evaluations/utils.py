@@ -177,13 +177,13 @@ def generate_csv_column_suggestions(columns):
             # History has its own suggestion mechanism
             suggestions["history"] = col
         elif col.startswith("context."):
-            field_name = _clean_field_name(col[8:])  # Remove 'context.' prefix
+            field_name = _clean_field_name(col.removeprefix("context."))
             suggestions["context"].append({"fieldName": field_name, "csvColumn": col})
         elif col.startswith("participant_data."):
-            field_name = _clean_field_name(col[17:])  # Remove 'participant_data.' prefix
+            field_name = _clean_field_name(col.removeprefix("participant_data."))
             suggestions["participant_data"].append({"fieldName": field_name, "csvColumn": col})
         elif col.startswith("session_state."):
-            field_name = _clean_field_name(col[14:])  # Remove 'session_state.' prefix
+            field_name = _clean_field_name(col.removeprefix("session_state."))
             suggestions["session_state"].append({"fieldName": field_name, "csvColumn": col})
         else:
             # Fall back to suggesting unknown fields as context fields
