@@ -5,7 +5,7 @@ from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Avg, Count, DurationField, Exists, ExpressionWrapper, F, Max, OuterRef, Q
+from django.db.models import Avg, Count, DurationField, Exists, ExpressionWrapper, F, Max, OuterRef, Q, Subquery
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
 from django.utils import timezone
@@ -122,7 +122,7 @@ class DashboardService:
             tag_on_msg = Exists(
                 CustomTaggedItem.objects.filter(
                     content_type=message_content_type,
-                    object_id__in=ChatMessage.objects.filter(chat=OuterRef(OuterRef("chat_id"))).values("id"),
+                    object_id__in=Subquery(ChatMessage.objects.filter(chat=OuterRef(OuterRef("chat_id"))).values("id")),
                     tag_id__in=tag_ids,
                 )
             )
@@ -132,8 +132,8 @@ class DashboardService:
             exp_tag_on_chat = Exists(
                 CustomTaggedItem.objects.filter(
                     content_type=chat_content_type,
-                    object_id__in=Chat.objects.filter(experiment_session__experiment=OuterRef(OuterRef("id"))).values(
-                        "id"
+                    object_id__in=Subquery(
+                        Chat.objects.filter(experiment_session__experiment=OuterRef(OuterRef("id"))).values("id")
                     ),
                     tag_id__in=tag_ids,
                 )
@@ -141,9 +141,11 @@ class DashboardService:
             exp_tag_on_msg = Exists(
                 CustomTaggedItem.objects.filter(
                     content_type=message_content_type,
-                    object_id__in=ChatMessage.objects.filter(
-                        chat__experiment_session__experiment=OuterRef(OuterRef("id"))
-                    ).values("id"),
+                    object_id__in=Subquery(
+                        ChatMessage.objects.filter(
+                            chat__experiment_session__experiment=OuterRef(OuterRef("id"))
+                        ).values("id")
+                    ),
                     tag_id__in=tag_ids,
                 )
             )
@@ -155,8 +157,8 @@ class DashboardService:
             part_tag_on_chat = Exists(
                 CustomTaggedItem.objects.filter(
                     content_type=chat_content_type,
-                    object_id__in=Chat.objects.filter(experiment_session__participant=OuterRef(OuterRef("id"))).values(
-                        "id"
+                    object_id__in=Subquery(
+                        Chat.objects.filter(experiment_session__participant=OuterRef(OuterRef("id"))).values("id")
                     ),
                     tag_id__in=tag_ids,
                 )
@@ -164,9 +166,11 @@ class DashboardService:
             part_tag_on_msg = Exists(
                 CustomTaggedItem.objects.filter(
                     content_type=message_content_type,
-                    object_id__in=ChatMessage.objects.filter(
-                        chat__experiment_session__participant=OuterRef(OuterRef("id"))
-                    ).values("id"),
+                    object_id__in=Subquery(
+                        ChatMessage.objects.filter(
+                            chat__experiment_session__participant=OuterRef(OuterRef("id"))
+                        ).values("id")
+                    ),
                     tag_id__in=tag_ids,
                 )
             )
