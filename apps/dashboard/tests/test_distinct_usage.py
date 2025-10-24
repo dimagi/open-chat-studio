@@ -1,11 +1,15 @@
 """
-Tests for .distinct() correctness in DashboardService.
+Tests for duplicate prevention in DashboardService.
 
-These tests verify that .distinct() is properly applied in dashboard service querysets
-to prevent row duplication from JOINs, which would lead to duplicate counting
-in aggregations and queryset results.
+These tests verify that dashboard service querysets prevent row duplication from JOINs,
+which would lead to duplicate counting in aggregations and queryset results.
 
-Run these tests to verify the service correctly handles .distinct() across various
+The service uses multiple strategies to prevent duplicates:
+- Exists() subqueries to avoid JOINs (e.g., message filtering, platform filtering)
+- distinct() calls where necessary (e.g., participant filtering with multiple sessions)
+- distinct=True in Count() aggregations to prevent over-counting
+
+Run these tests to verify the service correctly handles duplicate prevention across various
 filtering scenarios including date ranges, tags, platforms, and participant filters.
 """
 
@@ -30,19 +34,11 @@ from ..services import DashboardService
 
 @pytest.mark.django_db()
 class TestDistinctSessionDuplication:
-    """Test cases for session duplication issues when JOINing across messages"""
+    """Test cases for session duplication"""
 
     def test_sessions_not_duplicated_with_multiple_messages_in_date_range(self):
         """
         TEST: Sessions duplicated when filtering by message date range.
-
-        Issue: Line 62-64 in services.py
-        The query filters ExperimentSession by chat__messages__created_at
-        without applying .distinct(). When a session has multiple messages in
-        the date range, it returns duplicate session rows (one per message).
-
-        Expected: 1 session
-        Actual with bug: 3 sessions (one per message)
         """
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
@@ -84,14 +80,6 @@ class TestDistinctSessionDuplication:
     def test_experiments_not_duplicated_with_platform_filter(self):
         """
         TEST: Experiments duplicated when filtering by platform.
-
-        Issue: Line 81 in services.py
-        The experiments queryset filters by experimentchannel__platform
-        without applying .distinct(). If an experiment has 2 channels with
-        the same platform, it returns duplicate experiment rows.
-
-        Expected: 1 experiment
-        Actual with bug: 2 experiments (one per matching channel)
         """
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
@@ -139,14 +127,6 @@ class TestDistinctSessionDuplication:
     def test_participants_not_duplicated_with_multiple_sessions(self):
         """
         TEST: Participants duplicated when filtering by participant_ids.
-
-        Issue: Line 87-88 in services.py
-        The participants queryset filters by experimentsession__id with
-        participant_ids filter without proper .distinct(). If a participant
-        has multiple sessions, it returns duplicate participant rows.
-
-        Expected: 1 participant
-        Actual with bug: 2 participants (one per session)
         """
         team = TeamFactory()
         experiment1 = ExperimentFactory(team=team)
@@ -184,20 +164,9 @@ class TestDistinctSessionDuplication:
 
 @pytest.mark.django_db()
 class TestDistinctAggregationIssues:
-    """Test cases for aggregation accuracy issues due to missing distinct()"""
+    """Test cases for aggregation accuracy"""
 
     def test_session_analytics_no_duplicate_sessions(self):
-        """
-        TEST: Session counts inaccurate due to JOINs without distinct().
-
-        Issue: Line 156 in services.py
-        The sessions.annotate() joins to chat__messages without .distinct()
-        on the base queryset. When a session has multiple messages, the
-        Count("id") counts duplicates, inflating the session count.
-
-        Expected: 1 session counted
-        Actual with bug: 3 sessions counted (one per message)
-        """
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
         participant = ParticipantFactory(team=team)
@@ -230,17 +199,6 @@ class TestDistinctAggregationIssues:
         )
 
     def test_bot_performance_accurate_session_count(self):
-        """
-        TEST: Bot performance session counts incorrect due to JOINs.
-
-        Issue: Line 228-236 in services.py
-        The session_stats uses Count("id", distinct=True) but the base
-        queryset isn't distinct'd after joining to chat__messages through
-        the annotation. This can cause over-counting.
-
-        Expected: 1 session
-        Actual with bug: May count as multiple due to JOIN structure
-        """
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
         participant = ParticipantFactory(team=team)
@@ -275,13 +233,6 @@ class TestDistinctAggregationIssues:
     def test_bot_performance_accurate_message_count(self):
         """
         TEST: Message counts duplicated in bot performance data.
-
-        Issue: Line 234 in services.py
-        The Count("chat__messages", distinct=True) may still over-count if
-        the base sessions queryset has duplicates from other JOINs.
-
-        Expected: 5 messages
-        Actual with bug: May count more due to JOIN duplication
         """
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
@@ -317,17 +268,11 @@ class TestDistinctAggregationIssues:
 
 @pytest.mark.django_db()
 class TestDistinctComplexFiltering:
-    """Test cases for distinct() with multiple filter combinations"""
+    """Test cases for duplicate prevention with multiple filter combinations"""
 
     def test_sessions_distinct_with_experiment_and_platform_filter(self):
         """
         TEST: Sessions duplicated with combined experiment and platform filters.
-
-        When filtering by both experiment_ids and platform_names, the
-        session queryset may have duplicates if not properly distinct'd.
-
-        Expected: 1 session
-        Actual with bug: May be duplicated
         """
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
@@ -377,15 +322,8 @@ class TestDistinctComplexFiltering:
         """
         TEST: Participants should not be duplicated with tag filtering.
 
-        The participant filtering with tags (lines 101-105) uses OR conditions
-        across multiple chat and message tag relationships that could cause
-        duplicates without proper distinct().
-
         This test creates 3 messages all tagged with the same tag to exercise
         the tag join code path and verify .distinct() properly eliminates duplicates.
-
-        Expected: 1 unique participant
-        Actual: Should be 1 if .distinct() is properly applied (would be 3 without it)
         """
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
@@ -438,16 +376,11 @@ class TestDistinctComplexFiltering:
 
 @pytest.mark.django_db()
 class TestDistinctQueryOptimization:
-    """Test cases verifying distinct() is applied efficiently"""
+    """Test cases verifying duplicate prevention is applied efficiently"""
 
     def test_sessions_queryset_uses_distinct_after_message_join(self):
         """
-        TEST: Verify sessions queryset includes distinct() call.
-
-        This test checks that when we get the base queryset with message
-        filtering, it includes .distinct() to prevent duplicates.
-
-        This tests the actual queryset structure by examining the SQL.
+        TEST: Verify sessions queryset prevents duplicates from message filtering.
         """
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
@@ -472,22 +405,19 @@ class TestDistinctQueryOptimization:
         querysets = service.get_filtered_queryset_base()
         sessions = querysets["sessions"]
 
-        # Check that the queryset has distinct() applied by examining the query
-        # The queryset should have DISTINCT in its SQL when evaluated
+        # Check that the queryset prevents duplicates using Exists() subquery
+        # The queryset should not have duplicate rows when evaluated
         session_list = list(sessions)
 
         # Verify no duplicates in results (functional test)
         assert len(session_list) == 1, (
             f"Sessions duplicated! Expected 1 session, got {len(session_list)}. "
-            f"This indicates .distinct() may be missing or ineffective."
+            f"This indicates Exists() subquery may be missing or ineffective."
         )
 
     def test_experiments_queryset_uses_distinct_after_channel_join(self):
         """
-        TEST: Verify experiments queryset includes distinct() after channel join.
-
-        This test checks that when we filter experiments by platform,
-        the queryset includes .distinct() to handle multiple channels.
+        TEST: Verify experiments queryset prevents duplicates from platform filter.
         """
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
@@ -508,29 +438,15 @@ class TestDistinctQueryOptimization:
 
         # Verify no duplicates in results (functional test)
         assert len(experiments) == 1, (
-            f"Experiments queryset may be missing DISTINCT after channel filter! "
+            f"Experiments queryset may be missing Exists() subquery after channel filter! "
             f"Found {len(experiments)} experiments (expected 1). "
-            f"Without DISTINCT, multiple channels cause duplicates."
+            f"Without Exists() subquery, multiple channels cause duplicates."
         )
 
 
 @pytest.mark.django_db()
 class TestDistinctChannelPlatformFilter:
-    """Test cases specifically for line 81-82 experimentchannel filter"""
-
-    def test_experiments_not_duplicated_line_81_82_issue(self):
-        """
-        TEST: Line 81-82 issue - missing distinct after experimentchannel filter.
-
-        Code at line 81:
-        experiments = experiments.filter(experimentchannel__platform__in=platform_names)
-
-        The filter across ExperimentChannel without .distinct() creates duplicate
-        rows when an experiment has multiple channels with matching platforms.
-
-        Expected: 1 experiment
-        Actual with bug: 2+ experiments (one per matching channel)
-        """
+    def test_experiments_not_duplicated(self):
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
 
@@ -549,16 +465,11 @@ class TestDistinctChannelPlatformFilter:
 
         service = DashboardService(team)
 
-        # This specific filter combination triggers the bug at line 81
+        # This specific filter combination triggers platform filtering (lines 91-99)
         querysets = service.get_filtered_queryset_base(platform_names=[platform])
         experiments = list(querysets["experiments"])
 
-        assert len(experiments) == 1, (
-            f"Line 81-82 BUG: Experiment duplicated after experimentchannel filter! "
-            f"Expected 1, got {len(experiments)}. "
-            f"experiments = experiments.filter(experimentchannel__platform__in=platform_names) "
-            f"needs .distinct() after it."
-        )
+        assert len(experiments) == 1, f"Expected 1, got {len(experiments)}"
 
 
 @pytest.mark.django_db()
