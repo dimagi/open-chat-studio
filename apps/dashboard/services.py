@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -178,7 +179,7 @@ class DashboardService:
 
     def get_active_participants_data(self, granularity: str = "daily", **filters) -> list[dict[str, Any]]:
         """Get active participants chart data"""
-        cache_key = f"active_participants_{granularity}_{hash(str(sorted(filters.items())))}"
+        cache_key = f"active_participants_{granularity}_{self._cache_key(filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
@@ -209,7 +210,7 @@ class DashboardService:
 
     def get_session_analytics_data(self, granularity: str = "daily", **filters) -> dict[str, list[dict[str, Any]]]:
         """Get session analytics data (total sessions and unique participants)"""
-        cache_key = f"session_analytics_{granularity}_{hash(str(sorted(filters.items())))}"
+        cache_key = f"session_analytics_{granularity}_{self._cache_key(filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
@@ -241,7 +242,7 @@ class DashboardService:
 
     def get_message_volume_data(self, granularity: str = "daily", **filters) -> dict[str, list[dict[str, Any]]]:
         """Get message volume trends (participant vs bot messages)"""
-        cache_key = f"message_volume_{granularity}_{hash(str(sorted(filters.items())))}"
+        cache_key = f"message_volume_{granularity}_{self._cache_key(filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
@@ -287,7 +288,7 @@ class DashboardService:
 
         # Extract pagination/ordering from filters for cache key
         cache_filters = {k: v for k, v in filters.items() if k not in ["page", "page_size", "order_by", "order_dir"]}
-        cache_key = f"bot_performance_{hash(str(sorted(cache_filters.items())))}"
+        cache_key = f"bot_performance_{self._cache_key(cache_filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
 
         if not cached_data:
@@ -386,7 +387,7 @@ class DashboardService:
 
     def get_user_engagement_data(self, limit: int = 10, **filters) -> dict[str, Any]:
         """Get user engagement analysis data"""
-        cache_key = f"user_engagement_{limit}_{hash(str(sorted(filters.items())))}"
+        cache_key = f"user_engagement_{limit}_{self._cache_key(filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
@@ -438,7 +439,7 @@ class DashboardService:
 
     def get_channel_breakdown_data(self, **filters) -> dict[str, Any]:
         """Get channel breakdown statistics by platform"""
-        cache_key = f"channel_breakdown_{hash(str(sorted(filters.items())))}"
+        cache_key = f"channel_breakdown_{self._cache_key(filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
@@ -485,7 +486,7 @@ class DashboardService:
 
     def get_tag_analytics_data(self, **filters) -> dict[str, Any]:
         """Get tag analytics data"""
-        cache_key = f"tag_analytics_{hash(str(sorted(filters.items())))}"
+        cache_key = f"tag_analytics_{self._cache_key(filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
@@ -528,7 +529,7 @@ class DashboardService:
 
     def get_average_response_time_data(self, granularity: str = "daily", **filters) -> list[dict[str, Any]]:
         """Calculate average response time per period based on Trace table"""
-        cache_key = f"average_response_time_{granularity}_{hash(str(sorted(filters.items())))}"
+        cache_key = f"average_response_time_{granularity}_{self._cache_key(filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
@@ -608,9 +609,20 @@ class DashboardService:
             "last_activity": participant.last_activity.isoformat() if participant.last_activity else None,
         }
 
+    def _cache_key(self, filters: dict) -> str:
+        def normalize(obj):
+            if isinstance(obj, dict):
+                return {k: normalize(obj[k]) for k in sorted(obj)}
+            if isinstance(obj, list):
+                return sorted(normalize(v) for v in obj)
+            return obj
+
+        normalized = normalize(filters or {})
+        return json.dumps(normalized, separators=(",", ":"), sort_keys=True)
+
     def get_overview_stats(self, **filters) -> dict[str, Any]:
         """Get dashboard overview statistics"""
-        cache_key = f"overview_stats_{hash(str(sorted(filters.items())))}"
+        cache_key = f"overview_stats_{self._cache_key(filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
