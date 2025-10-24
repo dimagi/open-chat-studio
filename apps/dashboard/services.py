@@ -244,21 +244,21 @@ class DashboardService:
 
             stats_dict = {stat["experiment_id"]: stat for stat in session_stats}
 
-            date_filter = Q(sessions__chat__messages__created_at__gte=querysets["start_date"]) & Q(
-                sessions__chat__messages__created_at__lte=querysets["end_date"]
-            )
-
-            experiments_base = querysets["experiments"].annotate(
-                completed_sessions_count=Count(
-                    "sessions", filter=Q(sessions__ended_at__isnull=False) & date_filter, distinct=True
-                ),
-                average_session_duration=Avg(
-                    ExpressionWrapper(
-                        F("sessions__ended_at") - F("sessions__created_at"), output_field=DurationField()
+            # Use sessions base (already constrained/deduped) to avoid message join inflation
+            session_durations = (
+                querysets["sessions"]
+                .filter(ended_at__isnull=False)
+                .values("experiment_id")
+                .annotate(
+                    completed_sessions_count=Count("id", distinct=True),
+                    average_session_duration=Avg(
+                        ExpressionWrapper(F("ended_at") - F("created_at"), output_field=DurationField())
                     ),
-                    filter=Q(sessions__ended_at__isnull=False) & date_filter,
-                ),
+                )
             )
+            dur_map = {s["experiment_id"]: s for s in session_durations}
+
+            experiments_base = querysets["experiments"]
 
             performance_data = []
             for experiment in experiments_base:
@@ -268,12 +268,10 @@ class DashboardService:
                 participants_count = stats["participants_count"]
                 sessions_count = stats["sessions_count"]
                 messages_count = stats["messages_count"]
-                completed_sessions = experiment.completed_sessions_count
+                completed_sessions = dur_map.get(experiment.id, {}).get("completed_sessions_count", 0)
                 avg_duration = (
-                    experiment.average_session_duration.total_seconds() / 60
-                    if experiment.average_session_duration
-                    else 0
-                )
+                    dur_map.get(experiment.id, {}).get("average_session_duration") or timedelta()
+                ).total_seconds() / 60
                 completion_rate = (completed_sessions / sessions_count) if sessions_count else 0
 
                 experiment_url = reverse(
