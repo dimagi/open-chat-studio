@@ -171,6 +171,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         query_set = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
+            .select_related("team", "owner")
             .annotate(session_count=Count("sessions", distinct=True))
             .annotate(participant_count=Count("sessions__participant", distinct=True))
             .annotate(messages_count=Count("sessions__chat__messages", distinct=True))
