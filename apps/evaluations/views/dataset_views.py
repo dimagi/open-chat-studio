@@ -101,6 +101,7 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
             "last_message",
             table_url,
             "sessions-table",
+            table_type=FilterSet.TableType.DATASETS,
         )
 
     def get_context_data(self, **kwargs):
