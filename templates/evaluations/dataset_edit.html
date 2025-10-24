@@ -1,7 +1,5 @@
 {% extends "generic/object_form.html" %}
-{% load i18n %}
-{% load static %}
-{% load form_tags %}
+{% load form_tags i18n static %}
 
 {% block page_head %}
   {{ block.super }}
@@ -14,19 +12,19 @@
 {% endblock form %}
 
 {% block post_form %}
-  <h2 class="pg-subtitle">{% trans "Dataset Messages" %}</h2>
+  <h2 class="pg-subtitle">{% translate "Dataset Messages" %}</h2>
   <div id="dataset-messages-table"
        hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}"
        hx-trigger="load, refreshTable from:body"
        hx-target="this"
        hx-swap="innerHTML">
     <div class="text-center py-4">
-      <i class="fa-solid fa-spinner fa-spin"></i> {% trans "Loading messages..." %}
+      <i class="fa-solid fa-spinner fa-spin"></i> {% translate "Loading messages..." %}
     </div>
   </div>
 
   <div x-data="datasetModeSelector({ defaultMode: 'manual' })" x-init="init()" class="mt-6">
-    <h3 class="text-lg font-semibold mb-4">{% trans "Add Messages to Dataset" %}</h3>
+    <h3 class="text-lg font-semibold mb-4">{% translate "Add Messages to Dataset" %}</h3>
 
     <!-- Mode selection -->
     <div class="form-control mb-4">
@@ -48,9 +46,9 @@
           <input type="hidden" name="filtered_session_ids" x-ref="filteredSessionIds">
 
           <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
-            <h4 class="text-base font-semibold mb-4">{% trans "Select Sessions to Clone Messages From" %}</h4>
+            <h4 class="text-base font-semibold mb-4">{% translate "Select Sessions to Clone Messages From" %}</h4>
             <p class="text-sm text-gray-600 mb-4">
-              {% trans "Select one or more experiment sessions. All message pairs (human-AI) from the selected sessions will be added to this dataset. Duplicate messages (based on message IDs) will be automatically skipped." %}
+              {% translate "Select one or more experiment sessions. All message pairs (human-AI) from the selected sessions will be added to this dataset. Duplicate messages (based on message IDs) will be automatically skipped." %}
             </p>
 
             <div class="mb-4">
@@ -74,7 +72,7 @@
 
           <button type="submit" class="btn btn-primary">
             <i class="fa-solid fa-plus mr-2"></i>
-            {% trans "Clone Messages to Dataset" %}
+            {% translate "Clone Messages to Dataset" %}
           </button>
         </form>
       </div>
@@ -88,13 +86,13 @@
       <div x-show="mode === 'csv'" class="w-full mt-4">
         <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
           <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            {% trans "Upload a CSV file to update this dataset. Include an 'id' column to update existing messages, or omit it to create new messages." %}
+            {% translate "Upload a CSV file to update this dataset. Include an 'id' column to update existing messages, or omit it to create new messages." %}
           </p>
 
           <form id="csv-upload-form" enctype="multipart/form-data">
             {% csrf_token %}
             <div class="mb-4">
-              <label for="csv-file" class="block text-sm font-medium mb-2">{% trans "CSV File" %}</label>
+              <label for="csv-file" class="block text-sm font-medium mb-2">{% translate "CSV File" %}</label>
               <input type="file"
                      id="csv-file"
                      name="csv_file"
@@ -105,10 +103,10 @@
 
             <div class="flex gap-2">
               <button type="submit" class="btn btn-primary">
-                <i class="fa-solid fa-upload"></i> {% trans "Upload CSV" %}
+                <i class="fa-solid fa-upload"></i> {% translate "Upload CSV" %}
               </button>
               <a href="{% url 'evaluations:dataset_download' request.team.slug object.id %}" class="btn btn-secondary">
-                <i class="fa-solid fa-download"></i> {% trans "Download Template" %}
+                <i class="fa-solid fa-download"></i> {% translate "Download Template" %}
               </a>
             </div>
           </form>
