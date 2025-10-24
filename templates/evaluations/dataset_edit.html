@@ -54,7 +54,7 @@
             <div class="mb-4">
               <div class="flex items-center justify-between">
                 <div>
-                  {% include "experiments/filters.html" %}
+                  {% include "experiments/filters.html" with skip_dialogs=True %}
                 </div>
                 <div x-show="selectedSessionIds.size + filteredSessionIds.size > 0" class="text-sm font-medium ml-4">
                   <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> selected
