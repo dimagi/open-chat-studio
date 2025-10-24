@@ -16,6 +16,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
+from apps.annotations.models import Tag
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -376,18 +377,28 @@ class TestDistinctComplexFiltering:
 
     def test_participants_distinct_with_tag_filter(self):
         """
-        FAILING TEST: Participants may be duplicated with tag filtering.
+        TEST: Participants should not be duplicated with tag filtering.
 
-        The participant filtering with tags (lines 98-101) uses OR conditions
+        The participant filtering with tags (lines 101-105) uses OR conditions
         across multiple chat and message tag relationships that could cause
         duplicates without proper distinct().
 
+        This test creates 3 messages all tagged with the same tag to exercise
+        the tag join code path and verify .distinct() properly eliminates duplicates.
+
         Expected: 1 unique participant
-        Actual with bug: May have duplicates if multiple messages have tags
+        Actual: Should be 1 if .distinct() is properly applied (would be 3 without it)
         """
         team = TeamFactory()
         experiment = ExperimentFactory(team=team)
         participant = ParticipantFactory(team=team)
+
+        # Create a tag to trigger tag-based filtering
+        tag = Tag.objects.create(
+            team=team,
+            name="test-tag",
+            is_system_tag=False,
+        )
 
         # Create session with messages
         session = ExperimentSessionFactory(
@@ -396,28 +407,34 @@ class TestDistinctComplexFiltering:
             team=team,
         )
 
-        # Create multiple messages (without actual tags for now, just showing structure)
+        # Create multiple messages and tag them all with the same tag
+        # This exercises the tag join path that can cause duplication
+        messages = []
         for i in range(3):
-            ChatMessage.objects.create(
+            message = ChatMessage.objects.create(
                 chat=session.chat,
                 message_type=ChatMessageType.HUMAN,
                 content=f"Message {i}",
             )
+            # Add tag to each message
+            message.tags.add(tag, through_defaults={"team": team})
+            messages.append(message)
 
         service = DashboardService(team)
 
-        # Query all participants in the session's team
-        querysets = service.get_filtered_queryset_base()
+        # Query participants with tag filter to trigger the tag join code path
+        querysets = service.get_filtered_queryset_base(tag_ids=[tag.id])
         participants = querysets["participants"]
 
         participant_list = list(participants)
         participant_count = len([p for p in participant_list if p.id == participant.id])
 
-        # This assertion might fail if there's duplication
-        assert participant_count <= 1, (
-            f"Participant may be duplicated! "
-            f"Expected at most 1 instance, got {participant_count}. "
-            f"This suggests potential issues with tag filtering and distinct()."
+        # This assertion WILL FAIL with the bug - expecting 1, may get 3 (one per tagged message)
+        assert participant_count == 1, (
+            f"Participant duplicated with tag filtering! "
+            f"Expected 1 instance, got {participant_count}. "
+            f"This indicates missing or ineffective .distinct() when filtering "
+            f"participants by tags across chat messages (lines 101-105 in services.py)."
         )
 
 
