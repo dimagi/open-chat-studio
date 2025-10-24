@@ -7,11 +7,10 @@ from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWe
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.annotations.models import CustomTaggedItem, TagCategories
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
-
-from ..annotations.models import TagCategories
 from ..trace.models import Trace
 from .models import DashboardCache
 
@@ -99,17 +98,69 @@ class DashboardService:
             participants = participants.filter(id__in=participant_ids)
 
         if tag_ids:
-            experiments = experiments.filter(
-                Q(sessions__chat__tags__id__in=tag_ids) | Q(sessions__chat__messages__tags__id__in=tag_ids)
-            ).distinct()
-            sessions = sessions.filter(
-                Q(chat__tags__id__in=tag_ids) | Q(chat__messages__tags__id__in=tag_ids)
-            ).distinct()
+            # Use Exists() to avoid join+distinct - better performance for tag filtering
+            chat_content_type = ContentType.objects.get_for_model(Chat)
+            message_content_type = ContentType.objects.get_for_model(ChatMessage)
+
+            # Sessions: check if chat or any message has tags
+            tag_on_chat = Exists(
+                CustomTaggedItem.objects.filter(
+                    content_type=chat_content_type, object_id=OuterRef("chat__id"), tag_id__in=tag_ids
+                )
+            )
+            tag_on_msg = Exists(
+                CustomTaggedItem.objects.filter(
+                    content_type=message_content_type,
+                    object_id__in=ChatMessage.objects.filter(chat=OuterRef("chat")).values("id"),
+                    tag_id__in=tag_ids,
+                )
+            )
+            sessions = sessions.annotate(_tchat=tag_on_chat, _tmsg=tag_on_msg).filter(Q(_tchat=True) | Q(_tmsg=True))
+
+            # Experiments: check if any session's chat or messages have tags
+            exp_tag_on_chat = Exists(
+                CustomTaggedItem.objects.filter(
+                    content_type=chat_content_type,
+                    object_id__in=Chat.objects.filter(experiment_session__experiment=OuterRef("id")).values("id"),
+                    tag_id__in=tag_ids,
+                )
+            )
+            exp_tag_on_msg = Exists(
+                CustomTaggedItem.objects.filter(
+                    content_type=message_content_type,
+                    object_id__in=ChatMessage.objects.filter(
+                        chat__experiment_session__experiment=OuterRef("id")
+                    ).values("id"),
+                    tag_id__in=tag_ids,
+                )
+            )
+            experiments = experiments.annotate(_exp_tchat=exp_tag_on_chat, _exp_tmsg=exp_tag_on_msg).filter(
+                Q(_exp_tchat=True) | Q(_exp_tmsg=True)
+            )
+
+            # Participants: check if any of their session's chats or messages have tags
+            part_tag_on_chat = Exists(
+                CustomTaggedItem.objects.filter(
+                    content_type=chat_content_type,
+                    object_id__in=Chat.objects.filter(experiment_session__participant=OuterRef("id")).values("id"),
+                    tag_id__in=tag_ids,
+                )
+            )
+            part_tag_on_msg = Exists(
+                CustomTaggedItem.objects.filter(
+                    content_type=message_content_type,
+                    object_id__in=ChatMessage.objects.filter(
+                        chat__experiment_session__participant=OuterRef("id")
+                    ).values("id"),
+                    tag_id__in=tag_ids,
+                )
+            )
+            participants = participants.annotate(
+                _part_tchat=part_tag_on_chat, _part_tmsg=part_tag_on_msg
+            ).filter(Q(_part_tchat=True) | Q(_part_tmsg=True))
+
+            # Messages can still use the simple filter since we're already on the message model
             messages = messages.filter(tags__id__in=tag_ids)
-            participants = participants.filter(
-                Q(experimentsession__chat__tags__id__in=tag_ids)
-                | Q(experimentsession__chat__messages__tags__id__in=tag_ids)
-            ).distinct()
 
         return {
             "experiments": experiments,
