@@ -109,6 +109,11 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
         context.update(self._get_filter_context_data())
         return context
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(self.request, "Dataset updated successfully!")
+        return response
+
     def get_success_url(self):
         return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
 
