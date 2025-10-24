@@ -11,6 +11,7 @@ from apps.annotations.models import CustomTaggedItem, TagCategories
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
+
 from ..trace.models import Trace
 from .models import DashboardCache
 
@@ -105,13 +106,13 @@ class DashboardService:
             # Sessions: check if chat or any message has tags
             tag_on_chat = Exists(
                 CustomTaggedItem.objects.filter(
-                    content_type=chat_content_type, object_id=OuterRef("chat__id"), tag_id__in=tag_ids
+                    content_type=chat_content_type, object_id=OuterRef("chat_id"), tag_id__in=tag_ids
                 )
             )
             tag_on_msg = Exists(
                 CustomTaggedItem.objects.filter(
                     content_type=message_content_type,
-                    object_id__in=ChatMessage.objects.filter(chat=OuterRef("chat")).values("id"),
+                    object_id__in=ChatMessage.objects.filter(chat=OuterRef(OuterRef("chat_id"))).values("id"),
                     tag_id__in=tag_ids,
                 )
             )
@@ -121,7 +122,9 @@ class DashboardService:
             exp_tag_on_chat = Exists(
                 CustomTaggedItem.objects.filter(
                     content_type=chat_content_type,
-                    object_id__in=Chat.objects.filter(experiment_session__experiment=OuterRef("id")).values("id"),
+                    object_id__in=Chat.objects.filter(experiment_session__experiment=OuterRef(OuterRef("id"))).values(
+                        "id"
+                    ),
                     tag_id__in=tag_ids,
                 )
             )
@@ -129,7 +132,7 @@ class DashboardService:
                 CustomTaggedItem.objects.filter(
                     content_type=message_content_type,
                     object_id__in=ChatMessage.objects.filter(
-                        chat__experiment_session__experiment=OuterRef("id")
+                        chat__experiment_session__experiment=OuterRef(OuterRef("id"))
                     ).values("id"),
                     tag_id__in=tag_ids,
                 )
@@ -142,7 +145,9 @@ class DashboardService:
             part_tag_on_chat = Exists(
                 CustomTaggedItem.objects.filter(
                     content_type=chat_content_type,
-                    object_id__in=Chat.objects.filter(experiment_session__participant=OuterRef("id")).values("id"),
+                    object_id__in=Chat.objects.filter(experiment_session__participant=OuterRef(OuterRef("id"))).values(
+                        "id"
+                    ),
                     tag_id__in=tag_ids,
                 )
             )
@@ -150,14 +155,14 @@ class DashboardService:
                 CustomTaggedItem.objects.filter(
                     content_type=message_content_type,
                     object_id__in=ChatMessage.objects.filter(
-                        chat__experiment_session__participant=OuterRef("id")
+                        chat__experiment_session__participant=OuterRef(OuterRef("id"))
                     ).values("id"),
                     tag_id__in=tag_ids,
                 )
             )
-            participants = participants.annotate(
-                _part_tchat=part_tag_on_chat, _part_tmsg=part_tag_on_msg
-            ).filter(Q(_part_tchat=True) | Q(_part_tmsg=True))
+            participants = participants.annotate(_part_tchat=part_tag_on_chat, _part_tmsg=part_tag_on_msg).filter(
+                Q(_part_tchat=True) | Q(_part_tmsg=True)
+            )
 
             # Messages can still use the simple filter since we're already on the message model
             messages = messages.filter(tags__id__in=tag_ids)
