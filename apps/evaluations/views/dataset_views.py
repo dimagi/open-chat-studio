@@ -27,6 +27,7 @@ from apps.evaluations.tasks import upload_dataset_csv_task
 from apps.evaluations.utils import (
     generate_csv_column_suggestions,
     make_evaluation_messages_from_sessions,
+    normalize_json_quotes,
     parse_history_text,
 )
 from apps.experiments.filters import (
@@ -412,6 +413,14 @@ def parse_csv_columns(request, team_slug: str):
         columns = csv_reader.fieldnames or []
 
         all_rows = list(csv_reader)
+
+        for row in all_rows:
+            for key, value in row.items():
+                if isinstance(value, str):
+                    value_stripped = value.strip()
+                    if value_stripped.startswith(("{", "[")):
+                        row[key] = normalize_json_quotes(value)
+
         sample_rows = all_rows[:3]
         total_rows = len(all_rows)
         suggestions = generate_csv_column_suggestions(columns)
@@ -446,10 +455,19 @@ def download_dataset_csv(request, team_slug: str, pk: int):
         return response
 
     context_keys = {key for message in messages if message.context for key in message.context}
+    participant_data_keys = {
+        key for message in messages if message.participant_data for key in message.participant_data
+    }
+    session_state_keys = {key for message in messages if message.session_state for key in message.session_state}
+
     context_keys = sorted(context_keys)
+    participant_data_keys = sorted(participant_data_keys)
+    session_state_keys = sorted(session_state_keys)
 
     headers = ["id", "input_content", "output_content"]
     headers.extend([f"context.{key}" for key in context_keys])
+    headers.extend([f"participant_data.{key}" for key in participant_data_keys])
+    headers.extend([f"session_state.{key}" for key in session_state_keys])
     headers.append("history")
 
     filename = f"{dataset.name}_dataset.csv"
@@ -459,6 +477,12 @@ def download_dataset_csv(request, team_slug: str, pk: int):
 
     writer.writerow(headers)
 
+    def _serialize_value(value):
+        """Serialize a value to string, converting dicts/lists to JSON."""
+        if isinstance(value, dict | list):
+            return json.dumps(value)
+        return str(value) if value is not None else ""
+
     for message in messages:
         row = [
             message.id,
@@ -467,7 +491,17 @@ def download_dataset_csv(request, team_slug: str, pk: int):
         ]
 
         for key in context_keys:
-            row.append(message.context.get(key, "") if message.context else "")
+            value = message.context.get(key, "") if message.context else ""
+            row.append(_serialize_value(value))
+
+        for key in participant_data_keys:
+            value = message.participant_data.get(key, "") if message.participant_data else ""
+            row.append(_serialize_value(value))
+
+        for key in session_state_keys:
+            value = message.session_state.get(key, "") if message.session_state else ""
+            row.append(_serialize_value(value))
+
         row.append(message.full_history)
         writer.writerow(row)
 

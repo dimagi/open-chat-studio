@@ -22,7 +22,7 @@
               <div>
                 {% include "experiments/filters.html" %}
               </div>
-              
+
               <div class="flex items-center gap-3">
                 <div x-show="selectedSessionIds.size + filteredSessionIds.size > 0" class="text-sm font-medium">
                   <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> selected
@@ -165,47 +165,13 @@
 
 
               <!-- Context field mappings -->
-              <div>
-                <div class="flex items-center justify-between mb-2">
-                  <label class="block text-sm font-medium">{% translate "Context Fields (Optional)" %}</label>
-                  <button type="button"
-                          class="btn btn-xs btn-outline"
-                          @click="addContextMapping()">
-                    <i class="fa-solid fa-plus"></i> {% translate "Add Field" %}
-                  </button>
-                </div>
-                <div class="space-y-2">
-                  <template x-for="(mapping, index) in contextMappings" :key="index">
-                    <div class="flex gap-2 items-center">
-                      <div class="flex-1">
-                        <input type="text"
-                               x-model="mapping.fieldName"
-                               @input="validateContextFieldName(index); updateColumnMapping()"
-                               class="input input-bordered input-sm w-full"
-                               :class="mapping.fieldNameError ? 'input-error' : ''"
-                               placeholder="Context field name">
-                        <div x-show="mapping.fieldNameError" class="text-error text-xs mt-1" x-text="mapping.fieldNameError"></div>
-                      </div>
-                      <select x-model="mapping.csvColumn"
-                              @change="updateColumnMapping()"
-                              class="select select-bordered select-sm flex-1">
-                        <option value="">{% translate "Select column..." %}</option>
-                        <template x-for="column in csvData?.columns || []">
-                          <option :value="column" x-text="column" :selected="mapping.csvColumn === column"></option>
-                        </template>
-                      </select>
-                      <button type="button"
-                              class="btn btn-xs"
-                              @click="removeContextMapping(index)">
-                        <i class="fa-solid fa-trash"></i>
-                      </button>
-                    </div>
-                  </template>
-                  <div x-show="contextMappings.length === 0" class="text-sm text-gray-500 italic">
-                    {% translate "No additional context fields mapped. Click 'Add Field' to map CSV columns to context data." %}
-                  </div>
-                </div>
-              </div>
+              {% include "evaluations/components/field_mapping_section.html" with label="Context Fields (Optional)" field_type="context" placeholder="Context field name" empty_message="No additional context fields mapped. Click 'Add Field' to map CSV columns to context data." %}
+
+              <!-- Participant Data field mappings -->
+              {% include "evaluations/components/field_mapping_section.html" with label="Participant Data Fields (Optional)" field_type="participant_data" placeholder="Participant data field name" empty_message="No participant data fields mapped. Click 'Add Field' to map CSV columns to participant data." %}
+
+              <!-- Session State field mappings -->
+              {% include "evaluations/components/field_mapping_section.html" with label="Session State Fields (Optional)" field_type="session_state" placeholder="Session state field name" empty_message="No session state fields mapped. Click 'Add Field' to map CSV columns to session state." %}
 
               <!-- History configuration -->
               <div class="pt-4 border-t">
@@ -336,6 +302,8 @@
         columnMappingJson: '{}',
         csvDataJson: '[]',
         contextMappings: [],
+        participantDataMappings: [],
+        sessionStateMappings: [],
         historyColumn: '',
         populateHistory: false,
 
@@ -443,11 +411,20 @@
               this.errorMessages.push('Please upload a CSV file and map both input and output columns.');
             }
 
-            // Check for context field validation errors
-            for (let i = 0; i < this.contextMappings.length; i++) {
-              this.validateContextFieldName(i);
-              if (this.contextMappings[i].fieldNameError) {
-                this.errorMessages.push('Please fix context field name errors before submitting.');
+            // Check for field validation errors across all field types
+            const fieldTypes = [
+              { name: 'context', mappings: this.contextMappings, label: 'context' },
+              { name: 'participant_data', mappings: this.participantDataMappings, label: 'participant data' },
+              { name: 'session_state', mappings: this.sessionStateMappings, label: 'session state' }
+            ];
+
+            for (const fieldType of fieldTypes) {
+              for (let i = 0; i < fieldType.mappings.length; i++) {
+                this.validateFieldName(fieldType.name, i);
+                if (fieldType.mappings[i].fieldNameError) {
+                  this.errorMessages.push(`Please fix ${fieldType.label} field name errors before submitting.`);
+                  break;
+                }
               }
             }
           }
@@ -715,13 +692,24 @@
               this.columnMapping.input = data.suggestions.input || '';
               this.columnMapping.output = data.suggestions.output || '';
 
-              if (data.suggestions.context && Array.isArray(data.suggestions.context)) {
-                this.contextMappings = data.suggestions.context.map(suggestion => ({
-                  fieldName: suggestion.fieldName,
-                  csvColumn: suggestion.csvColumn,
-                  fieldNameError: ''
-                }));
-              }
+              // Map suggestions to internal format with error tracking
+              this.contextMappings = (data.suggestions.context || []).map(suggestion => ({
+                fieldName: suggestion.fieldName,
+                csvColumn: suggestion.csvColumn,
+                fieldNameError: ''
+              }));
+
+              this.participantDataMappings = (data.suggestions.participant_data || []).map(suggestion => ({
+                fieldName: suggestion.fieldName,
+                csvColumn: suggestion.csvColumn,
+                fieldNameError: ''
+              }));
+
+              this.sessionStateMappings = (data.suggestions.session_state || []).map(suggestion => ({
+                fieldName: suggestion.fieldName,
+                csvColumn: suggestion.csvColumn,
+                fieldNameError: ''
+              }));
 
               // Pre-populate history column if suggested
               if (data.suggestions.history) {
@@ -743,29 +731,43 @@
           this.csvData = null;
           this.columnMapping = { input: '', output: '' };
           this.contextMappings = [];
+          this.participantDataMappings = [];
+          this.sessionStateMappings = [];
           this.historyColumn = '';
           this.updateColumnMapping();
           document.querySelector('input[type="file"]').value = '';
         },
 
-        addContextMapping() {
-          this.contextMappings.push({ fieldName: '', csvColumn: '', fieldNameError: '' });
+        addMapping(fieldType) {
+          const mappingArray = this.getMappingArray(fieldType);
+          mappingArray.push({ fieldName: '', csvColumn: '', fieldNameError: '' });
         },
 
-        removeContextMapping(index) {
-          this.contextMappings.splice(index, 1);
+        removeMapping(fieldType, index) {
+          const mappingArray = this.getMappingArray(fieldType);
+          mappingArray.splice(index, 1);
           this.updateColumnMapping();
         },
 
-        validateContextFieldName(index) {
-          const mapping = this.contextMappings[index];
+        getMappingArray(fieldType) {
+          switch(fieldType) {
+            case 'context': return this.contextMappings;
+            case 'participant_data': return this.participantDataMappings;
+            case 'session_state': return this.sessionStateMappings;
+            default: return [];
+          }
+        },
+
+        validateFieldName(fieldType, index) {
+          const mappingArray = this.getMappingArray(fieldType);
+          const mapping = mappingArray[index];
           let fieldName = mapping.fieldName.trim();
 
           // Clear previous error
           mapping.fieldNameError = '';
 
           if (!fieldName) {
-            return; // Allow empty field names (optional context)
+            return; // Allow empty field names (optional)
           }
 
           // Convert spaces to underscores automatically
@@ -781,9 +783,9 @@
             return;
           }
 
-          // Check for duplicates
-          for (let i = 0; i < this.contextMappings.length; i++) {
-            if (i !== index && this.contextMappings[i].fieldName.trim() === fieldName) {
+          // Check for duplicates within the same field type
+          for (let i = 0; i < mappingArray.length; i++) {
+            if (i !== index && mappingArray[i].fieldName.trim() === fieldName) {
               mapping.fieldNameError = 'Field name already used';
               return;
             }
@@ -802,18 +804,41 @@
         },
 
         updateColumnMapping() {
-          // Build complete column mapping including context fields
           const mapping = {
             input: this.columnMapping.input,
             output: this.columnMapping.output
           };
 
-          // Add valid context mappings
+          // Build nested structures for each field type
+          const contextObj = {};
           this.contextMappings.forEach(ctx => {
             if (ctx.fieldName.trim() && ctx.csvColumn.trim()) {
-              mapping[ctx.fieldName.trim()] = ctx.csvColumn.trim();
+              contextObj[ctx.fieldName.trim()] = ctx.csvColumn.trim();
             }
           });
+          if (Object.keys(contextObj).length > 0) {
+            mapping.context = contextObj;
+          }
+
+          const participantDataObj = {};
+          this.participantDataMappings.forEach(pd => {
+            if (pd.fieldName.trim() && pd.csvColumn.trim()) {
+              participantDataObj[pd.fieldName.trim()] = pd.csvColumn.trim();
+            }
+          });
+          if (Object.keys(participantDataObj).length > 0) {
+            mapping.participant_data = participantDataObj;
+          }
+
+          const sessionStateObj = {};
+          this.sessionStateMappings.forEach(ss => {
+            if (ss.fieldName.trim() && ss.csvColumn.trim()) {
+              sessionStateObj[ss.fieldName.trim()] = ss.csvColumn.trim();
+            }
+          });
+          if (Object.keys(sessionStateObj).length > 0) {
+            mapping.session_state = sessionStateObj;
+          }
 
           this.columnMappingJson = JSON.stringify(mapping);
 
@@ -926,4 +951,3 @@
 
   </script>
 {% endblock page_js %}
-
