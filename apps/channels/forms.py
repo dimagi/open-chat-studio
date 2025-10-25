@@ -1,18 +1,20 @@
 import json
 import logging
 import re
+import secrets
 from functools import cached_property
 
 import phonenumbers
 from django import forms
 from django.conf import settings
+from django.contrib.postgres.forms import SimpleArrayField
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.utils import validate_platform_availability
+from apps.channels.utils import validate_domain_or_wildcard, validate_platform_availability
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
@@ -532,3 +534,77 @@ class CommCareConnectChannelForm(ExtraFormBase):
         help_text="This is the name of the chatbot that will be displayed to users on CommCare Connect",
         max_length=100,
     )
+
+
+class WidgetParams(forms.Widget):
+    template_name = "channels/widgets/widget_params.html"
+
+    def __init__(self, experiment, widget_token):
+        super().__init__()
+        self.experiment = experiment
+        self.widget_token = widget_token
+
+    def format_value(self, value):
+        return "" if value is None else value
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["experiment"] = self.experiment
+        context["widget"]["token"] = self.widget_token
+        context["docs_base_url"] = settings.DOCUMENTATION_BASE_URL
+        context["docs_links"] = settings.DOCUMENTATION_LINKS
+        return context
+
+
+class EmbeddedWidgetChannelForm(ExtraFormBase):
+    allowed_domains = SimpleArrayField(
+        forms.CharField(
+            max_length=100,
+            validators=[validate_domain_or_wildcard],
+        ),
+        delimiter="\n",
+        widget=forms.Textarea(
+            attrs={
+                "rows": 4,
+                "class": "textarea textarea-bordered w-full",
+                "placeholder": "Enter one domain per line, e.g.:\nexample.com\nwww.mysite.org",
+            }
+        ),
+        required=False,
+        help_text="Enter the domains where this widget is allowed to be embedded (one per line).",
+    )
+
+    widget_token = forms.CharField(
+        label="Widget Configuration",
+        required=False,
+        widget=forms.HiddenInput(),
+        help_text="Configuration parameters for the widget",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.channel:
+            self.initial["allowed_domains"] = self.channel.extra_data.get("allowed_domains", [])
+            widget_token = self.channel.extra_data.get("widget_token")
+            if widget_token:
+                self.initial["widget_token"] = widget_token
+                self.fields["widget_token"].widget = WidgetParams(
+                    experiment=self.channel.experiment, widget_token=widget_token
+                )
+
+    def clean(self):
+        """Generate or preserve the widget token"""
+        cleaned_data = super().clean()
+
+        # If editing existing channel, preserve the token
+        if self.channel and self.channel.extra_data.get("widget_token"):
+            cleaned_data["widget_token"] = self.channel.extra_data["widget_token"]
+        else:
+            # Generate token here so it's available when check_usage_by_another_experiment is called
+            cleaned_data["widget_token"] = secrets.token_urlsafe(24)
+
+        return cleaned_data
+
+    def post_save(self, channel: ExperimentChannel):
+        self.success_message = "Channel saved successfully"

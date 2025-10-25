@@ -126,8 +126,6 @@
       </div>
     {% endif %}
   </div>
-
-
   <div class="tabs-container">
     <div role="tablist" class="tabs tabs-border flex justify-start">
       {% if perms.chat.view_chat %}
@@ -179,6 +177,7 @@
         {% include "chatbots/settings_content.html" %}
       </div>
     </div>
+  </div>
     <script>
       function showTabContent(tabId) {
         const tabContents = document.querySelectorAll('.tab-content');
@@ -216,5 +215,4 @@
       });
       window.addEventListener('hashchange', selectTabFromHash);
     </script>
-  </div>
 {% endblock app %}
