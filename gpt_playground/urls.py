@@ -84,3 +84,4 @@ if settings.USE_DEBUG_TOOLBAR:
     from debug_toolbar.toolbar import debug_toolbar_urls
 
     urlpatterns.extend(debug_toolbar_urls())
+    urlpatterns += [path("silk/", include("silk.urls", namespace="silk"))]

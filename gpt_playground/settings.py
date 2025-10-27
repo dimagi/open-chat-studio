@@ -85,6 +85,7 @@ THIRD_PARTY_APPS = [
     "health_check.contrib.celery",
     "health_check.contrib.redis",
     "template_partials",
+    "silk",
 ]
 
 PROJECT_APPS = [
@@ -132,6 +133,7 @@ MIDDLEWARE = list(
             "corsheaders.middleware.CorsMiddleware",
             "django.middleware.security.SecurityMiddleware",
             "whitenoise.middleware.WhiteNoiseMiddleware",
+            "silk.middleware.SilkyMiddleware",
             "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
             "django.contrib.sessions.middleware.SessionMiddleware",
             "allauth.account.middleware.AccountMiddleware",
@@ -784,3 +786,6 @@ EXPERIMENT_TREND_CACHE_TIMEOUT = 900  # 15 minutes
 
 # Dynamic Filter configs
 MAX_FILTER_PARAMS = 30
+
+SILKY_AUTHENTICATION = True
+SILKY_AUTHORISATION = True
