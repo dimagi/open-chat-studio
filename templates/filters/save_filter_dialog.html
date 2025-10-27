@@ -65,7 +65,7 @@
           const formData = new FormData();
           formData.append('name', this.filterName);
           formData.append('filter_query_string', window.location.search.substring(1));
-          formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+          formData.append('csrfmiddlewaretoken', SiteJS.app.Cookies.get('csrftoken'));
 
           const response = await fetch('{% url "filters:create_filter_set" request.team.slug df_table_type %}', {
             method: 'POST',
