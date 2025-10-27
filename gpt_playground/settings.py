@@ -801,6 +801,9 @@ SILKY_MAX_RECORDED_REQUESTS = 1000
 
 
 def SILKY_INTERCEPT_FUNC(request):  # noqa
+    if not request.user.is_authenticated and request.user.is_staff:
+        return False
+
     if "silky" in request.GET:
         return True
 
