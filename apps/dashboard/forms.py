@@ -82,6 +82,8 @@ class DashboardFilterForm(forms.Form):
 
             # Set channel choices using ChannelPlatform.for_filter
             available_platform_labels = ChannelPlatform.for_filter(team)
+            available_platform_labels.remove(ChannelPlatform.EVALUATIONS.label)
+
             # Create a mapping from label to value for available platforms
             label_to_value = {choice[1]: choice[0] for choice in ChannelPlatform.choices}
             # Build choices list using only available platforms
