@@ -71,6 +71,7 @@ urlpatterns = [
     path("", include("apps.web.urls")),
     path("", include(slack_global_urls)),
     path("celery-progress/", include("celery_progress.urls")),
+    path("banners/", include("apps.banners.urls")),
     # API docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
