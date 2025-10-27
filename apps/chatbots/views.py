@@ -322,6 +322,9 @@ def chatbot_version_create_status(
 class ChatbotSessionsTableView(ExperimentSessionsTableView):
     table_class = ChatbotSessionsTable
 
+    def get_queryset(self):
+        return super().get_queryset().annotate(message_count=Count("chat__messages"))
+
     def get_table(self, **kwargs):
         """
         When viewing sessions for a specific chatbot, hide the chatbot column
