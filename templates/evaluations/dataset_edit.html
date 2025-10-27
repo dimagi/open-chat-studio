@@ -54,7 +54,7 @@
             <div class="mb-4">
               <div class="flex items-center justify-between">
                 <div>
-                  {% include "experiments/filters.html" with skip_dialogs=True %}
+                  {% include "experiments/filters.html" %}
                 </div>
                 <div x-show="selectedSessionIds.size + filteredSessionIds.size > 0" class="text-sm font-medium ml-4">
                   <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> selected
@@ -75,12 +75,6 @@
             {% translate "Clone Messages to Dataset" %}
           </button>
         </form>
-        {# Filter dialogs must be outside form to avoid nested forms but need filterComponent context #}
-        <div x-data="filterComponent">
-          {% include "filters/saved_filters_dialog.html" %}
-          {% include "filters/save_filter_dialog.html" %}
-        </div>
-
       </div>
 
       <!-- Manual mode -->
