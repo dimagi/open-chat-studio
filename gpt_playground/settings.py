@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
+import contextlib
 import os
 import sys
 from datetime import timedelta
@@ -133,7 +134,6 @@ MIDDLEWARE = list(
             "corsheaders.middleware.CorsMiddleware",
             "django.middleware.security.SecurityMiddleware",
             "whitenoise.middleware.WhiteNoiseMiddleware",
-            "silk.middleware.SilkyMiddleware",
             "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
             "django.contrib.sessions.middleware.SessionMiddleware",
             "allauth.account.middleware.AccountMiddleware",
@@ -142,6 +142,7 @@ MIDDLEWARE = list(
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
             "django_otp.middleware.OTPMiddleware",
+            "django_htmx.middleware.HtmxMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
             "apps.web.locale_middleware.UserLocaleMiddleware",
@@ -150,7 +151,7 @@ MIDDLEWARE = list(
             "waffle.middleware.WaffleMiddleware",
             "field_audit.middleware.FieldAuditMiddleware",
             "apps.audit.middleware.AuditTransactionMiddleware",
-            "django_htmx.middleware.HtmxMiddleware",
+            "silk.middleware.SilkyMiddleware",
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.generics.middleware.OriginDetectionMiddleware",
@@ -598,6 +599,7 @@ LOGGING = {
         "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
+        "silk": {"handlers": ["console"], "level": "DEBUG", "propagate": False},
     },
 }
 
@@ -789,3 +791,16 @@ MAX_FILTER_PARAMS = 30
 
 SILKY_AUTHENTICATION = True
 SILKY_AUTHORISATION = True
+SILKY_MAX_REQUEST_BODY_SIZE = 100 * 1024  # 10K
+SILKY_MAX_RESPONSE_BODY_SIZE = 100 * 1024  # 100K
+
+
+def SILKY_INTERCEPT_FUNC(request):
+    if "silky" in request.GET:
+        return True
+
+    if request.htmx:
+        with contextlib.suppress(AttributeError, TypeError):
+            return "silky" in request.htmx.current_url
+
+    return "silky" in request.headers.get("referer", "")
