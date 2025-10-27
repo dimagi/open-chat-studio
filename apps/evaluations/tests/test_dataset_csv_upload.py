@@ -1,4 +1,6 @@
+import csv
 import json
+from io import StringIO
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -9,6 +11,7 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.tasks import _update_existing_message, process_csv_rows
 from apps.evaluations.utils import generate_csv_column_suggestions
+from apps.files.models import File, FilePurpose
 from apps.utils.factories.evaluations import EvaluationDatasetFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -58,10 +61,23 @@ def sample_csv_data():
 @pytest.fixture()
 def csv_file_content(sample_csv_data):
     """Create CSV file content from sample data."""
-    csv_content = "input,output,context_field,date\n"
-    for row in sample_csv_data:
-        csv_content += f"{row['input']},{row['output']},{row['context_field']},{row['date']}\n"
-    return csv_content
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=["input", "output", "context_field", "date"])
+    writer.writeheader()
+    writer.writerows(sample_csv_data)
+    return output.getvalue()
+
+
+@pytest.fixture()
+def csv_file_instance(team_with_users, csv_file_content):
+    """Create a File instance with CSV content."""
+    csv_file = SimpleUploadedFile("test.csv", csv_file_content.encode(), content_type="text/csv")
+    return File.create(
+        filename="test.csv",
+        file_obj=csv_file,
+        team_id=team_with_users.id,
+        purpose=FilePurpose.EVALUATION_DATASET,
+    )
 
 
 @pytest.mark.django_db()
@@ -95,7 +111,7 @@ class TestCSVUploadCreate:
         assert "context_field" in context_csv_columns
         assert "date" in context_csv_columns
 
-    def test_csv_dataset_creation_without_history(self, client_with_user, team_with_users, sample_csv_data):
+    def test_csv_dataset_creation_without_history(self, client_with_user, team_with_users, csv_file_instance):
         """Test creating dataset from CSV without populate_history."""
         column_mapping = {
             "input": "input",
@@ -106,7 +122,7 @@ class TestCSVUploadCreate:
         form_data = {
             "name": "Test CSV Dataset",
             "mode": "csv",
-            "csv_data": json.dumps(sample_csv_data),
+            "csv_file_id": str(csv_file_instance.id),
             "column_mapping": json.dumps(column_mapping),
             "populate_history": False,
         }
@@ -133,7 +149,7 @@ class TestCSVUploadCreate:
         assert second_message.output["content"] == "I'm doing well, thanks!"
         assert second_message.history == []  # No history
 
-    def test_csv_dataset_creation_with_history(self, client_with_user, team_with_users, sample_csv_data):
+    def test_csv_dataset_creation_with_history(self, client_with_user, team_with_users, csv_file_instance):
         """Test creating dataset from CSV with populate_history enabled."""
         column_mapping = {
             "input": "input",
@@ -144,7 +160,7 @@ class TestCSVUploadCreate:
         form_data = {
             "name": "Test CSV Dataset with History",
             "mode": "csv",
-            "csv_data": json.dumps(sample_csv_data),
+            "csv_file_id": str(csv_file_instance.id),
             "column_mapping": json.dumps(column_mapping),
             "populate_history": True,
         }
@@ -297,17 +313,26 @@ class TestCSVUploadCreate:
 
     def test_csv_with_empty_rows_handling(self, client_with_user, team_with_users):
         """Test CSV upload handles empty or invalid rows correctly."""
-        csv_data = [
-            {"input": "Hello", "output": "Hi!", "context": "valid"},
-            {"input": "", "output": "Response", "context": "missing_input"},  # Invalid: empty input
-            {"input": "Question", "output": "", "context": "missing_output"},  # Invalid: empty output
-            {"input": "Valid", "output": "Valid response", "context": "valid2"},
-        ]
+        # Create CSV content
+        csv_content = (
+            "input,output,context\n"
+            "Hello,Hi!,valid\n"
+            ",Response,missing_input\n"
+            "Question,,missing_output\n"
+            "Valid,Valid response,valid2\n"
+        )
+        csv_file = SimpleUploadedFile("test.csv", csv_content.encode(), content_type="text/csv")
+        file_instance = File.create(
+            filename="test.csv",
+            file_obj=csv_file,
+            team_id=team_with_users.id,
+            purpose=FilePurpose.EVALUATION_DATASET,
+        )
 
         form_data = {
             "name": "Dataset with Empty Rows",
             "mode": "csv",
-            "csv_data": json.dumps(csv_data),
+            "csv_file_id": str(file_instance.id),
             "column_mapping": json.dumps({"input": "input", "output": "output", "context": {"context": "context"}}),
             "populate_history": False,
         }
@@ -327,27 +352,27 @@ class TestCSVUploadCreate:
 
     def test_csv_dataset_creation_with_generated_history(self, client_with_user, team_with_users):
         """Test creating dataset from CSV using a history column."""
-        csv_data = [
-            {
-                "input": "What's the weather?",
-                "output": "I can't check weather directly.",
-                "topic": "weather",
-                "history": "user: Hello\nassistant: Hi there!\nuser: How are you?\nassistant: I'm doing well, thanks!",
-            },
-            {
-                "input": "Tell me a joke",
-                "output": "Why don't scientists trust atoms? Because they make up everything!",
-                "topic": "humor",
-                "history": "user: Previous conversation\nassistant: Previous response",
-            },
-        ]
+        csv_content = (
+            "input,output,topic,history\n"
+            '"What\'s the weather?","I can\'t check weather directly.",weather,'
+            '"user: Hello\nassistant: Hi there!\nuser: How are you?\nassistant: I\'m doing well, thanks!"\n'
+            '"Tell me a joke","Why don\'t scientists trust atoms? Because they make up everything!",humor,'
+            '"user: Previous conversation\nassistant: Previous response"\n'
+        )
+        csv_file = SimpleUploadedFile("test.csv", csv_content.encode(), content_type="text/csv")
+        file_instance = File.create(
+            filename="test.csv",
+            file_obj=csv_file,
+            team_id=team_with_users.id,
+            purpose=FilePurpose.EVALUATION_DATASET,
+        )
 
         column_mapping = {"input": "input", "output": "output", "context": {"topic": "topic"}}
 
         form_data = {
             "name": "Test CSV Dataset with History Column",
             "mode": "csv",
-            "csv_data": json.dumps(csv_data),
+            "csv_file_id": str(file_instance.id),
             "column_mapping": json.dumps(column_mapping),
             "populate_history": False,
             "history_column": "history",
@@ -385,24 +410,18 @@ class TestCSVUploadCreate:
 
     def test_csv_dataset_creation_with_participant_data_and_session_state(self, client_with_user, team_with_users):
         """Test creating dataset from CSV with participant_data and session_state fields."""
-        csv_data = [
-            {
-                "input": "What is AI?",
-                "output": "AI stands for Artificial Intelligence",
-                "age": "25",
-                "name": "John",
-                "step": "1",
-                "completed": "false",
-            },
-            {
-                "input": "Tell me more",
-                "output": "AI is used in many applications",
-                "age": "30",
-                "name": "Jane",
-                "step": "2",
-                "completed": "true",
-            },
-        ]
+        # Create CSV content
+        csv_content = "input,output,age,name,step,completed\n"
+        csv_content += "What is AI?,AI stands for Artificial Intelligence,25,John,1,false\n"
+        csv_content += "Tell me more,AI is used in many applications,30,Jane,2,true\n"
+
+        csv_file = SimpleUploadedFile("test.csv", csv_content.encode(), content_type="text/csv")
+        file_instance = File.create(
+            filename="test.csv",
+            file_obj=csv_file,
+            team_id=team_with_users.id,
+            purpose=FilePurpose.EVALUATION_DATASET,
+        )
 
         # Map columns to participant_data and session_state using nested structure
         column_mapping = {
@@ -415,7 +434,7 @@ class TestCSVUploadCreate:
         form_data = {
             "name": "Test Dataset with Participant Data",
             "mode": "csv",
-            "csv_data": json.dumps(csv_data),
+            "csv_file_id": str(file_instance.id),
             "column_mapping": json.dumps(column_mapping),
             "populate_history": False,
         }

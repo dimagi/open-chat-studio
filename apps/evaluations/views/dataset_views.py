@@ -1,7 +1,9 @@
 import csv
 import json
 import logging
+from datetime import timedelta
 from io import StringIO
+from itertools import islice
 
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -10,6 +12,7 @@ from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
@@ -36,6 +39,7 @@ from apps.experiments.filters import (
     get_filter_context_data,
 )
 from apps.experiments.models import ExperimentSession
+from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -425,7 +429,7 @@ def delete_message(request, team_slug, message_id):
 @login_and_team_required
 @require_POST
 def parse_csv_columns(request, team_slug: str):
-    """Parse uploaded CSV and return column names and sample data."""
+    """Parse uploaded CSV, save to File model, and return column names and sample data."""
     try:
         csv_file = request.FILES.get("csv_file")
         if not csv_file:
@@ -435,24 +439,37 @@ def parse_csv_columns(request, team_slug: str):
         csv_reader = csv.DictReader(StringIO(file_content))
         columns = csv_reader.fieldnames or []
 
-        all_rows = list(csv_reader)
+        sample_rows = list(islice(csv_reader, 3))
 
-        for row in all_rows:
+        # This is for proper display in the sample
+        for row in sample_rows:
             for key, value in row.items():
                 if isinstance(value, str):
                     value_stripped = value.strip()
                     if value_stripped.startswith(("{", "[")):
                         row[key] = normalize_json_quotes(value)
 
-        sample_rows = all_rows[:3]
-        total_rows = len(all_rows)
+        total_rows = len(sample_rows) + sum(1 for _ in csv_reader)
+
         suggestions = generate_csv_column_suggestions(columns)
+
+        csv_file.seek(0)
+        file_instance = File.create(
+            filename=csv_file.name,
+            file_obj=csv_file,
+            team_id=request.team.id,
+            metadata={
+                "upload_timestamp": timezone.now().isoformat(),
+            },
+            purpose=FilePurpose.EVALUATION_DATASET,
+            expiry_date=timezone.now() + timedelta(days=3),
+        )
 
         return JsonResponse(
             {
                 "columns": columns,
                 "sample_rows": sample_rows,
-                "all_rows": all_rows,
+                "file_id": file_instance.id,
                 "total_rows": total_rows,
                 "suggestions": suggestions,
             }

@@ -1,6 +1,7 @@
 import contextlib
 import mimetypes
 import pathlib
+from datetime import datetime
 
 import magic
 from django.conf import settings
@@ -65,7 +66,17 @@ class File(BaseTeamModel, VersionsMixin):
         return cls.create(filename, external_file, team_id, external_id, external_source, metadata)
 
     @classmethod
-    def create(cls, filename, file_obj, team_id, external_id="", external_source="", metadata: dict = None):
+    def create(
+        cls,
+        filename: str,
+        file_obj,
+        team_id: int,
+        external_id: str = "",
+        external_source: str = "",
+        metadata: dict | None = None,
+        purpose: FilePurpose | None = None,
+        expiry_date: datetime | None = None,
+    ):
         content = file_obj.read() if file_obj else None
 
         content_type = mimetypes.guess_type(filename)[0]
@@ -83,7 +94,11 @@ class File(BaseTeamModel, VersionsMixin):
             team_id=team_id,
             content_type=content_type,
             metadata=metadata or {},
+            expiry_date=expiry_date,
         )
+
+        if purpose:
+            new_file.purpose = purpose
 
         if content:
             content_file = ContentFile(content, name=filename)

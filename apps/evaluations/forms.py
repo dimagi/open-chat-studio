@@ -1,5 +1,7 @@
+import csv
 import importlib
 import json
+from io import StringIO
 
 from django import forms
 from django.forms.widgets import RadioSelect
@@ -17,6 +19,7 @@ from apps.evaluations.models import (
 )
 from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.files.models import File
 
 
 class StyledRadioSelect(RadioSelect):
@@ -344,7 +347,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         required=False,
     )
 
-    csv_data = forms.CharField(
+    csv_file_id = forms.CharField(
         widget=forms.HiddenInput(),
         required=False,
     )
@@ -381,8 +384,8 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         elif mode == "manual":
             cleaned_data["message_pairs"] = self._clean_manual()
         elif mode == "csv":
-            csv_data, column_mapping, history_column = self._clean_csv()
-            cleaned_data["csv_data"] = csv_data
+            csv_file, column_mapping, history_column = self._clean_csv()
+            cleaned_data["csv_file"] = csv_file
             cleaned_data["column_mapping"] = column_mapping
             cleaned_data["history_column"] = history_column
         return cleaned_data
@@ -432,24 +435,34 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
 
     def _clean_csv(self):
         column_mapping_str = self.data.get("column_mapping", "")
-        csv_data_str = self.data.get("csv_data", "")
+        csv_file_id_str = self.data.get("csv_file_id", "")
         history_column = self.data.get("history_column", "").strip()
         populate_history = self.data.get("populate_history") == "on"
 
-        if not csv_data_str:
+        if not csv_file_id_str:
             raise forms.ValidationError("Please upload a CSV file.")
+
+        try:
+            csv_file_id = int(csv_file_id_str)
+            csv_file = File.objects.get(id=csv_file_id, team=self.team)
+        except (ValueError, File.DoesNotExist) as err:
+            raise forms.ValidationError("Invalid or missing CSV file.") from err
+
+        try:
+            file_content = csv_file.file.read().decode("utf-8")
+            csv_reader = csv.DictReader(StringIO(file_content))
+            csv_columns = set(csv_reader.fieldnames or [])
+        except Exception as err:
+            raise forms.ValidationError(f"Error reading CSV file: {str(err)}") from err
+
         column_mapping = {}
         if column_mapping_str:
             try:
                 column_mapping = json.loads(column_mapping_str)
             except json.JSONDecodeError as err:
                 raise forms.ValidationError("Invalid column mapping data.") from err
-        try:
-            csv_data = json.loads(csv_data_str)
-        except json.JSONDecodeError as err:
-            raise forms.ValidationError("Invalid CSV data.") from err
 
-        if not csv_data:
+        if not csv_columns:
             raise forms.ValidationError("CSV data appears to be empty or invalid.")
 
         if not column_mapping.get("input") or not column_mapping.get("output"):
@@ -459,8 +472,6 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             raise forms.ValidationError(
                 "Cannot both automatically populate history and use a history column. Please choose one option."
             )
-
-        csv_columns = set(csv_data[0].keys()) if csv_data else set()
 
         mapped_columns = set()
         if input_col := column_mapping.get("input"):
@@ -497,10 +508,13 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
                             "and underscores."
                         )
 
+        input_col = column_mapping.get("input", "")
+        output_col = column_mapping.get("output", "")
         valid_rows = 0
-        for i, row in enumerate(csv_data):
-            input_content = row.get(column_mapping.get("input", ""), "").strip()
-            output_content = row.get(column_mapping.get("output", ""), "").strip()
+
+        for i, row in enumerate(csv_reader):
+            input_content = row.get(input_col, "").strip()
+            output_content = row.get(output_col, "").strip()
             if input_content and output_content:
                 valid_rows += 1
 
@@ -515,7 +529,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         if valid_rows == 0:
             raise forms.ValidationError("No valid message pairs found in CSV data.")
 
-        return csv_data, column_mapping, history_column
+        return csv_file, column_mapping, history_column
 
     def _is_valid_python_identifier(self, name):
         """Check if a string is a valid Python identifier."""
@@ -570,76 +584,85 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         ]
 
     def _save_csv(self):
-        csv_data = self.cleaned_data.get("csv_data", [])
         column_mapping = self.cleaned_data.get("column_mapping", {})
         populate_history = self.cleaned_data.get("populate_history", False)
         history_column = self.cleaned_data.get("history_column", "")
 
+        csv_file_id = int(self.data.get("csv_file_id"))
+        csv_file = File.objects.get(id=csv_file_id)
+
+        file_content = csv_file.file.read().decode("utf-8")
+        csv_reader = csv.DictReader(StringIO(file_content))
+
         evaluation_messages = []
         auto_history = []  # For auto-populate mode
+        try:
+            for row in csv_reader:
+                # Extract mapped columns
+                input_content = row.get(column_mapping.get("input", ""), "").strip()
+                output_content = row.get(column_mapping.get("output", ""), "").strip()
+                if not input_content or not output_content:
+                    continue
 
-        for row in csv_data:
-            # Extract mapped columns
-            input_content = row.get(column_mapping.get("input", ""), "").strip()
-            output_content = row.get(column_mapping.get("output", ""), "").strip()
-            if not input_content or not output_content:
-                continue
+                context = {}
+                if context_mapping := column_mapping.get("context"):
+                    for field_name, csv_column in context_mapping.items():
+                        if csv_column in row:
+                            context[field_name] = parse_csv_value_as_json(row[csv_column])
 
-            context = {}
-            if context_mapping := column_mapping.get("context"):
-                for field_name, csv_column in context_mapping.items():
-                    if csv_column in row:
-                        context[field_name] = parse_csv_value_as_json(row[csv_column])
+                participant_data = {}
+                if participant_data_mapping := column_mapping.get("participant_data"):
+                    for field_name, csv_column in participant_data_mapping.items():
+                        if csv_column in row:
+                            participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
 
-            participant_data = {}
-            if participant_data_mapping := column_mapping.get("participant_data"):
-                for field_name, csv_column in participant_data_mapping.items():
-                    if csv_column in row:
-                        participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
+                session_state = {}
+                if session_state_mapping := column_mapping.get("session_state"):
+                    for field_name, csv_column in session_state_mapping.items():
+                        if csv_column in row:
+                            session_state[field_name] = parse_csv_value_as_json(row[csv_column])
 
-            session_state = {}
-            if session_state_mapping := column_mapping.get("session_state"):
-                for field_name, csv_column in session_state_mapping.items():
-                    if csv_column in row:
-                        session_state[field_name] = parse_csv_value_as_json(row[csv_column])
+                message_history = []
+                if populate_history:
+                    # Use auto-populated history from previous messages
+                    message_history = [msg.copy() for msg in auto_history]
+                elif history_column and history_column in row:
+                    # Parse history from CSV column
+                    history_text = row[history_column].strip()
+                    if history_text:
+                        message_history = parse_history_text(history_text)
 
-            message_history = []
-            if populate_history:
-                # Use auto-populated history from previous messages
-                message_history = [msg.copy() for msg in auto_history]
-            elif history_column and history_column in row:
-                # Parse history from CSV column
-                history_text = row[history_column].strip()
-                if history_text:
-                    message_history = parse_history_text(history_text)
-
-            evaluation_messages.append(
-                EvaluationMessage(
-                    input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
-                    output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
-                    context=context,
-                    participant_data=participant_data,
-                    session_state=session_state,
-                    history=message_history,
-                    metadata={"created_mode": "csv"},
+                evaluation_messages.append(
+                    EvaluationMessage(
+                        input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
+                        output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
+                        context=context,
+                        participant_data=participant_data,
+                        session_state=session_state,
+                        history=message_history,
+                        metadata={"created_mode": "csv"},
+                    )
                 )
-            )
 
-            if populate_history:
-                auto_history.append(
-                    {
-                        "message_type": ChatMessageType.HUMAN,
-                        "content": input_content.strip(),
-                        "summary": None,
-                    }
-                )
-                auto_history.append(
-                    {
-                        "message_type": ChatMessageType.AI,
-                        "content": output_content.strip(),
-                        "summary": None,
-                    }
-                )
+                if populate_history:
+                    auto_history.append(
+                        {
+                            "message_type": ChatMessageType.HUMAN,
+                            "content": input_content.strip(),
+                            "summary": None,
+                        }
+                    )
+                    auto_history.append(
+                        {
+                            "message_type": ChatMessageType.AI,
+                            "content": output_content.strip(),
+                            "summary": None,
+                        }
+                    )
+        finally:
+            # Clean up the CSV file after processing
+            csv_file.delete()
+
         return evaluation_messages
 
 
