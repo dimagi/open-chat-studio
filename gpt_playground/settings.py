@@ -603,7 +603,6 @@ LOGGING = {
         "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
-        "silk": {"handlers": ["console"], "level": "DEBUG", "propagate": False},
     },
 }
 
