@@ -75,6 +75,12 @@
             {% translate "Clone Messages to Dataset" %}
           </button>
         </form>
+        {# Filter dialogs must be outside form to avoid nested forms but need filterComponent context #}
+        <div x-data="filterComponent">
+          {% include "filters/saved_filters_dialog.html" %}
+          {% include "filters/save_filter_dialog.html" %}
+        </div>
+
       </div>
 
       <!-- Manual mode -->
