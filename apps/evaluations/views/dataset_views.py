@@ -60,7 +60,6 @@ class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
 class DatasetTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationdataset"
     model = EvaluationDataset
-    paginate_by = 25
     table_class = EvaluationDatasetTable
     template_name = "table/single_table.html"
 
@@ -186,7 +185,6 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
     """Table view for selecting sessions to create a dataset from."""
 
     model = ExperimentSession
-    paginate_by = 20
     table_class = EvaluationSessionsSelectionTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_experimentsession"
@@ -224,8 +222,8 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     """Table view for dataset messages with pagination."""
 
     model = EvaluationMessage
-    paginate_by = 10
     table_class = DatasetMessagesTable
+    table_pagination = {"per_page": 10}
     template_name = "table/single_table.html"
     permission_required = "evaluations.view_evaluationdataset"
 

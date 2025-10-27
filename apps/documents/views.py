@@ -413,7 +413,6 @@ def get_collection_file_status(request, team_slug: str, collection_id: int, pk: 
 
 class CollectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Collection
-    paginate_by = 25
     table_class = CollectionsTable
     template_name = "table/single_table.html"
     permission_required = "documents.view_collection"

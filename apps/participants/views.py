@@ -100,7 +100,6 @@ class CreateParticipant(LoginAndTeamRequiredMixin, CreateView, PermissionRequire
 
 class ParticipantTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Participant
-    paginate_by = 25
     table_class = ParticipantTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_participant"

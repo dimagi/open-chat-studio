@@ -8,7 +8,6 @@ from apps.utils.search import similarity_search
 
 
 class BaseExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
-    paginate_by = 25
     template_name = "table/single_table.html"
 
     def get_table(self, **kwargs):

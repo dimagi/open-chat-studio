@@ -27,7 +27,6 @@ class CustomActionHome(LoginAndTeamRequiredMixin, TemplateView):
 
 class CustomActionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = CustomAction
-    paginate_by = 25
     table_class = CustomActionTable
     template_name = "table/single_table.html"
     permission_required = "custom_actions.view_customaction"

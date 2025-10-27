@@ -138,7 +138,6 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
     """
 
     model = ExperimentSession
-    paginate_by = 25
     table_class = ExperimentSessionsTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_experimentsession"
@@ -173,7 +172,6 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
 
 class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Experiment
-    paginate_by = 25
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"
     permission_required = "experiments.view_experiment"
