@@ -486,6 +486,10 @@ SCHEDULED_TASKS = {
         "task": "apps.documents.tasks.sync_all_document_sources_task",
         "schedule": crontab(minute="0", hour="0", day_of_week="0"),
     },
+    "apps.web.tasks.cleanup_silk_data": {
+        "task": "apps.web.tasks.cleanup_silk_data",
+        "schedule": crontab(minute="0", hour="1"),
+    },
 }
 
 CACHES = {
@@ -793,9 +797,10 @@ SILKY_AUTHENTICATION = True
 SILKY_AUTHORISATION = True
 SILKY_MAX_REQUEST_BODY_SIZE = 100 * 1024  # 10K
 SILKY_MAX_RESPONSE_BODY_SIZE = 100 * 1024  # 100K
+SILKY_MAX_RECORDED_REQUESTS = 1000
 
 
-def SILKY_INTERCEPT_FUNC(request):
+def SILKY_INTERCEPT_FUNC(request):  # noqa
     if "silky" in request.GET:
         return True
 
