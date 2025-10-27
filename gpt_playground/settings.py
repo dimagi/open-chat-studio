@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
+import contextlib
 import os
 import sys
 from datetime import timedelta
@@ -85,6 +86,7 @@ THIRD_PARTY_APPS = [
     "health_check.contrib.celery",
     "health_check.contrib.redis",
     "template_partials",
+    "silk",
 ]
 
 PROJECT_APPS = [
@@ -140,6 +142,7 @@ MIDDLEWARE = list(
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
             "django_otp.middleware.OTPMiddleware",
+            "django_htmx.middleware.HtmxMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
             "apps.web.locale_middleware.UserLocaleMiddleware",
@@ -148,7 +151,7 @@ MIDDLEWARE = list(
             "waffle.middleware.WaffleMiddleware",
             "field_audit.middleware.FieldAuditMiddleware",
             "apps.audit.middleware.AuditTransactionMiddleware",
-            "django_htmx.middleware.HtmxMiddleware",
+            "silk.middleware.SilkyMiddleware",
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.generics.middleware.OriginDetectionMiddleware",
@@ -483,6 +486,10 @@ SCHEDULED_TASKS = {
         "task": "apps.documents.tasks.sync_all_document_sources_task",
         "schedule": crontab(minute="0", hour="0", day_of_week="0"),
     },
+    "apps.web.tasks.cleanup_silk_data": {
+        "task": "apps.web.tasks.cleanup_silk_data",
+        "schedule": crontab(minute="0", hour="1"),
+    },
 }
 
 CACHES = {
@@ -784,3 +791,23 @@ EXPERIMENT_TREND_CACHE_TIMEOUT = 900  # 15 minutes
 
 # Dynamic Filter configs
 MAX_FILTER_PARAMS = 30
+
+SILKY_AUTHENTICATION = True
+SILKY_AUTHORISATION = True
+SILKY_MAX_REQUEST_BODY_SIZE = 100 * 1024  # 10K
+SILKY_MAX_RESPONSE_BODY_SIZE = 100 * 1024  # 100K
+SILKY_MAX_RECORDED_REQUESTS = 1000
+
+
+def SILKY_INTERCEPT_FUNC(request):  # noqa
+    if not (request.user.is_authenticated and request.user.is_staff):
+        return False
+
+    if "silky" in request.GET:
+        return True
+
+    if request.htmx:
+        with contextlib.suppress(AttributeError, TypeError):
+            return "silky" in request.htmx.current_url
+
+    return "silky" in request.headers.get("referer", "")
