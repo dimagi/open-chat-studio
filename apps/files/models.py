@@ -13,14 +13,15 @@ from apps.experiments.versioning import VersionDetails, VersionField, VersionsMi
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel
 from apps.utils.conversions import bytes_to_megabytes, humanize_bytes
-from apps.utils.fields import SanitizedJSONField
 from apps.utils.deletion import get_related_m2m_objects
+from apps.utils.fields import SanitizedJSONField
 from apps.web.meta import absolute_url
 
 
 class FilePurpose(models.TextChoices):
     ASSISTANT = "assistant", "Assistant"
     COLLECTION = "collection", "Collection"
+    EVALUATION_DATASET = "evaluation_dataset", "Evaluation Dataset"
 
 
 class FileObjectManager(VersionsObjectManagerMixin, models.Manager):
