@@ -219,6 +219,17 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
         return query_set
 
 
+class DatasetSessionsSelectionJson(DatasetSessionsSelectionTableView):
+    """Return the filtered items in DatasetSessionsSelectionTableView in a JSON format without pagination."""
+
+    table_pagination = False
+
+    def get(self, request, *args, **kwargs):
+        query_set = self.get_queryset()
+        session_keys = [session.external_id for session in query_set]
+        return JsonResponse(session_keys, safe=False)
+
+
 class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     """Table view for dataset messages with pagination."""
 

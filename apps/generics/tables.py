@@ -9,10 +9,21 @@ class ColumnWithHelp(tables.Column):
         self.help_text = help_text
 
     def header(self):
-        if not self.help_text:
-            return self.verbose_name
-        help_html = get_template("generic/help.html").render({"help_content": self.help_text})
-        return format_html("""<span>{header}</span>{help}""", header=self.verbose_name, help=help_html)
+        kwargs = {
+            "verbose_name": self.verbose_name,
+            "help": "",
+            "checkbox": "",
+        }
+
+        if self.help_text:
+            kwargs["help"] = get_template("generic/help.html").render({"help_content": self.help_text})
+
+        if self.extra_context.get("head_js_function"):
+            kwargs["checkbox"] = format_html(
+                '<input type="checkbox" class="{css_class}" @change="{head_js_function}">&nbsp;', **self.extra_context
+            )
+
+        return format_html("""{checkbox}<span>{verbose_name}</span>{help}""", **kwargs)
 
 
 class TemplateColumnWithHelp(ColumnWithHelp, tables.TemplateColumn):

@@ -561,6 +561,7 @@
         if (updateUrl) {
           this.updateUrlWithFilters();
         }
+        window.dispatchEvent(new CustomEvent('filter:change'));
         htmx.ajax('GET', dataSourceUrl, {
           target: "#" + dataSourceContainerId,
           swap: 'innerHTML',
