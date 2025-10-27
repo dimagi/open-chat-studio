@@ -2,6 +2,10 @@ def user_teams(request):
     if not (hasattr(request, "user") and request.user.is_authenticated):
         return {}
 
+    if request.htmx:
+        # htmx requests don't need this context
+        return {}
+
     current_team = getattr(request, "team", None)
     if not current_team:
         return {}
