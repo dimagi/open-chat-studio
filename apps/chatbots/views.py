@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import Count, F, Max, Q
+from django.db.models import Count, F, OuterRef, Q, Subquery
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -168,14 +168,44 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return table
 
     def get_queryset(self):
+        from apps.chat.models import ChatMessage
+        from apps.experiments.models import ExperimentSession
+
+        session_count_subquery = (
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .values("experiment_id")
+            .annotate(count=Count("id"))
+            .values("count")
+        )
+
+        participant_count_subquery = (
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .values("experiment_id")
+            .annotate(count=Count("participant_id", distinct=True))
+            .values("count")
+        )
+
+        messages_count_subquery = (
+            ChatMessage.objects.filter(chat__experiment_session__experiment_id=OuterRef("pk"))
+            .values("chat__experiment_session__experiment_id")
+            .annotate(count=Count("id"))
+            .values("count")
+        )
+
+        last_message_subquery = (
+            ChatMessage.objects.filter(chat__experiment_session__experiment_id=OuterRef("pk"))
+            .order_by("-created_at")
+            .values("created_at")[:1]
+        )
+
         query_set = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
             .select_related("team", "owner")
-            .annotate(session_count=Count("sessions", distinct=True))
-            .annotate(participant_count=Count("sessions__participant", distinct=True))
-            .annotate(messages_count=Count("sessions__chat__messages", distinct=True))
-            .annotate(last_message=Max("sessions__chat__messages__created_at"))
+            .annotate(session_count=Subquery(session_count_subquery))
+            .annotate(participant_count=Subquery(participant_count_subquery))
+            .annotate(messages_count=Subquery(messages_count_subquery))
+            .annotate(last_message=Subquery(last_message_subquery))
             .order_by(F("last_message").desc(nulls_last=True))
         )
         show_archived = self.request.GET.get("show_archived") == "on"
