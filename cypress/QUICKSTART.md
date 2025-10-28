@@ -9,11 +9,6 @@ npm install cypress --save-dev
 
 ### 2. Create Test User
 ```bash
-python manage.py create_cypress_test_user
-```
-
-Or alternatively:
-```bash
 python cypress/create_test_user.py
 ```
 
