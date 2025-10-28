@@ -110,7 +110,7 @@ class TestCollection:
         assert collection.openai_vector_store_id == "old-vs-123"
 
         # Verify vector store was created and files were indexed
-        create_remote_index.assert_called_once_with(name=new_version.index_name, file_ids=[])
+        create_remote_index.assert_called_once_with(name=new_version.index_name, file_ids=None)
         index_collection_files.assert_called()
 
     def test_create_new_version_of_local_collection_index(self):
