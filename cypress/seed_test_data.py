@@ -21,6 +21,10 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 django.setup()
 
 # NOTE: needs to be below this code but does throw lint error
+# Import the create_test_user function from create_test_user.py
+import importlib.util
+import pathlib
+
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.documents.models import Collection
@@ -29,10 +33,6 @@ from apps.files.models import File, FilePurpose
 from apps.pipelines.models import Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.models import Team
-
-# Import the create_test_user function from create_test_user.py
-import importlib.util
-import pathlib
 
 create_test_user_path = pathlib.Path(__file__).parent / "create_test_user.py"
 spec = importlib.util.spec_from_file_location("create_test_user", create_test_user_path)
@@ -51,7 +51,7 @@ def seed_test_data():
     team_exists = Team.objects.filter(slug=team_slug).exists()
 
     if not user_exists or not team_exists:
-        print(f"⚠ Test user or team not found. Creating them now...")
+        print("⚠ Test user or team not found. Creating them now...")
         print()
         create_test_user_func()
         print()

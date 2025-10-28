@@ -7,6 +7,7 @@ Run this from the Django project root:
 
 import os
 import sys
+
 import django
 
 # Setup Django
