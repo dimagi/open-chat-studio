@@ -29,6 +29,7 @@ from apps.evaluations.models import (
 )
 from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.files.models import File
 from apps.teams.utils import current_team
 
 logger = logging.getLogger("ocs.evaluations")
@@ -248,9 +249,14 @@ def cleanup_old_preview_evaluation_runs():
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def upload_dataset_csv_task(self, dataset_id, csv_content, team_id):
+def upload_dataset_csv_task(self, dataset_id, file_id, team_id):
     """
     Process CSV upload for dataset asynchronously with progress tracking.
+
+    Args:
+        dataset_id: ID of the EvaluationDataset to update
+        file_id: ID of the File instance containing the CSV data
+        team_id: ID of the team
     """
     progress_recorder = ProgressRecorder(self)
 
@@ -258,21 +264,30 @@ def upload_dataset_csv_task(self, dataset_id, csv_content, team_id):
         dataset = EvaluationDataset.objects.select_related("team").get(id=dataset_id, team_id=team_id)
         team = dataset.team
 
-        with current_team(team):
-            rows, columns = _parse_csv_content(csv_content, progress_recorder)
-            if not rows:
-                return {"success": False, "error": "CSV file is empty"}
+        # Fetch the CSV file from the Files model
+        csv_file = File.objects.get(id=file_id, team_id=team_id)
 
-            stats = process_csv_rows(dataset, rows, columns, progress_recorder, team)
-            progress_recorder.set_progress(100, 100, "Upload complete")
+        try:
+            # Read CSV content from the file
+            csv_content = csv_file.file.read().decode("utf-8")
 
-            return {
-                "success": True,
-                "updated_count": stats["updated_count"],
-                "created_count": stats["created_count"],
-                "total_processed": stats["updated_count"] + stats["created_count"],
-                "errors": stats["error_messages"],
-            }
+            with current_team(team):
+                rows, columns = _parse_csv_content(csv_content, progress_recorder)
+                if not rows:
+                    return {"success": False, "error": "CSV file is empty"}
+
+                stats = process_csv_rows(dataset, rows, columns, progress_recorder, team)
+                progress_recorder.set_progress(100, 100, "Upload complete")
+
+                return {
+                    "success": True,
+                    "updated_count": stats["updated_count"],
+                    "created_count": stats["created_count"],
+                    "total_processed": stats["updated_count"] + stats["created_count"],
+                    "errors": stats["error_messages"],
+                }
+        finally:
+            csv_file.delete()
 
     except Exception as e:
         logger.error(f"Error in CSV upload task for dataset {dataset_id}: {str(e)}")

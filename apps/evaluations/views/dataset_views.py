@@ -559,20 +559,20 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
         if not csv_file:
             return JsonResponse({"error": "No CSV file provided"}, status=400)
 
-        # This will pass the whole file as a dict to celery. If files are
-        # large, this could be memory inefficient. The alternative would be to
-        # store the file on disk and fetch it in the task. Instead, we ensure
-        # the file is below a certain size.
+        # Save the CSV file to the Files model for processing
+        file_instance = File.create(
+            filename=csv_file.name,
+            file_obj=csv_file,
+            team_id=request.team.id,
+            metadata={
+                "upload_timestamp": timezone.now().isoformat(),
+                "dataset_id": dataset.id,
+            },
+            purpose=FilePurpose.EVALUATION_DATASET,
+            expiry_date=timezone.now() + timedelta(days=3),
+        )
 
-        MAX_CSV_SIZE = 5 * 1024 * 1024  # 5MB limit
-        if csv_file.size > MAX_CSV_SIZE:
-            return JsonResponse({"error": "CSV file too large (max 5MB)"}, status=400)
-        file_content = csv_file.read().decode("utf-8")
-
-        if not file_content.strip():
-            return JsonResponse({"error": "CSV file is empty"}, status=400)
-
-        task = upload_dataset_csv_task.delay(dataset.id, file_content, request.team.id)
+        task = upload_dataset_csv_task.delay(dataset.id, file_instance.id, request.team.id)
         return JsonResponse({"success": True, "task_id": task.id})
 
     except Exception as e:
