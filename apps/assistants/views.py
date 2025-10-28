@@ -68,7 +68,6 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
 
 
 class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
-    paginate_by = 25
     template_name = "table/single_table.html"
     table_class = OpenAiAssistantTable
     permission_required = "assistants.view_openaiassistant"

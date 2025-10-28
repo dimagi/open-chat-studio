@@ -139,12 +139,13 @@ class OCSTracer(Tracer):
         if not self.ready:
             return
 
-        self.spans[span_id] = self._get_current_observation().span(
-            span_id=span_id,
-            span_name=span_name,
-            inputs=inputs,
-            metadata=metadata or {},
-        )
+        # Disable for now since spans are unreliable in multithreaded workflows
+        # self.spans[span_id] = self._get_current_observation().span(
+        #     span_id=span_id,
+        #     span_name=span_name,
+        #     inputs=inputs,
+        #     metadata=metadata or {},
+        # )
 
     def end_span(
         self,
@@ -155,6 +156,9 @@ class OCSTracer(Tracer):
         if not self.ready:
             return
 
+        if error:
+            self.error_detected = True
+
         span = self.spans.pop(span_id, None)
         if not span:
             return
@@ -162,7 +166,6 @@ class OCSTracer(Tracer):
         span.output = outputs or {}
         span.end_time = timezone.now()
         if error:
-            self.error_detected = True
             span.status = TraceStatus.ERROR
             span.error = str(error)
 

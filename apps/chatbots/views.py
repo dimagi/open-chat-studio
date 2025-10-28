@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import Count, F, OuterRef, Q, Subquery
+from django.db.models import Count, F, Max, OuterRef, Q, Subquery
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -19,7 +19,7 @@ from waffle import flag_is_active
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatMessage
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
@@ -155,7 +155,6 @@ def chatbots_home(request, team_slug: str):
 
 
 class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
-    paginate_by = 25
     template_name = "table/single_table.html"
     model = Experiment
     table_class = ChatbotTable
@@ -310,7 +309,6 @@ class CreateChatbotVersion(CreateExperimentVersion):
 
 class ChatbotVersionsTableView(ExperimentVersionsTableView):
     model = Experiment
-    paginate_by = 25
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"
     permission_required = "experiments.view_experiment"
@@ -351,6 +349,20 @@ def chatbot_version_create_status(
 
 class ChatbotSessionsTableView(ExperimentSessionsTableView):
     table_class = ChatbotSessionsTable
+
+    def get_queryset(self):
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                message_count=Subquery(
+                    ChatMessage.objects.filter(chat=OuterRef("chat"))
+                    .values("chat")
+                    .annotate(count=Count("id"))
+                    .values("count")[:1]
+                )
+            )
+        )
 
     def get_table(self, **kwargs):
         """

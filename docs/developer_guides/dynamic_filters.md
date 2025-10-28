@@ -191,7 +191,6 @@ class ProductInventoryView(SingleTableView):
     model = Product
     table_class = ProductTable
     template_name = "inventory/product_list.html"
-    paginate_by = 25
 
     def get_queryset(self):
         """Apply filters to the queryset."""

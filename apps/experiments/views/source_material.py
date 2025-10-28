@@ -28,7 +28,6 @@ class SourceMaterialHome(LoginAndTeamRequiredMixin, TemplateView):
 
 class SourceMaterialTableView(SingleTableView):
     model = SourceMaterial
-    paginate_by = 25
     table_class = SourceMaterialTable
     template_name = "table/single_table.html"
 

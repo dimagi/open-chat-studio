@@ -58,7 +58,6 @@ class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
 class PipelineTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "pipelines.view_pipeline"
     model = Pipeline
-    paginate_by = 25
     table_class = PipelineTable
     template_name = "table/single_table.html"
 

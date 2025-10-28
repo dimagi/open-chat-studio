@@ -27,7 +27,6 @@ class ConsentFormHome(LoginAndTeamRequiredMixin, TemplateView):
 
 class ConsentFormTableView(SingleTableView):
     model = ConsentForm
-    paginate_by = 25
     table_class = ConsentFormTable
     template_name = "table/single_table.html"
 
