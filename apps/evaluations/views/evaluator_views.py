@@ -29,7 +29,6 @@ class EvaluatorHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredM
 class EvaluatorTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluator"
     model = Evaluator
-    paginate_by = 25
     table_class = EvaluatorTable
     template_name = "table/single_table.html"
 

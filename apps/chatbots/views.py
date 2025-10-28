@@ -155,7 +155,6 @@ def chatbots_home(request, team_slug: str):
 
 
 class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
-    paginate_by = 25
     template_name = "table/single_table.html"
     model = Experiment
     table_class = ChatbotTable
@@ -280,7 +279,6 @@ class CreateChatbotVersion(CreateExperimentVersion):
 
 class ChatbotVersionsTableView(ExperimentVersionsTableView):
     model = Experiment
-    paginate_by = 25
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"
     permission_required = "experiments.view_experiment"
