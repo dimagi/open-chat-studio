@@ -5,6 +5,7 @@ from django import forms
 from django.forms.widgets import RadioSelect
 from pydantic import ValidationError as PydanticValidationError
 
+from apps.chat.models import ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     EvaluationConfig,
@@ -627,14 +628,14 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             if populate_history:
                 auto_history.append(
                     {
-                        "message_type": "HUMAN",
+                        "message_type": ChatMessageType.HUMAN,
                         "content": input_content.strip(),
                         "summary": None,
                     }
                 )
                 auto_history.append(
                     {
-                        "message_type": "AI",
+                        "message_type": ChatMessageType.AI,
                         "content": output_content.strip(),
                         "summary": None,
                     }
