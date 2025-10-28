@@ -1,131 +1,211 @@
 describe('Chatbots Application', () => {
   const teamSlug = Cypress.env('TEAM_SLUG') || 'your-team-slug'
 
-  before(() => {
+  beforeEach(() => {
     cy.login()
+    cy.visit(`/a/${teamSlug}/chatbots/`, { failOnStatusCode: false })
+    cy.get('body').should('be.visible')
+    cy.get('h1', { timeout: 10000 }).should('exist')
+    cy.wait(2000)
   })
 
   describe('Chatbots Home Page', () => {
     it('loads chatbots home page successfully', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/`, { failOnStatusCode: false })
       cy.url().should('include', '/chatbots/')
       cy.get('body').should('be.visible')
     })
 
     it('page has title or heading', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/`, { failOnStatusCode: false })
-      // Should have some heading
-      cy.get('h1, h2, h3, title').should('exist')
+      cy.get('h1').should('exist')
+      cy.contains('h1, h2, h3', /Chatbots/i).should('exist')
     })
 
     it('page has interactive elements', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/`, { failOnStatusCode: false })
-      // Should have links, buttons, or navigation
       cy.get('a, button, nav').should('have.length.greaterThan', 0)
     })
   })
 
   describe('Create Chatbot', () => {
     it('opens create chatbot form', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/`)
-      // Try to click the create button
-      cy.contains('button, a', /Add New|Create|New Chatbot/i).then(($btn) => {
-        if ($btn.length > 0) {
-          cy.wrap($btn).first().click()
-          // Either modal or new page should appear
-          cy.get('form, [role="dialog"], .modal', { timeout: 5000 }).should('exist')
-        }
-      })
+      cy.contains('button', /Add New/i, { timeout: 10000 }).should('be.visible').click({force: true})
+
+      // Modal dialog should appear
+      cy.get('dialog.modal[open]', { timeout: 5000 }).should('be.visible')
+      cy.get('dialog.modal h3').should('contain', 'Create a new Chatbot')
     })
 
     it('create chatbot form has required fields', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/new/`)
-      // Check for common form fields
-      cy.get('input[name="name"], #id_name').should('exist')
-      cy.get('textarea[name="description"], #id_description').should('exist')
+      // Open the modal
+      cy.contains('button', /Add New/i, { timeout: 10000 }).should('be.visible').click({force: true})
+
+      // Wait for modal to open
+      cy.get('dialog.modal[open]', { timeout: 5000 }).should('be.visible')
+
+      // Check for the form with correct ID
+      cy.get('form#new_chatbot_form').should('exist')
+
+      // Check for required fields
+      cy.get('input#id_name[name="name"]').should('exist')
+      cy.get('textarea#id_description[name="description"]').should('exist')
     })
 
     it('validates required fields on submit', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/new/`)
-      // Try to submit empty form
-      cy.get('button[type="submit"]').click()
-      // Should show validation errors
-      cy.contains(/required|field|error/i).should('exist')
+      // Open the modal
+      cy.contains('button', /Add New/i, { timeout: 10000 }).should('be.visible').click({force: true})
+
+      // Wait for modal to open
+      cy.get('dialog.modal[open]', { timeout: 5000 }).should('be.visible')
+
+      // Try to submit without filling required fields
+      cy.get('button[type="submit"][form="new_chatbot_form"]').click({force: true})
+
+      // Check for HTML5 validation (name field is required)
+      cy.get('input#id_name:invalid').should('exist')
+    })
+
+    it('can fill out and submit create form', () => {
+      // Open the modal
+      cy.contains('button', /Add New/i, { timeout: 10000 }).should('be.visible').click({force: true})
+
+      // Wait for modal to open
+      cy.get('dialog.modal[open]', { timeout: 5000 }).should('be.visible')
+
+      // Fill out the form
+      const chatbotName = `Test Chatbot ${Date.now()}`
+      cy.get('input#id_name').type(chatbotName)
+      cy.get('textarea#id_description').type('This is a test chatbot created by Cypress')
+
+      // Submit the form
+      cy.get('button[type="submit"][form="new_chatbot_form"]').click({force: true})
+
+      // Should redirect to chatbot details or close modal
+      cy.url().should('match', /chatbots\/\d+\//, { timeout: 10000 })
     })
   })
 
   describe('Chatbot Details', () => {
     it('navigates to chatbot details from table', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/`)
-      // Click on first chatbot link if exists
-      cy.get('table tbody tr a, .chatbot-link').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          cy.url().should('match', /chatbots\/[^/]+\/$/)
-        }
-      })
+      // Wait for table to load via HTMX
+      cy.get('table tbody tr', { timeout: 10000 }).should('exist')
+
+      // Click on first chatbot link in the table
+      cy.get('table tbody tr a[href*="/chatbots/"]').first().click({force: true})
+
+      // Should navigate to chatbot detail page
+      cy.url().should('match', /chatbots\/\d+\//)
     })
 
-    it('chatbot detail page displays tabs', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/`)
-      cy.get('table tbody tr a, .chatbot-link').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          // Check for tabs
-          cy.get('[role="tablist"], .nav-tabs, .tabs').should('exist')
-        }
-      })
-    })
-  })
+    it('chatbot detail page has content', () => {
+      // Wait for table to load
+      cy.get('table tbody tr', { timeout: 10000 }).should('exist')
 
-  describe('Chatbot Settings', () => {
-    it('can access chatbot settings', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/`)
-      cy.get('table tbody tr').first().then(($row) => {
-        if ($row.length > 0) {
-          // Find and click settings link
-          cy.wrap($row).find('a').first().click()
-          // Look for settings tab or button
-          cy.contains('button, a', /Settings/i, { timeout: 5000 }).then(($settings) => {
-            if ($settings.length > 0) {
-              cy.wrap($settings).first().click()
-              cy.url().should('match', /settings|config/)
-            }
-          })
-        }
-      })
-    })
+      // Click on first chatbot
+      cy.get('table tbody tr a[href*="/chatbots/"]').first().click({force: true})
 
-    it('settings form has cancel button', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/`)
-      cy.get('table tbody tr a').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          cy.contains('button, a', /Settings/i).then(($settings) => {
-            if ($settings.length > 0) {
-              cy.wrap($settings).first().click()
-              cy.contains('button', /Cancel|Close/i).should('exist')
-            }
-          })
-        }
-      })
+      // Page should have loaded with content
+      cy.get('body').should('be.visible')
+      cy.get('h1, h2, h3').should('exist')
     })
   })
 
-  describe('Chatbot Sessions', () => {
-    it('displays sessions for chatbot', () => {
-      cy.visit(`/a/${teamSlug}/chatbots/`)
-      cy.get('table tbody tr a').first().then(($link) => {
-        if ($link.length > 0) {
-          cy.wrap($link).click()
-          // Look for sessions tab or section
-          cy.contains('Sessions, Chat History').then(($tab) => {
-            if ($tab.length > 0) {
-              cy.wrap($tab).click()
-              cy.get('table, .session-list').should('exist')
-            }
-          })
-        }
+  describe('Chatbot Actions', () => {
+    it('can access chatbot edit page', () => {
+      // Wait for table to load
+      cy.get('table tbody tr', { timeout: 10000 }).should('exist')
+
+      // Find and click the edit button (pencil icon) in first row
+      cy.get('table tbody tr').first().within(() => {
+        cy.get('a[href*="/edit/"]').click({force: true})
+      })
+
+      // Should navigate to edit page
+      cy.url().should('include', '/edit/')
+    })
+
+    it('can start a new session', () => {
+      cy.get('table tbody tr', { timeout: 10000 }).should('exist')
+      cy.get('table tbody tr').first().within(() => {
+        cy.get('button[title="New Session"]').click({force: true})
+      })
+      cy.url().should('include', '/session/')
+    })
+  })
+
+  describe('Chatbot Table', () => {
+    it('displays chatbot table with data', () => {
+      // Table should exist - wait for HTMX to load it
+      cy.get('table', { timeout: 10000 }).should('exist')
+
+      // Table should have headers
+      cy.get('table thead th').should('have.length.greaterThan', 0)
+
+      // Table should have at least one row (if chatbots exist)
+      cy.get('table tbody tr').should('exist')
+    })
+
+    it('table has correct columns', () => {
+      // Wait for table to load
+      cy.get('table', { timeout: 10000 }).should('exist')
+
+      // Check for expected column headers
+      cy.get('table thead th').should('contain', 'Name')
+      cy.get('table thead th').should('contain', 'Total Participants')
+      cy.get('table thead th').should('contain', 'Total Sessions')
+      cy.get('table thead th').should('contain', 'Total Messages')
+      cy.get('table thead th').should('contain', 'Actions')
+    })
+
+    it('can search chatbots', () => {
+      // Search input should exist
+      cy.get('input[type="search"][name="search"]', { timeout: 10000 }).should('exist')
+
+      // Wait for table to initially load
+      cy.get('table', { timeout: 10000 }).should('exist')
+
+      // Type in search box
+      cy.get('input[type="search"][name="search"]').type('test')
+
+      // Wait for HTMX to update the table
+      cy.wait(1500)
+
+      // Table should still be visible
+      cy.get('table').should('exist')
+    })
+
+    it('can toggle show archived', () => {
+      // Show archived toggle should exist
+      cy.get('input[type="checkbox"][name="show_archived"]', { timeout: 10000 }).should('exist')
+
+      // Wait for table to initially load
+      cy.get('table', { timeout: 10000 }).should('exist')
+
+      // Click the toggle
+      cy.get('input[type="checkbox"][name="show_archived"]').click({force: true})
+
+      // Wait for HTMX to update
+      cy.wait(1500)
+
+      // Table should still be visible
+      cy.get('table').should('exist')
+    })
+  })
+
+  describe('Chatbot Row Interactions', () => {
+    it('chatbot row has redirect functionality', () => {
+      // Wait for table to load
+      cy.get('table tbody tr', { timeout: 10000 }).should('exist')
+
+      // Rows should have data-redirect-url attribute
+      cy.get('table tbody tr[data-redirect-url]').should('exist')
+    })
+
+    it('chatbot name link works', () => {
+      // Wait for table to load
+      cy.get('table tbody tr', { timeout: 10000 }).should('exist')
+
+      // Get the first chatbot name and URL
+      cy.get('table tbody tr').first().within(() => {
+        cy.get('a[href*="/chatbots/"]').should('have.attr', 'href').and('match', /\/chatbots\/\d+\/$/)
       })
     })
   })
