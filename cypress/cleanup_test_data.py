@@ -43,7 +43,7 @@ def cleanup_test_data():
 
     # Get test user and team
     try:
-        User.objects.get(email=email)
+        user = User.objects.get(email=email)
         print(f"✓ Found user: {email}")
     except User.DoesNotExist:
         print(f"❌ User not found: {email}")
@@ -98,17 +98,16 @@ def cleanup_test_data():
     else:
         print("  ⚠ No participants to delete")
 
-    # Delete any remaining orphaned chats
-    print("\n--- Deleting Orphaned Chats ---")
+    # Delete any remaining chats
+    print("\n--- Deleting Remaining Chats ---")
     chats = Chat.objects.filter(team=team)
     count = chats.count()
     if count > 0:
         chats.delete()
-        print(f"  ✓ Deleted {count} orphaned chat(s)")
+        print(f"  ✓ Deleted {count} chat(s)")
     else:
-        print("  ⚠ No orphaned chats to delete")
+        print("  ⚠ No chats to delete")
 
-    # Delete collections (must be deleted before files due to many-to-many relationship)
     print("\n--- Deleting Collections ---")
     collections = Collection.objects.filter(team=team)
     count = collections.count()
@@ -118,12 +117,10 @@ def cleanup_test_data():
     else:
         print("  ⚠ No collections to delete")
 
-    # Delete files
     print("\n--- Deleting Files ---")
     files = File.objects.filter(team=team)
     count = files.count()
     if count > 0:
-        # Delete the actual files from storage
         for file_obj in files:
             if file_obj.file:
                 file_obj.file.delete(save=False)
@@ -142,15 +139,20 @@ def cleanup_test_data():
     else:
         print("  ⚠ No LLM providers to delete")
 
+    print("\n--- Deleting Team ---")
+    team.delete()
+    print(f"  ✓ Deleted team: {team_slug}")
+
+    print("\n--- Deleting User ---")
+    user.delete()
+    print(f"  ✓ Deleted user: {email}")
+
     print("\n" + "=" * 50)
-    print("✅ Test data cleanup complete!")
-    print("\nNote: The test user and team were NOT deleted.")
-    print("To delete those as well, run:")
-    print(
-        f"  python manage.py shell -c \"from django.contrib.auth import get_user_model; \
-        from apps.teams.models import Team; Team.objects.get(slug='{team_slug}').delete(); \
-        get_user_model().objects.get(email='{email}').delete()\""
-    )
+    print("✅ Complete cleanup finished!")
+    print("\nAll test data, team, and user have been deleted.")
+    print("To recreate the test setup, run:")
+    print("  python cypress/create_test_user.py")
+    print("  python cypress/seed_test_data.py  # (optional, for more test data)")
 
 
 if __name__ == "__main__":

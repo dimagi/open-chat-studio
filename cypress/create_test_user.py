@@ -7,23 +7,23 @@ Run this from the Django project root:
 
 import os
 import sys
-
 import django
-from django.contrib.auth import get_user_model
-
-from apps.teams import backends
-from apps.teams.models import Membership, Team
 
 # Setup Django
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 django.setup()
 
+# NOTE: needs to be below this code but does throw lint error
+from django.contrib.auth import get_user_model
+
+from apps.teams import backends
+from apps.teams.models import Membership, Team
+
 
 def create_test_user():
     User = get_user_model()
 
-    # Configuration
     username = "testuser"
     email = "test@example.com"
     password = "testpassword"
@@ -32,15 +32,12 @@ def create_test_user():
 
     print("Creating Cypress test user and team...")
     print("=" * 50)
-
-    # Ensure default groups exist
     try:
         backends.create_default_groups()
         print("✓ Default groups initialized")
     except Exception as e:
         print(f"⚠ Could not create default groups: {e}")
 
-    # Create or get user
     user, created = User.objects.get_or_create(username=username, defaults={"email": email})
 
     if created:
@@ -54,24 +51,19 @@ def create_test_user():
         user.save()
         print(f"✓ Updated password for: {email}")
 
-    # Create or get team
     team, created = Team.objects.get_or_create(slug=team_slug, defaults={"name": team_name})
 
     if created:
         print(f"✓ Created team: {team_slug}")
     else:
         print(f"⚠ Team already exists: {team_slug}")
-
-    # Add user to team with owner permissions
     membership = Membership.objects.filter(user=user, team=team).first()
 
     if not membership:
-        # Create new membership with full permissions
         membership = backends.make_user_team_owner(team, user)
         print("✓ Added user to team as owner (full permissions)")
     else:
         print("⚠ User already member of team")
-        # Update to ensure they have owner permissions
         membership.groups.set(backends.get_team_owner_groups())
         print("✓ Updated user to have owner permissions")
 
@@ -84,7 +76,10 @@ def create_test_user():
     print(f'  "TEST_PASSWORD": "{password}"')
     print("}")
     print()
-    print("You can now run Cypress tests:")
+    print("To seed test data (chatbots, files, participants, etc.), run:")
+    print("  python cypress/seed_test_data.py")
+    print()
+    print("Once seeded, you can run Cypress tests:")
     print("  npx cypress open")
     print("  npx cypress run")
 

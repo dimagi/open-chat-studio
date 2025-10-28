@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 django.setup()
 
+# NOTE: needs to be below this code but does throw lint error
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.documents.models import Collection
@@ -29,6 +30,16 @@ from apps.pipelines.models import Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.models import Team
 
+# Import the create_test_user function from create_test_user.py
+import importlib.util
+import pathlib
+
+create_test_user_path = pathlib.Path(__file__).parent / "create_test_user.py"
+spec = importlib.util.spec_from_file_location("create_test_user", create_test_user_path)
+create_test_user_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(create_test_user_module)
+create_test_user_func = create_test_user_module.create_test_user
+
 
 def seed_test_data():
     User = get_user_model()
@@ -36,26 +47,19 @@ def seed_test_data():
     # Configuration - must match cypress.env.json
     email = "test@example.com"
     team_slug = "test-team"
+    user_exists = User.objects.filter(email=email).exists()
+    team_exists = Team.objects.filter(slug=team_slug).exists()
 
-    print("Seeding Cypress test data...")
-    print("=" * 50)
+    if not user_exists or not team_exists:
+        print(f"⚠ Test user or team not found. Creating them now...")
+        print()
+        create_test_user_func()
+        print()
 
-    # Get test user and team
-    try:
-        user = User.objects.get(email=email)
-        print(f"✓ Found user: {email}")
-    except User.DoesNotExist:
-        print(f"❌ User not found: {email}")
-        print("   Run 'python cypress/create_test_user.py' first!")
-        sys.exit(1)
-
-    try:
-        team = Team.objects.get(slug=team_slug)
-        print(f"✓ Found team: {team_slug}")
-    except Team.DoesNotExist:
-        print(f"❌ Team not found: {team_slug}")
-        print("   Run 'python cypress/create_test_user.py' first!")
-        sys.exit(1)
+    user = User.objects.get(email=email)
+    team = Team.objects.get(slug=team_slug)
+    print(f"✓ Using user: {email}")
+    print(f"✓ Using team: {team_slug}")
 
     # Get or create default LLM provider
     llm_provider, created = LlmProvider.objects.get_or_create(
@@ -254,15 +258,8 @@ def seed_test_data():
             collection.files.add(*created_files)
             print(f"    ✓ Ensured {len(created_files)} file(s) in collection")
 
-    print("\n" + "=" * 50)
     print("✅ Test data seeding complete!")
-    print("\nCreated:")
-    print("  - 4 pipelines")
-    print("  - 4 pipeline-based chatbots (experiments)")
-    print("  - 3 assistants")
-    print("  - 5 participants (with sessions and chat messages)")
-    print("  - 4 files")
-    print("  - 1 collection with 4 files")
+    print("\n" + "=" * 50)
     print("\nYou can now run the Cypress tests:")
     print("  npx cypress open")
     print("  npx cypress run")
