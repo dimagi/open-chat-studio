@@ -6,6 +6,7 @@ describe('Home Page', () => {
 
   it('displays the main content', () => {
     cy.visit('/')
+    // Check for common elements that should be present
     cy.get('body').should('be.visible')
   })
 })

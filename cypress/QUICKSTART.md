@@ -130,6 +130,10 @@ Error: Cypress failed to verify that your server is running
 python manage.py runserver
 ```
 
+## 📚 More Information
+
+See [E2E_TESTS_README.md](./E2E_TESTS_README.md) for detailed documentation.
+
 ## 🎯 Test Files
 
 - `*-simple.cy.js` - Simplified, robust tests (recommended)
