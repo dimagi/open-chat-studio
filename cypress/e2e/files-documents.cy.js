@@ -10,7 +10,7 @@ describe('Files and Collections Application', () => {
       cy.login()
       cy.visit(`/a/${teamSlug}/files/file`, { failOnStatusCode: false })
       cy.get('body').should('be.visible')
-      cy.wait(500) // Wait for HTMX
+      cy.wait(10) // Wait for HTMX
     })
 
     it('loads files page successfully', () => {
@@ -24,7 +24,7 @@ describe('Files and Collections Application', () => {
     it('has search functionality', () => {
       cy.get('input[type="search"], input[name="search"]', { timeout: 10000 }).should('exist')
       cy.get('input[type="search"], input[name="search"]').type('test')
-      cy.wait(500)
+      cy.wait(10)
     })
 
     it('displays file information in table', () => {
@@ -38,7 +38,7 @@ describe('Files and Collections Application', () => {
       cy.login()
       cy.visit(`/a/${teamSlug}/files/file`, { failOnStatusCode: false })
       cy.get('body').should('be.visible')
-      cy.wait(500)
+      cy.wait(10)
     })
 
     it('can navigate to file details', () => {
@@ -51,7 +51,7 @@ describe('Files and Collections Application', () => {
     it('can access edit file page', () => {
       cy.get('table tbody tr', { timeout: 1000 }).should('exist')
       cy.get('table tbody tr a').first().click({force: true})
-      cy.wait(500)
+      cy.wait(10)
       cy.contains('button, a', /Edit/i, { timeout: 10000 }).should('exist').click({force: true})
       cy.get('form').should('exist')
       cy.contains('h1', /Edit File/i).should('exist')
@@ -60,7 +60,7 @@ describe('Files and Collections Application', () => {
     it('edit form shows file name field', () => {
       cy.get('table tbody tr', { timeout: 10000 }).should('exist')
       cy.get('table tbody tr a').first().click({force: true})
-      cy.wait(500)
+      cy.wait(10)
       cy.contains('button, a', /Edit/i, { timeout: 10000 }).click({force: true})
       cy.get('input#id_name[name="name"]').should('exist')
       cy.get('input#id_name').should('have.attr', 'required')
@@ -69,7 +69,7 @@ describe('Files and Collections Application', () => {
     it('edit form has summary field', () => {
       cy.get('table tbody tr', { timeout: 10000 }).should('exist')
       cy.get('table tbody tr a').first().click({force: true})
-      cy.wait(500)
+      cy.wait(10)
       cy.contains('button, a', /Edit/i, { timeout: 10000 }).click({force: true})
       cy.get('textarea#id_summary[name="summary"]').should('exist')
     })
@@ -77,7 +77,7 @@ describe('Files and Collections Application', () => {
     it('edit form has update button', () => {
       cy.get('table tbody tr', { timeout: 10000 }).should('exist')
       cy.get('table tbody tr a').first().click({force: true})
-      cy.wait(500)
+      cy.wait(10)
       cy.contains('button, a', /Edit/i, { timeout: 10000 }).click({force: true})
       cy.get('input[type="submit"]').should('exist')
       cy.get('input[type="submit"]').should('have.value', 'Update')
@@ -86,7 +86,7 @@ describe('Files and Collections Application', () => {
     it('edit form displays collections', () => {
       cy.get('table tbody tr', { timeout: 10000 }).should('exist')
       cy.get('table tbody tr a').first().click({force: true})
-      cy.wait(500)
+      cy.wait(10)
       cy.contains('button, a', /Edit/i, { timeout: 10000 }).click({force: true})
       cy.contains('h3', /Collections/i).should('exist')
     })
@@ -97,7 +97,7 @@ describe('Files and Collections Application', () => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`, { failOnStatusCode: false })
       cy.get('body').should('be.visible')
-      cy.wait(500)
+      cy.wait(10)
     })
 
     it('loads collections page successfully', () => {
@@ -126,7 +126,7 @@ describe('Files and Collections Application', () => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`, { failOnStatusCode: false })
       cy.get('body').should('be.visible')
-      cy.wait(200)
+      cy.wait(10)
     })
 
     it('navigates to collection details', () => {
@@ -149,7 +149,7 @@ describe('Files and Collections Application', () => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`, { failOnStatusCode: false })
       cy.get('body').should('be.visible')
-      cy.wait(200)
+      cy.wait(10)
     })
 
     it('collection has search functionality', () => {
@@ -169,7 +169,7 @@ describe('Files and Collections Application', () => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`, { failOnStatusCode: false })
       cy.get('body').should('be.visible')
-      cy.wait(200)
+      cy.wait(10)
     })
     it('collection page has breadcrumb navigation', () => {
       openFirstCollection()
@@ -196,12 +196,12 @@ describe('Files and Collections Application', () => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`, { failOnStatusCode: false })
       cy.get('body').should('be.visible')
-      cy.wait(200)
+      cy.wait(10)
     })
 
     it('can navigate to file details', () => {
       openFirstCollection()
-      cy.wait(400)
+      cy.wait(10)
       cy.get('#collection-files-container')
         .find('a.btn.btn-sm.btn-soft.btn-primary')
         .first()

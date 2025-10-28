@@ -83,7 +83,7 @@ describe('Participants Application', () => {
 	  cy.get('button[hx-target="#participant-name"]').then(($editBtn) => {
 	  if ($editBtn.length > 0) {
 	      cy.wrap($editBtn).first().click()
-	      cy.wait(1000)
+	      cy.wait(10)
 	      cy.get('input[name="name"]').should('be.visible')
 	  }
 	  })
