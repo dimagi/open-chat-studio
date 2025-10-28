@@ -62,12 +62,20 @@ describe('Dashboard Application', () => {
   describe('Dashboard Filters', () => {
     it('can filter by chatbot', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.get('select[name*="chatbot"], chatbot-filter').then(($filter) => {
-        if ($filter.length > 0) {
-          cy.wrap($filter).select(1) // Select first option after default
-          cy.wait(1000) // Wait for dashboard to update
-        }
-      })
+
+      // Click into the Tom Select input
+      cy.get('#id_experiments-ts-control', { timeout: 10000 })
+        .should('be.visible')
+        .click()
+
+      // Wait for dropdown to open and select the first chatbot option
+      cy.get('#id_experiments-ts-dropdown')
+        .should('be.visible')
+        .find('[role="option"]')
+        .first()
+        .click()
+      // Wait for dashboard to update
+      cy.wait(10)
     })
 
     it('can change date range', () => {
@@ -75,7 +83,7 @@ describe('Dashboard Application', () => {
       cy.get('select[name*="date_range"], #date-range-select').then(($select) => {
         if ($select.length > 0) {
           cy.wrap($select).select('7') // Select 7 days
-          cy.wait(1000)
+          cy.wait(10)
         }
       })
     })
@@ -85,7 +93,7 @@ describe('Dashboard Application', () => {
       cy.get('select[name*="granularity"]').then(($select) => {
         if ($select.length > 0) {
           cy.wrap($select).select('daily')
-          cy.wait(1000)
+          cy.wait(10)
         }
       })
     })
@@ -94,51 +102,65 @@ describe('Dashboard Application', () => {
   describe('Dashboard Data Tables', () => {
     it('bot performance table displays', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.contains(/Bot|Performance|Summary/i)
-        .parents('section, .card, .panel')
+
+      cy.contains('.card-title span', 'Bot Performance Summary', { timeout: 10000 })
+        .should('be.visible')
+        .parents('.card-body')
         .within(() => {
-          cy.get('table').then(($table) => {
-            if ($table.length > 0) {
-              cy.log('Performance table found')
-            }
-          })
+          cy.get('table#botPerformanceTable')
+            .should('exist')
+            .and('be.visible')
+
+          cy.get('tbody tr')
+            .its('length')
+            .should('be.greaterThan', 0)
         })
     })
 
-    it('channel breakdown displays', () => {
+    it('sessions table displays', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.contains(/Channel|Platform|Breakdown/i).then(($section) => {
-        if ($section.length > 0) {
-          cy.log('Channel breakdown section found')
-        }
-      })
+
+      cy.contains('.card-title span', 'Active Sessions', { timeout: 10000 })
+        .should('be.visible')
+        .parents('.card-body')
+        .within(() => {
+          cy.get('canvas#sessionAnalyticsChart')
+            .should('exist')
+            .and('be.visible')
+        })
     })
 
-    it('user engagement metrics display', () => {
+    it('user engagement activity table displays', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.contains(/User|Engagement|Activity/i).then(($section) => {
-        if ($section.length > 0) {
-          cy.log('User engagement section found')
-        }
-      })
+
+      cy.contains('.card-title span', 'Most Active Participants', { timeout: 10000 })
+        .should('be.visible')
+        .parents('.card-body')
+        .within(() => {
+          cy.get('table#mostActiveTable')
+            .should('exist')
+            .and('be.visible')
+
+          cy.get('tbody tr')
+            .its('length')
+            .should('be.greaterThan', 0)
+        })
     })
   })
 
 
+
   describe('Dashboard Reset', () => {
-    it('has refresh button', () => {
+    it('clicks the reset filters button', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.get('button[aria-label*="reset"], button[title*="Reset"]').then(($reset) => {
-        if ($reset.length > 0) {
-          cy.wrap($reset).click()
-          cy.wait(1000)
-        }
-      })
+      cy.contains('button', 'Reset', { timeout: 10000 })
+        .should('be.visible')
+        .click({ force: true })
     })
 
     it('data loads without errors', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.wait(2000) // Wait for initial load
+      cy.wait(10) // Wait for initial load
       // Check that no error messages are displayed
       cy.contains(/error|failed|unavailable/i).should('not.exist')
     })
