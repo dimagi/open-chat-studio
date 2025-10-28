@@ -7,7 +7,7 @@ from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
-from django.db.models import F, Func, OuterRef, Q, Subquery, functions
+from django.db.models import Case, F, Func, OuterRef, Q, Subquery, When, functions
 from django.utils import timezone
 from pytz.exceptions import UnknownTimeZoneError
 
@@ -214,7 +214,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         """
         from apps.chat.tasks import STATUSES_FOR_COMPLETE_CHATS
 
-        trigger_time = timezone.now() - timedelta(seconds=self.delay)
+        time_window_to_ignore = timezone.now() - timedelta(seconds=self.delay)
 
         last_human_message_created_at = (
             ChatMessage.objects.filter(
@@ -232,7 +232,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .order_by("-created_at")
             .values("id")[:1]
         )
-        log_count_for_last_message = (
+        success_count_for_last_message = (
             EventLog.objects.filter(
                 session=OuterRef("pk"),
                 chat_message_id=Subquery(last_human_message_id),
@@ -252,6 +252,15 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .annotate(count=Func(F("chat_message_id"), function="Count"))
             .values("count")
         )
+        last_success_log = (
+            EventLog.objects.filter(
+                session=OuterRef("pk"),
+                chat_message_id=Subquery(last_human_message_id),
+                status=EventLogStatusChoices.SUCCESS,
+            )
+            .order_by("-created_at")
+            .values("created_at")[:1]
+        )
 
         sessions = (
             ExperimentSession.objects.filter(
@@ -261,17 +270,24 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
             .annotate(
                 last_human_message_created_at=Subquery(last_human_message_created_at),
-                log_count=Subquery(log_count_for_last_message),
+                success_count=Subquery(success_count_for_last_message),
                 failure_count=Subquery(failure_count_for_last_message),
+                last_success_log_time=Subquery(last_success_log),
+            )
+            .annotate(
+                last_event_timestamp=Case(
+                    When(last_success_log_time__isnull=False, then=F("last_success_log_time")),
+                    When(last_success_log_time__isnull=True, then=F("last_human_message_created_at")),
+                )
             )
             .filter(
                 last_human_message_created_at__gte=self.updated_at,
                 # last message received after trigger config was updated
-                last_human_message_created_at__lt=trigger_time,
+                last_event_timestamp__lt=time_window_to_ignore,
                 last_human_message_created_at__isnull=False,
             )  # The last message was received before the trigger time
             .filter(
-                Q(log_count__lt=self.total_num_triggers) | Q(log_count__isnull=True)
+                Q(success_count__lt=self.total_num_triggers) | Q(success_count__isnull=True)
             )  # There were either no tries yet, or fewer tries than the required number for this message
             .filter(
                 Q(failure_count__lt=TOTAL_FAILURES)

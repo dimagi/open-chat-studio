@@ -3,7 +3,7 @@
   <dialog id="saveFilterDialog" class="modal">
     <div class="modal-box max-w-md bg-base-100 border border-base-300">
       <div class="flex items-center justify-between mb-6">
-        <h3 class="font-bold text-lg text-base-content">{% trans "Create Filter Set" %}</h3>
+        <h3 class="font-bold text-lg text-base-content">{% translate "Create Filter Set" %}</h3>
         <form method="dialog">
           <button class="btn btn-sm btn-ghost text-base-content hover:bg-base-200">✕</button>
         </form>
@@ -14,13 +14,13 @@
         {% csrf_token %}
         <input type="hidden" name="filter_query_string" value="{{ request.GET.urlencode }}" />
         <div class="mb-6">
-          <label class="block text-sm font-medium text-base-content mb-2">{% trans "Name" %}</label>
+          <label class="block text-sm font-medium text-base-content mb-2">{% translate "Name" %}</label>
           <input
             type="text" 
             x-model="filterName"
             id="filterSetName" 
             class="input input-bordered w-full bg-base-100 border-base-300 text-base-content placeholder-base-content/60 focus:border-primary" 
-            placeholder='{% trans "Name" %}'
+            placeholder='{% translate "Name" %}'
             required>
         </div>
         
@@ -30,7 +30,7 @@
               type="button"
               @click="closeDialog()"
               class="btn btn-ghost text-base-content hover:bg-base-200">
-              {% trans "Cancel" %}
+              {% translate "Cancel" %}
             </button>
           </form>
           <button 
@@ -39,7 +39,7 @@
             :class="{ 'loading': isLoading }"
             :disabled="isLoading"
             id="saveFilterBtn">
-            <span x-show="!isLoading">{% trans "Save" %}</span>
+            <span x-show="!isLoading">{% translate "Save" %}</span>
             <span x-show="isLoading">Saving...</span>
           </button>
         </div>
@@ -78,7 +78,7 @@
           });
           this.response = await response.json();
           this.savedFilters.push(this.response.filter_set)
-          
+
           if (response.ok) {
             alertify.notify('Filter saved!', 'success', 10);
             this.closeDialog();

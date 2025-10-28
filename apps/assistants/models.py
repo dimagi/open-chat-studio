@@ -12,6 +12,7 @@ from apps.experiments.models import Experiment
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
+from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 
 
@@ -254,7 +255,7 @@ class ToolResources(BaseModel):
     assistant = models.ForeignKey(OpenAiAssistant, on_delete=models.CASCADE, related_name="tool_resources")
     tool_type = models.CharField(max_length=128)
     files = models.ManyToManyField("files.File", blank=True)
-    extra = models.JSONField(default=dict, blank=True)
+    extra = SanitizedJSONField(default=dict, blank=True)
 
     objects = AuditingManager()
 

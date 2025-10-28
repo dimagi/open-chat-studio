@@ -43,6 +43,7 @@ from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team
 from apps.trace.models import Trace, TraceStatus
+from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
@@ -207,7 +208,7 @@ class PromptBuilderHistory(BaseTeamModel):
     """
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    history = models.JSONField()
+    history = SanitizedJSONField()
 
     def __str__(self) -> str:
         return str(self.history)
@@ -1610,9 +1611,9 @@ def validate_json_dict(value):
 class ParticipantData(BaseTeamModel):
     objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
-    data = encrypt(models.JSONField(default=dict, validators=[validate_json_dict]))
+    data = encrypt(SanitizedJSONField(default=dict, validators=[validate_json_dict]))
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE)
-    system_metadata = models.JSONField(default=dict)
+    system_metadata = SanitizedJSONField(default=dict)
     encryption_key = encrypt(
         models.CharField(max_length=255, blank=True, help_text="The base64 encoded encryption key")
     )
@@ -1698,7 +1699,7 @@ class ExperimentSession(BaseTeamModel):
         null=True,
         blank=True,
     )
-    state = models.JSONField(default=dict)
+    state = SanitizedJSONField(default=dict)
 
     class Meta:
         ordering = ["-created_at"]
