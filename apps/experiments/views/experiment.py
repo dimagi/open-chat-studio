@@ -151,9 +151,8 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             ExperimentSession.objects.with_last_message_created_at()
             .filter(experiment_filter, team=self.request.team)
             .select_related("participant__user", "chat")
+            .annotate_with_versions_list()
             .prefetch_related(
-                "chat__tags",
-                "chat__messages__tags",
                 Prefetch(
                     "chat__tagged_items",
                     queryset=CustomTaggedItem.objects.select_related("tag", "user"),

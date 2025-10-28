@@ -232,9 +232,9 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
                     0,
                 )
             )
+            .annotate_with_versions_list()
             .filter(message_count__gt=0)
             .order_by("experiment__name")
-            .prefetch_related("chat__messages", "chat__messages__tags")
         )
 
         session_filter = ExperimentSessionFilter()
