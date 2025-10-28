@@ -5,7 +5,7 @@ from io import StringIO
 
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, OuterRef, Subquery
+from django.db.models import Count, OuterRef, Q
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -199,16 +199,16 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
         message_filter = ChatMessageFilter()
         filtered_messages = message_filter.apply(messages_queryset, filter_params, timezone)
 
-        # Subquery to count filtered messages - much more efficient than COUNT with IN
-        message_count_subquery = (
-            filtered_messages.values("chat__experiment_session").annotate(count=Count("id")).values("count")
-        )
-
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
             .filter(team=self.request.team)
             .select_related("participant__user", "chat", "experiment")
-            .annotate(message_count=Coalesce(Subquery(message_count_subquery), 0))
+            .annotate(
+                message_count=Coalesce(
+                    Count("chat__messages", filter=Q(chat__messages__in=filtered_messages.values("pk")), distinct=True),
+                    0,
+                )
+            )
             .filter(message_count__gt=0)
             .order_by("experiment__name")
             .prefetch_related("chat__messages", "chat__messages__tags")
