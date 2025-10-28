@@ -153,8 +153,6 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             .filter(experiment_filter, team=self.request.team)
             .select_related("participant__user", "chat")
             .prefetch_related(
-                "chat__tags",
-                "chat__messages__tags",
                 Prefetch(
                     "chat__tagged_items",
                     queryset=CustomTaggedItem.objects.select_related("tag", "user"),
@@ -162,6 +160,7 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
                 ),
             )
         )
+        query_set = ExperimentSession.objects.annotate_with_versions_list(query_set)
         timezone = self.request.session.get("detected_tz", None)
 
         session_filter = ExperimentSessionFilter()

@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import markdown
 from django.conf import settings
+from django.contrib.postgres.aggregates import StringAgg
 from django.contrib.postgres.fields import ArrayField
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -18,14 +19,17 @@ from django.db import models, transaction
 from django.db.models import (
     BooleanField,
     Case,
+    CharField,
     Count,
     OuterRef,
     Q,
     Subquery,
     UniqueConstraint,
+    Value,
     When,
     functions,
 )
+from django.db.models.functions import Coalesce
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -34,6 +38,7 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
+from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
@@ -1673,6 +1678,24 @@ class ExperimentSessionObjectManager(models.Manager):
         )
         return queryset.annotate(last_message_created_at=models.Subquery(last_message_subquery))
 
+    @staticmethod
+    def annotate_with_versions_list(queryset):
+        version_tags_subquery = (
+            CustomTaggedItem.objects.filter(
+                content_type__model="chatmessage",
+                object_id__in=Subquery(ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")),
+                tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+            )
+            .values("content_type_id")
+            .annotate(versions=StringAgg("tag__name", delimiter=", ", distinct=True, ordering="tag__name"))
+            .values("versions")[:1]
+        )
+        return queryset.annotate(
+            experiment_versions=Coalesce(
+                Subquery(version_tags_subquery, output_field=CharField()), Value(""), output_field=CharField()
+            )
+        )
+
 
 class ExperimentSession(BaseTeamModel):
     """
@@ -1892,18 +1915,6 @@ class ExperimentSession(BaseTeamModel):
     def working_experiment(self) -> Experiment:
         """Returns the default experiment, or if there is none, the working experiment"""
         return self.experiment.get_working_version()
-
-    @property
-    def experiment_versions_from_prefetched_data(self):
-        if not hasattr(self.chat, "messages"):
-            return set()
-        version_tags = {
-            tag.name
-            for message in self.chat.messages.all()
-            for tag in message.tags.all()
-            if tag.category == Chat.MetadataKeys.EXPERIMENT_VERSION
-        }
-        return ", ".join(sorted(version_tags)) if version_tags else ""
 
     def get_experiment_version_number(self) -> int:
         """
