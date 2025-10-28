@@ -15,18 +15,19 @@ import django
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from apps.assistants.models import OpenAiAssistant
-from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, Participant
-from apps.files.models import File
-from apps.pipelines.models import Pipeline
-from apps.service_providers.models import LlmProvider, LlmProviderModel
-from apps.teams.models import Team
-
 # Setup Django
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 django.setup()
+
+from apps.assistants.models import OpenAiAssistant
+from apps.chat.models import ChatMessage, ChatMessageType
+from apps.documents.models import Collection
+from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.files.models import File, FilePurpose
+from apps.pipelines.models import Pipeline
+from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.teams.models import Team
 
 
 def seed_test_data():
@@ -84,7 +85,7 @@ def seed_test_data():
     ]
 
     pipelines = []
-    for name in enumerate(pipeline_names, 1):
+    for i, name in enumerate(pipeline_names, 1):
         pipeline, created = Pipeline.objects.get_or_create(
             team=team,
             name=name,
@@ -209,18 +210,49 @@ def seed_test_data():
         ("image.png", "image/png", b"\x89PNG\r\n\x1a\n..."),
     ]
 
+    created_files = []
     for filename, content_type, content in file_names:
         # Create a simple uploaded file
         uploaded_file = SimpleUploadedFile(filename, content, content_type=content_type)
 
         file_obj, created = File.objects.get_or_create(
-            team=team, name=filename, defaults={"file": uploaded_file, "content_type": content_type}
+            team=team,
+            name=filename,
+            defaults={
+                "file": uploaded_file,
+                "content_type": content_type,
+                "purpose": FilePurpose.COLLECTION,
+            },
         )
 
         if created:
             print(f"  ✓ Created file: {filename}")
+            created_files.append(file_obj)
         else:
             print(f"  ⚠ File already exists: {filename}")
+            created_files.append(file_obj)
+
+    # Create sample collection and add files to it
+    print("\n--- Creating Collection ---")
+    collection_name = "Sample Documents Collection"
+    collection, created = Collection.objects.get_or_create(
+        team=team,
+        name=collection_name,
+        defaults={
+            "is_index": False,
+        },
+    )
+
+    if created:
+        print(f"  ✓ Created collection: {collection_name}")
+        if created_files:
+            collection.files.set(created_files)
+            print(f"    ✓ Added {len(created_files)} file(s) to collection")
+    else:
+        print(f"  ⚠ Collection already exists: {collection_name}")
+        if created_files:
+            collection.files.add(*created_files)
+            print(f"    ✓ Ensured {len(created_files)} file(s) in collection")
 
     print("\n" + "=" * 50)
     print("✅ Test data seeding complete!")
@@ -230,6 +262,7 @@ def seed_test_data():
     print("  - 3 assistants")
     print("  - 5 participants (with sessions and chat messages)")
     print("  - 4 files")
+    print("  - 1 collection with 4 files")
     print("\nYou can now run the Cypress tests:")
     print("  npx cypress open")
     print("  npx cypress run")

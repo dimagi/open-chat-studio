@@ -12,21 +12,23 @@ import os
 import sys
 
 import django
-from django.contrib.auth import get_user_model
-from field_audit.models import AuditAction
-
-from apps.assistants.models import OpenAiAssistant
-from apps.chat.models import Chat
-from apps.experiments.models import Experiment, Participant
-from apps.files.models import File
-from apps.pipelines.models import Pipeline
-from apps.service_providers.models import LlmProvider
-from apps.teams.models import Team
 
 # Setup Django
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 django.setup()
+
+from django.contrib.auth import get_user_model
+from field_audit.models import AuditAction
+
+from apps.assistants.models import OpenAiAssistant
+from apps.chat.models import Chat
+from apps.documents.models import Collection
+from apps.experiments.models import Experiment, Participant
+from apps.files.models import File
+from apps.pipelines.models import Pipeline
+from apps.service_providers.models import LlmProvider
+from apps.teams.models import Team
 
 
 def cleanup_test_data():
@@ -105,6 +107,16 @@ def cleanup_test_data():
         print(f"  ✓ Deleted {count} orphaned chat(s)")
     else:
         print("  ⚠ No orphaned chats to delete")
+
+    # Delete collections (must be deleted before files due to many-to-many relationship)
+    print("\n--- Deleting Collections ---")
+    collections = Collection.objects.filter(team=team)
+    count = collections.count()
+    if count > 0:
+        collections.delete(audit_action=AuditAction.AUDIT)
+        print(f"  ✓ Deleted {count} collection(s)")
+    else:
+        print("  ⚠ No collections to delete")
 
     # Delete files
     print("\n--- Deleting Files ---")
