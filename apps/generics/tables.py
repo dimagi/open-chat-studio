@@ -7,6 +7,7 @@ class ColumnWithHelp(tables.Column):
     def __init__(self, help_text=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.help_text = help_text
+        self.extra_context = kwargs.get("extra_context", {})
 
     def header(self):
         kwargs = {
