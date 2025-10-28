@@ -220,10 +220,8 @@
       </div>
     </div>
   </div>
-  {% if not skip_dialogs %}
-    {% include "filters/saved_filters_dialog.html" %}
-    {% include "filters/save_filter_dialog.html" %}
-  {% endif %}
+  {% include "filters/saved_filters_dialog.html" %}
+  {% include "filters/save_filter_dialog.html" %}
 </div>
 
 {{ df_date_range_options|json_script:"date-range-options" }}

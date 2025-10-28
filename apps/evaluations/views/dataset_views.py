@@ -87,10 +87,35 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
         return EvaluationDataset.objects.filter(team=self.request.team)
 
     def get_form_kwargs(self):
-        return {**super().get_form_kwargs(), "team": self.request.team}
+        kwargs = super().get_form_kwargs()
+        kwargs["team"] = self.request.team
+        kwargs["filter_params"] = FilterParams.from_request(self.request)
+        kwargs["timezone"] = self.request.session.get("detected_tz", None)
+        return kwargs
+
+    def _get_filter_context_data(self):
+        table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
+        return get_filter_context_data(
+            self.request.team,
+            ExperimentSessionFilter.columns(self.request.team),
+            "last_message",
+            table_url,
+            "sessions-table",
+            table_type=FilterSet.TableType.DATASETS,
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self._get_filter_context_data())
+        return context
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(self.request, "Dataset updated successfully!")
+        return response
 
     def get_success_url(self):
-        return reverse("evaluations:dataset_home", args=[self.request.team.slug])
+        return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
 
 
 class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMixin):
