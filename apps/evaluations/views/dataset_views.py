@@ -209,9 +209,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
                     0,
                 )
             )
-        )
-        query_set = (
-            ExperimentSession.objects.annotate_with_versions_list(query_set)
+            .annotate_with_versions_list()
             .filter(message_count__gt=0)
             .order_by("experiment__name")
         )

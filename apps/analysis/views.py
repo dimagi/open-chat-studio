@@ -11,7 +11,7 @@ from django_htmx.http import HttpResponseClientRedirect, HttpResponseClientRefre
 from django_tables2 import RequestConfig, SingleTableView
 
 from apps.experiments.export import filtered_export_to_csv
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..experiments.tables import ExperimentSessionsTable
@@ -100,7 +100,7 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
         return context
 
     def get_table(self):
-        queryset = ExperimentSession.objects.annotate_with_last_message_created_at(self.object.sessions.all())
+        queryset = self.object.sessions.all().annotate_with_last_message_created_at()
         table = ExperimentSessionsTable(data=queryset)
         return RequestConfig(self.request).configure(table)
 

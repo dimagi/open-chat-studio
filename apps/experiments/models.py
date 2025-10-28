@@ -1663,12 +1663,9 @@ class SessionStatus(models.TextChoices):
         return [cls.ACTIVE.value, cls.COMPLETE.value]
 
 
-class ExperimentSessionObjectManager(models.Manager):
-    def with_last_message_created_at(self):
-        return self.annotate_with_last_message_created_at(self.get_queryset())
-
-    @staticmethod
-    def annotate_with_last_message_created_at(queryset):
+class ExperimentSessionQuerySet(models.QuerySet):
+    def annotate_with_last_message_created_at(self):
+        """Annotate queryset with the created_at timestamp of the last message in each session."""
         last_message_subquery = (
             ChatMessage.objects.filter(
                 chat__experiment_session=models.OuterRef("pk"),
@@ -1676,10 +1673,10 @@ class ExperimentSessionObjectManager(models.Manager):
             .order_by("-created_at")
             .values("created_at")[:1]
         )
-        return queryset.annotate(last_message_created_at=models.Subquery(last_message_subquery))
+        return self.annotate(last_message_created_at=models.Subquery(last_message_subquery))
 
-    @staticmethod
-    def annotate_with_versions_list(queryset):
+    def annotate_with_versions_list(self):
+        """Annotate queryset with a comma-separated list of experiment versions used in each session."""
         version_tags_subquery = (
             CustomTaggedItem.objects.filter(
                 content_type__model="chatmessage",
@@ -1690,11 +1687,20 @@ class ExperimentSessionObjectManager(models.Manager):
             .annotate(versions=StringAgg("tag__name", delimiter=", ", distinct=True, ordering="tag__name"))
             .values("versions")[:1]
         )
-        return queryset.annotate(
+        return self.annotate(
             experiment_versions=Coalesce(
                 Subquery(version_tags_subquery, output_field=CharField()), Value(""), output_field=CharField()
             )
         )
+
+
+class ExperimentSessionObjectManager(models.Manager):
+    def get_queryset(self):
+        return ExperimentSessionQuerySet(self.model, using=self._db)
+
+    def with_last_message_created_at(self):
+        """Convenience method for backwards compatibility."""
+        return self.get_queryset().annotate_with_last_message_created_at()
 
 
 class ExperimentSession(BaseTeamModel):

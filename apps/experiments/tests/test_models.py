@@ -441,7 +441,11 @@ class TestExperimentSession:
 
     @pytest.mark.parametrize(
         ("versions_chatted_to", "expected_display_val"),
-        [([1, 2], "v1, v2"), ([1], "v1"), ([None], "")],
+        [
+            ([1, 2], "v1, v2"),
+            ([1], "v1"),
+            ([None], ""),
+        ],
     )
     def test_experiment_versions_query(self, versions_chatted_to, expected_display_val, experiment_session):
         for version in versions_chatted_to:
@@ -453,7 +457,7 @@ class TestExperimentSession:
                     f"v{version}", experiment_session.team, tag_category=TagCategories.EXPERIMENT_VERSION
                 )
 
-        session = ExperimentSession.objects.annotate_with_versions_list(ExperimentSession.objects.all()).first()
+        session = ExperimentSession.objects.all().annotate_with_versions_list().first()
         assert session.experiment_versions == expected_display_val
 
     @pytest.mark.parametrize("participant_data_injected", [True, False])
