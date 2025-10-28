@@ -471,14 +471,10 @@
         loadSessionIds() {
           const fetchUrl = "{% url 'evaluations:dataset_sessions_selection_json' team.slug %}";
 
-          window.sessionIdsLastFetch = window.sessionIdsLastFetch||"";
           window.sessionIdsLoading = window.sessionIdsLoading||false;
-          {# !this.allSessionIds.size #}
-
-          if (window.sessionIdsLoading || window.sessionIdsLastFetch === window.location.search) {
+          if (window.sessionIdsLoading) {
             return;
           }
-          window.sessionIdsLastFetch = window.location.search;
           window.sessionIdsLoading = true;
 
           return fetch(fetchUrl + window.location.search, {
