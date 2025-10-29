@@ -59,15 +59,7 @@ def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: 
         try:
             experiment = participant_datum.experiment
             channel = channels[experiment.id]
-            response = connect_client.create_channel(
-                connect_id=connect_id, channel_source=channel.extra_data["commcare_connect_bot_name"]
-            )
-
-            participant_datum.system_metadata = {
-                "commcare_connect_channel_id": response["channel_id"],
-                "consent": response["consent"],
-            }
-            participant_datum.save(update_fields=["system_metadata"])
+            create_connect_channel_for_participant(channel, connect_client, connect_id, participant_datum)
             successful_ids.add(experiment.id)
         except Exception as e:
             if self.request.retries == self.max_retries:
@@ -76,6 +68,17 @@ def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: 
                     "Failed to create channel for participant '%s' and experiments '{}'", connect_id, failed_ids
                 )
             raise self.retry(e, countdown=60) from None
+
+
+def create_connect_channel_for_participant(channel, connect_client, connect_id, participant_data):
+    response = connect_client.create_channel(
+        connect_id=connect_id, channel_source=channel.extra_data["commcare_connect_bot_name"]
+    )
+    participant_data.system_metadata = {
+        "commcare_connect_channel_id": response["channel_id"],
+        "consent": response["consent"],
+    }
+    participant_data.save(update_fields=["system_metadata"])
 
 
 @shared_task(ignore_result=True)
