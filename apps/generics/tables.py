@@ -19,10 +19,8 @@ class ColumnWithHelp(tables.Column):
         if self.help_text:
             kwargs["help"] = get_template("generic/help.html").render({"help_content": self.help_text})
 
-        if self.extra_context.get("head_js_function"):
-            kwargs["checkbox"] = format_html(
-                '<input type="checkbox" class="{css_class}" @change="{head_js_function}">&nbsp;', **self.extra_context
-            )
+        if table_header := self.extra_context.get("table_header"):
+            kwargs["checkbox"] = get_template("evaluations/session_checkbox.html").render(table_header)
 
         return format_html("""{checkbox}<span>{verbose_name}</span>{help}""", **kwargs)
 

@@ -233,7 +233,10 @@ class EvaluationSessionsSelectionTable(tables.Table):
         extra_context={
             "css_class": "checkbox checkbox-primary session-checkbox",
             "js_function": "updateSelectedSessions()",
-            "head_js_function": "toggleSelectedSessions()",
+            "table_header": {
+                "js_function": "toggleSelectedSessions()",
+                "css_class": "checkbox checkbox-primary session-checkbox",
+            },
         },
     )
     clone_filtered_only = TemplateColumnWithHelp(
@@ -244,7 +247,10 @@ class EvaluationSessionsSelectionTable(tables.Table):
         extra_context={
             "css_class": "checkbox checkbox-secondary filter-checkbox",
             "js_function": "updateFilteredSessions()",
-            "head_js_function": "toggleFilteredSessions()",
+            "table_header": {
+                "js_function": "toggleFilteredSessions()",
+                "css_class": "checkbox checkbox-secondary filter-checkbox",
+            },
         },
     )
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
