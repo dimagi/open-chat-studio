@@ -658,7 +658,17 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
         """Save the dataset and clone messages if mode is 'clone'."""
         instance = super().save(commit=commit)
 
-        if commit and self.cleaned_data.get("mode") == "clone":
-            self._save_clone(instance)
+        if commit:
+            # Clear any previous error states on any save
+            if instance.is_failed or instance.error_message:
+                instance.error_message = ""
+                # If not cloning (which sets its own status), mark as completed
+                mode = self.cleaned_data.get("mode")
+                if mode != "clone":
+                    instance.status = DatasetCreationStatus.COMPLETED
+                instance.save(update_fields=["error_message", "status"])
+
+            if self.cleaned_data.get("mode") == "clone":
+                self._save_clone(instance)
 
         return instance

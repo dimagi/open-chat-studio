@@ -20,7 +20,12 @@ from django_tables2 import SingleTableView
 
 from apps.chat.models import ChatMessage
 from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
-from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
+from apps.evaluations.models import (
+    DatasetCreationStatus,
+    EvaluationDataset,
+    EvaluationMessage,
+    EvaluationMessageContent,
+)
 from apps.evaluations.tables import (
     DatasetMessagesTable,
     EvaluationDatasetTable,
@@ -274,6 +279,12 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
     """Add a new message pair to an existing dataset and return updated table."""
     try:
         dataset = get_object_or_404(EvaluationDataset, id=dataset_id, team__slug=team_slug)
+
+        # Clear any previous error states when manually adding a message
+        if dataset.is_failed or dataset.error_message:
+            dataset.error_message = ""
+            dataset.status = DatasetCreationStatus.COMPLETED
+            dataset.save(update_fields=["error_message", "status"])
 
         form_data = _get_message_form_data(request)
         errors, data = _get_message_data_and_errors(form_data)
