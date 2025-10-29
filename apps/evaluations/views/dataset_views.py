@@ -207,7 +207,20 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     def form_valid(self, form):
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
-        return super().form_valid(form)
+        response = super().form_valid(form)
+
+        # Show different message for CSV mode (async processing)
+        mode = form.cleaned_data.get("mode")
+        if mode == "csv":
+            messages.success(
+                self.request,
+                "Dataset created! Messages are being imported from the CSV in the background. "
+                "They will appear shortly.",
+            )
+        else:
+            messages.success(self.request, "Dataset created successfully!")
+
+        return response
 
 
 class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):

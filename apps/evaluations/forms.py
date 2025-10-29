@@ -7,7 +7,6 @@ from django import forms
 from django.forms.widgets import RadioSelect
 from pydantic import ValidationError as PydanticValidationError
 
-from apps.chat.models import ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     EvaluationConfig,
@@ -17,7 +16,8 @@ from apps.evaluations.models import (
     Evaluator,
     ExperimentVersionSelection,
 )
-from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
+from apps.evaluations.tasks import create_dataset_from_csv_task
+from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 
@@ -584,86 +584,19 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         ]
 
     def _save_csv(self):
+        """Dispatch async task to create messages from CSV. Returns empty list."""
         column_mapping = self.cleaned_data.get("column_mapping", {})
         populate_history = self.cleaned_data.get("populate_history", False)
         history_column = self.cleaned_data.get("history_column", "")
-
         csv_file_id = int(self.data.get("csv_file_id"))
-        csv_file = File.objects.get(id=csv_file_id)
 
-        file_content = csv_file.file.read().decode("utf-8")
-        csv_reader = csv.DictReader(StringIO(file_content))
+        # Dispatch celery task to process CSV asynchronously
+        create_dataset_from_csv_task.delay(
+            self.instance.id, csv_file_id, self.team.id, column_mapping, history_column, populate_history
+        )
 
-        evaluation_messages = []
-        auto_history = []  # For auto-populate mode
-        try:
-            for row in csv_reader:
-                # Extract mapped columns
-                input_content = row.get(column_mapping.get("input", ""), "").strip()
-                output_content = row.get(column_mapping.get("output", ""), "").strip()
-                if not input_content or not output_content:
-                    continue
-
-                context = {}
-                if context_mapping := column_mapping.get("context"):
-                    for field_name, csv_column in context_mapping.items():
-                        if csv_column in row:
-                            context[field_name] = parse_csv_value_as_json(row[csv_column])
-
-                participant_data = {}
-                if participant_data_mapping := column_mapping.get("participant_data"):
-                    for field_name, csv_column in participant_data_mapping.items():
-                        if csv_column in row:
-                            participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
-
-                session_state = {}
-                if session_state_mapping := column_mapping.get("session_state"):
-                    for field_name, csv_column in session_state_mapping.items():
-                        if csv_column in row:
-                            session_state[field_name] = parse_csv_value_as_json(row[csv_column])
-
-                message_history = []
-                if populate_history:
-                    # Use auto-populated history from previous messages
-                    message_history = [msg.copy() for msg in auto_history]
-                elif history_column and history_column in row:
-                    # Parse history from CSV column
-                    history_text = row[history_column].strip()
-                    if history_text:
-                        message_history = parse_history_text(history_text)
-
-                evaluation_messages.append(
-                    EvaluationMessage(
-                        input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
-                        output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
-                        context=context,
-                        participant_data=participant_data,
-                        session_state=session_state,
-                        history=message_history,
-                        metadata={"created_mode": "csv"},
-                    )
-                )
-
-                if populate_history:
-                    auto_history.append(
-                        {
-                            "message_type": ChatMessageType.HUMAN,
-                            "content": input_content.strip(),
-                            "summary": None,
-                        }
-                    )
-                    auto_history.append(
-                        {
-                            "message_type": ChatMessageType.AI,
-                            "content": output_content.strip(),
-                            "summary": None,
-                        }
-                    )
-        finally:
-            # Clean up the CSV file after processing
-            csv_file.delete()
-
-        return evaluation_messages
+        # Return empty list - messages will be created by task
+        return []
 
 
 def _get_message_pair_value(field_name: str, pair_index: int, field_value: str) -> dict:

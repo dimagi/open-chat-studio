@@ -294,6 +294,135 @@ def upload_dataset_csv_task(self, dataset_id, file_id, team_id):
         return {"success": False, "error": str(e)}
 
 
+@shared_task(bind=True, base=TaskbadgerTask)
+def create_dataset_from_csv_task(
+    self, dataset_id, file_id, team_id, column_mapping, history_column=None, populate_history=False
+):
+    """
+    Create dataset messages from CSV with column mapping asynchronously.
+
+    Args:
+        dataset_id: ID of the EvaluationDataset to populate
+        file_id: ID of the File instance containing the CSV data
+        team_id: ID of the team
+        column_mapping: Dictionary mapping CSV columns to message fields
+        history_column: Optional column name containing history data
+        populate_history: Whether to auto-populate history from previous messages
+    """
+    progress_recorder = ProgressRecorder(self)
+
+    try:
+        dataset = EvaluationDataset.objects.select_related("team").get(id=dataset_id, team_id=team_id)
+        team = dataset.team
+
+        csv_file = File.objects.get(id=file_id, team_id=team_id)
+
+        try:
+            csv_content = csv_file.file.read().decode("utf-8")
+            csv_reader = csv.DictReader(StringIO(csv_content))
+
+            progress_recorder.set_progress(5, 100, "Parsing CSV...")
+
+            evaluation_messages = []
+            auto_history = []
+            row_count = 0
+
+            with current_team(team):
+                for row in csv_reader:
+                    row_count += 1
+
+                    # Extract mapped columns
+                    input_content = row.get(column_mapping.get("input", ""), "").strip()
+                    output_content = row.get(column_mapping.get("output", ""), "").strip()
+                    if not input_content or not output_content:
+                        continue
+
+                    context = {}
+                    if context_mapping := column_mapping.get("context"):
+                        for field_name, csv_column in context_mapping.items():
+                            if csv_column in row:
+                                context[field_name] = parse_csv_value_as_json(row[csv_column])
+
+                    participant_data = {}
+                    if participant_data_mapping := column_mapping.get("participant_data"):
+                        for field_name, csv_column in participant_data_mapping.items():
+                            if csv_column in row:
+                                participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
+
+                    session_state = {}
+                    if session_state_mapping := column_mapping.get("session_state"):
+                        for field_name, csv_column in session_state_mapping.items():
+                            if csv_column in row:
+                                session_state[field_name] = parse_csv_value_as_json(row[csv_column])
+
+                    message_history = []
+                    if populate_history:
+                        # Use auto-populated history from previous messages
+                        message_history = [msg.copy() for msg in auto_history]
+                    elif history_column and history_column in row:
+                        # Parse history from CSV column
+                        history_text = row[history_column].strip()
+                        if history_text:
+                            message_history = parse_history_text(history_text)
+
+                    evaluation_messages.append(
+                        EvaluationMessage(
+                            input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
+                            output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
+                            context=context,
+                            participant_data=participant_data,
+                            session_state=session_state,
+                            history=message_history,
+                            metadata={"created_mode": "csv"},
+                        )
+                    )
+
+                    if populate_history:
+                        auto_history.append(
+                            {
+                                "message_type": ChatMessageType.HUMAN,
+                                "content": input_content.strip(),
+                                "summary": None,
+                            }
+                        )
+                        auto_history.append(
+                            {
+                                "message_type": ChatMessageType.AI,
+                                "content": output_content.strip(),
+                                "summary": None,
+                            }
+                        )
+
+                    # Update progress every 10 rows
+                    if row_count % 10 == 0:
+                        progress = min(90, 5 + (row_count * 85 // max(row_count, 1)))
+                        progress_recorder.set_progress(progress, 100, f"Processing row {row_count}...")
+
+                if not evaluation_messages:
+                    return {"success": False, "error": "No valid messages found in CSV"}
+
+                # Bulk create messages
+                progress_recorder.set_progress(95, 100, "Creating messages...")
+                created_messages = EvaluationMessage.objects.bulk_create(evaluation_messages)
+                dataset.messages.add(*created_messages)
+
+                progress_recorder.set_progress(100, 100, "Import complete")
+
+                return {
+                    "success": True,
+                    "created_count": len(created_messages),
+                    "total_rows": row_count,
+                }
+
+        finally:
+            # Clean up the CSV file after processing
+            csv_file.delete()
+
+    except Exception as e:
+        logger.error(f"Error in CSV creation task for dataset {dataset_id}: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
 def _parse_csv_content(csv_content, progress_recorder):
     """Parse CSV content and return rows and columns."""
     csv_reader = csv.DictReader(StringIO(csv_content))
