@@ -32,6 +32,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
+from apps.web.waf import WafRule, waf_allow
 
 from ..experiments.helpers import update_experiment_name_by_pipeline_id
 from ..generics.chips import Chip
@@ -289,6 +290,7 @@ def _get_node_schema(node_class):
     return schema
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @login_and_team_required
 @csrf_exempt
 def pipeline_data(request, team_slug: str, pk: int):
