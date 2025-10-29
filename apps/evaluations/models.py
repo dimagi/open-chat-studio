@@ -135,7 +135,7 @@ class EvaluationMessage(BaseModel):
             for session_id, message_id in regular_messages.values_list("chat__experiment_session__external_id", "id"):
                 message_ids_per_session[session_id].append(message_id)
 
-        if filtered_session_ids and filter_params:
+        if filtered_session_ids and filter_params is not None:
             filtered_messages = base_queryset.filter(chat__experiment_session__external_id__in=filtered_session_ids)
             message_filter = ChatMessageFilter()
             filtered_messages = message_filter.apply(filtered_messages, filter_params, timezone)

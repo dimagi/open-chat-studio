@@ -778,7 +778,7 @@ def create_dataset_from_sessions_task(
     try:
         progress_recorder.set_progress(0, 100, "Starting clone...")
 
-        filter_params = FilterParams(QueryDict(filter_query)) if filter_query else None
+        filter_params = FilterParams(QueryDict(filter_query)) if filter_query is not None else None
 
         with current_team(team):
             evaluation_messages = EvaluationMessage.create_from_sessions(
