@@ -4,7 +4,7 @@ from io import StringIO
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -111,6 +111,7 @@ class TestCSVUploadCreate:
         assert "context_field" in context_csv_columns
         assert "date" in context_csv_columns
 
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_csv_dataset_creation_without_history(self, client_with_user, team_with_users, csv_file_instance):
         """Test creating dataset from CSV without populate_history."""
         column_mapping = {
@@ -149,6 +150,7 @@ class TestCSVUploadCreate:
         assert second_message.output["content"] == "I'm doing well, thanks!"
         assert second_message.history == []  # No history
 
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_csv_dataset_creation_with_history(self, client_with_user, team_with_users, csv_file_instance):
         """Test creating dataset from CSV with populate_history enabled."""
         column_mapping = {
@@ -311,6 +313,7 @@ class TestCSVUploadCreate:
         assert ss_mappings["step"] == "session_state.step"
         assert ss_mappings["completed"] == "session_state.completed"
 
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_csv_with_empty_rows_handling(self, client_with_user, team_with_users):
         """Test CSV upload handles empty or invalid rows correctly."""
         # Create CSV content
@@ -350,6 +353,7 @@ class TestCSVUploadCreate:
         assert messages[0].input["content"] == "Hello"
         assert messages[1].input["content"] == "Valid"
 
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_csv_dataset_creation_with_generated_history(self, client_with_user, team_with_users):
         """Test creating dataset from CSV using a history column."""
         csv_content = (
@@ -408,6 +412,7 @@ class TestCSVUploadCreate:
         assert messages[0].context["topic"] == "weather"
         assert messages[1].context["topic"] == "humor"
 
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_csv_dataset_creation_with_participant_data_and_session_state(self, client_with_user, team_with_users):
         """Test creating dataset from CSV with participant_data and session_state fields."""
         # Create CSV content

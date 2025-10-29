@@ -110,6 +110,7 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(self._get_filter_context_data())
+        context["celery_job_id"] = self.object.job_id
         return context
 
     def form_valid(self, form):
@@ -202,24 +203,12 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         return context
 
     def get_success_url(self):
-        return reverse("evaluations:dataset_home", args=[self.request.team.slug])
+        return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
         response = super().form_valid(form)
-
-        # Show different message for CSV mode (async processing)
-        mode = form.cleaned_data.get("mode")
-        if mode == "csv":
-            messages.success(
-                self.request,
-                "Dataset created! Messages are being imported from the CSV in the background. "
-                "They will appear shortly.",
-            )
-        else:
-            messages.success(self.request, "Dataset created successfully!")
-
         return response
 
 

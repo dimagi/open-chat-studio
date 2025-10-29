@@ -9,6 +9,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
+    DatasetCreationStatus,
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
@@ -16,7 +17,10 @@ from apps.evaluations.models import (
     Evaluator,
     ExperimentVersionSelection,
 )
-from apps.evaluations.tasks import create_dataset_from_csv_task
+from apps.evaluations.tasks import (
+    create_dataset_from_csv_task,
+    create_dataset_from_sessions_task,
+)
 from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
@@ -323,16 +327,6 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
         return session_ids, filtered_session_ids
 
-    def _create_messages_from_sessions(self, session_ids, filtered_session_ids):
-        """Creates EvaluationMessage objects from sessions."""
-        return EvaluationMessage.create_from_sessions(
-            team=self.team,
-            external_session_ids=session_ids,
-            filtered_session_ids=filtered_session_ids,
-            filter_params=self.filter_params,
-            timezone=self.timezone,
-        )
-
 
 class EvaluationDatasetForm(EvaluationDatasetBaseForm):
     """Form for creating evaluation datasets."""
@@ -544,33 +538,49 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         if not commit:
             return dataset
 
+        mode = self.cleaned_data.get("mode")
+
+        if mode == "manual":
+            # Manual mode is synchronous as there are a small number of items
+            self._save_manual(dataset)
+            dataset.status = DatasetCreationStatus.COMPLETED
+            dataset.save(update_fields=["status"])
+            return dataset
+
+        dataset.status = DatasetCreationStatus.PENDING
         dataset.save()
 
-        mode = self.cleaned_data.get("mode")
-        evaluation_messages = []
-
+        task = None
         if mode == "clone":
-            evaluation_messages = self._save_clone()
-        elif mode == "manual":
-            evaluation_messages = self._save_manual()
+            task = self._save_clone(dataset)
         elif mode == "csv":
-            evaluation_messages = self._save_csv()
-        if evaluation_messages:
-            EvaluationMessage.objects.bulk_create(evaluation_messages)
-            dataset.messages.set(evaluation_messages)
+            task = self._save_csv(dataset)
+
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
 
         return dataset
 
-    def _save_clone(self):
+    def _save_clone(self, dataset):
+        """Dispatch async task to clone messages from sessions."""
         session_ids = self.cleaned_data.get("session_ids", [])
         filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
 
-        if session_ids or filtered_session_ids:
-            return self._create_messages_from_sessions(session_ids, filtered_session_ids)
-        return []
+        task = create_dataset_from_sessions_task.delay(
+            dataset.id,
+            self.team.id,
+            list(session_ids),
+            list(filtered_session_ids),
+            self.filter_params.to_query() if self.filter_params else None,
+            self.timezone,
+        )
+        return task
 
-    def _save_manual(self):
-        return [
+    def _save_manual(self, dataset):
+        """Create messages from manual input synchronously."""
+        message_pairs = self.cleaned_data.get("message_pairs", [])
+
+        evaluation_messages = [
             EvaluationMessage(
                 input=pair["human"],
                 output=pair["ai"],
@@ -580,23 +590,23 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
                 session_state=pair.get("session_state", {}),
                 metadata={"created_mode": "manual"},
             )
-            for pair in self.cleaned_data.get("message_pairs", [])
+            for pair in message_pairs
         ]
 
-    def _save_csv(self):
-        """Dispatch async task to create messages from CSV. Returns empty list."""
+        created_messages = EvaluationMessage.objects.bulk_create(evaluation_messages)
+        dataset.messages.set(created_messages)
+
+    def _save_csv(self, dataset):
+        """Dispatch async task to create messages from CSV."""
         column_mapping = self.cleaned_data.get("column_mapping", {})
         populate_history = self.cleaned_data.get("populate_history", False)
         history_column = self.cleaned_data.get("history_column", "")
         csv_file_id = int(self.data.get("csv_file_id"))
 
-        # Dispatch celery task to process CSV asynchronously
-        create_dataset_from_csv_task.delay(
-            self.instance.id, csv_file_id, self.team.id, column_mapping, history_column, populate_history
+        task = create_dataset_from_csv_task.delay(
+            dataset.id, csv_file_id, self.team.id, column_mapping, history_column, populate_history
         )
-
-        # Return empty list - messages will be created by task
-        return []
+        return task
 
 
 def _get_message_pair_value(field_name: str, pair_index: int, field_value: str) -> dict:
@@ -681,3 +691,13 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
         if messages_to_add:
             created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
             dataset.messages.add(*created_messages)
+
+    def _create_messages_from_sessions(self, session_ids, filtered_session_ids):
+        """Creates EvaluationMessage objects from sessions."""
+        return EvaluationMessage.create_from_sessions(
+            team=self.team,
+            external_session_ids=session_ids,
+            filtered_session_ids=filtered_session_ids,
+            filter_params=self.filter_params,
+            timezone=self.timezone,
+        )
