@@ -208,12 +208,19 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         return context
 
     def get_success_url(self):
-        return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
+        return reverse("evaluations:dataset_home", args=[self.request.team.slug])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
         response = super().form_valid(form)
+
+        mode = form.cleaned_data.get("mode")
+        if mode == "manual":
+            messages.success(self.request, "Dataset created successfully!")
+        else:
+            messages.success(self.request, "Dataset created! Messages are being created in the background.")
+
         return response
 
 
