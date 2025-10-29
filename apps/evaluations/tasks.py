@@ -789,9 +789,36 @@ def create_dataset_from_sessions_task(
                 timezone=timezone,
             )
 
-            progress_recorder.set_progress(50, 100, f"Creating {len(evaluation_messages)} messages...")
+            progress_recorder.set_progress(
+                40, 100, f"Found {len(evaluation_messages)} messages, checking for duplicates..."
+            )
 
-            created_messages = EvaluationMessage.objects.bulk_create(evaluation_messages)
+            # Get existing chat message pairs to avoid duplicates
+            existing_chat_message_pairs = set(
+                dataset.messages.filter(
+                    input_chat_message_id__isnull=False,
+                    expected_output_chat_message_id__isnull=False,
+                ).values_list("input_chat_message_id", "expected_output_chat_message_id")
+            )
+
+            # Filter out duplicates based on ChatMessage IDs
+            messages_to_add = []
+            for msg in evaluation_messages:
+                chat_pair = (msg.input_chat_message_id, msg.expected_output_chat_message_id)
+                if chat_pair not in existing_chat_message_pairs:
+                    messages_to_add.append(msg)
+                    existing_chat_message_pairs.add(chat_pair)
+
+            if not messages_to_add:
+                dataset.status = DatasetCreationStatus.COMPLETED
+                dataset.job_id = ""
+                dataset.save(update_fields=["status", "job_id"])
+                progress_recorder.set_progress(100, 100, "Clone complete - no new messages to add")
+                return {"success": True, "created_count": 0, "duplicates_skipped": len(evaluation_messages)}
+
+            progress_recorder.set_progress(70, 100, f"Creating {len(messages_to_add)} new messages...")
+
+            created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
             dataset.messages.add(*created_messages)
 
             dataset.status = DatasetCreationStatus.COMPLETED
@@ -800,7 +827,8 @@ def create_dataset_from_sessions_task(
 
             progress_recorder.set_progress(100, 100, "Clone complete")
 
-            return {"success": True, "created_count": len(created_messages)}
+            duplicates_skipped = len(evaluation_messages) - len(messages_to_add)
+            return {"success": True, "created_count": len(created_messages), "duplicates_skipped": duplicates_skipped}
 
     except Exception as e:
         logger.exception(f"Error in clone task for dataset {dataset_id}: {e}")

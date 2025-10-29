@@ -327,6 +327,26 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
         return session_ids, filtered_session_ids
 
+    def _save_clone(self, dataset):
+        """Dispatch async task to clone messages from sessions."""
+        session_ids = self.cleaned_data.get("session_ids", [])
+        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
+
+        if not session_ids and not filtered_session_ids:
+            return
+
+        task = create_dataset_from_sessions_task.delay(
+            dataset.id,
+            self.team.id,
+            list(session_ids),
+            list(filtered_session_ids),
+            self.filter_params.to_query() if self.filter_params else None,
+            self.timezone,
+        )
+
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
+
 
 class EvaluationDatasetForm(EvaluationDatasetBaseForm):
     """Form for creating evaluation datasets."""
@@ -550,31 +570,12 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         dataset.status = DatasetCreationStatus.PENDING
         dataset.save()
 
-        task = None
         if mode == "clone":
-            task = self._save_clone(dataset)
+            self._save_clone(dataset)
         elif mode == "csv":
-            task = self._save_csv(dataset)
-
-        dataset.job_id = task.id
-        dataset.save(update_fields=["job_id"])
+            self._save_csv(dataset)
 
         return dataset
-
-    def _save_clone(self, dataset):
-        """Dispatch async task to clone messages from sessions."""
-        session_ids = self.cleaned_data.get("session_ids", [])
-        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
-
-        task = create_dataset_from_sessions_task.delay(
-            dataset.id,
-            self.team.id,
-            list(session_ids),
-            list(filtered_session_ids),
-            self.filter_params.to_query() if self.filter_params else None,
-            self.timezone,
-        )
-        return task
 
     def _save_manual(self, dataset):
         """Create messages from manual input synchronously."""
@@ -606,7 +607,8 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         task = create_dataset_from_csv_task.delay(
             dataset.id, csv_file_id, self.team.id, column_mapping, history_column, populate_history
         )
-        return task
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
 
 
 def _get_message_pair_value(field_name: str, pair_index: int, field_value: str) -> dict:
@@ -657,47 +659,6 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
         instance = super().save(commit=commit)
 
         if commit and self.cleaned_data.get("mode") == "clone":
-            self._clone_messages_to_dataset(instance)
+            self._save_clone(instance)
 
         return instance
-
-    def _clone_messages_to_dataset(self, dataset: EvaluationDataset):
-        """
-        Clone messages from sessions into the existing dataset, avoiding duplicates.
-        Uses ChatMessage IDs for duplicate detection.
-        """
-        session_ids = self.cleaned_data.get("session_ids", set())
-        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
-
-        if not session_ids and not filtered_session_ids:
-            return
-
-        new_evaluation_messages = self._create_messages_from_sessions(session_ids, filtered_session_ids)
-        existing_chat_message_pairs = set(
-            dataset.messages.filter(
-                input_chat_message_id__isnull=False,
-                expected_output_chat_message_id__isnull=False,
-            ).values_list("input_chat_message_id", "expected_output_chat_message_id")
-        )
-
-        # Filter out duplicates based on ChatMessage IDs
-        messages_to_add = []
-        for msg in new_evaluation_messages:
-            chat_pair = (msg.input_chat_message_id, msg.expected_output_chat_message_id)
-            if chat_pair not in existing_chat_message_pairs:
-                messages_to_add.append(msg)
-                existing_chat_message_pairs.add(chat_pair)
-
-        if messages_to_add:
-            created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
-            dataset.messages.add(*created_messages)
-
-    def _create_messages_from_sessions(self, session_ids, filtered_session_ids):
-        """Creates EvaluationMessage objects from sessions."""
-        return EvaluationMessage.create_from_sessions(
-            team=self.team,
-            external_session_ids=session_ids,
-            filtered_session_ids=filtered_session_ids,
-            filter_params=self.filter_params,
-            timezone=self.timezone,
-        )
