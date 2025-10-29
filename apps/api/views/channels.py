@@ -3,6 +3,7 @@ import logging
 
 import httpx
 from django.conf import settings
+from django.db import transaction
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
@@ -93,11 +94,11 @@ def consent(request: Request):
     examples=[
         OpenApiExample(
             name="GenerateBotMessageAndSend",
-            summary="Generates a bot message and sends it to the user",
+            summary="Generates a bot message and sends it to the user (auto-creates participant if needed).",
             value={
-                "identifier": "part1",
+                "identifier": "+15556793",
                 "experiment": "exp1",
-                "platform": "connect_messaging",
+                "platform": "whatsapp",
                 "prompt_text": "Tell the user to do something",
                 "session_data": {"key": "value"},
                 "participant_data": {"key": "value"},
@@ -125,6 +126,7 @@ def consent(request: Request):
     ],
 )
 @api_view(["POST"])
+@transaction.atomic
 def trigger_bot_message(request):
     """
     Trigger the bot to send a message to the user
@@ -140,36 +142,49 @@ def trigger_bot_message(request):
 
     experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
 
-    participant_data = ParticipantData.objects.filter(
-        participant__identifier=identifier,
-        participant__platform=platform,
-        experiment=experiment.id,
-    ).first()
-    if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data:
-        # The commcare_connect channel requires certain data from the participant_data in order to send messages to th
-        # user, which is why we need to check if the participant_data exists
-        return JsonResponse({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
-    elif not Participant.objects.filter(identifier=identifier, platform=platform).exists():
-        return JsonResponse({"detail": "Participant not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    if not ExperimentChannel.objects.filter(platform=platform, experiment=experiment).exists():
+    channel = ExperimentChannel.objects.filter(platform=platform, experiment=experiment).first()
+    if not channel:
         return JsonResponse(
             {"detail": f"Experiment cannot send messages on the {platform} channel"},
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    if platform == ChannelPlatform.COMMCARE_CONNECT and not participant_data.has_consented():
-        return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
-    if data.get("participant_data"):
-        if participant_data:
+    participant_data = ParticipantData.objects.filter(
+        participant__identifier=identifier,
+        participant__platform=platform,
+        experiment=experiment.id,
+    ).first()
+
+    if not participant_data:
+        participant, _ = Participant.objects.get_or_create(identifier=identifier, platform=platform, team=request.team)
+        participant_data, created = ParticipantData.objects.get_or_create(
+            participant=participant,
+            experiment=experiment,
+            defaults={"team": request.team, "data": data.get("participant_data") or {}},
+        )
+        # If participant_data already existed and participant_data is provided in request
+        if not created and data.get("participant_data"):
             merged_data = {**participant_data.data, **data["participant_data"]}
+            if merged_data != participant_data.data:
+                participant_data.data = merged_data
+                participant_data.save(update_fields=["data"])
+    elif data.get("participant_data"):
+        merged_data = {**participant_data.data, **data["participant_data"]}
+        if merged_data != participant_data.data:
             participant_data.data = merged_data
             participant_data.save(update_fields=["data"])
-        else:
-            participant = Participant.objects.get(identifier=identifier, platform=platform, team=request.team)
-            participant_data = ParticipantData.objects.create(
-                participant=participant, experiment=experiment, data=data["participant_data"], team=request.team
-            )
+
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
+        if not participant_data.system_metadata.get("commcare_connect_channel_id"):
+            # Trigger the setup task to create the channel and get consent status from CCC
+            from apps.api.tasks import create_connect_channel_for_participant
+            from apps.channels.clients.connect_client import CommCareConnectClient
+
+            connect_client = CommCareConnectClient()
+            create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
+
+        if not participant_data.has_consented():
+            return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
     trigger_bot_message_task.delay(data)
 
