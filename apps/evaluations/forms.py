@@ -558,6 +558,9 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         if not commit:
             return dataset
 
+        dataset.status = DatasetCreationStatus.PENDING
+        dataset.save()
+
         mode = self.cleaned_data.get("mode")
 
         if mode == "manual":
@@ -566,9 +569,6 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             dataset.status = DatasetCreationStatus.COMPLETED
             dataset.save(update_fields=["status"])
             return dataset
-
-        dataset.status = DatasetCreationStatus.PENDING
-        dataset.save()
 
         if mode == "clone":
             self._save_clone(dataset)
