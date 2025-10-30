@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import markdown
 from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.aggregates import StringAgg
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
@@ -1665,21 +1666,19 @@ class ExperimentSessionQuerySet(models.QuerySet):
 
     def annotate_with_versions_list(self):
         """Annotate queryset with a comma-separated list of experiment versions used in each session."""
-        version_tags_subquery = (
+        message_ct = ContentType.objects.get_for_model(ChatMessage)
+        version_tags_subquery = Subquery(
             CustomTaggedItem.objects.filter(
-                content_type__model="chatmessage",
-                object_id__in=Subquery(ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")),
+                content_type=message_ct,
+                object_id__in=ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id"),
                 tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
             )
             .values("content_type_id")
             .annotate(versions=StringAgg("tag__name", delimiter=", ", distinct=True, ordering="tag__name"))
-            .values("versions")[:1]
+            .values("versions")[:1],
+            output_field=CharField(),
         )
-        return self.annotate(
-            experiment_versions=Coalesce(
-                Subquery(version_tags_subquery, output_field=CharField()), Value(""), output_field=CharField()
-            )
-        )
+        return self.annotate(experiment_versions=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
 
 
 class ExperimentSessionObjectManager(models.Manager):
