@@ -439,54 +439,6 @@
           });
         },
 
-        // Filtered session methods (for per-session filtering)
-        updateFilteredSessions() {
-          const checkboxes = document.querySelectorAll('tbody .filter-checkbox:checked');
-          const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
-          const allCurrentPageCheckboxes = document.querySelectorAll('tbody .filter-checkbox');
-          const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
-
-          this.filteredSessionIds = new Set(
-            [...this.filteredSessionIds].filter(id => !currentPageSessionIds.includes(id))
-          );
-          currentPageSelections.forEach(id => this.filteredSessionIds.add(id));
-
-          this.selectedSessionIds = new Set(
-            [...this.selectedSessionIds].filter(id => !this.filteredSessionIds.has(id))
-          );
-
-          this.updateFilteredSessionHiddenField();
-          this.updateSessionHiddenField();
-          this.uncheckSessionCheckboxes();
-          this.updateSessionHeaderCheckbox();
-          this.updateFilteredSessionHeaderCheckbox();
-        },
-
-        // Session selection methods (for clone mode)
-        updateSelectedSessions() {
-          const checkboxes = document.querySelectorAll('tbody .session-checkbox:checked');
-          const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
-          const allCurrentPageCheckboxes = document.querySelectorAll('tbody .session-checkbox');
-          const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
-
-          // Remove current page sessions, then add back the checked ones
-          this.selectedSessionIds = new Set(
-            [...this.selectedSessionIds].filter(id => !currentPageSessionIds.includes(id))
-          );
-          currentPageSelections.forEach(id => this.selectedSessionIds.add(id));
-
-          this.filteredSessionIds = new Set(
-            [...this.filteredSessionIds].filter(id => !this.selectedSessionIds.has(id))
-          );
-
-          this.updateSessionHiddenField();
-          this.updateFilteredSessionHiddenField();
-          this.uncheckFilterCheckboxes();
-          this.updateSessionHeaderCheckbox();
-          this.updateFilteredSessionHeaderCheckbox();
-          this.errorMessages = [];
-        },
-
         toggleSelectedSessions(val) {
           const toggleInput = document.querySelector('thead .session-checkbox');
           if (toggleInput.checked || val) {
@@ -502,7 +454,7 @@
           this.uncheckFilterCheckboxes();
           this.updateSessionHeaderCheckbox();
           this.updateFilteredSessionHeaderCheckbox();
-          restoreCheckboxStates();
+          this.restoreCheckboxStates();
         },
 
         toggleFilteredSessions(val) {
@@ -520,7 +472,7 @@
           this.uncheckFilterCheckboxes();
           this.updateSessionHeaderCheckbox();
           this.updateFilteredSessionHeaderCheckbox();
-          restoreFilteredCheckboxStates();
+          this.restoreFilteredCheckboxStates();
         },
 
         updateSessionHeaderCheckbox() {
@@ -565,19 +517,6 @@
 
           this.updateSessionHiddenField();
           this.updateFilteredSessionHiddenField();
-        },
-
-        clearAllSelections() {
-          this.selectedSessionIds = new Set();
-          this.filteredSessionIds = new Set();
-          this.updateSessionHiddenField();
-          this.updateFilteredSessionHiddenField();
-          document.querySelectorAll('.session-checkbox:checked').forEach(cb => {
-            cb.checked = false;
-          });
-          document.querySelectorAll('.filter-checkbox:checked').forEach(cb => {
-            cb.checked = false;
-          });
         },
 
         updateSessionHiddenField() {

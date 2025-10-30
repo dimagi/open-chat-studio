@@ -19,9 +19,9 @@ const sessionManagement = {
   },
 
   updateSelectedSessions(component) {
-    const checkboxes = document.querySelectorAll('.session-checkbox:checked');
+    const checkboxes = document.querySelectorAll('tbody.session-checkbox:checked');
     const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
-    const allCurrentPageCheckboxes = document.querySelectorAll('.session-checkbox');
+    const allCurrentPageCheckboxes = document.querySelectorAll('tbody.session-checkbox');
     const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
 
     component.selectedSessionIds = new Set(
@@ -35,12 +35,14 @@ const sessionManagement = {
 
     this.updateHiddenFields(component);
     this.uncheckFilterCheckboxes(component);
+    this.updateSessionHeaderCheckbox();
+    this.updateFilteredSessionHeaderCheckbox();
   },
 
   updateFilteredSessions(component) {
-    const checkboxes = document.querySelectorAll('.filter-checkbox:checked');
+    const checkboxes = document.querySelectorAll('tbody.filter-checkbox:checked');
     const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
-    const allCurrentPageCheckboxes = document.querySelectorAll('.filter-checkbox');
+    const allCurrentPageCheckboxes = document.querySelectorAll('tbody.filter-checkbox');
     const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
 
     component.filteredSessionIds = new Set(
@@ -54,6 +56,8 @@ const sessionManagement = {
 
     this.updateHiddenFields(component);
     this.uncheckSessionCheckboxes(component);
+    this.updateSessionHeaderCheckbox();
+    this.updateFilteredSessionHeaderCheckbox();
   },
 
   clearAllSelections(component) {
@@ -116,7 +120,7 @@ const sessionManagement = {
       const checkbox = document.querySelector(`.filter-checkbox[value="${sessionId}"]`);
       if (checkbox) checkbox.checked = true;
     });
-  }
+  },
 };
 
 window.datasetModeSelector = function(options = {}) {
@@ -179,6 +183,12 @@ window.datasetModeSelector = function(options = {}) {
     clearAllSelections() {
       sessionManagement.clearAllSelections(this);
     },
+    restoreFilteredCheckboxStates() {
+      sessionManagement.restoreFilteredCheckboxStates(this);
+    },
+    restoreCheckboxStates() {
+      sessionManagement.restoreCheckboxStates(this);
+    }
   };
 };
 
