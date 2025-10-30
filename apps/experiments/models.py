@@ -12,7 +12,6 @@ import markdown
 from django.conf import settings
 from django.contrib.postgres.aggregates import StringAgg
 from django.contrib.postgres.fields import ArrayField
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
@@ -889,37 +888,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     def get_trend_data(self) -> tuple[list, list]:
         """
-        Get the error/success trends across all versions in this experiment's version family. If it is missing from the
-        cache, it is calculated and stored in the cache.
-        """
-
-        if trend_data := cache.get(self.trends_cache_key):
-            return trend_data
-
-        trend_data = self._calculate_trends()
-        cache.set(self.trends_cache_key, trend_data, settings.EXPERIMENT_TREND_CACHE_TIMEOUT)
-        return trend_data
-
-    def traces_url(self) -> str:
-        """
-        Returns a URL to the traces page, filtered to show only traces for this experiment.
-        """
-        experiment_filter = ColumnFilterData(column="experiment", operator="any of", value=json.dumps([self.id]))
-
-        versions_to_include = [f"v{n}" for n in range(1, self.version_number + 1)]
-        versions_filter = ColumnFilterData(column="versions", operator="any of", value=json.dumps(versions_to_include))
-
-        filter_params = FilterParams(column_filters=[experiment_filter, versions_filter])
-        return (
-            reverse("trace:home", kwargs={"team_slug": get_slug_for_team(self.team_id)})
-            + "?"
-            + filter_params.to_query()
-        )
-
-    def _calculate_trends(self) -> tuple[list, list]:
-        """
-        Calculate the trends across all versions in this experiment's version family. Returns two lists: successes and
-        errors, each containing the count of successful and error traces for each hour in the last 48 hours.
+        Get the error/success trends across all versions in this experiment's version family.
+        Returns two lists: successes and errors, each containing the count of successful and error traces
+        for each hour in the last 48 hours.
         """
         days = 2
         to_date = timezone.now()
@@ -959,6 +930,22 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         successes = [success_trend.get(bucket, 0) for bucket in hour_buckets]
         errors = [error_trend.get(bucket, 0) for bucket in hour_buckets]
         return successes, errors
+
+    def traces_url(self) -> str:
+        """
+        Returns a URL to the traces page, filtered to show only traces for this experiment.
+        """
+        experiment_filter = ColumnFilterData(column="experiment", operator="any of", value=json.dumps([self.id]))
+
+        versions_to_include = [f"v{n}" for n in range(1, self.version_number + 1)]
+        versions_filter = ColumnFilterData(column="versions", operator="any of", value=json.dumps(versions_to_include))
+
+        filter_params = FilterParams(column_filters=[experiment_filter, versions_filter])
+        return (
+            reverse("trace:home", kwargs={"team_slug": get_slug_for_team(self.team_id)})
+            + "?"
+            + filter_params.to_query()
+        )
 
     @property
     def trace_service(self):
