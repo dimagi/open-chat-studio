@@ -789,7 +789,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         ]
 
     def __str__(self):
-        if self.working_version is None:
+        if self.working_version_id is None:
             return self.name
         return f"{self.name} ({self.version_display})"
 
