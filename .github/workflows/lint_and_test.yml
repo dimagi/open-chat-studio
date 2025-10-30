@@ -50,8 +50,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22.x
-      - name: Install JS dependencies
-        run: npm install
+      - name: Install dependencies
+        run: |
+          npm install
+          apt-get install ripgrep
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
       - name: Run pre-commit hooks
