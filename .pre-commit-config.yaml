@@ -30,3 +30,12 @@ repos:
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]
+  - repo: local
+    hooks:
+      - id: waf-allow-not-first
+        name: waf_allow must be the first decorator listed
+        entry: scripts/waf_pre_commit.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        fail_fast: true
