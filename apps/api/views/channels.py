@@ -145,8 +145,8 @@ def trigger_bot_message(request):
     channel = ExperimentChannel.objects.filter(platform=platform, experiment=experiment).first()
     if not channel:
         return JsonResponse(
-            {"detail": f"Experiment cannot send messages on the {platform} channel"},
-            status=status.HTTP_404_NOT_FOUND,
+            {"detail": f"Experiment cannot send messages on the {platform} channel. Create the channel first."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     participant_data = ParticipantData.objects.filter(
