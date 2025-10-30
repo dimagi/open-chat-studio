@@ -151,13 +151,11 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
             .filter(experiment_filter, team=self.request.team)
-            # TODO: revisit if we can remove some of these
-            # team: session.get_absolute_url
-            # participant__team, experiment: participant.get_link_to_experiment_data
-            # experiment__team: experiment.get_absolute_url
+            # Select related source
+            # experiment: participant.get_link_to_experiment_data
             # participant__user: str(participant)
             # chat: tags prefetch
-            .select_related("team", "experiment", "experiment__team", "participant__user", "participant__team", "chat")
+            .select_related("experiment", "participant__user", "chat")
             .annotate_with_versions_list()
             .prefetch_related(
                 Prefetch(
