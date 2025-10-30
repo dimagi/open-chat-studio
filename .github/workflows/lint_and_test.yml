@@ -53,7 +53,7 @@ jobs:
       - name: Install dependencies
         run: |
           npm install
-          apt-get install ripgrep
+          sudo apt-get install -y ripgrep
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
       - name: Run pre-commit hooks
