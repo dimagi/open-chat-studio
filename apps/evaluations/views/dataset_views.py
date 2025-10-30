@@ -227,7 +227,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
             .filter(team=self.request.team)
-            .select_related("participant__user", "chat", "experiment")
+            .select_related("team", "participant__user", "chat", "experiment")
             .annotate(
                 message_count=Coalesce(
                     Count("chat__messages", filter=Q(chat__messages__in=filtered_messages.values("pk")), distinct=True),
