@@ -5,6 +5,7 @@ from slack_bolt.adapter.django.handler import to_bolt_request, to_django_respons
 from apps.slack.models import SlackOAuthState
 from apps.slack.slack_app import app, handler
 from apps.teams.decorators import login_and_team_required
+from apps.web.waf import WafRule, waf_allow
 
 from .const import INSTALLATION_CONFIG
 
@@ -37,6 +38,7 @@ def slack_oauth_redirect(request):
     return bolt_resp_to_django_resp(request, bolt_resp)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @csrf_exempt
 def slack_events_handler(request):
     # see `slack_listeners.py`

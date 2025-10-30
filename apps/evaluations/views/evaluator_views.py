@@ -11,6 +11,7 @@ from apps.evaluations.models import Evaluator
 from apps.evaluations.tables import EvaluatorTable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.web.waf import WafRule, waf_allow
 
 
 class EvaluatorHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -40,6 +41,7 @@ class EvaluatorTableView(SingleTableView, PermissionRequiredMixin):
         )
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 class CreateEvaluator(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     permission_required = "evaluations.add_evaluator"
     template_name = "evaluations/evaluator_form.html"

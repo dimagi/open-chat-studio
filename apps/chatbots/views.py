@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import Count, F, Max, OuterRef, Q, Subquery
+from django.db.models import Count, F, OuterRef, Q, Subquery
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -46,6 +46,7 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.utils.search import similarity_search
+from apps.web.waf import WafRule, waf_allow
 
 
 def _get_alpine_context(request, experiment=None):
@@ -490,11 +491,13 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
     )
 
 
+@waf_allow(WafRule.NoUserAgent_HEADER)
 @team_required
 def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     return start_session_public(request, team_slug, experiment_id)
 
 
+@waf_allow(WafRule.NoUserAgent_HEADER)
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):

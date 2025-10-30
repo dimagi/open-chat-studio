@@ -40,6 +40,7 @@ from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
+from apps.web.waf import WafRule, waf_allow
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -132,6 +133,7 @@ class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMix
         return HttpResponse(status=200)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     permission_required = "evaluations.add_evaluationdataset"
     template_name = "evaluations/dataset_create_form.html"
@@ -422,6 +424,7 @@ def delete_message(request, team_slug, message_id):
     return HttpResponse("", status=200)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @login_and_team_required
 @require_POST
 def parse_csv_columns(request, team_slug: str):
