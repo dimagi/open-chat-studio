@@ -28,6 +28,7 @@ from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
+from apps.teams.utils import get_slug_for_team
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
@@ -349,14 +350,14 @@ class AttachMediaTool(CustomBaseTool):
                         link_text = IMAGE_LINK_TEXT.format(
                             file_id=file_id,
                             session_id=self.experiment_session.id,
-                            team_slug=file.team.slug,
+                            team_slug=get_slug_for_team(file.team_id),
                         )
                     else:
                         link_text = FILE_LINK_TEXT.format(
                             name=file.name,
                             file_id=file_id,
                             session_id=self.experiment_session.id,
-                            team_slug=file.team.slug,
+                            team_slug=get_slug_for_team(file.team_id),
                         )
                     file_response = f"{file_response} {link_text}"
                 response.append(file_response)

@@ -46,7 +46,7 @@ from apps.experiments.versioning import VersionDetails, VersionField, VersionsMi
 from apps.generics.chips import Chip
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import BaseTeamModel, Team
-from apps.teams.utils import current_team
+from apps.teams.utils import current_team, get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
@@ -246,7 +246,7 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         return self.topic
 
     def get_absolute_url(self):
-        return reverse("experiments:source_material_edit", args=[self.team.slug, self.id])
+        return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @transaction.atomic()
     def archive(self):
@@ -298,7 +298,7 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
         return self.name
 
     def get_absolute_url(self):
-        return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
+        return reverse("experiments:safety_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -368,7 +368,7 @@ class Survey(BaseTeamModel, VersionsMixin):
         )
 
     def get_absolute_url(self):
-        return reverse("experiments:survey_edit", args=[self.team.slug, self.id])
+        return reverse("experiments:survey_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @transaction.atomic()
     def archive(self):
@@ -435,7 +435,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         return markdown.markdown(self.consent_text)
 
     def get_absolute_url(self):
-        return reverse("experiments:consent_edit", args=[self.team.slug, self.id])
+        return reverse("experiments:consent_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @transaction.atomic()
     def archive(self):
@@ -800,7 +800,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+        return reverse("experiments:single_experiment_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_version(self, version: int) -> "Experiment":
         """
@@ -859,7 +859,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         label = self.name
         if self.is_archived:
             label = f"{label} (archived)"
-        url = reverse("chatbots:single_chatbot_home", args=[self.team.slug, self.id])
+        url = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
         return Chip(label=label, url=url)
 
     def get_chat_model(self):
@@ -910,7 +910,11 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         versions_filter = ColumnFilterData(column="versions", operator="any of", value=json.dumps(versions_to_include))
 
         filter_params = FilterParams(column_filters=[experiment_filter, versions_filter])
-        return reverse("trace:home", kwargs={"team_slug": self.team.slug}) + "?" + filter_params.to_query()
+        return (
+            reverse("trace:home", kwargs={"team_slug": get_slug_for_team(self.team_id)})
+            + "?"
+            + filter_params.to_query()
+        )
 
     def _calculate_trends(self) -> tuple[list, list]:
         """
@@ -1503,11 +1507,12 @@ class Participant(BaseTeamModel):
         experiment = self.get_experiments_for_display().first()
         if experiment:
             return self.get_link_to_experiment_data(experiment)
-        return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
+        return reverse("participants:single-participant-home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_link_to_experiment_data(self, experiment: Experiment) -> str:
         url = reverse(
-            "participants:single-participant-home-with-experiment", args=[self.team.slug, self.id, experiment.id]
+            "participants:single-participant-home-with-experiment",
+            args=[get_slug_for_team(self.team_id), self.id, experiment.id],
         )
         return f"{url}#{experiment.id}"
 
@@ -1767,7 +1772,7 @@ class ExperimentSession(BaseTeamModel):
         return absolute_url(
             reverse(
                 "experiments:start_session_from_invite",
-                args=[self.team.slug, self.experiment.public_id, self.external_id],
+                args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
             )
         )
 
@@ -1809,7 +1814,8 @@ class ExperimentSession(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse(
-            "experiments:experiment_session_view", args=[self.team.slug, self.experiment.public_id, self.external_id]
+            "experiments:experiment_session_view",
+            args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
         )
 
     def end(self, commit: bool = True, propagate: bool = True):
@@ -1957,6 +1963,7 @@ class ExperimentSession(BaseTeamModel):
     def as_chatbot_chip(self) -> Chip:
         """Returns a link to the chatbot session page"""
         url = reverse(
-            "chatbots:chatbot_session_view", args=[self.team.slug, self.experiment.public_id, self.external_id]
+            "chatbots:chatbot_session_view",
+            args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
         )
         return Chip(label=self.external_id, url=url)

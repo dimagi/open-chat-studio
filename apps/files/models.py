@@ -12,9 +12,10 @@ from pgvector.django import HalfVectorField
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
 from apps.utils.conversions import bytes_to_megabytes, humanize_bytes
-from apps.utils.fields import SanitizedJSONField
 from apps.utils.deletion import get_related_m2m_objects
+from apps.utils.fields import SanitizedJSONField
 from apps.web.meta import absolute_url
 
 
@@ -156,10 +157,12 @@ class File(BaseTeamModel, VersionsMixin):
         return self.collections.all()
 
     def download_link(self, experiment_session_id: int) -> str:
-        return absolute_url(reverse("experiments:download_file", args=[self.team.slug, experiment_session_id, self.id]))
+        return absolute_url(
+            reverse("experiments:download_file", args=[get_slug_for_team(self.team_id), experiment_session_id, self.id])
+        )
 
     def get_absolute_url(self):
-        return reverse("files:file_edit", args=[self.team.slug, self.id])
+        return reverse("files:file_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     def as_chip(self) -> Chip:
         label = self.name
