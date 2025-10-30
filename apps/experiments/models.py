@@ -1659,11 +1659,7 @@ class ExperimentSessionQuerySet(models.QuerySet):
     def annotate_with_last_message_created_at(self):
         """Annotate queryset with the created_at timestamp of the last message in each session."""
         last_message_subquery = (
-            ChatMessage.objects.filter(
-                chat__experiment_session=models.OuterRef("pk"),
-            )
-            .order_by("-created_at")
-            .values("created_at")[:1]
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id")).order_by("-created_at").values("created_at")[:1]
         )
         return self.annotate(last_message_created_at=models.Subquery(last_message_subquery))
 
