@@ -71,6 +71,7 @@ urlpatterns = [
     path("", include("apps.web.urls")),
     path("", include(slack_global_urls)),
     path("celery-progress/", include("celery_progress.urls")),
+    path("banners/", include("apps.banners.urls")),
     # API docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
@@ -78,6 +79,7 @@ urlpatterns = [
     path("api/", include("apps.api.urls", namespace="api")),
     path("tz_detect/", include("tz_detect.urls")),
     path("__reload__/", include("django_browser_reload.urls")),
+    path("silk/", include("silk.urls", namespace="silk")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.USE_DEBUG_TOOLBAR:

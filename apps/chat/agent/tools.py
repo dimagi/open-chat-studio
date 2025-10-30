@@ -316,7 +316,7 @@ class EndSessionTool(CustomBaseTool):
 class AttachMediaTool(CustomBaseTool):
     requires_callbacks: ClassVar[bool] = True
     name: str = AgentTools.ATTACH_MEDIA
-    description: str = "Attach a media file to your response"
+    description: str = "Use this to attach or share media files with users."
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
 

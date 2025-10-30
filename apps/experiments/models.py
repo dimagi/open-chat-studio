@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import markdown
 from django.conf import settings
+from django.contrib.postgres.aggregates import StringAgg
 from django.contrib.postgres.fields import ArrayField
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -18,14 +19,17 @@ from django.db import models, transaction
 from django.db.models import (
     BooleanField,
     Case,
+    CharField,
     Count,
     OuterRef,
     Q,
     Subquery,
     UniqueConstraint,
+    Value,
     When,
     functions,
 )
+from django.db.models.functions import Coalesce
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -34,6 +38,7 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
+from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
@@ -43,6 +48,7 @@ from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team
 from apps.trace.models import Trace, TraceStatus
+from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
@@ -207,7 +213,7 @@ class PromptBuilderHistory(BaseTeamModel):
     """
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    history = models.JSONField()
+    history = SanitizedJSONField()
 
     def __str__(self) -> str:
         return str(self.history)
@@ -1610,9 +1616,9 @@ def validate_json_dict(value):
 class ParticipantData(BaseTeamModel):
     objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
-    data = encrypt(models.JSONField(default=dict, validators=[validate_json_dict]))
+    data = encrypt(SanitizedJSONField(default=dict, validators=[validate_json_dict]))
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE)
-    system_metadata = models.JSONField(default=dict)
+    system_metadata = SanitizedJSONField(default=dict)
     encryption_key = encrypt(
         models.CharField(max_length=255, blank=True, help_text="The base64 encoded encryption key")
     )
@@ -1657,12 +1663,9 @@ class SessionStatus(models.TextChoices):
         return [cls.ACTIVE.value, cls.COMPLETE.value]
 
 
-class ExperimentSessionObjectManager(models.Manager):
-    def with_last_message_created_at(self):
-        return self.annotate_with_last_message_created_at(self.get_queryset())
-
-    @staticmethod
-    def annotate_with_last_message_created_at(queryset):
+class ExperimentSessionQuerySet(models.QuerySet):
+    def annotate_with_last_message_created_at(self):
+        """Annotate queryset with the created_at timestamp of the last message in each session."""
         last_message_subquery = (
             ChatMessage.objects.filter(
                 chat__experiment_session=models.OuterRef("pk"),
@@ -1670,7 +1673,34 @@ class ExperimentSessionObjectManager(models.Manager):
             .order_by("-created_at")
             .values("created_at")[:1]
         )
-        return queryset.annotate(last_message_created_at=models.Subquery(last_message_subquery))
+        return self.annotate(last_message_created_at=models.Subquery(last_message_subquery))
+
+    def annotate_with_versions_list(self):
+        """Annotate queryset with a comma-separated list of experiment versions used in each session."""
+        version_tags_subquery = (
+            CustomTaggedItem.objects.filter(
+                content_type__model="chatmessage",
+                object_id__in=Subquery(ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")),
+                tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+            )
+            .values("content_type_id")
+            .annotate(versions=StringAgg("tag__name", delimiter=", ", distinct=True, ordering="tag__name"))
+            .values("versions")[:1]
+        )
+        return self.annotate(
+            experiment_versions=Coalesce(
+                Subquery(version_tags_subquery, output_field=CharField()), Value(""), output_field=CharField()
+            )
+        )
+
+
+class ExperimentSessionObjectManager(models.Manager):
+    def get_queryset(self):
+        return ExperimentSessionQuerySet(self.model, using=self._db)
+
+    def with_last_message_created_at(self):
+        """Convenience method for backwards compatibility."""
+        return self.get_queryset().annotate_with_last_message_created_at()
 
 
 class ExperimentSession(BaseTeamModel):
@@ -1698,7 +1728,7 @@ class ExperimentSession(BaseTeamModel):
         null=True,
         blank=True,
     )
-    state = models.JSONField(default=dict)
+    state = SanitizedJSONField(default=dict)
 
     class Meta:
         ordering = ["-created_at"]
@@ -1891,18 +1921,6 @@ class ExperimentSession(BaseTeamModel):
     def working_experiment(self) -> Experiment:
         """Returns the default experiment, or if there is none, the working experiment"""
         return self.experiment.get_working_version()
-
-    @property
-    def experiment_versions_from_prefetched_data(self):
-        if not hasattr(self.chat, "messages"):
-            return set()
-        version_tags = {
-            tag.name
-            for message in self.chat.messages.all()
-            for tag in message.tags.all()
-            if tag.category == Chat.MetadataKeys.EXPERIMENT_VERSION
-        }
-        return ", ".join(sorted(version_tags)) if version_tags else ""
 
     def get_experiment_version_number(self) -> int:
         """

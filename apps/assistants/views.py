@@ -20,6 +20,7 @@ from apps.service_providers.models import LlmProvider
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
+from apps.web.waf import WafRule, waf_allow
 
 from ..files.models import File
 from ..generics.chips import Chip
@@ -68,7 +69,6 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
 
 
 class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
-    paginate_by = 25
     template_name = "table/single_table.html"
     table_class = OpenAiAssistantTable
     permission_required = "assistants.view_openaiassistant"
@@ -106,6 +106,7 @@ class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         return OpenAiAssistant.objects.filter(team=self.request.team)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
     title = "Create OpenAI Assistant"
     button_text = "Create"

@@ -29,7 +29,6 @@ class McpServerHome(LoginAndTeamRequiredMixin, TemplateView):
 
 class McpServerTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = McpServer
-    paginate_by = 25
     table_class = McpServerTable
     template_name = "table/single_table.html"
     permission_required = "mcp_integrations.view_mcpserver"

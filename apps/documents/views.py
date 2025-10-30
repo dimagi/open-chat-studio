@@ -48,6 +48,7 @@ from apps.service_providers.utils import get_embedding_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
+from apps.web.waf import WafRule, waf_allow
 
 logger = logging.getLogger("ocs.documents.views")
 
@@ -294,6 +295,7 @@ def sync_document_source(request, team_slug: str, collection_id: int, pk: int):
     )
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @require_POST
 @login_and_team_required
 @permission_required("documents.change_collection")
@@ -413,7 +415,6 @@ def get_collection_file_status(request, team_slug: str, collection_id: int, pk: 
 
 class CollectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Collection
-    paginate_by = 25
     table_class = CollectionsTable
     template_name = "table/single_table.html"
     permission_required = "documents.view_collection"

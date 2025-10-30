@@ -18,7 +18,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, ensure_config
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
-from openai import OpenAI
+from openai import NOT_GIVEN, OpenAI
 from openai._base_client import SyncAPIClient
 from pydantic import BaseModel
 
@@ -383,7 +383,7 @@ class OpenAILlmService(OpenAIGenericService):
         return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
 
     def create_remote_index(self, name: str, file_ids: list = None) -> str:
-        file_ids = file_ids or []
+        file_ids = file_ids or NOT_GIVEN
         vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids)
         return vector_store.id
 

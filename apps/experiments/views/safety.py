@@ -25,7 +25,6 @@ class SafetyLayerHome(LoginAndTeamRequiredMixin, TemplateView):
 
 class SafetyLayerTableView(SingleTableView):
     model = SafetyLayer
-    paginate_by = 25
     table_class = SafetyLayerTable
     template_name = "table/single_table.html"
 

@@ -1,50 +1,43 @@
-{% load chat_tags %}
-{% if banners %}
-    <div class="banners-container">
-        {% for banner in banners %}
-            <div class="alert alert-{{ banner.type }} alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
-                <div class="flex-1">
-                    {% if banner.title %}
-                        <strong>{{ banner.title }}</strong>:
-                    {% endif %}
-                    <div class="markdown">{{ banner.message|render_markdown }}</div>
-                </div>
-                <button class="btn btn-sm btn-ghost dismiss-banner ml-4" aria-label="Dismiss banner"
-                        data-banner-id="{{ banner.id }}"
-                        data-expiry="{{ banner.cookie_expires }}"
-                        aria-label="Close">×</button>
-            </div>
-        {% endfor %}
-    </div>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            function updateDismissedBanners(bannerId, bannerExpiry) {
-                try {
-                    let cookieName = `dismissed_banner_${bannerId}`;
-                    const dismissed = SiteJS.app.Cookies.get(cookieName);
-                    if (!dismissed) {
-                        SiteJS.app.Cookies.set(cookieName, 1, { expires: Number(bannerExpiry) });
-                    }
-                } catch (error) {
-                    if (error instanceof TypeError) {
-                        console.error('TypeError in updateDismissedBanners:', error.message);
-                    } else {
-                        throw error;
-                    }
-                }
+<div class="banners-container"
+     hx-get="{% url 'banners:load_banners' %}"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+</div>
+<script>
+    function updateDismissedBanners(bannerId, bannerExpiry) {
+        try {
+            let cookieName = `dismissed_banner_${bannerId}`;
+            const dismissed = SiteJS.app.Cookies.get(cookieName);
+            if (!dismissed) {
+                SiteJS.app.Cookies.set(cookieName, 1, { expires: Number(bannerExpiry) });
             }
-            document.querySelectorAll('.dismiss-banner').forEach(button => {
-                button.addEventListener('click', function() {
-                    const alert = this.closest('.alert');
+        } catch (error) {
+            if (error instanceof TypeError) {
+                console.error('TypeError in updateDismissedBanners:', error.message);
+            } else {
+                throw error;
+            }
+        }
+    }
 
-                    const bannerId = this.dataset.bannerId;
-                    if (alert && bannerId) {
-                        const bannerExpiry = this.dataset.expiry;
-                        updateDismissedBanners(bannerId, bannerExpiry);
-                        alert.remove();
-                    }
-                });
+    function attachBannerDismissHandlers(container) {
+        container.querySelectorAll('.dismiss-banner').forEach(button => {
+            button.addEventListener('click', function() {
+                const alert = this.closest('.alert');
+                const bannerId = this.dataset.bannerId;
+                if (alert && bannerId) {
+                    const bannerExpiry = this.dataset.expiry;
+                    updateDismissedBanners(bannerId, bannerExpiry);
+                    alert.remove();
+                }
             });
         });
-    </script>
-{% endif %}
+    }
+
+    // Attach handlers after HTMX loads the content
+    document.addEventListener('htmx:afterSwap', function(event) {
+        if (event.target.classList.contains('banners-container')) {
+            attachBannerDismissHandlers(event.target);
+        }
+    });
+</script>

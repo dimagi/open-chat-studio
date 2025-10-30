@@ -227,7 +227,7 @@ def _chip_session_url_factory(_, request, record, __):
 class EvaluationSessionsSelectionTable(tables.Table):
     selection = TemplateColumnWithHelp(
         template_name="evaluations/session_checkbox.html",
-        verbose_name="All Messages",
+        verbose_name="All",
         orderable=False,
         help_text="Include all messages from these sessions in the dataset",
         extra_context={
@@ -237,7 +237,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
     )
     clone_filtered_only = TemplateColumnWithHelp(
         template_name="evaluations/session_checkbox.html",
-        verbose_name="Filtered Messages",
+        verbose_name="Filtered",
         orderable=False,
         help_text="Include only messages matching the current filters in the dataset",
         extra_context={
@@ -248,9 +248,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
-    versions = columns.Column(
-        verbose_name="Versions", accessor="experiment_versions_from_prefetched_data", orderable=False
-    )
+    versions = columns.Column(verbose_name="Versions", accessor="experiment_versions", orderable=False)
     message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
     session = actions.ActionsColumn(
         actions=[
@@ -270,6 +268,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
             **settings.DJANGO_TABLES2_ROW_ATTRS,
             "data-redirect-url": None,
         }
+        attrs = {"class": "table w-full"}
         orderable = False
         empty_text = "No sessions available for selection."
 

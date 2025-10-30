@@ -5,6 +5,7 @@ from django import forms
 from django.forms.widgets import RadioSelect
 from pydantic import ValidationError as PydanticValidationError
 
+from apps.chat.models import ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     EvaluationConfig,
@@ -14,7 +15,7 @@ from apps.evaluations.models import (
     Evaluator,
     ExperimentVersionSelection,
 )
-from apps.evaluations.utils import parse_history_text
+from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 
 
@@ -29,6 +30,7 @@ class StyledRadioSelect(RadioSelect):
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
 
         option["attrs"]["class"] = "radio radio-primary mr-2"
+        option["attrs"]["x-model"] = "mode"
         return option
 
 
@@ -255,8 +257,8 @@ class EvaluationMessageForm(forms.ModelForm):
         fields = ("input", "output", "context")
 
 
-class EvaluationDatasetForm(forms.ModelForm):
-    """Form for creating evaluation datasets."""
+class EvaluationDatasetBaseForm(forms.ModelForm):
+    """Base form with common fields and methods for dataset forms."""
 
     MODE_CHOICES = [
         ("clone", "Clone from sessions"),
@@ -264,19 +266,73 @@ class EvaluationDatasetForm(forms.ModelForm):
         ("csv", "Upload CSV file"),
     ]
 
-    mode = forms.ChoiceField(
-        choices=MODE_CHOICES, widget=StyledRadioSelect(), initial="clone", label="Dataset creation mode"
-    )
+    mode = forms.ChoiceField(choices=MODE_CHOICES, widget=StyledRadioSelect(), label="Dataset creation mode")
 
     session_ids = forms.CharField(
-        widget=forms.HiddenInput(),
+        widget=forms.HiddenInput(attrs={"x-ref": "sessionIds"}),
         required=False,
     )
 
     filtered_session_ids = forms.CharField(
-        widget=forms.HiddenInput(),
+        widget=forms.HiddenInput(attrs={"x-ref": "filteredSessionIds"}),
         required=False,
     )
+
+    class Meta:
+        model = EvaluationDataset
+        fields = ("name",)
+
+    def __init__(self, team, *args, **kwargs):
+        self.filter_params = kwargs.pop("filter_params", None)
+        self.timezone = kwargs.pop("timezone", None)
+        super().__init__(*args, **kwargs)
+        self.team = team
+
+    def _clean_clone(self):
+        """Validates session IDs for clone mode. Returns (session_ids, filtered_session_ids)."""
+        session_ids_str = self.data.get("session_ids", "")
+        session_ids = {sid for sid in session_ids_str.split(",") if sid}
+
+        filtered_session_ids_str = self.data.get("filtered_session_ids", "")
+        filtered_session_ids = {sid for sid in filtered_session_ids_str.split(",") if sid}
+
+        if not session_ids and not filtered_session_ids:
+            raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
+
+        intersection = session_ids & filtered_session_ids
+        if intersection:
+            raise forms.ValidationError(
+                "A session cannot be selected in both 'All Messages' and 'Filtered Messages'. "
+                f"The following sessions are in both lists: {', '.join(sorted(str(sid) for sid in intersection))}"
+            )
+
+        all_session_ids = session_ids.union(filtered_session_ids)
+        existing_sessions = ExperimentSession.objects.filter(
+            team=self.team, external_id__in=all_session_ids
+        ).values_list("external_id", flat=True)
+
+        missing_sessions = all_session_ids - set(str(sid) for sid in existing_sessions)
+        if missing_sessions:
+            raise forms.ValidationError(
+                "The following sessions do not exist or you don't have permission to access them: "
+                f"{', '.join(sorted(missing_sessions))}"
+            )
+
+        return session_ids, filtered_session_ids
+
+    def _create_messages_from_sessions(self, session_ids, filtered_session_ids):
+        """Creates EvaluationMessage objects from sessions."""
+        return EvaluationMessage.create_from_sessions(
+            team=self.team,
+            external_session_ids=session_ids,
+            filtered_session_ids=filtered_session_ids,
+            filter_params=self.filter_params,
+            timezone=self.timezone,
+        )
+
+
+class EvaluationDatasetForm(EvaluationDatasetBaseForm):
+    """Form for creating evaluation datasets."""
 
     messages_json = forms.CharField(
         widget=forms.HiddenInput(),
@@ -305,15 +361,8 @@ class EvaluationDatasetForm(forms.ModelForm):
         required=False,
     )
 
-    class Meta:
-        model = EvaluationDataset
-        fields = ("name",)
-
     def __init__(self, team, *args, **kwargs):
-        self.filter_params = kwargs.pop("filter_params", None)
-        self.timezone = kwargs.pop("timezone", None)
-        super().__init__(*args, **kwargs)
-        self.team = team
+        super().__init__(team, *args, **kwargs)
 
     def clean_name(self):
         name = self.cleaned_data.get("name")
@@ -337,39 +386,6 @@ class EvaluationDatasetForm(forms.ModelForm):
             cleaned_data["column_mapping"] = column_mapping
             cleaned_data["history_column"] = history_column
         return cleaned_data
-
-    def _clean_clone(self):
-        session_ids_str = self.data.get("session_ids", "")
-        session_ids = set(session_ids_str.split(","))
-        session_ids.discard("")  # Remove empty strings
-
-        filtered_session_ids_str = self.data.get("filtered_session_ids", "")
-        filtered_session_ids = set(filtered_session_ids_str.split(","))
-        filtered_session_ids.discard("")  # Remove empty strings
-
-        if not session_ids and not filtered_session_ids:
-            raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
-
-        intersection = session_ids & filtered_session_ids
-        if intersection:
-            raise forms.ValidationError(
-                "A session cannot be selected in both 'All Messages' and 'Filtered Messages'. "
-                f"The following sessions are in both lists: {', '.join(sorted(str(sid) for sid in intersection))}"
-            )
-
-        all_session_ids = session_ids.union(filtered_session_ids)
-        existing_sessions = ExperimentSession.objects.filter(
-            team=self.team, external_id__in=all_session_ids
-        ).values_list("external_id", flat=True)
-
-        missing_sessions = all_session_ids - set(str(sid) for sid in existing_sessions)
-        if missing_sessions:
-            raise forms.ValidationError(
-                "The following sessions do not exist or you don't have permission to access them: "
-                f"{', '.join(sorted(missing_sessions))}"
-            )
-
-        return session_ids, filtered_session_ids
 
     def _clean_manual(self):
         messages_json = self.data.get("messages_json", "")
@@ -445,7 +461,17 @@ class EvaluationDatasetForm(forms.ModelForm):
             )
 
         csv_columns = set(csv_data[0].keys()) if csv_data else set()
-        mapped_columns = {col for col in column_mapping.values() if col}
+
+        mapped_columns = set()
+        if input_col := column_mapping.get("input"):
+            mapped_columns.add(input_col)
+        if output_col := column_mapping.get("output"):
+            mapped_columns.add(output_col)
+
+        for field_type in ["context", "participant_data", "session_state"]:
+            if field_mapping := column_mapping.get(field_type):
+                if isinstance(field_mapping, dict):
+                    mapped_columns.update(field_mapping.values())
 
         if history_column:
             mapped_columns.add(history_column)
@@ -454,14 +480,22 @@ class EvaluationDatasetForm(forms.ModelForm):
         if missing_columns:
             raise forms.ValidationError(f"Columns not found in CSV file: {', '.join(sorted(missing_columns))}")
 
-        for field_name in column_mapping:
-            if field_name not in ["input", "output"]:
-                if not self._is_valid_python_identifier(field_name):
-                    raise forms.ValidationError(
-                        f"Context field '{field_name}' is not a valid Python identifier. "
-                        "Field names must start with a letter or underscore and contain only letters, digits, "
-                        "and underscores."
-                    )
+        # Validate field names for all nested structures
+        field_type_labels = {
+            "context": "Context",
+            "participant_data": "Participant data",
+            "session_state": "Session state",
+        }
+        for field_type in ["context", "participant_data", "session_state"]:
+            if field_mapping := column_mapping.get(field_type):
+                for field_name in field_mapping:
+                    if not self._is_valid_python_identifier(field_name):
+                        label = field_type_labels.get(field_type, field_type)
+                        raise forms.ValidationError(
+                            f"{label} field '{field_name}' is not a valid Python identifier. "
+                            "Field names must start with a letter or underscore and contain only letters, digits, "
+                            "and underscores."
+                        )
 
         valid_rows = 0
         for i, row in enumerate(csv_data):
@@ -514,19 +548,12 @@ class EvaluationDatasetForm(forms.ModelForm):
         return dataset
 
     def _save_clone(self):
-        evaluation_messages = []
         session_ids = self.cleaned_data.get("session_ids", [])
         filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
 
         if session_ids or filtered_session_ids:
-            evaluation_messages = EvaluationMessage.create_from_sessions(
-                team=self.team,
-                external_session_ids=session_ids,
-                filtered_session_ids=filtered_session_ids,
-                filter_params=self.filter_params,
-                timezone=self.timezone,
-            )
-        return evaluation_messages
+            return self._create_messages_from_sessions(session_ids, filtered_session_ids)
+        return []
 
     def _save_manual(self):
         return [
@@ -559,9 +586,22 @@ class EvaluationDatasetForm(forms.ModelForm):
                 continue
 
             context = {}
-            for field_name, csv_column in column_mapping.items():
-                if field_name not in ["input", "output"] and csv_column in row:
-                    context[field_name] = row[csv_column]
+            if context_mapping := column_mapping.get("context"):
+                for field_name, csv_column in context_mapping.items():
+                    if csv_column in row:
+                        context[field_name] = parse_csv_value_as_json(row[csv_column])
+
+            participant_data = {}
+            if participant_data_mapping := column_mapping.get("participant_data"):
+                for field_name, csv_column in participant_data_mapping.items():
+                    if csv_column in row:
+                        participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
+
+            session_state = {}
+            if session_state_mapping := column_mapping.get("session_state"):
+                for field_name, csv_column in session_state_mapping.items():
+                    if csv_column in row:
+                        session_state[field_name] = parse_csv_value_as_json(row[csv_column])
 
             message_history = []
             if populate_history:
@@ -578,6 +618,8 @@ class EvaluationDatasetForm(forms.ModelForm):
                     input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
                     output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
                     context=context,
+                    participant_data=participant_data,
+                    session_state=session_state,
                     history=message_history,
                     metadata={"created_mode": "csv"},
                 )
@@ -586,14 +628,14 @@ class EvaluationDatasetForm(forms.ModelForm):
             if populate_history:
                 auto_history.append(
                     {
-                        "message_type": "HUMAN",
+                        "message_type": ChatMessageType.HUMAN,
                         "content": input_content.strip(),
                         "summary": None,
                     }
                 )
                 auto_history.append(
                     {
-                        "message_type": "AI",
+                        "message_type": ChatMessageType.AI,
                         "content": output_content.strip(),
                         "summary": None,
                     }
@@ -614,16 +656,12 @@ def _clean_json_field(field_name: str, field_value: str) -> dict:
         raise forms.ValidationError(f"{field_name} is not valid JSON") from err
 
 
-class EvaluationDatasetEditForm(forms.ModelForm):
-    """Simple form for editing existing evaluation datasets (name only)."""
-
-    class Meta:
-        model = EvaluationDataset
-        fields = ("name",)
+class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
+    """Form for editing existing evaluation datasets."""
 
     def __init__(self, team, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.team = team
+        super().__init__(team, *args, **kwargs)
+        self.fields["mode"].label = "Add messages mode"
 
     def clean_name(self):
         name = self.cleaned_data.get("name")
@@ -636,3 +674,54 @@ class EvaluationDatasetEditForm(forms.ModelForm):
                 raise forms.ValidationError("A dataset with this name already exists in your team.")
 
         return name
+
+    def clean(self):
+        cleaned_data = super().clean()
+        mode = cleaned_data.get("mode")
+
+        if mode == "clone":
+            session_ids, filtered_session_ids = self._clean_clone()
+            cleaned_data["session_ids"] = session_ids
+            cleaned_data["filtered_session_ids"] = filtered_session_ids
+
+        return cleaned_data
+
+    def save(self, commit=True):
+        """Save the dataset and clone messages if mode is 'clone'."""
+        instance = super().save(commit=commit)
+
+        if commit and self.cleaned_data.get("mode") == "clone":
+            self._clone_messages_to_dataset(instance)
+
+        return instance
+
+    def _clone_messages_to_dataset(self, dataset: EvaluationDataset):
+        """
+        Clone messages from sessions into the existing dataset, avoiding duplicates.
+        Uses ChatMessage IDs for duplicate detection.
+        """
+        session_ids = self.cleaned_data.get("session_ids", set())
+        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
+
+        if not session_ids and not filtered_session_ids:
+            return
+
+        new_evaluation_messages = self._create_messages_from_sessions(session_ids, filtered_session_ids)
+        existing_chat_message_pairs = set(
+            dataset.messages.filter(
+                input_chat_message_id__isnull=False,
+                expected_output_chat_message_id__isnull=False,
+            ).values_list("input_chat_message_id", "expected_output_chat_message_id")
+        )
+
+        # Filter out duplicates based on ChatMessage IDs
+        messages_to_add = []
+        for msg in new_evaluation_messages:
+            chat_pair = (msg.input_chat_message_id, msg.expected_output_chat_message_id)
+            if chat_pair not in existing_chat_message_pairs:
+                messages_to_add.append(msg)
+                existing_chat_message_pairs.add(chat_pair)
+
+        if messages_to_add:
+            created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
+            dataset.messages.add(*created_messages)

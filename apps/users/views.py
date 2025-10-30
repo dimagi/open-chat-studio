@@ -11,6 +11,8 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_http_methods, require_POST
 from django_htmx.http import HttpResponseLocation
 
+from apps.web.waf import WafRule, waf_allow
+
 from .forms import ApiKeyForm, CustomUserChangeForm, UploadAvatarForm
 from .helpers import require_email_confirmation, user_has_confirmed_email_address
 from .models import CustomUser
@@ -63,6 +65,7 @@ def profile(request):
     )
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @login_required
 @require_POST
 def upload_profile_image(request):
