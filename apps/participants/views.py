@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
-from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
+from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.filters.models import FilterSet
 from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm
 from apps.teams.decorators import login_and_team_required
@@ -100,7 +100,6 @@ class CreateParticipant(LoginAndTeamRequiredMixin, CreateView, PermissionRequire
 
 class ParticipantTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Participant
-    paginate_by = 25
     table_class = ParticipantTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_participant"
@@ -133,7 +132,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
         context["selected_experiment"] = experiment
         sessions = participant.experimentsession_set.filter(experiment=experiment).all()
         context["session_table"] = ExperimentSessionsTable(
-            ExperimentSession.objects.annotate_with_last_message_created_at(sessions),
+            sessions.annotate_with_last_message_created_at(),
             extra_columns=[("participant", None)],  # remove participant column
         )
         data = participant.get_data_for_experiment(experiment)

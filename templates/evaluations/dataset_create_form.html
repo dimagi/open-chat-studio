@@ -3,8 +3,11 @@
 
 {% block form %}
   {{ form.non_field_errors }}
-  {% render_form_fields form "name" "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_data" %}
+  {% render_form_fields form "name" %}
+
   <div x-data="datasetBuilder()" x-init="init()">
+    {% render_form_fields form "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_data" %}
+
     <div x-show="!loaded" class="text-center py-8">
       <i class="fa-solid fa-spinner fa-spin fa-2x text-primary"></i>
     </div>
@@ -20,7 +23,7 @@
           <div class="mb-4">
             <div class="flex items-center justify-between">
               <div>
-                {% include "experiments/filters.html" with skip_dialogs=True %}
+                {% include "experiments/filters.html" %}
               </div>
 
               <div class="flex items-center gap-3">
@@ -276,28 +279,20 @@
   </div> <!-- End of datasetBuilder div -->
 {% endblock form %}
 
-{% block post_form %}
-  {# Filter dialogs must be outside form to avoid nested forms but need filterComponent context #}
-  {# Create a separate filterComponent instance - it will sync via API and URL params #}
-  <div x-data="filterComponent">
-    {% include "filters/saved_filters_dialog.html" %}
-    {% include "filters/save_filter_dialog.html" %}
-  </div>
-{% endblock post_form %}
-
 {% block page_js %}
+  <script src="{% static 'js/evaluations-bundle.js' %}"></script>
   <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
     function datasetBuilder() {
+      // Extend the shared datasetModeSelector with create-specific functionality
+      const baseComponent = window.datasetModeSelector({ defaultMode: 'clone' });
+
       return {
-        loaded: false,
-        mode: 'clone',
-        selectedSessionIds: new Set(),
-        filteredSessionIds: new Set(),
+        ...baseComponent,
+        // Add create-specific properties
         allSessionIds: new Set(),
         messages: [],
         messagesJsonString: '[]',
-        errorMessages: [],
 
         // Modal editing state
         editingMessage: {
@@ -324,31 +319,12 @@
         populateHistory: false,
 
         init() {
-          // Watch for mode changes
-          this.mode = document.querySelector('input[name="mode"]:checked')?.value || 'clone';
-          document.addEventListener('change', (e) => {
-            if (e.target.name === 'mode') {
-              this.mode = e.target.value;
-              this.errorMessages = [];
-            }
-          });
+          // Call base init first
+          baseComponent.init.call(this);
 
+          // Add event listeners for select-all feature
           window.addEventListener('filter:change', () => this.loadSessionIds());
           window.addEventListener('sessions-table-updated', () => this.onSessionsTableUpdate());
-
-          // Initialize session selection for clone mode
-          const preselected = document.querySelector('input[name="session_ids"]').value;
-          if (preselected) {
-            preselected.split(',').filter(id => id.trim()).forEach(id => this.selectedSessionIds.add(id));
-          }
-          this.updateSessionHiddenField();
-
-          // Initialize filtered session selection
-          const preselectedFiltered = document.querySelector('input[name="filtered_session_ids"]').value;
-          if (preselectedFiltered) {
-            preselectedFiltered.split(',').filter(id => id.trim()).forEach(id => this.filteredSessionIds.add(id));
-          }
-          this.updateFilteredSessionHiddenField();
 
           // Initialize messages for manual mode
           const messagesData = document.querySelector('input[name="messages_json"]').value;
@@ -373,15 +349,6 @@
             });
           }
 
-          // Form submission validation
-          const mainForm = document.getElementById('dataset-create-form');
-          mainForm.addEventListener('submit', (e) => {
-            this.validateForm(e);
-          });
-
-          // Set loaded to true after everything is initialized
-          this.loaded = true;
-
           // Initialize JSON editor for manual message form after DOM is ready
           this.$nextTick(() => {
             const form = document.getElementById('manual-message-form');
@@ -390,22 +357,11 @@
         },
 
         validateForm(e) {
-          this.errorMessages = [];
+          // Call base validation first
+          baseComponent.validateForm.call(this, e);
 
-          if (this.mode === 'clone') {
-            if (this.selectedSessionIds.size + this.filteredSessionIds.size === 0) {
-              e.preventDefault();
-              this.errorMessages.push('Please select at least one session to create the dataset.');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-
-            const intersection = [...this.selectedSessionIds].filter(id => this.filteredSessionIds.has(id));
-            if (intersection.length > 0) {
-              e.preventDefault();
-              this.errorMessages.push('A session cannot be selected in both "All Messages" and "Filtered Messages". Please select each session in only one column.');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-          } else if (this.mode === 'manual') {
+          // Add create-specific validation
+          if (this.mode === 'manual') {
             if (this.messages.length === 0) {
               this.errorMessages.push('Please add at least one message pair to create the dataset.');
             } else {
@@ -648,7 +604,7 @@
           });
         },
 
-        // Manual message methods (for manual mode)
+        // Manual message methods
         addMessageFromForm() {
           // Get values from the form
           const form = document.getElementById('manual-message-form');
@@ -1026,62 +982,16 @@
       };
     }
 
-    function restoreCheckboxStates() {
-      const hiddenField = document.querySelector('input[name="session_ids"]');
-      if (!hiddenField) return;
-
-      const selectedIds = hiddenField.value ? hiddenField.value.split(',').filter(id => id.trim()) : [];
-
-      document.querySelectorAll('tbody .session-checkbox').forEach(cb => {
-        cb.checked = false;
-      });
-
-      selectedIds.forEach(sessionId => {
-        const checkbox = document.querySelector(`.session-checkbox[value="${sessionId}"]`);
-        if (checkbox) {
-          checkbox.checked = true;
-        }
-      });
-    }
-
-    function restoreFilteredCheckboxStates() {
-      const filteredHiddenField = document.querySelector('input[name="filtered_session_ids"]');
-      if (!filteredHiddenField) return;
-
-      const filteredIds = filteredHiddenField.value ? filteredHiddenField.value.split(',').filter(id => id.trim()) : [];
-
-      document.querySelectorAll('tbody .filter-checkbox').forEach(cb => {
-        cb.checked = false;
-      });
-
-      filteredIds.forEach(sessionId => {
-        const checkbox = document.querySelector(`.filter-checkbox[value="${sessionId}"]`);
-        if (checkbox) {
-          checkbox.checked = true;
-        }
-      });
-    }
-
-    document.addEventListener('htmx:afterSettle', function(event) {
+    // Dispatch sessions-table-updated event after HTMX updates
+    const dispatchTableUpdateEvent = (event) => {
       if (event.target.id === 'sessions-table') {
         setTimeout(() => {
-          restoreCheckboxStates();
-          restoreFilteredCheckboxStates();
           window.dispatchEvent(new CustomEvent('sessions-table-updated'));
         }, 10);
       }
-    });
+    };
 
-    document.addEventListener('htmx:afterRequest', function(event) {
-      if (event.target.id === 'sessions-table') {
-        setTimeout(() => {
-          restoreCheckboxStates();
-          restoreFilteredCheckboxStates();
-          window.dispatchEvent(new CustomEvent('sessions-table-updated'));
-        }, 10);
-      }
-    });
-
-
+    document.addEventListener('htmx:afterSettle', dispatchTableUpdateEvent);
+    document.addEventListener('htmx:afterRequest', dispatchTableUpdateEvent);
   </script>
 {% endblock page_js %}

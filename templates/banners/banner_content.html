@@ -1,0 +1,17 @@
+{% load chat_tags %}
+{% if banners %}
+    {% for banner in banners %}
+        <div class="alert alert-{{ banner.type }} alert-vertical sm:alert-horizontal w-full flex items-center justify-between" role="alert">
+            <div class="flex-1">
+                {% if banner.title %}
+                    <strong>{{ banner.title }}</strong>:
+                {% endif %}
+                <div class="markdown">{{ banner.message|render_markdown }}</div>
+            </div>
+            <button class="btn btn-sm btn-ghost dismiss-banner ml-4" aria-label="Dismiss banner"
+                    data-banner-id="{{ banner.id }}"
+                    data-expiry="{{ banner.cookie_expires }}"
+                    aria-label="Close">×</button>
+        </div>
+    {% endfor %}
+{% endif %}

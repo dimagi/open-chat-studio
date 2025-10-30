@@ -172,9 +172,9 @@ class TestCSVUploadCreate:
         assert second_message.context["context_field"] == "wellness"
         assert second_message.context["date"] == "2024-01-01"
         assert len(second_message.history) == 2
-        assert second_message.history[0]["message_type"] == "HUMAN"
+        assert second_message.history[0]["message_type"] == "human"
         assert second_message.history[0]["content"] == "Hello"
-        assert second_message.history[1]["message_type"] == "AI"
+        assert second_message.history[1]["message_type"] == "ai"
         assert second_message.history[1]["content"] == "Hi there!"
 
         # Third message should have history from first two messages

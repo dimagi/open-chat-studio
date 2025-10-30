@@ -46,7 +46,6 @@ class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
 class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationconfig"
     model = EvaluationConfig
-    paginate_by = 25
     table_class = EvaluationConfigTable
     template_name = "table/single_table.html"
 
@@ -120,7 +119,6 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequi
 class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationrun"
     model = EvaluationRun
-    paginate_by = 25
     table_class = EvaluationRunTable
     template_name = "table/single_table.html"
 

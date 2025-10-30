@@ -40,6 +40,7 @@ from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
+from apps.web.waf import WafRule, waf_allow
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -60,7 +61,6 @@ class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
 class DatasetTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationdataset"
     model = EvaluationDataset
-    paginate_by = 25
     table_class = EvaluationDatasetTable
     template_name = "table/single_table.html"
 
@@ -87,10 +87,35 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
         return EvaluationDataset.objects.filter(team=self.request.team)
 
     def get_form_kwargs(self):
-        return {**super().get_form_kwargs(), "team": self.request.team}
+        kwargs = super().get_form_kwargs()
+        kwargs["team"] = self.request.team
+        kwargs["filter_params"] = FilterParams.from_request(self.request)
+        kwargs["timezone"] = self.request.session.get("detected_tz", None)
+        return kwargs
+
+    def _get_filter_context_data(self):
+        table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
+        return get_filter_context_data(
+            self.request.team,
+            ExperimentSessionFilter.columns(self.request.team),
+            "last_message",
+            table_url,
+            "sessions-table",
+            table_type=FilterSet.TableType.DATASETS,
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self._get_filter_context_data())
+        return context
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(self.request, "Dataset updated successfully!")
+        return response
 
     def get_success_url(self):
-        return reverse("evaluations:dataset_home", args=[self.request.team.slug])
+        return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
 
 
 class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMixin):
@@ -108,6 +133,7 @@ class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMix
         return HttpResponse(status=200)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     permission_required = "evaluations.add_evaluationdataset"
     template_name = "evaluations/dataset_create_form.html"
@@ -186,7 +212,6 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
     """Table view for selecting sessions to create a dataset from."""
 
     model = ExperimentSession
-    paginate_by = 20
     table_class = EvaluationSessionsSelectionTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_experimentsession"
@@ -209,9 +234,9 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
                     0,
                 )
             )
+            .annotate_with_versions_list()
             .filter(message_count__gt=0)
             .order_by("experiment__name")
-            .prefetch_related("chat__messages", "chat__messages__tags")
         )
 
         session_filter = ExperimentSessionFilter()
@@ -235,8 +260,8 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     """Table view for dataset messages with pagination."""
 
     model = EvaluationMessage
-    paginate_by = 10
     table_class = DatasetMessagesTable
+    table_pagination = {"per_page": 10}
     template_name = "table/single_table.html"
     permission_required = "evaluations.view_evaluationdataset"
 
@@ -410,6 +435,7 @@ def delete_message(request, team_slug, message_id):
     return HttpResponse("", status=200)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @login_and_team_required
 @require_POST
 def parse_csv_columns(request, team_slug: str):

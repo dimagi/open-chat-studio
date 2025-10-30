@@ -138,7 +138,6 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
     """
 
     model = ExperimentSession
-    paginate_by = 25
     table_class = ExperimentSessionsTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_experimentsession"
@@ -152,9 +151,8 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             ExperimentSession.objects.with_last_message_created_at()
             .filter(experiment_filter, team=self.request.team)
             .select_related("participant__user", "chat")
+            .annotate_with_versions_list()
             .prefetch_related(
-                "chat__tags",
-                "chat__messages__tags",
                 Prefetch(
                     "chat__tagged_items",
                     queryset=CustomTaggedItem.objects.select_related("tag", "user"),
@@ -173,7 +171,6 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
 
 class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
     model = Experiment
-    paginate_by = 25
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"
     permission_required = "experiments.view_experiment"
