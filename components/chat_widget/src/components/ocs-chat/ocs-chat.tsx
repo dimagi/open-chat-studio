@@ -408,6 +408,10 @@ export class OcsChat {
 
     // Start session if we don't have one yet
     if (!this.sessionId) {
+      // Prevent concurrent session initialization
+      if (this.isLoading) {
+        return;
+      }
       await this.startSession();
       // Check if session started successfully
       if (!this.sessionId) {
