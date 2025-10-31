@@ -236,17 +236,21 @@ export class OcsChat {
     // Initialize button position from computed styles
     this.initializeButtonPosition();
 
-    if (this.visible) {
-      this.initializePosition();
-    }
+    // Defer position initialization and session starting to avoid state changes during componentDidLoad
+    setTimeout(() => {
+      if (this.visible) {
+        this.initializePosition();
+      }
 
-    // Only auto-start session if we don't have an existing one
-    if (this.visible && !this.sessionId) {
-      this.startSession();
-    } else if (this.visible && this.sessionId) {
-      // Resume polling for existing session
-      this.startMessagePolling();
-    }
+      // Only auto-start session if we don't have an existing one
+      if (this.visible && !this.sessionId) {
+        this.startSession();
+      } else if (this.visible && this.sessionId) {
+        // Resume polling for existing session
+        this.startMessagePolling();
+      }
+    }, 0);
+
     window.addEventListener('resize', this.handleWindowResize);
   }
 
