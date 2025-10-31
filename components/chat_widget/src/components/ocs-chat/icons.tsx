@@ -15,6 +15,9 @@ export const OcsWidgetAvatar = () => {
   </svg>;
 }
 
+/**
+ * Heroicon: x-mark
+ */
 export const XMarkIcon = () => {
   return <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
               stroke="currentColor">
@@ -42,6 +45,9 @@ export const GripDotsVerticalIcon = () => {
   );
 };
 
+/**
+ * Heroicon: plus-circle
+ */
 export const PlusWithCircleIcon = () => {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -50,6 +56,9 @@ export const PlusWithCircleIcon = () => {
   )
 }
 
+/**
+ * Heroicon: arrows-pointing-out
+ */
 export const ArrowsPointingOutIcon = () => {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -59,6 +68,9 @@ export const ArrowsPointingOutIcon = () => {
   )
 }
 
+/**
+ * Heroicon: arrows-pointing-in
+ */
 export const ArrowsPointingInIcon = () => {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -68,6 +80,9 @@ export const ArrowsPointingInIcon = () => {
   )
 }
 
+/**
+ * Heroicon: paper-clip
+ */
 export const PaperClipIcon = () => {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -77,6 +92,9 @@ export const PaperClipIcon = () => {
   )
 }
 
+/**
+ * Heroicon: document-check
+ */
 export const CheckDocumentIcon = () => {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -86,6 +104,7 @@ export const CheckDocumentIcon = () => {
 
   )
 }
+
 export const XIcon = () => {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">

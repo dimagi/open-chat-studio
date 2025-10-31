@@ -4,7 +4,7 @@ import {
   XMarkIcon,
   GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
   PaperClipIcon, CheckDocumentIcon, XIcon, OcsWidgetAvatar
-} from './heroicons';
+} from './icons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { varToPixels } from '../../utils/utils';
 import {TranslationStrings, TranslationManager, defaultTranslations} from '../../utils/translations';
