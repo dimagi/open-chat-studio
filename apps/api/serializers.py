@@ -215,7 +215,6 @@ class ChatStartSessionResponse(serializers.Serializer):
     session_id = serializers.UUIDField(label="Session ID")
     chatbot = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
-    seed_message_task_id = serializers.CharField(required=False, read_only=True)
 
 
 class ChatSendMessageRequest(serializers.Serializer):
