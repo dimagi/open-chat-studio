@@ -7,8 +7,8 @@ import en from '../assets/translations/en.json';
 import es from '../assets/translations/es.json';
 import fr from '../assets/translations/fr.json';
 import hi from '../assets/translations/hi.json';
-import it from '../assets/translations/ita.json';
-import pt from '../assets/translations/por.json';
+import it from '../assets/translations/it.json';
+import pt from '../assets/translations/pt.json';
 import sw from '../assets/translations/sw.json';
 import uk from '../assets/translations/uk.json';
 
