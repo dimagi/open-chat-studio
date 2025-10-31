@@ -20,6 +20,7 @@ export interface ChatStartSessionResponse {
   session_id: string;
   chatbot: unknown;
   participant: unknown;
+  seed_message_task_id?: string;
 }
 
 export interface ChatSendMessageResponse {
