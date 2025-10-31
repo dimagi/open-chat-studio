@@ -1,5 +1,5 @@
-import { newSpecPage } from '@stencil/core/testing';
-import { OcsChat } from './ocs-chat';
+import {newSpecPage} from '@stencil/core/testing';
+import {OcsChat} from './ocs-chat';
 
 // Create mock functions at the module level
 const mockStartSession = jest.fn();
@@ -147,10 +147,9 @@ describe('ocs-chat session creation', () => {
 
     // Simulate user sending a message
     page.rootInstance.messageInput = 'Hello, world!';
-    const sendPromise = page.rootInstance.sendMessage('Hello, world!');
+    await page.rootInstance.sendMessage('Hello, world!');
 
     // Wait for the async operation to complete
-    await sendPromise;
     await page.waitForChanges();
 
     // Verify fetch was called to start a session
@@ -181,7 +180,7 @@ describe('ocs-chat session creation', () => {
     ];
 
     // Mock localStorage to return existing session data
-    const mockGetItem = jest.fn((key: string) => {
+    (window.localStorage.getItem as jest.Mock) = jest.fn((key: string) => {
       if (key === 'ocs-chat-session-test-bot') {
         return existingSessionId;
       }
@@ -193,8 +192,6 @@ describe('ocs-chat session creation', () => {
       }
       return null;
     });
-
-    (window.localStorage.getItem as jest.Mock) = mockGetItem;
 
     const page = await newSpecPage({
       components: [OcsChat],
@@ -255,8 +252,7 @@ describe('ocs-chat session creation', () => {
     await page.waitForChanges();
 
     expect(page.rootInstance.sessionId).toBe('test-session-id');
-    const initialMessages = page.rootInstance.messages.length;
-    expect(initialMessages).toBeGreaterThan(0);
+    expect(page.rootInstance.messages.length).toBeGreaterThan(0);
 
     // Clear the session
     await page.rootInstance.clearSession();
