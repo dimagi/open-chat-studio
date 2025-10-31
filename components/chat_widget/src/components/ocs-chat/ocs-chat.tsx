@@ -375,12 +375,7 @@ export class OcsChat {
       this.sessionId = data.session_id;
       this.saveSessionToStorage();
 
-      // Handle seed message if present
-      if (data.seed_message_task_id) {
-        this.startTaskPolling(data.seed_message_task_id);
-      } else {
-        this.startMessagePolling();
-      }
+      this.startMessagePolling();
     } catch (_error) {
       this.handleError('Failed to start chat session');
     } finally {

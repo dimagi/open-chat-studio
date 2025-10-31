@@ -29,7 +29,6 @@ function setupFetchMock(sessionId = 'test-session-id', taskId = 'test-task-id') 
         ok: true,
         json: () => Promise.resolve({
           session_id: sessionId,
-          seed_message_task_id: null,
           chatbot: {},
           participant: {},
         }),
@@ -56,7 +55,6 @@ describe('ocs-chat session creation', () => {
     // Setup default mock implementations
     mockStartSession.mockResolvedValue({
       session_id: 'test-session-id',
-      seed_message_task_id: null,
     });
 
     mockSendMessage.mockResolvedValue({
@@ -348,7 +346,6 @@ describe('ocs-chat session creation', () => {
             json: () =>
               Promise.resolve({
                 session_id: 'test-session-id',
-                seed_message_task_id: null,
                 chatbot: {},
                 participant: {},
               }),
