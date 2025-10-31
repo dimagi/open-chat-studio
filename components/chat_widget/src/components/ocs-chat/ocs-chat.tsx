@@ -1475,7 +1475,7 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
                 >
-                  {this.messages.length === 0 && this.parsedWelcomeMessages.length > 0 && (
+                  {this.messages.length === 0 && this.getWelcomeMessages().length > 0 && (
                     <div class="welcome-messages">
                       {this.getWelcomeMessages().map((message, index) => (
                         <div key={`welcome-${index}`} class="message-row message-row-assistant">
@@ -1544,7 +1544,7 @@ export class OcsChat {
               )}
 
               {/* Starter Questions */}
-              {this.messages.length === 0 && this.parsedStarterQuestions.length > 0 && (
+              {this.messages.length === 0 && this.getStarterQuestions().length > 0 && (
                 <div class="starter-questions">
                   {this.getStarterQuestions().map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
