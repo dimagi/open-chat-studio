@@ -144,3 +144,18 @@ describe('TranslationManager', () => {
   // to force a rejection here without modifying source. We validate
   // fallback behaviour via the unknown-language case instead.
 });
+
+describe('Translation Files Consistency', () => {
+  const supportedLanguages = ['ar', 'en', 'es', 'fr', 'hi', 'it', 'pt', 'sw', 'uk'];
+  // Assume that the default translations file has all the correct keys.
+  const referenceKeys = Object.keys(defaultTranslations).sort();
+
+  supportedLanguages.forEach(lang => {
+    it(`${lang}.json should have all required translation keys`, async () => {
+      const langTranslations = await translations.loadTranslations(lang);
+      const langKeys = Object.keys(langTranslations).sort();
+
+      expect(langKeys).toEqual(referenceKeys);
+    });
+  });
+});

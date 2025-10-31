@@ -3,8 +3,8 @@ import {Component, Host, h, Prop, State, Element, Watch, Env} from '@stencil/cor
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
-  PaperClipIcon, CheckDocumentIcon, XIcon
-} from './heroicons';
+  PaperClipIcon, CheckDocumentIcon, XIcon, OcsWidgetAvatar
+} from './icons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { varToPixels } from '../../utils/utils';
 import {TranslationStrings, TranslationManager, defaultTranslations} from '../../utils/translations';
@@ -1139,10 +1139,6 @@ export class OcsChat {
     return fallback;
   }
 
-  private getDefaultIconUrl(): string {
-    return `${this.apiBaseUrl}/static/images/favicons/favicon.svg`;
-  }
-
   private getWelcomeMessages(): string[] {
     const translated = this.translationManager.getArray("content.welcomeMessages");
     return translated && translated.length > 0
@@ -1169,7 +1165,6 @@ export class OcsChat {
     const buttonText = this.translationManager.get('branding.buttonText', this.buttonText);
     const hasText = !!(buttonText && buttonText.trim());
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
-    const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
     const finalButtonText = buttonText ?? '';
     const openLabel = this.translationManager.get('launcher.open') ?? '';
@@ -1195,7 +1190,7 @@ export class OcsChat {
           aria-grabbed={this.isButtonDragging}
           aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
         >
-          <img src={iconSrc} alt="" />
+          {hasCustomIcon ? <img src={this.iconUrl} alt="" /> : <OcsWidgetAvatar />}
           <span>{finalButtonText}</span>
           {isDraggable && (
             <span id="chat-button-drag-hint" style={{ display: 'none' }}>
@@ -1218,7 +1213,7 @@ export class OcsChat {
           aria-grabbed={this.isButtonDragging}
           aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
         >
-          <img src={iconSrc} alt="Chat" />
+          {hasCustomIcon ? <img src={this.iconUrl} alt="" /> : <OcsWidgetAvatar />}
           {isDraggable && (
             <span id="chat-button-drag-hint" style={{ display: 'none' }}>
               Draggable. Use mouse or touch to reposition.
