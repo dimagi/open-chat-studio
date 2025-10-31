@@ -426,10 +426,11 @@ export class OcsChat {
 
       // If this is the first user message and there are welcome messages,
       // add them to chat history as assistant messages
-      if (this.messages.length === 0 && this.parsedWelcomeMessages.length > 0) {
+      const welcomeMessagesToAdd = this.getWelcomeMessages();
+      if (this.messages.length === 0 && welcomeMessagesToAdd.length > 0) {
         const now = new Date();
-        const welcomeMessages: ChatMessage[] = this.parsedWelcomeMessages.map((welcomeMsg, index) => ({
-          created_at: new Date(now.getTime() - (this.parsedWelcomeMessages.length - index) * 1000).toISOString(),
+        const welcomeMessages: ChatMessage[] = welcomeMessagesToAdd.map((welcomeMsg, index) => ({
+          created_at: new Date(now.getTime() - (welcomeMessagesToAdd.length - index) * 1000).toISOString(),
           role: 'assistant' as const,
           content: welcomeMsg,
           attachments: []
