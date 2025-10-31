@@ -91,7 +91,7 @@ export class OcsChat {
   /**
    * The message to display in the new chat confirmation dialog.
    */
-  @Prop() newChatConfirmationMessage?: string = "Starting a new chat will clear your current conversation. Continue?";
+  @Prop() newChatConfirmationMessage?: string;
 
   /**
    * Whether the chat widget is visible on load.
@@ -145,7 +145,7 @@ export class OcsChat {
   /**
    * The text to display while the assistant is typing/preparing a response.
    */
-  @Prop() typingIndicatorText?: string = "Preparing response";
+  @Prop() typingIndicatorText?: string;
 
   /**
    * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
