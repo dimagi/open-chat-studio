@@ -47,7 +47,7 @@ jobs:
 
           # Check for checked checkbox indicating docs/changelog update needed
           # Looks for: - [x] This PR requires docs/changelog update
-          if echo "$PR_BODY" | grep -qiE '- \[[xX]\].*[Rr]equires (docs|changelog|documentation)'; then
+          if printf '%s\n' "$PR_BODY" | grep -qiE -- '- \[[xX]\].*[Rr]equires (docs|changelog|documentation)'; then
             echo "needs_docs_update=true" >> $GITHUB_OUTPUT
             echo "PR indicates docs/changelog update is needed"
           else
