@@ -236,17 +236,14 @@ export class OcsChat {
     // Initialize button position from computed styles
     this.initializeButtonPosition();
 
-    // Defer position initialization and session starting to avoid state changes during componentDidLoad
+    // Defer position initialization to avoid state changes during componentDidLoad
     setTimeout(() => {
       if (this.visible) {
         this.initializePosition();
       }
 
-      // Only auto-start session if we don't have an existing one
-      if (this.visible && !this.sessionId) {
-        this.startSession();
-      } else if (this.visible && this.sessionId) {
-        // Resume polling for existing session
+      // Resume polling for existing session (don't auto-start new sessions)
+      if (this.visible && this.sessionId) {
         this.startMessagePolling();
       }
     }, 0);
@@ -412,7 +409,16 @@ export class OcsChat {
   }
 
   private async sendMessage(message: string): Promise<void> {
-    if (!this.sessionId || !message.trim()) return;
+    if (!message.trim()) return;
+
+    // Start session if we don't have one yet
+    if (!this.sessionId) {
+      await this.startSession();
+      // Check if session started successfully
+      if (!this.sessionId) {
+        return; // startSession already handled the error
+      }
+    }
 
     try {
       let attachmentIds: number[] = [];
@@ -581,14 +587,14 @@ export class OcsChat {
 
     if (visible) {
       this.initializePosition();
-    }
-    if (visible && !this.sessionId) {
-      await this.startSession();
-    } else if (!visible) {
-      this.stopMessagePolling();
+
+      // Resume polling for existing session (don't auto-start new sessions)
+      if (this.sessionId) {
+        this.scrollToBottom(true);
+        this.startMessagePolling();
+      }
     } else {
-      this.scrollToBottom(true);
-      this.startMessagePolling();
+      this.stopMessagePolling();
     }
   }
 
@@ -1348,10 +1354,14 @@ export class OcsChat {
 
   private async confirmNewChat(): Promise<void> {
     this.hideConfirmationDialog();
-    await this.actuallyStartNewChat();
+    await this.clearSession();
   }
 
-  private async actuallyStartNewChat(): Promise<void> {
+  /**
+   * This clears out all data related to the previous session. A new session
+   * will start when the user sends a message.
+   */
+  private async clearSession(): Promise<void> {
     this.clearSessionStorage();
     this.sessionId = undefined;
     this.messages = [];
@@ -1361,8 +1371,6 @@ export class OcsChat {
       this.selectedFiles = [];
     }
     this.cleanup();
-
-    await this.startSession();
   }
 
   private toggleFullscreen(): void {
@@ -1595,19 +1603,18 @@ export class OcsChat {
               )}
 
               {/* Input Area */}
-              {this.sessionId && (
-                <div class="input-area">
-                  <div class="input-container">
-                    <textarea
-                      ref={(el) => this.textareaRef = el}
-                      class="message-textarea"
-                      rows={1}
-                      placeholder={this.translationManager.get('composer.placeholder')}
-                      value={this.messageInput}
-                      onInput={(e) => this.handleInputChange(e)}
-                      onKeyPress={(e) => this.handleKeyPress(e)}
-                      disabled={this.isTyping || this.isUploadingFiles}
-                    ></textarea>
+              <div class="input-area">
+                <div class="input-container">
+                  <textarea
+                    ref={(el) => this.textareaRef = el}
+                    class="message-textarea"
+                    rows={1}
+                    placeholder={this.translationManager.get('composer.placeholder')}
+                    value={this.messageInput}
+                    onInput={(e) => this.handleInputChange(e)}
+                    onKeyPress={(e) => this.handleKeyPress(e)}
+                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
+                  ></textarea>
                     {/* File Upload Button */}
                     {this.allowAttachments && (
                       <input
@@ -1628,7 +1635,7 @@ export class OcsChat {
                       <button
                         class="file-attachment-button"
                         onClick={() => this.fileInputRef?.click()}
-                        disabled={this.isTyping || this.isUploadingFiles}
+                        disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
                         title={this.translationManager.get('attach.add')}
                         aria-label={this.translationManager.get('attach.add')}
                       >
@@ -1637,18 +1644,17 @@ export class OcsChat {
                     )}
                     <button
                       class={`send-button ${
-                        !this.isTyping && !!this.messageInput.trim()
+                        !this.isTyping && !this.isLoading && !!this.messageInput.trim()
                           ? 'send-button-enabled'
                           : 'send-button-disabled'
                       }`}
                       onClick={() => this.sendMessage(this.messageInput)}
-                      disabled={this.isTyping || this.isUploadingFiles || !this.messageInput.trim()}
+                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading || !this.messageInput.trim()}
                     >
                       {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                     </button>
                   </div>
                 </div>
-              )}
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
                 <p>{this.translationManager.get('branding.poweredBy')}{' '} <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
               </div>
