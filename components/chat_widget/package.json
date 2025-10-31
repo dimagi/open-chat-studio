@@ -20,7 +20,7 @@
     "loader/"
   ],
   "scripts": {
-    "test": "stencil test --spec",
+    "test": "stencil test --spec -- --forceExit",
     "build": "stencil build --docs",
     "start": "stencil build --dev --watch --serve",
     "generate": "stencil generate",

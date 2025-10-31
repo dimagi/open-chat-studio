@@ -99,7 +99,9 @@ describe('ocs-chat session creation', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Small delay to allow any pending promises to resolve
+    await new Promise(resolve => setTimeout(resolve, 0));
     jest.restoreAllMocks();
   });
 
