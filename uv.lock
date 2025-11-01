@@ -3674,7 +3674,7 @@ wheels = [
 
 [[package]]
 name = "taskbadger"
-version = "1.5.0"
+version = "1.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -3683,9 +3683,9 @@ dependencies = [
     { name = "tomlkit" },
     { name = "typer", extra = ["all"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d0/64/581614fe60399322bf63bc8a4f7aebe737c503a50f41c1b8b3b72f05190b/taskbadger-1.5.0.tar.gz", hash = "sha256:cb7ec601d5b085d544d9c13e7f4c58cff3a6a441053c7481abb33f5d478f12a0", size = 29973, upload-time = "2025-02-14T13:02:42.528Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fc/79/be8907f313cbfcb21df56876b0cb9b2a3c3cd9ccbc312b03d3f83925af08/taskbadger-1.6.1.tar.gz", hash = "sha256:08271e8c480d7557579d72e7f029cb0167b6f5617c8cd5071c62b8a750d8fbf6", size = 30693, upload-time = "2025-03-04T18:31:12.07Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/24/98ad32b7be554ff6cd0b006985d90e11cdd8e6a095a9d0c2fa3819e588d0/taskbadger-1.5.0-py3-none-any.whl", hash = "sha256:ecc526f7258e929dce810d84e15531204112e6781e29f99792f15d4f09c904ee", size = 58367, upload-time = "2025-02-14T13:02:41.31Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/fa/d93f97dca2f208d1a7e7f7a0b0d11ea7d0d638d6a654b8d5a409e4a32c33/taskbadger-1.6.1-py3-none-any.whl", hash = "sha256:49c61602bc733ffc83e84ea942a025e04a449448af11ad323b49d2a14514ca56", size = 59091, upload-time = "2025-03-04T18:31:09.96Z" },
 ]
 
 [[package]]
