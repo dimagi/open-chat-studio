@@ -74,7 +74,6 @@ from apps.experiments.filters import (
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
-    ExperimentInvitationForm,
     ExperimentVersionForm,
     SurveyCompletedForm,
     TranslateMessagesForm,
@@ -921,54 +920,6 @@ def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, 
     except Exception:
         messages.warning(request=request, message="This link could not be verified")
         return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
-
-
-@login_and_team_required
-@permission_required("experiments.invite_participants", raise_exception=True)
-def experiment_invitations(request, team_slug: str, experiment_id: int, origin="experiments"):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    experiment_version = experiment.default_version
-    sessions = experiment.sessions.order_by("-created_at").filter(
-        status__in=["setup", "pending"],
-        participant__isnull=False,
-    )
-    form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
-    if request.method == "POST":
-        post_form = ExperimentInvitationForm(request.POST)
-        if post_form.is_valid():
-            if ExperimentSession.objects.filter(
-                team=request.team,
-                experiment_id=experiment_id,
-                status__in=["setup", "pending"],
-                participant__identifier=post_form.cleaned_data["email"],
-            ).exists():
-                participant_email = post_form.cleaned_data["email"]
-                messages.info(request, f"{participant_email} already has a pending invitation.")
-            else:
-                with transaction.atomic():
-                    session = WebChannel.start_new_session(
-                        experiment,
-                        participant_identifier=post_form.cleaned_data["email"],
-                        session_status=SessionStatus.SETUP,
-                        timezone=request.session.get("detected_tz", None),
-                    )
-                if post_form.cleaned_data["invite_now"]:
-                    send_experiment_invitation(session)
-        else:
-            form = post_form
-
-    version_specific_vars = {
-        "experiment_name": experiment_version.name,
-        "experiment_description": experiment_version.description,
-    }
-    template_name = (
-        "chatbots/chatbot_invitations.html" if origin == "chatbots" else "experiments/experiment_invitations.html"
-    )
-    return TemplateResponse(
-        request,
-        template_name,
-        {"invitation_form": form, "experiment": experiment, "sessions": sessions, **version_specific_vars},
-    )
 
 
 @require_POST

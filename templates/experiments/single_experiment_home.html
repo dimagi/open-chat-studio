@@ -150,7 +150,7 @@
             {% endif %}
             {% if perms.experiments.invite_participants %}
               <li>
-                <a href="{% url 'experiments:experiment_invitations' team.slug experiment.id %}">
+                <a href="{% url 'chatbots:chatbots_invitations' experiment.id %}">
                   <i class="fa-regular fa-envelope"></i> Invitations
                 </a>
               </li>

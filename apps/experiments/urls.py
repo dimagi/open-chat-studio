@@ -105,7 +105,6 @@ urlpatterns = [
     # events
     path("e/<int:experiment_id>/events/", include("apps.events.urls")),
     # superuser tools
-    path("e/<int:experiment_id>/invitations/", views.experiment_invitations, name="experiment_invitations"),
     path("e/<int:experiment_id>/invitations/send/<str:session_id>/", views.send_invitation, name="send_invitation"),
     path("e/<int:experiment_id>/exports/generate", views.generate_chat_export, name="generate_chat_export"),
     path(

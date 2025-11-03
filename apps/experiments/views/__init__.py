@@ -23,7 +23,6 @@ from .experiment import (  # noqa: F401
     experiment_chat_embed,
     experiment_chat_session,
     experiment_complete,
-    experiment_invitations,
     experiment_pre_survey,
     experiment_review,
     experiment_session_details_view,
