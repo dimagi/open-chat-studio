@@ -43,7 +43,6 @@ class ServiceProviderMixin:
 class ServiceProviderTableView(
     LoginAndTeamRequiredMixin, SingleTableView, ServiceProviderMixin, PermissionRequiredMixin
 ):
-    paginate_by = 25
     template_name = "table/single_table.html"
 
     def get_permission_required(self):

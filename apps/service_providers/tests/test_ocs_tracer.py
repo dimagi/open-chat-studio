@@ -42,6 +42,7 @@ class TestOCSTracer:
 
         tracer.end_trace(outputs={}, error=None)
 
+    @pytest.mark.skip("spans disabled")
     def test_span_creation(self, experiment):
         """
         A span that is started should be added to the current trace. If there is an active span, it should be added
@@ -84,6 +85,7 @@ class TestOCSTracer:
 
         tracer.end_trace()
 
+    @pytest.mark.skip("spans disabled")
     def test_span_with_error(self, experiment):
         """
         Test that a span with an error is properly recorded.

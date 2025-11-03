@@ -68,7 +68,7 @@ urlpatterns = [
         name="add_message_to_dataset",
     ),
     path(
-        "add_single_message/session/<uuid:session_id>/",
+        "add_single_message/session/<str:session_id>/",
         dataset_views.AddMessageToDatasetView.as_view(),
         name="add_single_message_to_dataset",
     ),

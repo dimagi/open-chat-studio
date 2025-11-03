@@ -77,6 +77,7 @@ IGNORE_APPS = {
     "utils_tests",
     "waffle",
     "web",
+    "silk",
 }
 
 IGNORE_MODELS = {"teams": {"flag"}}

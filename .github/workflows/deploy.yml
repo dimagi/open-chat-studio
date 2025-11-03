@@ -115,6 +115,9 @@ jobs:
         file: Dockerfile
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        build-args: |
+          SECRET_KEY=dummy-secret-key-for-build
+          DJANGO_ALLOWED_HOSTS=localhost
 
     - name: Update ECS task def for Django web container
       id: django-web-def

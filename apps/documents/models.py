@@ -337,7 +337,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         if not self.is_remote_index or self.openai_vector_store_id:
             return
 
-        file_ids = file_ids or []
         self.openai_vector_store_id = self.llm_provider.create_remote_index(name=self.index_name, file_ids=file_ids)
         self.save(update_fields=["openai_vector_store_id"])
 

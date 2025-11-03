@@ -27,7 +27,7 @@ from apps.evaluations.models import (
     EvaluationRunType,
     Evaluator,
 )
-from apps.evaluations.utils import parse_history_text
+from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.utils import current_team
 
@@ -300,8 +300,22 @@ def _extract_row_data(row):
     context = {}
     for col_name, value in row.items():
         if col_name.startswith("context.") and value:
-            context_key = col_name[8:]  # Remove "context." prefix
-            context[context_key] = value
+            context_key = col_name.removeprefix("context.")
+            context[context_key] = parse_csv_value_as_json(value)
+
+    # Extract participant_data from participant_data.* columns
+    participant_data = {}
+    for col_name, value in row.items():
+        if col_name.startswith("participant_data.") and value:
+            key = col_name.removeprefix("participant_data.")
+            participant_data[key] = parse_csv_value_as_json(value)
+
+    # Extract session_state from session_state.* columns
+    session_state = {}
+    for col_name, value in row.items():
+        if col_name.startswith("session_state.") and value:
+            key = col_name.removeprefix("session_state.")
+            session_state[key] = parse_csv_value_as_json(value)
 
     # Parse history if present
     history = []
@@ -316,6 +330,8 @@ def _extract_row_data(row):
         "input_content": input_content,
         "output_content": output_content,
         "context": context,
+        "participant_data": participant_data,
+        "session_state": session_state,
         "history": history,
     }
 
@@ -328,20 +344,35 @@ def _update_existing_message(dataset, message_id, row_data, team):
     old_output_content = message.output.get("content", "")
     old_history = message.history
     old_context = message.context
+    old_participant_data = message.participant_data
+    old_session_state = message.session_state
 
     new_input_content = row_data["input_content"]
     new_output_content = row_data["output_content"]
     new_history = row_data["history"]
-    new_context = row_data["context"]
+    new_context = row_data.get("context", {})
+    new_participant_data = row_data.get("participant_data", {})
+    new_session_state = row_data.get("session_state", {})
 
     input_content_changed = old_input_content != new_input_content
     output_content_changed = old_output_content != new_output_content
     history_changed = old_history != new_history
     context_chagned = old_context != new_context
+    participant_data_changed = old_participant_data != new_participant_data
+    session_state_changed = old_session_state != new_session_state
 
-    any_content_changed = input_content_changed or output_content_changed or history_changed or context_chagned
+    any_content_changed = (
+        input_content_changed
+        or output_content_changed
+        or history_changed
+        or context_chagned
+        or participant_data_changed
+        or session_state_changed
+    )
 
-    message.context = row_data["context"]
+    message.context = new_context
+    message.participant_data = new_participant_data
+    message.session_state = new_session_state
 
     if history_changed:
         message.history = new_history
@@ -370,6 +401,8 @@ def _create_new_message(dataset, row_data):
         input=EvaluationMessageContent(content=row_data["input_content"], role="human").model_dump(),
         output=EvaluationMessageContent(content=row_data["output_content"], role="ai").model_dump(),
         context=row_data["context"],
+        participant_data=row_data["participant_data"],
+        session_state=row_data["session_state"],
         history=row_data["history"],
         metadata={"created_mode": "csv_upload"},
     )

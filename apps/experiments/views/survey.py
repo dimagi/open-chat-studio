@@ -28,7 +28,6 @@ class SurveyHome(LoginAndTeamRequiredMixin, TemplateView):
 
 class SurveyTableView(SingleTableView):
     model = Survey
-    paginate_by = 25
     table_class = SurveyTable
     template_name = "table/single_table.html"
 

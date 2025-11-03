@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import Count, F, Max, Q
+from django.db.models import Count, F, OuterRef, Q, Subquery
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -19,7 +19,7 @@ from waffle import flag_is_active
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatMessage
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
@@ -46,6 +46,7 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.utils.search import similarity_search
+from apps.web.waf import WafRule, waf_allow
 
 
 def _get_alpine_context(request, experiment=None):
@@ -155,7 +156,6 @@ def chatbots_home(request, team_slug: str):
 
 
 class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
-    paginate_by = 25
     template_name = "table/single_table.html"
     model = Experiment
     table_class = ChatbotTable
@@ -168,13 +168,44 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return table
 
     def get_queryset(self):
+        from apps.chat.models import ChatMessage
+        from apps.experiments.models import ExperimentSession
+
+        session_count_subquery = (
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .values("experiment_id")
+            .annotate(count=Count("id"))
+            .values("count")
+        )
+
+        participant_count_subquery = (
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .values("experiment_id")
+            .annotate(count=Count("participant_id", distinct=True))
+            .values("count")
+        )
+
+        messages_count_subquery = (
+            ChatMessage.objects.filter(chat__experiment_session__experiment_id=OuterRef("pk"))
+            .values("chat__experiment_session__experiment_id")
+            .annotate(count=Count("id"))
+            .values("count")
+        )
+
+        last_message_subquery = (
+            ChatMessage.objects.filter(chat__experiment_session__experiment_id=OuterRef("pk"))
+            .order_by("-created_at")
+            .values("created_at")[:1]
+        )
+
         query_set = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
-            .annotate(session_count=Count("sessions", distinct=True))
-            .annotate(participant_count=Count("sessions__participant", distinct=True))
-            .annotate(messages_count=Count("sessions__chat__messages", distinct=True))
-            .annotate(last_message=Max("sessions__chat__messages__created_at"))
+            .select_related("team", "owner")
+            .annotate(session_count=Subquery(session_count_subquery))
+            .annotate(participant_count=Subquery(participant_count_subquery))
+            .annotate(messages_count=Subquery(messages_count_subquery))
+            .annotate(last_message=Subquery(last_message_subquery))
             .order_by(F("last_message").desc(nulls_last=True))
         )
         show_archived = self.request.GET.get("show_archived") == "on"
@@ -279,7 +310,6 @@ class CreateChatbotVersion(CreateExperimentVersion):
 
 class ChatbotVersionsTableView(ExperimentVersionsTableView):
     model = Experiment
-    paginate_by = 25
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"
     permission_required = "experiments.view_experiment"
@@ -320,6 +350,20 @@ def chatbot_version_create_status(
 
 class ChatbotSessionsTableView(ExperimentSessionsTableView):
     table_class = ChatbotSessionsTable
+
+    def get_queryset(self):
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                message_count=Subquery(
+                    ChatMessage.objects.filter(chat=OuterRef("chat"))
+                    .values("chat")
+                    .annotate(count=Count("id"))
+                    .values("count")[:1]
+                )
+            )
+        )
 
     def get_table(self, **kwargs):
         """
@@ -447,11 +491,13 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
     )
 
 
+@waf_allow(WafRule.NoUserAgent_HEADER)
 @team_required
 def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     return start_session_public(request, team_slug, experiment_id)
 
 
+@waf_allow(WafRule.NoUserAgent_HEADER)
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):

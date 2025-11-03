@@ -1144,34 +1144,36 @@ export class OcsChat {
   }
 
   private getWelcomeMessages(): string[] {
-    const translated = this.translationManager.getArray("welcomeMessages");
+    const translated = this.translationManager.getArray("content.welcomeMessages");
     return translated && translated.length > 0
       ? translated
       : this.parsedWelcomeMessages;
   }
 
   private getStarterQuestions(): string[] {
-    const translated = this.translationManager.getArray("starterQuestions");
+    const translated = this.translationManager.getArray("content.starterQuestions");
     return translated && translated.length > 0
       ? translated
       : this.parsedStarterQuestions;
   }
 
   private getButtonClasses(): string {
-    const translatedButtonText = this.translationManager.get('buttonText');
-    const hasText = (translatedButtonText && translatedButtonText.trim()) || (this.buttonText && this.buttonText.trim());
+    const buttonText = this.translationManager.get('branding.buttonText', this.buttonText);
+    const hasText = !!(buttonText && buttonText.trim());
     const baseClass = hasText ? 'chat-btn-text' : 'chat-btn-icon';
     const shapeClass = this.buttonShape === 'round' ? 'round' : '';
     return `${baseClass} ${shapeClass}`.trim();
   }
 
   private renderButton() {
-    const translatedButtonText = this.translationManager.get('buttonText');
-    const hasText = (translatedButtonText && translatedButtonText.trim()) || (this.buttonText && this.buttonText.trim());
+    const buttonText = this.translationManager.get('branding.buttonText', this.buttonText);
+    const hasText = !!(buttonText && buttonText.trim());
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
     const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
-    const finalButtonText = translatedButtonText || this.buttonText;
+    const finalButtonText = buttonText ?? '';
+    const openLabel = this.translationManager.get('launcher.open') ?? '';
+    const buttonAriaLabel = finalButtonText ? `${openLabel} - ${finalButtonText}` : openLabel;
 
     // Only show drag cursor if button is draggable
     const isDraggable = this.isButtonDraggable();
@@ -1184,14 +1186,14 @@ export class OcsChat {
         <button
           ref={(el) => this.buttonRef = el}
           class={buttonClasses}
+          aria-label={buttonAriaLabel}
+          title={finalButtonText || openLabel}
           style={buttonStyle}
           onClick={() => this.handleButtonClick()}
           onMouseDown={(e) => this.handleButtonMouseDown(e)}
           onTouchStart={(e) => this.handleButtonTouchStart(e)}
-          aria-label={`Open chat - ${finalButtonText}`}
           aria-grabbed={this.isButtonDragging}
           aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
-          title={finalButtonText}
         >
           <img src={iconSrc} alt="" />
           <span>{finalButtonText}</span>
@@ -1207,14 +1209,14 @@ export class OcsChat {
         <button
           ref={(el) => this.buttonRef = el}
           class={buttonClasses}
+          aria-label={openLabel}
+          title={openLabel}
           style={buttonStyle}
           onClick={() => this.handleButtonClick()}
           onMouseDown={(e) => this.handleButtonMouseDown(e)}
           onTouchStart={(e) => this.handleButtonTouchStart(e)}
-          aria-label={finalButtonText ? `Open chat - ${finalButtonText}` : 'Open chat'}
           aria-grabbed={this.isButtonDragging}
           aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
-          title={finalButtonText ? finalButtonText : 'Open chat'}
         >
           <img src={iconSrc} alt="Chat" />
           {isDraggable && (
@@ -1402,15 +1404,15 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="header-text">{this.translationManager.get('headerText') || this.headerText}</div>
+              <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
               <div class="header-buttons">
                 {/* New Chat button */}
                 {this.messages.length > 0 && (
                   <button
                     class="header-button"
                     onClick={() => this.showConfirmationDialog()}
-                    title={this.translationManager.get('startNewChat')}
-                    aria-label={this.translationManager.get('startNewChat')}
+                    title={this.translationManager.get('window.newChat')}
+                    aria-label={this.translationManager.get('window.newChat')}
                   >
                     <PlusWithCircleIcon/>
                   </button>
@@ -1419,8 +1421,8 @@ export class OcsChat {
                 {this.allowFullScreen && <button
                   class="header-button fullscreen-button"
                   onClick={() => this.toggleFullscreen()}
-                  title={this.isFullscreen ? this.translationManager.get('exitFullscreen') : this.translationManager.get('enterFullscreen')}
-                  aria-label={this.isFullscreen ? this.translationManager.get('exitFullscreen') : this.translationManager.get('enterFullscreen')}
+                  title={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
+                  aria-label={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
                 >
                   {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
                 </button>}
@@ -1428,7 +1430,7 @@ export class OcsChat {
                 <button
                   class="header-button"
                   onClick={() => this.visible = false}
-                  aria-label={this.translationManager.get('close')}
+                  aria-label={this.translationManager.get('window.close')}
                 >
                   <XMarkIcon/>
                 </button>
@@ -1439,22 +1441,22 @@ export class OcsChat {
               <div class="confirmation-overlay">
                 <div class="confirmation-dialog">
                   <div class="confirmation-content">
-                    <h3 class="confirmation-title">{this.translationManager.get('startNewChatTitle')}</h3>
+                    <h3 class="confirmation-title">{this.translationManager.get('modal.newChatTitle')}</h3>
                     <p class="confirmation-message">
-                      {this.translationManager.get('startNewChatMessage') || this.newChatConfirmationMessage}
+                      {this.translationManager.get('modal.newChatBody', this.newChatConfirmationMessage)}
                     </p>
                     <div class="confirmation-buttons">
                       <button
                         class="confirmation-button confirmation-button-cancel"
                         onClick={() => this.hideConfirmationDialog()}
                       >
-                        {this.translationManager.get('cancel')}
+                        {this.translationManager.get('modal.cancel')}
                       </button>
                       <button
                         class="confirmation-button confirmation-button-confirm"
                         onClick={() => this.confirmNewChat()}
                       >
-                        {this.translationManager.get('confirm')}
+                        {this.translationManager.get('modal.confirm')}
                       </button>
                     </div>
                   </div>
@@ -1468,7 +1470,7 @@ export class OcsChat {
               {this.isLoading && !this.sessionId && (
                 <div class="loading-container">
                   <div class="loading-spinner"></div>
-                  <span class="loading-text">Starting chat...</span>
+                  <span class="loading-text">{this.translationManager.get('status.starting')}</span>
                 </div>
               )}
 
@@ -1538,7 +1540,7 @@ export class OcsChat {
                         <div class="typing-progress"></div>
                       </div>
                       <div class="typing-text">
-                        <span>{this.translationManager.get('typingIndicatorText')}</span>
+                        <span>{this.translationManager.get('status.typing', this.typingIndicatorText)}</span>
                         <span class="typing-dots loading"></span>
                       </div>
                     </div>
@@ -1584,7 +1586,7 @@ export class OcsChat {
                         <button
                           onClick={() => this.removeSelectedFile(index)}
                           class="selected-file-remove-button"
-                          aria-label={this.translationManager.get('removeFile')}
+                          aria-label={this.translationManager.get('attach.remove')}
                         ><XIcon />
                         </button>
                       </div>
@@ -1601,7 +1603,7 @@ export class OcsChat {
                       ref={(el) => this.textareaRef = el}
                       class="message-textarea"
                       rows={1}
-                      placeholder={this.translationManager.get('typeMessage')}
+                      placeholder={this.translationManager.get('composer.placeholder')}
                       value={this.messageInput}
                       onInput={(e) => this.handleInputChange(e)}
                       onKeyPress={(e) => this.handleKeyPress(e)}
@@ -1628,8 +1630,8 @@ export class OcsChat {
                         class="file-attachment-button"
                         onClick={() => this.fileInputRef?.click()}
                         disabled={this.isTyping || this.isUploadingFiles}
-                        title={this.translationManager.get('attachFiles')}
-                        aria-label={this.translationManager.get('attachFiles')}
+                        title={this.translationManager.get('attach.add')}
+                        aria-label={this.translationManager.get('attach.add')}
                       >
                         <PaperClipIcon />
                       </button>
@@ -1643,13 +1645,13 @@ export class OcsChat {
                       onClick={() => this.sendMessage(this.messageInput)}
                       disabled={this.isTyping || this.isUploadingFiles || !this.messageInput.trim()}
                     >
-                      {this.isUploadingFiles ? `${this.translationManager.get('uploading')}...` : this.translationManager.get('sendMessage')}
+                      {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                     </button>
                   </div>
                 </div>
               )}
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
-                <p>{this.translationManager.get('poweredBy')}{' '} <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
+                <p>{this.translationManager.get('branding.poweredBy')}{' '} <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
               </div>
             </div>
           </div>
