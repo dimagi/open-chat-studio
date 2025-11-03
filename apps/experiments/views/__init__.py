@@ -28,7 +28,6 @@ from .experiment import (  # noqa: F401
     experiment_session_message_embed,
     experiment_session_messages_view,
     experiment_session_pagination_view,
-    experiment_version_details,
     generate_chat_export,
     get_experiment_version_names,
     get_export_download_link,

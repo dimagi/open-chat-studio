@@ -1434,19 +1434,6 @@ def update_version_description(request, team_slug: str, experiment_id: int, vers
 
 
 @login_and_team_required
-def experiment_version_details(request, team_slug: str, experiment_id: int, version_number: int):
-    try:
-        experiment_version = Experiment.objects.get_all().get(
-            team=request.team, working_version_id=experiment_id, version_number=version_number
-        )
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
-    return render(request, "experiments/components/experiment_version_details_content.html", context)
-
-
-@login_and_team_required
 def get_release_status_badge(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     context = {"has_changes": experiment.compare_with_latest(), "experiment": experiment}
