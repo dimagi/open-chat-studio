@@ -40,7 +40,6 @@ urlpatterns = [
     # experiments
     path("new/", views.CreateExperiment.as_view(), name="new"),
     path("table/", views.ExperimentTableView.as_view(), {"is_experiment": True}, name="table"),
-    path("e/<int:experiment_id>/", views.single_experiment_home, name="single_experiment_home"),
     path("e/<int:experiment_id>/trends/data", views.trends_data, name="trends_data"),
     path("e/<int:experiment_id>/sessions-table/", views.ExperimentSessionsTableView.as_view(), name="sessions-list"),
     path("e/<int:experiment_id>/versions/", views.ExperimentVersionsTableView.as_view(), name="versions-list"),

@@ -512,13 +512,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     return TemplateResponse(request, template_name, context)
 
 
-@login_and_team_required
-@permission_required("experiments.view_experiment", raise_exception=True)
-def single_experiment_home(request, team_slug: str, experiment_id: int):
-    """Redirect to single chatbot home - chatbots should be the primary interface for individual experiments."""
-    return HttpResponseRedirect(reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id]))
-
-
 def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
     combined_events = []
     static_events = (
@@ -1476,7 +1469,7 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
     experiment.save()
     url = (
         reverse(
-            "experiments:single_experiment_home",
+            "chatbots:single_chatbot_home",
             kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
         )
         + "#versions"
@@ -1496,7 +1489,7 @@ def archive_experiment_version(request, team_slug: str, experiment_id: int, vers
     )
     url = (
         reverse(
-            "experiments:single_experiment_home",
+            "chatbots:single_chatbot_home",
             kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
         )
         + "#versions"
@@ -1547,7 +1540,7 @@ def migrate_experiment_view(request, team_slug, experiment_id):
 
     experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
     failed_url = reverse(
-        "experiments:single_experiment_home",
+        "chatbots:single_chatbot_home",
         kwargs={"team_slug": team_slug, "experiment_id": experiment_id},
     )
     if experiment.parent_links.exists():

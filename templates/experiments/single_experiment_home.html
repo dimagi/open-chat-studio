@@ -26,7 +26,7 @@
       </div>
       <div>
         {% if first_parent_id %}
-          <a class="btn btn-primary" href="{% url 'experiments:single_experiment_home' request.team.slug first_parent_id %}">
+          <a class="btn btn-primary" href="{% url 'chatbots:single_chatbot_home' request.team.slug first_parent_id %}">
             Go to Parent
           </a>
         {% else %}
