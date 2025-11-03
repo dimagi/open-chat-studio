@@ -5,6 +5,12 @@ on:
     types: [closed]
     branches:
       - main
+    paths:
+      - components
+      - gpt_playground
+      - assets
+      - apps
+      - templates
 
 permissions:
   contents: read
