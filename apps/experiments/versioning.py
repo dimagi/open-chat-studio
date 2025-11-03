@@ -49,6 +49,8 @@ class FieldGroup:
 class VersionField:
     """Represents a specific detail about the instance. The label is the user friendly name"""
 
+    NUM_QUERYSET_RESULTS_TO_SHOW = 10
+
     name: str = ""
     raw_value: Any | None = None
     to_display: callable = None
@@ -58,6 +60,7 @@ class VersionField:
     label: str = data_field(default="")
     queryset: QuerySet | None = None
     raw_value_version: Self | None = None
+    num_results_truncated: int = 0
 
     @property
     def current_value(self):
@@ -80,6 +83,17 @@ class VersionField:
             return []
 
         return [VersionField(raw_value=record, to_display=self.to_display) for record in self.queryset.all()]
+
+    @property
+    def queryset_results_for_display(self) -> list["VersionField"]:
+        """
+        This method is used to display queryset results in the version comparison UI. It limits the number of results
+        shown for performance reasons.
+        """
+        # Start by showing those fields that changed
+        self.num_results_truncated = max(0, self.queryset.count() - self.NUM_QUERYSET_RESULTS_TO_SHOW)
+        changed_results = sorted(self.queryset_results, key=lambda x: x.changed, reverse=True)
+        return changed_results[: self.NUM_QUERYSET_RESULTS_TO_SHOW]
 
     def __post_init__(self):
         self.label = self.name.replace("_", " ").title()
