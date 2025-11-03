@@ -15,7 +15,6 @@ from .experiment import (  # noqa: F401
     ExperimentSessionsTableView,
     ExperimentVersionsTableView,
     archive_experiment_version,
-    delete_experiment,
     download_file,
     end_experiment,
     experiment_chat,

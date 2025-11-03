@@ -332,14 +332,6 @@ def _get_voice_provider_alpine_context(request):
     }
 
 
-@login_and_team_required
-@permission_required("experiments.delete_experiment", raise_exception=True)
-def delete_experiment(request, team_slug: str, pk: int):
-    safety_layer = get_object_or_404(Experiment, id=pk, team=request.team)
-    safety_layer.delete()
-    return redirect("chatbots:chatbots_home", team_slug=team_slug)
-
-
 class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
     model = Experiment
     form_class = ExperimentVersionForm
