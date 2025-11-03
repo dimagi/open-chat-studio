@@ -130,20 +130,20 @@ describe('All Application Pages', () => {
   })
 
   describe('Navigation', () => {
-    it('all pages have navigation or links', () => {
-      const pages = [
-        `/a/${teamSlug}/chatbots/`,
-        `/a/${teamSlug}/participants/`,
-        `/a/${teamSlug}/dashboard/`,
-        `/a/${teamSlug}/assistants/`,
-        `/a/${teamSlug}/files/`,
-        `/a/${teamSlug}/documents/`,
-        `/a/${teamSlug}/analysis/`
-      ]
+    const pages = [
+      `/a/${teamSlug}/chatbots/`,
+      `/a/${teamSlug}/participants/`,
+      `/a/${teamSlug}/dashboard/`,
+      `/a/${teamSlug}/assistants/`,
+      `/a/${teamSlug}/files/`,
+      `/a/${teamSlug}/documents/`,
+      `/a/${teamSlug}/analysis/`
+    ]
 
-      pages.forEach(page => {
+    pages.forEach(page => {
+      it(`should have navigation or links on ${page}`, () => {
         cy.visit(page)
-        // Check for navigation or at least some links/buttons
+
         cy.get('body').then(($body) => {
           const hasNav = $body.find('nav, .nav, [role="navigation"]').length > 0
           const hasLinks = $body.find('a').length > 0
