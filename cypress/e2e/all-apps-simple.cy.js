@@ -119,12 +119,12 @@ describe('All Application Pages', () => {
 
   describe('Service Providers / Team Settings', () => {
     it('manage team page loads', () => {
-      cy.visit(`/a/${teamSlug}/settings/team/`)
+      cy.visit(`/a/${teamSlug}/team/`)
       cy.get('body').should('be.visible')
     })
 
     it('team page has settings content', () => {
-      cy.visit(`/a/${teamSlug}/settings/team/`)
+      cy.visit(`/a/${teamSlug}/team/`)
       cy.get('body').invoke('text').should('have.length.greaterThan', 20)
     })
   })
