@@ -71,8 +71,6 @@ jobs:
               "pr_body": ${{ toJSON(github.event.pull_request.body) }},
               "pr_url": "${{ github.event.pull_request.html_url }}",
               "pr_author": "${{ github.event.pull_request.user.login }}",
-              "pr_merged_at": "${{ github.event.pull_request.merged_at }}",
-              "pr_labels": ${{ toJSON(github.event.pull_request.labels.*.name) }},
               "is_widget_change": ${{ steps.check_widget.outputs.is_widget_change }},
               "ref": "${{ github.ref }}",
               "sha": "${{ github.sha }}",
