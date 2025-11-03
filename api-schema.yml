@@ -878,13 +878,9 @@ components:
           allOf:
           - $ref: '#/components/schemas/Participant'
           readOnly: true
-        seed_message_task_id:
-          type: string
-          readOnly: true
       required:
       - chatbot
       - participant
-      - seed_message_task_id
       - session_id
     ChatTaskPoll:
       type: object

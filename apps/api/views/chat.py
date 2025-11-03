@@ -287,16 +287,12 @@ def chat_start_session(request):
         session.state = session_data
         session.save(update_fields=["state"])
 
-    WebChannel.check_and_process_seed_message(session, experiment)
-
     # Prepare response data
     response_data = {
         "session_id": session.external_id,
         "chatbot": experiment,
         "participant": participant,
     }
-    if session.seed_task_id:
-        response_data["seed_message_task_id"] = session.seed_task_id
 
     serialized_response = ChatStartSessionResponse(response_data, context={"request": request})
     return Response(serialized_response.data, status=status.HTTP_201_CREATED)

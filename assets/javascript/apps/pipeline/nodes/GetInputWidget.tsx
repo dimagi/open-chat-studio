@@ -145,7 +145,13 @@ export const getInputWidget = (params: InputWidgetParams) => {
   const readOnly = usePipelineStore((state) => state.readOnly);
   const Widget = getWidget(widgetOrType, widgetSchema)
   let fieldError = getNodeFieldError(params.id, params.name);
-  const paramValue = params.params[params.name];
+  let paramValue = params.params[params.name];
+  
+  // Use schema default if paramValue is undefined
+  if (paramValue === undefined && widgetSchema.default !== undefined) {
+    paramValue = widgetSchema.default;
+  }
+  
   if (params.required && (paramValue === null || paramValue === undefined)) {
     fieldError = "This field is required";
   }

@@ -54,6 +54,7 @@
   }
 </style>
 <body style="background-color: #98dbcc; gap: 10px; display: flex; flex-direction: column;">
+<!-- fixed position -->
 <open-chat-studio-widget style="top: 100px; right: 100px;"
     visible="false"
     chatbot-id="cdec8c04-ff39-4175-bffb-f7d872e2eb3a"
@@ -61,6 +62,7 @@
     persistent-session-expire="100"
     allow-attachments="true"
   ></open-chat-studio-widget>
+
 <div class="widget-demo light">
   <p>Connected to www.openchatstudio.com</p>
   <open-chat-studio-widget
@@ -74,7 +76,7 @@
 </div>
 
 <div class="widget-demo light">
-  <p>Regular button, default styling, light mode</p>
+  <p>Regular button, default styling, light mode, text overrides</p>
   <open-chat-studio-widget
     class="widget regular-button"
     api-base-url="http://localhost:8000"
@@ -85,6 +87,8 @@
     position="center"
     welcome-messages="['Hi there! Welcome to OpenChatStudio! This is a very long welcome message used to illustrate the max message width.', 'How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
     starter-questions="['I would like a OpenChatStudio demo', 'How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
+    typing-indicator-text="Finding the best answer"
+    new-chat-confirmation-message="Starting a new chat will clear your current conversation. Continue?"
     persistent-session="true"
     persistent-session-expire="100"
     allow-attachments="true"
@@ -92,13 +96,13 @@
 </div>
 
 <div class="widget-demo dark">
-  <p>Regular button, default styling, dark mode</p>
+  <p>Regular button, default styling, dark mode, language ES</p>
   <open-chat-studio-widget
     class="widget regular-button"
     api-base-url="http://localhost:8000"
     visible="false"
     chatbot-id="183312ac-cbe5-4c91-9e7b-d9df96b088e4"
-    button-text="Let's Chat Dark"
+    button-text="Let's Chat Dark Spanish"
     header-text="Regular, dark mode"
     position="center"
     welcome-messages="['Hi there! Welcome to OpenChatStudio! This is a very long welcome message used to illustrate the max message width.', 'How can we help you [today](#tonowhere)?\n* list\n* list\n# Header L1\n\n## Header L2\n\n```\nsome code\nmore code\n```\n']"
@@ -106,6 +110,7 @@
     persistent-session="true"
     persistent-session-expire="100"
     allow-attachments="true"
+    language="es"
   ></open-chat-studio-widget>
 </div>
 

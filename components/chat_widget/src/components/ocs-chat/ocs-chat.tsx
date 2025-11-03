@@ -3,8 +3,8 @@ import {Component, Host, h, Prop, State, Element, Watch, Env} from '@stencil/cor
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
-  PaperClipIcon, CheckDocumentIcon, XIcon
-} from './heroicons';
+  PaperClipIcon, CheckDocumentIcon, XIcon, OcsWidgetAvatar
+} from './icons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { varToPixels } from '../../utils/utils';
 import {TranslationStrings, TranslationManager, defaultTranslations} from '../../utils/translations';
@@ -91,7 +91,7 @@ export class OcsChat {
   /**
    * The message to display in the new chat confirmation dialog.
    */
-  @Prop() newChatConfirmationMessage?: string = "Starting a new chat will clear your current conversation. Continue?";
+  @Prop() newChatConfirmationMessage?: string;
 
   /**
    * Whether the chat widget is visible on load.
@@ -145,7 +145,7 @@ export class OcsChat {
   /**
    * The text to display while the assistant is typing/preparing a response.
    */
-  @Prop() typingIndicatorText?: string = "Preparing response";
+  @Prop() typingIndicatorText?: string;
 
   /**
    * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
@@ -426,10 +426,11 @@ export class OcsChat {
 
       // If this is the first user message and there are welcome messages,
       // add them to chat history as assistant messages
-      if (this.messages.length === 0 && this.parsedWelcomeMessages.length > 0) {
+      const welcomeMessagesToAdd = this.getWelcomeMessages();
+      if (this.messages.length === 0 && welcomeMessagesToAdd.length > 0) {
         const now = new Date();
-        const welcomeMessages: ChatMessage[] = this.parsedWelcomeMessages.map((welcomeMsg, index) => ({
-          created_at: new Date(now.getTime() - (this.parsedWelcomeMessages.length - index) * 1000).toISOString(),
+        const welcomeMessages: ChatMessage[] = welcomeMessagesToAdd.map((welcomeMsg, index) => ({
+          created_at: new Date(now.getTime() - (welcomeMessagesToAdd.length - index) * 1000).toISOString(),
           role: 'assistant' as const,
           content: welcomeMsg,
           attachments: []
@@ -1139,10 +1140,6 @@ export class OcsChat {
     return fallback;
   }
 
-  private getDefaultIconUrl(): string {
-    return `${this.apiBaseUrl}/static/images/favicons/favicon.svg`;
-  }
-
   private getWelcomeMessages(): string[] {
     const translated = this.translationManager.getArray("content.welcomeMessages");
     return translated && translated.length > 0
@@ -1169,7 +1166,6 @@ export class OcsChat {
     const buttonText = this.translationManager.get('branding.buttonText', this.buttonText);
     const hasText = !!(buttonText && buttonText.trim());
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
-    const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
     const finalButtonText = buttonText ?? '';
     const openLabel = this.translationManager.get('launcher.open') ?? '';
@@ -1195,7 +1191,7 @@ export class OcsChat {
           aria-grabbed={this.isButtonDragging}
           aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
         >
-          <img src={iconSrc} alt="" />
+          {hasCustomIcon ? <img src={this.iconUrl} alt="" /> : <OcsWidgetAvatar />}
           <span>{finalButtonText}</span>
           {isDraggable && (
             <span id="chat-button-drag-hint" style={{ display: 'none' }}>
@@ -1218,7 +1214,7 @@ export class OcsChat {
           aria-grabbed={this.isButtonDragging}
           aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
         >
-          <img src={iconSrc} alt="Chat" />
+          {hasCustomIcon ? <img src={this.iconUrl} alt="" /> : <OcsWidgetAvatar />}
           {isDraggable && (
             <span id="chat-button-drag-hint" style={{ display: 'none' }}>
               Draggable. Use mouse or touch to reposition.
@@ -1480,7 +1476,7 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
                 >
-                  {this.messages.length === 0 && this.parsedWelcomeMessages.length > 0 && (
+                  {this.messages.length === 0 && this.getWelcomeMessages().length > 0 && (
                     <div class="welcome-messages">
                       {this.getWelcomeMessages().map((message, index) => (
                         <div key={`welcome-${index}`} class="message-row message-row-assistant">
@@ -1549,7 +1545,7 @@ export class OcsChat {
               )}
 
               {/* Starter Questions */}
-              {this.messages.length === 0 && this.parsedStarterQuestions.length > 0 && (
+              {this.messages.length === 0 && this.getStarterQuestions().length > 0 && (
                 <div class="starter-questions">
                   {this.getStarterQuestions().map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
