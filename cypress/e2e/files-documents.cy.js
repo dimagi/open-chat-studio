@@ -8,7 +8,7 @@ describe('Files and Collections Application', () => {
   describe('Files Home Page', () => {
     beforeEach(() => {
       cy.login()
-      cy.visit(`/a/${teamSlug}/files/file`, { failOnStatusCode: false })
+      cy.visit(`/a/${teamSlug}/files/file`)
       cy.get('body').should('be.visible')
       cy.wait(10) // Wait for HTMX
     })
@@ -36,7 +36,7 @@ describe('Files and Collections Application', () => {
   describe('File Details and Edit', () => {
     beforeEach(() => {
       cy.login()
-      cy.visit(`/a/${teamSlug}/files/file`, { failOnStatusCode: false })
+      cy.visit(`/a/${teamSlug}/files/file`)
       cy.get('body').should('be.visible')
       cy.wait(10)
     })
@@ -95,7 +95,7 @@ describe('Files and Collections Application', () => {
   describe('Collections Home Page', () => {
     beforeEach(() => {
       cy.login()
-      cy.visit(`/a/${teamSlug}/documents/collection/`, { failOnStatusCode: false })
+      cy.visit(`/a/${teamSlug}/documents/collection/`)
       cy.get('body').should('be.visible')
       cy.wait(10)
     })
@@ -124,7 +124,7 @@ describe('Files and Collections Application', () => {
   describe('Collection Details', () => {
     beforeEach(() => {
       cy.login()
-      cy.visit(`/a/${teamSlug}/documents/collection/`, { failOnStatusCode: false })
+      cy.visit(`/a/${teamSlug}/documents/collection/`)
       cy.get('body').should('be.visible')
       cy.wait(10)
     })
@@ -147,7 +147,7 @@ describe('Files and Collections Application', () => {
   describe('Collection Actions', () => {
     beforeEach(() => {
       cy.login()
-      cy.visit(`/a/${teamSlug}/documents/collection/`, { failOnStatusCode: false })
+      cy.visit(`/a/${teamSlug}/documents/collection/`)
       cy.get('body').should('be.visible')
       cy.wait(10)
     })
@@ -167,7 +167,7 @@ describe('Files and Collections Application', () => {
   describe('Collection Management', () => {
     beforeEach(() => {
       cy.login()
-      cy.visit(`/a/${teamSlug}/documents/collection/`, { failOnStatusCode: false })
+      cy.visit(`/a/${teamSlug}/documents/collection/`)
       cy.get('body').should('be.visible')
       cy.wait(10)
     })
@@ -194,7 +194,7 @@ describe('Files and Collections Application', () => {
   describe('File Details and Edit', () => {
     beforeEach(() => {
       cy.login()
-      cy.visit(`/a/${teamSlug}/documents/collection/`, { failOnStatusCode: false })
+      cy.visit(`/a/${teamSlug}/documents/collection/`)
       cy.get('body').should('be.visible')
       cy.wait(10)
     })

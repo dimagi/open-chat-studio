@@ -3,7 +3,7 @@ describe('Chatbots Application', () => {
 
   beforeEach(() => {
     cy.login()
-    cy.visit(`/a/${teamSlug}/chatbots/`, { failOnStatusCode: false })
+    cy.visit(`/a/${teamSlug}/chatbots/`)
     cy.get('body').should('be.visible')
     cy.get('h1', { timeout: 10000 }).should('exist')
     cy.wait(10)

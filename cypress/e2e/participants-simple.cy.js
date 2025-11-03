@@ -6,18 +6,18 @@ describe('Participants Pages', () => {
   })
 
   it('participants home page loads', () => {
-    cy.visit(`/a/${teamSlug}/participants/`, { failOnStatusCode: false })
+    cy.visit(`/a/${teamSlug}/participants/`)
     cy.url().should('include', '/participants/')
     cy.get('body').should('be.visible')
   })
 
   it('participants page has content', () => {
-    cy.visit(`/a/${teamSlug}/participants/`, { failOnStatusCode: false })
+    cy.visit(`/a/${teamSlug}/participants/`)
     cy.get('body').invoke('text').should('have.length.greaterThan', 10)
   })
 
   it('participants table or list is displayed', () => {
-    cy.visit(`/a/${teamSlug}/participants/`, { failOnStatusCode: false })
+    cy.visit(`/a/${teamSlug}/participants/`)
     cy.get('body').then(($body) => {
       if ($body.find('table').length > 0) {
         cy.log('Participants table found')
@@ -32,13 +32,13 @@ describe('Participants Pages', () => {
   })
 
   it('can find import/export options if they exist', () => {
-    cy.visit(`/a/${teamSlug}/participants/`, { failOnStatusCode: false })
+    cy.visit(`/a/${teamSlug}/participants/`)
     cy.get('body').then(($body) => {
       const buttons = $body.find('button, a').filter((i, el) => {
         const text = Cypress.$(el).text().toLowerCase()
         return text.includes('import') || text.includes('export')
       })
-      
+
       if (buttons.length > 0) {
         cy.log('Import/Export functionality found')
       } else {
@@ -48,12 +48,12 @@ describe('Participants Pages', () => {
   })
 
   it('can access participants table view', () => {
-    cy.visit(`/a/${teamSlug}/participants/table/`, { failOnStatusCode: false })
+    cy.visit(`/a/${teamSlug}/participants/table/`)
     cy.get('body').should('be.visible')
   })
 
   it('can access new participant page', () => {
-    cy.visit(`/a/${teamSlug}/participants/new/`, { failOnStatusCode: false })
+    cy.visit(`/a/${teamSlug}/participants/new/`)
     cy.get('body').then(($body) => {
       if ($body.find('form').length > 0) {
         cy.log('Create participant form found')
@@ -65,7 +65,7 @@ describe('Participants Pages', () => {
   })
 
   it('can access import page', () => {
-    cy.visit(`/a/${teamSlug}/participants/import/`, { failOnStatusCode: false })
+    cy.visit(`/a/${teamSlug}/participants/import/`)
     cy.get('body').then(($body) => {
       if ($body.find('form').length > 0 || $body.find('input[type="file"]').length > 0) {
         cy.log('Import form found')
