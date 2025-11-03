@@ -3,9 +3,11 @@ import pytest
 from apps.custom_actions.models import CustomActionOperation
 from apps.experiments.models import Experiment, SafetyLayer
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
+from apps.files.models import File
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory, TimeoutTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, SourceMaterialFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory
 
@@ -256,6 +258,27 @@ class TestVersion:
         assert "pipeline_id" in [f.name for f in curr_version_details.fields]
         # Since the field is missing, the value should be None
         assert curr_version_details.get_field("pipeline_id").raw_value is None
+
+    def test_queryset_results_for_display(self):
+        """
+        Test that when a VersionField has a queryset with more results than the display limit, only a limited number of
+        results are available at the queryset_results_for_display attribute and that it is sorted with those that
+        changed first.
+        """
+        FileFactory.create_batch(12)
+        queryset = File.objects.all()
+
+        field1 = VersionField(queryset=queryset)
+        field2 = VersionField(queryset=queryset[:11])
+
+        field1.compare(field2)
+        # We expect NUM_QUERYSET_RESULTS_TO_SHOW results to be available
+        assert len(field1.queryset_results_for_display) == VersionField.NUM_QUERYSET_RESULTS_TO_SHOW
+
+        # Ensure it is sorted
+        assert field1.queryset_results_for_display[0].changed
+        for result in field1.queryset_results_for_display[1:]:
+            assert result.changed is False
 
 
 @pytest.mark.django_db()
