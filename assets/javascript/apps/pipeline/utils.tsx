@@ -35,6 +35,11 @@ const localCache = {
 };
 
 export const getCachedData: () => typeof localCache = () => {
+  const model_params = JSON.parse(document.getElementById("llm-model-params")?.textContent || "{}");
+  const param_schemas = JSON.parse(document.getElementById("llm-model-parameter-schemas")?.textContent || "{}");
+  console.log("model_params: ", model_params);
+  console.log("param_schemas: ", param_schemas);
+
   if (!localCache.loaded) {
     localCache.parameterValues = JSON.parse(document.getElementById("parameter-values")?.textContent || "{}");
     localCache.defaultValues = JSON.parse(document.getElementById("default-values")?.textContent || "{}");
