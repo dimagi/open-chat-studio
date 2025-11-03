@@ -58,42 +58,31 @@ describe('All Application Pages', () => {
 
   describe('Files', () => {
     it('files page loads', () => {
-      cy.visit(`/a/${teamSlug}/files/`)
+      cy.visit(`/a/${teamSlug}/files/file`)
       cy.url().should('include', '/files/')
       cy.get('body').should('be.visible')
     })
 
     it('files page has content', () => {
-      cy.visit(`/a/${teamSlug}/files/`)
+      cy.visit(`/a/${teamSlug}/files/file`)
       cy.get('body').invoke('text').should('have.length.greaterThan', 10)
-    })
-
-    it('can access new file page', () => {
-      cy.visit(`/a/${teamSlug}/files/new/`)
-      cy.get('body').then(($body) => {
-        if ($body.find('form').length > 0 || $body.find('input[type="file"]').length > 0) {
-          cy.log('File upload form found')
-        } else {
-          cy.log('File upload not available or different structure')
-        }
-      })
     })
   })
 
-  describe('Documents', () => {
-    it('documents page loads', () => {
-      cy.visit(`/a/${teamSlug}/documents/`)
+  describe('Collections', () => {
+    it('collections page loads', () => {
+      cy.visit(`/a/${teamSlug}/documents/collection/`)
       cy.url().should('include', '/documents/')
       cy.get('body').should('be.visible')
     })
 
-    it('documents page has content', () => {
-      cy.visit(`/a/${teamSlug}/documents/`)
+    it('collections page has content', () => {
+      cy.visit(`/a/${teamSlug}/documents/collection/`)
       cy.get('body').invoke('text').should('have.length.greaterThan', 10)
     })
 
-    it('can access new document collection page', () => {
-      cy.visit(`/a/${teamSlug}/documents/new/`)
+    it('can access new collections page', () => {
+      cy.visit(`/a/${teamSlug}/documents/collection/new/`)
       cy.get('body').then(($body) => {
         if ($body.find('form').length > 0) {
           cy.log('Create collection form found')
@@ -132,11 +121,11 @@ describe('All Application Pages', () => {
   describe('Navigation', () => {
     const pages = [
       `/a/${teamSlug}/chatbots/`,
-      `/a/${teamSlug}/participants/`,
+      `/a/${teamSlug}/participants/participant/`,
       `/a/${teamSlug}/dashboard/`,
       `/a/${teamSlug}/assistants/`,
-      `/a/${teamSlug}/files/`,
-      `/a/${teamSlug}/documents/`,
+      `/a/${teamSlug}/files/file/`,
+      `/a/${teamSlug}/documents/collection/`,
       `/a/${teamSlug}/analysis/`
     ]
 
