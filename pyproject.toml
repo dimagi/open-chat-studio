@@ -93,7 +93,7 @@ Issues = "https://github.com/dimagi/open-chat-studio/issues"
 Changelog = "https://docs.openchatstudio.com/changelog/"
 
 [tool.pytest.ini_options]
-addopts = "--ds=gpt_playground.settings --reuse-db --strict-markers --tb=short"
+addopts = "--ds=config.settings --reuse-db --strict-markers --tb=short"
 python_files = "tests.py test_*.py *_tests.py"
 norecursedirs = ".* build dist venv node_modules compose assets static"
 

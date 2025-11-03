@@ -203,7 +203,7 @@ class MyModelFactory(factory.django.DjangoModelFactory):
 - Team isolation in all tests
 
 ### Test Configuration
-- Settings: `gpt_playground.settings` with test overrides
+- Settings: `config.settings` with test overrides
 - Environment variables automatically set in tests
 
 ## Configuration
@@ -212,8 +212,8 @@ class MyModelFactory(factory.django.DjangoModelFactory):
 Key settings in `.env` file such as database connection strings, credentials for external services, etc.
 
 ### Django Settings
-- **Base**: `gpt_playground/settings.py`
-- **Production**: `gpt_playground/settings_production.py`
+- **Base**: `config/settings.py`
+- **Production**: `config/settings_production.py`
 - **Debug**: Enabled by default in development
 - **Database**: PostgreSQL with pgvector for embeddings
 
@@ -489,7 +489,7 @@ class MySerializer(serializers.ModelSerializer):
 
 ## Key Files Reference
 
-- **Main Django config**: `gpt_playground/settings.py`
+- **Main Django config**: `config/settings.py`
 - **Task definitions**: `tasks.py` (Invoke commands)
 - **Frontend build**: `webpack.config.js`
 - **Package management**: `pyproject.toml`, `package.json`
