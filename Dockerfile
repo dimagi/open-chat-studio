@@ -38,7 +38,7 @@ WORKDIR /code
 
 # keep in sync with tailwind.config.js
 COPY *.json *.js .babelrc /code/
-COPY config/settings.py /code/config/settings.py
+COPY config/settings.py /code/gpt_playground/settings.py
 COPY templates /code/templates/
 COPY assets /code/assets/
 
@@ -94,4 +94,4 @@ USER django
 
 ENV PORT=8000
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 0 config.wsgi:application"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 0 gpt_playground.wsgi:application"]
