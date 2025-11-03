@@ -1418,36 +1418,6 @@ def get_release_status_badge(request, team_slug: str, experiment_id: int):
     return render(request, "experiments/components/unreleased_badge.html", context)
 
 
-@login_and_team_required
-@permission_required(("experiments.change_experiment", "pipelines.add_pipeline"))
-def migrate_experiment_view(request, team_slug, experiment_id):
-    from apps.pipelines.helper import convert_non_pipeline_experiment_to_pipeline
-
-    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
-    failed_url = reverse(
-        "chatbots:single_chatbot_home",
-        kwargs={"team_slug": team_slug, "experiment_id": experiment_id},
-    )
-    if experiment.parent_links.exists():
-        messages.error(
-            request, "Child experiments will be migrated along with their 'parent'. Please migrate the parent."
-        )
-        return redirect(failed_url)
-
-    try:
-        with transaction.atomic():
-            experiment = Experiment.objects.get(id=experiment_id)
-            convert_non_pipeline_experiment_to_pipeline(experiment)
-        messages.success(request, f'Successfully migrated experiment "{experiment.name}" to chatbot!')
-        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
-    except Exception:
-        logging.exception(
-            "Failed to migrate experiment to chatbot", details={"team_slug": team_slug, "experiment_id": experiment_id}
-        )
-        messages.error(request, "There was an error during the migration. Please try again later.")
-        return redirect(failed_url)
-
-
 @cache_control(max_age=settings.EXPERIMENT_TREND_CACHE_TIMEOUT, private=True)
 @cache_page(settings.EXPERIMENT_TREND_CACHE_TIMEOUT)
 @require_GET
