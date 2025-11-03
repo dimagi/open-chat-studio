@@ -39,7 +39,7 @@ from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
-from django.views.generic import CreateView, UpdateView
+from django.views.generic import CreateView
 from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
@@ -277,28 +277,6 @@ class CreateExperiment(BaseExperimentView, CreateView):
         if not is_chatbot:
             return HttpResponseRedirect(reverse("chatbots:new", args=[request.team.slug]))
         return super().dispatch(request, *args, **kwargs)
-
-
-class EditExperiment(BaseExperimentView, UpdateView):
-    title = "Update Experiment"
-    button_title = "Update"
-    permission_required = "experiments.change_experiment"
-
-    def get_initial(self):
-        initial = super().get_initial()
-        initial["type"] = "assistant" if self.object.assistant_id else "llm"
-        return initial
-
-    def get_object(self, queryset=None):
-        obj = super().get_object(queryset)
-        if obj.working_version:
-            raise Http404("Experiment not found.")
-        return obj
-
-    def post(self, request, *args, **kwargs):
-        if self.get_object().is_archived:
-            raise PermissionDenied("Cannot edit archived experiments.")
-        return super().post(request, *args, **kwargs)
 
 
 def _get_voice_provider_alpine_context(request):

@@ -11,7 +11,6 @@ from .consent import (  # noqa: F401
 from .experiment import (  # noqa: F401
     CreateExperiment,
     CreateExperimentVersion,
-    EditExperiment,
     ExperimentSessionsTableView,
     ExperimentVersionsTableView,
     archive_experiment_version,

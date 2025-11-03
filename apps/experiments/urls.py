@@ -58,7 +58,6 @@ urlpatterns = [
         name="update_version_description",
     ),
     path("e/<int:experiment_id>/versions/create", views.CreateExperimentVersion.as_view(), name="create_version"),
-    path("e/<int:pk>/edit/", views.EditExperiment.as_view(), name="edit"),
     path(
         "e/<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
         views.start_authed_web_session,
