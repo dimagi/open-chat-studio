@@ -58,65 +58,32 @@ def cleanup_test_data():
         print("   No cleanup needed!")
         sys.exit(0)
 
-    # Delete experiments (chatbots)
-    print("\n--- Deleting Chatbots (Experiments) ---")
-    experiments = Experiment.objects.filter(team=team)
-    count = experiments.count()
-    if count > 0:
-        experiments.delete(audit_action=AuditAction.AUDIT)
-        print(f"  ✓ Deleted {count} experiment(s)")
-    else:
-        print("  ⚠ No experiments to delete")
+    # Define models to delete in order (with optional special handling)
+    models_to_delete = [
+        {"model": Experiment, "name": "Chatbots (Experiments)", "plural": "experiment(s)", "audit": True},
+        {"model": Pipeline, "name": "Pipelines", "plural": "pipeline(s)", "audit": False},
+        {"model": OpenAiAssistant, "name": "Assistants", "plural": "assistant(s)", "audit": True},
+        {"model": Participant, "name": "Participants", "plural": "participant(s) and their sessions/chats", "audit": False},
+        {"model": Chat, "name": "Remaining Chats", "plural": "chat(s)", "audit": False},
+        {"model": Collection, "name": "Collections", "plural": "collection(s)", "audit": True},
+        {"model": LlmProvider, "name": "LLM Providers", "plural": "LLM provider(s)", "audit": True},
+    ]
 
-    # Delete pipelines
-    print("\n--- Deleting Pipelines ---")
-    pipelines = Pipeline.objects.filter(team=team)
-    count = pipelines.count()
-    if count > 0:
-        pipelines.delete()
-        print(f"  ✓ Deleted {count} pipeline(s)")
-    else:
-        print("  ⚠ No pipelines to delete")
+    # Delete each model type
+    for config in models_to_delete:
+        print(f"\n--- Deleting {config['name']} ---")
+        queryset = config["model"].objects.filter(team=team)
+        count = queryset.count()
+        if count > 0:
+            if config["audit"]:
+                queryset.delete(audit_action=AuditAction.AUDIT)
+            else:
+                queryset.delete()
+            print(f"  ✓ Deleted {count} {config['plural']}")
+        else:
+            print(f"  ⚠ No {config['plural'].split()[0].lower()} to delete")
 
-    # Delete assistants
-    print("\n--- Deleting Assistants ---")
-    assistants = OpenAiAssistant.objects.filter(team=team)
-    count = assistants.count()
-    if count > 0:
-        assistants.delete(audit_action=AuditAction.AUDIT)
-        print(f"  ✓ Deleted {count} assistant(s)")
-    else:
-        print("  ⚠ No assistants to delete")
-
-    # Delete participants (and their sessions/chats)
-    print("\n--- Deleting Participants ---")
-    participants = Participant.objects.filter(team=team)
-    count = participants.count()
-    if count > 0:
-        participants.delete()
-        print(f"  ✓ Deleted {count} participant(s) and their sessions/chats")
-    else:
-        print("  ⚠ No participants to delete")
-
-    # Delete any remaining chats
-    print("\n--- Deleting Remaining Chats ---")
-    chats = Chat.objects.filter(team=team)
-    count = chats.count()
-    if count > 0:
-        chats.delete()
-        print(f"  ✓ Deleted {count} chat(s)")
-    else:
-        print("  ⚠ No chats to delete")
-
-    print("\n--- Deleting Collections ---")
-    collections = Collection.objects.filter(team=team)
-    count = collections.count()
-    if count > 0:
-        collections.delete(audit_action=AuditAction.AUDIT)
-        print(f"  ✓ Deleted {count} collection(s)")
-    else:
-        print("  ⚠ No collections to delete")
-
+    # Files need special handling for file deletion
     print("\n--- Deleting Files ---")
     files = File.objects.filter(team=team)
     count = files.count()
@@ -128,16 +95,6 @@ def cleanup_test_data():
         print(f"  ✓ Deleted {count} file(s)")
     else:
         print("  ⚠ No files to delete")
-
-    # Delete LLM providers
-    print("\n--- Deleting LLM Providers ---")
-    llm_providers = LlmProvider.objects.filter(team=team)
-    count = llm_providers.count()
-    if count > 0:
-        llm_providers.delete(audit_action=AuditAction.AUDIT)
-        print(f"  ✓ Deleted {count} LLM provider(s)")
-    else:
-        print("  ⚠ No LLM providers to delete")
 
     print("\n--- Deleting Team ---")
     team.delete()
