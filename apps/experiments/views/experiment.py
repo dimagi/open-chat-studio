@@ -92,7 +92,6 @@ from apps.experiments.models import (
 from apps.experiments.tables import (
     ChildExperimentRoutesTable,
     ExperimentSessionsTable,
-    ExperimentTable,
     ExperimentVersionsTable,
     ParentExperimentRoutesTable,
     TerminalBotsTable,
@@ -114,14 +113,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.base_experiment_table_view import BaseExperimentTableView
 from apps.web.dynamic_filters.datastructures import FilterParams
-
-
-class ExperimentTableView(BaseExperimentTableView):
-    model = Experiment
-    table_class = ExperimentTable
-    permission_required = "experiments.view_experiment"
 
 
 class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):

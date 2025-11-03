@@ -13,7 +13,6 @@ from .experiment import (  # noqa: F401
     CreateExperimentVersion,
     EditExperiment,
     ExperimentSessionsTableView,
-    ExperimentTableView,
     ExperimentVersionsTableView,
     archive_experiment_version,
     delete_experiment,
