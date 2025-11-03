@@ -426,10 +426,11 @@ export class OcsChat {
 
       // If this is the first user message and there are welcome messages,
       // add them to chat history as assistant messages
-      if (this.messages.length === 0 && this.parsedWelcomeMessages.length > 0) {
+      const welcomeMessagesToAdd = this.getWelcomeMessages();
+      if (this.messages.length === 0 && welcomeMessagesToAdd.length > 0) {
         const now = new Date();
-        const welcomeMessages: ChatMessage[] = this.parsedWelcomeMessages.map((welcomeMsg, index) => ({
-          created_at: new Date(now.getTime() - (this.parsedWelcomeMessages.length - index) * 1000).toISOString(),
+        const welcomeMessages: ChatMessage[] = welcomeMessagesToAdd.map((welcomeMsg, index) => ({
+          created_at: new Date(now.getTime() - (welcomeMessagesToAdd.length - index) * 1000).toISOString(),
           role: 'assistant' as const,
           content: welcomeMsg,
           attachments: []
@@ -1475,7 +1476,7 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
                 >
-                  {this.messages.length === 0 && this.parsedWelcomeMessages.length > 0 && (
+                  {this.messages.length === 0 && this.getWelcomeMessages().length > 0 && (
                     <div class="welcome-messages">
                       {this.getWelcomeMessages().map((message, index) => (
                         <div key={`welcome-${index}`} class="message-row message-row-assistant">
@@ -1544,7 +1545,7 @@ export class OcsChat {
               )}
 
               {/* Starter Questions */}
-              {this.messages.length === 0 && this.parsedStarterQuestions.length > 0 && (
+              {this.messages.length === 0 && this.getStarterQuestions().length > 0 && (
                 <div class="starter-questions">
                   {this.getStarterQuestions().map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
