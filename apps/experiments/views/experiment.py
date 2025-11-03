@@ -433,21 +433,6 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionReq
         return f"{url}#versions"
 
 
-@login_and_team_required
-@permission_required("experiments.view_experiment", raise_exception=True)
-def version_create_status(request, team_slug: str, experiment_id: int):
-    experiment = Experiment.objects.get(id=experiment_id, team=request.team)
-    return TemplateResponse(
-        request,
-        "experiments/create_version_button.html",
-        {
-            "active_tab": "experiments",
-            "experiment": experiment,
-            "trigger_refresh": experiment.create_version_task_id is not None,
-        },
-    )
-
-
 def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
     experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
 
