@@ -17,6 +17,7 @@ from apps.custom_actions.schema_utils import (
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
 from apps.utils.models import BaseModel
 
 log = logging.getLogger("ocs.custom_actions")
@@ -62,7 +63,7 @@ class CustomAction(BaseTeamModel):
         return self.name
 
     def get_absolute_url(self):
-        return reverse("custom_actions:edit", args=[self.team.slug, self.pk])
+        return reverse("custom_actions:edit", args=[get_slug_for_team(self.team_id), self.pk])
 
     def get_auth_service(self):
         if self.auth_provider:

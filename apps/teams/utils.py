@@ -1,8 +1,10 @@
 import logging
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
+from functools import lru_cache
 
 import sentry_sdk
+from django.core.cache import cache
 
 log = logging.getLogger("ocs.teams")
 _context = ContextVar("team")
@@ -79,3 +81,21 @@ def _unwrap_lazy(obj):
             obj._setup()
         return obj._wrapped
     return obj
+
+
+@lru_cache
+def get_slug_for_team(team_id: int):
+    """Team slugs don't change so it is safe to cache them for a long period of time.
+    This function caches them in the Django cache as well as in memory.
+    """
+    if not team_id or team_id < 0:
+        raise ValueError()
+    cache_key = f"team_slug:{team_id}"
+    slug = cache.get(cache_key)
+    if slug is None:
+        from apps.teams.models import Team
+
+        slug = Team.objects.values_list("slug", flat=True).get(id=team_id)
+        # Cache for 24 hours
+        cache.set(cache_key, slug, 24 * 3600)
+    return slug

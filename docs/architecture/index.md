@@ -71,7 +71,7 @@ Open Chat Studio uses Celery for asynchronous task processing, which is critical
 
 **Key Files**:
 
-- `gpt_playground/celery.py`: Celery configuration
+- `config/celery.py`: Celery configuration
 - Various `tasks.py` files in different apps
 
 ### Authentication and Authorization

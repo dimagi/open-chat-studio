@@ -6,6 +6,7 @@ from django.urls import reverse
 
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
 
 
 class AnalysisStatus(models.TextChoices):
@@ -67,7 +68,7 @@ class TranscriptAnalysis(BaseTeamModel):
         return self.name
 
     def get_absolute_url(self):
-        return reverse("analysis:detail", args=[self.team.slug, self.id])
+        return reverse("analysis:detail", args=[get_slug_for_team(self.team_id), self.id])
 
     @property
     def is_complete(self):

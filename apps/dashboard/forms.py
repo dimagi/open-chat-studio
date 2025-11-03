@@ -91,7 +91,7 @@ class DashboardFilterForm(forms.Form):
                 (label_to_value[label], label) for label in available_platform_labels if label in label_to_value
             ]
             self.fields["channels"].choices = platform_choices
-            self.fields["participants"].queryset = Participant.objects.filter(team=team)
+            self.fields["participants"].queryset = Participant.objects.select_related("user").filter(team=team)
             self.fields["tags"].queryset = Tag.objects.filter(team=team).exclude(
                 category=TagCategories.EXPERIMENT_VERSION
             )

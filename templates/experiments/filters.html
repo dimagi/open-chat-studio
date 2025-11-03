@@ -255,15 +255,16 @@
         const App = SiteJS.app;
         this.loadFiltersFromQueryString(window.location.search);
 
-        // Default filters set by user or team
-        this.maybeApplyDefaultFilters();
-        
         // Load starred filters on initialization
         this.loadStarredFilters();
 
           // Always trigger a data load on init to ensure correct data is shown
         this.$nextTick(() => {
-          this.triggerFilterChange(false); // Don't update URL again since we just loaded from it
+          this.maybeApplyDefaultFilters().then((defaultApplied) => {
+            if (!defaultApplied) {
+              this.triggerFilterChange(false); // Don't update URL again since we just loaded from it
+            }
+          });
         });
         // for date range dropdown
         this.setLabelFromURL();
@@ -764,7 +765,8 @@
           
           if (defaultFilter?.filter_query_string) {
             this.filterData.filters = [];
-            this.applySavedFilter(defaultFilter);
+            await this.applySavedFilter(defaultFilter);
+            return true;
           }
         } catch (error) {
           console.error('Failed to load default filters:', error);

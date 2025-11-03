@@ -16,6 +16,7 @@ from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 from apps.generics.actions import chip_action
 from apps.generics.tables import TemplateColumnWithHelp
+from apps.teams.utils import get_slug_for_team
 
 
 class EvaluationConfigTable(tables.Table):
@@ -220,7 +221,7 @@ class EvaluationDatasetTable(tables.Table):
 def _chip_session_url_factory(_, request, record, __):
     return reverse(
         "chatbots:chatbot_session_view",
-        args=[record.team.slug, record.experiment.public_id, record.external_id],
+        args=[get_slug_for_team(record.team_id), record.experiment.public_id, record.external_id],
     )
 
 

@@ -184,19 +184,11 @@ class ExperimentSessionFilter(MultiColumnFilter):
     def prepare_queryset(self, queryset):
         """Prepare the queryset by annotating with first and last message timestamps."""
         first_message_subquery = (
-            ChatMessage.objects.filter(
-                chat__experiment_session=OuterRef("pk"),
-            )
-            .order_by("created_at")
-            .values("created_at")[:1]
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id")).order_by("created_at").values("created_at")[:1]
         )
 
         last_message_subquery = (
-            ChatMessage.objects.filter(
-                chat__experiment_session=OuterRef("pk"),
-            )
-            .order_by("-created_at")
-            .values("created_at")[:1]
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id")).order_by("-created_at").values("created_at")[:1]
         )
 
         queryset = queryset.annotate(first_message_created_at=Subquery(first_message_subquery))
