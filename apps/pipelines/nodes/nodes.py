@@ -150,6 +150,7 @@ class LLMResponseMixin(BaseModel):
     @model_validator(mode="after")
     def validate_llm_model(self):
         from apps.service_providers.llm_service.default_models import llm_model_parmeters
+        from apps.service_providers.llm_service.model_parameters import ParameterTypes
 
         try:
             model = self.llm_provider_model
@@ -166,7 +167,8 @@ class LLMResponseMixin(BaseModel):
                 {"field": "llm_provider_id"},
             )
 
-        if params := llm_model_parmeters.get(model.name):
+        params: ParameterTypes = llm_model_parmeters.get(model.name)
+        if params:
             try:
                 params(**self.llm_model_parameters)
             except ValidationError as e:

@@ -59,3 +59,6 @@ def parameter_schemas() -> dict[str, dict]:
         "OpenAIReasoningParameters": get_schema(OpenAIReasoningParameters),
         "OpenAIReasoningWithVerbosityParameters": get_schema(OpenAIReasoningWithVerbosityParameters),
     }
+
+
+ParameterTypes = OpenAIReasoningParameters | OpenAIReasoningWithVerbosityParameters
