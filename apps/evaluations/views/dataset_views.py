@@ -5,7 +5,7 @@ from io import StringIO
 
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -220,27 +220,33 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
         timezone = self.request.session.get("detected_tz", None)
         filter_params = FilterParams.from_request(self.request)
 
-        messages_queryset = ChatMessage.objects.filter(chat__experiment_session=OuterRef("pk"))
+        # Get filtered message IDs more efficiently
         message_filter = ChatMessageFilter()
-        filtered_messages = message_filter.apply(messages_queryset, filter_params, timezone)
+        base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
+        filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
 
+        # Use Exists for filtering instead of Count with IN subquery - avoids cartesian product
+        has_messages = Exists(filtered_messages)
+
+        # Build the query with optimized annotations
         query_set = (
-            ExperimentSession.objects.with_last_message_created_at()
-            .filter(team=self.request.team)
-            .select_related("participant__user", "chat", "experiment")
-            .annotate(
-                message_count=Coalesce(
-                    Count("chat__messages", filter=Q(chat__messages__in=filtered_messages.values("pk")), distinct=True),
-                    0,
-                )
-            )
+            ExperimentSession.objects.filter(team=self.request.team)
+            .filter(has_messages)  # Filter early with Exists - THIS IS THE KEY OPTIMIZATION
+            .select_related("team", "participant__user", "chat", "experiment")
             .annotate_with_versions_list()
-            .filter(message_count__gt=0)
-            .order_by("experiment__name")
         )
 
+        # Apply session filter (this will add first_message_created_at and last_message_created_at)
         session_filter = ExperimentSessionFilter()
         query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
+
+        # Add message count annotation at the end
+        query_set = query_set.annotate(
+            message_count=Coalesce(
+                Count("chat__messages", filter=Q(chat__messages__in=filtered_messages.values("pk")), distinct=True),
+                0,
+            )
+        ).order_by("experiment__name")
 
         return query_set
 

@@ -8,6 +8,7 @@ from django.urls import reverse
 
 from apps.annotations.models import TaggedModelMixin
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 
 
@@ -50,7 +51,7 @@ class Trace(models.Model):
         return f"Trace {self.experiment} {self.session} {self.duration}ms"
 
     def get_absolute_url(self):
-        return reverse("trace:trace_detail", args=[self.team.slug, self.id])
+        return reverse("trace:trace_detail", args=[get_slug_for_team(self.team_id), self.id])
 
     def duration_seconds(self) -> float:
         return round(self.duration / 1000, 2)

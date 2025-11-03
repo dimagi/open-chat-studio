@@ -19,6 +19,7 @@ from apps.service_providers import auth_service, const, model_audit_fields, trac
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
+from ..teams.utils import get_slug_for_team
 from . import llm_service, messaging_service, speech_service
 from .exceptions import ServiceProviderConfigError
 
@@ -327,14 +328,19 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
     def remove_file_url(self):
         return reverse(
             "service_providers:delete_file",
-            kwargs={"team_slug": self.team.slug, "provider_type": const.VOICE, "pk": self.id, "file_id": "000"},
+            kwargs={
+                "team_slug": get_slug_for_team(self.team_id),
+                "provider_type": const.VOICE,
+                "pk": self.id,
+                "file_id": "000",
+            },
         )
 
     def add_file_url(self):
         return reverse(
             "service_providers:add_file",
             kwargs={
-                "team_slug": self.team.slug,
+                "team_slug": get_slug_for_team(self.team_id),
                 "provider_type": const.VOICE,
                 "pk": self.id,
             },

@@ -12,6 +12,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 
 from ..experiments.export import get_filtered_sessions
 from ..service_providers.utils import get_dropdown_llm_model_choices
+from ..teams.utils import get_slug_for_team
 from .const import LANGUAGE_CHOICES
 from .models import AnalysisQuery, TranscriptAnalysis
 
@@ -41,7 +42,7 @@ class TranscriptAnalysisForm(forms.ModelForm):
         session_ids = sessions.values_list("id", flat=True)[: settings.ANALYTICS_MAX_SESSIONS]
 
         self.fields["sessions"] = SessionChoiceField(
-            queryset=sessions.select_related("experiment", "team"),
+            queryset=sessions.select_related("experiment"),
             widget=forms.CheckboxSelectMultiple(attrs={"class": "session-checkbox", "@click": "checkLimits()"}),
             required=True,
             label="",
@@ -196,7 +197,7 @@ class SessionChoiceField(forms.ModelMultipleChoiceField):
         url = reverse(
             "chatbots:chatbot_session_view",
             kwargs={
-                "team_slug": obj.team.slug,
+                "team_slug": get_slug_for_team(obj.team_id),
                 "experiment_id": obj.experiment.public_id,
                 "session_id": obj.external_id,
             },

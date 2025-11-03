@@ -145,7 +145,7 @@ class ConsentFormTable(tables.Table):
 
 def session_chat_url(url_name, request, record, value):
     return reverse(
-        url_name, args=[request.team.slug, record.experiment.id, record.get_experiment_version_number(), record.id]
+        url_name, args=[request.team.slug, record.experiment_id, record.get_experiment_version_number(), record.id]
     )
 
 

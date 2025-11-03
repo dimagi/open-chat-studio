@@ -4,6 +4,7 @@ from django.urls import reverse
 
 from apps.generics import actions
 from apps.mcp_integrations.models import McpServer
+from apps.teams.utils import get_slug_for_team
 
 
 class McpServerTable(tables.Table):
@@ -20,7 +21,7 @@ class McpServerTable(tables.Table):
             actions.chip_action(
                 label="Refresh",
                 url_factory=lambda _, __, record, value: reverse(
-                    "mcp_integrations:refresh_tools", args=[record.team.slug, record.pk]
+                    "mcp_integrations:refresh_tools", args=[get_slug_for_team(record.team_id), record.pk]
                 ),
                 required_permissions=["mcp_integrations.change_mcpserver"],
                 icon_class="fa fa-refresh",
