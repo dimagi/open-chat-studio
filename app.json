@@ -15,7 +15,7 @@
       "value": "none",
       "required": true
     },
-    "DJANGO_SETTINGS_MODULE": "gpt_playground.settings_production",
+    "DJANGO_SETTINGS_MODULE": "config.settings_production",
     "SECRET_KEY": {
       "generator": "secret"
     },
