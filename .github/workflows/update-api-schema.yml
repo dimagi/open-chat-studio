@@ -15,8 +15,8 @@ on:
       - 'apps/**/views.py'
       - 'apps/**/views/**.py'
       - 'apps/**/urls.py'
-      - 'config/urls.py'
-      - 'config/settings.py'
+      - 'gpt_playground/urls.py'
+      - 'gpt_playground/settings.py'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -5,7 +5,7 @@ setup:
     - plan: heroku-redis
       as: REDIS
   config:
-    DJANGO_SETTINGS_MODULE: config.settings_production
+    DJANGO_SETTINGS_MODULE: gpt_playground.settings_production
 build:
   docker:
     django: Dockerfile
@@ -16,13 +16,13 @@ release:
 run:
   web:
     command:
-      - gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0 config.wsgi:application
+      - gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0 gpt_playground.wsgi:application
     image: django
   worker:
     command:
-      - celery -A config worker -l INFO --pool gevent --concurrency 100
+      - celery -A gpt_playground worker -l INFO --pool gevent --concurrency 100
     image: django
   beat:
     command:
-      - celery -A config beat -l INFO
+      - celery -A gpt_playground beat -l INFO
     image: django

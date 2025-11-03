@@ -5,8 +5,8 @@
 db.sqlite3
 .sass-cache/
 celerybeat*
-config/localsettings.py
-config/local.py
+gpt_playground/localsettings.py
+gpt_playground/local.py
 static_root/
 node_modules/
 openapitools.json

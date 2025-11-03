@@ -8,9 +8,9 @@ os.environ["DJANGO_DATABASE_USE_POOL"] = "false"
 os.environ["DJANGO_DATABASE_CONN_MAX_AGE"] = "30"
 
 # set the default Django settings module for the 'celery' program.
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 
-app = Celery("open_chat_studio")
+app = Celery("gpt_playground")
 
 # Using a string here means the worker doesn't have to serialize
 # the configuration object to child processes.

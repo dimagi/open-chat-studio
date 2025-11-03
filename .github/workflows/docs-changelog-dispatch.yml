@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - components
-      - config
+      - gpt_playground
       - assets
       - apps
       - templates

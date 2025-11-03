@@ -33,7 +33,7 @@ from pathlib import Path
 import django
 
 # Set the DJANGO_SETTINGS_MODULE environment variable
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 
 # Configure Django
 django.setup()

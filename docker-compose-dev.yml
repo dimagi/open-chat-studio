@@ -4,7 +4,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     environment:
-      - POSTGRES_DB=open_chat_studio
+      - POSTGRES_DB=gpt_playground
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
     ports:

@@ -184,7 +184,7 @@ def runserver(c: Context, public=False):
 )
 def celery(c: Context, gevent=False, beat=True):
     """Start Celery worker with auto-reload on code changes."""
-    cmd = "celery -A config worker -l INFO"
+    cmd = "celery -A gpt_playground worker -l INFO"
     if gevent:
         cmd += " --pool gevent --concurrency 10"
     else:
