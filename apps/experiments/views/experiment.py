@@ -119,13 +119,6 @@ from apps.utils.base_experiment_table_view import BaseExperimentTableView
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 
-@login_and_team_required
-@permission_required("experiments.view_experiment", raise_exception=True)
-def experiments_home(request, team_slug: str):
-    """Redirect to chatbots home - there should be only one main homepage."""
-    return HttpResponseRedirect(reverse("chatbots:chatbots_home", args=[team_slug]))
-
-
 class ExperimentTableView(BaseExperimentTableView):
     model = Experiment
     table_class = ExperimentTable
@@ -256,7 +249,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         if self.request.POST.get("action") == "save_and_archive":
             experiment = get_object_or_404(Experiment, id=experiment.id, team=self.request.team)
             experiment.archive()
-            return redirect("experiments:experiments_home", self.request.team.slug)
+            return redirect("chatbots:chatbots_home", self.request.team.slug)
         return response
 
 
@@ -353,7 +346,7 @@ def _get_voice_provider_alpine_context(request):
 def delete_experiment(request, team_slug: str, pk: int):
     safety_layer = get_object_or_404(Experiment, id=pk, team=request.team)
     safety_layer.delete()
-    return redirect("experiments:experiments_home", team_slug=team_slug)
+    return redirect("chatbots:chatbots_home", team_slug=team_slug)
 
 
 class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):

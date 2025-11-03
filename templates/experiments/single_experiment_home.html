@@ -43,7 +43,7 @@
 {% endif %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
-      <li><a href="{% url 'experiments:experiments_home' request.team.slug %}">Experiments</a></li>
+      <li><a href="{% url 'chatbots:chatbots_home' request.team.slug %}">Experiments</a></li>
       <li class="pg-breadcrumb-active" aria-current="page">{{ experiment.name }}</li>
     </ul>
   </div>

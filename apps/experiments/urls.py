@@ -9,7 +9,6 @@ app_name = "experiments"
 
 
 urlpatterns = [
-    path("", views.experiments_home, name="experiments_home"),
     # prompts
     path("prompt_builder", views.experiments_prompt_builder, name="experiments_prompt_builder"),
     path(
