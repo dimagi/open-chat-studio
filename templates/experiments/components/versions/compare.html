@@ -17,6 +17,9 @@
                                                     {% include "experiments/components/versions/version_field.html" %}
                                                 {% endfor %}
                                             </div>
+                                            {% if field.num_results_truncated > 0 %}
+                                                <div class="text-sm italic text-center mt-2">{{ field.num_results_truncated }} results not shown...</div>
+                                            {% endif %}
                                         {% else %}
                                             {% include "experiments/components/versions/version_field.html" %}
                                         {% endif %}
