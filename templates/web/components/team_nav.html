@@ -110,7 +110,7 @@
     {% if perms.pipelines.view_pipeline %}
       <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'pipelines' %}class="menu-active"{% endif %}>
         <i class="fa-solid fa-puzzle-piece"></i>
-        {% translate "Pipelines" %}
+        {% translate "Event Pipelines" %}
       </a>
     {% endif %}
   </li>

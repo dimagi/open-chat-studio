@@ -18,6 +18,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
+from django.templatetags.static import static as static_url
 from django.urls import include, path
 from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
@@ -56,6 +57,7 @@ team_urlpatterns = [
 ]
 
 urlpatterns = [
+    path("favicon.ico", RedirectView.as_view(url=static_url("images/favicons/favicon-96x96.png"), permanent=True)),
     path("admin/", include("apps.admin.urls")),
     # redirect Django admin login to main login page
     path("django-admin/login/", RedirectView.as_view(pattern_name=settings.LOGIN_URL)),

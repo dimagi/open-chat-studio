@@ -1,7 +1,6 @@
+from django.conf import settings
 from drf_spectacular.authentication import TokenScheme
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
-
-from gpt_playground import settings
 
 
 class ApiScheme(OpenApiAuthenticationExtension):

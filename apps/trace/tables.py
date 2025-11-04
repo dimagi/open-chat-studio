@@ -6,17 +6,18 @@ from django.urls import reverse
 from apps.generics import actions
 from apps.generics.actions import chip_action
 from apps.generics.tables import TimeAgoColumn
+from apps.teams.utils import get_slug_for_team
 from apps.trace.models import Trace
 
 
 def _chip_chatbot_url_factory(_, request, record, __):
-    return reverse("chatbots:single_chatbot_home", args=[record.team.slug, record.experiment_id])
+    return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(record.team_id), record.experiment_id])
 
 
 def _chip_session_url_factory(_, request, record, __):
     return reverse(
         "chatbots:chatbot_session_view",
-        args=[record.team.slug, record.experiment.public_id, record.session.external_id],
+        args=[get_slug_for_team(record.team_id), record.experiment.public_id, record.session.external_id],
     )
 
 

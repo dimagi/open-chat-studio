@@ -164,7 +164,7 @@ INTERNAL_IPS = [
     "127.0.0.1",  # Django debug toolbar
 ]
 
-ROOT_URLCONF = "gpt_playground.urls"
+ROOT_URLCONF = "config.urls"
 
 # used to disable the cache in dev, but turn it on in production.
 # more here: https://nickjanetakis.com/blog/django-4-1-html-templates-are-cached-by-default-with-debug-true
@@ -204,7 +204,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "gpt_playground.wsgi.application"
+WSGI_APPLICATION = "config.wsgi.application"
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 FORMS_URLFIELD_ASSUME_HTTPS = True
@@ -218,7 +218,7 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql_psycopg2",
-            "NAME": env("DJANGO_DATABASE_NAME", default="gpt_playground"),
+            "NAME": env("DJANGO_DATABASE_NAME", default="open_chat_studio"),
             "USER": env("DJANGO_DATABASE_USER", default="postgres"),
             "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="***"),
             "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
@@ -798,10 +798,13 @@ SILKY_MAX_RECORDED_REQUESTS = 1000
 
 
 def SILKY_INTERCEPT_FUNC(request):  # noqa
+    if request.path_info.startswith("/__debug__/"):
+        return False
+
     if not (request.user.is_authenticated and request.user.is_staff):
         return False
 
-    if "silky" in request.GET:
+    if DEBUG or "silky" in request.GET:
         return True
 
     if request.htmx:

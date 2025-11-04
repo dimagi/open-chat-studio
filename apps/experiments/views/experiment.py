@@ -35,6 +35,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -150,7 +151,11 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         query_set = (
             ExperimentSession.objects.with_last_message_created_at()
             .filter(experiment_filter, team=self.request.team)
-            .select_related("participant__user", "chat")
+            # Select related source
+            # experiment: participant.get_link_to_experiment_data
+            # participant__user: str(participant)
+            # chat: tags prefetch
+            .select_related("experiment", "participant__user", "chat")
             .annotate_with_versions_list()
             .prefetch_related(
                 Prefetch(
@@ -1572,6 +1577,8 @@ def migrate_experiment_view(request, team_slug, experiment_id):
         return redirect(failed_url)
 
 
+@cache_control(max_age=settings.EXPERIMENT_TREND_CACHE_TIMEOUT, private=True)
+@cache_page(settings.EXPERIMENT_TREND_CACHE_TIMEOUT)
 @require_GET
 @login_and_team_required
 @permission_required("experiments.view_experiment")
