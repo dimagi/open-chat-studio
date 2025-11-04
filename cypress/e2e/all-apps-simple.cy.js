@@ -14,141 +14,100 @@ describe('All Application Pages', () => {
 
     it('dashboard has charts or data', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.get('body').then(($body) => {
-        const hasCharts = $body.find('canvas, svg, .chart').length > 0
-        const hasTables = $body.find('table').length > 0
-        const hasData = $body.text().length > 100
-
-        if (hasCharts) {
-          cy.log('Dashboard has charts')
-        } else if (hasTables) {
-          cy.log('Dashboard has tables')
-        } else if (hasData) {
-          cy.log('Dashboard has content')
-        } else {
-          cy.log('Dashboard may be empty')
-        }
-      })
+      cy.get('canvas').its('length')
+        .then((count) => {
+          expect(count).to.be.greaterThan(2);
+        });
     })
   })
 
   describe('Assistants', () => {
     it('assistants page loads', () => {
       cy.visit(`/a/${teamSlug}/assistants/`)
-      cy.url().should('include', '/assistants/')
-      cy.get('body').should('be.visible')
+      cy.pageTitleEquals('OpenAI Assistant')
     })
 
-    it('assistants page has content', () => {
+    it('assistants page has table and new button', () => {
       cy.visit(`/a/${teamSlug}/assistants/`)
-      cy.get('body').invoke('text').should('have.length.greaterThan', 10)
+      cy.get('table').should('exist')
+      cy.get('[data-cy="btn-new"]').should('be.visible')
+        .and('contain.text', 'Add new')
     })
 
     it('can access new assistant page', () => {
-      cy.visit(`/a/${teamSlug}/assistants/new/`)
-      cy.get('body').then(($body) => {
-        if ($body.find('form').length > 0) {
-          cy.log('Create assistant form found')
-        } else {
-          cy.log('Form not found or insufficient permissions')
-        }
-      })
+      cy.visit(`/a/${teamSlug}/assistants/`)
+      cy.get('[data-cy="btn-new"]').click()
+      cy.pageTitleEquals('Create OpenAI Assistant')
+      cy.get('input[name="name"]').should('be.visible')
     })
   })
 
   describe('Files', () => {
     it('files page loads', () => {
       cy.visit(`/a/${teamSlug}/files/file`)
-      cy.url().should('include', '/files/')
-      cy.get('body').should('be.visible')
-    })
-
-    it('files page has content', () => {
-      cy.visit(`/a/${teamSlug}/files/file`)
-      cy.get('body').invoke('text').should('have.length.greaterThan', 10)
+      cy.pageTitleEquals('Files')
+      cy.get('table').should('exist')
     })
   })
 
   describe('Collections', () => {
     it('collections page loads', () => {
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.url().should('include', '/documents/')
-      cy.get('body').should('be.visible')
-    })
-
-    it('collections page has content', () => {
-      cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.get('body').invoke('text').should('have.length.greaterThan', 10)
+      cy.pageTitleEquals('Collections')
+      cy.get('table').should('exist')
+      cy.get('[data-cy="btn-new"]').should('be.visible')
+        .and('contain.text', 'Add new')
     })
 
     it('can access new collections page', () => {
-      cy.visit(`/a/${teamSlug}/documents/collection/new/`)
-      cy.get('body').then(($body) => {
-        if ($body.find('form').length > 0) {
-          cy.log('Create collection form found')
-        } else {
-          cy.log('Form not found or insufficient permissions')
-        }
-      })
+      cy.visit(`/a/${teamSlug}/documents/collection/`)
+      cy.get('[data-cy="btn-new"]').click()
+      cy.pageTitleEquals('Create Collection')
+      cy.get('input[name="name"]').should('be.visible')
     })
   })
 
-  describe('Analysis', () => {
-    it('analysis page loads', () => {
-      cy.visit(`/a/${teamSlug}/analysis/`)
-      cy.url().should('include', '/analysis/')
-      cy.get('body').should('be.visible')
-    })
-
-    it('analysis page has content', () => {
-      cy.visit(`/a/${teamSlug}/analysis/`)
-      cy.get('body').invoke('text').should('have.length.greaterThan', 10)
-    })
-  })
-
-  describe('Service Providers / Team Settings', () => {
+  describe('Team Settings', () => {
     it('manage team page loads', () => {
       cy.visit(`/a/${teamSlug}/team/`)
-      cy.get('body').should('be.visible')
+      cy.pageTitleEquals('Team Details')
+      cy.get('input[name="name"]').should('be.visible').and('have.value', 'Test Team')
     })
 
-    it('team page has settings content', () => {
-      cy.visit(`/a/${teamSlug}/team/`)
-      cy.get('body').invoke('text').should('have.length.greaterThan', 20)
+    const serviceProviderTypes = [
+      'llm',
+      'voice',
+      'messaging',
+      'auth',
+      'actions',
+      // 'mcp',  feature flag
+      'tracing'
+    ]
+    serviceProviderTypes.forEach(type => {
+      it(`manage team page contains '${type}' section`, () => {
+        cy.visit(`/a/${teamSlug}/team/`)
+        cy.get(`[data-cy="title-${type}"]`).should('exist')
+      })
     })
   })
 
   describe('Navigation', () => {
-    const pages = [
-      `/a/${teamSlug}/chatbots/`,
-      `/a/${teamSlug}/participants/participant/`,
-      `/a/${teamSlug}/dashboard/`,
-      `/a/${teamSlug}/assistants/`,
-      `/a/${teamSlug}/files/file/`,
-      `/a/${teamSlug}/documents/collection/`,
-      `/a/${teamSlug}/analysis/`
-    ]
+    it(`should show left side navigation`, () => {
+      cy.viewport(1024, 768)
+      cy.visit(`/a/${teamSlug}/chatbots/`)
+      cy.get(`[data-cy="btn-team-nav"]`).click()
+      cy.get(`[data-cy="nav-team-settings"]`).should('be.visible')
+      cy.get(`[data-cy="nav-add-team"]`).should('be.visible')
+      cy.get(`[data-cy="nav-docs"]`).should('be.visible')
+    })
 
-    pages.forEach(page => {
-      it(`should have navigation or links on ${page}`, () => {
-        cy.visit(page)
-
-        cy.get('body').then(($body) => {
-          const hasNav = $body.find('nav, .nav, [role="navigation"]').length > 0
-          const hasLinks = $body.find('a').length > 0
-
-          if (hasNav) {
-            cy.log(`${page}: Has navigation element`)
-          } else if (hasLinks) {
-            cy.log(`${page}: Has links (no explicit nav)`)
-          } else {
-            cy.log(`${page}: Minimal page structure`)
-          }
-
-          // At minimum, should have some interactive elements
-          expect($body.find('a, button').length).to.be.greaterThan(0)
-        })
-      })
+    it(`should show mobile navigation`, () => {
+      cy.viewport(768, 1024)
+      cy.visit(`/a/${teamSlug}/chatbots/`)
+      cy.get(`[data-cy="btn-team-nav-mobile"]`).click()
+      cy.get(`[data-cy="nav-team-settings"]`).should('be.visible')
+      cy.get(`[data-cy="nav-add-team"]`).should('be.visible')
+      cy.get(`[data-cy="nav-docs"]`).should('be.visible')
     })
   })
 })

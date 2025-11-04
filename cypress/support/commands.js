@@ -77,6 +77,10 @@ Cypress.Commands.add('login', (username, password) => {
   })
 })
 
+Cypress.Commands.add('pageTitleEquals', (title) => {
+  cy.get('[data-cy="title"]').contains(title)
+});
+
 /**
  * Logout command
  */
