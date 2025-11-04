@@ -41,22 +41,30 @@ from ..utils.prompt import PromptVars
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    """View for listing event pipelines."""
+
     permission_required = "pipelines.view_pipeline"
     template_name = "generic/object_home.html"
 
     def get_context_data(self, team_slug: str, **kwargs):
         return {
             "active_tab": "pipelines",
-            "title": "Pipelines",
+            "title": "Event Pipelines",
             "new_object_url": reverse("pipelines:new", args=[team_slug]),
             "table_url": reverse("pipelines:table", args=[team_slug]),
             "title_help_content": render_help_with_link(
-                "Pipelines allow you to create more complex bots by combining one or more steps together.", "pipelines"
+                (
+                    "Event pipelines allow you to combine steps together to create complex execution logic in response "
+                    "to events."
+                ),
+                "pipelines",
             ),
         }
 
 
 class PipelineTableView(SingleTableView, PermissionRequiredMixin):
+    """Displays a table of event pipelines for the current team."""
+
     permission_required = "pipelines.view_pipeline"
     model = Pipeline
     table_class = PipelineTable
