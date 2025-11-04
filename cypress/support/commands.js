@@ -39,51 +39,42 @@ Cypress.Commands.add('login', (username, password) => {
     
     // Submit form
     cy.get('input[type="submit"]').click()
-    
-    // Wait for navigation
-    cy.wait(2000)
-    
-    // Check result
-    cy.url({ timeout: 15000 }).then(url => {
-      if (url.includes('/accounts/login/')) {
-        // Still on login page - check for errors
-        cy.get('body').then($body => {
-          const bodyText = $body.text()
-          if (bodyText.includes('incorrect') || bodyText.includes('invalid') || bodyText.includes('does not exist')) {
-            throw new Error(
-              `❌ Login failed for user '${user}'.\n` +
-              `Please check:\n` +
-              `1. User exists in database\n` +
-              `2. Password is correct\n` +
-              `3. TEST_USER and TEST_PASSWORD are set in cypress.env.json`
-            )
-          } else if (bodyText.includes('2FA') || bodyText.includes('two-factor') || bodyText.includes('authentication')) {
-            throw new Error('❌ 2FA is enabled. Please disable 2FA for test user or handle in tests')
-          } else {
-            throw new Error(`❌ Login failed for unknown reason. Check login page at /accounts/login/`)
-          }
-        })
-      } else {
-        cy.log('✓ Login successful')
-      }
-    })
-  })
 
-  // Option 2: Login via API (faster, recommended for tests that don't test login)
-  // Uncomment and customize this if you have a login API endpoint
-  /*
-  cy.request({
-    method: 'POST',
-    url: '/api/auth/login/',
-    body: {
-      username: user,
-      password: pass,
-    },
-  }).then((response) => {
-    // Save the auth token or session cookie
-    window.localStorage.setItem('authToken', response.body.token)
+
+    // // Wait for navigation
+    cy.wait(2000)
+    //
+    // // Check result
+    // cy.url({ timeout: 15000 }).then(url => {
+    //   if (url.includes('/accounts/login/')) {
+    //     // Still on login page - check for errors
+    //     cy.get('body').then($body => {
+    //       const bodyText = $body.text()
+    //       if (bodyText.includes('incorrect') || bodyText.includes('invalid') || bodyText.includes('does not exist')) {
+    //         throw new Error(
+    //           `❌ Login failed for user '${user}'.\n` +
+    //           `Please check:\n` +
+    //           `1. User exists in database\n` +
+    //           `2. Password is correct\n` +
+    //           `3. TEST_USER and TEST_PASSWORD are set in cypress.env.json`
+    //         )
+    //       } else if (bodyText.includes('2FA') || bodyText.includes('two-factor') || bodyText.includes('authentication')) {
+    //         throw new Error('❌ 2FA is enabled. Please disable 2FA for test user or handle in tests')
+    //       } else {
+    //         throw new Error(`❌ Login failed for unknown reason. Check login page at /accounts/login/`)
+    //       }
+    //     })
+    //   } else {
+    //     cy.log('✓ Login successful')
+    //   }
+    // })
+  }, {
+    validate() {
+      cy.request('/users/profile/').then((response) => {
+        expect(response.status).to.eq(200);
+      });
+    }
   })
-  */
 })
 
 /**

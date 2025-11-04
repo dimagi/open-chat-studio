@@ -1,7 +1,7 @@
 describe('All Application Pages', () => {
   const teamSlug = Cypress.env('TEAM_SLUG') || 'your-team-slug'
 
-  before(() => {
+  beforeEach(() => {
     cy.login()
   })
 

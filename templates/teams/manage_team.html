@@ -14,7 +14,7 @@
   <section class="app-card">
     {% if not create %}
       <div class="flex justify-between">
-        <h3 class="pg-subtitle">
+        <h3 data-cy="title" class="pg-subtitle">
           {% translate "Team Details" %}
         </h3>
         <a href="{% url "single_team:feature_flags" request.team.slug %}" class="btn btn-primary">Manage Feature Flags</a>
@@ -35,7 +35,7 @@
       {% has_perm "service_providers" "add_llmprovider" as allow_new %}
       {% url "service_providers:table" request.team.slug "llm" as table_url %}
       {% url "service_providers:llm_new" request.team.slug as new_object_url %}
-      {% include "generic/object_home_content.html" with new_object_url=new_object_url table_url=table_url %}
+      {% include "generic/object_home_content.html" with new_object_url=new_object_url table_url=table_url data_cy_title="title-llm" %}
     {% endwith %}
     {% translate "Speech to text and visa versa" as speech_subtitle %}
     {% include "service_providers/service_provider_home.html" with provider_type="voice" title="Speech Service Providers" subtitle=speech_subtitle perm="add_voiceprovider" %}
@@ -44,12 +44,12 @@
     {% translate "Authentication credentials for integrations" as auth_subtitle %}
     {% include "service_providers/service_provider_home.html" with provider_type="auth" title="Authentication Providers" subtitle=auth_subtitle perm="add_authprovider" %}
 
-    {% has_perm "custom_actions" "add_customaction" as allow_new_action %}
-    {% url "custom_actions:table" request.team.slug as actions_table_url %}
-    {% url "custom_actions:new" request.team.slug as actions_new_url %}
-    {% translate "Allow Experiments to call external services" as actions_subtitle %}
     {% with button_style="btn-outline" title_class="pg-subtitle" %}
-      {% include "generic/object_home_content.html" with new_object_url=actions_new_url title="Custom Actions" table_url=actions_table_url allow_new=allow_new_action subtitle=actions_subtitle %}
+      {% has_perm "custom_actions" "add_customaction" as allow_new_action %}
+      {% url "custom_actions:table" request.team.slug as actions_table_url %}
+      {% url "custom_actions:new" request.team.slug as actions_new_url %}
+      {% translate "Allow Experiments to call external services" as actions_subtitle %}
+      {% include "generic/object_home_content.html" with new_object_url=actions_new_url title="Custom Actions" table_url=actions_table_url allow_new=allow_new_action subtitle=actions_subtitle data_cy_title="title-actions" %}
     {% endwith %}
 
     {% flag "flag_mcp" %}
@@ -58,7 +58,7 @@
       {% url "mcp_integrations:new" request.team.slug as mcp_new_url %}
       {% translate "Manage MCP Servers" as mcp_subtitle %}
       {% with button_style="btn-outline" title_class="pg-subtitle" %}
-        {% include "generic/object_home_content.html" with new_object_url=mcp_new_url title="MCP Integrations" table_url=mcp_table_url allow_new=allow_new_mcp subtitle=mcp_subtitle %}
+        {% include "generic/object_home_content.html" with new_object_url=mcp_new_url title="MCP Integrations" table_url=mcp_table_url allow_new=allow_new_mcp subtitle=mcp_subtitle data_cy_title="title-mcp" %}
       {% endwith %}
     {% endflag %}
 
