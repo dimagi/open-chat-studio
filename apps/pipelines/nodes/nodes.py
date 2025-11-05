@@ -203,7 +203,9 @@ class LLMResponseMixin(BaseModel):
             ) from None
 
     def get_chat_model(self):
-        return self.get_llm_service().get_chat_model(self.get_llm_provider_model().name, self.llm_temperature)
+        return self.get_llm_service().get_chat_model(
+            self.get_llm_provider_model().name, self.llm_temperature, **self.llm_model_parameters
+        )
 
 
 class HistoryMixin(LLMResponseMixin):
