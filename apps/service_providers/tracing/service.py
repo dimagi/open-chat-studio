@@ -29,7 +29,7 @@ class TracingService:
         self._tracers = tracers
 
         self.outputs: dict[UUID, dict] = defaultdict(dict)
-        self.span_stack: list[tuple[UUID, str]] = []
+        self.span_stack: list[TraceContext] = []
 
         self.trace_name: str | None = None
         self.trace_id: UUID | None = None
@@ -97,12 +97,7 @@ class TracingService:
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, str] | None = None,
     ) -> Iterator[TraceContext]:
-        """Context manager for tracing.
-
-        Uses ExitStack to manage multiple tracer contexts safely.
-        If a tracer fails during initialization, already-entered
-        tracers are guaranteed to be cleaned up.
-        """
+        """Context manager for tracing."""
         self.trace_id = uuid.uuid4()
         self.trace_name = trace_name
         self.session = session
@@ -142,21 +137,17 @@ class TracingService:
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
     ) -> Iterator[TraceContext]:
-        """Context manager for spanning.
-
-        Uses ExitStack to manage multiple tracer span contexts safely.
-        """
-        if not self.activated:
-            # Return a dummy context if not activated
-            yield TraceContext(id=uuid.uuid4(), name=span_name)
-            return
-
-        span_id = uuid.uuid4()
-        self.span_stack.append((span_id, span_name))
-
+        """Context manager for spanning."""
         # Create context object that will be passed to tracers and yielded to user
+        span_id = uuid.uuid4()
         span_context = TraceContext(id=span_id, name=span_name)
 
+        if not self.activated:
+            # Return a dummy context if not activated
+            yield span_context
+            return
+
+        self.span_stack.append(span_context)
         try:
             with ExitStack() as stack:
                 # Enter all tracer span contexts, passing the same context object
@@ -175,10 +166,7 @@ class TracingService:
                 # Yield the context object to user code
                 yield span_context
         finally:
-            # Verify and pop from span stack
-            popped_span_id, _ = self.span_stack.pop()
-            if popped_span_id != span_id:
-                logger.error("Span ID mismatch: expected %s, got %s", popped_span_id, span_id)
+            self.span_stack.pop()
 
     def get_langchain_callbacks(
         self, run_name_map: dict[str, str] = None, filter_patterns: list[str] = None
@@ -220,14 +208,14 @@ class TracingService:
         """
         extra_callbacks = callbacks or []
         tracer_callbacks = self.get_langchain_callbacks(run_name_map, filter_patterns)
-        _, span_name = self._get_current_span_info()
+        span_context = self._get_current_span_info()
         metadata = {}
         if self.session:
             metadata["participant-id"] = self.session.participant.identifier
             metadata["session-id"] = str(self.session.external_id)
 
         config = RunnableConfig(
-            run_name=f"{span_name or 'OCS'} run",
+            run_name=f"{span_context.name or 'OCS'} run",
             callbacks=tracer_callbacks + extra_callbacks,
             metadata=metadata,
         )
@@ -261,10 +249,10 @@ class TracingService:
         self.outputs = defaultdict(dict)
         self.span_stack = []
 
-    def _get_current_span_info(self) -> tuple[UUID, str]:
+    def _get_current_span_info(self) -> TraceContext:
         if self.span_stack:
             return self.span_stack[-1]
-        return self.trace_id, self.trace_name
+        return TraceContext(self.trace_id, self.trace_name)
 
     def add_output_message_tags_to_trace(self, tags: list[str]) -> None:
         if not self.activated or not tags:
