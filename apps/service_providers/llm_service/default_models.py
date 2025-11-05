@@ -1,8 +1,10 @@
 import dataclasses
 from collections import defaultdict
+from enum import Enum
 
 from django.db import transaction
 
+from apps.service_providers.llm_service.model_parameters import OpenAIReasoningParameters
 from apps.utils.deletion import get_related_objects, get_related_pipelines_queryset
 
 
@@ -13,6 +15,7 @@ class Model:
     is_default: bool = False
     deprecated: bool = False
     is_translation_default: bool = False
+    parameters: Enum = None
 
 
 def k(n: int) -> int:
@@ -21,9 +24,9 @@ def k(n: int) -> int:
 
 DEFAULT_LLM_PROVIDER_MODELS = {
     "azure": [
-        Model("o4-mini", 200000),
-        Model("o3", 200000),
-        Model("o3-mini", 200000),
+        Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
+        Model("o3", 200000, parameters=OpenAIReasoningParameters),
+        Model("o3-mini", 200000, parameters=OpenAIReasoningParameters),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
         Model("gpt-4.1-nano", 1000000),
@@ -46,18 +49,18 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-instant-1.2", k(100), deprecated=True),
     ],
     "openai": [
-        Model("o4-mini", 200000),
-        Model("o4-mini-high", 200000),
+        Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
+        Model("o4-mini-high", 200000, parameters=OpenAIReasoningParameters),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
         Model("gpt-4.1-nano", 1000000),
-        Model("o3", 128000),
-        Model("o3-mini", 128000),
+        Model("o3", 128000, parameters=OpenAIReasoningParameters),
+        Model("o3-mini", 128000, parameters=OpenAIReasoningParameters),
         Model("gpt-4o-mini", 128000),
         Model("gpt-4o", 128000),
         Model("chatgpt-4o-latest", 128000),
-        Model("o1-preview", 128000),
-        Model("o1-mini", 128000),
+        Model("o1-preview", 128000, parameters=OpenAIReasoningParameters),
+        Model("o1-mini", 128000, parameters=OpenAIReasoningParameters),
         Model("gpt-4", k(8)),
         Model("gpt-4-turbo", 128000),
         Model("gpt-4-turbo-preview", 128000),
@@ -118,6 +121,13 @@ DEFAULT_EMBEDDING_PROVIDER_MODELS = {
     "openai": ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
     "google": ["gemini-embedding-001"],
 }
+
+
+LLM_MODEL_PARAMETERS = {}
+for _provider, models in DEFAULT_LLM_PROVIDER_MODELS.items():
+    for model in models:
+        if model.parameters:
+            LLM_MODEL_PARAMETERS[model.name] = model.parameters
 
 
 def get_default_model(provider_type: str) -> Model:
