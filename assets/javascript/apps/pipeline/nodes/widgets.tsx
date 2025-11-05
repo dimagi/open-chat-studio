@@ -782,13 +782,15 @@ export function LlmWidget(props: WidgetParams) {
         const currModelParamSchema = getSelectedModelSchema(providerModelId);
         const prevModelParamSchema = getSelectedModelSchema(old.data.params.llm_provider_model_id);
         
-        if (prevModelParamSchema != currModelParamSchema) {
+        if (currModelParamSchema && prevModelParamSchema != currModelParamSchema) {
           let defaultLlmParams = {};
           // Update the parameter set in the state with the new model's default parameters
           Object.getOwnPropertyNames(currModelParamSchema.properties).map((paramName) => {
             defaultLlmParams = {...defaultLlmParams, [paramName]: currModelParamSchema.properties[paramName].default};
           });
           next.data.params.llm_model_parameters = defaultLlmParams;
+        } else {
+          next.data.params.llm_model_parameters = {};
         }
       })
     );
