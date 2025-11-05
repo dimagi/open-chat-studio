@@ -38,7 +38,6 @@ class LangFuseTracer(Tracer):
         super().__init__(type_, config)
         self.client = None
         self.trace_record = None
-        self.spans: dict[UUID, Any] = {}
 
     @property
     def ready(self) -> bool:
@@ -99,7 +98,6 @@ class LangFuseTracer(Tracer):
                 # Reset state
                 self.client = None
                 self.trace_record = None
-                self.spans.clear()
                 self.trace_record_name = None
                 self.trace_record_id = None
                 self.session = None
@@ -126,12 +124,9 @@ class LangFuseTracer(Tracer):
             metadata=metadata,
             level=level,
         ) as span:
-            self.spans[span_context.id] = span
-
             try:
                 yield span_context
             finally:
-                self.spans.pop(span_context.id, None)
                 if output := span_context.outputs:
                     span.update(output=output.copy())
 
