@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from langfuse._client.get_client import _create_client_from_instance
 from langfuse._client.resource_manager import LangfuseResourceManager
 from langfuse.langchain import CallbackHandler
 
@@ -60,47 +61,35 @@ class LangFuseTracer(Tracer):
         if self.trace_record:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        # Set base class state from context
-        self.trace_record_name = trace_context.name
-        self.trace_record_id = trace_context.id
         self.session = session
 
         # Get client and create trace
         self.client = client_manager.get(self.config)
-        with self.client.start_as_current_span(
-            name=trace_context.name,
-            input=inputs,
-            metadata=metadata,
-        ) as trace:
-            self.trace_record = trace
-            self.trace.update_trace(
-                session_id=str(session.external_id),
-                user_id=session.participant.identifier,
-            )
+        try:
+            with self.client.start_as_current_span(
+                name=trace_context.name,
+                input=inputs,
+                metadata=metadata,
+            ) as trace:
+                self.trace_record = trace
+                self.trace_record.update_trace(
+                    session_id=str(session.external_id),
+                    user_id=session.participant.identifier,
+                )
 
-            error_to_record: Exception | None = None
-            try:
                 yield trace_context
 
-                # Get outputs from context and merge with error if present
-                outputs = trace_context.outputs.copy() if trace_context.outputs else {}
-                if error_to_record:
-                    outputs["error"] = str(error_to_record)
-
                 # Update trace with outputs if any
-                if outputs:
-                    trace.update(output=outputs)
-            finally:
-                # Flush client to send data to Langfuse
-                if self.client:
-                    self.client.flush()
+                if outputs := trace_context.outputs:
+                    trace.update(output=outputs.copy())
+        finally:
+            if self.trace_record:
+                self.client.flush()
 
-                # Reset state
-                self.client = None
-                self.trace_record = None
-                self.trace_record_name = None
-                self.trace_record_id = None
-                self.session = None
+            # Reset state
+            self.client = None
+            self.trace_record = None
+            self.session = None
 
     @contextmanager
     def span(
@@ -124,11 +113,9 @@ class LangFuseTracer(Tracer):
             metadata=metadata,
             level=level,
         ) as span:
-            try:
-                yield span_context
-            finally:
-                if output := span_context.outputs:
-                    span.update(output=output.copy())
+            yield span_context
+            if output := span_context.outputs:
+                span.update(output=output.copy())
 
     def get_langchain_callback(self) -> BaseCallbackHandler | None:
         if not self.ready:
@@ -144,8 +131,8 @@ class LangFuseTracer(Tracer):
             raise ServiceNotInitializedException("Service not initialized.")
 
         return {
-            "trace_id": self.trace_record.id,
-            "trace_url": self.trace_record.get_trace_url(),
+            "trace_id": self.trace_record.trace_id,
+            "trace_url": self.client.get_trace_url(trace_id=self.trace_record.trace_id),
             "trace_provider": self.type,
         }
 
@@ -179,8 +166,9 @@ class ClientManager:
         public_key = config.get("public_key")
         with LangfuseResourceManager._lock:
             active_instances = LangfuseResourceManager._instances
-            client = active_instances.get(public_key, None)
-            if client is None:
+            if target_instance := active_instances.get(public_key, None):
+                client = _create_client_from_instance(target_instance, public_key)
+            else:
                 logger.debug("Creating new Langfuse client with public_key '%s'", public_key)
                 client = Langfuse(**config)
             self.key_timestamps[public_key] = time.time()
