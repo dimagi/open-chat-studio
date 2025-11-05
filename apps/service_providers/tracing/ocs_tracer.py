@@ -5,7 +5,6 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
@@ -33,8 +32,6 @@ class OCSTracer(Tracer):
         self.start_time: float = None
         self.trace_record = None
         self.error_detected = False
-        # error_span_id is used to track the span in which an error occurred
-        self.error_span_id = None
 
     @property
     def ready(self) -> bool:
@@ -158,43 +155,6 @@ class OCSTracer(Tracer):
             if error_to_record:
                 self.error_detected = True
 
-                # Note: Span creation is disabled, but we still track errors
-                # If span tracking is re-enabled, this is where we would:
-                # 1. Get outputs from span_context.outputs
-                # 2. Create and save span to database with outputs
-                # 3. Add error tags if needed
-
-                # Example if re-enabled:
-                #   span.output = span_context.outputs
-                #   span.error = str(error_to_record)
-                #   span.save()
-
-    def _start_span_for_callback(
-        self,
-        span_id: UUID,
-        span_name: str,
-        inputs: dict[str, Any],
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Internal method for LangChain callback handler.
-
-        Span tracking is disabled, so this is a no-op.
-        """
-        pass
-
-    def _end_span_for_callback(
-        self,
-        span_id: UUID,
-        outputs: dict[str, Any] | None = None,
-        error: Exception | None = None,
-    ) -> None:
-        """Internal method for LangChain callback handler.
-
-        Tracks errors even though span creation is disabled.
-        """
-        if error:
-            self.error_detected = True
-
     def get_langchain_callback(self) -> None:
         """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
         return OCSCallbackHandler(tracer=self)
@@ -233,85 +193,15 @@ class OCSTracer(Tracer):
 
 
 class OCSCallbackHandler(BaseCallbackHandler):
-    LANGCHAIN_CHAINS_TO_IGNORE = [
-        "start",
-        "end",
-        "should_continue",
-        "RunnableSequence",
-        "LangGraph",
-        "Run Pipeline run",
-    ]
-
     def __init__(self, tracer: OCSTracer):
         super().__init__()
         self.tracer = tracer
 
-    def on_llm_start(self, serialized, prompts, run_id, parent_run_id, tags, metadata, *args, **kwargs) -> None:
-        self.tracer._start_span_for_callback(
-            span_id=run_id,
-            span_name=kwargs.get("name", "Unknown span"),
-            inputs={"prompts": prompts},
-            metadata=metadata or {},
-        )
+    def on_llm_error(self, *args, **kwargs) -> None:
+        self.tracer.error_detected = True
 
-    def on_llm_end(self, response, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer._end_span_for_callback(
-            span_id=run_id,
-            outputs={"output": response},
-        )
+    def on_chain_error(self, *args, **kwargs) -> None:
+        self.tracer.error_detected = True
 
-    def on_llm_error(self, error, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer._end_span_for_callback(
-            span_id=run_id,
-            error=error,
-        )
-
-    def on_chain_start(self, serialized, inputs, run_id, parent_run_id, tags, metadata, *args, **kwargs) -> None:
-        metadata = metadata or {}
-        serialized = serialized or {}
-        chain_name = kwargs.get("name", "Unknown span")
-        if chain_name in OCSCallbackHandler.LANGCHAIN_CHAINS_TO_IGNORE:
-            return
-
-        self.tracer._start_span_for_callback(
-            span_id=run_id,
-            span_name=chain_name,
-            inputs=inputs,
-            metadata=metadata or {},
-        )
-
-    def on_chain_end(self, outputs, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer._end_span_for_callback(
-            span_id=run_id,
-            outputs=outputs,
-        )
-
-    def on_chain_error(self, error, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer._end_span_for_callback(
-            span_id=run_id,
-            outputs={},
-            error=error,
-        )
-
-    def on_tool_start(self, serialized, input_str, run_id, parent_run_id, tags, metadata, *args, **kwargs) -> None:
-        self.tracer._start_span_for_callback(
-            span_id=run_id,
-            span_name=kwargs.get("name", "Unknown span"),
-            inputs={"input": input_str},
-            metadata=metadata or {},
-        )
-
-    def on_tool_end(self, output, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer._end_span_for_callback(
-            span_id=run_id,
-            outputs={"output": output},
-        )
-
-    def on_tool_error(self, error, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer._end_span_for_callback(
-            span_id=run_id,
-            error=error,
-        )
-
-    def on_chat_model_start(self, *args, **kwargs) -> Any:
-        pass
+    def on_tool_error(self, *args, **kwargs) -> None:
+        self.tracer.error_detected = True
