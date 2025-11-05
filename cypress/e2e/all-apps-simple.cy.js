@@ -8,8 +8,7 @@ describe('All Application Pages', () => {
   describe('Dashboard', () => {
     it('dashboard page loads', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.url().should('include', '/dashboard/')
-      cy.get('body').should('be.visible')
+      cy.pageTitleEquals('Team Dashboard')
     })
 
     it('dashboard has charts or data', () => {
