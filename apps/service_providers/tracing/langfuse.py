@@ -6,12 +6,11 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from threading import RLock
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from langfuse.callback import CallbackHandler
-from langfuse.client import StatefulSpanClient, StatefulTraceClient
+from langfuse._client.resource_manager import LangfuseResourceManager
+from langfuse.langchain import CallbackHandler
 
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException, TraceContext
@@ -38,8 +37,8 @@ class LangFuseTracer(Tracer):
     def __init__(self, type_, config: dict):
         super().__init__(type_, config)
         self.client = None
-        self.trace_record: StatefulTraceClient | None = None
-        self.spans: dict[UUID, StatefulSpanClient] = {}
+        self.trace_record = None
+        self.spans: dict[UUID, Any] = {}
 
     @property
     def ready(self) -> bool:
@@ -69,24 +68,21 @@ class LangFuseTracer(Tracer):
 
         # Get client and create trace
         self.client = client_manager.get(self.config)
-        self.trace_record = self.client.trace(
+        with self.client.start_as_current_span(
             name=trace_context.name,
-            session_id=str(session.external_id),
-            user_id=session.participant.identifier,
             input=inputs,
             metadata=metadata,
-        )
+        ) as trace:
+            self.trace_record = trace
+            self.trace.update_trace(
+                session_id=str(session.external_id),
+                user_id=session.participant.identifier,
+            )
 
-        error_to_record: Exception | None = None
+            error_to_record: Exception | None = None
+            try:
+                yield trace_context
 
-        try:
-            yield trace_context
-        except Exception as e:
-            error_to_record = e
-            raise
-        finally:
-            # Guaranteed cleanup
-            if self.trace_record:
                 # Get outputs from context and merge with error if present
                 outputs = trace_context.outputs.copy() if trace_context.outputs else {}
                 if error_to_record:
@@ -94,19 +90,19 @@ class LangFuseTracer(Tracer):
 
                 # Update trace with outputs if any
                 if outputs:
-                    self.trace_record.update(output=outputs)
-
+                    trace.update(output=outputs)
+            finally:
                 # Flush client to send data to Langfuse
                 if self.client:
                     self.client.flush()
 
-            # Reset state
-            self.client = None
-            self.trace_record = None
-            self.spans.clear()
-            self.trace_record_name = None
-            self.trace_record_id = None
-            self.session = None
+                # Reset state
+                self.client = None
+                self.trace_record = None
+                self.spans.clear()
+                self.trace_record_name = None
+                self.trace_record_id = None
+                self.session = None
 
     @contextmanager
     def span(
@@ -124,45 +120,29 @@ class LangFuseTracer(Tracer):
             yield span_context
             return
 
-        # Create span content using context
-        content_span = {
-            "id": str(span_context.id),
-            "name": span_context.name,
-            "input": inputs,
-            "metadata": metadata or {},
-            "level": level,
-        }
+        with self.client.start_as_current_span(
+            name=span_context.name,
+            input=inputs,
+            metadata=metadata,
+            level=level,
+        ) as span:
+            self.spans[span_context.id] = span
 
-        # Get parent observation and create span
-        span_client = self._get_current_observation().span(**content_span)
-        self.spans[span_context.id] = span_client
+            try:
+                yield span_context
+            finally:
+                self.spans.pop(span_context.id, None)
+                if output := span_context.outputs:
+                    span.update(output=output.copy())
 
-        error_to_record: Exception | None = None
-
-        try:
-            yield span_context
-        except Exception as e:
-            error_to_record = e
-            raise
-        finally:
-            # Get outputs from context and merge with error if present
-            self.spans.pop(span_context.id, None)
-            output = span_context.outputs.copy() if span_context.outputs else {}
-            if error_to_record:
-                output["error"] = str(error_to_record)
-
-            content = {
-                "output": output,
-                "status_message": str(error_to_record) if error_to_record else None,
-                "level": "ERROR" if error_to_record else None,
-            }
-            span_client.end(**content)
-
-    def get_langchain_callback(self) -> BaseCallbackHandler:
+    def get_langchain_callback(self) -> BaseCallbackHandler | None:
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        return LangfuseCallbackHandler(stateful_client=self._get_current_observation(), update_stateful_client=False)
+        if self.config and self.config.get("public_key"):
+            public_key = self.config.get("public_key")
+            return LangfuseCallbackHandler(public_key=public_key)
+        return None
 
     def get_trace_metadata(self) -> dict[str, str]:
         if not self.ready:
@@ -173,17 +153,6 @@ class LangFuseTracer(Tracer):
             "trace_url": self.trace_record.get_trace_url(),
             "trace_provider": self.type,
         }
-
-    def _get_current_observation(self) -> StatefulTraceClient | StatefulSpanClient:
-        """
-        Returns the most recent active span if one exists, otherwise returns the root trace.
-        This ensures new spans are properly nested under their parent spans.
-        """
-        if self.spans:
-            last_span = next(reversed(self.spans))
-            return self.spans[last_span]
-        else:
-            return self.trace_record
 
     def add_trace_tags(self, tags: list[str]) -> None:
         if not self.ready:
@@ -203,24 +172,23 @@ class ClientManager:
     certain amount of time."""
 
     def __init__(self, stale_timeout=300, prune_interval=60, max_clients=20) -> None:
-        self.clients: dict[int, tuple[float, Any]] = {}
+        self.clients: dict[str, float] = {}
         self.stale_timeout = stale_timeout
         self.max_clients = max_clients
         self.prune_interval = prune_interval
-        self.lock = RLock()
         self._start_prune_thread()
 
     def get(self, config: dict) -> Langfuse:
         from langfuse import Langfuse
 
-        key = hash(frozenset(config.items()))
-        with self.lock:
-            if key not in self.clients:
-                logger.debug("Creating new client with key '%s'", key)
+        public_key = config.get("public_key")
+        with LangfuseResourceManager._lock:
+            active_instances = LangfuseResourceManager._instances
+            client = active_instances.get(public_key, None)
+            if client is None:
+                logger.debug("Creating new Langfuse client with public_key '%s'", public_key)
                 client = Langfuse(**config)
-            else:
-                client = self.clients[key][1]
-            self.clients[key] = (time.time(), client)
+            self.clients[public_key] = time.time()
         return client
 
     def _start_prune_thread(self):
@@ -237,34 +205,32 @@ class ClientManager:
             return
 
         logger.debug("Pruning clients...")
-        for key in list(self.clients.keys()):
-            timestamp, client = self.clients[key]
+        for public_key in list(self.clients.keys()):
+            timestamp = self.clients[public_key]
             if time.time() - timestamp > self.stale_timeout:
-                logger.debug("Pruning old client with key '%s'", key)
-                self._remove_client(key, client)
+                logger.debug("Pruning old client with public_key '%s'", public_key)
+                self._remove_client(public_key)
 
         if len(self.clients) > self.max_clients:
             # remove the oldest clients until we are below the max
-            sorted_clients = sorted(self.clients.items(), key=lambda x: x[1][0])
-            clients_to_remove = sorted_clients[: len(self.clients) - self.max_clients]
-            logger.debug("Pruned %d clients above max limit", len(clients_to_remove))
-            for key, (_, client) in clients_to_remove:
-                self._remove_client(key, client)
+            sorted_keys = sorted(self.clients.items(), key=lambda x: x[1])
+            keys_to_remove = sorted_keys[: len(self.clients) - self.max_clients]
+            logger.debug("Pruned %d clients above max limit", len(keys_to_remove))
+            for public_key, _ in keys_to_remove:
+                self._remove_client(public_key)
 
-    def _remove_client(self, key, client):
-        with self.lock:
-            self.clients.pop(key)
-        client.shutdown()
+    def _remove_client(self, public_key):
+        with LangfuseResourceManager._lock:
+            active_instances = LangfuseResourceManager._instances
+            if target_instance := active_instances.pop(public_key, None):
+                target_instance.shutdown()
+            self.clients.pop(public_key)
 
     def shutdown(self):
-        if not self.clients:
-            return
-
-        with self.lock:
-            logger.debug("Shutting down all langfuse clients (%s)", len(self.clients))
-            for _key, (_, client) in self.clients.items():
-                client.shutdown()
-            self.clients = {}
+        logger.debug("Shutting down all langfuse clients (%s)", len(self.clients))
+        with LangfuseResourceManager._lock:
+            LangfuseResourceManager.reset()
+            self.clients.clear()
 
 
 client_manager = ClientManager()
@@ -289,14 +255,6 @@ class LangfuseCallbackHandler(CallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
-        if self.runs.get(run_id):
-            self.runs[run_id].event(name=name, input=data, metadata=metadata)
-            return
-
-        if self.root_span is not None:
-            self.root_span.event(name=name, input=data, metadata=metadata)
-            return
-
-        if self.trace_record is not None:
-            self.trace_record.event(name=name, input=data, metadata=metadata)
-            return
+        if span := self._get_parent_observation(run_id):
+            span.create_event(name=name, input=data, metadata=metadata)
+        return None
