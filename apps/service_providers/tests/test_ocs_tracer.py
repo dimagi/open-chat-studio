@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import pytest
 
+from apps.service_providers.tracing.base import TraceContext
 from apps.service_providers.tracing.ocs_tracer import OCSTracer
 from apps.trace.models import Span, Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -17,8 +18,6 @@ class TestOCSTracer:
         assert Trace.objects.count() == 0
 
         # Using the context manager creates a trace
-        from apps.service_providers.tracing.base import TraceContext
-
         trace_context = TraceContext(id=uuid4(), name="test_trace")
         with tracer.trace(trace_context=trace_context, session=session):
             pass
@@ -31,8 +30,6 @@ class TestOCSTracer:
         tracer = OCSTracer(experiment.id, experiment.team_id)
 
         # Using span context manager when tracer is not ready should not raise an error
-        from apps.service_providers.tracing.base import TraceContext
-
         span_context = TraceContext(id=uuid4(), name="test_span")
         with tracer.span(
             span_context=span_context,
@@ -118,8 +115,6 @@ class TestOCSTracer:
         assert span.error is not None
 
     def test_record_experiment_version(self, experiment):
-        from apps.service_providers.tracing.base import TraceContext
-
         tracer = OCSTracer(experiment.id, experiment.team_id)
         session = ExperimentSessionFactory()
 
