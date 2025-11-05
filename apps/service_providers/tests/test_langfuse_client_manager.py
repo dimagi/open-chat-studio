@@ -34,7 +34,13 @@ def mock_client_registry():
 @pytest.fixture()
 def langfuse_mock(mock_client_registry):
     """Mock the Langfuse client."""
-    with mock.patch("langfuse.Langfuse", side_effect=mock_client_registry) as mock_langfuse:
+    with (
+        mock.patch(
+            "apps.service_providers.tracing.langfuse._create_client_from_instance",
+            new=lambda instance, public_key: instance,
+        ),
+        mock.patch("langfuse.Langfuse", side_effect=mock_client_registry) as mock_langfuse,
+    ):
         yield mock_langfuse
 
 
