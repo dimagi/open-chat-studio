@@ -5,7 +5,7 @@
   {{ form.non_field_errors }}
   {% render_form_fields form "name" %}
 
-  <div x-data="datasetBuilder()" x-init="init()">
+  <div x-data="datasetModeSelectorBuilder()" x-init="init()">
     {% render_form_fields form "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_data" %}
 
     <div x-show="!loaded" class="text-center py-8">
@@ -31,12 +31,6 @@
                   <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> selected
                   <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
                     Clear
-                  </button>
-                  <button type="button" class="btn btn-xs btn-outline ml-2" @click="toggleSelectedSessions(1)">
-                    Select all messages
-                  </button>
-                  <button type="button" class="btn btn-xs btn-outline ml-2" @click="toggleFilteredSessions(1)">
-                    Select all filtered messages
                   </button>
                 </div>
               </div>
@@ -276,21 +270,23 @@
         </div>
       </div>
     </dialog>
-  </div> <!-- End of datasetBuilder div -->
+  </div> <!-- End of datasetModeSelectorBuilder div -->
 {% endblock form %}
 
 {% block page_js %}
   <script src="{% static 'js/evaluations-bundle.js' %}"></script>
   <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
-    function datasetBuilder() {
+    function datasetModeSelectorBuilder() {
       // Extend the shared datasetModeSelector with create-specific functionality
-      const baseComponent = window.datasetModeSelector({ defaultMode: 'clone' });
+      const baseComponent = window.datasetModeSelector({
+        defaultMode: 'clone',
+        sessionIdsFetchUrl: "{% url 'evaluations:dataset_sessions_selection_json' team.slug %}"
+      });
 
       return {
         ...baseComponent,
         // Add create-specific properties
-        allSessionIds: new Set(),
         messages: [],
         messagesJsonString: '[]',
 
@@ -321,10 +317,6 @@
         init() {
           // Call base init first
           baseComponent.init.call(this);
-
-          // Add event listeners for select-all feature
-          window.addEventListener('filter:change', () => this.loadSessionIds());
-          window.addEventListener('sessions-table-updated', () => this.onSessionsTableUpdate());
 
           // Initialize messages for manual mode
           const messagesData = document.querySelector('input[name="messages_json"]').value;
@@ -408,139 +400,6 @@
             e.preventDefault();
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }
-        },
-
-        // Loading id from Sessions filtered
-        loadSessionIds() {
-          const fetchUrl = "{% url 'evaluations:dataset_sessions_selection_json' team.slug %}";
-
-          if (Alpine.store('sessionIdsLoading')) {
-            return;
-          }
-          Alpine.store('sessionIdsLoading', true);
-
-          return fetch(fetchUrl + window.location.search, {
-            method: 'GET',
-            credentials: 'same-origin',
-            headers: {
-              'X-CSRFToken': SiteJS.app.Cookies.get('csrftoken'),
-              'Accept': 'application/json'
-            }
-          })
-          .then(res => res.json())
-          .then(data => {
-            this.allSessionIds = new Set(data);
-          })
-          .catch(err => {
-            console.error('Failed to load session ids');
-          })
-          .finally(() => {
-            Alpine.store('sessionIdsLoading', false);
-          });
-        },
-
-        toggleSelectedSessions(val) {
-          const toggleInput = document.querySelector('thead .session-checkbox');
-          if (toggleInput.checked || val) {
-            this.selectedSessionIds = new Set([...this.allSessionIds]);
-            this.filteredSessionIds = new Set();
-          } else {
-            this.selectedSessionIds = new Set();
-          }
-
-          this.updateSessionHiddenField();
-          this.updateFilteredSessionHiddenField();
-          this.uncheckSessionCheckboxes();
-          this.uncheckFilterCheckboxes();
-          this.updateSessionHeaderCheckbox();
-          this.updateFilteredSessionHeaderCheckbox();
-          this.restoreCheckboxStates();
-        },
-
-        toggleFilteredSessions(val) {
-          const toggleInput = document.querySelector('thead .filter-checkbox');
-          if (toggleInput.checked || val) {
-            this.filteredSessionIds = new Set([...this.allSessionIds]);
-            this.selectedSessionIds = new Set();
-          } else {
-            this.filteredSessionIds = new Set();
-          }
-
-          this.updateSessionHiddenField();
-          this.updateFilteredSessionHiddenField();
-          this.uncheckSessionCheckboxes();
-          this.uncheckFilterCheckboxes();
-          this.updateSessionHeaderCheckbox();
-          this.updateFilteredSessionHeaderCheckbox();
-          this.restoreFilteredCheckboxStates();
-        },
-
-        updateSessionHeaderCheckbox() {
-          const toggleInput = document.querySelector('thead .session-checkbox');
-          if (!toggleInput || !this.allSessionIds.size){
-            return; // page load
-          }
-          if (this.selectedSessionIds.size === 0) {
-            toggleInput.checked = false;
-          } else {
-            toggleInput.checked = [...this.allSessionIds].every(id => this.selectedSessionIds.has(id));
-          }
-        },
-
-        updateFilteredSessionHeaderCheckbox() {
-          const toggleInput = document.querySelector('thead .filter-checkbox');
-          if (!toggleInput || !this.allSessionIds.size){
-            return; // page load
-          }
-          if (this.filteredSessionIds.size === 0) {
-            toggleInput.checked = false;
-          } else {
-            toggleInput.checked = [...this.allSessionIds].every(id => this.filteredSessionIds.has(id));
-          }
-        },
-
-        onSessionsTableUpdate() {
-          this.clearFilteredSelections();
-          this.updateSessionHeaderCheckbox();
-          this.updateFilteredSessionHeaderCheckbox();
-        },
-
-        clearFilteredSelections() {
-          // Remove selected items from selection when they don't match active filters
-          this.filteredSessionIds = new Set(
-            [...this.filteredSessionIds].filter(id => this.allSessionIds.has(id))
-          );
-
-          this.selectedSessionIds = new Set(
-            [...this.selectedSessionIds].filter(id => this.allSessionIds.has(id))
-          );
-
-          this.updateSessionHiddenField();
-          this.updateFilteredSessionHiddenField();
-        },
-
-        updateSessionHiddenField() {
-          const hiddenField = document.querySelector('input[name="session_ids"]');
-          hiddenField.value = Array.from(this.selectedSessionIds).join(',');
-        },
-
-        updateFilteredSessionHiddenField() {
-          const hiddenField = document.querySelector('input[name="filtered_session_ids"]');
-          hiddenField.value = Array.from(this.filteredSessionIds).join(',');
-        },
-
-        uncheckFilterCheckboxes() {
-          this.selectedSessionIds.forEach(id => {
-            const checkbox = document.querySelector(`.filter-checkbox[value="${id}"]`);
-            if (checkbox) checkbox.checked = false;
-          });
-        },
-
-        uncheckSessionCheckboxes() {
-          this.filteredSessionIds.forEach(id => {
-            const checkbox = document.querySelector(`.session-checkbox[value="${id}"]`);
-            if (checkbox) checkbox.checked = false;
-          });
         },
 
         // Manual message methods
@@ -920,17 +779,5 @@
         }
       };
     }
-
-    // Dispatch sessions-table-updated event after HTMX updates
-    const dispatchTableUpdateEvent = (event) => {
-      if (event.target.id === 'sessions-table') {
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('sessions-table-updated'));
-        }, 10);
-      }
-    };
-
-    document.addEventListener('htmx:afterSettle', dispatchTableUpdateEvent);
-    document.addEventListener('htmx:afterRequest', dispatchTableUpdateEvent);
   </script>
 {% endblock page_js %}
