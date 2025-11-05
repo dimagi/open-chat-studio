@@ -44,12 +44,6 @@ class OpenAIReasoningParameters(LLMModelParamBase):
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIReasoningEffortParameter.labels),
     )
 
-    summary: OpenAIReasoningSummaryParameter = Field(
-        title="Reasoning Summary",
-        default="auto",
-        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIReasoningSummaryParameter.labels),
-    )
-
 
 def get_schema(model):
     """Get resolved schema for a model. This is so the frontend can render it properly."""
