@@ -279,6 +279,9 @@ class OpenAIGenericService(LlmService):
         if "effort" in kwargs:
             extra_kwargs = {"reasoning": {"effort": kwargs["effort"]}}
 
+        if "verbosity" in kwargs:
+            extra_kwargs["verbosity"] = kwargs["verbosity"]
+
         if "top_p" in kwargs and "max_output_tokens" in kwargs:
             extra_kwargs = {"top_p": kwargs["top_p"], "max_tokens": kwargs["max_output_tokens"]}
 
@@ -347,6 +350,8 @@ class OpenAILlmService(OpenAIGenericService):
     openai_organization: str = None
 
     def _get_model_kwargs(self, **kwargs) -> dict:
+        print(super()._get_model_kwargs(**kwargs))
+
         return {
             **super()._get_model_kwargs(**kwargs),
             "openai_organization": self.openai_organization,

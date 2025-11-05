@@ -12,6 +12,12 @@ class OpenAIReasoningEffortParameter(TextChoices):
     HIGH = "high", "High"
 
 
+class OpenAIVerbosityParameter(TextChoices):
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+
+
 class OpenAIReasoningSummaryParameter(TextChoices):
     AUTO = "auto", "Auto"
     DETAILED = "detailed", "Detailed"
@@ -42,6 +48,14 @@ class OpenAIReasoningParameters(LLMModelParamBase):
         title="Reasoning Effort",
         default="low",
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIReasoningEffortParameter.labels),
+    )
+
+
+class OpenAIReasoningWithVerbosityParameters(OpenAIReasoningParameters):
+    verbosity: OpenAIVerbosityParameter = Field(
+        title="Verbosity",
+        default="low",
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
     )
 
 
