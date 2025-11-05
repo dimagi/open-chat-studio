@@ -167,9 +167,9 @@ class LLMResponseMixin(BaseModel):
             )
 
         # Validate model parameters
-        if params := LLM_MODEL_PARAMETERS.get(model.name):
+        if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
             try:
-                params(**self.llm_model_parameters)
+                params_cls(**self.llm_model_parameters)
             except ValidationError as e:
                 raise PydanticCustomError(
                     "invalid_model_parameters",
