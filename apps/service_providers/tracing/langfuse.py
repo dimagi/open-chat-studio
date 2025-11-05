@@ -4,6 +4,8 @@ import atexit
 import logging
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from threading import RLock
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -12,7 +14,7 @@ from langfuse.callback import CallbackHandler
 from langfuse.client import StatefulSpanClient, StatefulTraceClient
 
 from . import Tracer
-from .base import ServiceNotInitializedException, ServiceReentryException
+from .base import ServiceNotInitializedException, ServiceReentryException, TraceContext
 from .const import SpanLevel
 
 if TYPE_CHECKING:
@@ -43,80 +45,120 @@ class LangFuseTracer(Tracer):
     def ready(self) -> bool:
         return bool(self.trace)
 
-    def start_trace(
+    @contextmanager
+    def trace(
         self,
-        trace_name: str,
-        trace_id: UUID,
+        trace_context: TraceContext,
         session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> Iterator[TraceContext]:
+        """Context manager for Langfuse trace lifecycle.
+
+        Acquires a Langfuse client from ClientManager, creates a trace,
+        and ensures the client is flushed on exit.
+        """
+        # Check for reentry
         if self.trace:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        super().start_trace(trace_name, trace_id, session, inputs)
+        # Set base class state from context
+        self.trace_name = trace_context.name
+        self.trace_id = trace_context.id
+        self.session = session
 
+        # Get client and create trace
         self.client = client_manager.get(self.config)
         self.trace = self.client.trace(
-            name=trace_name,
+            name=trace_context.name,
             session_id=str(session.external_id),
             user_id=session.participant.identifier,
             input=inputs,
             metadata=metadata,
         )
 
-    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        super().end_trace(outputs=outputs, error=error)
-        if not self.ready:
-            raise ServiceNotInitializedException("Service not initialized.")
+        error_to_record: Exception | None = None
 
-        if outputs or error:
-            outputs = outputs or {}
-            outputs = {**outputs, "error": str(error)} if error else outputs
-            self.trace.update(output=outputs)
+        try:
+            yield trace_context
+        except Exception as e:
+            error_to_record = e
+            raise
+        finally:
+            # Guaranteed cleanup
+            if self.trace:
+                # Get outputs from context and merge with error if present
+                outputs = trace_context.outputs.copy() if trace_context.outputs else {}
+                if error_to_record:
+                    outputs["error"] = str(error_to_record)
 
-        self.client.flush()
-        self.client = None
-        self.trace = None
-        self.spans.clear()
+                # Update trace with outputs if any
+                if outputs:
+                    self.trace.update(output=outputs)
 
-    def start_span(
+                # Flush client to send data to Langfuse
+                if self.client:
+                    self.client.flush()
+
+            # Reset state
+            self.client = None
+            self.trace = None
+            self.spans.clear()
+            self.trace_name = None
+            self.trace_id = None
+            self.session = None
+
+    @contextmanager
+    def span(
         self,
-        span_id: UUID,
-        span_name: str,
+        span_context: TraceContext,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
         level: SpanLevel = "DEFAULT",
-    ) -> None:
+    ) -> Iterator[TraceContext]:
+        """Context manager for Langfuse span lifecycle.
+
+        Creates a nested span under the current observation (last span or root trace).
+        """
         if not self.ready:
+            yield span_context
             return
 
+        # Create span content using context
         content_span = {
-            "id": str(span_id),
-            "name": span_name,
+            "id": str(span_context.id),
+            "name": span_context.name,
             "input": inputs,
             "metadata": metadata or {},
             "level": level,
         }
 
-        self.spans[span_id] = self._get_current_observation().span(**content_span)
+        # Get parent observation and create span
+        span_client = self._get_current_observation().span(**content_span)
+        self.spans[span_context.id] = span_client
 
-    def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        if not self.ready:
-            return
+        error_to_record: Exception | None = None
 
-        span = self.spans.pop(span_id, None)
-        if span:
-            output: dict = {}
-            output |= outputs or {}
-            output |= {"error": str(error)} if error else {}
+        try:
+            yield span_context
+        except Exception as e:
+            error_to_record = e
+            raise
+        finally:
+            # Guaranteed cleanup - end the span
+            span = self.spans.pop(span_context.id, None)
+            if span:
+                # Get outputs from context and merge with error if present
+                output = span_context.outputs.copy() if span_context.outputs else {}
+                if error_to_record:
+                    output["error"] = str(error_to_record)
 
-            content = {
-                "output": output,
-                "status_message": str(error) if error else None,
-                "level": "ERROR" if error else None,
-            }
-            span.end(**content)
+                content = {
+                    "output": output,
+                    "status_message": str(error_to_record) if error_to_record else None,
+                    "level": "ERROR" if error_to_record else None,
+                }
+                span.end(**content)
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
         if not self.ready:

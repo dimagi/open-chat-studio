@@ -614,8 +614,8 @@ The ClientManager pattern doesn't need changes since:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] LangFuseTracer imports successfully: `python -c "from apps.service_providers.tracing.langfuse import LangFuseTracer"`
-- [ ] Type checking passes: `inv ruff`
+- [x] LangFuseTracer imports successfully: `python -c "from apps.service_providers.tracing.langfuse import LangFuseTracer"`
+- [x] Type checking passes: `inv ruff`
 - [ ] Unit tests pass: `pytest apps/service_providers/tests/test_langfuse_client_manager.py`
 
 #### Manual Verification:
