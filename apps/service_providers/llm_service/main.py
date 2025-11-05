@@ -423,7 +423,23 @@ class AnthropicLlmService(LlmService):
             anthropic_api_url=self.anthropic_api_base,
             model=llm_model,
             temperature=temperature,
+            **self._get_model_kwargs(**kwargs),
         )
+
+    def _get_model_kwargs(self, **kwargs) -> dict:
+        model_kwargs = {
+            "max_tokens": kwargs.get("max_tokens"),
+        }
+        if "top_k" in kwargs:
+            model_kwargs["top_k"] = kwargs["top_k"]
+
+        if kwargs.get("thinking", False):
+            model_kwargs["thinking"] = {
+                "type": "enabled" if kwargs["thinking"] else "disabled",
+                "budget_tokens": kwargs.get("budget_tokens"),
+            }
+
+        return model_kwargs
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
