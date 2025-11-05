@@ -800,7 +800,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse("experiments:single_experiment_home", args=[get_slug_for_team(self.team_id), self.id])
+        return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_version(self, version: int) -> "Experiment":
         """
