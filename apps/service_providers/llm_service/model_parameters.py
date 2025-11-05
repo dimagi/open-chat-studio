@@ -21,6 +21,22 @@ class LLMModelParamBase(BaseModel):
     pass
 
 
+def _validate_token_limit(value: int, info, strictly_less_than: bool = False) -> int:
+    value = int(value)
+    model_max_token_limit = info.context.get("model_max_token_limit")
+    if strictly_less_than and value >= model_max_token_limit:
+        raise PydanticCustomError(
+            "invalid_model_parameters",
+            f"Tokens must be less than the model's max token limit of {model_max_token_limit}",
+        )
+    elif value > model_max_token_limit:
+        raise PydanticCustomError(
+            "invalid_model_parameters",
+            f"Tokens cannot be more than the model's max token limit of {model_max_token_limit}",
+        )
+    return value
+
+
 class OpenAINonReasoningParameters(LLMModelParamBase):
     max_output_tokens: int = Field(
         title="Max Output Tokens",
@@ -39,15 +55,7 @@ class OpenAINonReasoningParameters(LLMModelParamBase):
 
     @field_validator("max_output_tokens", mode="before")
     def ensure_value_is_less_than_model_max(cls, value: int, info):
-        value = int(value)
-        model_max_token_limit = info.context.get("model_max_token_limit", None)
-        if value >= model_max_token_limit:
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "This value must be less than the model's max token limit",
-                {"field": "max_output_tokens"},
-            )
-        return value
+        return _validate_token_limit(value, info)
 
 
 class OpenAIReasoningParameters(LLMModelParamBase):
@@ -68,14 +76,7 @@ class AnthropicBaseParameters(LLMModelParamBase):
 
     @field_validator("max_tokens", mode="before")
     def ensure_value_is_less_than_model_max(cls, value: int, info):
-        value = int(value)
-        model_max_token_limit = info.context.get("model_max_token_limit", None)
-        if value >= model_max_token_limit:
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "This value must be less than the model's max token limit",
-            )
-        return value
+        return _validate_token_limit(value, info, strictly_less_than=True)
 
 
 class AnthropicNonReasoningParameters(AnthropicBaseParameters):
@@ -104,14 +105,7 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
 
     @field_validator("budget_tokens", mode="before")
     def ensure_value_is_less_than_model_max(cls, value: int, info):
-        value = int(value)
-        model_max_token_limit = info.context.get("model_max_token_limit", None)
-        if value >= model_max_token_limit:
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "Thinking Token Budget must be less than the model's max token limit",
-            )
-        return value
+        return _validate_token_limit(value, info)
 
 
 def get_schema(model):
