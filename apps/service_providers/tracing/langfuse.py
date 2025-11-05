@@ -210,7 +210,8 @@ class ClientManager:
             self.key_timestamps.pop(public_key)
 
     def shutdown(self):
-        logger.debug("Shutting down all langfuse clients (%s)", len(self.key_timestamps))
+        if self.key_timestamps:
+            logger.debug("Shutting down all langfuse clients (%s)", len(self.key_timestamps))
         with LangfuseResourceManager._lock:
             LangfuseResourceManager.reset()
             self.key_timestamps.clear()
