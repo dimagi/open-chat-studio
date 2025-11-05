@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import dataclasses
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -21,6 +23,23 @@ class ServiceNotInitializedException(Exception):
     pass
 
 
+@dataclasses.dataclass
+class TraceContext:
+    """Context object for active traces and spans.
+
+    Holds state and outputs, yielded from trace/span context managers.
+    This unified class is used for both trace-level and span-level contexts.
+    """
+
+    id: UUID
+    name: str
+    outputs: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+    def set_outputs(self, outputs: dict[str, Any]) -> None:
+        """Set outputs for this trace/span. Can be called multiple times to merge outputs."""
+        self.outputs |= outputs or {}
+
+
 class Tracer(ABC):
     def __init__(self, type_, config: dict):
         self.type = type_
@@ -36,52 +55,60 @@ class Tracer(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def start_trace(
+    @contextmanager
+    def trace(
         self,
-        trace_name: str,
-        trace_id: UUID,
+        trace_context: TraceContext,
         session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """This must be called before any tracing methods are called.
+    ) -> Iterator[TraceContext]:
+        """Context manager for trace lifecycle.
+
+        Sets up tracing context on entry and ensures cleanup on exit.
+        Yields the TraceContext object that can be used to set outputs.
 
         Args:
-            trace_name (str): The name of the trace.
-            trace_id (UUID): The unique identifier for the trace.
-            session (ExperimentSession): The session object.
-            user_id (str): The user identifier.
-            inputs (dict[str, Any] | None): The inputs to the trace.
-            metadata (dict[str, Any] | None): Additional metadata for the trace.
+            trace_context: The context object with id, name, and outputs
+            session: The experiment session for this trace
+            inputs: Optional input data for the trace
+            metadata: Optional metadata for the trace
+
+        Yields:
+            TraceContext: The same context object for setting outputs
+
+        Example:
+            ctx = TraceContext(id=trace_id, name=trace_name)
+            with tracer.trace(ctx, session) as ctx:
+                # tracing active
+                ctx.set_outputs({"result": "value"})
+            # cleanup guaranteed, outputs available in ctx.outputs
         """
-        self.trace_name = trace_name
-        self.trace_id = trace_id
-        self.session = session
-
-    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        """This must be called after all tracing methods are called to finalize the trace."""
-        self.trace_name = None
-        self.trace_id = None
-        self.session = None
-
-    @abstractmethod
-    def start_span(
-        self,
-        span_id: UUID,
-        span_name: str,
-        inputs: dict[str, Any],
-        metadata: dict[str, Any] | None = None,
-        level: SpanLevel = "DEFAULT",
-    ) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def end_span(
+    @contextmanager
+    def span(
         self,
-        span_id: UUID,
-        outputs: dict[str, Any] | None = None,
-        error: Exception | None = None,
-    ) -> None:
+        span_context: TraceContext,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
+    ) -> Iterator[TraceContext]:
+        """Context manager for span lifecycle.
+
+        Sets up span context on entry and ensures cleanup on exit.
+        Yields the TraceContext object that can be used to set outputs.
+
+        Args:
+            span_context: The context object with id, name, and outputs
+            inputs: Input data for the span
+            metadata: Optional metadata for the span
+            level: Span level (DEFAULT, WARNING, ERROR)
+
+        Yields:
+            TraceContext: The same context object for setting outputs
+        """
         raise NotImplementedError
 
     @abstractmethod
