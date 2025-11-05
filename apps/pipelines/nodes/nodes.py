@@ -1,6 +1,7 @@
 import json
 import logging
 import unicodedata
+from functools import cached_property
 from typing import Annotated, Any, Literal, Self
 
 import tiktoken
@@ -51,6 +52,7 @@ from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter
+from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
@@ -144,11 +146,13 @@ class LLMResponseMixin(BaseModel):
     llm_temperature: float = Field(
         default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
     )
+    llm_model_parameters: dict[str, Any] = Field(default_factory=dict, json_schema_extra=UiSchema(widget=Widgets.none))
 
     @model_validator(mode="after")
-    def validate_llm_model_deprecation(self):
+    def validate_llm_model(self):
+        # Ensure model is not deprecated
         try:
-            model = self.get_llm_provider_model()
+            model = self.llm_provider_model
         except PipelineNodeBuildError as e:
             raise PydanticCustomError(
                 "invalid_model",
@@ -161,6 +165,18 @@ class LLMResponseMixin(BaseModel):
                 f"LLM provider model '{model.name}' is deprecated.",
                 {"field": "llm_provider_id"},
             )
+
+        # Validate model parameters
+        if params := LLM_MODEL_PARAMETERS.get(model.name):
+            try:
+                params(**self.llm_model_parameters)
+            except ValidationError as e:
+                raise PydanticCustomError(
+                    "invalid_model_parameters",
+                    f"Invalid parameters for LLM provider model '{model.name}': {e.errors()}",
+                    {"field": "llm_model_parameters"},
+                ) from None
+
         return self
 
     def get_llm_service(self) -> LlmService:
@@ -173,6 +189,10 @@ class LLMResponseMixin(BaseModel):
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
+
+    @cached_property
+    def llm_provider_model(self):
+        return self.get_llm_provider_model()
 
     def get_llm_provider_model(self):
         try:
