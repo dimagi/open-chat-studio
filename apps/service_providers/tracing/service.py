@@ -4,6 +4,7 @@ import logging
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID
@@ -75,18 +76,18 @@ class TracingService:
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
         input_message_id: int | None = None,
-    ):
+    ) -> Iterator[TraceContext]:
         """Context manager for tracing or spanning.
 
         This context manager will start a trace if there isn't already one,
         otherwise it will start a span.
         """
         if not self.trace_id:
-            with self.trace(name, session, inputs, metadata):
-                yield self
+            with self.trace(name, session, inputs, metadata) as ctx:
+                yield ctx
         else:
-            with self.span(name, inputs, metadata):
-                yield self
+            with self.span(name, inputs, metadata) as ctx:
+                yield ctx
 
     @contextmanager
     def trace(
@@ -95,7 +96,7 @@ class TracingService:
         session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, str] | None = None,
-    ):
+    ) -> Iterator[TraceContext]:
         """Context manager for tracing.
 
         Uses ExitStack to manage multiple tracer contexts safely.
@@ -140,7 +141,7 @@ class TracingService:
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
-    ):
+    ) -> Iterator[TraceContext]:
         """Context manager for spanning.
 
         Uses ExitStack to manage multiple tracer span contexts safely.
@@ -178,15 +179,6 @@ class TracingService:
             popped_span_id, _ = self.span_stack.pop()
             if popped_span_id != span_id:
                 logger.error("Span ID mismatch: expected %s, got %s", popped_span_id, span_id)
-
-    def set_current_span_outputs(
-        self,
-        outputs: dict[str, Any],
-    ) -> None:
-        if not self.activated:
-            return
-        span_id, _ = self._get_current_span_info()
-        self.outputs[span_id] |= outputs or {}
 
     def get_langchain_callbacks(
         self, run_name_map: dict[str, str] = None, filter_patterns: list[str] = None

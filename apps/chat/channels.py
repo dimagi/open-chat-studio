@@ -364,9 +364,9 @@ class ChannelBase(ABC):
                     trace_name=self.experiment.name,
                     session=self.experiment_session,
                     inputs={"input": self.message.model_dump()},
-                ):
+                ) as span:
                     response = self._new_user_message()
-                    self.trace_service.set_current_span_outputs({"response": response.content})
+                    span.set_outputs({"response": response.content})
                     return response
             except GenerationCancelled:
                 return ChatMessage(content="", message_type=ChatMessageType.AI)
