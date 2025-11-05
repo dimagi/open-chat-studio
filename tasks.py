@@ -198,14 +198,19 @@ def celery(c: Context, gevent=False, beat=True):
 
 
 @task(
-    help={"no_fix": "Only check for issues, don't auto-fix", "unsafe_fixes": "Apply potentially unsafe automatic fixes"}
+    help={
+        "no_fix": "Only check for issues, don't auto-fix",
+        "unsafe_fixes": "Apply potentially unsafe automatic fixes",
+        "paths": "Specific files or directories to check (space-separated)",
+    }
 )
-def ruff(c: Context, no_fix=False, unsafe_fixes=False):
+def ruff(c: Context, no_fix=False, unsafe_fixes=False, paths=""):
     """Run ruff checks and formatting. Use --unsafe-fixes to apply unsafe fixes."""
     fix_flag = "" if no_fix else "--fix"
     unsafe_fixes_flag = "--unsafe-fixes" if unsafe_fixes else ""
-    c.run(f"ruff check {fix_flag} {unsafe_fixes_flag}", echo=True, pty=True)
-    c.run("ruff format", echo=True, pty=True)
+    target_paths = paths if paths else "."
+    c.run(f"ruff check {fix_flag} {unsafe_fixes_flag} {target_paths}", echo=True, pty=True)
+    c.run(f"ruff format {target_paths}", echo=True, pty=True)
 
 
 @task(

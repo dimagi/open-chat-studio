@@ -1,9 +1,6 @@
 """Tests for custom Django model fields."""
 
 import pytest
-from django.db import connection, models
-
-from apps.utils.fields import SanitizedJSONField
 
 
 @pytest.mark.django_db()
@@ -20,7 +17,7 @@ class TestSanitizedJSONField:
 
     def test_sanitize_null_bytes(self, team_with_users):
         """Test that null bytes are removed from strings."""
-        from apps.evaluations.models import EvaluationMessage, EvaluationResult, EvaluationRun, Evaluator
+        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
         from apps.utils.factories.evaluations import EvaluationConfigFactory
 
         # Create necessary objects
@@ -56,7 +53,7 @@ class TestSanitizedJSONField:
 
     def test_sanitize_control_characters(self, team_with_users):
         """Test that control characters (except whitespace) are removed."""
-        from apps.evaluations.models import EvaluationMessage, EvaluationResult, EvaluationRun, Evaluator
+        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
         from apps.utils.factories.evaluations import EvaluationConfigFactory
 
         config = EvaluationConfigFactory(team=team_with_users)
@@ -96,7 +93,7 @@ class TestSanitizedJSONField:
 
     def test_sanitize_nested_structures(self, team_with_users):
         """Test that sanitization works on nested dicts and lists."""
-        from apps.evaluations.models import EvaluationMessage, EvaluationResult, EvaluationRun, Evaluator
+        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
         from apps.utils.factories.evaluations import EvaluationConfigFactory
 
         config = EvaluationConfigFactory(team=team_with_users)
@@ -130,7 +127,7 @@ class TestSanitizedJSONField:
 
     def test_primitives_unchanged(self, team_with_users):
         """Test that non-string primitives are unchanged."""
-        from apps.evaluations.models import EvaluationMessage, EvaluationResult, EvaluationRun, Evaluator
+        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
         from apps.utils.factories.evaluations import EvaluationConfigFactory
 
         config = EvaluationConfigFactory(team=team_with_users)

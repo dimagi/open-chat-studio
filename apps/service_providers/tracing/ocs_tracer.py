@@ -31,7 +31,7 @@ class OCSTracer(Tracer):
         self.experiment_id = experiment_id
         self.team_id = team_id
         self.start_time: float = None
-        self.trace = None
+        self.trace_record = None
         self.spans: dict[UUID, Span] = {}
         self.error_detected = False
         # error_span_id is used to track the span in which an error occurred
@@ -40,7 +40,7 @@ class OCSTracer(Tracer):
     @property
     def ready(self) -> bool:
         """OCS tracer is always ready when a trace is active."""
-        return self.trace is not None
+        return self.trace_record is not None
 
     @contextmanager
     def trace(
@@ -78,7 +78,7 @@ class OCSTracer(Tracer):
             experiment_version_number = experiment.version_number
 
         # Create database trace record
-        self.trace = Trace.objects.create(
+        self.trace_record = Trace.objects.create(
             trace_id=trace_context.id,
             experiment_id=experiment_id,
             experiment_version_number=experiment_version_number,
@@ -96,22 +96,22 @@ class OCSTracer(Tracer):
             yield trace_context
         finally:
             # Guaranteed cleanup - update trace duration and status
-            if self.trace and self.start_time:
+            if self.trace_record and self.start_time:
                 try:
                     end_time = time.time()
                     duration = end_time - self.start_time
                     duration_ms = int(duration * 1000)
 
-                    self.trace.duration = duration_ms
+                    self.trace_record.duration = duration_ms
                     if self.error_detected:
-                        self.trace.status = TraceStatus.ERROR
+                        self.trace_record.status = TraceStatus.ERROR
                     else:
-                        self.trace.status = TraceStatus.SUCCESS
+                        self.trace_record.status = TraceStatus.SUCCESS
 
                     # Note: OCSTracer doesn't store trace outputs in database
                     # but could access them via trace_context.outputs if needed
 
-                    self.trace.save()
+                    self.trace_record.save()
 
                     logger.debug(
                         "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
@@ -124,11 +124,11 @@ class OCSTracer(Tracer):
                         "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
                         self.experiment_id,
                         session.id,
-                        self.trace.output_message_id,
+                        self.trace_record.output_message_id,
                     )
 
             # Reset state
-            self.trace = None
+            self.trace_record = None
             self.spans = {}
             self.error_detected = False
             self.trace_name = None
@@ -208,13 +208,13 @@ class OCSTracer(Tracer):
 
     def set_output_message_id(self, output_message_id: str) -> None:
         """Set the output message ID for the trace."""
-        if self.trace:
-            self.trace.output_message_id = output_message_id
+        if self.trace_record:
+            self.trace_record.output_message_id = output_message_id
 
     def set_input_message_id(self, input_message_id: str) -> None:
         """Set the input message ID for the trace."""
-        if self.trace:
-            self.trace.input_message_id = input_message_id
+        if self.trace_record:
+            self.trace_record.input_message_id = input_message_id
 
     def _get_current_observation(self) -> Span | Trace:
         """
@@ -225,15 +225,15 @@ class OCSTracer(Tracer):
             last_span = next(reversed(self.spans))
             return self.spans[last_span]
         else:
-            return self.trace
+            return self.trace_record
 
     def get_trace_metadata(self) -> dict[str, Any]:
         if not self.ready:
             return
 
         return {
-            "trace_id": self.trace.id,
-            "trace_url": self.trace.get_absolute_url(),
+            "trace_id": self.trace_record.id,
+            "trace_url": self.trace_record.get_absolute_url(),
             "trace_provider": self.type,
         }
 
