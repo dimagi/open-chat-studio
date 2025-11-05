@@ -100,6 +100,15 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
     def ensure_value_is_less_than_model_max(cls, value: int, info):
         return _validate_token_limit(value, info)
 
+    @field_validator("thinking", mode="before")
+    def check_temperature(value: bool, info):
+        if value and info.context.get("temperature", 0) != 1:
+            raise PydanticCustomError(
+                "invalid_model_parameters",
+                "Thinking can only be used with a temperature of 1",
+            )
+        return value
+
 
 def get_schema(model):
     """Get resolved schema for a model. This is so the frontend can render it properly."""
