@@ -350,8 +350,6 @@ class OpenAILlmService(OpenAIGenericService):
     openai_organization: str = None
 
     def _get_model_kwargs(self, **kwargs) -> dict:
-        print(super()._get_model_kwargs(**kwargs))
-
         return {
             **super()._get_model_kwargs(**kwargs),
             "openai_organization": self.openai_organization,
