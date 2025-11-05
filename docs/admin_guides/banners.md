@@ -33,7 +33,7 @@ Banners are temporary notifications that can be displayed to users on specific p
 - **Message**: The main content displayed to users (supports markdown)
 - **Banner Type**: Choose the visual style:
   - `info` - Blue information banner
-  - `warning` - Yellow warning banner  
+  - `warning` - Yellow warning banner
   - `error` - Red error banner
   - `success` - Green success banner
 
@@ -41,8 +41,6 @@ Banners are temporary notifications that can be displayed to users on specific p
 
 - **Location**: Where the banner should appear:
   - `global` - All pages (default)
-  - `experiments_home` - Experiments listing page
-  - `experiments_new` - New experiment creation page
   - `pipelines` - Pipelines home page
   - `pipelines_new` - New pipeline creation page
   - `chatbots_home` - Chatbots listing page
