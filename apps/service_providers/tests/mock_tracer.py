@@ -15,13 +15,21 @@ from apps.service_providers.tracing.const import SpanLevel
 class MockTracer(Tracer):
     def __init__(self):
         super().__init__("mock", {})
-        self.trace = None
+        # Don't set self.trace here to avoid shadowing the trace() method
+        # Instead, we'll use _trace_data internally and add a property
+        self._trace_data = None
         self.spans: dict[UUID, dict] = {}
         self.tags = None
 
     @property
     def ready(self) -> bool:
-        return bool(self.trace)
+        return self._trace_data is not None
+
+    # Expose trace data for tests (use _trace_data property)
+    @property
+    def trace_result(self):
+        """Property to access trace data for test assertions."""
+        return self._trace_data
 
     @contextmanager
     def trace(
@@ -38,7 +46,7 @@ class MockTracer(Tracer):
         self.session = session
 
         # Create mock trace
-        self.trace = {
+        self._trace_data = {
             "name": trace_context.name,
             "id": trace_context.id,
             "session_id": session.id,
@@ -60,9 +68,9 @@ class MockTracer(Tracer):
             outputs = trace_context.outputs if trace_context.outputs else None
 
             # Mark as ended and store outputs/error
-            self.trace["outputs"] = outputs
-            self.trace["error"] = error_to_record
-            self.trace["ended"] = True
+            self._trace_data["outputs"] = outputs
+            self._trace_data["error"] = error_to_record
+            self._trace_data["ended"] = True
 
             # Reset state
             self.trace_name = None
