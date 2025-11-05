@@ -168,14 +168,9 @@ class LLMResponseMixin(BaseModel):
 
         # Validate model parameters
         if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
-            try:
-                params_cls(**self.llm_model_parameters)
-            except ValidationError as e:
-                raise PydanticCustomError(
-                    "invalid_model_parameters",
-                    f"Invalid parameters for LLM provider model '{model.name}': {e.errors()}",
-                    {"field": "llm_model_parameters"},
-                ) from None
+            params_cls.model_validate(
+                self.llm_model_parameters, context={"model_max_token_limit": model.max_token_limit}
+            )
 
         return self
 

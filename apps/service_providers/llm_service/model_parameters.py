@@ -1,5 +1,6 @@
 from django.db.models import TextChoices
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from pydantic_core import PydanticCustomError
 
 from apps.custom_actions.schema_utils import resolve_references
 from apps.pipelines.nodes.base import UiSchema, Widgets
@@ -35,6 +36,18 @@ class OpenAINonReasoningParameters(LLMModelParamBase):
         le=1.0,
         json_schema_extra=UiSchema(widget=Widgets.float),
     )
+
+    @field_validator("max_output_tokens", mode="before")
+    def ensure_value_is_less_than_model_max(cls, value: int, info):
+        value = int(value)
+        model_max_token_limit = info.context.get("model_max_token_limit", None)
+        if value >= model_max_token_limit:
+            raise PydanticCustomError(
+                "invalid_model_parameters",
+                "This value must be less than the model's max token limit",
+                {"field": "max_output_tokens"},
+            )
+        return value
 
 
 class OpenAIReasoningParameters(LLMModelParamBase):

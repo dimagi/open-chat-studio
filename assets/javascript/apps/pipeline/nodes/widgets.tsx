@@ -77,6 +77,7 @@ interface LLMModelParametersWidgetProps {
   schema: any;
   modelParameters: any;
   readOnly: boolean;
+  getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
 }
 
 
@@ -734,7 +735,7 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
             <div key={`${props.nodeId}_${paramName}`}>
               {getInputWidget(
                 {
-                  id: props.nodeId + "_" + paramName,
+                  id: props.nodeId,
                   name: paramName,
                   schema: props.schema,
                   params: {name: paramName, [paramName]: currentParamValue},
@@ -742,8 +743,7 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
                   nodeType: "",
                   required: true,
                 },
-                // getNodeFieldError should be a no-op for LLM parameters
-                (() => undefined), 
+                props.getNodeFieldError,
                 props.readOnly
               )}
             </div>
@@ -757,6 +757,7 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
 export function LlmWidget(props: WidgetParams) {
 
   const {parameterValues, modelParams, modelParamSchemas} = getCachedData();
+  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
   const readOnly = usePipelineStore((state) => state.readOnly);
 
   const getSelectedModelSchema = (selectedModelId: string) => {
@@ -846,6 +847,7 @@ export function LlmWidget(props: WidgetParams) {
           nodeId={props.nodeId}
           schema={llmModelParamsSchema}
           modelParameters={modelParameters}
+          getNodeFieldError={getNodeFieldError}
           readOnly={readOnly}
         />
       )}
