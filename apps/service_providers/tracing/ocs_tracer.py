@@ -90,6 +90,9 @@ class OCSTracer(Tracer):
 
         try:
             yield trace_context
+        except Exception:
+            self.error_detected = True
+            raise
         finally:
             # Guaranteed cleanup - update trace duration and status
             if self.trace_record and self.start_time:
