@@ -38,12 +38,12 @@ class LangFuseTracer(Tracer):
     def __init__(self, type_, config: dict):
         super().__init__(type_, config)
         self.client = None
-        self.trace: StatefulTraceClient | None = None
+        self.trace_record: StatefulTraceClient | None = None
         self.spans: dict[UUID, StatefulSpanClient] = {}
 
     @property
     def ready(self) -> bool:
-        return bool(self.trace)
+        return bool(self.trace_record)
 
     @contextmanager
     def trace(
@@ -59,17 +59,17 @@ class LangFuseTracer(Tracer):
         and ensures the client is flushed on exit.
         """
         # Check for reentry
-        if self.trace:
+        if self.trace_record:
             raise ServiceReentryException("Service does not support reentrant use.")
 
         # Set base class state from context
-        self.trace_name = trace_context.name
-        self.trace_id = trace_context.id
+        self.trace_record_name = trace_context.name
+        self.trace_record_id = trace_context.id
         self.session = session
 
         # Get client and create trace
         self.client = client_manager.get(self.config)
-        self.trace = self.client.trace(
+        self.trace_record = self.client.trace(
             name=trace_context.name,
             session_id=str(session.external_id),
             user_id=session.participant.identifier,
@@ -86,7 +86,7 @@ class LangFuseTracer(Tracer):
             raise
         finally:
             # Guaranteed cleanup
-            if self.trace:
+            if self.trace_record:
                 # Get outputs from context and merge with error if present
                 outputs = trace_context.outputs.copy() if trace_context.outputs else {}
                 if error_to_record:
@@ -94,7 +94,7 @@ class LangFuseTracer(Tracer):
 
                 # Update trace with outputs if any
                 if outputs:
-                    self.trace.update(output=outputs)
+                    self.trace_record.update(output=outputs)
 
                 # Flush client to send data to Langfuse
                 if self.client:
@@ -102,10 +102,10 @@ class LangFuseTracer(Tracer):
 
             # Reset state
             self.client = None
-            self.trace = None
+            self.trace_record = None
             self.spans.clear()
-            self.trace_name = None
-            self.trace_id = None
+            self.trace_record_name = None
+            self.trace_record_id = None
             self.session = None
 
     @contextmanager
@@ -169,8 +169,8 @@ class LangFuseTracer(Tracer):
             raise ServiceNotInitializedException("Service not initialized.")
 
         return {
-            "trace_id": self.trace.id,
-            "trace_url": self.trace.get_trace_url(),
+            "trace_id": self.trace_record.id,
+            "trace_url": self.trace_record.get_trace_url(),
             "trace_provider": self.type,
         }
 
@@ -183,12 +183,12 @@ class LangFuseTracer(Tracer):
             last_span = next(reversed(self.spans))
             return self.spans[last_span]
         else:
-            return self.trace
+            return self.trace_record
 
     def add_trace_tags(self, tags: list[str]) -> None:
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
-        self.trace.update(tags=tags)
+        self.trace_record.update(tags=tags)
 
     def set_output_message_id(self, output_message_id: str) -> None:
         pass
@@ -297,6 +297,6 @@ class LangfuseCallbackHandler(CallbackHandler):
             self.root_span.event(name=name, input=data, metadata=metadata)
             return
 
-        if self.trace is not None:
-            self.trace.event(name=name, input=data, metadata=metadata)
+        if self.trace_record is not None:
+            self.trace_record.event(name=name, input=data, metadata=metadata)
             return
