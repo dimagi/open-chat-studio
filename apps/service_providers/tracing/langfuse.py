@@ -167,7 +167,7 @@ class ClientManager:
     certain amount of time."""
 
     def __init__(self, stale_timeout=300, prune_interval=60, max_clients=20) -> None:
-        self.clients: dict[str, float] = {}
+        self.key_timestamps: dict[str, float] = {}
         self.stale_timeout = stale_timeout
         self.max_clients = max_clients
         self.prune_interval = prune_interval
@@ -183,7 +183,7 @@ class ClientManager:
             if client is None:
                 logger.debug("Creating new Langfuse client with public_key '%s'", public_key)
                 client = Langfuse(**config)
-            self.clients[public_key] = time.time()
+            self.key_timestamps[public_key] = time.time()
         return client
 
     def _start_prune_thread(self):
@@ -196,20 +196,20 @@ class ClientManager:
             self._prune_stale()
 
     def _prune_stale(self):
-        if not self.clients:
+        if not self.key_timestamps:
             return
 
         logger.debug("Pruning clients...")
-        for public_key in list(self.clients.keys()):
-            timestamp = self.clients[public_key]
+        for public_key in list(self.key_timestamps.keys()):
+            timestamp = self.key_timestamps[public_key]
             if time.time() - timestamp > self.stale_timeout:
                 logger.debug("Pruning old client with public_key '%s'", public_key)
                 self._remove_client(public_key)
 
-        if len(self.clients) > self.max_clients:
+        if len(self.key_timestamps) > self.max_clients:
             # remove the oldest clients until we are below the max
-            sorted_keys = sorted(self.clients.items(), key=lambda x: x[1])
-            keys_to_remove = sorted_keys[: len(self.clients) - self.max_clients]
+            sorted_keys = sorted(self.key_timestamps.items(), key=lambda x: x[1])
+            keys_to_remove = sorted_keys[: len(self.key_timestamps) - self.max_clients]
             logger.debug("Pruned %d clients above max limit", len(keys_to_remove))
             for public_key, _ in keys_to_remove:
                 self._remove_client(public_key)
@@ -219,13 +219,13 @@ class ClientManager:
             active_instances = LangfuseResourceManager._instances
             if target_instance := active_instances.pop(public_key, None):
                 target_instance.shutdown()
-            self.clients.pop(public_key)
+            self.key_timestamps.pop(public_key)
 
     def shutdown(self):
-        logger.debug("Shutting down all langfuse clients (%s)", len(self.clients))
+        logger.debug("Shutting down all langfuse clients (%s)", len(self.key_timestamps))
         with LangfuseResourceManager._lock:
             LangfuseResourceManager.reset()
-            self.clients.clear()
+            self.key_timestamps.clear()
 
 
 client_manager = ClientManager()

@@ -60,7 +60,7 @@ def test_get_creates_new_client(client_manager, config, langfuse_mock, mock_clie
     langfuse_mock.assert_called_with(**config)
     assert len(mock_client_registry.registry) == 1
     assert client == mock_client_registry.registry[config["public_key"]]
-    assert len(client_manager.clients) == 1
+    assert len(client_manager.key_timestamps) == 1
 
 
 def test_get_reuses_existing_client(client_manager, config, langfuse_mock):
@@ -73,7 +73,7 @@ def test_get_reuses_existing_client(client_manager, config, langfuse_mock):
     # Assert
     langfuse_mock.assert_not_called()
     assert first_client == second_client
-    assert len(client_manager.clients) == 1
+    assert len(client_manager.key_timestamps) == 1
 
 
 def test_get_creates_different_clients_for_different_configs(client_manager, config, langfuse_mock):
@@ -86,7 +86,7 @@ def test_get_creates_different_clients_for_different_configs(client_manager, con
 
     # Assert
     assert first_client != second_client
-    assert len(client_manager.clients) == 2
+    assert len(client_manager.key_timestamps) == 2
 
 
 def test_prune_stale_clients(client_manager, config, langfuse_mock):
@@ -96,12 +96,12 @@ def test_prune_stale_clients(client_manager, config, langfuse_mock):
 
     time.sleep(0.4)
     client_manager.get(other_config)  # Get second client
-    assert len(client_manager.clients) == 2
+    assert len(client_manager.key_timestamps) == 2
 
     time.sleep(0.1)  # Sleep longer than the stale timeout
     client_manager._prune_stale()
 
-    assert len(client_manager.clients) == 1
+    assert len(client_manager.key_timestamps) == 1
     first_client.shutdown.assert_called_once()
 
 
@@ -123,20 +123,20 @@ def test_max_clients_limit(client_manager, langfuse_mock, mock_client_registry):
         clients.append(client_manager.get(config))
         time.sleep(0.1)  # Ensure timestamps are different
 
-    assert len(client_manager.clients) == 4
+    assert len(client_manager.key_timestamps) == 4
 
     # Act: add one more client to exceed the limit
     client_manager._prune_stale()
 
     # Assert: should still have 3 clients but the oldest one should be removed
-    assert len(client_manager.clients) == 3
+    assert len(client_manager.key_timestamps) == 3
     clients[0].shutdown.assert_called_once()  # The oldest client should be shut down
 
     # The remaining clients should be the newer ones
-    assert configs[0]["public_key"] not in client_manager.clients
-    assert configs[1]["public_key"] in client_manager.clients
-    assert configs[2]["public_key"] in client_manager.clients
-    assert configs[3]["public_key"] in client_manager.clients
+    assert configs[0]["public_key"] not in client_manager.key_timestamps
+    assert configs[1]["public_key"] in client_manager.key_timestamps
+    assert configs[2]["public_key"] in client_manager.key_timestamps
+    assert configs[3]["public_key"] in client_manager.key_timestamps
 
 
 def test_prune_thread_starts_automatically(langfuse_mock):
@@ -176,7 +176,7 @@ def test_thread_safety_with_concurrent_access(client_manager, langfuse_mock):
 
     # Assert
     assert len(results) == 10
-    assert len(client_manager.clients) == 10
+    assert len(client_manager.key_timestamps) == 10
 
 
 def test_prune_worker(client_manager, config, langfuse_mock):
