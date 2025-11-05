@@ -16,7 +16,28 @@ class OpenAIReasoningSummaryParameter(TextChoices):
     DETAILED = "detailed", "Detailed"
 
 
-class OpenAIReasoningParameters(BaseModel):
+class LLMModelParamBase(BaseModel):
+    pass
+
+
+class OpenAINonReasoningParameters(LLMModelParamBase):
+    max_output_tokens: int = Field(
+        title="Max Output Tokens",
+        default=128000,
+        description="The maximum number of tokens to generate in the completion.",
+        ge=1,
+    )
+
+    top_p: float = Field(
+        title="Top P",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        json_schema_extra=UiSchema(widget=Widgets.float),
+    )
+
+
+class OpenAIReasoningParameters(LLMModelParamBase):
     effort: OpenAIReasoningEffortParameter = Field(
         title="Reasoning Effort",
         default="low",
@@ -37,5 +58,5 @@ def get_schema(model):
     return schema
 
 
-param_classes = [OpenAIReasoningParameters]
+param_classes = LLMModelParamBase.__subclasses__()
 LLM_MODEL_PARAMETER_SCHEMAS = {cls.__name__: get_schema(cls) for cls in param_classes}
