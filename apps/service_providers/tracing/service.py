@@ -75,7 +75,6 @@ class TracingService:
         session: ExperimentSession,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
-        input_message_id: int | None = None,
     ) -> Iterator[TraceContext]:
         """Context manager for tracing or spanning.
 
