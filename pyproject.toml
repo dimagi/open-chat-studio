@@ -40,7 +40,7 @@ dependencies = [
     "langchain>=0.3,<0.4",
     "langchain-core>=0.3.23,<0.4",
     "langchain-anthropic",
-    "langchain-openai>0.3.9",
+    "langchain-openai>0.3.28",
     "langchain_google_genai",
     "langchain-community>=0.3,<0.4",
     "langfuse>=2.59.7",
