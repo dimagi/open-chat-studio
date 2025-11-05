@@ -276,8 +276,8 @@ class OpenAIGenericService(LlmService):
 
     def _get_model_kwargs(self, **kwargs) -> dict:
         extra_kwargs = {}
-        if "summary" in kwargs and "effort" in kwargs:
-            extra_kwargs = {"reasoning": {"summary": kwargs["summary"], "effort": kwargs["effort"]}}
+        if "effort" in kwargs:
+            extra_kwargs = {"reasoning": {"effort": kwargs["effort"]}}
 
         if "top_p" in kwargs and "max_output_tokens" in kwargs:
             extra_kwargs = {"top_p": kwargs["top_p"], "max_tokens": kwargs["max_output_tokens"]}

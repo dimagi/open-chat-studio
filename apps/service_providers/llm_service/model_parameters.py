@@ -37,27 +37,6 @@ def _validate_token_limit(value: int, info, strictly_less_than: bool = False) ->
     return value
 
 
-class OpenAINonReasoningParameters(LLMModelParamBase):
-    max_output_tokens: int = Field(
-        title="Max Output Tokens",
-        default=128000,
-        description="The maximum number of tokens to generate in the completion.",
-        ge=1,
-    )
-
-    top_p: float = Field(
-        title="Top P",
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        json_schema_extra=UiSchema(widget=Widgets.float),
-    )
-
-    @field_validator("max_output_tokens", mode="before")
-    def ensure_value_is_less_than_model_max(cls, value: int, info):
-        return _validate_token_limit(value, info)
-
-
 class OpenAIReasoningParameters(LLMModelParamBase):
     effort: OpenAIReasoningEffortParameter = Field(
         title="Reasoning Effort",
