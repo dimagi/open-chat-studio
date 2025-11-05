@@ -2,19 +2,18 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from django.core.cache import cache
-from django.utils import timezone
 from langchain_core.callbacks.base import BaseCallbackHandler
 
-from apps.annotations.models import TagCategories
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
-from apps.trace.error_parser import get_tags_from_error
 from apps.trace.models import Span, Trace, TraceStatus
 
-from .base import Tracer
+from .base import TraceContext, Tracer
 
 if TYPE_CHECKING:
     from apps.experiments.models import ExperimentSession
@@ -40,35 +39,37 @@ class OCSTracer(Tracer):
 
     @property
     def ready(self) -> bool:
-        """OCS tracer is always ready when no trace is active."""
+        """OCS tracer is always ready when a trace is active."""
         return self.trace is not None
 
-    def start_trace(
+    @contextmanager
+    def trace(
         self,
-        trace_name: str,
-        trace_id: UUID,
+        trace_context: TraceContext,
         session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """
-        Initialize a new trace and begin timing its execution.
+    ) -> Iterator[TraceContext]:
+        """Context manager for OCS trace lifecycle.
 
-        Creates a new Trace object in the database and starts recording execution time.
-
-        Note:
-            If the experiment is a versioned experiment, the trace will be linked to
-            the working version and the version number will be recorded. If the experiment
-            is already the working version, no version number is stored.
+        Creates a database Trace record on entry and updates it with
+        duration and status on exit.
         """
         from apps.experiments.models import Experiment
 
-        super().start_trace(trace_name, trace_id, session, inputs, metadata)
+        # Set base class state from context
+        self.trace_name = trace_context.name
+        self.trace_id = trace_context.id
+        self.session = session
+
+        # Determine experiment ID (handle versioning)
         try:
             experiment = Experiment.objects.get(id=self.experiment_id)
         except Experiment.DoesNotExist:
             logger.exception(f"Experiment with id {self.experiment_id} does not exist. Cannot start trace.")
+            yield trace_context
             return
+
         experiment_id = self.experiment_id
         experiment_version_number = None
         if experiment.is_a_version:
@@ -76,8 +77,9 @@ class OCSTracer(Tracer):
             experiment_id = experiment.working_version_id
             experiment_version_number = experiment.version_number
 
+        # Create database trace record
         self.trace = Trace.objects.create(
-            trace_id=trace_id,
+            trace_id=trace_context.id,
             experiment_id=experiment_id,
             experiment_version_number=experiment_version_number,
             team_id=self.team_id,
@@ -89,97 +91,113 @@ class OCSTracer(Tracer):
         )
 
         self.start_time = time.time()
-        self.session = session
-
-    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        """End the trace and create a Trace object in the database."""
-        if not self.ready or not self.start_time:
-            super().end_trace(outputs, error)
-            return
 
         try:
-            end_time = time.time()
-            duration = end_time - self.start_time
-            duration_ms = int(duration * 1000)
-
-            self.trace.duration = duration_ms
-            if self.error_detected:
-                self.trace.status = TraceStatus.ERROR
-            else:
-                self.trace.status = TraceStatus.SUCCESS
-            self.trace.save()
-
-            logger.debug(
-                "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
-                self.experiment_id,
-                self.session.id,
-                duration_ms,
-            )
-        except Exception:
-            logger.exception(
-                "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
-                self.experiment_id,
-                self.session.id,
-                self.trace.output_message_id,
-            )
+            yield trace_context
         finally:
+            # Guaranteed cleanup - update trace duration and status
+            if self.trace and self.start_time:
+                try:
+                    end_time = time.time()
+                    duration = end_time - self.start_time
+                    duration_ms = int(duration * 1000)
+
+                    self.trace.duration = duration_ms
+                    if self.error_detected:
+                        self.trace.status = TraceStatus.ERROR
+                    else:
+                        self.trace.status = TraceStatus.SUCCESS
+
+                    # Note: OCSTracer doesn't store trace outputs in database
+                    # but could access them via trace_context.outputs if needed
+
+                    self.trace.save()
+
+                    logger.debug(
+                        "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
+                        self.experiment_id,
+                        session.id,
+                        duration_ms,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
+                        self.experiment_id,
+                        session.id,
+                        self.trace.output_message_id,
+                    )
+
+            # Reset state
             self.trace = None
             self.spans = {}
             self.error_detected = False
-            super().end_trace(outputs, error)
+            self.trace_name = None
+            self.trace_id = None
+            self.session = None
 
-    def start_span(
+    @contextmanager
+    def span(
+        self,
+        span_context: TraceContext,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
+    ) -> Iterator[TraceContext]:
+        """Context manager for OCS span lifecycle.
+
+        Note: Span tracking is currently disabled due to multithreading
+        reliability issues. This is a no-op context manager that yields
+        immediately but still processes errors.
+        """
+        error_to_record: Exception | None = None
+
+        try:
+            yield span_context
+        except Exception as e:
+            error_to_record = e
+            raise
+        finally:
+            if error_to_record:
+                self.error_detected = True
+
+                # Note: Span creation is disabled, but we still track errors
+                # If span tracking is re-enabled, this is where we would:
+                # 1. Get outputs from span_context.outputs
+                # 2. Create and save span to database with outputs
+                # 3. Add error tags if needed
+
+                # Example if re-enabled:
+                # if self.spans and span_context.id in self.spans:
+                #     span = self.spans[span_context.id]
+                #     span.output = span_context.outputs
+                #     span.error = str(error_to_record)
+                #     span.save()
+
+    def _start_span_for_callback(
         self,
         span_id: UUID,
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
-        level: SpanLevel = "DEFAULT",
     ) -> None:
-        if not self.ready:
-            return
+        """Internal method for LangChain callback handler.
 
-        # Disable for now since spans are unreliable in multithreaded workflows
-        # self.spans[span_id] = self._get_current_observation().span(
-        #     span_id=span_id,
-        #     span_name=span_name,
-        #     inputs=inputs,
-        #     metadata=metadata or {},
-        # )
+        Span tracking is disabled, so this is a no-op.
+        """
+        pass
 
-    def end_span(
+    def _end_span_for_callback(
         self,
         span_id: UUID,
         outputs: dict[str, Any] | None = None,
         error: Exception | None = None,
     ) -> None:
-        if not self.ready:
-            return
+        """Internal method for LangChain callback handler.
 
+        Tracks errors even though span creation is disabled.
+        """
         if error:
             self.error_detected = True
-
-        span = self.spans.pop(span_id, None)
-        if not span:
-            return
-
-        span.output = outputs or {}
-        span.end_time = timezone.now()
-        if error:
-            span.status = TraceStatus.ERROR
-            span.error = str(error)
-
-            if self.error_span_id is None:
-                # Only tag the span in which the error occured
-                self.error_span_id = span_id
-                tags = get_tags_from_error(error)
-                for tag in tags:
-                    span.create_and_add_tag(tag=tag, team=span.team, tag_category=TagCategories.ERROR)
-
-            self._bust_caches()
-        else:
-            span.status = TraceStatus.SUCCESS
-        span.save()
 
     def get_langchain_callback(self) -> None:
         """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
@@ -244,7 +262,7 @@ class OCSCallbackHandler(BaseCallbackHandler):
         self.tracer = tracer
 
     def on_llm_start(self, serialized, prompts, run_id, parent_run_id, tags, metadata, *args, **kwargs) -> None:
-        self.tracer.start_span(
+        self.tracer._start_span_for_callback(
             span_id=run_id,
             span_name=kwargs.get("name", "Unknown span"),
             inputs={"prompts": prompts},
@@ -252,13 +270,13 @@ class OCSCallbackHandler(BaseCallbackHandler):
         )
 
     def on_llm_end(self, response, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer.end_span(
+        self.tracer._end_span_for_callback(
             span_id=run_id,
             outputs={"output": response},
         )
 
     def on_llm_error(self, error, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer.end_span(
+        self.tracer._end_span_for_callback(
             span_id=run_id,
             error=error,
         )
@@ -270,7 +288,7 @@ class OCSCallbackHandler(BaseCallbackHandler):
         if chain_name in OCSCallbackHandler.LANGCHAIN_CHAINS_TO_IGNORE:
             return
 
-        self.tracer.start_span(
+        self.tracer._start_span_for_callback(
             span_id=run_id,
             span_name=chain_name,
             inputs=inputs,
@@ -278,20 +296,20 @@ class OCSCallbackHandler(BaseCallbackHandler):
         )
 
     def on_chain_end(self, outputs, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer.end_span(
+        self.tracer._end_span_for_callback(
             span_id=run_id,
             outputs=outputs,
         )
 
     def on_chain_error(self, error, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer.end_span(
+        self.tracer._end_span_for_callback(
             span_id=run_id,
             outputs={},
             error=error,
         )
 
     def on_tool_start(self, serialized, input_str, run_id, parent_run_id, tags, metadata, *args, **kwargs) -> None:
-        self.tracer.start_span(
+        self.tracer._start_span_for_callback(
             span_id=run_id,
             span_name=kwargs.get("name", "Unknown span"),
             inputs={"input": input_str},
@@ -299,13 +317,13 @@ class OCSCallbackHandler(BaseCallbackHandler):
         )
 
     def on_tool_end(self, output, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer.end_span(
+        self.tracer._end_span_for_callback(
             span_id=run_id,
             outputs={"output": output},
         )
 
     def on_tool_error(self, error, run_id, parent_run_id, *args, **kwargs) -> None:
-        self.tracer.end_span(
+        self.tracer._end_span_for_callback(
             span_id=run_id,
             error=error,
         )
