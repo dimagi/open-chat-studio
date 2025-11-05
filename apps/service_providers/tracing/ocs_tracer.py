@@ -11,7 +11,7 @@ from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
-from apps.trace.models import Span, Trace, TraceStatus
+from apps.trace.models import Trace, TraceStatus
 
 from .base import TraceContext, Tracer
 
@@ -32,7 +32,6 @@ class OCSTracer(Tracer):
         self.team_id = team_id
         self.start_time: float = None
         self.trace_record = None
-        self.spans: dict[UUID, Span] = {}
         self.error_detected = False
         # error_span_id is used to track the span in which an error occurred
         self.error_span_id = None
@@ -129,7 +128,6 @@ class OCSTracer(Tracer):
 
             # Reset state
             self.trace_record = None
-            self.spans = {}
             self.error_detected = False
             self.trace_name = None
             self.trace_id = None
@@ -167,11 +165,9 @@ class OCSTracer(Tracer):
                 # 3. Add error tags if needed
 
                 # Example if re-enabled:
-                # if self.spans and span_context.id in self.spans:
-                #     span = self.spans[span_context.id]
-                #     span.output = span_context.outputs
-                #     span.error = str(error_to_record)
-                #     span.save()
+                #   span.output = span_context.outputs
+                #   span.error = str(error_to_record)
+                #   span.save()
 
     def _start_span_for_callback(
         self,
@@ -215,17 +211,6 @@ class OCSTracer(Tracer):
         """Set the input message ID for the trace."""
         if self.trace_record:
             self.trace_record.input_message_id = input_message_id
-
-    def _get_current_observation(self) -> Span | Trace:
-        """
-        Returns the most recent active span if one exists, otherwise returns the root trace.
-        This ensures new spans are properly nested under their parent spans.
-        """
-        if self.spans:
-            last_span = next(reversed(self.spans))
-            return self.spans[last_span]
-        else:
-            return self.trace_record
 
     def get_trace_metadata(self) -> dict[str, Any]:
         if not self.ready:

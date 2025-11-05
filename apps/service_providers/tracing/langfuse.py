@@ -145,20 +145,18 @@ class LangFuseTracer(Tracer):
             error_to_record = e
             raise
         finally:
-            # Guaranteed cleanup - end the span
-            span = self.spans.pop(span_context.id, None)
-            if span:
-                # Get outputs from context and merge with error if present
-                output = span_context.outputs.copy() if span_context.outputs else {}
-                if error_to_record:
-                    output["error"] = str(error_to_record)
+            # Get outputs from context and merge with error if present
+            self.spans.pop(span_context.id, None)
+            output = span_context.outputs.copy() if span_context.outputs else {}
+            if error_to_record:
+                output["error"] = str(error_to_record)
 
-                content = {
-                    "output": output,
-                    "status_message": str(error_to_record) if error_to_record else None,
-                    "level": "ERROR" if error_to_record else None,
-                }
-                span.end(**content)
+            content = {
+                "output": output,
+                "status_message": str(error_to_record) if error_to_record else None,
+                "level": "ERROR" if error_to_record else None,
+            }
+            span_client.end(**content)
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
         if not self.ready:
