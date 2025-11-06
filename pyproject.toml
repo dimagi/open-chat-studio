@@ -60,7 +60,8 @@ dependencies = [
     "slack-bolt",
     "taskbadger",
     "tenacity",
-    "tiktoken", # this is required by the tokenizer that langchain uses
+    "tiktoken",
+    "transformers>=4.48.0", # this is required by the tokenizer that langchain uses
     "turn-python>=1.0.0",
     "twilio",
     "whitenoise[brotli]",
