@@ -23,14 +23,26 @@ CloudWatch Logs Insights Query:
     Log group: aws-waf-logs-chatbots-prod-waf-logs
 
     Query:
-        fields httpRequest.uri, ruleGroupList.0.terminatingRule.ruleId,
-               ruleGroupList.0.terminatingRule.action,
-               ruleGroupList.0.terminatingRule.ruleMatchDetails.0.conditionType
-        | filter ispresent(ruleGroupList.0.terminatingRule.ruleId)
-        | stats count(*) as hitCount by httpRequest.uri,
-                ruleGroupList.0.terminatingRule.ruleId,
-                ruleGroupList.0.terminatingRule.ruleMatchDetails.0.conditionType
-        | sort hitCount desc
+      fields httpRequest.uri,
+             httpRequest.httpMethod,
+             httpRequest.country,
+             httpRequest.clientIp,
+             httpRequest.headers,
+             ruleGroupList.0.terminatingRule.ruleId,
+             ruleGroupList.0.terminatingRule.action,
+             ruleGroupList.0.terminatingRule.ruleMatchDetails.0.conditionType,
+             @timestamp
+      | filter ispresent(ruleGroupList.0.terminatingRule.ruleId)
+             and httpRequest.uri not like /\\.php$/
+      | stats count(*) as hitCount,
+              earliest(@timestamp) as firstSeen,
+              latest(@timestamp) as lastSeen,
+              count_distinct(httpRequest.clientIp) as uniqueIPs,
+              count_distinct(httpRequest.country) as uniqueCountries
+        by httpRequest.uri,
+           ruleGroupList.0.terminatingRule.ruleId,
+           ruleGroupList.0.terminatingRule.ruleMatchDetails.0.conditionType
+      | sort hitCount desc
 
     Export the results as CSV and use as input to this script.
 
@@ -44,6 +56,18 @@ CSV Format:
     - First column for URL path
     - Second column for rule
     - Last column for hit count
+
+To dig deeper on a specific URL use the following cloudwatch query:
+
+    fields @timestamp,
+        httpRequest.uri,
+        httpRequest.clientIp,
+        httpRequest.country,
+        httpRequest.httpMethod,
+        ruleGroupList.0.terminatingRule.ruleId
+    | filter httpRequest.uri = "/channels/telegram/08628b8f-bbee-4237-badd-a991e988b7fe"
+    | sort @timestamp desc
+    | limit 100
 """
 
 import csv
