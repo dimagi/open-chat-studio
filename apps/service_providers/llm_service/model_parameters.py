@@ -7,6 +7,12 @@ from apps.pipelines.nodes.base import UiSchema, Widgets
 
 
 class OpenAIReasoningEffortParameter(TextChoices):
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+
+
+class GPT5ReasoningEffortParameter(TextChoices):
     MINIMAL = "minimal", "Minimal"
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
@@ -52,7 +58,21 @@ class OpenAIReasoningParameters(LLMModelParamBase):
     )
 
 
-class OpenAIReasoningWithVerbosityParameters(OpenAIReasoningParameters):
+class GPT5Parameters(LLMModelParamBase):
+    effort: GPT5ReasoningEffortParameter = Field(
+        title="Reasoning Effort",
+        default="low",
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT5ReasoningEffortParameter.labels),
+    )
+
+    verbosity: OpenAIVerbosityParameter = Field(
+        title="Verbosity",
+        default="low",
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
+    )
+
+
+class GPT5ProParameters(LLMModelParamBase):
     verbosity: OpenAIVerbosityParameter = Field(
         title="Verbosity",
         default="low",

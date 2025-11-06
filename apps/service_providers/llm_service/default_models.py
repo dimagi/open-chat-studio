@@ -7,8 +7,9 @@ from django.db import transaction
 from apps.service_providers.llm_service.model_parameters import (
     AnthropicNonReasoningParameters,
     AnthropicReasoningParameters,
+    GPT5Parameters,
+    GPT5ProParameters,
     OpenAIReasoningParameters,
-    OpenAIReasoningWithVerbosityParameters,
 )
 from apps.utils.deletion import get_related_objects, get_related_pipelines_queryset
 
@@ -74,10 +75,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4-0613", k(8), deprecated=True),
         Model("gpt-3.5-turbo", k(16)),
         Model("gpt-3.5-turbo-1106", k(16)),
-        Model("gpt-5", k(8), parameters=OpenAIReasoningWithVerbosityParameters),
-        Model("gpt-5-mini", k(8), parameters=OpenAIReasoningWithVerbosityParameters),
-        Model("gpt-5-nano", k(8), parameters=OpenAIReasoningWithVerbosityParameters),
-        Model("gpt-5-pro", k(8), parameters=OpenAIReasoningWithVerbosityParameters),
+        Model("gpt-5", k(8), parameters=GPT5Parameters),
+        Model("gpt-5-mini", k(8), parameters=GPT5Parameters),
+        Model("gpt-5-nano", k(8), parameters=GPT5Parameters),
+        Model("gpt-5-pro", k(8), parameters=GPT5ProParameters),
     ],
     "groq": [
         Model("whisper-large-v3", k(8)),
