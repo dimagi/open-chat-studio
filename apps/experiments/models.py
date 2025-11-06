@@ -1673,7 +1673,7 @@ class ExperimentSessionQuerySet(models.QuerySet):
 
     def annotate_with_message_count(self):
         message_count_subquery = Subquery(
-            ChatMessage.objects.filter(chat=OuterRef("chat"))
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
             .values("chat")
             .annotate(count=Count("id"))
             .values("count")[:1]
