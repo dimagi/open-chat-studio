@@ -375,8 +375,8 @@ print_next_steps() {
     echo "     inv runserver"
     echo ""
 
-    echo "  5. In another terminal, build frontend assets:"
-    echo "     npm run dev-watch"
+    echo "  5. Build frontend assets:"
+    echo "     npm run dev"
     echo ""
 
     echo "See CLAUDE.md for more development commands and information."
