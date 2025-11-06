@@ -25,11 +25,6 @@ class OpenAIVerbosityParameter(TextChoices):
     HIGH = "high", "High"
 
 
-class OpenAIReasoningSummaryParameter(TextChoices):
-    AUTO = "auto", "Auto"
-    DETAILED = "detailed", "Detailed"
-
-
 class LLMModelParamBase(BaseModel):
     pass
 
@@ -37,7 +32,7 @@ class LLMModelParamBase(BaseModel):
 class OpenAIReasoningParameters(LLMModelParamBase):
     effort: OpenAIReasoningEffortParameter = Field(
         title="Reasoning Effort",
-        default="low",
+        default="medium",
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIReasoningEffortParameter.labels),
     )
 
@@ -45,13 +40,13 @@ class OpenAIReasoningParameters(LLMModelParamBase):
 class GPT5Parameters(LLMModelParamBase):
     effort: GPT5ReasoningEffortParameter = Field(
         title="Reasoning Effort",
-        default="low",
+        default="medium",
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT5ReasoningEffortParameter.labels),
     )
 
     verbosity: OpenAIVerbosityParameter = Field(
         title="Verbosity",
-        default="low",
+        default="medium",
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
     )
 
@@ -59,7 +54,7 @@ class GPT5Parameters(LLMModelParamBase):
 class GPT5ProParameters(LLMModelParamBase):
     verbosity: OpenAIVerbosityParameter = Field(
         title="Verbosity",
-        default="low",
+        default="medium",
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
     )
 
