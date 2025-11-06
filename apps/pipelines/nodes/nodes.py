@@ -148,6 +148,22 @@ class LLMResponseMixin(BaseModel):
     )
     llm_model_parameters: dict[str, Any] = Field(default_factory=dict, json_schema_extra=UiSchema(widget=Widgets.none))
 
+    @field_validator("llm_model_parameters", mode="before")
+    def ensure_dict(cls, value, info: FieldValidationInfo):
+        try:
+            model = LlmProviderModel.objects.get(id=info.data.get("llm_provider_model_id"))
+            if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
+                return params_cls.model_validate(
+                    value or {},
+                    context={
+                        "model_max_token_limit": model.max_token_limit,
+                        "temperature": info.data.get("llm_temperature", 0.7),
+                    },
+                ).model_dump()
+        except (LlmProviderModel.DoesNotExist, Exception):
+            pass
+        return value or {}
+
     @model_validator(mode="after")
     def validate_llm_model(self):
         # Ensure model is not deprecated
