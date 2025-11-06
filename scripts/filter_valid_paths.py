@@ -32,10 +32,13 @@ from pathlib import Path
 # Setup Django environment
 import django
 
-# Set the DJANGO_SETTINGS_MODULE environment variable
+# Setup Django environment
+# Ensure project root is importable before importing Django
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-# Configure Django
 django.setup()
 
 # Import Django's URL resolver
