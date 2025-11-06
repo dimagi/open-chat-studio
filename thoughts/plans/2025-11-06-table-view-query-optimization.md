@@ -175,10 +175,10 @@ def get_table_data(self):
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] All unit tests pass: `pytest apps/chatbots/tests/test_chatbot_views.py::test_chatbot_experiment_table_view -v`
-- [ ] Type checking passes: `npm run type-check`
-- [ ] Linting passes: `inv ruff`
-- [ ] No new migrations generated: `python manage.py makemigrations --dry-run --check`
+- [x] All unit tests pass: `pytest apps/chatbots/tests/test_chatbot_views.py::test_chatbot_experiment_table_view -v`
+- [x] Type checking passes: `npm run type-check`
+- [x] Linting passes: `inv ruff`
+- [x] No new migrations generated: `python manage.py makemigrations --dry-run --check`
 
 #### Manual Verification:
 - [ ] Navigate to Chatbots table view (URL: `/teams/<team_slug>/chatbots/`)
@@ -294,10 +294,10 @@ def get_table_data(self):
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] All unit tests pass: `pytest apps/evaluations/ -v`
-- [ ] Type checking passes: `npm run type-check`
-- [ ] Linting passes: `inv ruff`
-- [ ] No new migrations generated: `python manage.py makemigrations --dry-run --check`
+- [x] All unit tests pass: `pytest apps/evaluations/ -v`
+- [x] Type checking passes: `npm run type-check`
+- [x] Linting passes: `inv ruff`
+- [x] No new migrations generated: `python manage.py makemigrations --dry-run --check`
 
 #### Manual Verification:
 - [ ] Navigate to dataset session selection view (create new dataset flow)
@@ -344,10 +344,10 @@ def get_queryset(self):
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] All unit tests pass: `pytest apps/analysis/ -v`
-- [ ] Type checking passes: `npm run type-check`
-- [ ] Linting passes: `inv ruff`
-- [ ] No new migrations generated: `python manage.py makemigrations --dry-run --check`
+- [x] All unit tests pass: `pytest apps/analysis/ -v`
+- [x] Type checking passes: `npm run type-check`
+- [x] Linting passes: `inv ruff`
+- [x] No new migrations generated: `python manage.py makemigrations --dry-run --check`
 
 #### Manual Verification:
 - [ ] Navigate to transcript analysis list view (URL: `/teams/<team_slug>/analysis/`)
