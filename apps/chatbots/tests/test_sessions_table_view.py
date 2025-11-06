@@ -49,39 +49,43 @@ def create_view_instance(team, user, chatbot, query_params=None):
     return view
 
 
-@pytest.fixture()
-def chatbot_with_sessions(db):
-    """Create a chatbot with multiple sessions containing messages and tags."""
-    team_with_users = TeamWithUsersFactory.create()
-    user = team_with_users.members.first()
-    chatbot = ChatbotFactory(team=team_with_users, owner=user)
+@pytest.fixture(scope="class")
+def chatbot_with_sessions(django_db_setup, django_db_blocker):
+    """Create a chatbot with multiple sessions containing messages and tags.
 
-    # Create sessions with varying numbers of messages
-    sessions = []
-    for i in range(5):
-        session = ExperimentSessionFactory(
-            experiment=chatbot, team=team_with_users, participant=ParticipantFactory(team=team_with_users)
-        )
+    Uses class scope for performance since tests are read-only.
+    """
+    with django_db_blocker.unblock():
+        team_with_users = TeamWithUsersFactory.create()
+        user = team_with_users.members.first()
+        chatbot = ChatbotFactory(team=team_with_users, owner=user)
 
-        # Add messages to each session
-        for j in range(i + 1):  # Session 0 has 1 message, session 1 has 2, etc.
-            message = ChatMessage.objects.create(
-                chat=session.chat, message_type="ai", content=f"Message {j} for session {i}"
+        # Create sessions with varying numbers of messages
+        sessions = []
+        for i in range(5):
+            session = ExperimentSessionFactory(
+                experiment=chatbot, team=team_with_users, participant=ParticipantFactory(team=team_with_users)
             )
 
-            # Add version tags to some messages
-            if j == 0:
-                message_ct = ContentType.objects.get_for_model(ChatMessage)
-                tag, _ = Tag.objects.get_or_create(
-                    name=f"v{i + 1}", category=Chat.MetadataKeys.EXPERIMENT_VERSION, team=team_with_users
-                )
-                CustomTaggedItem.objects.create(
-                    content_type=message_ct, object_id=message.id, tag=tag, team=team_with_users
+            # Add messages to each session
+            for j in range(i + 1):  # Session 0 has 1 message, session 1 has 2, etc.
+                message = ChatMessage.objects.create(
+                    chat=session.chat, message_type="ai", content=f"Message {j} for session {i}"
                 )
 
-        sessions.append(session)
+                # Add version tags to some messages
+                if j == 0:
+                    message_ct = ContentType.objects.get_for_model(ChatMessage)
+                    tag, _ = Tag.objects.get_or_create(
+                        name=f"v{i + 1}", category=Chat.MetadataKeys.EXPERIMENT_VERSION, team=team_with_users
+                    )
+                    CustomTaggedItem.objects.create(
+                        content_type=message_ct, object_id=message.id, tag=tag, team=team_with_users
+                    )
 
-    return {"chatbot": chatbot, "team": team_with_users, "user": user, "sessions": sessions}
+            sessions.append(session)
+
+        yield {"chatbot": chatbot, "team": team_with_users, "user": user, "sessions": sessions}
 
 
 @pytest.mark.django_db()
