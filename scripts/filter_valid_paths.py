@@ -107,20 +107,32 @@ def normalize_path(path):
 
 
 def is_valid_path(path, compiled_patterns, normalized_paths_cache, prefix_tree=None):
-    """Check if a path matches any of the valid patterns."""
+    """Check if a path matches any of the valid patterns.
+
+    Returns a tuple: (is_valid: bool, matched_pattern: str or None)
+    """
     # Use cache to avoid normalizing the same path multiple times
     if path in normalized_paths_cache:
-        normalized_path = normalized_paths_cache[path]
+        normalized_path = normalized_paths_cache[path]["normalized"]
+        matched_pattern = normalized_paths_cache[path]["pattern"]
     else:
         normalized_path = normalize_path(path.strip())
-        normalized_paths_cache[path] = normalized_path
 
-    # Quick check using prefix tree if available
-    if prefix_tree and not path_matches_prefix_tree(normalized_path, prefix_tree):
-        return False
+        # Quick check using prefix tree if available
+        if prefix_tree and not path_matches_prefix_tree(normalized_path, prefix_tree):
+            normalized_paths_cache[path] = {"normalized": normalized_path, "pattern": None}
+            return False, None
 
-    # Check against all compiled patterns
-    return any(pattern.match(normalized_path) for pattern in compiled_patterns)
+        # Find which pattern matches
+        matched_pattern = None
+        for i, pattern in enumerate(compiled_patterns):
+            if pattern.match(normalized_path):
+                matched_pattern = i
+                break
+
+        normalized_paths_cache[path] = {"normalized": normalized_path, "pattern": matched_pattern}
+
+    return matched_pattern is not None, matched_pattern
 
 
 def build_prefix_tree(patterns):
@@ -270,6 +282,10 @@ def main():
     valid_count = 0
     total_count = 0
 
+    # Dictionary to deduplicate rows by (path, rule) combination
+    # Key: (normalized path, rule_id), Value: dict with row data and max hit count
+    unique_paths = {}
+
     print("Processing CSV file...")
     try:
         with open(input_file, newline="") as infile, open(output_file, "w", newline="") as outfile:
@@ -278,7 +294,6 @@ def main():
 
             # Assume first row is header and find URL path column
             header = next(reader)
-            writer.writerow(header)  # Copy header to output
 
             path_column = None
             for i, col_name in enumerate(header):
@@ -291,38 +306,71 @@ def main():
                 path_column = 0
                 print("Warning: Could not identify path column, using first column.")
 
-            # Process in batches for better performance
-            batch_size = 1000
-            rows_batch = []
+            # Find rule column (typically second column in WAF logs)
+            rule_column = None
+            for i, col_name in enumerate(header):
+                if "rule" in col_name.lower():
+                    rule_column = i
+                    break
+
+            # Default to column 1 if not found
+            if rule_column is None:
+                rule_column = 1 if len(header) > 1 else 0
+                print(f"Warning: Could not identify rule column, using column {rule_column}.")
+
+            # Find hit count column (usually last column)
+            hitcount_column = len(header) - 1
+            for i, col_name in enumerate(header):
+                if col_name.lower() in ["hitcount", "hit_count", "count", "hits"]:
+                    hitcount_column = i
+                    break
 
             for row in reader:
                 total_count += 1
 
                 if len(row) > path_column:
                     path = row[path_column]
-                    if is_valid_path(path, compiled_patterns, normalized_paths_cache, prefix_tree):
-                        rows_batch.append(row)
+                    is_valid, matched_pattern_idx = is_valid_path(
+                        path, compiled_patterns, normalized_paths_cache, prefix_tree
+                    )
+                    if is_valid:
                         valid_count += 1
 
-                # Write batch to file
-                if len(rows_batch) >= batch_size:
-                    writer.writerows(rows_batch)
-                    rows_batch = []
+                        # Get rule from row (default to empty string if not available)
+                        rule = row[rule_column] if len(row) > rule_column else ""
+
+                        # Get hit count from row (default to 0 if not parseable)
+                        try:
+                            hit_count = int(row[hitcount_column]) if len(row) > hitcount_column else 0
+                        except (ValueError, IndexError):
+                            hit_count = 0
+
+                        # Create unique key from matched pattern index and rule
+                        # This ensures different paths matching the same pattern are deduplicated
+                        unique_key = (matched_pattern_idx, rule)
+
+                        # Keep the row with the highest hit count for each unique (pattern, rule) combination
+                        if unique_key not in unique_paths or hit_count > unique_paths[unique_key]["hit_count"]:
+                            unique_paths[unique_key] = {"row": row, "hit_count": hit_count}
 
                 # Progress reporting
                 if total_count % 10000 == 0:
                     print(f"Processed {total_count} rows so far, found {valid_count} valid paths...")
 
-            # Write any remaining rows
-            if rows_batch:
-                writer.writerows(rows_batch)
+            # Write header
+            writer.writerow(header)
+
+            # Sort by hit count (descending) and write deduplicated rows
+            sorted_paths = sorted(unique_paths.items(), key=lambda x: x[1]["hit_count"], reverse=True)
+            writer.writerows([data["row"] for _, data in sorted_paths])
 
     except Exception as e:
         print(f"Error processing file: {e}")
         sys.exit(1)
 
     elapsed_time = time.time() - start_time
-    print(f"Processed {total_count} rows, found {valid_count} valid paths.")
+    unique_count = len(unique_paths)
+    print(f"Processed {total_count} rows, found {valid_count} valid paths ({unique_count} unique).")
     print(f"Results written to {output_file}")
     print(f"Total time: {elapsed_time:.2f} seconds")
 
