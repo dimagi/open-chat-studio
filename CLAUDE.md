@@ -19,19 +19,22 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 For first-time setup or when starting a new development session, use the bootstrap script:
 
 ```bash
-./bootstrap.sh
+./bootstrap.sh           # Interactive mode with confirmation prompts
+./bootstrap.sh -y        # Auto-confirm all prompts (non-interactive)
+./bootstrap.sh --yes     # Same as -y
+./bootstrap.sh --help    # Show help and usage information
 ```
 
 This script will:
 - Check if Python 3.13+ is installed
 - Check if Node.js 18+ and npm are installed
-- Install UV if not already present
+- Prompt to install UV if not already present (or auto-install with `-y`)
 - Check for Docker, PostgreSQL, and Redis
-- Run `uv sync --frozen --dev` to install Python dependencies
-- Run `npm install` to install Node.js dependencies
+- Prompt to run `uv sync --frozen --dev` to install Python dependencies
+- Prompt to run `npm install` to install Node.js dependencies
 - Verify environment configuration
 
-**Note:** The bootstrap script always runs `uv sync` and `npm install` to ensure dependencies are up to date, even if the tools are already installed.
+**Note:** In interactive mode (default), the script will ask for confirmation before making system changes. Use the `-y` or `--yes` flag to skip all prompts and auto-confirm all actions (useful for automated setups).
 
 After running the bootstrap script, follow the next steps shown in the output to:
 1. Configure your `.env` file

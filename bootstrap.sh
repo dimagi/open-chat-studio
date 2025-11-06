@@ -1,14 +1,23 @@
 #!/bin/bash
 # Bootstrap script for Open Chat Studio development environment
 # This script installs and configures all necessary dependencies
+#
+# Usage:
+#   ./bootstrap.sh          # Interactive mode with confirmation prompts
+#   ./bootstrap.sh -y       # Auto-confirm all prompts
+#   ./bootstrap.sh --yes    # Auto-confirm all prompts
 
 set -e  # Exit on error
+
+# Global flag for skipping prompts
+SKIP_PROMPTS=false
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Helper functions
@@ -28,9 +37,70 @@ step() {
     echo -e "${BLUE}[STEP]${NC} $1"
 }
 
+prompt() {
+    echo -e "${CYAN}[PROMPT]${NC} $1"
+}
+
 # Check if a command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+# Prompt for confirmation
+confirm() {
+    if [ "$SKIP_PROMPTS" = true ]; then
+        return 0
+    fi
+
+    local message="$1"
+    local default="${2:-n}"
+
+    if [ "$default" = "y" ]; then
+        prompt "$message [Y/n] "
+    else
+        prompt "$message [y/N] "
+    fi
+
+    read -r response
+    case "$response" in
+        [yY][eE][sS]|[yY])
+            return 0
+            ;;
+        "")
+            [ "$default" = "y" ] && return 0 || return 1
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Parse command line arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -y|--yes)
+                SKIP_PROMPTS=true
+                shift
+                ;;
+            -h|--help)
+                echo "Usage: $0 [OPTIONS]"
+                echo ""
+                echo "Bootstrap script for Open Chat Studio development environment"
+                echo ""
+                echo "Options:"
+                echo "  -y, --yes    Skip confirmation prompts (auto-confirm)"
+                echo "  -h, --help   Show this help message"
+                echo ""
+                exit 0
+                ;;
+            *)
+                error "Unknown option: $1"
+                echo "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
 }
 
 # Install UV if not present
@@ -39,14 +109,19 @@ install_uv() {
     if command_exists uv; then
         info "UV is already installed ($(uv --version))"
     else
-        info "Installing UV..."
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        # Add to PATH for current session
-        export PATH="$HOME/.cargo/bin:$PATH"
-        if command_exists uv; then
-            info "UV installed successfully ($(uv --version))"
+        if confirm "UV is not installed. Install UV package manager?" "y"; then
+            info "Installing UV..."
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            # Add to PATH for current session
+            export PATH="$HOME/.cargo/bin:$PATH"
+            if command_exists uv; then
+                info "UV installed successfully ($(uv --version))"
+            else
+                error "UV installation failed"
+                exit 1
+            fi
         else
-            error "UV installation failed"
+            error "UV is required to continue. Exiting."
             exit 1
         fi
     fi
@@ -141,17 +216,25 @@ check_redis() {
 # Install Python dependencies
 install_python_deps() {
     step "Installing Python dependencies..."
-    info "Running: uv sync --frozen --dev"
-    uv sync --frozen --dev
-    info "Python dependencies installed successfully"
+    if confirm "Install/update Python dependencies with 'uv sync --frozen --dev'?" "y"; then
+        info "Running: uv sync --frozen --dev"
+        uv sync --frozen --dev
+        info "Python dependencies installed successfully"
+    else
+        warn "Skipped Python dependencies installation"
+    fi
 }
 
 # Install Node.js dependencies
 install_node_deps() {
     step "Installing Node.js dependencies..."
-    info "Running: npm install"
-    npm install
-    info "Node.js dependencies installed successfully"
+    if confirm "Install/update Node.js dependencies with 'npm install'?" "y"; then
+        info "Running: npm install"
+        npm install
+        info "Node.js dependencies installed successfully"
+    else
+        warn "Skipped Node.js dependencies installation"
+    fi
 }
 
 # Check for .env file
@@ -204,8 +287,15 @@ print_next_steps() {
 
 # Main installation flow
 main() {
+    # Parse command line arguments
+    parse_args "$@"
+
     echo ""
-    info "Starting Open Chat Studio development environment bootstrap..."
+    if [ "$SKIP_PROMPTS" = true ]; then
+        info "Starting Open Chat Studio development environment bootstrap (auto-confirm mode)..."
+    else
+        info "Starting Open Chat Studio development environment bootstrap..."
+    fi
     echo ""
 
     # Check prerequisites
@@ -222,7 +312,7 @@ main() {
 
     echo ""
 
-    # Install dependencies (always run)
+    # Install dependencies (prompt if not auto-confirm)
     install_python_deps
     install_node_deps
 
@@ -235,5 +325,5 @@ main() {
     print_next_steps
 }
 
-# Run main function
-main
+# Run main function with all script arguments
+main "$@"
