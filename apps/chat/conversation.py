@@ -229,7 +229,12 @@ def _compress_chat_history(
         return history, None, None
 
     total_messages = history.copy()
-    total_messages.extend(input_messages)
+    if input_messages and input_messages[0].type == "system" and total_messages and total_messages[0].type == "system":
+        # Move prompt and summary to the start of the list
+        # Avoids the Anthropic error: received multiple non-consecutive system messages
+        total_messages = [input_messages[0], total_messages[0]] + total_messages[1:] + input_messages[1:]
+    else:
+        total_messages.extend(input_messages)
     current_token_count = llm.get_num_tokens_from_messages(total_messages)
     if history_mode in [PipelineChatHistoryModes.SUMMARIZE, PipelineChatHistoryModes.TRUNCATE_TOKENS, None]:
         if current_token_count <= max_token_limit and len(total_messages) <= MAX_UNCOMPRESSED_MESSAGES:
