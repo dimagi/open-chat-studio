@@ -7,28 +7,31 @@ class ColumnWithHelp(tables.Column):
     def __init__(self, help_text=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.help_text = help_text
-        self.extra_context = kwargs.get("extra_context", {})
 
     def header(self):
-        kwargs = {
-            "verbose_name": self.verbose_name,
-            "help": "",
-            "checkbox": "",
-        }
+        if not self.help_text:
+            return self.verbose_name
+        help_html = get_template("generic/help.html").render({"help_content": self.help_text})
+        return format_html("""<span>{header}</span>{help}""", header=self.verbose_name, help=help_html)
 
-        if self.help_text:
-            kwargs["help"] = get_template("generic/help.html").render({"help_content": self.help_text})
 
-        if table_header := self.extra_context.get("table_header"):
-            kwargs["checkbox"] = get_template("evaluations/session_checkbox.html").render(table_header)
+class ColumnWithCustomHeader(tables.Column):
+    def __init__(self, header_template=None, header_context=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.template_path = header_template
+        self.template_context = header_context or {}
 
-        return format_html("""{checkbox}<span>{verbose_name}</span>{help}""", **kwargs)
+    def header(self):
+        context = {"verbose_name": self.verbose_name, **self.template_context}
+        return get_template(self.template_path).render(context)
+
+
+class TemplateColumnWithCustomHeader(ColumnWithCustomHeader, tables.TemplateColumn):
+    """A Template column that allows custom templates for the column header."""
 
 
 class TemplateColumnWithHelp(ColumnWithHelp, tables.TemplateColumn):
     """A TemplateColumn that supports help text in the header."""
-
-    pass
 
 
 class TimeAgoColumn(tables.TemplateColumn):
