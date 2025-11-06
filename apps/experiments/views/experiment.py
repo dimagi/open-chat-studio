@@ -133,21 +133,7 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         if experiment_id := self.kwargs.get("experiment_id"):
             experiment_filter = Q(experiment__id=experiment_id)
 
-        query_set = (
-            ExperimentSession.objects.filter(experiment_filter, team=self.request.team)
-            # Select related source
-            # experiment: participant.get_link_to_experiment_data
-            # participant__user: str(participant)
-            # chat: tags prefetch
-            .select_related("experiment", "participant__user", "chat")
-            .prefetch_related(
-                Prefetch(
-                    "chat__tagged_items",
-                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                    to_attr="prefetched_tagged_items",
-                ),
-            )
-        )
+        query_set = ExperimentSession.objects.filter(experiment_filter, team=self.request.team)
         timezone = self.request.session.get("detected_tz", None)
 
         session_filter = ExperimentSessionFilter()
@@ -160,7 +146,21 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         """Add expensive annotations only to the paginated data, not for counting."""
         queryset = super().get_table_data()
         # Add expensive annotations after filtering but before display
-        return queryset.annotate_with_last_message_created_at().annotate_with_versions_list()
+        queryset = (
+            # Select related source
+            # experiment: participant.get_link_to_experiment_data
+            # participant__user: str(participant)
+            # chat: tags prefetch
+            queryset.select_related("experiment", "participant__user", "chat").prefetch_related(
+                Prefetch(
+                    "chat__tagged_items",
+                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                    to_attr="prefetched_tagged_items",
+                ),
+            )
+        )
+        # annotate_with_last_message_created_at is done by ExperimentSessionFilter
+        return queryset.annotate_with_versions_list()
 
 
 class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):

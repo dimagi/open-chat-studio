@@ -168,7 +168,6 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return table
 
     def get_queryset(self):
-        from apps.chat.models import ChatMessage
         from apps.experiments.models import ExperimentSession
 
         session_count_subquery = (
@@ -354,14 +353,7 @@ class ChatbotSessionsTableView(ExperimentSessionsTableView):
     def get_table_data(self):
         """Add message_count annotation to the paginated data."""
         queryset = super().get_table_data()
-        return queryset.annotate(
-            message_count=Subquery(
-                ChatMessage.objects.filter(chat=OuterRef("chat"))
-                .values("chat")
-                .annotate(count=Count("id"))
-                .values("count")[:1]
-            )
-        )
+        return queryset.annotate_with_message_count()
 
     def get_table(self, **kwargs):
         """
