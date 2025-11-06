@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -6,73 +8,115 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import Tracer
+from apps.service_providers.tracing.base import TraceContext
 from apps.service_providers.tracing.const import SpanLevel
 
 
 class MockTracer(Tracer):
     def __init__(self):
         super().__init__("mock", {})
-        self.trace = None
+        # Don't set self.trace here to avoid shadowing the trace() method
+        # Instead, we'll use _trace_data internally and add a property
+        self._trace_data = None
         self.spans: dict[UUID, dict] = {}
         self.tags = None
 
     @property
     def ready(self) -> bool:
-        return bool(self.trace)
+        return self._trace_data is not None
 
-    def start_trace(
+    # Expose trace data for tests (use _trace_data property)
+    @property
+    def trace_result(self):
+        """Property to access trace data for test assertions."""
+        return self._trace_data
+
+    @contextmanager
+    def trace(
         self,
-        trace_name: str,
-        trace_id: UUID,
+        trace_context: TraceContext,
         session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
-        super().start_trace(trace_name=trace_name, trace_id=trace_id, session=session)
-        self.trace = {
-            "name": trace_name,
-            "id": trace_id,
+    ) -> Iterator[TraceContext]:
+        """Context manager for mock trace."""
+        # Set base class state
+        self.trace_name = trace_context.name
+        self.trace_id = trace_context.id
+        self.session = session
+
+        # Create mock trace
+        self._trace_data = {
+            "name": trace_context.name,
+            "id": trace_context.id,
             "session_id": session.id,
             "user_id": session.participant.identifier,
             "inputs": inputs or {},
             "metadata": metadata or {},
+            "ended": False,
         }
 
-    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        super().end_trace(outputs=outputs, error=error)
+        error_to_record: Exception | None = None
 
-        if not self.trace:
-            raise Exception("Trace has not been started.")
-        self.trace["outputs"] = outputs
-        self.trace["error"] = error
-        self.trace["ended"] = True
+        try:
+            yield trace_context
+        except Exception as e:
+            error_to_record = e
+            raise
+        finally:
+            # Get outputs from the context object
+            outputs = trace_context.outputs if trace_context.outputs else None
 
-    def start_span(
+            # Mark as ended and store outputs/error
+            self._trace_data["outputs"] = outputs
+            self._trace_data["error"] = error_to_record
+            self._trace_data["ended"] = True
+
+            # Reset state
+            self.trace_name = None
+            self.trace_id = None
+            self.session = None
+
+    @contextmanager
+    def span(
         self,
-        span_id: UUID,
-        span_name: str,
+        span_context: TraceContext,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
         level: SpanLevel = "DEFAULT",
-    ) -> None:
-        self.spans[span_id] = {
-            "name": span_name,
+    ) -> Iterator[TraceContext]:
+        """Context manager for mock span."""
+        # Create mock span
+        self.spans[span_context.id] = {
+            "name": span_context.name,
             "inputs": inputs,
             "metadata": metadata or {},
             "level": level,
+            "ended": False,
         }
 
-    def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        span = self.spans[span_id]
-        span["outputs"] = outputs or {}
-        span["error"] = str(error) if error else None
-        span["ended"] = True
+        error_to_record: Exception | None = None
+
+        try:
+            yield span_context
+        except Exception as e:
+            error_to_record = e
+            raise
+        finally:
+            # Get outputs from the context object
+            outputs = span_context.outputs if span_context.outputs else {}
+
+            # Mark as ended and store outputs/error
+            span = self.spans[span_context.id]
+            span["outputs"] = outputs
+            span["error"] = str(error_to_record) if error_to_record else None
+            span["ended"] = True
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
         return MagicMock()
 
     def get_trace_metadata(self) -> dict[str, str]:
-        return {"trace_id": str(self.trace["id"])}
+        return {"trace_id": str(self._trace_data["id"])}
 
     def add_trace_tags(self, tags: list[str]) -> None:
         self.tags = tags

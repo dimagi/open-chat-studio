@@ -4,15 +4,17 @@ import atexit
 import logging
 import threading
 import time
-from threading import RLock
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from langfuse.callback import CallbackHandler
-from langfuse.client import StatefulSpanClient, StatefulTraceClient
+from langfuse._client.get_client import _create_client_from_instance
+from langfuse._client.resource_manager import LangfuseResourceManager
+from langfuse.langchain import CallbackHandler
 
 from . import Tracer
-from .base import ServiceNotInitializedException, ServiceReentryException
+from .base import ServiceNotInitializedException, ServiceReentryException, TraceContext
 from .const import SpanLevel
 
 if TYPE_CHECKING:
@@ -36,119 +38,108 @@ class LangFuseTracer(Tracer):
     def __init__(self, type_, config: dict):
         super().__init__(type_, config)
         self.client = None
-        self.trace: StatefulTraceClient | None = None
-        self.spans: dict[UUID, StatefulSpanClient] = {}
+        self.trace_record = None
 
     @property
     def ready(self) -> bool:
-        return bool(self.trace)
+        return bool(self.trace_record)
 
-    def start_trace(
+    @contextmanager
+    def trace(
         self,
-        trace_name: str,
-        trace_id: UUID,
+        trace_context: TraceContext,
         session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
-        if self.trace:
+    ) -> Iterator[TraceContext]:
+        """Context manager for Langfuse trace lifecycle.
+
+        Acquires a Langfuse client from ClientManager, creates a trace,
+        and ensures the client is flushed on exit.
+        """
+        # Check for reentry
+        if self.trace_record:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        super().start_trace(trace_name, trace_id, session, inputs)
+        self.session = session
 
+        # Get client and create trace
         self.client = client_manager.get(self.config)
-        self.trace = self.client.trace(
-            name=trace_name,
-            session_id=str(session.external_id),
-            user_id=session.participant.identifier,
-            input=inputs,
-            metadata=metadata,
-        )
+        try:
+            with self.client.start_as_current_span(
+                name=trace_context.name,
+                input=inputs,
+                metadata=metadata,
+            ) as trace:
+                self.trace_record = trace
+                self.trace_record.update_trace(
+                    session_id=str(session.external_id),
+                    user_id=session.participant.identifier,
+                )
 
-    def end_trace(self, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        super().end_trace(outputs=outputs, error=error)
-        if not self.ready:
-            raise ServiceNotInitializedException("Service not initialized.")
+                yield trace_context
 
-        if outputs or error:
-            outputs = outputs or {}
-            outputs = {**outputs, "error": str(error)} if error else outputs
-            self.trace.update(output=outputs)
+                # Update trace with outputs if any
+                if outputs := trace_context.outputs:
+                    trace.update(output=outputs.copy())
+        finally:
+            if self.trace_record:
+                self.client.flush()
 
-        self.client.flush()
-        self.client = None
-        self.trace = None
-        self.spans.clear()
+            # Reset state
+            self.client = None
+            self.trace_record = None
+            self.session = None
 
-    def start_span(
+    @contextmanager
+    def span(
         self,
-        span_id: UUID,
-        span_name: str,
+        span_context: TraceContext,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
         level: SpanLevel = "DEFAULT",
-    ) -> None:
+    ) -> Iterator[TraceContext]:
+        """Context manager for Langfuse span lifecycle.
+
+        Creates a nested span under the current observation (last span or root trace).
+        """
         if not self.ready:
+            yield span_context
             return
 
-        content_span = {
-            "id": str(span_id),
-            "name": span_name,
-            "input": inputs,
-            "metadata": metadata or {},
-            "level": level,
-        }
+        with self.client.start_as_current_span(
+            name=span_context.name,
+            input=inputs,
+            metadata=metadata,
+            level=level,
+        ) as span:
+            yield span_context
+            if output := span_context.outputs:
+                span.update(output=output.copy())
 
-        self.spans[span_id] = self._get_current_observation().span(**content_span)
-
-    def end_span(self, span_id: UUID, outputs: dict[str, Any] | None = None, error: Exception | None = None) -> None:
-        if not self.ready:
-            return
-
-        span = self.spans.pop(span_id, None)
-        if span:
-            output: dict = {}
-            output |= outputs or {}
-            output |= {"error": str(error)} if error else {}
-
-            content = {
-                "output": output,
-                "status_message": str(error) if error else None,
-                "level": "ERROR" if error else None,
-            }
-            span.end(**content)
-
-    def get_langchain_callback(self) -> BaseCallbackHandler:
+    def get_langchain_callback(self) -> BaseCallbackHandler | None:
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
-        return LangfuseCallbackHandler(stateful_client=self._get_current_observation(), update_stateful_client=False)
+        if self.config and self.config.get("public_key"):
+            public_key = self.config.get("public_key")
+            return LangfuseCallbackHandler(public_key=public_key)
+        return None
 
     def get_trace_metadata(self) -> dict[str, str]:
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
         return {
-            "trace_id": self.trace.id,
-            "trace_url": self.trace.get_trace_url(),
+            "trace_id": self.trace_record.trace_id,
+            "trace_url": self.client.get_trace_url(trace_id=self.trace_record.trace_id),
             "trace_provider": self.type,
         }
-
-    def _get_current_observation(self) -> StatefulTraceClient | StatefulSpanClient:
-        """
-        Returns the most recent active span if one exists, otherwise returns the root trace.
-        This ensures new spans are properly nested under their parent spans.
-        """
-        if self.spans:
-            last_span = next(reversed(self.spans))
-            return self.spans[last_span]
-        else:
-            return self.trace
 
     def add_trace_tags(self, tags: list[str]) -> None:
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
-        self.trace.update(tags=tags)
+        self.trace_record.update(tags=tags)
 
     def set_output_message_id(self, output_message_id: str) -> None:
         pass
@@ -163,24 +154,24 @@ class ClientManager:
     certain amount of time."""
 
     def __init__(self, stale_timeout=300, prune_interval=60, max_clients=20) -> None:
-        self.clients: dict[int, tuple[float, Any]] = {}
+        self.key_timestamps: dict[str, float] = {}
         self.stale_timeout = stale_timeout
         self.max_clients = max_clients
         self.prune_interval = prune_interval
-        self.lock = RLock()
         self._start_prune_thread()
 
     def get(self, config: dict) -> Langfuse:
         from langfuse import Langfuse
 
-        key = hash(frozenset(config.items()))
-        with self.lock:
-            if key not in self.clients:
-                logger.debug("Creating new client with key '%s'", key)
-                client = Langfuse(**config)
+        public_key = config.get("public_key")
+        with LangfuseResourceManager._lock:
+            active_instances = LangfuseResourceManager._instances
+            if target_instance := active_instances.get(public_key, None):
+                client = _create_client_from_instance(target_instance, public_key)
             else:
-                client = self.clients[key][1]
-            self.clients[key] = (time.time(), client)
+                logger.debug("Creating new Langfuse client with public_key '%s'", public_key)
+                client = Langfuse(**config)
+            self.key_timestamps[public_key] = time.time()
         return client
 
     def _start_prune_thread(self):
@@ -193,38 +184,37 @@ class ClientManager:
             self._prune_stale()
 
     def _prune_stale(self):
-        if not self.clients:
+        if not self.key_timestamps:
             return
 
         logger.debug("Pruning clients...")
-        for key in list(self.clients.keys()):
-            timestamp, client = self.clients[key]
+        for public_key in list(self.key_timestamps.keys()):
+            timestamp = self.key_timestamps[public_key]
             if time.time() - timestamp > self.stale_timeout:
-                logger.debug("Pruning old client with key '%s'", key)
-                self._remove_client(key, client)
+                logger.debug("Pruning old client with public_key '%s'", public_key)
+                self._remove_client(public_key)
 
-        if len(self.clients) > self.max_clients:
+        if len(self.key_timestamps) > self.max_clients:
             # remove the oldest clients until we are below the max
-            sorted_clients = sorted(self.clients.items(), key=lambda x: x[1][0])
-            clients_to_remove = sorted_clients[: len(self.clients) - self.max_clients]
-            logger.debug("Pruned %d clients above max limit", len(clients_to_remove))
-            for key, (_, client) in clients_to_remove:
-                self._remove_client(key, client)
+            sorted_keys = sorted(self.key_timestamps.items(), key=lambda x: x[1])
+            keys_to_remove = sorted_keys[: len(self.key_timestamps) - self.max_clients]
+            logger.debug("Pruned %d clients above max limit", len(keys_to_remove))
+            for public_key, _ in keys_to_remove:
+                self._remove_client(public_key)
 
-    def _remove_client(self, key, client):
-        with self.lock:
-            self.clients.pop(key)
-        client.shutdown()
+    def _remove_client(self, public_key):
+        with LangfuseResourceManager._lock:
+            active_instances = LangfuseResourceManager._instances
+            if target_instance := active_instances.pop(public_key, None):
+                target_instance.shutdown()
+            self.key_timestamps.pop(public_key)
 
     def shutdown(self):
-        if not self.clients:
-            return
-
-        with self.lock:
-            logger.debug("Shutting down all langfuse clients (%s)", len(self.clients))
-            for _key, (_, client) in self.clients.items():
-                client.shutdown()
-            self.clients = {}
+        if self.key_timestamps:
+            logger.debug("Shutting down all langfuse clients (%s)", len(self.key_timestamps))
+        with LangfuseResourceManager._lock:
+            LangfuseResourceManager.reset()
+            self.key_timestamps.clear()
 
 
 client_manager = ClientManager()
@@ -249,14 +239,6 @@ class LangfuseCallbackHandler(CallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
-        if self.runs.get(run_id):
-            self.runs[run_id].event(name=name, input=data, metadata=metadata)
-            return
-
-        if self.root_span is not None:
-            self.root_span.event(name=name, input=data, metadata=metadata)
-            return
-
-        if self.trace is not None:
-            self.trace.event(name=name, input=data, metadata=metadata)
-            return
+        if span := self._get_parent_observation(run_id):
+            span.create_event(name=name, input=data, metadata=metadata)
+        return None

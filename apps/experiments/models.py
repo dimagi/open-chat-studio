@@ -1866,12 +1866,12 @@ class ExperimentSession(BaseTeamModel):
                     session=self,
                     inputs={"input": instruction_prompt},
                     metadata=trace_info.metadata,
-                ):
+                ) as span:
                     bot_message = self._bot_prompt_for_user(
                         instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
                     )
                     self.try_send_message(message=bot_message)
-                    trace_service.set_current_span_outputs({"response": bot_message})
+                    span.set_outputs({"response": bot_message})
                     trace_info = trace_service.get_trace_metadata()
                 return trace_info
         except Exception as e:
