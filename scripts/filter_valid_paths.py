@@ -11,15 +11,39 @@ Usage:
 The script uses Django's URL resolver to fetch all defined URL patterns and matches
 them against the paths in the input CSV file. Valid paths are written to the output CSV file.
 
-The CSV should have a header row and the script will try to identify the column containing the URL paths.
-The following headers are considered for the URL path column:
-    - path
-    - url
-    - url_path
-    - pathname
-    - route
+Deduplication:
+    The script deduplicates rows based on the combination of (Django URL pattern, WAF rule).
+    This means that multiple URLs with different variable parts (e.g., UUIDs) that match the
+    same Django URL pattern will be combined into a single row, keeping the one with the
+    highest hit count.
 
-If none of these headers are found, the script will default to using the first column as the URL path.
+CloudWatch Logs Insights Query:
+    To export WAF logs for filtering, use this query in CloudWatch Logs Insights:
+
+    Log group: aws-waf-logs-chatbots-prod-waf-logs
+
+    Query:
+        fields httpRequest.uri, ruleGroupList.0.terminatingRule.ruleId,
+               ruleGroupList.0.terminatingRule.action,
+               ruleGroupList.0.terminatingRule.ruleMatchDetails.0.conditionType
+        | filter ispresent(ruleGroupList.0.terminatingRule.ruleId)
+        | stats count(*) as hitCount by httpRequest.uri,
+                ruleGroupList.0.terminatingRule.ruleId,
+                ruleGroupList.0.terminatingRule.ruleMatchDetails.0.conditionType
+        | sort hitCount desc
+
+    Export the results as CSV and use as input to this script.
+
+CSV Format:
+    The CSV should have a header row and the script will try to identify the columns:
+    - URL path column: path, url, url_path, pathname, route, or httpRequest.uri
+    - Rule column: any column containing "rule" (e.g., ruleGroupList.0.terminatingRule.ruleId)
+    - Hit count column: hitCount, hit_count, count, or hits
+
+    If columns are not auto-detected, the script defaults to:
+    - First column for URL path
+    - Second column for rule
+    - Last column for hit count
 """
 
 import csv
@@ -297,7 +321,8 @@ def main():
 
             path_column = None
             for i, col_name in enumerate(header):
-                if col_name.lower() in ["path", "url", "url_path", "pathname", "route"]:
+                col_lower = col_name.lower()
+                if col_lower in ["path", "url", "url_path", "pathname", "route"] or col_lower.endswith(".uri"):
                     path_column = i
                     break
 
