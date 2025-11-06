@@ -7,6 +7,7 @@ from django.db import transaction
 from apps.service_providers.llm_service.model_parameters import (
     AnthropicNonReasoningParameters,
     AnthropicReasoningParameters,
+    ClaudeHaikuLatestParameters,
     GPT5Parameters,
     GPT5ProParameters,
     OpenAIReasoningParameters,
@@ -48,7 +49,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-opus-4-20250514", k(200), is_translation_default=True, parameters=AnthropicReasoningParameters),
         Model("claude-3-7-sonnet-20250219", k(200), parameters=AnthropicNonReasoningParameters),
         Model("claude-3-5-sonnet-latest", k(200), parameters=AnthropicNonReasoningParameters),
-        Model("claude-3-5-haiku-latest", k(200), is_default=True, parameters=AnthropicNonReasoningParameters),
+        Model("claude-3-5-haiku-latest", k(200), is_default=True, parameters=ClaudeHaikuLatestParameters),
         Model("claude-3-opus-latest", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
         Model("claude-2.0", k(100), deprecated=True, parameters=AnthropicNonReasoningParameters),
         Model("claude-2.1", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),

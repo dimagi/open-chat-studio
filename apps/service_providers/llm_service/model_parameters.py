@@ -93,6 +93,16 @@ class AnthropicBaseParameters(LLMModelParamBase):
         return _validate_token_limit(value, info, strictly_less_than=True)
 
 
+class ClaudeHaikuLatestParameters(AnthropicBaseParameters):
+    max_tokens: int = Field(
+        title="Max Output Tokens",
+        default=8192,
+        description="The maximum number of tokens to generate in the completion.",
+        ge=1,
+        le=8192,
+    )
+
+
 class AnthropicNonReasoningParameters(AnthropicBaseParameters):
     top_k: int = Field(
         title="Top K",
