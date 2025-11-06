@@ -27,6 +27,28 @@ def attach_session_middleware_to_request(request):
     request.session.save()
 
 
+def create_authenticated_request(team, user, url, query_params=None):
+    """Helper to create an authenticated request with all necessary attributes."""
+    factory = RequestFactory()
+    request = factory.get(url, query_params or {})
+    request.user = user
+    request.team = team
+    request.team_membership = get_team_membership_for_request(request)
+    attach_session_middleware_to_request(request)
+    return request
+
+
+def create_view_instance(team, user, chatbot, query_params=None):
+    """Helper to create a configured view instance."""
+    url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": chatbot.id})
+    request = create_authenticated_request(team, user, url, query_params)
+
+    view = ChatbotSessionsTableView()
+    view.request = request
+    view.kwargs = {"team_slug": team.slug, "experiment_id": chatbot.id}
+    return view
+
+
 @pytest.fixture()
 def chatbot_with_sessions(db):
     """Create a chatbot with multiple sessions containing messages and tags."""
@@ -73,14 +95,8 @@ class TestChatbotSessionsTableView:
         user = data["user"]
         chatbot = data["chatbot"]
 
-        factory = RequestFactory()
-        request = factory.get(
-            reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": chatbot.id})
-        )
-        request.user = user
-        request.team = team
-        request.team_membership = get_team_membership_for_request(request)
-        attach_session_middleware_to_request(request)
+        url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": chatbot.id})
+        request = create_authenticated_request(team, user, url)
 
         view = ChatbotSessionsTableView.as_view()
         response = view(request, team_slug=team.slug, experiment_id=chatbot.id)
@@ -91,23 +107,8 @@ class TestChatbotSessionsTableView:
     def test_table_data_includes_message_count_annotation(self, chatbot_with_sessions):
         """Test that table data includes the message_count annotation."""
         data = chatbot_with_sessions
-        team = data["team"]
-        user = data["user"]
-        chatbot = data["chatbot"]
         sessions = data["sessions"]
-
-        factory = RequestFactory()
-        request = factory.get(
-            reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": chatbot.id})
-        )
-        request.user = user
-        request.team = team
-        request.team_membership = get_team_membership_for_request(request)
-        attach_session_middleware_to_request(request)
-
-        view = ChatbotSessionsTableView()
-        view.request = request
-        view.kwargs = {"team_slug": team.slug, "experiment_id": chatbot.id}
+        view = create_view_instance(data["team"], data["user"], data["chatbot"])
 
         # Get table data which should include annotations
         table_data = list(view.get_table_data())
@@ -129,23 +130,7 @@ class TestChatbotSessionsTableView:
     def test_table_data_includes_last_message_annotation(self, chatbot_with_sessions):
         """Test that table data includes the last_message_created_at annotation."""
         data = chatbot_with_sessions
-        team = data["team"]
-        user = data["user"]
-        chatbot = data["chatbot"]
-
-        factory = RequestFactory()
-        request = factory.get(
-            reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": chatbot.id})
-        )
-        request.user = user
-        request.team = team
-        request.team_membership = get_team_membership_for_request(request)
-        attach_session_middleware_to_request(request)
-
-        view = ChatbotSessionsTableView()
-        view.request = request
-        view.kwargs = {"team_slug": team.slug, "experiment_id": chatbot.id}
-
+        view = create_view_instance(data["team"], data["user"], data["chatbot"])
         table_data = list(view.get_table_data())
 
         # Verify last_message_created_at annotation is present
@@ -156,24 +141,8 @@ class TestChatbotSessionsTableView:
     def test_table_data_includes_experiment_versions_annotation(self, chatbot_with_sessions):
         """Test that table data includes the experiment_versions annotation."""
         data = chatbot_with_sessions
-        team = data["team"]
-        user = data["user"]
-        chatbot = data["chatbot"]
         sessions = data["sessions"]
-
-        factory = RequestFactory()
-        request = factory.get(
-            reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": chatbot.id})
-        )
-        request.user = user
-        request.team = team
-        request.team_membership = get_team_membership_for_request(request)
-        attach_session_middleware_to_request(request)
-
-        view = ChatbotSessionsTableView()
-        view.request = request
-        view.kwargs = {"team_slug": team.slug, "experiment_id": chatbot.id}
-
+        view = create_view_instance(data["team"], data["user"], data["chatbot"])
         table_data = list(view.get_table_data())
 
         # Create a mapping of session IDs to their expected version tags
@@ -195,22 +164,7 @@ class TestChatbotSessionsTableView:
         until get_table_data() is called.
         """
         data = chatbot_with_sessions
-        team = data["team"]
-        user = data["user"]
-        chatbot = data["chatbot"]
-
-        factory = RequestFactory()
-        request = factory.get(
-            reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": chatbot.id})
-        )
-        request.user = user
-        request.team = team
-        request.team_membership = get_team_membership_for_request(request)
-        attach_session_middleware_to_request(request)
-
-        view = ChatbotSessionsTableView()
-        view.request = request
-        view.kwargs = {"team_slug": team.slug, "experiment_id": chatbot.id}
+        view = create_view_instance(data["team"], data["user"], data["chatbot"])
 
         # Get the base queryset (used for counting)
         queryset = view.get_queryset()
@@ -231,15 +185,8 @@ class TestChatbotSessionsTableView:
         chatbot = data["chatbot"]
 
         # Request with pagination (page size 2)
-        factory = RequestFactory()
-        request = factory.get(
-            reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": chatbot.id}),
-            {"per_page": "2"},
-        )
-        request.user = user
-        request.team = team
-        request.team_membership = get_team_membership_for_request(request)
-        attach_session_middleware_to_request(request)
+        url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": chatbot.id})
+        request = create_authenticated_request(team, user, url, {"per_page": "2"})
 
         view = ChatbotSessionsTableView.as_view()
         response = view(request, team_slug=team.slug, experiment_id=chatbot.id)
@@ -265,14 +212,8 @@ class TestChatbotSessionsTableView:
         user = team_with_users.members.first()
         chatbot = ChatbotFactory(team=team_with_users, owner=user)
 
-        factory = RequestFactory()
-        request = factory.get(
-            reverse("chatbots:sessions-list", kwargs={"team_slug": team_with_users.slug, "experiment_id": chatbot.id})
-        )
-        request.user = user
-        request.team = team_with_users
-        request.team_membership = get_team_membership_for_request(request)
-        attach_session_middleware_to_request(request)
+        url = reverse("chatbots:sessions-list", kwargs={"team_slug": team_with_users.slug, "experiment_id": chatbot.id})
+        request = create_authenticated_request(team_with_users, user, url)
 
         view = ChatbotSessionsTableView.as_view()
         response = view(request, team_slug=team_with_users.slug, experiment_id=chatbot.id)
@@ -292,19 +233,7 @@ class TestChatbotSessionsTableView:
             experiment=chatbot, team=team_with_users, participant=ParticipantFactory(team=team_with_users)
         )
 
-        factory = RequestFactory()
-        request = factory.get(
-            reverse("chatbots:sessions-list", kwargs={"team_slug": team_with_users.slug, "experiment_id": chatbot.id})
-        )
-        request.user = user
-        request.team = team_with_users
-        request.team_membership = get_team_membership_for_request(request)
-        attach_session_middleware_to_request(request)
-
-        view = ChatbotSessionsTableView()
-        view.request = request
-        view.kwargs = {"team_slug": team_with_users.slug, "experiment_id": chatbot.id}
-
+        view = create_view_instance(team_with_users, user, chatbot)
         table_data = list(view.get_table_data())
 
         assert len(table_data) == 1
@@ -318,23 +247,7 @@ class TestChatbotSessionsTableView:
     def test_chatbot_column_hidden_for_single_chatbot_view(self, chatbot_with_sessions):
         """Test that the chatbot column is hidden when viewing a specific chatbot's sessions."""
         data = chatbot_with_sessions
-        team = data["team"]
-        user = data["user"]
-        chatbot = data["chatbot"]
-
-        factory = RequestFactory()
-        request = factory.get(
-            reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": chatbot.id})
-        )
-        request.user = user
-        request.team = team
-        request.team_membership = get_team_membership_for_request(request)
-        attach_session_middleware_to_request(request)
-
-        view = ChatbotSessionsTableView()
-        view.request = request
-        view.kwargs = {"team_slug": team.slug, "experiment_id": chatbot.id}
-
+        view = create_view_instance(data["team"], data["user"], data["chatbot"])
         table = view.get_table()
 
         # The chatbot column should be excluded when viewing a specific chatbot
