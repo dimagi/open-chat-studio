@@ -12,6 +12,57 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 - **AI/ML**: LangChain, OpenAI, Anthropic, Google Gemini
 - **Package Management**: uv (Python), npm (Node.js)
 
+## Getting Started
+
+### Quick Start
+
+For first-time setup or when starting a new development session, use the bootstrap script:
+
+```bash
+./bootstrap.sh
+```
+
+This script will:
+- Check if Python 3.13+ is installed
+- Check if Node.js 18+ and npm are installed
+- Install UV if not already present
+- Check for Docker, PostgreSQL, and Redis
+- Run `uv sync --frozen --dev` to install Python dependencies
+- Run `npm install` to install Node.js dependencies
+- Verify environment configuration
+
+**Note:** The bootstrap script always runs `uv sync` and `npm install` to ensure dependencies are up to date, even if the tools are already installed.
+
+After running the bootstrap script, follow the next steps shown in the output to:
+1. Configure your `.env` file
+2. Start Docker services (PostgreSQL and Redis)
+3. Run database migrations
+4. Start the development server
+
+### Manual Setup
+
+If you prefer manual setup or need to install specific components:
+
+```bash
+# Install UV
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Python dependencies
+uv sync --frozen --dev
+
+# Install Node.js dependencies
+npm install
+
+# Start services
+inv up
+
+# Run migrations
+python manage.py migrate
+
+# Start development server
+inv runserver
+```
+
 ## Development Commands
 
 ### Backend (Django)
