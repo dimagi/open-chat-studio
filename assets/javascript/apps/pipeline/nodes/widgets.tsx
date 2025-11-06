@@ -717,7 +717,8 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
 
   const updateLLMParamValue = (event: ChangeEvent<HTMLSelectElement | HTMLTextAreaElement | HTMLInputElement>) => {
     const paramName = event.target.name;
-    const paramValue = event.target.value;
+    const {type} = event.target;
+    const paramValue = type === 'checkbox' ? (event.target as HTMLInputElement).checked : event.target.value;
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
         next.data.params.llm_model_parameters = {...old.data.params.llm_model_parameters, [paramName]: paramValue};
