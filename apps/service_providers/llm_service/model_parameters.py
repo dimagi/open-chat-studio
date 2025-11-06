@@ -34,22 +34,6 @@ class LLMModelParamBase(BaseModel):
     pass
 
 
-def _validate_token_limit(value: int, info, strictly_less_than: bool = False) -> int:
-    value = int(value)
-    model_max_token_limit = info.context.get("model_max_token_limit")
-    if strictly_less_than and value >= model_max_token_limit:
-        raise PydanticCustomError(
-            "invalid_model_parameters",
-            f"Tokens must be less than the model's max token limit of {model_max_token_limit}",
-        )
-    elif value > model_max_token_limit:
-        raise PydanticCustomError(
-            "invalid_model_parameters",
-            f"Tokens cannot be more than the model's max token limit of {model_max_token_limit}",
-        )
-    return value
-
-
 class OpenAIReasoningParameters(LLMModelParamBase):
     effort: OpenAIReasoningEffortParameter = Field(
         title="Reasoning Effort",
@@ -88,10 +72,6 @@ class AnthropicBaseParameters(LLMModelParamBase):
         ge=1,
     )
 
-    @field_validator("max_tokens", mode="before")
-    def ensure_value_is_less_than_model_max(cls, value: int, info):
-        return _validate_token_limit(value, info, strictly_less_than=True)
-
 
 class ClaudeHaikuLatestParameters(AnthropicBaseParameters):
     max_tokens: int = Field(
@@ -129,7 +109,19 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
 
     @field_validator("budget_tokens", mode="before")
     def ensure_value_is_less_than_model_max(cls, value: int, info):
-        return _validate_token_limit(value, info)
+        value = int(value)
+        model_max_token_limit = info.context.get("model_max_token_limit")
+        if value >= model_max_token_limit:
+            raise PydanticCustomError(
+                "invalid_model_parameters",
+                f"Tokens must be less than the model's max token limit of {model_max_token_limit}",
+            )
+        elif value >= info.data.get("max_tokens"):
+            raise PydanticCustomError(
+                "invalid_model_parameters",
+                f"Tokens must be less than the model's max output token limit of {info.data.get('max_tokens')}",
+            )
+        return value
 
     @field_validator("thinking", mode="before")
     def check_temperature(value: bool, info):
