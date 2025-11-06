@@ -4,14 +4,15 @@ import logging
 import time
 import uuid
 from collections import defaultdict
-from contextlib import contextmanager
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID
 
 import sentry_sdk
 from langchain_core.runnables import RunnableConfig
 
-from .base import Tracer
+from .base import TraceContext, Tracer
 from .callback import wrap_callback
 
 if TYPE_CHECKING:
@@ -28,7 +29,7 @@ class TracingService:
         self._tracers = tracers
 
         self.outputs: dict[UUID, dict] = defaultdict(dict)
-        self.span_stack: list[tuple[UUID, str]] = []
+        self.span_stack: list[TraceContext] = []
 
         self.trace_name: str | None = None
         self.trace_id: UUID | None = None
@@ -74,19 +75,18 @@ class TracingService:
         session: ExperimentSession,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
-        input_message_id: int | None = None,
-    ):
+    ) -> Iterator[TraceContext]:
         """Context manager for tracing or spanning.
 
         This context manager will start a trace if there isn't already one,
         otherwise it will start a span.
         """
         if not self.trace_id:
-            with self.trace(name, session, inputs, metadata):
-                yield self
+            with self.trace(name, session, inputs, metadata) as ctx:
+                yield ctx
         else:
-            with self.span(name, inputs, metadata):
-                yield self
+            with self.span(name, inputs, metadata) as ctx:
+                yield ctx
 
     @contextmanager
     def trace(
@@ -95,43 +95,38 @@ class TracingService:
         session: ExperimentSession,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, str] | None = None,
-    ):
+    ) -> Iterator[TraceContext]:
+        """Context manager for tracing."""
         self.trace_id = uuid.uuid4()
         self.trace_name = trace_name
         self.session = session
         self._start_time = time.time()
 
+        # Create context object for this trace
+        trace_context = TraceContext(id=self.trace_id, name=trace_name)
+
         try:
-            self._start_traces(inputs, metadata)
-            yield self
-        except Exception as e:
-            self._end_traces(e)
-            raise
-        else:
-            self._end_traces()
+            with ExitStack() as stack:
+                # Enter all tracer contexts
+                for tracer in self._tracers:
+                    try:
+                        stack.enter_context(
+                            tracer.trace(
+                                trace_context=trace_context,
+                                session=session,
+                                inputs=inputs,
+                                metadata=metadata,
+                            )
+                        )
+                    except Exception:
+                        logger.exception("Error initializing tracer %s", tracer.__class__.__name__)
 
-    def _start_traces(self, inputs: dict[str, Any] | None = None, metadata: dict[str, str] | None = None):
-        for tracer in self._tracers:
-            try:
-                tracer.start_trace(
-                    trace_name=self.trace_name,
-                    trace_id=self.trace_id,
-                    session=self.session,
-                    inputs=inputs,
-                    metadata=metadata,
-                )
-            except Exception:  # noqa BLE001
-                logger.exception("Error initializing tracer %s", tracer.__class__.__name__)
+                sentry_sdk.set_context("Traces", self.get_trace_metadata())
 
-        sentry_sdk.set_context("Traces", self.get_trace_metadata())
-
-    def _end_traces(self, error: Exception | None = None):
-        for tracer in self._active_tracers:
-            try:
-                tracer.end_trace(self.outputs.get(self.trace_id), error)
-            except Exception:  # noqa BLE001
-                logger.exception("Error ending tracer %s", tracer.__class__.__name__)
-        self._reset()
+                # Yield the context object to user code
+                yield trace_context
+        finally:
+            self._reset()
 
     @contextmanager
     def span(
@@ -139,35 +134,37 @@ class TracingService:
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
-    ):
-        if not self.activated:
-            yield self
-            return
-
+    ) -> Iterator[TraceContext]:
+        """Context manager for spanning."""
+        # Create context object that will be passed to tracers and yielded to user
         span_id = uuid.uuid4()
-        self._start_span(
-            span_id,
-            span_name,
-            inputs,
-            metadata,
-        )
+        span_context = TraceContext(id=span_id, name=span_name)
 
-        try:
-            yield self
-        except Exception as e:
-            self._end_span(span_id, span_name, e)
-            raise
-        else:
-            self._end_span(span_id, span_name)
-
-    def set_current_span_outputs(
-        self,
-        outputs: dict[str, Any],
-    ) -> None:
         if not self.activated:
+            # Return a dummy context if not activated
+            yield span_context
             return
-        span_id, _ = self._get_current_span_info()
-        self.outputs[span_id] |= outputs or {}
+
+        self.span_stack.append(span_context)
+        try:
+            with ExitStack() as stack:
+                # Enter all tracer span contexts, passing the same context object
+                for tracer in self._active_tracers:
+                    try:
+                        stack.enter_context(
+                            tracer.span(
+                                span_context=span_context,
+                                inputs=inputs,
+                                metadata=metadata or {},
+                            )
+                        )
+                    except Exception:
+                        logger.exception(f"Error starting span {span_name} in tracer {tracer.__class__.__name__}")
+
+                # Yield the context object to user code
+                yield span_context
+        finally:
+            self.span_stack.pop()
 
     def get_langchain_callbacks(
         self, run_name_map: dict[str, str] = None, filter_patterns: list[str] = None
@@ -209,14 +206,14 @@ class TracingService:
         """
         extra_callbacks = callbacks or []
         tracer_callbacks = self.get_langchain_callbacks(run_name_map, filter_patterns)
-        _, span_name = self._get_current_span_info()
+        span_context = self._get_current_span_info()
         metadata = {}
         if self.session:
             metadata["participant-id"] = self.session.participant.identifier
             metadata["session-id"] = str(self.session.external_id)
 
         config = RunnableConfig(
-            run_name=f"{span_name or 'OCS'} run",
+            run_name=f"{span_context.name or 'OCS'} run",
             callbacks=tracer_callbacks + extra_callbacks,
             metadata=metadata,
         )
@@ -239,47 +236,6 @@ class TracingService:
 
         return {"trace_info": trace_info} if trace_info else {}
 
-    def _start_span(
-        self,
-        span_id: UUID,
-        span_name: str,
-        inputs: dict[str, Any],
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        if not self.activated:
-            return
-
-        self.span_stack.append((span_id, span_name))
-
-        for tracer in self._active_tracers:
-            try:
-                tracer.start_span(
-                    span_id=span_id,
-                    span_name=span_name,
-                    inputs=inputs,
-                    metadata=metadata or {},
-                )
-            except Exception:  # noqa BLE001
-                logger.exception(f"Error starting span {span_name}")
-
-    def _end_span(self, span_id: UUID, span_name: str, error: Exception | None = None) -> None:
-        if not self.activated:
-            return
-
-        popped_span_id, _ = self.span_stack.pop()
-        if popped_span_id != span_id:
-            logger.error("Span ID mismatch: expected %s, got %s", popped_span_id, span_id)
-
-        for tracer in self._active_tracers:
-            try:
-                tracer.end_span(
-                    span_id=span_id,
-                    outputs=self.outputs.get(span_id, None),
-                    error=error,
-                )
-            except Exception:  # noqa BLE001
-                logger.exception(f"Error ending span {span_name}")
-
     @property
     def _active_tracers(self) -> list[Tracer]:
         return [tracer for tracer in self._tracers if tracer.ready]
@@ -291,10 +247,10 @@ class TracingService:
         self.outputs = defaultdict(dict)
         self.span_stack = []
 
-    def _get_current_span_info(self) -> tuple[UUID, str]:
+    def _get_current_span_info(self) -> TraceContext:
         if self.span_stack:
             return self.span_stack[-1]
-        return self.trace_id, self.trace_name
+        return TraceContext(self.trace_id, self.trace_name)
 
     def add_output_message_tags_to_trace(self, tags: list[str]) -> None:
         if not self.activated or not tags:
