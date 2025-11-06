@@ -1,7 +1,6 @@
 import json
 import logging
 import unicodedata
-from functools import cached_property
 from typing import Annotated, Any, Literal, Self
 
 import tiktoken
@@ -149,7 +148,7 @@ class LLMResponseMixin(BaseModel):
     llm_model_parameters: dict[str, Any] = Field(default_factory=dict, json_schema_extra=UiSchema(widget=Widgets.none))
 
     @field_validator("llm_model_parameters", mode="before")
-    def ensure_dict(cls, value, info: FieldValidationInfo):
+    def ensure_default_parameters_are_present(cls, value, info: FieldValidationInfo):
         try:
             model = LlmProviderModel.objects.get(id=info.data.get("llm_provider_model_id"))
             if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
@@ -168,7 +167,7 @@ class LLMResponseMixin(BaseModel):
     def validate_llm_model(self):
         # Ensure model is not deprecated
         try:
-            model = self.llm_provider_model
+            model = self.get_llm_provider_model()
         except PipelineNodeBuildError as e:
             raise PydanticCustomError(
                 "invalid_model",
@@ -201,10 +200,6 @@ class LLMResponseMixin(BaseModel):
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
-
-    @cached_property
-    def llm_provider_model(self):
-        return self.get_llm_provider_model()
 
     def get_llm_provider_model(self):
         try:
