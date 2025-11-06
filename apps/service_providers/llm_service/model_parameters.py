@@ -95,9 +95,8 @@ class AnthropicNonReasoningParameters(AnthropicBaseParameters):
     top_k: int = Field(
         title="Top K",
         description="Only sample from the top K options for each subsequent token.",
-        default=0.0,
+        default=0,
         ge=0,
-        json_schema_extra=UiSchema(widget=Widgets.float),
     )
 
 
@@ -130,7 +129,7 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
         return value
 
     @field_validator("thinking", mode="before")
-    def check_temperature(value: bool, info):
+    def check_temperature(cls, value: bool, info):
         if value and info.context.get("temperature", 0) != 1:
             raise PydanticCustomError(
                 "invalid_model_parameters",
