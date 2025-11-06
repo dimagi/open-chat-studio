@@ -430,9 +430,10 @@ class AnthropicLlmService(LlmService):
         )
 
     def _get_model_kwargs(self, **kwargs) -> dict:
-        model_kwargs = {
-            "max_tokens": kwargs.get("max_tokens"),
-        }
+        model_kwargs = {}
+        if "max_tokens" in kwargs:
+            model_kwargs["max_tokens"] = kwargs["max_tokens"]
+
         if "top_k" in kwargs:
             model_kwargs["top_k"] = kwargs["top_k"]
 
