@@ -52,6 +52,8 @@ def create_view_instance(team, user, chatbot, query_params=None):
 @pytest.fixture()
 def chatbot_with_sessions(db):
     """Create a chatbot with multiple sessions containing messages and tags."""
+    # TODO: convert this to a class scoped fixture (requires manual DB cleanup)
+
     team_with_users = TeamWithUsersFactory.create()
     user = team_with_users.members.first()
     chatbot = ChatbotFactory(team=team_with_users, owner=user)
