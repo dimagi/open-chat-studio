@@ -316,34 +316,36 @@ check_node_deps() {
     fi
 }
 
-# Run all checks without installing anything
-run_check_mode() {
-    echo ""
-    info "Running system checks (read-only mode)..."
-    echo ""
-
+do_bootstrap() {
     # Check prerequisites
     check_python
     check_node
-    check_uv
     check_docker
     check_postgres
     check_redis
 
     echo ""
 
-    # Check dependencies
-    check_python_deps
-    check_node_deps
+    if [ "$CHECK_ONLY" = true ]; then
+      check_uv
+
+      # Check dependencies
+      check_python_deps
+      check_node_deps
+    else
+      install_uv
+
+      echo ""
+
+      # Install dependencies (prompt if not auto-confirm)
+      install_python_deps
+      install_node_deps
+    fi
 
     echo ""
 
     # Check environment
     check_env_file
-
-    echo ""
-    info "Check complete!"
-    echo ""
 }
 
 # Print next steps
@@ -388,7 +390,13 @@ main() {
 
     # If check-only mode, run checks and exit
     if [ "$CHECK_ONLY" = true ]; then
-        run_check_mode
+        echo ""
+        info "Running system checks (read-only mode)..."
+        echo ""
+        do_bootstrap
+        echo ""
+        info "Check complete!"
+        echo ""
         exit 0
     fi
 
@@ -422,28 +430,7 @@ main() {
     fi
     echo ""
 
-    # Check prerequisites
-    check_python
-    check_node
-    check_docker
-    check_postgres
-    check_redis
-
-    echo ""
-
-    # Install UV (checks first)
-    install_uv
-
-    echo ""
-
-    # Install dependencies (prompt if not auto-confirm)
-    install_python_deps
-    install_node_deps
-
-    echo ""
-
-    # Check environment
-    check_env_file
+    do_bootstrap
 
     # Print next steps
     print_next_steps
