@@ -19,19 +19,30 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 For first-time setup or when starting a new development session, use the bootstrap script:
 
 ```bash
+# Check system status without installing anything
+./scripts/bootstrap.sh --check
+
 # The script only runs if CLAUDE_CODE_REMOTE=true OR --force flag is provided
-./bootstrap.sh --force           # Interactive mode with confirmation prompts
-./bootstrap.sh --force -y        # Auto-confirm all prompts (non-interactive)
-./bootstrap.sh --help            # Show help and usage information
+./scripts/bootstrap.sh --force           # Interactive mode with confirmation prompts
+./scripts/bootstrap.sh --force -y        # Auto-confirm all prompts (non-interactive)
+./scripts/bootstrap.sh --help            # Show help and usage information
 
 # When running in Claude Code remote environment
-CLAUDE_CODE_REMOTE=true ./bootstrap.sh -y
+CLAUDE_CODE_REMOTE=true ./scripts/bootstrap.sh -y
 ```
 
 **Important:** The bootstrap script is designed for automated/remote environments and will skip execution unless:
 - The `CLAUDE_CODE_REMOTE` environment variable is set to `'true'`, OR
-- The `--force` flag is provided
+- The `--force` flag is provided, OR
+- The `--check` flag is provided (check mode only - read-only)
 
+**Check Mode:**
+Use `--check` to verify your system setup without installing anything. This is useful to:
+- See what's already installed
+- Identify missing dependencies
+- Verify your environment before running the full bootstrap
+
+**Installation Mode:**
 This script will:
 - Check if Python 3.13+ is installed
 - Check if Node.js 18+ and npm are installed
@@ -42,6 +53,7 @@ This script will:
 - Verify environment configuration
 
 **Flags:**
+- `-c, --check`: Check system status without installing anything (read-only)
 - `-f, --force`: Force the script to run (bypass environment check)
 - `-y, --yes`: Skip confirmation prompts (auto-confirm all actions)
 - `-h, --help`: Show help and usage information
