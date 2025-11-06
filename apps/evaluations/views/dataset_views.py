@@ -258,7 +258,7 @@ class DatasetSessionsSelectionJson(DatasetSessionsSelectionTableView):
 
     def get(self, request, *args, **kwargs):
         query_set = self.get_queryset()
-        session_keys = [session.external_id for session in query_set]
+        session_keys = list(query_set.values_list("external_id", flat=True))
         return JsonResponse(session_keys, safe=False)
 
 
