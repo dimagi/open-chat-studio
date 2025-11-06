@@ -62,7 +62,7 @@ class OpenAIReasoningWithVerbosityParameters(OpenAIReasoningParameters):
 class AnthropicBaseParameters(LLMModelParamBase):
     max_tokens: int = Field(
         title="Max Output Tokens",
-        default=64000,
+        default=32000,
         description="The maximum number of tokens to generate in the completion.",
         ge=1,
     )
