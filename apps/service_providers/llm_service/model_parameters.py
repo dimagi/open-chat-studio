@@ -52,6 +52,7 @@ class GPT5Parameters(LLMModelParamBase):
 
 
 class GPT5ProParameters(LLMModelParamBase):
+    # gpt-5-pro only supports high effort, which is also its default
     verbosity: OpenAIVerbosityParameter = Field(
         title="Verbosity",
         default="medium",
@@ -65,6 +66,7 @@ class AnthropicBaseParameters(LLMModelParamBase):
         default=32000,
         description="The maximum number of tokens to generate in the completion.",
         ge=1,
+        le=64000,
     )
 
 
@@ -75,6 +77,17 @@ class ClaudeHaikuLatestParameters(AnthropicBaseParameters):
         description="The maximum number of tokens to generate in the completion.",
         ge=1,
         le=8192,
+    )
+
+
+class ClaudeOpus4_20250514Parameters(AnthropicBaseParameters):
+    max_tokens: int = Field(
+        title="Max Output Tokens",
+        required=True,
+        default=32000,
+        description="The maximum number of tokens to generate in the completion.",
+        ge=1,
+        le=32000,
     )
 
 
@@ -103,15 +116,13 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
     )
 
     @field_validator("budget_tokens", mode="before")
-    def ensure_value_is_less_than_model_max(cls, value: int, info):
-        value = int(value)
-        model_max_token_limit = info.context.get("model_max_token_limit")
-        if value >= model_max_token_limit:
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                f"Tokens must be less than the model's max token limit of {model_max_token_limit}",
-            )
-        elif value >= info.data.get("max_tokens"):
+    def ensure_value_is_less_than_max_output_tokens(cls, value: int, info):
+        if not info.data.get("thinking", False):
+            # No need to validate if thinking is not enabled
+            return value
+
+        value = int(value or 0)
+        if value >= info.data.get("max_tokens", 0):
             raise PydanticCustomError(
                 "invalid_model_parameters",
                 f"Tokens must be less than the model's max output token limit of {info.data.get('max_tokens')}",

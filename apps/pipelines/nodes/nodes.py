@@ -185,7 +185,7 @@ class LLMResponseMixin(BaseModel):
         if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
             params_cls.model_validate(
                 self.llm_model_parameters,
-                context={"model_max_token_limit": model.max_token_limit, "temperature": self.llm_temperature},
+                context={"temperature": self.llm_temperature},
             )
 
         return self

@@ -8,6 +8,7 @@ from apps.service_providers.llm_service.model_parameters import (
     AnthropicNonReasoningParameters,
     AnthropicReasoningParameters,
     ClaudeHaikuLatestParameters,
+    ClaudeOpus4_20250514Parameters,
     GPT5Parameters,
     GPT5ProParameters,
     OpenAIReasoningParameters,
@@ -46,7 +47,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "anthropic": [
         Model("claude-sonnet-4-20250514", k(200), parameters=AnthropicReasoningParameters),
-        Model("claude-opus-4-20250514", k(200), is_translation_default=True, parameters=AnthropicReasoningParameters),
+        Model("claude-opus-4-20250514", k(200), is_translation_default=True, parameters=ClaudeOpus4_20250514Parameters),
         Model("claude-3-7-sonnet-20250219", k(200), parameters=AnthropicNonReasoningParameters),
         Model("claude-3-5-sonnet-latest", k(200), parameters=AnthropicNonReasoningParameters),
         Model("claude-3-5-haiku-latest", k(200), is_default=True, parameters=ClaudeHaikuLatestParameters),
