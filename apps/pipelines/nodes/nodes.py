@@ -157,7 +157,7 @@ class LLMResponseMixin(BaseModel):
                     value or {},
                     context={
                         "model_max_token_limit": model.max_token_limit,
-                        "temperature": info.data.get("llm_temperature", 0.7),
+                        "temperature": info.data.get("llm_temperature"),
                     },
                 ).model_dump()
         except (LlmProviderModel.DoesNotExist, Exception):
