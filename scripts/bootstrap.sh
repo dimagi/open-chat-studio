@@ -405,20 +405,6 @@ main() {
         echo ""
         info "Bootstrap script skipped."
         echo ""
-        echo "This script only runs when:"
-        echo "  1. The CLAUDE_CODE_REMOTE environment variable is set to 'true', OR"
-        echo "  2. The --force flag is provided"
-        echo ""
-        echo "To run this script:"
-        echo "  ./bootstrap.sh --force          # Run with confirmation prompts"
-        echo "  ./bootstrap.sh --force -y       # Run without prompts"
-        echo "  CLAUDE_CODE_REMOTE=true ./bootstrap.sh"
-        echo ""
-        echo "To check prerequisites without installing:"
-        echo "  ./bootstrap.sh --check"
-        echo ""
-        echo "Use --help for more information."
-        echo ""
         exit 0
     fi
 
