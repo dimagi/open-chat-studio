@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import Count, F, OuterRef, Q, Subquery
+from django.db.models import Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -224,13 +224,12 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         # Add expensive annotations only to paginated data
-        queryset = (
-            queryset.annotate(session_count=Subquery(session_count_subquery))
-            .annotate(participant_count=Subquery(participant_count_subquery))
-            .annotate(messages_count=Subquery(messages_count_subquery))
-            .annotate(last_message=Subquery(last_message_subquery))
-            .order_by(F("last_message").desc(nulls_last=True))
-        )
+        queryset = queryset.annotate(
+            session_count=Subquery(session_count_subquery, output_field=IntegerField()),
+            participant_count=Subquery(participant_count_subquery, output_field=IntegerField()),
+            messages_count=Subquery(messages_count_subquery, output_field=IntegerField()),
+            last_message=Subquery(last_message_subquery, output_field=DateTimeField()),
+        ).order_by(F("last_message").desc(nulls_last=True))
         return queryset
 
 
