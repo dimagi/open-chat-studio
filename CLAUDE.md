@@ -19,11 +19,18 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 For first-time setup or when starting a new development session, use the bootstrap script:
 
 ```bash
-./bootstrap.sh           # Interactive mode with confirmation prompts
-./bootstrap.sh -y        # Auto-confirm all prompts (non-interactive)
-./bootstrap.sh --yes     # Same as -y
-./bootstrap.sh --help    # Show help and usage information
+# The script only runs if CLAUDE_CODE_REMOTE=true OR --force flag is provided
+./bootstrap.sh --force           # Interactive mode with confirmation prompts
+./bootstrap.sh --force -y        # Auto-confirm all prompts (non-interactive)
+./bootstrap.sh --help            # Show help and usage information
+
+# When running in Claude Code remote environment
+CLAUDE_CODE_REMOTE=true ./bootstrap.sh -y
 ```
+
+**Important:** The bootstrap script is designed for automated/remote environments and will skip execution unless:
+- The `CLAUDE_CODE_REMOTE` environment variable is set to `'true'`, OR
+- The `--force` flag is provided
 
 This script will:
 - Check if Python 3.13+ is installed
@@ -33,6 +40,11 @@ This script will:
 - Prompt to run `uv sync --frozen --dev` to install Python dependencies
 - Prompt to run `npm install` to install Node.js dependencies
 - Verify environment configuration
+
+**Flags:**
+- `-f, --force`: Force the script to run (bypass environment check)
+- `-y, --yes`: Skip confirmation prompts (auto-confirm all actions)
+- `-h, --help`: Show help and usage information
 
 **Note:** In interactive mode (default), the script will ask for confirmation before making system changes. Use the `-y` or `--yes` flag to skip all prompts and auto-confirm all actions (useful for automated setups).
 

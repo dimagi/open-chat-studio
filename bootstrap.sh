@@ -9,8 +9,9 @@
 
 set -e  # Exit on error
 
-# Global flag for skipping prompts
+# Global flags
 SKIP_PROMPTS=false
+FORCE_RUN=false
 
 # Colors for output
 RED='\033[0;31m'
@@ -83,14 +84,28 @@ parse_args() {
                 SKIP_PROMPTS=true
                 shift
                 ;;
+            -f|--force)
+                FORCE_RUN=true
+                shift
+                ;;
             -h|--help)
                 echo "Usage: $0 [OPTIONS]"
                 echo ""
                 echo "Bootstrap script for Open Chat Studio development environment"
                 echo ""
+                echo "This script only runs if:"
+                echo "  - The CLAUDE_CODE_REMOTE environment variable is set to 'true', OR"
+                echo "  - The --force flag is provided"
+                echo ""
                 echo "Options:"
+                echo "  -f, --force  Force the script to run (bypass environment check)"
                 echo "  -y, --yes    Skip confirmation prompts (auto-confirm)"
                 echo "  -h, --help   Show this help message"
+                echo ""
+                echo "Examples:"
+                echo "  ./bootstrap.sh --force          # Force run with prompts"
+                echo "  ./bootstrap.sh --force -y       # Force run without prompts"
+                echo "  CLAUDE_CODE_REMOTE=true ./bootstrap.sh -y"
                 echo ""
                 exit 0
                 ;;
@@ -289,6 +304,25 @@ print_next_steps() {
 main() {
     # Parse command line arguments
     parse_args "$@"
+
+    # Check if script should run
+    if [ "$FORCE_RUN" != true ] && [ "${CLAUDE_CODE_REMOTE:-false}" != "true" ]; then
+        echo ""
+        info "Bootstrap script skipped."
+        echo ""
+        echo "This script only runs when:"
+        echo "  1. The CLAUDE_CODE_REMOTE environment variable is set to 'true', OR"
+        echo "  2. The --force flag is provided"
+        echo ""
+        echo "To run this script:"
+        echo "  ./bootstrap.sh --force          # Run with confirmation prompts"
+        echo "  ./bootstrap.sh --force -y       # Run without prompts"
+        echo "  CLAUDE_CODE_REMOTE=true ./bootstrap.sh"
+        echo ""
+        echo "Use --help for more information."
+        echo ""
+        exit 0
+    fi
 
     echo ""
     if [ "$SKIP_PROMPTS" = true ]; then
