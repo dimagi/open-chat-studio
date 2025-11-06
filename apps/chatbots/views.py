@@ -168,9 +168,35 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return table
 
     def get_queryset(self):
+        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
+        query_set = (
+            self.model.objects.get_all()
+            .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
+            .select_related("team", "owner")
+        )
+        show_archived = self.request.GET.get("show_archived") == "on"
+        if not show_archived:
+            query_set = query_set.filter(is_archived=False)
+
+        search = self.request.GET.get("search")
+        if search:
+            query_set = similarity_search(
+                query_set,
+                search_phase=search,
+                columns=["name", "description"],
+                extra_conditions=Q(owner__username__icontains=search),
+                score=0.1,
+            )
+        return query_set
+
+    def get_table_data(self):
+        """Add expensive annotations only to the paginated data, not for counting."""
         from apps.chat.models import ChatMessage
         from apps.experiments.models import ExperimentSession
 
+        queryset = super().get_table_data()
+
+        # Define subqueries (moved from get_queryset)
         session_count_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .values("experiment_id")
@@ -198,30 +224,15 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
             .values("created_at")[:1]
         )
 
-        query_set = (
-            self.model.objects.get_all()
-            .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
-            .select_related("team", "owner")
-            .annotate(session_count=Subquery(session_count_subquery))
+        # Add expensive annotations only to paginated data
+        queryset = (
+            queryset.annotate(session_count=Subquery(session_count_subquery))
             .annotate(participant_count=Subquery(participant_count_subquery))
             .annotate(messages_count=Subquery(messages_count_subquery))
             .annotate(last_message=Subquery(last_message_subquery))
             .order_by(F("last_message").desc(nulls_last=True))
         )
-        show_archived = self.request.GET.get("show_archived") == "on"
-        if not show_archived:
-            query_set = query_set.filter(is_archived=False)
-
-        search = self.request.GET.get("search")
-        if search:
-            query_set = similarity_search(
-                query_set,
-                search_phase=search,
-                columns=["name", "description"],
-                extra_conditions=Q(owner__username__icontains=search),
-                score=0.1,
-            )
-        return query_set
+        return queryset
 
 
 class CreateChatbot(CreateExperiment):
