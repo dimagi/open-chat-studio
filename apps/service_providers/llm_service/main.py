@@ -423,7 +423,7 @@ class AnthropicLlmService(LlmService):
         )
 
     def _get_model_kwargs(self, **kwargs) -> dict:
-        budget_tokens = kwargs.pop("budget_tokens", None)
+        budget_tokens = kwargs.pop("budget_tokens", 1024)
         if kwargs.pop("thinking", False):
             kwargs["thinking"] = {
                 "type": "enabled",
