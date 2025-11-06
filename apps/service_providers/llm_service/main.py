@@ -275,17 +275,10 @@ class OpenAIGenericService(LlmService):
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
     def _get_model_kwargs(self, **kwargs) -> dict:
-        extra_kwargs = {}
-        if "effort" in kwargs:
-            extra_kwargs = {"reasoning": {"effort": kwargs["effort"]}}
+        if effort := kwargs.pop("effort", None):
+            kwargs["reasoning"] = {"effort": effort}
 
-        if "verbosity" in kwargs:
-            extra_kwargs["verbosity"] = kwargs["verbosity"]
-
-        if "top_p" in kwargs and "max_output_tokens" in kwargs:
-            extra_kwargs = {"top_p": kwargs["top_p"], "max_tokens": kwargs["max_output_tokens"]}
-
-        return {"openai_api_key": self.openai_api_key, "openai_api_base": self.openai_api_base, **extra_kwargs}
+        return {"openai_api_key": self.openai_api_key, "openai_api_base": self.openai_api_base, **kwargs}
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
@@ -430,20 +423,14 @@ class AnthropicLlmService(LlmService):
         )
 
     def _get_model_kwargs(self, **kwargs) -> dict:
-        model_kwargs = {}
-        if "max_tokens" in kwargs:
-            model_kwargs["max_tokens"] = kwargs["max_tokens"]
-
-        if "top_k" in kwargs:
-            model_kwargs["top_k"] = kwargs["top_k"]
-
-        if kwargs.get("thinking", False):
-            model_kwargs["thinking"] = {
-                "type": "enabled" if kwargs["thinking"] else "disabled",
-                "budget_tokens": kwargs.get("budget_tokens"),
+        budget_tokens = kwargs.pop("budget_tokens", None)
+        if kwargs.pop("thinking", False):
+            kwargs["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": budget_tokens,
             }
 
-        return model_kwargs
+        return kwargs
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
