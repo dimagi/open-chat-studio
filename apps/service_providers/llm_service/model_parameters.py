@@ -7,6 +7,7 @@ from apps.pipelines.nodes.base import UiSchema, Widgets
 
 
 class OpenAIReasoningEffortParameter(TextChoices):
+    MINIMAL = "minimal", "Minimal"
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
     HIGH = "high", "High"
