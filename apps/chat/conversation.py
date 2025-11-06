@@ -276,7 +276,9 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
         )
     history_tokens = llm.get_num_tokens_from_messages(history)
     summary_tokens = (
-        llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+        # Use HumanMessage and not SystemMessage because the Anthropic count_tokens API does not process
+        # system messages.
+        llm.get_num_tokens_from_messages([HumanMessage(content=summary)])
         if summary
         else INITIAL_SUMMARY_TOKENS_ESTIMATE
     )
@@ -300,7 +302,7 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
         summary_token_limit = max_token_limit - history_tokens - input_message_tokens
 
         if summary := _get_new_summary(llm, pruned_memory, summary, model_token_limit=max_token_limit):
-            summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+            summary_tokens = llm.get_num_tokens_from_messages([HumanMessage(content=summary)])
             if summary_tokens > summary_token_limit:
                 summary, summary_token_limit = _reduce_summary_size(llm, summary, summary_token_limit)
         else:
@@ -344,9 +346,9 @@ def compress_chat_history_from_messages(
             "Compressed chat history to %s tokens (%s prompt + %s summary + %s history)",
             input_message_tokens
             + llm.get_num_tokens_from_messages(history)
-            + llm.get_num_tokens_from_messages([SystemMessage(content=summary)]),
+            + llm.get_num_tokens_from_messages([HumanMessage(content=summary)]),
             input_message_tokens,
-            llm.get_num_tokens_from_messages([SystemMessage(content=summary)]),
+            llm.get_num_tokens_from_messages([HumanMessage(content=summary)]),
             llm.get_num_tokens_from_messages(history),
         )
     except ChatException as e:
@@ -430,14 +432,14 @@ def _get_summarization_prompt_tokens_with_context(llm, summary, pruned_memory):
 def _reduce_summary_size(llm, summary, summary_token_limit) -> tuple:
     if summary_token_limit <= 0:
         raise ChatException("Unable to compress history: summary token <= 0")
-    summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+    summary_tokens = llm.get_num_tokens_from_messages([HumanMessage(content=summary)])
     attempts = 0
     while summary and summary_tokens > summary_token_limit:
         if attempts == 3:
             raise ChatException("Too many attempts trying to reduce summary size.")
         chain = LLMChain(llm=llm, prompt=SUMMARY_COMPRESSION_PROMPT, name="compress_chat_history")
         summary = chain.invoke({"summary": summary})["text"]
-        summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+        summary_tokens = llm.get_num_tokens_from_messages([HumanMessage(content=summary)])
         attempts += 1
 
     return summary, summary_tokens
