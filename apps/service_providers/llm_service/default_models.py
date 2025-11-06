@@ -1,8 +1,8 @@
 import dataclasses
 from collections import defaultdict
-from enum import Enum
 
 from django.db import transaction
+from pydantic import BaseModel
 
 from apps.service_providers.llm_service.model_parameters import (
     AnthropicNonReasoningParameters,
@@ -23,7 +23,7 @@ class Model:
     is_default: bool = False
     deprecated: bool = False
     is_translation_default: bool = False
-    parameters: Enum = None
+    parameters: BaseModel | None = None
 
 
 def k(n: int) -> int:
