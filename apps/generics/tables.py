@@ -15,10 +15,23 @@ class ColumnWithHelp(tables.Column):
         return format_html("""<span>{header}</span>{help}""", header=self.verbose_name, help=help_html)
 
 
+class ColumnWithCustomHeader(tables.Column):
+    def __init__(self, header_template=None, header_context=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.template_path = header_template
+        self.template_context = header_context or {}
+
+    def header(self):
+        context = {"verbose_name": self.verbose_name, **self.template_context}
+        return get_template(self.template_path).render(context)
+
+
+class TemplateColumnWithCustomHeader(ColumnWithCustomHeader, tables.TemplateColumn):
+    """A Template column that allows custom templates for the column header."""
+
+
 class TemplateColumnWithHelp(ColumnWithHelp, tables.TemplateColumn):
     """A TemplateColumn that supports help text in the header."""
-
-    pass
 
 
 class TimeAgoColumn(tables.TemplateColumn):
