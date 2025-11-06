@@ -351,17 +351,15 @@ def chatbot_version_create_status(
 class ChatbotSessionsTableView(ExperimentSessionsTableView):
     table_class = ChatbotSessionsTable
 
-    def get_queryset(self):
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                message_count=Subquery(
-                    ChatMessage.objects.filter(chat=OuterRef("chat"))
-                    .values("chat")
-                    .annotate(count=Count("id"))
-                    .values("count")[:1]
-                )
+    def get_table_data(self):
+        """Add message_count annotation to the paginated data."""
+        queryset = super().get_table_data()
+        return queryset.annotate(
+            message_count=Subquery(
+                ChatMessage.objects.filter(chat=OuterRef("chat"))
+                .values("chat")
+                .annotate(count=Count("id"))
+                .values("count")[:1]
             )
         )
 
