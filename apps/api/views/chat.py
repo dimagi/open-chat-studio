@@ -22,7 +22,7 @@ from apps.api.serializers import (
 )
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import ApiChannel, WebChannel
+from apps.chat.channels import ApiChannel
 from apps.chat.models import Chat, ChatAttachment
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response

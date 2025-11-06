@@ -47,31 +47,31 @@ class TestTracingService:
     def test_trace_context_manager(self, tracing_service, mock_tracer, mock_session):
         trace_name = "test_trace"
 
-        with tracing_service.trace(trace_name, session=mock_session, inputs={"input": "test"}):
+        with tracing_service.trace(trace_name, session=mock_session, inputs={"input": "test"}) as trace_ctx:
             assert tracing_service.activated
             assert tracing_service.trace_name == trace_name
             assert tracing_service.session == mock_session
 
             assert isinstance(tracing_service.trace_id, UUID)
-            assert mock_tracer.trace is not None
-            assert mock_tracer.trace["name"] == trace_name
-            assert mock_tracer.trace["session_id"] == mock_session.id
-            assert mock_tracer.trace["user_id"] == mock_session.participant.identifier
-            assert mock_tracer.trace["inputs"] == {"input": "test"}
+            assert mock_tracer.trace_result is not None
+            assert mock_tracer.trace_result["name"] == trace_name
+            assert mock_tracer.trace_result["session_id"] == mock_session.id
+            assert mock_tracer.trace_result["user_id"] == mock_session.participant.identifier
+            assert mock_tracer.trace_result["inputs"] == {"input": "test"}
 
-            tracing_service.set_current_span_outputs({"output": "test"})
-            assert tracing_service.outputs[tracing_service.trace_id] == {"output": "test"}
+            # Set outputs via context object
+            trace_ctx.set_outputs({"output": "test"})
+            assert trace_ctx.outputs == {"output": "test"}
 
         assert not tracing_service.activated
 
     def test_end_traces(self, tracing_service, mock_tracer, mock_session):
         trace_name = "test_trace"
-        user_id = "test_user"
-        with tracing_service.trace(trace_name, mock_session, user_id):
+        with tracing_service.trace(trace_name, mock_session) as trace_ctx:
             # Add some data to verify reset
-            tracing_service.set_current_span_outputs({"output": "test"})
+            trace_ctx.set_outputs({"output": "test"})
 
-        assert mock_tracer.trace["ended"]
+        assert mock_tracer.trace_result["ended"]
 
         assert not tracing_service.activated
         assert not tracing_service.trace_id
@@ -82,13 +82,12 @@ class TestTracingService:
 
     def test_span_context_manager(self, tracing_service, mock_tracer, mock_session):
         trace_name = "test_trace"
-        user_id = "test_user"
         span_name = "test_span"
         inputs = {"input": "test"}
         metadata = {"meta": "test"}
 
-        with tracing_service.trace(trace_name, mock_session, user_id, mock_session):
-            with tracing_service.span(span_name, inputs, metadata) as span:
+        with tracing_service.trace(trace_name, mock_session):
+            with tracing_service.span(span_name, inputs, metadata) as span_ctx:
                 assert len(mock_tracer.spans) == 1
                 span_id = list(mock_tracer.spans.keys())[0]
                 span_data = mock_tracer.spans[span_id]
@@ -97,8 +96,8 @@ class TestTracingService:
                 assert span_data["metadata"] == metadata
 
                 outputs = {"output": "test"}
-                span.set_current_span_outputs(outputs)
-                assert tracing_service.outputs[span_id] == outputs
+                span_ctx.set_outputs(outputs)
+                assert span_ctx.outputs == outputs
 
             span_data = mock_tracer.spans[span_id]
             assert span_data["ended"]
@@ -107,11 +106,10 @@ class TestTracingService:
 
     def test_span_with_exception(self, tracing_service, mock_tracer, mock_session):
         trace_name = "test_trace"
-        user_id = "test_user"
         span_name = "test_span"
         inputs = {"input": "test"}
 
-        with tracing_service.trace(trace_name, mock_session, user_id):
+        with tracing_service.trace(trace_name, mock_session):
             try:
                 with tracing_service.span(span_name, inputs):
                     raise ValueError("Test error")
@@ -134,7 +132,7 @@ class TestTracingService:
 
     def test_get_langchain_callbacks(self, tracing_service, mock_tracer, mock_session):
         # Test with activated service
-        with tracing_service.trace("test", mock_session, "user"):
+        with tracing_service.trace("test", mock_session):
             callbacks = tracing_service.get_langchain_callbacks()
             assert len(callbacks) == 1
 
@@ -174,9 +172,9 @@ class TestTracingService:
         }
 
     def test_get_trace_metadata(self, tracing_service, mock_tracer, mock_session):
-        with tracing_service.trace("test", mock_session, "user"):
+        with tracing_service.trace("test", mock_session):
             metadata = tracing_service.get_trace_metadata()
-            assert metadata == {"trace_info": [{"trace_id": str(mock_tracer.trace["id"])}]}
+            assert metadata == {"trace_info": [{"trace_id": str(mock_tracer.trace_result["id"])}]}
 
         assert not tracing_service.activated
         metadata = tracing_service.get_trace_metadata()
@@ -185,25 +183,24 @@ class TestTracingService:
     def test_get_trace_metadata_with_exception(self, tracing_service, mock_tracer, mock_session):
         mock_tracer.get_trace_metadata = MagicMock(side_effect=Exception("Test error"))
 
-        with tracing_service.trace("test", mock_session, "user"):
+        with tracing_service.trace("test", mock_session):
             metadata = tracing_service.get_trace_metadata()
             # When an exception occurs, the method continues but doesn't add anything to trace_info
             assert metadata == {}
 
     def test_active_tracers(self, tracing_service, mock_tracer):
         # Test with no active tracers
-        mock_tracer.trace = None
+        mock_tracer._trace_data = None
         assert tracing_service._active_tracers == []
 
         # Test with an active tracer
-        mock_tracer.trace = {"name": "test"}
+        mock_tracer._trace_data = {"name": "test"}
         assert tracing_service._active_tracers == [mock_tracer]
 
     def test_add_add_output_message_tags_to_trace(self, tracing_service, mock_tracer, mock_session):
         trace_name = "test_trace"
-        user_id = "test_user"
 
-        with tracing_service.trace(trace_name, mock_session, user_id):
+        with tracing_service.trace(trace_name, mock_session):
             raw_tags = [("tag1", "categoryA"), ("tag2", "categoryB")]
             flat_tags = [f"{category}:{tag}" for tag, category in raw_tags]
             tracing_service.add_output_message_tags_to_trace(flat_tags)

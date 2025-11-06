@@ -148,7 +148,7 @@ class PipelineStartAction(EventActionHandlerBase):
             session=session,
             inputs={"input": input},
             metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},
-        ):
+        ) as span:
             from apps.chat.bots import PipelineBot
 
             bot = PipelineBot(
@@ -162,5 +162,5 @@ class PipelineStartAction(EventActionHandlerBase):
                 save_run_to_history=False,
             )
             # does not support updating participant data or session state
-            trace_service.set_current_span_outputs({"response": output.content})
+            span.set_outputs({"response": output.content})
         return output.content
