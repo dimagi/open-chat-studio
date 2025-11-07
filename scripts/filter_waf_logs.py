@@ -4,9 +4,9 @@ This script filters valid paths from a CSV file based on Django URL patterns. Th
 logs from the AWS WAF or Load Balancer.
 
 Usage:
-    - To filter paths: `python scripts/filter_valid_paths.py input.csv output.csv`
-    - To debug a specific path: `python scripts/filter_valid_paths.py --debug /path/to/debug`
-    - To show all URL patterns: `python scripts/filter_valid_paths.py --show-paths`
+    - To filter paths: `python scripts/filter_waf_logs.py input.csv output.csv`
+    - To debug a specific path: `python scripts/filter_waf_logs.py --debug /path/to/debug`
+    - To show all URL patterns: `python scripts/filter_waf_logs.py --show-paths`
 
 The script uses Django's URL resolver to fetch all defined URL patterns and matches
 them against the paths in the input CSV file. Valid paths are written to the output CSV file.
