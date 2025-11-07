@@ -11,6 +11,7 @@ from django_tables2 import SingleTableView
 from apps.experiments.models import SourceMaterial
 from apps.experiments.tables import SourceMaterialTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.web.waf import WafRule, waf_allow
 
 
 class SourceMaterialHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -45,6 +46,7 @@ class SourceMaterialTableView(SingleTableView):
         return query_set
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 class CreateSourceMaterial(CreateView):
     model = SourceMaterial
     fields = [
@@ -68,6 +70,7 @@ class CreateSourceMaterial(CreateView):
         return super().form_valid(form)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 class EditSourceMaterial(UpdateView):
     model = SourceMaterial
     fields = [

@@ -176,6 +176,7 @@ def _new_api_message(request, experiment_id: uuid, version=None):
     )
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @require_POST
 @csrf_exempt
 @verify_hmac
