@@ -62,3 +62,12 @@ Verify that the implementation meets the plan's requirements and success criteri
 - Iterate on plans when requirements are unclear or complex
 - Reference research documents when asking questions about implementation
 - Keep plans focused on a single feature or fix
+
+## Local Environment Setup
+
+To use these slash commands in Claude Code, install the required plugin:
+
+```
+/plugin marketplace add dimagi/claude-plugins
+/plugin install research-plan-build
+```
