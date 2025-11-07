@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(python manage.py check:*)",
+      "Bash(pytest:*)",
+      "Bash(inv ruff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": false,
+  "env": {
+    "MAX_THINKING_TOKENS": "32000"
+  },
+   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/bootstrap.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
