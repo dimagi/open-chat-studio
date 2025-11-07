@@ -126,7 +126,7 @@ def test_session_poll_with_messages(api_client, session):
     }
 
 
-@pytest.skip("This no longer applies to the chat API until we have proper public access implemented.")
+@pytest.mark.skip("This no longer applies to the chat API until we have proper public access implemented.")
 @pytest.mark.django_db()
 def test_start_chat_session_requires_auth_when_not_public(team_with_users, api_client, experiment):
     url = reverse("api:chat:start-session")
