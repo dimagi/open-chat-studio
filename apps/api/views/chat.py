@@ -263,6 +263,7 @@ def chat_start_session(request):
     team = experiment.team
 
     if not experiment_channel:
+        # legacy flow
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(team)
 
     if request.user.is_authenticated:

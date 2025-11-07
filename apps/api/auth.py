@@ -10,6 +10,7 @@ def handle_embedded_widget_auth(request, experiment_id=None, session=None):
     """
     embed_key = request.headers.get("X-Embed-Key")
     if not embed_key:
+        # follow legacy workflow
         return None
 
     origin_domain = extract_domain_from_headers(request)
