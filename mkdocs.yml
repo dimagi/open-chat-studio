@@ -71,6 +71,7 @@ nav:
     - Processes:
       - User Docs: developer_guides/user_docs.md
       - Deployment: developer_guides/deployment.md
+      - AI Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
     - Code Systems:
       - Common Practises: developer_guides/common_practises.md
