@@ -6,6 +6,8 @@ These guides are divided into two groups:
 
 These are intended to inform developers how certain processes within the core OCS team work.
 
+- [Claude Code Workflow](claude_code_workflow.md) - Structured development workflow using Claude Code
+
 **Code Systems**
 
 Each of these guides relates to a specific subsystem / subcomponent of the OCS codebase. These documents are intended as documentation for the given subsystem.
