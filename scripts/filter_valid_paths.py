@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""
+r"""
 This script filters valid paths from a CSV file based on Django URL patterns. This is mostly used to filter
 logs from the AWS WAF or Load Balancer.
 
@@ -12,9 +12,9 @@ The script uses Django's URL resolver to fetch all defined URL patterns and matc
 them against the paths in the input CSV file. Valid paths are written to the output CSV file.
 
 Deduplication:
-    The script deduplicates rows based on the combination of (Django URL pattern, WAF rule).
+    The script deduplicates rows based on the combination of (Django URL pattern, HTTP method, WAF rule).
     This means that multiple URLs with different variable parts (e.g., UUIDs) that match the
-    same Django URL pattern will be combined into a single row, keeping the one with the
+    same Django URL pattern and HTTP method will be combined into a single row, keeping the one with the
     highest hit count.
 
 CloudWatch Logs Insights Query:
@@ -23,25 +23,30 @@ CloudWatch Logs Insights Query:
     Log group: aws-waf-logs-chatbots-prod-waf-logs
 
     Query:
-      fields httpRequest.uri,
-             httpRequest.httpMethod,
+      fields httpRequest.uri as uri,
+             httpRequest.httpMethod as httpMethod,
              httpRequest.country,
              httpRequest.clientIp,
              httpRequest.headers,
-             ruleGroupList.0.terminatingRule.ruleId,
+             ruleGroupList.0.terminatingRule.ruleId as ruleId,
              ruleGroupList.0.terminatingRule.action,
-             ruleGroupList.0.terminatingRule.ruleMatchDetails.0.conditionType,
              @timestamp
       | filter ispresent(ruleGroupList.0.terminatingRule.ruleId)
-             and httpRequest.uri not like /\\.php$/
+      | filter ruleGroupList.0.terminatingRule.action = 'BLOCK'
+      | filter httpRequest.uri not like /\.(php\d?|bak|cgi)$/
+      | filter ruleGroupList.0.terminatingRule.ruleId != 'UserAgent_BadBots_HEADER'
+      | filter ruleGroupList.0.terminatingRule.ruleId != 'RestrictedExtensions_URIPATH'
+      | filter ruleGroupList.0.terminatingRule.ruleId != 'GenericLFI_URIPATH'
+      | filter ruleGroupList.0.terminatingRule.ruleId != 'GenericRFI_QUERYARGUMENTS'
+      | filter ruleGroupList.0.terminatingRule.ruleId != 'GenericRFI_BODY'
       | stats count(*) as hitCount,
-              earliest(@timestamp) as firstSeen,
-              latest(@timestamp) as lastSeen,
+              fromMillis(earliest(@timestamp)) as firstSeen,
+              fromMillis(latest(@timestamp)) as lastSeen,
               count_distinct(httpRequest.clientIp) as uniqueIPs,
               count_distinct(httpRequest.country) as uniqueCountries
-        by httpRequest.uri,
-           ruleGroupList.0.terminatingRule.ruleId,
-           ruleGroupList.0.terminatingRule.ruleMatchDetails.0.conditionType
+        by uri,
+           httpMethod,
+           ruleId
       | sort hitCount desc
 
     Export the results as CSV and use as input to this script.
@@ -49,6 +54,7 @@ CloudWatch Logs Insights Query:
 CSV Format:
     The CSV should have a header row and the script will try to identify the columns:
     - URL path column: path, url, url_path, pathname, route, or httpRequest.uri
+    - HTTP method column: httpMethod, http_method, or method
     - Rule column: any column containing "rule" (e.g., ruleGroupList.0.terminatingRule.ruleId)
     - Hit count column: hitCount, hit_count, count, or hits
 
@@ -56,6 +62,7 @@ CSV Format:
     - First column for URL path
     - Second column for rule
     - Last column for hit count
+    - HTTP method: optional, will warn if not found
 
 To dig deeper on a specific URL use the following cloudwatch query:
 
@@ -65,6 +72,8 @@ To dig deeper on a specific URL use the following cloudwatch query:
         httpRequest.country,
         httpRequest.httpMethod,
         ruleGroupList.0.terminatingRule.ruleId
+    | filter ispresent(ruleGroupList.0.terminatingRule.ruleId)
+    | filter ruleGroupList.0.terminatingRule.action = 'BLOCK'
     | filter httpRequest.uri = "/channels/telegram/08628b8f-bbee-4237-badd-a991e988b7fe"
     | sort @timestamp desc
     | limit 100
@@ -367,6 +376,17 @@ def main():
                 rule_column = 1 if len(header) > 1 else 0
                 print(f"Warning: Could not identify rule column, using column {rule_column}.")
 
+            # Find HTTP method column
+            method_column = None
+            for i, col_name in enumerate(header):
+                col_lower = col_name.lower()
+                if col_lower in ["httpmethod", "http_method", "method"]:
+                    method_column = i
+                    break
+
+            if method_column is None:
+                print("Warning: Could not identify HTTP method column.")
+
             # Find hit count column (usually last column)
             hitcount_column = len(header) - 1
             for i, col_name in enumerate(header):
@@ -388,17 +408,22 @@ def main():
                         # Get rule from row (default to empty string if not available)
                         rule = row[rule_column] if len(row) > rule_column else ""
 
+                        # Get HTTP method from row (default to empty string if not available)
+                        http_method = (
+                            row[method_column] if method_column is not None and len(row) > method_column else ""
+                        )
+
                         # Get hit count from row (default to 0 if not parseable)
                         try:
                             hit_count = int(row[hitcount_column]) if len(row) > hitcount_column else 0
                         except (ValueError, IndexError):
                             hit_count = 0
 
-                        # Create unique key from matched pattern index and rule
-                        # This ensures different paths matching the same pattern are deduplicated
-                        unique_key = (matched_pattern_idx, rule)
+                        # Create unique key from matched pattern index, HTTP method, and rule
+                        # This ensures different paths matching the same pattern are deduplicated by method and rule
+                        unique_key = (matched_pattern_idx, http_method, rule)
 
-                        # Keep the row with the highest hit count for each unique (pattern, rule) combination
+                        # Keep the row with the highest hit count for each unique (pattern, method, rule) combination
                         if unique_key not in unique_paths or hit_count > unique_paths[unique_key]["hit_count"]:
                             unique_paths[unique_key] = {"row": row, "hit_count": hit_count}
 
