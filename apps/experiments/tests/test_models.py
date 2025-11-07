@@ -444,20 +444,21 @@ class TestExperimentSession:
         [
             ([1, 2], "v1, v2"),
             ([1], "v1"),
+            ([None], ""),
         ],
     )
-    def test_experiment_versions_from_prefetched_data(
-        self, versions_chatted_to, expected_display_val, experiment_session
-    ):
+    def test_experiment_versions_query(self, versions_chatted_to, expected_display_val, experiment_session):
         for version in versions_chatted_to:
             message = ChatMessage.objects.create(
                 message_type=ChatMessageType.AI, content="", chat=experiment_session.chat
             )
-            message.create_and_add_tag(
-                f"v{version}", experiment_session.team, tag_category=TagCategories.EXPERIMENT_VERSION
-            )
+            if version:
+                message.create_and_add_tag(
+                    f"v{version}", experiment_session.team, tag_category=TagCategories.EXPERIMENT_VERSION
+                )
 
-        assert experiment_session.experiment_versions_from_prefetched_data == expected_display_val
+        session = ExperimentSession.objects.all().annotate_with_versions_list().first()
+        assert session.experiment_versions == expected_display_val
 
     @pytest.mark.parametrize("participant_data_injected", [True, False])
     def test_requires_participant_data(self, participant_data_injected):
@@ -1144,26 +1145,6 @@ class TestExperimentTrends:
             assert sum(error) == 2
             assert experiment.traces.filter(status=TraceStatus.ERROR).count() == 3
             assert sum(success) == 0
-
-    @patch("apps.experiments.models.cache")
-    @patch("apps.experiments.models.Experiment._calculate_trends")
-    def test_trend_data_caching(self, _calculate_trends, cache, experiment):
-        trends = ([1, 2, 3], [4, 5, 6])
-
-        # Nothing in the cache
-        _calculate_trends.return_value = trends
-        cache.get.return_value = None
-        _, errors = experiment.get_trend_data()
-        assert errors == [4, 5, 6]
-        _calculate_trends.assert_called()
-        cache.set.assert_called()
-
-        # Simulate cache hit
-        _calculate_trends.reset_mock()
-        cache.get.return_value = trends
-        _, errors = experiment.get_trend_data()
-        assert errors == [4, 5, 6]
-        _calculate_trends.assert_not_called()
 
 
 def _compare_models(original, new, expected_changed_fields: list) -> set:

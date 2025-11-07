@@ -12,6 +12,8 @@ from apps.experiments.models import Experiment
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
+from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 
 
@@ -79,7 +81,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.name
 
     def get_absolute_url(self):
-        return reverse("assistants:edit", args=[self.team.slug, self.id])
+        return reverse("assistants:edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @property
     def formatted_tools(self):
@@ -254,7 +256,7 @@ class ToolResources(BaseModel):
     assistant = models.ForeignKey(OpenAiAssistant, on_delete=models.CASCADE, related_name="tool_resources")
     tool_type = models.CharField(max_length=128)
     files = models.ManyToManyField("files.File", blank=True)
-    extra = models.JSONField(default=dict, blank=True)
+    extra = SanitizedJSONField(default=dict, blank=True)
 
     objects = AuditingManager()
 

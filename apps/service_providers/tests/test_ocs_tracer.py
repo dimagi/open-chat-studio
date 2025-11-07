@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import pytest
 
+from apps.service_providers.tracing.base import TraceContext
 from apps.service_providers.tracing.ocs_tracer import OCSTracer
 from apps.trace.models import Span, Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -13,35 +14,35 @@ class TestOCSTracer:
         tracer = OCSTracer(experiment.id, experiment.team_id)
         session = ExperimentSessionFactory()
 
-        tracer.end_trace()
-        # The trace was never started, so no Trace object should be created
+        # Initially no traces exist
         assert Trace.objects.count() == 0
 
-        tracer.start_trace(
-            trace_name="test_trace",
-            trace_id=uuid4(),
-            session=session,
-        )
+        # Using the context manager creates a trace
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+        with tracer.trace(trace_context=trace_context, session=session):
+            pass
 
-        tracer.end_trace()
         assert Trace.objects.count() == 1
 
     def test_noop(self, experiment):
-        """Starting or ending spans should do nothing if the tracer is not ready"""
+        """Span context manager should do nothing if the tracer is not ready"""
 
         tracer = OCSTracer(experiment.id, experiment.team_id)
 
-        tracer.start_span(
-            span_id=uuid4(),
-            span_name="test_span",
+        # Using span context manager when tracer is not ready should not raise an error
+        span_context = TraceContext(id=uuid4(), name="test_span")
+        with tracer.span(
+            span_context=span_context,
             inputs={"input": "data"},
             metadata={"meta": "data"},
-        )
+        ):
+            # Should execute without errors even though tracer is not ready
+            pass
 
-        tracer.end_span(span_id=uuid4(), outputs={}, error=None)
+        # Verify no Span objects were created
+        assert Span.objects.count() == 0
 
-        tracer.end_trace(outputs={}, error=None)
-
+    @pytest.mark.skip("spans disabled")
     def test_span_creation(self, experiment):
         """
         A span that is started should be added to the current trace. If there is an active span, it should be added
@@ -84,6 +85,7 @@ class TestOCSTracer:
 
         tracer.end_trace()
 
+    @pytest.mark.skip("spans disabled")
     def test_span_with_error(self, experiment):
         """
         Test that a span with an error is properly recorded.
@@ -109,30 +111,22 @@ class TestOCSTracer:
             span_id=span_id,
             error=Exception("Test error"),
         )
-        span = Span.objects.get(trace=tracer.trace)
+        span = Span.objects.get(trace=tracer.trace_record)
         assert span.error is not None
 
     def test_record_experiment_version(self, experiment):
         tracer = OCSTracer(experiment.id, experiment.team_id)
         session = ExperimentSessionFactory()
 
-        tracer.start_trace(
-            trace_name="test_trace",
-            trace_id=uuid4(),
-            session=session,
-        )
-
-        assert experiment.working_version is None
-        assert tracer.trace.experiment_version_number is None
-        assert tracer.trace.experiment_id == experiment.id
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+        with tracer.trace(trace_context=trace_context, session=session):
+            assert experiment.working_version is None
+            assert tracer.trace_record.experiment_version_number is None
+            assert tracer.trace_record.experiment_id == experiment.id
 
         version = experiment.create_new_version()
         tracer = OCSTracer(version.id, experiment.team_id)
-        tracer.start_trace(
-            trace_name="test_trace",
-            trace_id=uuid4(),
-            session=session,
-        )
-
-        assert tracer.trace.experiment_version_number == version.version_number
-        assert tracer.trace.experiment_id == experiment.id
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+        with tracer.trace(trace_context=trace_context, session=session):
+            assert tracer.trace_record.experiment_version_number == version.version_number
+            assert tracer.trace_record.experiment_id == experiment.id

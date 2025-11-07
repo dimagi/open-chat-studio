@@ -595,15 +595,16 @@ paths:
             examples:
               GenerateBotMessageAndSend:
                 value:
-                  identifier: part1
+                  identifier: '+15556793'
                   experiment: exp1
-                  platform: connect_messaging
+                  platform: whatsapp
                   prompt_text: Tell the user to do something
                   session_data:
                     key: value
                   participant_data:
                     key: value
-                summary: Generates a bot message and sends it to the user
+                summary: Generates a bot message and sends it to the user (auto-creates
+                  participant if needed).
               ParticipantNotFound:
                 value:
                   detail: Participant not found
@@ -878,13 +879,9 @@ components:
           allOf:
           - $ref: '#/components/schemas/Participant'
           readOnly: true
-        seed_message_task_id:
-          type: string
-          readOnly: true
       required:
       - chatbot
       - participant
-      - seed_message_task_id
       - session_id
     ChatTaskPoll:
       type: object

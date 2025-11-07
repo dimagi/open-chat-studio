@@ -32,6 +32,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
+from apps.web.waf import WafRule, waf_allow
 
 from ..experiments.helpers import update_experiment_name_by_pipeline_id
 from ..generics.chips import Chip
@@ -40,25 +41,32 @@ from ..utils.prompt import PromptVars
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    """View for listing event pipelines."""
+
     permission_required = "pipelines.view_pipeline"
     template_name = "generic/object_home.html"
 
     def get_context_data(self, team_slug: str, **kwargs):
         return {
             "active_tab": "pipelines",
-            "title": "Pipelines",
+            "title": "Event Pipelines",
             "new_object_url": reverse("pipelines:new", args=[team_slug]),
             "table_url": reverse("pipelines:table", args=[team_slug]),
             "title_help_content": render_help_with_link(
-                "Pipelines allow you to create more complex bots by combining one or more steps together.", "pipelines"
+                (
+                    "Event pipelines allow you to combine steps together to create complex execution logic in response "
+                    "to events."
+                ),
+                "pipelines",
             ),
         }
 
 
 class PipelineTableView(SingleTableView, PermissionRequiredMixin):
+    """Displays a table of event pipelines for the current team."""
+
     permission_required = "pipelines.view_pipeline"
     model = Pipeline
-    paginate_by = 25
     table_class = PipelineTable
     template_name = "table/single_table.html"
 
@@ -290,6 +298,7 @@ def _get_node_schema(node_class):
     return schema
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @login_and_team_required
 @csrf_exempt
 def pipeline_data(request, team_slug: str, pk: int):

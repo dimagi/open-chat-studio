@@ -366,9 +366,9 @@ class ChannelBase(ABC):
                     trace_name=self.experiment.name,
                     session=self.experiment_session,
                     inputs={"input": self.message.model_dump()},
-                ):
+                ) as span:
                     response = self._new_user_message()
-                    self.trace_service.set_current_span_outputs({"response": response.content})
+                    span.set_outputs({"response": response.content})
                     return response
             except GenerationCancelled:
                 return ChatMessage(content="", message_type=ChatMessageType.AI)
@@ -448,7 +448,7 @@ class ChannelBase(ABC):
     def _send_seed_message(self) -> str:
         with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}) as span:
             bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
-            span.set_current_span_outputs({"response": bot_response.content})
+            span.set_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
             return bot_response.content
 
@@ -632,9 +632,7 @@ class ChannelBase(ABC):
             ai_message = self._get_bot_response(message=self.user_query)
 
             files = ai_message.get_attached_files() or []
-            span.set_current_span_outputs(
-                {"response": ai_message.content, "attachments": [file.name for file in files]}
-            )
+            span.set_outputs({"response": ai_message.content, "attachments": [file.name for file in files]})
 
             with self.trace_service.span(
                 "Send message to user", inputs={"bot_message": ai_message.content, "files": [str(f) for f in files]}

@@ -178,7 +178,6 @@ class FileHome(LoginAndTeamRequiredMixin, TemplateView):
 
 class FileTableView(LoginAndTeamRequiredMixin, SingleTableView):
     model = File
-    paginate_by = 25
     table_class = FilesTable
     template_name = "table/single_table.html"
 

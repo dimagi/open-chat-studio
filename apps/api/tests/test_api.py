@@ -622,3 +622,85 @@ def test_generate_bot_message_and_send(ConnectClient, experiment):
     last_message = new_session.chat.messages.last()
     assert last_message.message_type == "ai"
     assert last_message.content == "Time to take a break an juice some fruit"
+
+
+@pytest.mark.django_db()
+@override_settings(
+    CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
+)
+@patch("apps.chat.channels.CommCareConnectClient")
+@pytest.mark.parametrize("consented", [True, False])
+def test_generate_bot_message_auto_creates_participant(ConnectClient, experiment, httpx_mock, consented):
+    """
+    Test that trigger_bot_message auto-creates participant and participant_data if they don't exist.
+    This supports the auto-consent flow from CommCare Connect.
+    """
+    connect_client_mock = ConnectClient.return_value
+
+    connect_id = uuid.uuid4().hex
+    created_connect_channel_id = str(uuid.uuid4())
+
+    # Setup the experiment with a CCC channel
+    ExperimentChannelFactory(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        extra_data={"commcare_connect_bot_name": "test_bot"},
+    )
+
+    # Mock the CCC API call that creates the channel and returns consent
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel/",
+        json={"channel_id": created_connect_channel_id, "consent": consented},
+    )
+
+    # Verify participant doesn't exist yet
+    assert not Participant.objects.filter(identifier=connect_id, platform=ChannelPlatform.COMMCARE_CONNECT).exists()
+    assert not ParticipantData.objects.filter(
+        participant__identifier=connect_id,
+        experiment=experiment,
+    ).exists()
+
+    api_user = experiment.team.members.first()
+    client = ApiTestClient(api_user, experiment.team)
+
+    data = {
+        "identifier": connect_id,
+        "platform": ChannelPlatform.COMMCARE_CONNECT,
+        "experiment": str(experiment.public_id),
+        "prompt_text": "Welcome to the bot!",
+    }
+    url = reverse("api:trigger_bot")
+    with mock_llm(["Welcome! How can I help you today?"], [0]):
+        response = client.post(url, json.dumps(data), content_type="application/json")
+
+    assert response.status_code == 200 if consented else 400
+    if not consented:
+        assert response.json()["detail"] == "User has not given consent"
+
+    # Verify participant and participant_data were created despite the error
+    participant = Participant.objects.get(identifier=connect_id, platform=ChannelPlatform.COMMCARE_CONNECT)
+    assert participant is not None
+    assert participant.team == experiment.team
+
+    participant_data = ParticipantData.objects.get(participant=participant, experiment=experiment)
+    assert participant_data is not None
+    assert participant_data.system_metadata["commcare_connect_channel_id"] == created_connect_channel_id
+    assert participant_data.system_metadata["consent"] is consented
+
+    if consented:
+        # Verify the message was sent
+        connect_client_mock.send_message_to_user.assert_called()
+        kwargs = connect_client_mock.send_message_to_user.call_args.kwargs
+        assert kwargs["message"] == "Welcome! How can I help you today?"
+
+        # Verify session and message were created
+        session = ExperimentSession.objects.get(participant=participant, experiment=experiment)
+        assert session.chat.messages.count() == 1
+        message = session.chat.messages.first()
+        assert message.message_type == "ai"
+        assert message.content == "Welcome! How can I help you today?"
+    else:
+        connect_client_mock.send_message_to_user.assert_not_called()
+        assert not ExperimentSession.objects.filter(participant=participant, experiment=experiment).exists()

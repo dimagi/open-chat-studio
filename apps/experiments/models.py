@@ -10,22 +10,26 @@ from uuid import uuid4
 
 import markdown
 from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.postgres.aggregates import StringAgg
 from django.contrib.postgres.fields import ArrayField
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models import (
     BooleanField,
     Case,
+    CharField,
     Count,
     OuterRef,
     Q,
     Subquery,
     UniqueConstraint,
+    Value,
     When,
     functions,
 )
+from django.db.models.functions import Coalesce
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -34,6 +38,7 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
+from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
@@ -41,8 +46,9 @@ from apps.experiments.versioning import VersionDetails, VersionField, VersionsMi
 from apps.generics.chips import Chip
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import BaseTeamModel, Team
-from apps.teams.utils import current_team
+from apps.teams.utils import current_team, get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
+from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
@@ -207,7 +213,7 @@ class PromptBuilderHistory(BaseTeamModel):
     """
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    history = models.JSONField()
+    history = SanitizedJSONField()
 
     def __str__(self) -> str:
         return str(self.history)
@@ -240,7 +246,7 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         return self.topic
 
     def get_absolute_url(self):
-        return reverse("experiments:source_material_edit", args=[self.team.slug, self.id])
+        return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @transaction.atomic()
     def archive(self):
@@ -292,7 +298,7 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
         return self.name
 
     def get_absolute_url(self):
-        return reverse("experiments:safety_edit", args=[self.team.slug, self.id])
+        return reverse("experiments:safety_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -362,7 +368,7 @@ class Survey(BaseTeamModel, VersionsMixin):
         )
 
     def get_absolute_url(self):
-        return reverse("experiments:survey_edit", args=[self.team.slug, self.id])
+        return reverse("experiments:survey_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @transaction.atomic()
     def archive(self):
@@ -429,7 +435,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         return markdown.markdown(self.consent_text)
 
     def get_absolute_url(self):
-        return reverse("experiments:consent_edit", args=[self.team.slug, self.id])
+        return reverse("experiments:consent_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @transaction.atomic()
     def archive(self):
@@ -783,7 +789,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         ]
 
     def __str__(self):
-        if self.working_version is None:
+        if self.working_version_id is None:
             return self.name
         return f"{self.name} ({self.version_display})"
 
@@ -794,7 +800,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse("experiments:single_experiment_home", args=[self.team.slug, self.id])
+        return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_version(self, version: int) -> "Experiment":
         """
@@ -853,7 +859,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         label = self.name
         if self.is_archived:
             label = f"{label} (archived)"
-        url = reverse("chatbots:single_chatbot_home", args=[self.team.slug, self.id])
+        url = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
         return Chip(label=label, url=url)
 
     def get_chat_model(self):
@@ -883,33 +889,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     def get_trend_data(self) -> tuple[list, list]:
         """
-        Get the error/success trends across all versions in this experiment's version family. If it is missing from the
-        cache, it is calculated and stored in the cache.
-        """
-
-        if trend_data := cache.get(self.trends_cache_key):
-            return trend_data
-
-        trend_data = self._calculate_trends()
-        cache.set(self.trends_cache_key, trend_data, settings.EXPERIMENT_TREND_CACHE_TIMEOUT)
-        return trend_data
-
-    def traces_url(self) -> str:
-        """
-        Returns a URL to the traces page, filtered to show only traces for this experiment.
-        """
-        experiment_filter = ColumnFilterData(column="experiment", operator="any of", value=json.dumps([self.id]))
-
-        versions_to_include = [f"v{n}" for n in range(1, self.version_number + 1)]
-        versions_filter = ColumnFilterData(column="versions", operator="any of", value=json.dumps(versions_to_include))
-
-        filter_params = FilterParams(column_filters=[experiment_filter, versions_filter])
-        return reverse("trace:home", kwargs={"team_slug": self.team.slug}) + "?" + filter_params.to_query()
-
-    def _calculate_trends(self) -> tuple[list, list]:
-        """
-        Calculate the trends across all versions in this experiment's version family. Returns two lists: successes and
-        errors, each containing the count of successful and error traces for each hour in the last 48 hours.
+        Get the error/success trends across all versions in this experiment's version family.
+        Returns two lists: successes and errors, each containing the count of successful and error traces
+        for each hour in the last 48 hours.
         """
         days = 2
         to_date = timezone.now()
@@ -949,6 +931,22 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         successes = [success_trend.get(bucket, 0) for bucket in hour_buckets]
         errors = [error_trend.get(bucket, 0) for bucket in hour_buckets]
         return successes, errors
+
+    def traces_url(self) -> str:
+        """
+        Returns a URL to the traces page, filtered to show only traces for this experiment.
+        """
+        experiment_filter = ColumnFilterData(column="experiment", operator="any of", value=json.dumps([self.id]))
+
+        versions_to_include = [f"v{n}" for n in range(1, self.version_number + 1)]
+        versions_filter = ColumnFilterData(column="versions", operator="any of", value=json.dumps(versions_to_include))
+
+        filter_params = FilterParams(column_filters=[experiment_filter, versions_filter])
+        return (
+            reverse("trace:home", kwargs={"team_slug": get_slug_for_team(self.team_id)})
+            + "?"
+            + filter_params.to_query()
+        )
 
     @property
     def trace_service(self):
@@ -1497,11 +1495,12 @@ class Participant(BaseTeamModel):
         experiment = self.get_experiments_for_display().first()
         if experiment:
             return self.get_link_to_experiment_data(experiment)
-        return reverse("participants:single-participant-home", args=[self.team.slug, self.id])
+        return reverse("participants:single-participant-home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_link_to_experiment_data(self, experiment: Experiment) -> str:
         url = reverse(
-            "participants:single-participant-home-with-experiment", args=[self.team.slug, self.id, experiment.id]
+            "participants:single-participant-home-with-experiment",
+            args=[get_slug_for_team(self.team_id), self.id, experiment.id],
         )
         return f"{url}#{experiment.id}"
 
@@ -1610,9 +1609,9 @@ def validate_json_dict(value):
 class ParticipantData(BaseTeamModel):
     objects = ParticipantDataObjectManager()
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name="data_set")
-    data = encrypt(models.JSONField(default=dict, validators=[validate_json_dict]))
+    data = encrypt(SanitizedJSONField(default=dict, validators=[validate_json_dict]))
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE)
-    system_metadata = models.JSONField(default=dict)
+    system_metadata = SanitizedJSONField(default=dict)
     encryption_key = encrypt(
         models.CharField(max_length=255, blank=True, help_text="The base64 encoded encryption key")
     )
@@ -1657,20 +1656,38 @@ class SessionStatus(models.TextChoices):
         return [cls.ACTIVE.value, cls.COMPLETE.value]
 
 
-class ExperimentSessionObjectManager(models.Manager):
-    def with_last_message_created_at(self):
-        return self.annotate_with_last_message_created_at(self.get_queryset())
-
-    @staticmethod
-    def annotate_with_last_message_created_at(queryset):
+class ExperimentSessionQuerySet(models.QuerySet):
+    def annotate_with_last_message_created_at(self):
+        """Annotate queryset with the created_at timestamp of the last message in each session."""
         last_message_subquery = (
-            ChatMessage.objects.filter(
-                chat__experiment_session=models.OuterRef("pk"),
-            )
-            .order_by("-created_at")
-            .values("created_at")[:1]
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id")).order_by("-created_at").values("created_at")[:1]
         )
-        return queryset.annotate(last_message_created_at=models.Subquery(last_message_subquery))
+        return self.annotate(last_message_created_at=models.Subquery(last_message_subquery))
+
+    def annotate_with_versions_list(self):
+        """Annotate queryset with a comma-separated list of experiment versions used in each session."""
+        message_ct = ContentType.objects.get_for_model(ChatMessage)
+        version_tags_subquery = Subquery(
+            CustomTaggedItem.objects.filter(
+                content_type=message_ct,
+                object_id__in=ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id"),
+                tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+            )
+            .values("content_type_id")
+            .annotate(versions=StringAgg("tag__name", delimiter=", ", distinct=True, ordering="tag__name"))
+            .values("versions")[:1],
+            output_field=CharField(),
+        )
+        return self.annotate(experiment_versions=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
+
+
+class ExperimentSessionObjectManager(models.Manager):
+    def get_queryset(self):
+        return ExperimentSessionQuerySet(self.model, using=self._db)
+
+    def with_last_message_created_at(self):
+        """Convenience method for backwards compatibility."""
+        return self.get_queryset().annotate_with_last_message_created_at()
 
 
 class ExperimentSession(BaseTeamModel):
@@ -1698,7 +1715,7 @@ class ExperimentSession(BaseTeamModel):
         null=True,
         blank=True,
     )
-    state = models.JSONField(default=dict)
+    state = SanitizedJSONField(default=dict)
 
     class Meta:
         ordering = ["-created_at"]
@@ -1737,7 +1754,7 @@ class ExperimentSession(BaseTeamModel):
         return absolute_url(
             reverse(
                 "experiments:start_session_from_invite",
-                args=[self.team.slug, self.experiment.public_id, self.external_id],
+                args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
             )
         )
 
@@ -1779,7 +1796,8 @@ class ExperimentSession(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse(
-            "experiments:experiment_session_view", args=[self.team.slug, self.experiment.public_id, self.external_id]
+            "experiments:experiment_session_view",
+            args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
         )
 
     def end(self, commit: bool = True, propagate: bool = True):
@@ -1832,12 +1850,12 @@ class ExperimentSession(BaseTeamModel):
                     session=self,
                     inputs={"input": instruction_prompt},
                     metadata=trace_info.metadata,
-                ):
+                ) as span:
                     bot_message = self._bot_prompt_for_user(
                         instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
                     )
                     self.try_send_message(message=bot_message)
-                    trace_service.set_current_span_outputs({"response": bot_message})
+                    span.set_outputs({"response": bot_message})
                     trace_info = trace_service.get_trace_metadata()
                 return trace_info
         except Exception as e:
@@ -1892,18 +1910,6 @@ class ExperimentSession(BaseTeamModel):
         """Returns the default experiment, or if there is none, the working experiment"""
         return self.experiment.get_working_version()
 
-    @property
-    def experiment_versions_from_prefetched_data(self):
-        if not hasattr(self.chat, "messages"):
-            return set()
-        version_tags = {
-            tag.name
-            for message in self.chat.messages.all()
-            for tag in message.tags.all()
-            if tag.category == Chat.MetadataKeys.EXPERIMENT_VERSION
-        }
-        return ", ".join(sorted(version_tags)) if version_tags else ""
-
     def get_experiment_version_number(self) -> int:
         """
         Returns the version that is being chatted to. If it's the default version, return 0 which is the default
@@ -1939,6 +1945,7 @@ class ExperimentSession(BaseTeamModel):
     def as_chatbot_chip(self) -> Chip:
         """Returns a link to the chatbot session page"""
         url = reverse(
-            "chatbots:chatbot_session_view", args=[self.team.slug, self.experiment.public_id, self.external_id]
+            "chatbots:chatbot_session_view",
+            args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
         )
         return Chip(label=self.external_id, url=url)

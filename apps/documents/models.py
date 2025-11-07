@@ -15,6 +15,7 @@ from apps.experiments.versioning import VersionDetails, VersionField, VersionsMi
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
     get_related_pipeline_experiments_queryset,
@@ -116,7 +117,7 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     @property
     def index_name(self) -> str:
-        name = f"collection-{self.team.slug}-{slugify(self.name)}-{self.id}"
+        name = f"collection-{get_slug_for_team(self.team_id)}-{slugify(self.name)}-{self.id}"  # noqa: F821
         if self.is_a_version:
             return f"{name} v{self.version_number}"
         return name
@@ -217,7 +218,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         return new_version
 
     def get_absolute_url(self):
-        return reverse("documents:single_collection_home", args=[self.team.slug, self.id])
+        return reverse("documents:single_collection_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_related_nodes_queryset(self) -> models.QuerySet:
         index_references = get_related_pipelines_queryset(self, "collection_index_id").distinct()
@@ -337,7 +338,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         if not self.is_remote_index or self.openai_vector_store_id:
             return
 
-        file_ids = file_ids or []
         self.openai_vector_store_id = self.llm_provider.create_remote_index(name=self.index_name, file_ids=file_ids)
         self.save(update_fields=["openai_vector_store_id"])
 

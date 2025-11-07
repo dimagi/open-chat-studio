@@ -100,7 +100,6 @@ class DeleteTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
 class TagTableView(SingleTableView):
     model = Tag
-    paginate_by = 25
     table_class = TagTable
     template_name = "table/single_table.html"
 

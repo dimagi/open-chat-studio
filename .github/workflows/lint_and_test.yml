@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Use Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: 22.x
       - name: Install dependencies
@@ -47,11 +47,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: 22.x
-      - name: Install JS dependencies
-        run: npm install
+      - name: Install dependencies
+        run: |
+          npm install
+          sudo apt-get install -y ripgrep
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
       - name: Run pre-commit hooks
@@ -67,7 +69,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: Check lockfile
         run: uv lock --check --offline
 
@@ -102,7 +104,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - name: Install Dependencies
@@ -113,6 +115,7 @@ jobs:
         env:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
+          SECRET_KEY: secret-test-key
         run: uv run pytest -n auto --cov --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
 
       - name: Upload results to Codecov

@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
+import contextlib
 import os
 import sys
 from datetime import timedelta
@@ -29,7 +30,7 @@ env.read_env(os.path.join(BASE_DIR, ".env"))
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env("SECRET_KEY", default="YNAazYQdzqQWddeZmFZfBfROzqlzvLEwVxoOjGgK")
+SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DEBUG", default=True)
@@ -85,6 +86,7 @@ THIRD_PARTY_APPS = [
     "health_check.contrib.celery",
     "health_check.contrib.redis",
     "template_partials",
+    "silk",
 ]
 
 PROJECT_APPS = [
@@ -140,6 +142,7 @@ MIDDLEWARE = list(
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
             "django_otp.middleware.OTPMiddleware",
+            "django_htmx.middleware.HtmxMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
             "apps.web.locale_middleware.UserLocaleMiddleware",
@@ -148,11 +151,10 @@ MIDDLEWARE = list(
             "waffle.middleware.WaffleMiddleware",
             "field_audit.middleware.FieldAuditMiddleware",
             "apps.audit.middleware.AuditTransactionMiddleware",
-            "django_htmx.middleware.HtmxMiddleware",
+            "silk.middleware.SilkyMiddleware",
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.generics.middleware.OriginDetectionMiddleware",
-            "apps.banners.middleware.BannerLocationMiddleware",
             "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],
     )
@@ -162,7 +164,7 @@ INTERNAL_IPS = [
     "127.0.0.1",  # Django debug toolbar
 ]
 
-ROOT_URLCONF = "gpt_playground.urls"
+ROOT_URLCONF = "config.urls"
 
 # used to disable the cache in dev, but turn it on in production.
 # more here: https://nickjanetakis.com/blog/django-4-1-html-templates-are-cached-by-default-with-debug-true
@@ -191,7 +193,6 @@ TEMPLATES = [
                 "apps.users.context_processors.user_teams",
                 # this line can be removed if not using google analytics
                 "apps.web.context_processors.google_analytics_id",
-                "apps.banners.context_processors.banner_context",
                 "apps.admin.context_processors.ocs_config",
             ],
             "loaders": _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS,
@@ -203,7 +204,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "gpt_playground.wsgi.application"
+WSGI_APPLICATION = "config.wsgi.application"
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 FORMS_URLFIELD_ASSUME_HTTPS = True
@@ -217,7 +218,7 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql_psycopg2",
-            "NAME": env("DJANGO_DATABASE_NAME", default="gpt_playground"),
+            "NAME": env("DJANGO_DATABASE_NAME", default="open_chat_studio"),
             "USER": env("DJANGO_DATABASE_USER", default="postgres"),
             "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="***"),
             "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
@@ -482,6 +483,10 @@ SCHEDULED_TASKS = {
         # sync doc sources once per week
         "task": "apps.documents.tasks.sync_all_document_sources_task",
         "schedule": crontab(minute="0", hour="0", day_of_week="0"),
+    },
+    "apps.web.tasks.cleanup_silk_data": {
+        "task": "apps.web.tasks.cleanup_silk_data",
+        "schedule": crontab(minute="0", hour="1"),
     },
 }
 
@@ -785,3 +790,26 @@ EXPERIMENT_TREND_CACHE_TIMEOUT = 900  # 15 minutes
 
 # Dynamic Filter configs
 MAX_FILTER_PARAMS = 30
+
+SILKY_AUTHENTICATION = True
+SILKY_AUTHORISATION = True
+SILKY_MAX_REQUEST_BODY_SIZE = 100 * 1024  # 10K
+SILKY_MAX_RESPONSE_BODY_SIZE = 100 * 1024  # 100K
+SILKY_MAX_RECORDED_REQUESTS = 1000
+
+
+def SILKY_INTERCEPT_FUNC(request):  # noqa
+    if request.path_info.startswith("/__debug__/"):
+        return False
+
+    if not (request.user.is_authenticated and request.user.is_staff):
+        return False
+
+    if DEBUG or "silky" in request.GET:
+        return True
+
+    if request.htmx:
+        with contextlib.suppress(AttributeError, TypeError):
+            return "silky" in request.htmx.current_url
+
+    return "silky" in request.headers.get("referer", "")

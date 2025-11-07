@@ -38,7 +38,7 @@ WORKDIR /code
 
 # keep in sync with tailwind.config.js
 COPY *.json *.js .babelrc /code/
-COPY gpt_playground/settings.py /code/gpt_playground/settings.py
+COPY config/settings.py /code/config/settings.py
 COPY templates /code/templates/
 COPY assets /code/assets/
 
@@ -84,11 +84,14 @@ ENV PATH="/code/.venv/bin:$PATH"
 
 COPY --chown=django:django . /code
 
-RUN python manage.py collectstatic --noinput --settings=gpt_playground.settings_production
+ARG SECRET_KEY
+ARG DJANGO_ALLOWED_HOSTS
+
+RUN SECRET_KEY=${SECRET_KEY} DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS} python manage.py collectstatic --noinput --settings=config.settings_production
 RUN chown django:django -R static_root
 
 USER django
 
 ENV PORT=8000
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 0 gpt_playground.wsgi:application"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 0 config.wsgi:application"]

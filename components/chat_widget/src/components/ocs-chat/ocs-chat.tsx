@@ -3,8 +3,8 @@ import {Component, Host, h, Prop, State, Element, Watch, Env} from '@stencil/cor
 import {
   XMarkIcon,
   GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
-  PaperClipIcon, CheckDocumentIcon, XIcon
-} from './heroicons';
+  PaperClipIcon, CheckDocumentIcon, XIcon, OcsWidgetAvatar
+} from './icons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { varToPixels } from '../../utils/utils';
 import {TranslationStrings, TranslationManager, defaultTranslations} from '../../utils/translations';
@@ -91,7 +91,7 @@ export class OcsChat {
   /**
    * The message to display in the new chat confirmation dialog.
    */
-  @Prop() newChatConfirmationMessage?: string = "Starting a new chat will clear your current conversation. Continue?";
+  @Prop() newChatConfirmationMessage?: string;
 
   /**
    * Whether the chat widget is visible on load.
@@ -145,7 +145,7 @@ export class OcsChat {
   /**
    * The text to display while the assistant is typing/preparing a response.
    */
-  @Prop() typingIndicatorText?: string = "Preparing response";
+  @Prop() typingIndicatorText?: string;
 
   /**
    * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
@@ -173,6 +173,11 @@ export class OcsChat {
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
+  private buttonPosition: { x: number; y: number } = { x: 30, y: 30 };
+  private buttonHorizontalSide: 'left' | 'right' = 'right';
+  private buttonVerticalSide: 'top' | 'bottom' = 'bottom';
+  @State() isButtonDragging: boolean = false;
+  @State() buttonWasDragged: boolean = false;
 
   translationManager: TranslationManager = new TranslationManager();
 
@@ -188,6 +193,10 @@ export class OcsChat {
   private textareaRef?: HTMLTextAreaElement;
   private chatWindowRef?: HTMLDivElement;
   private fileInputRef?: HTMLInputElement;
+  private buttonRef?: HTMLButtonElement;
+  private buttonDragOffset: { x: number; y: number } = { x: 0, y: 0 };
+  private rafId: number | null = null;
+  private buttonListenersAttached: boolean = false;
   private chatWindowHeight: number = 600;
   private chatWindowWidth: number = 450;
   private chatWindowFullscreenWidth: number = 1024;
@@ -223,23 +232,29 @@ export class OcsChat {
     this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
-    if (this.visible) {
-      this.initializePosition();
-    }
 
-    // Only auto-start session if we don't have an existing one
-    if (this.visible && !this.sessionId) {
-      this.startSession();
-    } else if (this.visible && this.sessionId) {
-      // Resume polling for existing session
-      this.startMessagePolling();
-    }
+    // Initialize button position from computed styles
+    this.initializeButtonPosition();
+
+    // Defer position initialization to avoid state changes during componentDidLoad
+    setTimeout(() => {
+      if (this.visible) {
+        this.initializePosition();
+      }
+
+      // Resume polling for existing session (don't auto-start new sessions)
+      if (this.visible && this.sessionId) {
+        this.startMessagePolling();
+      }
+    }, 0);
+
     window.addEventListener('resize', this.handleWindowResize);
   }
 
   disconnectedCallback() {
     this.cleanup();
     this.removeEventListeners();
+    this.removeButtonEventListeners();
     window.removeEventListener('resize', this.handleWindowResize);
   }
 
@@ -360,12 +375,7 @@ export class OcsChat {
       this.sessionId = data.session_id;
       this.saveSessionToStorage();
 
-      // Handle seed message if present
-      if (data.seed_message_task_id) {
-        this.startTaskPolling(data.seed_message_task_id);
-      } else {
-        this.startMessagePolling();
-      }
+      this.startMessagePolling();
     } catch (_error) {
       this.handleError('Failed to start chat session');
     } finally {
@@ -394,7 +404,20 @@ export class OcsChat {
   }
 
   private async sendMessage(message: string): Promise<void> {
-    if (!this.sessionId || !message.trim()) return;
+    if (!message.trim()) return;
+
+    // Start session if we don't have one yet
+    if (!this.sessionId) {
+      // Prevent concurrent session initialization
+      if (this.isLoading) {
+        return;
+      }
+      await this.startSession();
+      // Check if session started successfully
+      if (!this.sessionId) {
+        return; // startSession already handled the error
+      }
+    }
 
     try {
       let attachmentIds: number[] = [];
@@ -412,10 +435,11 @@ export class OcsChat {
 
       // If this is the first user message and there are welcome messages,
       // add them to chat history as assistant messages
-      if (this.messages.length === 0 && this.parsedWelcomeMessages.length > 0) {
+      const welcomeMessagesToAdd = this.getWelcomeMessages();
+      if (this.messages.length === 0 && welcomeMessagesToAdd.length > 0) {
         const now = new Date();
-        const welcomeMessages: ChatMessage[] = this.parsedWelcomeMessages.map((welcomeMsg, index) => ({
-          created_at: new Date(now.getTime() - (this.parsedWelcomeMessages.length - index) * 1000).toISOString(),
+        const welcomeMessages: ChatMessage[] = welcomeMessagesToAdd.map((welcomeMsg, index) => ({
+          created_at: new Date(now.getTime() - (welcomeMessagesToAdd.length - index) * 1000).toISOString(),
           role: 'assistant' as const,
           content: welcomeMsg,
           attachments: []
@@ -555,16 +579,22 @@ export class OcsChat {
    */
   @Watch('visible')
   async visibilityHandler(visible: boolean) {
+    if (this.isButtonDragging) {
+      this.isButtonDragging = false;
+      this.buttonWasDragged = false;
+      this.removeButtonEventListeners();
+    }
+
     if (visible) {
       this.initializePosition();
-    }
-    if (visible && !this.sessionId) {
-      await this.startSession();
-    } else if (!visible) {
-      this.stopMessagePolling();
+
+      // Resume polling for existing session (don't auto-start new sessions)
+      if (this.sessionId) {
+        this.scrollToBottom(true);
+        this.startMessagePolling();
+      }
     } else {
-      this.scrollToBottom(true);
-      this.startMessagePolling();
+      this.stopMessagePolling();
     }
   }
 
@@ -852,62 +882,353 @@ export class OcsChat {
   private handleWindowResize = (): void => {
     this.positionInitialized = false;
     this.initializePosition();
+
+    // Revalidate button position after resize to keep it within viewport bounds
+    if (this.isButtonDraggable()) {
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const buttonWidth = this.buttonRef?.offsetWidth || 60;
+      const buttonHeight = this.buttonRef?.offsetHeight || 60;
+      const minPadding = 10;
+
+      this.buttonPosition = {
+        x: Math.max(minPadding, Math.min(this.buttonPosition.x, windowWidth - buttonWidth - minPadding)),
+        y: Math.max(minPadding, Math.min(this.buttonPosition.y, windowHeight - buttonHeight - minPadding))
+      };
+
+      this.updateHostPosition();
+    }
   };
 
-  private getDefaultIconUrl(): string {
-    return `${this.apiBaseUrl}/static/images/favicons/favicon.svg`;
+  // Button positioning and drag handlers
+  private initializeButtonPosition(): void {
+    const computedStyle = getComputedStyle(this.host);
+    const position = computedStyle.getPropertyValue('position');
+
+    // Only enable dragging if the host element is positioned fixed
+    if (position !== 'fixed') {
+      return;
+    }
+
+    const rect = this.host.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    const left = computedStyle.getPropertyValue('left');
+    const right = computedStyle.getPropertyValue('right');
+    const top = computedStyle.getPropertyValue('top');
+    const bottom = computedStyle.getPropertyValue('bottom');
+
+    const hasLeft = !this.isAutoPosition(left);
+    const hasTop = !this.isAutoPosition(top);
+
+    this.buttonHorizontalSide = hasLeft ? 'left' : 'right';
+    this.buttonVerticalSide = hasTop ? 'top' : 'bottom';
+
+    const resolvedRight = this.getNumericPositionValue(right, Math.max(0, windowWidth - rect.right));
+    const resolvedLeft = this.getNumericPositionValue(left, Math.max(0, rect.left));
+    const resolvedBottom = this.getNumericPositionValue(bottom, Math.max(0, windowHeight - rect.bottom));
+    const resolvedTop = this.getNumericPositionValue(top, Math.max(0, rect.top));
+
+    const horizontalValue = this.buttonHorizontalSide === 'left' ? resolvedLeft : resolvedRight;
+    const verticalValue = this.buttonVerticalSide === 'top' ? resolvedTop : resolvedBottom;
+
+    this.buttonPosition = {
+      x: horizontalValue,
+      y: verticalValue
+    };
+
+    // Apply the position to the host
+    this.updateHostPosition();
+  }
+
+  private updateHostPosition(): void {
+    this.host.style.position = 'fixed';
+    if (this.buttonHorizontalSide === 'left') {
+      this.host.style.left = `${this.buttonPosition.x}px`;
+      this.host.style.right = 'auto';
+    } else {
+      this.host.style.right = `${this.buttonPosition.x}px`;
+      this.host.style.left = 'auto';
+    }
+
+    if (this.buttonVerticalSide === 'top') {
+      this.host.style.top = `${this.buttonPosition.y}px`;
+      this.host.style.bottom = 'auto';
+    } else {
+      this.host.style.bottom = `${this.buttonPosition.y}px`;
+      this.host.style.top = 'auto';
+    }
+  }
+
+  private isButtonDraggable(): boolean {
+    const computedStyle = getComputedStyle(this.host);
+    return computedStyle.getPropertyValue('position') === 'fixed';
+  }
+
+  private handleButtonMouseDown = (event: MouseEvent): void => {
+    if (!this.buttonRef || !this.isButtonDraggable()) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.isButtonDragging = true;
+    this.buttonWasDragged = false; // Reset the drag flag
+    const rect = this.host.getBoundingClientRect();
+    this.buttonDragOffset = {
+      x: pointer.clientX - rect.left,
+      y: pointer.clientY - rect.top
+    };
+
+    this.addButtonEventListeners();
+  };
+
+  private handleButtonTouchStart = (event: TouchEvent): void => {
+    if (!this.buttonRef || !this.isButtonDraggable()) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.isButtonDragging = true;
+    this.buttonWasDragged = false; // Reset the drag flag
+    const rect = this.host.getBoundingClientRect();
+    this.buttonDragOffset = {
+      x: pointer.clientX - rect.left,
+      y: pointer.clientY - rect.top
+    };
+
+    this.addButtonEventListeners();
+  };
+
+  private handleButtonMouseMove = (event: MouseEvent): void => {
+    if (!this.isButtonDragging) return;
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.updateButtonPosition(pointer);
+  };
+
+  private handleButtonTouchMove = (event: TouchEvent): void => {
+    if (!this.isButtonDragging) return;
+
+    event.preventDefault();
+
+    const pointer = this.getPointerCoordinates(event);
+    if (!pointer) return;
+
+    this.updateButtonPosition(pointer);
+  };
+
+  private updateButtonPosition(pointer: PointerEvent): void {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    const buttonWidth = this.buttonRef?.offsetWidth || 60;
+    const buttonHeight = this.buttonRef?.offsetHeight || 60;
+    const minPadding = 10;
+
+    const candidateLeft = pointer.clientX - this.buttonDragOffset.x;
+    const candidateTop = pointer.clientY - this.buttonDragOffset.y;
+
+    const minLeft = minPadding;
+    const maxLeft = windowWidth - buttonWidth - minPadding;
+    const minTop = minPadding;
+    const maxTop = windowHeight - buttonHeight - minPadding;
+
+    const constrainedLeft = Math.max(minLeft, Math.min(candidateLeft, maxLeft));
+    const constrainedTop = Math.max(minTop, Math.min(candidateTop, maxTop));
+
+    const newHorizontalValue = this.buttonHorizontalSide === 'left'
+      ? constrainedLeft
+      : Math.max(minPadding, windowWidth - (constrainedLeft + buttonWidth));
+    const newVerticalValue = this.buttonVerticalSide === 'top'
+      ? constrainedTop
+      : Math.max(minPadding, windowHeight - (constrainedTop + buttonHeight));
+
+    if (newHorizontalValue !== this.buttonPosition.x || newVerticalValue !== this.buttonPosition.y) {
+      this.buttonWasDragged = true;
+      this.buttonPosition = { x: newHorizontalValue, y: newVerticalValue };
+
+      if (this.rafId === null) {
+        this.rafId = requestAnimationFrame(() => {
+          this.updateHostPosition();
+          this.rafId = null;
+        });
+      }
+    }
+  }
+
+  private handleButtonMouseUp = (): void => {
+    if (this.isButtonDragging) {
+      this.isButtonDragging = false;
+      this.removeButtonEventListeners();
+    }
+  };
+
+  private handleButtonTouchEnd = (): void => {
+    if (this.isButtonDragging) {
+      this.isButtonDragging = false;
+      this.removeButtonEventListeners();
+    }
+  };
+
+  private handleButtonClick = (): void => {
+    // Only toggle visibility if the button wasn't dragged
+    if (!this.buttonWasDragged) {
+      this.toggleWindowVisibility();
+    }
+    // Reset the flag after handling the click
+    this.buttonWasDragged = false;
+  };
+
+  private addButtonEventListeners(): void {
+    if (this.buttonListenersAttached) {
+      return;
+    }
+
+    document.addEventListener('mousemove', this.handleButtonMouseMove);
+    document.addEventListener('mouseup', this.handleButtonMouseUp);
+    document.addEventListener('touchmove', this.handleButtonTouchMove, { passive: false });
+    document.addEventListener('touchend', this.handleButtonTouchEnd);
+    this.buttonListenersAttached = true;
+  }
+
+  private removeButtonEventListeners(): void {
+    if (!this.buttonListenersAttached) {
+      return;
+    }
+
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+
+    document.removeEventListener('mousemove', this.handleButtonMouseMove);
+    document.removeEventListener('mouseup', this.handleButtonMouseUp);
+    document.removeEventListener('touchmove', this.handleButtonTouchMove);
+    document.removeEventListener('touchend', this.handleButtonTouchEnd);
+    this.buttonListenersAttached = false;
+  }
+
+  private isAutoPosition(value: string): boolean {
+    const trimmed = value.trim();
+    return trimmed === '' || trimmed === 'auto';
+  }
+
+  private parsePixelValue(value: string): number | null {
+    const trimmed = value.trim();
+    if (trimmed === '' || trimmed === 'auto') {
+      return null;
+    }
+
+    if (trimmed.endsWith('px')) {
+      const parsed = parseFloat(trimmed);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+
+    return null;
+  }
+
+  private getNumericPositionValue(value: string, fallback: number): number {
+    const parsed = this.parsePixelValue(value);
+    if (parsed !== null) {
+      return parsed;
+    }
+    return fallback;
   }
 
   private getWelcomeMessages(): string[] {
-    const translated = this.translationManager.getArray("welcomeMessages");
+    const translated = this.translationManager.getArray("content.welcomeMessages");
     return translated && translated.length > 0
       ? translated
       : this.parsedWelcomeMessages;
   }
 
   private getStarterQuestions(): string[] {
-    const translated = this.translationManager.getArray("starterQuestions");
+    const translated = this.translationManager.getArray("content.starterQuestions");
     return translated && translated.length > 0
       ? translated
       : this.parsedStarterQuestions;
   }
 
   private getButtonClasses(): string {
-    const translatedButtonText = this.translationManager.get('buttonText');
-    const hasText = (translatedButtonText && translatedButtonText.trim()) || (this.buttonText && this.buttonText.trim());
+    const buttonText = this.translationManager.get('branding.buttonText', this.buttonText);
+    const hasText = !!(buttonText && buttonText.trim());
     const baseClass = hasText ? 'chat-btn-text' : 'chat-btn-icon';
     const shapeClass = this.buttonShape === 'round' ? 'round' : '';
     return `${baseClass} ${shapeClass}`.trim();
   }
 
   private renderButton() {
-    const translatedButtonText = this.translationManager.get('buttonText');
-    const hasText = (translatedButtonText && translatedButtonText.trim()) || (this.buttonText && this.buttonText.trim());
+    const buttonText = this.translationManager.get('branding.buttonText', this.buttonText);
+    const hasText = !!(buttonText && buttonText.trim());
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
-    const iconSrc = hasCustomIcon ? this.iconUrl : this.getDefaultIconUrl();
     const buttonClasses = this.getButtonClasses();
-    const finalButtonText = translatedButtonText || this.buttonText;
+    const finalButtonText = buttonText ?? '';
+    const openLabel = this.translationManager.get('launcher.open') ?? '';
+    const buttonAriaLabel = finalButtonText ? `${openLabel} - ${finalButtonText}` : openLabel;
+
+    // Only show drag cursor if button is draggable
+    const isDraggable = this.isButtonDraggable();
+    const buttonStyle = isDraggable ? {
+      cursor: this.isButtonDragging ? 'grabbing' : 'grab',
+    } : {};
+
     if (hasText) {
       return (
         <button
+          ref={(el) => this.buttonRef = el}
           class={buttonClasses}
-          onClick={() => this.toggleWindowVisibility()}
-          aria-label={`Open chat - ${finalButtonText}`}
-          title={finalButtonText}
+          aria-label={buttonAriaLabel}
+          title={finalButtonText || openLabel}
+          style={buttonStyle}
+          onClick={() => this.handleButtonClick()}
+          onMouseDown={(e) => this.handleButtonMouseDown(e)}
+          onTouchStart={(e) => this.handleButtonTouchStart(e)}
+          aria-grabbed={this.isButtonDragging}
+          aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
         >
-          <img src={iconSrc} alt="" />
+          {hasCustomIcon ? <img src={this.iconUrl} alt="" /> : <OcsWidgetAvatar />}
           <span>{finalButtonText}</span>
+          {isDraggable && (
+            <span id="chat-button-drag-hint" style={{ display: 'none' }}>
+              Draggable. Use mouse or touch to reposition.
+            </span>
+          )}
         </button>
       );
     } else {
       return (
         <button
+          ref={(el) => this.buttonRef = el}
           class={buttonClasses}
-          onClick={() => this.toggleWindowVisibility()}
-          aria-label="Open chat"
-          title="Open chat"
+          aria-label={openLabel}
+          title={openLabel}
+          style={buttonStyle}
+          onClick={() => this.handleButtonClick()}
+          onMouseDown={(e) => this.handleButtonMouseDown(e)}
+          onTouchStart={(e) => this.handleButtonTouchStart(e)}
+          aria-grabbed={this.isButtonDragging}
+          aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
         >
-          <img src={iconSrc} alt="Chat" />
+          {hasCustomIcon ? <img src={this.iconUrl} alt="" /> : <OcsWidgetAvatar />}
+          {isDraggable && (
+            <span id="chat-button-drag-hint" style={{ display: 'none' }}>
+              Draggable. Use mouse or touch to reposition.
+            </span>
+          )}
         </button>
       );
     }
@@ -1033,10 +1354,14 @@ export class OcsChat {
 
   private async confirmNewChat(): Promise<void> {
     this.hideConfirmationDialog();
-    await this.actuallyStartNewChat();
+    await this.clearSession();
   }
 
-  private async actuallyStartNewChat(): Promise<void> {
+  /**
+   * This clears out all data related to the previous session. A new session
+   * will start when the user sends a message.
+   */
+  private async clearSession(): Promise<void> {
     this.clearSessionStorage();
     this.sessionId = undefined;
     this.messages = [];
@@ -1046,8 +1371,6 @@ export class OcsChat {
       this.selectedFiles = [];
     }
     this.cleanup();
-
-    await this.startSession();
   }
 
   private toggleFullscreen(): void {
@@ -1088,15 +1411,15 @@ export class OcsChat {
                   <GripDotsVerticalIcon/>
                 </div>
               </div>
-              <div class="header-text">{this.translationManager.get('headerText') || this.headerText}</div>
+              <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
               <div class="header-buttons">
                 {/* New Chat button */}
                 {this.messages.length > 0 && (
                   <button
                     class="header-button"
                     onClick={() => this.showConfirmationDialog()}
-                    title={this.translationManager.get('startNewChat')}
-                    aria-label={this.translationManager.get('startNewChat')}
+                    title={this.translationManager.get('window.newChat')}
+                    aria-label={this.translationManager.get('window.newChat')}
                   >
                     <PlusWithCircleIcon/>
                   </button>
@@ -1105,8 +1428,8 @@ export class OcsChat {
                 {this.allowFullScreen && <button
                   class="header-button fullscreen-button"
                   onClick={() => this.toggleFullscreen()}
-                  title={this.isFullscreen ? this.translationManager.get('exitFullscreen') : this.translationManager.get('enterFullscreen')}
-                  aria-label={this.isFullscreen ? this.translationManager.get('exitFullscreen') : this.translationManager.get('enterFullscreen')}
+                  title={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
+                  aria-label={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
                 >
                   {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
                 </button>}
@@ -1114,7 +1437,7 @@ export class OcsChat {
                 <button
                   class="header-button"
                   onClick={() => this.visible = false}
-                  aria-label={this.translationManager.get('close')}
+                  aria-label={this.translationManager.get('window.close')}
                 >
                   <XMarkIcon/>
                 </button>
@@ -1125,22 +1448,22 @@ export class OcsChat {
               <div class="confirmation-overlay">
                 <div class="confirmation-dialog">
                   <div class="confirmation-content">
-                    <h3 class="confirmation-title">{this.translationManager.get('startNewChatTitle')}</h3>
+                    <h3 class="confirmation-title">{this.translationManager.get('modal.newChatTitle')}</h3>
                     <p class="confirmation-message">
-                      {this.translationManager.get('startNewChatMessage') || this.newChatConfirmationMessage}
+                      {this.translationManager.get('modal.newChatBody', this.newChatConfirmationMessage)}
                     </p>
                     <div class="confirmation-buttons">
                       <button
                         class="confirmation-button confirmation-button-cancel"
                         onClick={() => this.hideConfirmationDialog()}
                       >
-                        {this.translationManager.get('cancel')}
+                        {this.translationManager.get('modal.cancel')}
                       </button>
                       <button
                         class="confirmation-button confirmation-button-confirm"
                         onClick={() => this.confirmNewChat()}
                       >
-                        {this.translationManager.get('confirm')}
+                        {this.translationManager.get('modal.confirm')}
                       </button>
                     </div>
                   </div>
@@ -1154,7 +1477,7 @@ export class OcsChat {
               {this.isLoading && !this.sessionId && (
                 <div class="loading-container">
                   <div class="loading-spinner"></div>
-                  <span class="loading-text">Starting chat...</span>
+                  <span class="loading-text">{this.translationManager.get('status.starting')}</span>
                 </div>
               )}
 
@@ -1164,7 +1487,7 @@ export class OcsChat {
                   ref={(el) => this.messageListRef = el}
                   class="messages-container"
                 >
-                  {this.messages.length === 0 && this.parsedWelcomeMessages.length > 0 && (
+                  {this.messages.length === 0 && this.getWelcomeMessages().length > 0 && (
                     <div class="welcome-messages">
                       {this.getWelcomeMessages().map((message, index) => (
                         <div key={`welcome-${index}`} class="message-row message-row-assistant">
@@ -1224,7 +1547,7 @@ export class OcsChat {
                         <div class="typing-progress"></div>
                       </div>
                       <div class="typing-text">
-                        <span>{this.translationManager.get('typingIndicatorText')}</span>
+                        <span>{this.translationManager.get('status.typing', this.typingIndicatorText)}</span>
                         <span class="typing-dots loading"></span>
                       </div>
                     </div>
@@ -1233,7 +1556,7 @@ export class OcsChat {
               )}
 
               {/* Starter Questions */}
-              {this.messages.length === 0 && this.parsedStarterQuestions.length > 0 && (
+              {this.messages.length === 0 && this.getStarterQuestions().length > 0 && (
                 <div class="starter-questions">
                   {this.getStarterQuestions().map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
@@ -1270,7 +1593,7 @@ export class OcsChat {
                         <button
                           onClick={() => this.removeSelectedFile(index)}
                           class="selected-file-remove-button"
-                          aria-label={this.translationManager.get('removeFile')}
+                          aria-label={this.translationManager.get('attach.remove')}
                         ><XIcon />
                         </button>
                       </div>
@@ -1280,19 +1603,18 @@ export class OcsChat {
               )}
 
               {/* Input Area */}
-              {this.sessionId && (
-                <div class="input-area">
-                  <div class="input-container">
-                    <textarea
-                      ref={(el) => this.textareaRef = el}
-                      class="message-textarea"
-                      rows={1}
-                      placeholder={this.translationManager.get('typeMessage')}
-                      value={this.messageInput}
-                      onInput={(e) => this.handleInputChange(e)}
-                      onKeyPress={(e) => this.handleKeyPress(e)}
-                      disabled={this.isTyping || this.isUploadingFiles}
-                    ></textarea>
+              <div class="input-area">
+                <div class="input-container">
+                  <textarea
+                    ref={(el) => this.textareaRef = el}
+                    class="message-textarea"
+                    rows={1}
+                    placeholder={this.translationManager.get('composer.placeholder')}
+                    value={this.messageInput}
+                    onInput={(e) => this.handleInputChange(e)}
+                    onKeyPress={(e) => this.handleKeyPress(e)}
+                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
+                  ></textarea>
                     {/* File Upload Button */}
                     {this.allowAttachments && (
                       <input
@@ -1313,29 +1635,28 @@ export class OcsChat {
                       <button
                         class="file-attachment-button"
                         onClick={() => this.fileInputRef?.click()}
-                        disabled={this.isTyping || this.isUploadingFiles}
-                        title={this.translationManager.get('attachFiles')}
-                        aria-label={this.translationManager.get('attachFiles')}
+                        disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
+                        title={this.translationManager.get('attach.add')}
+                        aria-label={this.translationManager.get('attach.add')}
                       >
                         <PaperClipIcon />
                       </button>
                     )}
                     <button
                       class={`send-button ${
-                        !this.isTyping && !!this.messageInput.trim()
+                        !this.isTyping && !this.isLoading && !!this.messageInput.trim()
                           ? 'send-button-enabled'
                           : 'send-button-disabled'
                       }`}
                       onClick={() => this.sendMessage(this.messageInput)}
-                      disabled={this.isTyping || this.isUploadingFiles || !this.messageInput.trim()}
+                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading || !this.messageInput.trim()}
                     >
-                      {this.isUploadingFiles ? `${this.translationManager.get('uploading')}...` : this.translationManager.get('sendMessage')}
+                      {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                     </button>
                   </div>
                 </div>
-              )}
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
-                <p>{this.translationManager.get('poweredBy')}{' '} <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
+                <p>{this.translationManager.get('branding.poweredBy')}{' '} <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
               </div>
             </div>
           </div>

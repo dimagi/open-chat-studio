@@ -16,7 +16,7 @@ class Banner(models.Model):
         ("error", "Error"),
         ("success", "Success"),
     )
-    # Pre-defined locations must match those in the middleware.py
+    # Pre-defined locations must match those in the views.py
     LOCATIONS = (
         ("global", "Global (All Pages)"),
         ("pipelines", "Pipelines Home"),

@@ -82,6 +82,8 @@ class DashboardFilterForm(forms.Form):
 
             # Set channel choices using ChannelPlatform.for_filter
             available_platform_labels = ChannelPlatform.for_filter(team)
+            available_platform_labels.remove(ChannelPlatform.EVALUATIONS.label)
+
             # Create a mapping from label to value for available platforms
             label_to_value = {choice[1]: choice[0] for choice in ChannelPlatform.choices}
             # Build choices list using only available platforms
@@ -89,7 +91,7 @@ class DashboardFilterForm(forms.Form):
                 (label_to_value[label], label) for label in available_platform_labels if label in label_to_value
             ]
             self.fields["channels"].choices = platform_choices
-            self.fields["participants"].queryset = Participant.objects.filter(team=team)
+            self.fields["participants"].queryset = Participant.objects.select_related("user").filter(team=team)
             self.fields["tags"].queryset = Tag.objects.filter(team=team).exclude(
                 category=TagCategories.EXPERIMENT_VERSION
             )

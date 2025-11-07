@@ -10,6 +10,7 @@ from apps.experiments.tables import ExperimentSessionsTable, _show_chat_button, 
 from apps.generics import actions, chips
 from apps.generics.actions import chip_action
 from apps.generics.tables import ColumnWithHelp, TimeAgoColumn
+from apps.teams.utils import get_slug_for_team
 
 
 def _name_label_factory(record, _):
@@ -19,7 +20,7 @@ def _name_label_factory(record, _):
 
 
 def _chatbot_url_factory(record):
-    return reverse("chatbots:single_chatbot_home", args=[record.team.slug, record.id])
+    return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(record.team_id), record.id])
 
 
 def _chip_chatbot_url_factory(_, __, record, ___):
@@ -75,7 +76,7 @@ class ChatbotTable(tables.Table):
 def chatbot_url_factory(_, __, record, value):
     return reverse(
         "chatbots:chatbot_session_view",
-        args=[record.team.slug, record.experiment.public_id, record.external_id],
+        args=[get_slug_for_team(record.team_id), record.experiment.public_id, record.external_id],
     )
 
 
@@ -83,6 +84,11 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
     chatbot = columns.Column(
         verbose_name="Chatbot",
         accessor="experiment",
+        orderable=True,
+    )
+    message_count = columns.Column(
+        verbose_name="Message Count",
+        accessor="message_count",
         orderable=True,
     )
 
@@ -112,7 +118,7 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
     class Meta:
         model = ExperimentSession
         # Ensure that chatbot is shown first
-        fields = ["chatbot"]
+        fields = ["chatbot", "participant", "message_count"]
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No sessions yet!"

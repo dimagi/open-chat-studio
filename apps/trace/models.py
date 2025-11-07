@@ -8,6 +8,8 @@ from django.urls import reverse
 
 from apps.annotations.models import TaggedModelMixin
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
+from apps.utils.fields import SanitizedJSONField
 
 
 class TraceStatus(models.TextChoices):
@@ -37,10 +39,10 @@ class Trace(models.Model):
     )
     team = models.ForeignKey("teams.team", on_delete=models.SET_NULL, null=True, related_name="traces")
     duration = models.IntegerField()
-    participant_data = models.JSONField(
+    participant_data = SanitizedJSONField(
         default=dict, blank=True, help_text="Snapshot of participant data at the time of the trace"
     )
-    session_state = models.JSONField(
+    session_state = SanitizedJSONField(
         default=dict, blank=True, help_text="Snapshot of session state at the time of the trace"
     )
     experiment_version_number = models.PositiveIntegerField(null=True, blank=True)
@@ -49,7 +51,7 @@ class Trace(models.Model):
         return f"Trace {self.experiment} {self.session} {self.duration}ms"
 
     def get_absolute_url(self):
-        return reverse("trace:trace_detail", args=[self.team.slug, self.id])
+        return reverse("trace:trace_detail", args=[get_slug_for_team(self.team_id), self.id])
 
     def duration_seconds(self) -> float:
         return round(self.duration / 1000, 2)
@@ -87,9 +89,9 @@ class Span(BaseTeamModel, TaggedModelMixin):
     start_time = models.DateTimeField(auto_now_add=True)
     end_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=32, choices=TraceStatus.choices, default=TraceStatus.PENDING)
-    input = models.JSONField(default=dict, blank=True)
-    output = models.JSONField(default=dict, blank=True)
-    metadata = models.JSONField(default=dict, blank=True)
+    input = SanitizedJSONField(default=dict, blank=True)
+    output = SanitizedJSONField(default=dict, blank=True)
+    metadata = SanitizedJSONField(default=dict, blank=True)
     error = models.CharField(blank=True)
 
     class Meta:

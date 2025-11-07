@@ -7,6 +7,7 @@ from django.urls import reverse
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
 
 logger = logging.getLogger("ocs.mcp_integrations")
 
@@ -42,7 +43,7 @@ class McpServer(BaseTeamModel):
         return self.name
 
     def get_absolute_url(self):
-        return reverse("mcp_integrations:edit", args=[self.team.slug, self.pk])
+        return reverse("mcp_integrations:edit", args=[get_slug_for_team(self.team_id), self.pk])
 
     def sync_tools(self):
         """

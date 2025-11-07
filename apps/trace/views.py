@@ -27,7 +27,6 @@ class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
 
 
 class TraceTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
-    paginate_by = 25
     template_name = "table/single_table.html"
     model = Trace
     table_class = TraceTable
