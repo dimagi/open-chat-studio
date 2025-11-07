@@ -89,23 +89,46 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel():
 @pytest.mark.parametrize(
     ("slack_enabled", "messaging_provider_types", "channels_enabled"),
     [
-        (False, [], [ChannelPlatform.TELEGRAM]),
+        (False, [], [ChannelPlatform.TELEGRAM, ChannelPlatform.EMBEDDED_WIDGET]),
         (
             False,
             [MessagingProviderType.twilio],
-            [ChannelPlatform.TELEGRAM, ChannelPlatform.WHATSAPP, ChannelPlatform.FACEBOOK],
+            [
+                ChannelPlatform.TELEGRAM,
+                ChannelPlatform.WHATSAPP,
+                ChannelPlatform.FACEBOOK,
+                ChannelPlatform.EMBEDDED_WIDGET,
+            ],
         ),
-        (False, [MessagingProviderType.turnio], [ChannelPlatform.TELEGRAM, ChannelPlatform.WHATSAPP]),
+        (
+            False,
+            [MessagingProviderType.turnio],
+            [ChannelPlatform.TELEGRAM, ChannelPlatform.WHATSAPP, ChannelPlatform.EMBEDDED_WIDGET],
+        ),
         (
             False,
             [MessagingProviderType.turnio, MessagingProviderType.twilio],
-            [ChannelPlatform.TELEGRAM, ChannelPlatform.WHATSAPP, ChannelPlatform.FACEBOOK],
+            [
+                ChannelPlatform.TELEGRAM,
+                ChannelPlatform.WHATSAPP,
+                ChannelPlatform.FACEBOOK,
+                ChannelPlatform.EMBEDDED_WIDGET,
+            ],
         ),
-        (False, [MessagingProviderType.sureadhere], [ChannelPlatform.TELEGRAM, ChannelPlatform.SUREADHERE]),
+        (
+            False,
+            [MessagingProviderType.sureadhere],
+            [ChannelPlatform.TELEGRAM, ChannelPlatform.SUREADHERE, ChannelPlatform.EMBEDDED_WIDGET],
+        ),
         (
             True,
             [MessagingProviderType.sureadhere, MessagingProviderType.slack],
-            [ChannelPlatform.TELEGRAM, ChannelPlatform.SLACK, ChannelPlatform.SUREADHERE],
+            [
+                ChannelPlatform.TELEGRAM,
+                ChannelPlatform.SLACK,
+                ChannelPlatform.SUREADHERE,
+                ChannelPlatform.EMBEDDED_WIDGET,
+            ],
         ),
     ],
 )

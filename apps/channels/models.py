@@ -31,6 +31,7 @@ class ChannelPlatform(models.TextChoices):
     SLACK = "slack", "Slack"
     COMMCARE_CONNECT = "commcare_connect", "CommCare Connect"
     EVALUATIONS = "evaluations", "Evaluations"
+    EMBEDDED_WIDGET = "embedded_widget", "Embedded Widget"
 
     @classmethod
     def team_global_platforms(cls):
@@ -45,6 +46,7 @@ class ChannelPlatform(models.TextChoices):
         all_platforms = cls.as_list(exclude=[cls.API, cls.WEB, cls.EVALUATIONS])
         platform_availability = {platform: False for platform in all_platforms}
         platform_availability[cls.TELEGRAM] = True
+        platform_availability[cls.EMBEDDED_WIDGET] = True
 
         for provider in MessagingProvider.objects.filter(team=team):
             for platform in provider.get_messaging_service().supported_platforms:
@@ -87,6 +89,8 @@ class ChannelPlatform(models.TextChoices):
                 return forms.SlackChannelForm(**kwargs)
             case self.COMMCARE_CONNECT:
                 return forms.CommCareConnectChannelForm(**kwargs)
+            case self.EMBEDDED_WIDGET:
+                return forms.EmbeddedWidgetChannelForm(**kwargs)
         return None
 
     @property
@@ -107,6 +111,8 @@ class ChannelPlatform(models.TextChoices):
                 # The bot_name will be shown to the user, which is how they'll know which bot it is. We use the bot name
                 # here to prevent other bots from using the same name in order to mitigate confusion.
                 return "commcare_connect_bot_name"
+            case self.EMBEDDED_WIDGET:
+                return "widget_token"
         return None
 
     @staticmethod
