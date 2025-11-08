@@ -5,7 +5,7 @@ from celery.app import trace
 
 # Don't use connection pooling in Celery
 os.environ["DJANGO_DATABASE_USE_POOL"] = "false"
-os.environ["DJANGO_DATABASE_CONN_MAX_AGE"] = "30"
+os.environ["DJANGO_DATABASE_CONN_MAX_AGE"] = "0"
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
