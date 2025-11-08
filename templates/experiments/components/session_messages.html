@@ -78,7 +78,7 @@
                       <div class="flex flex-col">
                         {% for file in message.get_attached_files %}
                           <div class="inline text-sm p-1">
-                            <a href="{% url "experiments:download_file" request.team.slug experiment_session.id file.id %}" target="_blank" class="link link-primary">
+                            <a href="{% url "chatbots:download_file" request.team.slug experiment_session.id file.id %}" target="_blank" class="link link-primary">
                               <i class="fa-solid fa-file fa-sm mr-1"></i>{{ file.name }}
                             </a>
                             ({{ file.display_size }})
@@ -95,7 +95,7 @@
                                   x-show="showImage"
                                   x-transition
                                   class="mt-2"
-                                  hx-get="{% url 'experiments:get_image_html' request.team.slug experiment_session.id file.id %}"
+                                  hx-get="{% url 'chatbots:get_image_html' request.team.slug experiment_session.id file.id %}"
                                   hx-trigger="intersect once"
                                   hx-swap="innerHTML">
                                   <div class="flex items-center gap-2 text-xs text-gray-500">

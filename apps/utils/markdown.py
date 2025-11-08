@@ -68,8 +68,10 @@ def _update_href(el):
         return el
 
     prefix, team_slug, owner_id, file_id = href.split(":")
+    # Map file prefixes to URL names
+    # Use chatbots for regular files since experiments are migrated to chatbots
     url_name = {
-        "file": "experiments:download_file",
+        "file": "chatbots:download_file",
         "assistant_file": "assistants:download_file",
     }.get(prefix)
     if url_name is None:

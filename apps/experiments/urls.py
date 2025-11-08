@@ -145,11 +145,6 @@ urlpatterns = [
         name="experiment_session_view",
     ),
     path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/paginate/",
-        views.experiment_session_pagination_view,
-        name="experiment_session_pagination_view",
-    ),
-    path(
         "e/<uuid:experiment_id>/s/<str:session_id>/messages/",
         views.experiment_session_messages_view,
         name="experiment_session_messages_view",
@@ -173,8 +168,6 @@ urlpatterns = [
         DeleteExperimentRoute.as_view(),
         name="experiment_route_delete",
     ),
-    path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
-    path("<int:session_id>/image/<int:pk>/html/", views.get_image_html, name="get_image_html"),
     path(
         "e/<uuid:experiment_id>/verify_token/<str:token>/",
         views.verify_public_chat_token,

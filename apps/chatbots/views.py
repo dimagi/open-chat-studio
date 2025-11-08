@@ -5,11 +5,12 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db.models import Count, F, OuterRef, Q, Subquery
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
+from django.utils.html import format_html
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
@@ -22,6 +23,7 @@ from apps.chat.channels import WebChannel
 from apps.chat.models import Chat, ChatMessage
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
+from apps.files.models import File
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.filters import (
     ExperimentSessionFilter,
@@ -645,3 +647,37 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "use_dynamic_filters": True,
             **filter_context,
         }
+
+
+@team_required
+def download_file(request, team_slug: str, session_id: int, pk: int):
+    """Download a file attached to a chatbot session."""
+    resource = get_object_or_404(
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+    )
+    try:
+        file = resource.file.open()
+        return FileResponse(file, as_attachment=True, filename=resource.file.name)
+    except FileNotFoundError:
+        raise Http404() from None
+
+
+@team_required
+def get_image_html(request, team_slug: str, session_id: int, pk: int):
+    """Return HTML for displaying an image attachment in a chatbot session."""
+    resource = get_object_or_404(
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+    )
+
+    if not resource.is_image:
+        raise Http404("File is not an image")
+
+    # Generate the image URL
+    image_url = reverse("chatbots:download_file", args=[team_slug, session_id, pk])
+
+    # Return HTML for the image
+    html = format_html(
+        '<img src="{}" alt="{}" class="max-w-md max-h-64 rounded border shadow-sm mt-2">', image_url, resource.name
+    )
+
+    return HttpResponse(html)
