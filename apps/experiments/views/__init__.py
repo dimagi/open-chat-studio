@@ -10,9 +10,7 @@ from .consent import (  # noqa: F401
 )
 from .experiment import (  # noqa: F401
     CreateExperiment,
-    CreateExperimentVersion,
     ExperimentSessionsTableView,
-    ExperimentVersionsTableView,
     archive_experiment_version,
     end_experiment,
     experiment_chat,

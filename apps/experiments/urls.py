@@ -41,7 +41,6 @@ urlpatterns = [
     path("new/", views.CreateExperiment.as_view(), name="new"),
     path("e/<int:experiment_id>/trends/data", views.trends_data, name="trends_data"),
     path("e/<int:experiment_id>/sessions-table/", views.ExperimentSessionsTableView.as_view(), name="sessions-list"),
-    path("e/<int:experiment_id>/versions/", views.ExperimentVersionsTableView.as_view(), name="versions-list"),
     path(
         "e/<int:experiment_id>/versions/archive/<int:version_number>/",
         views.archive_experiment_version,
@@ -57,7 +56,6 @@ urlpatterns = [
         views.update_version_description,
         name="update_version_description",
     ),
-    path("e/<int:experiment_id>/versions/create", views.CreateExperimentVersion.as_view(), name="create_version"),
     path(
         "e/<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
         views.start_authed_web_session,

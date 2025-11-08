@@ -1,3 +1,5 @@
+from unittest import mock
+
 import pytest
 from django.contrib.auth.models import Permission
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -298,3 +300,44 @@ def test_chatbot_sessions_table_view(team_with_users):
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
     assert response.status_code == 200
     assert isinstance(response.context_data["table"], ChatbotSessionsTable)
+
+
+@pytest.mark.django_db()
+class TestCreateChatbotVersionView:
+    """Tests for creating new chatbot versions."""
+
+    @pytest.mark.parametrize("in_sync_with_openai", [True, False])
+    @mock.patch("apps.chatbots.views.messages")
+    @mock.patch("apps.chatbots.views.async_create_experiment_version.delay")
+    def test_create_version_with_assistant(self, delay, messages, in_sync_with_openai, client, team_with_users):
+        """Test creating a chatbot version with an assistant, checking sync status."""
+        from apps.assistants.models import OpenAiAssistant
+
+        delay.return_value = "a7a82d12-0abe-4466-92c7-95e4ed8eaf5c"
+        team = team_with_users
+        user = team.members.first()
+
+        # Create assistant and chatbot
+        assistant = OpenAiAssistant.objects.create(
+            name="Test Assistant",
+            team=team,
+            llm_provider_model=None,
+        )
+        experiment = Experiment.objects.create(name="Test Chatbot", assistant=assistant, owner=user, team=team)
+
+        client.force_login(user)
+        post_data = {"version_description": "Some description", "is_default_version": True}
+        url = reverse("chatbots:create_version", args=[team.slug, experiment.id])
+
+        with mock.patch("apps.chatbots.views.CreateChatbotVersion._is_assistant_out_of_sync") as out_of_sync:
+            out_of_sync.return_value = not in_sync_with_openai
+            client.post(url, data=post_data)
+
+        if in_sync_with_openai:
+            expected_message = "Creating new version. This might take a few minutes."
+            messages.success.assert_called_with(mock.ANY, expected_message)
+            assert delay.called is True
+        else:
+            expected_message = "Assistant is out of sync with OpenAI. Please update the assistant first."
+            messages.error.assert_called_with(mock.ANY, expected_message)
+            assert delay.called is False
