@@ -238,9 +238,6 @@ if env.bool("DJANGO_DATABASE_USE_POOL", True):
 else:
     DATABASES["default"]["CONN_MAX_AGE"] = env.int("DJANGO_DATABASE_CONN_MAX_AGE", 0)
 
-if env.bool("DJANGO_DATABASE_DISABLE_SSL", False):
-    db_options["sslmode"] = "disable"
-
 # Auth / login stuff
 
 # Django recommends overriding the user model even if you don't think you need to because it makes
