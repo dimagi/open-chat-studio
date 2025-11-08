@@ -57,16 +57,6 @@ urlpatterns = [
         name="update_version_description",
     ),
     path(
-        "e/<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
-        views.start_authed_web_session,
-        name="start_authed_web_session",
-    ),
-    path(
-        "e/<int:experiment_id>/v/<int:version_number>/session/<int:session_id>/",
-        views.experiment_chat_session,
-        name="experiment_chat_session",
-    ),
-    path(
         "e/<uuid:experiment_id>/v/<int:version_number>/session/<str:session_id>/message/",
         views.experiment_session_message,
         name="experiment_session_message",

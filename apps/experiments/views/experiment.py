@@ -394,50 +394,6 @@ def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
     }
 
 
-@require_POST
-@login_and_team_required
-def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
-    """Start an authed web session with the chosen experiment, be it a specific version or not"""
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-
-    session = WebChannel.start_new_session(
-        working_experiment=experiment,
-        participant_user=request.user,
-        participant_identifier=request.user.email,
-        timezone=request.session.get("detected_tz", None),
-        version=version_number,
-    )
-    return HttpResponseRedirect(
-        reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, version_number, session.id])
-    )
-
-
-@login_and_team_required
-def experiment_chat_session(
-    request, team_slug: str, experiment_id: int, session_id: int, version_number: int, active_tab: str = "experiments"
-):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = get_object_or_404(
-        ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
-    )
-    try:
-        experiment_version = experiment.get_version(version_number)
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
-        "experiment_name": experiment_version.name,
-        "experiment_version": experiment_version,
-        "experiment_version_number": experiment_version.version_number,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/chat/web_chat.html",
-        {"experiment": experiment, "session": session, "active_tab": active_tab, **version_specific_vars},
-    )
-
-
 @experiment_session_view()
 @verify_session_access_cookie
 @require_POST

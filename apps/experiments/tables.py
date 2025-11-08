@@ -103,6 +103,10 @@ class ConsentFormTable(tables.Table):
 
 
 def session_chat_url(url_name, request, record, value):
+    """Generate URL for continuing a chat session.
+
+    Uses chatbot URLs since experiments have been migrated to chatbots.
+    """
     return reverse(
         url_name, args=[request.team.slug, record.experiment_id, record.get_experiment_version_number(), record.id]
     )
@@ -122,7 +126,7 @@ class ExperimentSessionsTable(tables.Table):
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(
-                url_name="experiments:experiment_chat_session",
+                url_name="chatbots:chatbot_chat_session",
                 url_factory=session_chat_url,
                 icon_class="fa-solid fa-comment",
                 title="Continue Chat",

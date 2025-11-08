@@ -11,7 +11,6 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.chat.channels import WebChannel
-from apps.chat.models import Chat
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
@@ -387,28 +386,32 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
     assert fs_resource.files.filter(name="fs.text").exists()
 
 
-@pytest.mark.django_db()
-@pytest.mark.parametrize("version_number", [1, 2])
-def test_start_authed_web_session_with_version(version_number, client):
-    team = TeamWithUsersFactory()
-    working_experiment = ExperimentFactory(team=team)
-    working_experiment.create_new_version()
+# Test for start_authed_web_session moved to chatbots
+# See: apps/chatbots/tests/test_chatbot_views.py
+# The view has been removed from experiments and is now chatbots:start_authed_web_session
 
-    client.force_login(working_experiment.team.members.first())
-    url = reverse(
-        "experiments:start_authed_web_session",
-        kwargs={
-            "team_slug": working_experiment.team.slug,
-            "experiment_id": working_experiment.id,
-            "version_number": version_number,
-        },
-    )
-
-    response = client.post(url, data={})
-    assert response.status_code == 302
-    assert working_experiment.sessions.count() == 1
-    expected_chat_metadata = {Chat.MetadataKeys.EXPERIMENT_VERSION: version_number}
-    assert working_experiment.sessions.first().chat.metadata == expected_chat_metadata
+# @pytest.mark.django_db()
+# @pytest.mark.parametrize("version_number", [1, 2])
+# def test_start_authed_web_session_with_version(version_number, client):
+#     team = TeamWithUsersFactory()
+#     working_experiment = ExperimentFactory(team=team)
+#     working_experiment.create_new_version()
+#
+#     client.force_login(working_experiment.team.members.first())
+#     url = reverse(
+#         "chatbots:start_authed_web_session",
+#         kwargs={
+#             "team_slug": working_experiment.team.slug,
+#             "experiment_id": working_experiment.id,
+#             "version_number": version_number,
+#         },
+#     )
+#
+#     response = client.post(url, data={})
+#     assert response.status_code == 302
+#     assert working_experiment.sessions.count() == 1
+#     expected_chat_metadata = {Chat.MetadataKeys.EXPERIMENT_VERSION: version_number}
+#     assert working_experiment.sessions.first().chat.metadata == expected_chat_metadata
 
 
 @pytest.mark.django_db()
