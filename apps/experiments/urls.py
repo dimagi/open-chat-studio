@@ -140,11 +140,6 @@ urlpatterns = [
         name="experiment_complete",
     ),
     path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/view/",
-        views.experiment_session_details_view,
-        name="experiment_session_view",
-    ),
-    path(
         "e/<uuid:experiment_id>/s/<str:session_id>/messages/",
         views.experiment_session_messages_view,
         name="experiment_session_messages_view",

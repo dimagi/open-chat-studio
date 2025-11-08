@@ -21,7 +21,6 @@ from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, 
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import (
-    FileResponse,
     Http404,
     HttpResponse,
     HttpResponseForbidden,
@@ -33,7 +32,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
@@ -107,7 +105,6 @@ from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
 from apps.filters.models import FilterSet
 from apps.generics.chips import Chip
-from apps.generics.views import paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
@@ -1294,33 +1291,6 @@ def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, sessi
             "active_tab": "experiments",
         },
     )
-
-
-@experiment_session_view()
-@verify_session_access_cookie
-def experiment_session_details_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return render_session_details(
-        request,
-        team_slug,
-        experiment_id,
-        session_id,
-        active_tab="experiments",
-        template_path="experiments/experiment_session_view.html",
-    )
-
-
-@login_and_team_required
-def experiment_session_pagination_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return paginate_session(
-        request,
-        team_slug,
-        experiment_id,
-        session_id,
-        view_name="experiments:experiment_session_view",
-    )
-
-
-
 
 
 @require_POST
