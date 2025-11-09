@@ -3,9 +3,8 @@ import os
 from celery import Celery
 from celery.app import trace
 
-# Don't use connection pooling in Celery
-os.environ["DJANGO_DATABASE_USE_POOL"] = "false"
-os.environ["DJANGO_DATABASE_CONN_MAX_AGE"] = "0"
+# Pool size must be > the celery concurrency limit
+os.environ["DJANGO_DATABASE_POOL_MAX_SIZE"] = "110"
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -27,7 +26,5 @@ trace.LOG_SUCCESS = """\
 Task %(name)s[%(id)s] succeeded in %(runtime)ss\
 """
 
-# Set this to 1 since many of our tasks are long-running
-worker_prefetch_multiplier = 1
 worker_max_tasks_per_child = 100  # Restart worker periodically
 task_acks_late = True
