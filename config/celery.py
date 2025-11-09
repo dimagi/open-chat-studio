@@ -26,3 +26,8 @@ app.conf.result_expires = 86400  # expire results in redis in 1 day
 trace.LOG_SUCCESS = """\
 Task %(name)s[%(id)s] succeeded in %(runtime)ss\
 """
+
+# Set this to 1 since many of our tasks are long-running
+worker_prefetch_multiplier = 1
+worker_max_tasks_per_child = 100  # Restart worker periodically
+task_acks_late = True
