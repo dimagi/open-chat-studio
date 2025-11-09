@@ -1,6 +1,6 @@
 import os
 
-from celery import Celery, signals
+from celery import Celery
 from celery.app import trace
 
 # Don't use connection pooling in Celery
@@ -31,32 +31,3 @@ Task %(name)s[%(id)s] succeeded in %(runtime)ss\
 worker_prefetch_multiplier = 1
 worker_max_tasks_per_child = 100  # Restart worker periodically
 task_acks_late = True
-
-
-# Fix for SSL connection errors with gevent + psycopg3
-# psycopg3 connections with SSL are not greenlet-safe when shared across greenlets.
-# Django doesn't close connections after Celery tasks (no request_finished signal),
-# so connections persist and get shared, causing "SSL error: decryption failed or bad record mac"
-# Solution: Force connection cleanup before/after each task
-@signals.task_prerun.connect
-def close_db_connections_before_task(**kwargs):
-    """Close database connections before task execution to ensure each greenlet gets a fresh connection"""
-    from django.db import close_old_connections
-
-    close_old_connections()
-
-
-@signals.task_postrun.connect
-def close_db_connections_after_task(**kwargs):
-    """Close database connections after task execution to prevent connection sharing across greenlets"""
-    from django.db import close_old_connections
-
-    close_old_connections()
-
-
-@signals.worker_process_init.connect
-def setup_worker_process(**kwargs):
-    """Initialize worker process with clean database connections"""
-    from django.db import close_old_connections
-
-    close_old_connections()
