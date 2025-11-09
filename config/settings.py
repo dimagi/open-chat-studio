@@ -223,6 +223,7 @@ else:
             "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="***"),
             "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
             "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
+            "CONN_HEALTH_CHECKS": True,
         }
     }
 
