@@ -154,7 +154,7 @@ docs = [
 
 prod = [
     "gunicorn",
-    "gevent==24.*"
+    "gevent==25.*"
 ]
 
 [tool.uv]
