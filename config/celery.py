@@ -1,11 +1,7 @@
-from gevent import monkey  # noqa
+import os
 
-monkey.patch_all()  # noqa
-
-import os  # noqa E402
-
-from celery import Celery  # noqa E402
-from celery.app import trace  # noqa E402
+from celery import Celery
+from celery.app import trace
 
 # Don't use connection pooling in Celery
 os.environ["DJANGO_DATABASE_USE_POOL"] = "false"
