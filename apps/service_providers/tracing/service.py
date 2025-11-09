@@ -120,6 +120,7 @@ class TracingService:
                         )
                     except Exception:
                         logger.exception("Error initializing tracer %s", tracer.__class__.__name__)
+                        # ExitStack ensures already-entered tracers get cleaned up
 
                 sentry_sdk.set_context("Traces", self.get_trace_metadata())
 
