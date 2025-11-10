@@ -114,6 +114,7 @@ from apps.service_providers.utils import get_llm_provider_choices, get_models_by
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
+from apps.web.waf import WafRule, waf_allow
 
 
 class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -564,6 +565,7 @@ def experiment_chat_session(
     )
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @experiment_session_view()
 @verify_session_access_cookie
 @require_POST
@@ -571,6 +573,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
     return _experiment_session_message(request, version_number)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @experiment_session_view()
 @require_POST
 @xframe_options_exempt
