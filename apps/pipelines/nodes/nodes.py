@@ -54,6 +54,7 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
+from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -160,7 +161,8 @@ class LLMResponseMixin(BaseModel):
 
         try:
             model = get_llm_provider_model(info.data.get("llm_provider_model_id"))
-            if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
+            # Default to BasicParameters class. This should only happen for unknown models.
+            if params_cls := LLM_MODEL_PARAMETERS.get(model.name, BasicParameters):
                 return params_cls.model_validate(
                     value or {},
                     context={

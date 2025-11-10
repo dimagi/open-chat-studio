@@ -32,7 +32,7 @@ class LLMModelParamBase(BaseModel):
 class BasicParameters(LLMModelParamBase):
     """Parameters common to non-reasoning models"""
 
-    llm_temperature: float = Field(
+    temperature: float = Field(
         default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
     )
 
@@ -138,10 +138,10 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
 
     @field_validator("thinking", mode="before")
     def check_temperature(cls, value: bool, info):
-        if value and info.data.get("llm_temperature") != 1:
+        if value and info.data.get("temperature") != 1.0:
             raise PydanticCustomError(
                 "invalid_model_parameters",
-                "Thinking can only be used with a temperature of 1",
+                "Thinking can only be used with a temperature of 1.0",
             )
         return value
 

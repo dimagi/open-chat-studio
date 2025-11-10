@@ -26,7 +26,7 @@ def _populate_temperature_params(apps, schema_editor):
         llm_model_params = params.get("llm_model_params", {})
         
         # llm_temperature should exist for all these models, but default to 0.7 just in case
-        llm_model_params["llm_temperature"] = params.get("llm_temperature", 0.7)
+        llm_model_params["temperature"] = params.get("llm_temperature", 0.7)
         params["llm_model_params"] = llm_model_params
         node.params = params
         nodes_to_save.append(node)
