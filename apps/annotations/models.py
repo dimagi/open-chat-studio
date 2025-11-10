@@ -13,6 +13,7 @@ from taggit.managers import TaggableManager
 from taggit.models import GenericTaggedItemBase, TagBase
 
 from apps.teams.models import BaseTeamModel, Team
+from apps.teams.utils import get_slug_for_team
 from apps.users.models import CustomUser
 
 logger = logging.getLogger("ocs.annotations")
@@ -45,7 +46,7 @@ class Tag(TagBase, BaseTeamModel):
         ordering = ["name"]
 
     def get_absolute_url(self):
-        return reverse("annotations:tag_edit", args=[self.team.slug, self.id])
+        return reverse("annotations:tag_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @property
     def label(self):

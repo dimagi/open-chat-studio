@@ -34,8 +34,10 @@ from apps.channels.utils import validate_platform_availability
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.experiments.views.utils import get_channels_context
 from apps.teams.decorators import login_and_team_required
+from apps.web.waf import WafRule, waf_allow
 
 
+@waf_allow(WafRule.NoUserAgent_HEADER)
 @csrf_exempt
 def new_telegram_message(request, channel_external_id: uuid):
     token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
@@ -59,6 +61,7 @@ def new_twilio_message(request):
     return HttpResponse()
 
 
+@waf_allow(WafRule.NoUserAgent_HEADER)
 @csrf_exempt
 @require_POST
 def new_sureadhere_message(request, sureadhere_tenant_id: int):
@@ -173,6 +176,7 @@ def _new_api_message(request, experiment_id: uuid, version=None):
     )
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @require_POST
 @csrf_exempt
 @verify_hmac
@@ -232,7 +236,6 @@ class BaseChannelDialogView(View):
 
         platform_form = form.channel_form
         extra_form = form.extra_form if hasattr(form, "extra_form") else None
-
         context.update(
             {
                 "experiment": self.experiment,

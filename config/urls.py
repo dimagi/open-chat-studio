@@ -18,6 +18,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
+from django.templatetags.static import static as static_url
 from django.urls import include, path
 from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
@@ -26,6 +27,7 @@ from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
 from apps.web.sitemaps import StaticViewSitemap
 from apps.web.urls import team_urlpatterns as web_team_urls
+from apps.web.waf import WafRule, waf_allow
 
 sitemaps = {
     "static": StaticViewSitemap(),
@@ -56,12 +58,18 @@ team_urlpatterns = [
 ]
 
 urlpatterns = [
+    path("favicon.ico", RedirectView.as_view(url=static_url("images/favicons/favicon-96x96.png"), permanent=True)),
     path("admin/", include("apps.admin.urls")),
     # redirect Django admin login to main login page
     path("django-admin/login/", RedirectView.as_view(pattern_name=settings.LOGIN_URL)),
     path("django-admin/", admin.site.urls),
     path("i18n/", include("django.conf.urls.i18n")),
-    path("sitemap.xml", sitemap, {"sitemaps": sitemaps}, name="django.contrib.sitemaps.views.sitemap"),
+    path(
+        "sitemap.xml",
+        waf_allow(WafRule.NoUserAgent_HEADER)(sitemap),
+        {"sitemaps": sitemaps},
+        name="django.contrib.sitemaps.views.sitemap",
+    ),
     path("a/<slug:team_slug>/", include(team_urlpatterns)),
     path("", include("apps.sso.urls")),  # must be before allauth urls since it uses the same paths
     path("accounts/", include("allauth_2fa.urls")),

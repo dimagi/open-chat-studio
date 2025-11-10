@@ -19,7 +19,7 @@ const sessionManagement = {
   },
 
   updateSelectedSessions(component) {
-    const checkboxes = document.querySelectorAll('.session-checkbox:checked');
+    const checkboxes = document.querySelectorAll('tbody .session-checkbox:checked');
     const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
     const allCurrentPageCheckboxes = document.querySelectorAll('.session-checkbox');
     const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
@@ -35,12 +35,14 @@ const sessionManagement = {
 
     this.updateHiddenFields(component);
     this.uncheckFilterCheckboxes(component);
+    this.updateSessionHeaderCheckbox(component);
+    this.updateFilteredSessionHeaderCheckbox(component);
   },
 
   updateFilteredSessions(component) {
-    const checkboxes = document.querySelectorAll('.filter-checkbox:checked');
+    const checkboxes = document.querySelectorAll('tbody .filter-checkbox:checked');
     const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
-    const allCurrentPageCheckboxes = document.querySelectorAll('.filter-checkbox');
+    const allCurrentPageCheckboxes = document.querySelectorAll('tbody .filter-checkbox');
     const currentPageSessionIds = Array.from(allCurrentPageCheckboxes).map(cb => cb.value);
 
     component.filteredSessionIds = new Set(
@@ -54,6 +56,8 @@ const sessionManagement = {
 
     this.updateHiddenFields(component);
     this.uncheckSessionCheckboxes(component);
+    this.updateSessionHeaderCheckbox(component);
+    this.updateFilteredSessionHeaderCheckbox(component);
   },
 
   clearAllSelections(component) {
@@ -97,11 +101,14 @@ const sessionManagement = {
     const selectedIds = sessionIdsInput.value ?
       sessionIdsInput.value.split(',').filter(id => id.trim()) : [];
 
-    document.querySelectorAll('.session-checkbox').forEach(cb => cb.checked = false);
+    document.querySelectorAll('tbody .session-checkbox').forEach(cb => cb.checked = false);
     selectedIds.forEach(sessionId => {
       const checkbox = document.querySelector(`.session-checkbox[value="${sessionId}"]`);
       if (checkbox) checkbox.checked = true;
     });
+
+    this.updateSessionHeaderCheckbox(component);
+    this.updateFilteredSessionHeaderCheckbox(component);
   },
 
   restoreFilteredCheckboxStates(component) {
@@ -111,12 +118,71 @@ const sessionManagement = {
     const filteredIds = filteredSessionIdsInput.value ?
       filteredSessionIdsInput.value.split(',').filter(id => id.trim()) : [];
 
-    document.querySelectorAll('.filter-checkbox').forEach(cb => cb.checked = false);
+    document.querySelectorAll('tbody .filter-checkbox').forEach(cb => cb.checked = false);
     filteredIds.forEach(sessionId => {
       const checkbox = document.querySelector(`.filter-checkbox[value="${sessionId}"]`);
       if (checkbox) checkbox.checked = true;
     });
-  }
+
+    this.updateSessionHeaderCheckbox(component);
+    this.updateFilteredSessionHeaderCheckbox(component);
+  },
+
+  toggleSelectedSessions(component, val) {
+    const toggleInput = document.querySelector('thead .session-checkbox');
+    if (toggleInput.checked || val) {
+      component.selectedSessionIds = new Set([...component.allSessionIds]);
+      component.filteredSessionIds = new Set();
+    } else {
+      component.selectedSessionIds = new Set();
+    }
+
+    this.updateHiddenFields(component);
+    this.restoreCheckboxStates(component);
+    this.uncheckFilterCheckboxes(component);
+  },
+
+  toggleFilteredSessions(component, val) {
+    const toggleInput = document.querySelector('thead .filter-checkbox');
+    if (toggleInput.checked || val) {
+      component.filteredSessionIds = new Set([...component.allSessionIds]);
+      component.selectedSessionIds = new Set();
+    } else {
+      component.filteredSessionIds = new Set();
+    }
+
+    this.updateHiddenFields(component);
+    this.restoreFilteredCheckboxStates(component);
+    this.uncheckSessionCheckboxes(component);
+  },
+
+  updateSessionHeaderCheckbox(component) {
+    const allSessionIds = component.allSessionIds;
+    const selectedSessionIds = component.selectedSessionIds;
+    const toggleInput = document.querySelector('thead .session-checkbox');
+    if (!toggleInput || !allSessionIds.size) {
+      return; // page load
+    }
+    if (selectedSessionIds.size === 0) {
+      toggleInput.checked = false;
+    } else {
+      toggleInput.checked = [...allSessionIds].every(id => selectedSessionIds.has(id));
+    }
+  },
+
+  updateFilteredSessionHeaderCheckbox(component) {
+    const allSessionIds = component.allSessionIds;
+    const filteredSessionIds = component.filteredSessionIds;
+    const toggleInput = document.querySelector('thead .filter-checkbox');
+    if (!toggleInput || !allSessionIds.size) {
+      return; // page load
+    }
+    if (filteredSessionIds.size === 0) {
+      toggleInput.checked = false;
+    } else {
+      toggleInput.checked = [...allSessionIds].every(id => filteredSessionIds.has(id));
+    }
+  },
 };
 
 window.datasetModeSelector = function(options = {}) {
@@ -125,6 +191,9 @@ window.datasetModeSelector = function(options = {}) {
     mode: options.defaultMode || 'clone',
     selectedSessionIds: new Set(),
     filteredSessionIds: new Set(),
+    allSessionIds: new Set(),
+    sessionIdsFetchUrl: options.sessionIdsFetchUrl || '',
+    sessionIdsIsLoading: false,
     errorMessages: [],
 
     init() {
@@ -142,6 +211,10 @@ window.datasetModeSelector = function(options = {}) {
         this.$refs.cloneForm.addEventListener('submit', (e) => this.validateForm(e));
       }
 
+      window.addEventListener('dataset-mode:table-update', () => this.onSessionsTableUpdate());
+      window.addEventListener('filter:change', () => this.loadSessionIds());
+      window.addEventListener('dataset-mode:session-ids-loaded', () => this.clearAllSelections());
+
       this.loaded = true;
     },
 
@@ -152,7 +225,7 @@ window.datasetModeSelector = function(options = {}) {
         if (this.selectedSessionIds.size + this.filteredSessionIds.size === 0) {
           e.preventDefault();
           this.errorMessages.push('Please select at least one session to clone messages from.');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          window.scrollTo({top: 0, behavior: 'smooth'});
           return;
         }
 
@@ -163,7 +236,7 @@ window.datasetModeSelector = function(options = {}) {
           this.errorMessages.push(
             'A session cannot be selected in both "All Messages" and "Filtered Messages".'
           );
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          window.scrollTo({top: 0, behavior: 'smooth'});
         }
       }
     },
@@ -178,6 +251,49 @@ window.datasetModeSelector = function(options = {}) {
     },
     clearAllSelections() {
       sessionManagement.clearAllSelections(this);
+    },
+    restoreFilteredCheckboxStates() {
+      sessionManagement.restoreFilteredCheckboxStates(this);
+    },
+    restoreCheckboxStates() {
+      sessionManagement.restoreCheckboxStates(this);
+    },
+    loadSessionIds() {
+      // Loading id from Sessions filtered
+      if (this.sessionIdsIsLoading) {
+        return;
+      }
+      this.sessionIdsIsLoading = true;
+
+      return fetch(this.sessionIdsFetchUrl + window.location.search, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: {
+          'X-CSRFToken': window.SiteJS.app.Cookies.get('csrftoken'),
+          'Accept': 'application/json'
+        }
+      })
+        .then(res => res.json())
+        .then(data => {
+          this.allSessionIds = new Set(data);
+        })
+        .catch(err => {
+          console.error('Failed to load session ids:' + err);
+        })
+        .finally(() => {
+          this.sessionIdsIsLoading = false;
+          window.dispatchEvent(new CustomEvent('dataset-mode:session-ids-loaded'));
+        });
+    },
+    toggleSelectedSessions() {
+      sessionManagement.toggleSelectedSessions(this);
+    },
+    toggleFilteredSessions() {
+      sessionManagement.toggleFilteredSessions(this);
+    },
+    onSessionsTableUpdate() {
+      sessionManagement.updateSessionHeaderCheckbox(this);
+      sessionManagement.updateFilteredSessionHeaderCheckbox(this);
     },
   };
 };
@@ -194,6 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
           sessionManagement.restoreFilteredCheckboxStates(component);
         }
       }
+      window.dispatchEvent(new CustomEvent('dataset-mode:table-update'));
     }, 10);
   };
 

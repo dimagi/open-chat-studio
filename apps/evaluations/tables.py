@@ -15,7 +15,8 @@ from apps.evaluations.utils import get_evaluator_type_display
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 from apps.generics.actions import chip_action
-from apps.generics.tables import TemplateColumnWithHelp
+from apps.generics.tables import TemplateColumnWithCustomHeader
+from apps.teams.utils import get_slug_for_team
 
 
 class EvaluationConfigTable(tables.Table):
@@ -220,29 +221,39 @@ class EvaluationDatasetTable(tables.Table):
 def _chip_session_url_factory(_, request, record, __):
     return reverse(
         "chatbots:chatbot_session_view",
-        args=[record.team.slug, record.experiment.public_id, record.external_id],
+        args=[get_slug_for_team(record.team_id), record.experiment.public_id, record.external_id],
     )
 
 
 class EvaluationSessionsSelectionTable(tables.Table):
-    selection = TemplateColumnWithHelp(
+    selection = TemplateColumnWithCustomHeader(
         template_name="evaluations/session_checkbox.html",
         verbose_name="All",
         orderable=False,
-        help_text="Include all messages from these sessions in the dataset",
         extra_context={
             "css_class": "checkbox checkbox-primary session-checkbox",
             "js_function": "updateSelectedSessions()",
         },
+        header_template="evaluations/session_checkbox.html",
+        header_context={
+            "help_content": "Include all messages from these sessions in the dataset",
+            "js_function": "toggleSelectedSessions()",
+            "css_class": "checkbox checkbox-primary session-checkbox",
+        },
     )
-    clone_filtered_only = TemplateColumnWithHelp(
+    clone_filtered_only = TemplateColumnWithCustomHeader(
         template_name="evaluations/session_checkbox.html",
         verbose_name="Filtered",
         orderable=False,
-        help_text="Include only messages matching the current filters in the dataset",
         extra_context={
             "css_class": "checkbox checkbox-secondary filter-checkbox",
             "js_function": "updateFilteredSessions()",
+        },
+        header_template="evaluations/session_checkbox.html",
+        header_context={
+            "help_content": "Include only messages matching the current filters in the dataset",
+            "js_function": "toggleFilteredSessions()",
+            "css_class": "checkbox checkbox-secondary filter-checkbox",
         },
     )
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")

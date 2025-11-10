@@ -61,7 +61,6 @@ dependencies = [
     "taskbadger",
     "tenacity",
     "tiktoken",
-    "transformers>=4.48.0", # this is required by the tokenizer that langchain uses
     "turn-python>=1.0.0",
     "twilio",
     "whitenoise[brotli]",
@@ -93,7 +92,7 @@ Issues = "https://github.com/dimagi/open-chat-studio/issues"
 Changelog = "https://docs.openchatstudio.com/changelog/"
 
 [tool.pytest.ini_options]
-addopts = "--ds=gpt_playground.settings --reuse-db --strict-markers --tb=short"
+addopts = "--ds=config.settings --reuse-db --strict-markers --tb=short"
 python_files = "tests.py test_*.py *_tests.py"
 norecursedirs = ".* build dist venv node_modules compose assets static"
 
@@ -154,7 +153,7 @@ docs = [
 
 prod = [
     "gunicorn",
-    "gevent==24.*"
+    "gevent==25.*"
 ]
 
 [tool.uv]

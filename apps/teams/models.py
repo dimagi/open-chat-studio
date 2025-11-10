@@ -49,7 +49,7 @@ class Team(BaseModel):
 
     @property
     def sorted_memberships(self):
-        return self.membership_set.order_by("user__email")
+        return self.membership_set.select_related("user").prefetch_related("groups").order_by("user__email")
 
     def pending_invitations(self):
         return self.invitations.filter(is_accepted=False)

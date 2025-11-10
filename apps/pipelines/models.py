@@ -21,6 +21,7 @@ from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 
@@ -155,7 +156,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return create_pipeline_with_nodes(team=team, name=final_name, middle_node=node)
 
     def get_absolute_url(self):
-        return reverse("pipelines:edit", args=[self.team.slug, self.id])
+        return reverse("pipelines:edit", args=[get_slug_for_team(self.team_id), self.id])
 
     def update_nodes_from_data(self) -> None:
         """Set the nodes on the pipeline from data coming from the frontend"""

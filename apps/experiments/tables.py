@@ -15,47 +15,6 @@ from apps.experiments.models import (
 from apps.generics import actions, chips
 
 
-class ExperimentTable(tables.Table):
-    name = columns.Column(
-        orderable=True,
-    )
-    description = columns.Column(verbose_name="Description")
-    owner = columns.Column(accessor="owner__username", verbose_name="Created By")
-    type = columns.Column(orderable=False, empty_values=())
-    trends = columns.TemplateColumn(
-        verbose_name="Trends (last 48h)",
-        template_name="table/trends_chart.html",
-    )
-    actions = columns.TemplateColumn(
-        template_name="experiments/components/experiment_actions_column.html",
-        extra_context={"type": "experiments"},
-    )
-
-    class Meta:
-        model = Experiment
-        fields = ("name",)
-        row_attrs = {
-            **settings.DJANGO_TABLES2_ROW_ATTRS,
-            "data-redirect-url": lambda record: (
-                record.get_absolute_url() if hasattr(record, "get_absolute_url") else ""
-            ),
-        }
-        orderable = False
-        empty_text = "No experiments found."
-
-    def render_name(self, record):
-        if record.is_archived:
-            return f"{record.name} (archived)"
-        return record.name
-
-    def render_type(self, record):
-        if record.assistant_id:
-            return "Assistant"
-        if record.pipeline_id:
-            return "Pipeline"
-        return "Base LLM"
-
-
 class SafetyLayerTable(tables.Table):
     actions = actions.ActionsColumn(
         actions=[
@@ -145,7 +104,7 @@ class ConsentFormTable(tables.Table):
 
 def session_chat_url(url_name, request, record, value):
     return reverse(
-        url_name, args=[request.team.slug, record.experiment.id, record.get_experiment_version_number(), record.id]
+        url_name, args=[request.team.slug, record.experiment_id, record.get_experiment_version_number(), record.id]
     )
 
 

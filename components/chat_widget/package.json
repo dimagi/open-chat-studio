@@ -1,6 +1,6 @@
 {
   "name": "open-chat-studio-widget",
-  "version": "0.4.8",
+  "version": "0.5.2",
   "description": "Chat component for Open Chat Studio",
   "main": "dist/index.cjs.js",
   "exports": "./dist/esm/open-chat-studio-widget.js",
@@ -20,7 +20,7 @@
     "loader/"
   ],
   "scripts": {
-    "test": "stencil test --spec",
+    "test": "stencil test --spec -- --forceExit",
     "build": "stencil build --docs",
     "start": "stencil build --dev --watch --serve",
     "generate": "stencil generate",

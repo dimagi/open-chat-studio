@@ -16,6 +16,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.utils import make_evaluation_messages_from_sessions
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel, Team
+from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 
@@ -73,7 +74,7 @@ class Evaluator(BaseTeamModel):
         return self.evaluator(**self.params).run(message, generated_response)
 
     def get_absolute_url(self):
-        return reverse("evaluations:evaluator_edit", args=[self.team.slug, self.id])
+        return reverse("evaluations:evaluator_edit", args=[get_slug_for_team(self.team_id), self.id])
 
 
 class EvaluationMessageContent(PydanticBaseModel):
@@ -213,7 +214,7 @@ class EvaluationDataset(BaseTeamModel):
         return f"{self.name} ({self.messages.count()} messages)"
 
     def get_absolute_url(self):
-        return reverse("evaluations:dataset_edit", args=[self.team.slug, self.id])
+        return reverse("evaluations:dataset_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @property
     def is_processing(self):
@@ -281,7 +282,7 @@ class EvaluationConfig(BaseTeamModel):
         return None
 
     def get_absolute_url(self):
-        return reverse("evaluations:evaluation_runs_home", args=[self.team.slug, self.id])
+        return reverse("evaluations:evaluation_runs_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def run(self, run_type=EvaluationRunType.FULL) -> EvaluationRun:
         """Runs the evaluation asynchronously using Celery"""
@@ -329,7 +330,9 @@ class EvaluationRun(BaseTeamModel):
         return f"EvaluationRun ({self.created_at} - {self.finished_at})"
 
     def get_absolute_url(self):
-        return reverse("evaluations:evaluation_results_home", args=[self.team.slug, self.config_id, self.pk])
+        return reverse(
+            "evaluations:evaluation_results_home", args=[get_slug_for_team(self.team_id), self.config_id, self.pk]
+        )
 
     def mark_complete(self, save=True):
         self.finished_at = timezone.now()

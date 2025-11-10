@@ -3,9 +3,10 @@
 
 {% block form %}
   {{ form.non_field_errors }}
-  <div x-data="datasetBuilder()" x-init="init()">
-    {% render_form_fields form "name" "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_file_id" %}
+  {% render_form_fields form "name" %}
 
+  <div x-data="datasetModeSelectorBuilder()" x-init="init()">
+    {% render_form_fields form "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_data" %}
     <div x-show="!loaded" class="text-center py-8">
       <i class="fa-solid fa-spinner fa-spin fa-2x text-primary"></i>
     </div>
@@ -268,16 +269,19 @@
         </div>
       </div>
     </dialog>
-  </div> <!-- End of datasetBuilder div -->
+  </div> <!-- End of datasetModeSelectorBuilder div -->
 {% endblock form %}
 
 {% block page_js %}
   <script src="{% static 'js/evaluations-bundle.js' %}"></script>
   <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
-    function datasetBuilder() {
+    function datasetModeSelectorBuilder() {
       // Extend the shared datasetModeSelector with create-specific functionality
-      const baseComponent = window.datasetModeSelector({ defaultMode: 'clone' });
+      const baseComponent = window.datasetModeSelector({
+        defaultMode: 'clone',
+        sessionIdsFetchUrl: "{% url 'evaluations:dataset_sessions_selection_json' team.slug %}"
+      });
 
       return {
         ...baseComponent,

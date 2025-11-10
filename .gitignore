@@ -5,8 +5,8 @@
 db.sqlite3
 .sass-cache/
 celerybeat*
-gpt_playground/localsettings.py
-gpt_playground/local.py
+config/localsettings.py
+config/local.py
 static_root/
 node_modules/
 openapitools.json
@@ -31,3 +31,4 @@ tmp_schema.yml
 
 # Sentry Config File
 .env.sentry-build-plugin
+docs/claude

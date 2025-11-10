@@ -13,10 +13,13 @@
                                     <dd class="pl-3 overflow-y-auto">
                                         {% if field.queryset_results %}
                                             <div class="flex flex-col gap-1">
-                                                {% for field in field.queryset_results %}
-                                                    {% include "experiments/components/versions/version_field.html" %}
+                                                {% for result in field.queryset_results_for_display %}
+                                                    {% include "experiments/components/versions/version_field.html" with field=result %}
                                                 {% endfor %}
                                             </div>
+                                            {% if field.num_results_truncated > 0 %}
+                                                <div class="text-sm italic text-center mt-2">{{ field.num_results_truncated }} results not shown...</div>
+                                            {% endif %}
                                         {% else %}
                                             {% include "experiments/components/versions/version_field.html" %}
                                         {% endif %}

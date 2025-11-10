@@ -7,7 +7,7 @@ from itertools import islice
 
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -49,6 +49,7 @@ from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
+from apps.web.waf import WafRule, waf_allow
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -142,6 +143,7 @@ class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMix
         return HttpResponse(status=200)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
     permission_required = "evaluations.add_evaluationdataset"
     template_name = "evaluations/dataset_create_form.html"
@@ -233,32 +235,61 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
     permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
+        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
         timezone = self.request.session.get("detected_tz", None)
         filter_params = FilterParams.from_request(self.request)
 
-        messages_queryset = ChatMessage.objects.filter(chat__experiment_session=OuterRef("pk"))
+        # Get filtered message IDs more efficiently
         message_filter = ChatMessageFilter()
-        filtered_messages = message_filter.apply(messages_queryset, filter_params, timezone)
+        base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
+        filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
 
+        # Use Exists for filtering instead of Count with IN subquery - avoids cartesian product
+        has_messages = Exists(filtered_messages)
+
+        # Build the query with basic filtering only
         query_set = (
-            ExperimentSession.objects.with_last_message_created_at()
-            .filter(team=self.request.team)
-            .select_related("participant__user", "chat", "experiment")
-            .annotate(
-                message_count=Coalesce(
-                    Count("chat__messages", filter=Q(chat__messages__in=filtered_messages.values("pk")), distinct=True),
-                    0,
-                )
-            )
-            .annotate_with_versions_list()
-            .filter(message_count__gt=0)
-            .order_by("experiment__name")
+            ExperimentSession.objects.filter(team=self.request.team)
+            .filter(has_messages)  # Filter early with Exists
+            .select_related("team", "participant__user", "chat", "experiment")
         )
 
+        # Apply session filter (this will add first_message_created_at and last_message_created_at)
         session_filter = ExperimentSessionFilter()
         query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
 
-        return query_set
+        return query_set.order_by("experiment__name")
+
+    def get_table_data(self):
+        """Add expensive annotations only to the paginated data, not for counting."""
+        queryset = super().get_table_data()
+
+        # Get filter params for message count
+        timezone = self.request.session.get("detected_tz", None)
+        filter_params = FilterParams.from_request(self.request)
+        message_filter = ChatMessageFilter()
+        base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
+        filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
+
+        # Add expensive annotations only to paginated data
+        queryset = queryset.annotate_with_versions_list().annotate(
+            message_count=Coalesce(
+                Count("chat__messages", filter=Q(chat__messages__in=filtered_messages.values("pk")), distinct=True),
+                0,
+            )
+        )
+        return queryset
+
+
+class DatasetSessionsSelectionJson(DatasetSessionsSelectionTableView):
+    """Return the filtered items in DatasetSessionsSelectionTableView in a JSON format without pagination."""
+
+    table_pagination = False
+
+    def get(self, request, *args, **kwargs):
+        query_set = self.get_queryset()
+        session_keys = list(query_set.values_list("external_id", flat=True))
+        return JsonResponse(session_keys, safe=False)
 
 
 class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -446,6 +477,7 @@ def delete_message(request, team_slug, message_id):
     return HttpResponse("", status=200)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @login_and_team_required
 @require_POST
 def parse_csv_columns(request, team_slug: str):

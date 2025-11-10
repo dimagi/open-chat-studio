@@ -71,11 +71,13 @@ nav:
     - Processes:
       - User Docs: developer_guides/user_docs.md
       - Deployment: developer_guides/deployment.md
+      - AI Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
     - Code Systems:
       - Common Practises: developer_guides/common_practises.md
       - Object Versioning: developer_guides/versioning.md
       - Feature Flags: developer_guides/feature_flags.md
+      - WAF Management: developer_guides/waf_management.md
       - Dynamic Filters: developer_guides/dynamic_filters.md
       - Slack Channel Integration: developer_guides/slack_channel_integration.md
       - Index Managers: developer_guides/index_managers.md
