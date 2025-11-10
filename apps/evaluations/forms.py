@@ -602,10 +602,10 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         column_mapping = self.cleaned_data.get("column_mapping", {})
         populate_history = self.cleaned_data.get("populate_history", False)
         history_column = self.cleaned_data.get("history_column", "")
-        csv_file_id = int(self.data.get("csv_file_id"))
+        csv_file = self.cleaned_data["csv_file"]
 
         task = create_dataset_from_csv_task.delay(
-            dataset.id, csv_file_id, self.team.id, column_mapping, history_column, populate_history
+            dataset.id, csv_file.id, self.team.id, column_mapping, history_column, populate_history
         )
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
