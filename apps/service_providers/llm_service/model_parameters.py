@@ -138,6 +138,14 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
         return value
 
 
+class BasicParameters(LLMModelParamBase):
+    """Parameters common to non-reasoning models"""
+
+    llm_temperature: float = Field(
+        default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
+    )
+
+
 def get_schema(model):
     """Get resolved schema for a model. This is so the frontend can render it properly."""
     schema = resolve_references(model.model_json_schema())
