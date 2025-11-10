@@ -29,6 +29,14 @@ class LLMModelParamBase(BaseModel):
     pass
 
 
+class BasicParameters(LLMModelParamBase):
+    """Parameters common to non-reasoning models"""
+
+    llm_temperature: float = Field(
+        default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
+    )
+
+
 class OpenAIReasoningParameters(LLMModelParamBase):
     effort: OpenAIReasoningEffortParameter = Field(
         title="Reasoning Effort",
@@ -60,7 +68,7 @@ class GPT5ProParameters(LLMModelParamBase):
     )
 
 
-class AnthropicBaseParameters(LLMModelParamBase):
+class AnthropicBaseParameters(BasicParameters):
     max_tokens: int = Field(
         title="Max Output Tokens",
         default=32000,
@@ -130,20 +138,12 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
 
     @field_validator("thinking", mode="before")
     def check_temperature(cls, value: bool, info):
-        if value and info.context.get("temperature", 0) != 1:
+        if value and info.data.get("llm_temperature") != 1:
             raise PydanticCustomError(
                 "invalid_model_parameters",
                 "Thinking can only be used with a temperature of 1",
             )
         return value
-
-
-class BasicParameters(LLMModelParamBase):
-    """Parameters common to non-reasoning models"""
-
-    llm_temperature: float = Field(
-        default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
-    )
 
 
 def get_schema(model):

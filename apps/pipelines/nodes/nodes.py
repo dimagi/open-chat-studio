@@ -151,9 +151,6 @@ def get_llm_provider_model(llm_provider_model_id: int):
 class LLMResponseMixin(BaseModel):
     llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
-    llm_temperature: float = Field(
-        default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
-    )
     llm_model_parameters: dict[str, Any] = Field(default_factory=dict, json_schema_extra=UiSchema(widget=Widgets.none))
 
     @field_validator("llm_model_parameters", mode="before")
@@ -217,6 +214,10 @@ class LLMResponseMixin(BaseModel):
         return self.get_llm_service().get_chat_model(
             get_llm_provider_model(self.llm_provider_model_id).name, self.llm_temperature, **self.llm_model_parameters
         )
+
+    @property
+    def llm_temperature(self) -> float:
+        return self.llm_model_parameters.get("llm_temperature", 0.7)
 
 
 class HistoryMixin(LLMResponseMixin):
