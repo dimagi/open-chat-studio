@@ -955,34 +955,6 @@ def test_multiple_valid_inputs(pipeline):
     assert output["messages"][-1] == "T: not hello"
 
 
-@pytest.mark.django_db()
-@patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_assistant_node_empty_metadata_handling(get_llm_service, pipeline):
-    history_manager_mock = Mock()
-    history_manager_mock.input_message_metadata = None
-    history_manager_mock.output_message_metadata = None
-
-    assistant_chat_mock = Mock()
-    assistant_chat_mock.history_manager = history_manager_mock
-    assistant_chat_mock.invoke = lambda *args, **kwargs: ChainOutput(
-        output="How are you doing?", prompt_tokens=30, completion_tokens=20
-    )
-    assistant = OpenAiAssistantFactory()
-    nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
-
-    with patch("apps.pipelines.nodes.nodes.AssistantChat", return_value=assistant_chat_mock):
-        runnable = create_runnable(pipeline, nodes)
-        state = PipelineState(
-            messages=["I am just a human I have no feelings"],
-            experiment_session=ExperimentSessionFactory(),
-            attachments=[],
-        )
-        output_state = runnable.invoke(state)
-    assert output_state["input_message_metadata"] == {}
-    assert output_state["output_message_metadata"] == {}
-    assert output_state["messages"][-1] == "How are you doing?"
-
-
 @pytest.mark.parametrize(
     ("left", "right", "expected"),
     [

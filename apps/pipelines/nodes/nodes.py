@@ -1,5 +1,4 @@
 import json
-import logging
 import unicodedata
 from typing import Annotated, Any, Literal, Self
 
@@ -24,7 +23,6 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
-from apps.assistants.models import OpenAiAssistant
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
@@ -50,14 +48,7 @@ from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
-from apps.service_providers.llm_service.adapters import AssistantAdapter
-from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
-from apps.service_providers.llm_service.runnables import (
-    AgentAssistantChat,
-    AssistantChat,
-    ChainOutput,
-)
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
@@ -883,79 +874,6 @@ class ExtractParticipantData(
         return PipelineState.from_node_output(
             node_name=self.name, node_id=self.node_id, output=state["last_node_input"], participant_data=output_data
         )
-
-
-@deprecated_node(message="Use the 'LLM' node instead.", docs_link="migrate_from_assistant")
-class AssistantNode(PipelineNode, OutputMessageTagMixin):
-    """Calls an OpenAI assistant"""
-
-    model_config = ConfigDict(
-        json_schema_extra=NodeSchema(
-            label="OpenAI Assistant",
-            icon="fa-solid fa-user-tie",
-            documentation_link=settings.DOCUMENTATION_LINKS["node_assistant"],
-        )
-    )
-
-    assistant_id: int = Field(
-        ..., json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.assistant)
-    )
-    citations_enabled: bool = Field(
-        default=True,
-        description="Whether to include cited sources in responses",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
-    )
-    input_formatter: str = Field("", description="(Optional) Use {input} to designate the user input")
-
-    @field_validator("input_formatter")
-    def ensure_input_variable_exists(cls, value):
-        value = value or ""
-        acceptable_var = "input"
-        if value:
-            prompt_variables = set(PromptTemplate.from_template(value).input_variables)
-            if acceptable_var not in prompt_variables:
-                raise PydanticCustomError("invalid_input_formatter", "The input formatter must contain {input}")
-
-            acceptable_vars = set([acceptable_var])
-            extra_vars = prompt_variables - acceptable_vars
-            if extra_vars:
-                raise PydanticCustomError("invalid_input_formatter", "Only {input} is allowed")
-
-    def _process(self, state: PipelineState) -> PipelineState:
-        try:
-            assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
-        except OpenAiAssistant.DoesNotExist:
-            raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
-
-        session: ExperimentSession | None = state.get("experiment_session")
-        runnable = self._get_assistant_runnable(assistant, session=session)
-        attachments = self._get_attachments(state)
-        chain_output: ChainOutput = runnable.invoke(
-            state["last_node_input"], config=self._config, attachments=attachments
-        )
-        output = chain_output.output
-
-        return PipelineState.from_node_output(
-            node_name=self.name,
-            node_id=self.node_id,
-            output=output,
-            input_message_metadata=runnable.history_manager.input_message_metadata or {},
-            output_message_metadata=runnable.history_manager.output_message_metadata or {},
-        )
-
-    def _get_attachments(self, state) -> list:
-        return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
-
-    def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession):
-        history_manager = AssistantPipelineHistoryManager()
-        adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
-
-        if adapter.get_allowed_tools():
-            return AgentAssistantChat(adapter=adapter, history_manager=history_manager)
-        else:
-            if assistant.tools_enabled:
-                logging.info("Tools have been disabled")
-            return AssistantChat(adapter=adapter, history_manager=history_manager)
 
 
 CODE_NODE_DOCS = f"{settings.DOCUMENTATION_BASE_URL}{settings.DOCUMENTATION_LINKS['node_code']}"
