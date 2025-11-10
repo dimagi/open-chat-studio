@@ -6,7 +6,7 @@
   {% render_form_fields form "name" %}
 
   <div x-data="datasetModeSelectorBuilder()" x-init="init()">
-    {% render_form_fields form "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_data" %}
+    {% render_form_fields form "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_file_id" %}
     <div x-show="!loaded" class="text-center py-8">
       <i class="fa-solid fa-spinner fa-spin fa-2x text-primary"></i>
     </div>
