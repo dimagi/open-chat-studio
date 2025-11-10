@@ -1,6 +1,7 @@
 import json
 import logging
 import unicodedata
+from functools import cache
 from typing import Annotated, Any, Literal, Self
 
 import tiktoken
@@ -139,6 +140,14 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
 
+@cache
+def get_llm_provider_model(llm_provider_model_id: int):
+    try:
+        return LlmProviderModel.objects.get(id=llm_provider_model_id)
+    except LlmProviderModel.DoesNotExist:
+        raise PipelineNodeBuildError(f"LLM provider model with id {llm_provider_model_id} does not exist") from None
+
+
 class LLMResponseMixin(BaseModel):
     llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
@@ -153,7 +162,7 @@ class LLMResponseMixin(BaseModel):
             return {}
 
         try:
-            model = LlmProviderModel.objects.get(id=info.data.get("llm_provider_model_id"))
+            model = get_llm_provider_model(info.data.get("llm_provider_model_id"))
             if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
                 return params_cls.model_validate(
                     value or {},
@@ -170,7 +179,7 @@ class LLMResponseMixin(BaseModel):
     def validate_llm_model(self):
         # Ensure model is not deprecated
         try:
-            model = self.get_llm_provider_model()
+            model = get_llm_provider_model(self.llm_provider_model_id)
         except PipelineNodeBuildError as e:
             raise PydanticCustomError(
                 "invalid_model",
@@ -204,17 +213,9 @@ class LLMResponseMixin(BaseModel):
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
-    def get_llm_provider_model(self):
-        try:
-            return LlmProviderModel.objects.get(id=self.llm_provider_model_id)
-        except LlmProviderModel.DoesNotExist:
-            raise PipelineNodeBuildError(
-                f"LLM provider model with id {self.llm_provider_model_id} does not exist"
-            ) from None
-
     def get_chat_model(self):
         return self.get_llm_service().get_chat_model(
-            self.get_llm_provider_model().name, self.llm_temperature, **self.llm_model_parameters
+            get_llm_provider_model(self.llm_provider_model_id).name, self.llm_temperature, **self.llm_model_parameters
         )
 
 
@@ -268,7 +269,7 @@ class HistoryMixin(LLMResponseMixin):
                 max_token_limit=(
                     self.user_max_token_limit
                     if self.user_max_token_limit is not None
-                    else self.get_llm_provider_model().max_token_limit
+                    else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
                 ),
                 input_messages=input_messages,
                 history_mode=self.history_mode,
@@ -286,7 +287,7 @@ class HistoryMixin(LLMResponseMixin):
             max_token_limit=(
                 self.user_max_token_limit
                 if self.user_max_token_limit is not None
-                else self.get_llm_provider_model().max_token_limit
+                else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
             ),
             input_messages=input_messages,
             keep_history_len=self.max_history_length,
@@ -806,7 +807,7 @@ class ExtractStructuredDataNodeMixin:
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        llm_provider_model = self.get_llm_provider_model()
+        llm_provider_model = get_llm_provider_model(self.llm_provider_model_id)
         model_token_limit = llm_provider_model.max_token_limit
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count
