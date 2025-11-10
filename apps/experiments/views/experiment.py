@@ -2,7 +2,6 @@ import logging
 import unicodedata
 import uuid
 from datetime import datetime
-from functools import cached_property
 from typing import cast
 from urllib.parse import urlparse
 
@@ -21,7 +20,6 @@ from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, 
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import (
-    FileResponse,
     Http404,
     HttpResponse,
     HttpResponseForbidden,
@@ -33,21 +31,18 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView
-from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
 from waffle import flag_is_active
 
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.annotations.models import CustomTaggedItem, Tag
-from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
@@ -74,7 +69,6 @@ from apps.experiments.filters import (
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
-    ExperimentVersionForm,
     SurveyCompletedForm,
     TranslateMessagesForm,
 )
@@ -92,7 +86,6 @@ from apps.experiments.models import (
 from apps.experiments.tables import (
     ChildExperimentRoutesTable,
     ExperimentSessionsTable,
-    ExperimentVersionsTable,
     ParentExperimentRoutesTable,
     TerminalBotsTable,
 )
@@ -107,7 +100,6 @@ from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
 from apps.filters.models import FilterSet
 from apps.generics.chips import Chip
-from apps.generics.views import paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
@@ -156,18 +148,6 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
         )
         return query_set
-
-
-class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
-    model = Experiment
-    table_class = ExperimentVersionsTable
-    template_name = "experiments/experiment_version_table.html"
-    permission_required = "experiments.view_experiment"
-
-    def get_queryset(self):
-        experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
-        other_versions = Experiment.objects.get_all().filter(working_version=self.kwargs["experiment_id"]).all()
-        return (experiment_row | other_versions).order_by("-version_number")
 
 
 class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -235,7 +215,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         response = super().form_valid(form)
 
         if self.request.POST.get("action") == "save_and_version":
-            return redirect("experiments:create_version", self.request.team.slug, experiment.id)
+            return redirect("chatbots:create_version", self.request.team.slug, experiment.id)
 
         if self.request.POST.get("action") == "save_and_archive":
             experiment = get_object_or_404(Experiment, id=experiment.id, team=self.request.team)
@@ -308,107 +288,6 @@ def _get_voice_provider_alpine_context(request):
         "llm_providers": request.team.llmprovider_set.all(),
         "llm_options": get_llm_provider_choices(request.team),
     }
-
-
-class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
-    model = Experiment
-    form_class = ExperimentVersionForm
-    template_name = "experiments/create_version_form.html"
-    title = "Create Experiment Version"
-    button_title = "Create"
-    permission_required = "experiments.add_experiment"
-
-    @cached_property
-    def object(self):
-        return get_object_or_404(Experiment, pk=self.kwargs["experiment_id"], team=self.request.team)
-
-    @cached_property
-    def latest_version(self):
-        return self.object.latest_version
-
-    def get_form_kwargs(self) -> dict:
-        form_kwargs = super().get_form_kwargs()
-        if not self.latest_version:
-            form_kwargs["initial"] = {"is_default_version": True}
-        return form_kwargs
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        working_experiment = self.object
-        version = working_experiment.version_details
-        if self.latest_version:
-            # Populate diffs
-            version.compare(self.latest_version.version_details)
-
-        context["version_details"] = version
-        context["has_versions"] = self.latest_version is not None
-        context["experiment"] = working_experiment
-        return context
-
-    def form_valid(self, form):
-        description = form.cleaned_data["version_description"]
-        is_default = form.cleaned_data["is_default_version"]
-        working_version = self.object
-
-        if working_version.is_archived:
-            raise PermissionDenied("Unable to version an archived experiment.")
-
-        if working_version.create_version_task_id:
-            messages.error(self.request, "Version creation is already in progress.")
-            return HttpResponseRedirect(self.get_success_url())
-
-        error_msg = self._check_pipleline_and_assistant_for_errors()
-
-        if error_msg:
-            messages.error(self.request, error_msg)
-            return render(self.request, self.template_name, self.get_context_data(form=form))
-
-        task_id = async_create_experiment_version.delay(
-            experiment_id=working_version.id, version_description=description, make_default=is_default
-        )
-        working_version.create_version_task_id = task_id
-        working_version.save(update_fields=["create_version_task_id"])
-        messages.success(self.request, "Creating new version. This might take a few minutes.")
-
-        return HttpResponseRedirect(self.get_success_url())
-
-    def _check_pipleline_and_assistant_for_errors(self) -> str:
-        """Checks if the pipeline or assistant has errors before creating a new version."""
-        experiment = self.object
-
-        try:
-            if self._is_assistant_out_of_sync(experiment):
-                return "Assistant is out of sync with OpenAI. Please update the assistant first."
-        except OpenAiSyncError as e:
-            return str(e)
-
-        if pipeline := experiment.pipeline:
-            errors = pipeline.validate()
-            if errors:
-                return "Unable to create a new version when the pipeline has errors"
-
-    def _is_assistant_out_of_sync(self, experiment: Experiment) -> bool:
-        if not experiment.assistant:
-            return False
-
-        if not experiment.assistant.assistant_id:
-            return True
-
-        if len(get_diff_with_openai_assistant(experiment.assistant)) > 0:
-            return True
-
-        files_missing_local, files_missing_remote = get_out_of_sync_files(experiment.assistant)
-        return bool(files_missing_local or files_missing_remote)
-
-    def get_success_url(self):
-        url = reverse(
-            "chatbots:single_chatbot_home",
-            kwargs={
-                "team_slug": self.request.team.slug,
-                "experiment_id": self.kwargs["experiment_id"],
-            },
-        )
-        return f"{url}#versions"
 
 
 def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
@@ -513,50 +392,6 @@ def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
             experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
         ),
     }
-
-
-@require_POST
-@login_and_team_required
-def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
-    """Start an authed web session with the chosen experiment, be it a specific version or not"""
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-
-    session = WebChannel.start_new_session(
-        working_experiment=experiment,
-        participant_user=request.user,
-        participant_identifier=request.user.email,
-        timezone=request.session.get("detected_tz", None),
-        version=version_number,
-    )
-    return HttpResponseRedirect(
-        reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, version_number, session.id])
-    )
-
-
-@login_and_team_required
-def experiment_chat_session(
-    request, team_slug: str, experiment_id: int, session_id: int, version_number: int, active_tab: str = "experiments"
-):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = get_object_or_404(
-        ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
-    )
-    try:
-        experiment_version = experiment.get_version(version_number)
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
-        "experiment_name": experiment_version.name,
-        "experiment_version": experiment_version,
-        "experiment_version_number": experiment_version.version_number,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/chat/web_chat.html",
-        {"experiment": experiment, "session": session, "active_tab": active_tab, **version_specific_vars},
-    )
 
 
 @experiment_session_view()
@@ -1294,63 +1129,6 @@ def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, sessi
             "active_tab": "experiments",
         },
     )
-
-
-@experiment_session_view()
-@verify_session_access_cookie
-def experiment_session_details_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return render_session_details(
-        request,
-        team_slug,
-        experiment_id,
-        session_id,
-        active_tab="experiments",
-        template_path="experiments/experiment_session_view.html",
-    )
-
-
-@login_and_team_required
-def experiment_session_pagination_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return paginate_session(
-        request,
-        team_slug,
-        experiment_id,
-        session_id,
-        view_name="experiments:experiment_session_view",
-    )
-
-
-@team_required
-def download_file(request, team_slug: str, session_id: int, pk: int):
-    resource = get_object_or_404(
-        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
-    )
-    try:
-        file = resource.file.open()
-        return FileResponse(file, as_attachment=True, filename=resource.file.name)
-    except FileNotFoundError:
-        raise Http404() from None
-
-
-@team_required
-def get_image_html(request, team_slug: str, session_id: int, pk: int):
-    """Return HTML for displaying an image attachment."""
-    resource = get_object_or_404(
-        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
-    )
-
-    if not resource.is_image:
-        raise Http404("File is not an image")
-
-    # Generate the image URL
-    image_url = reverse("experiments:download_file", args=[team_slug, session_id, pk])
-
-    # Return HTML for the image
-    html = format_html(
-        '<img src="{}" alt="{}" class="max-w-md max-h-64 rounded border shadow-sm mt-2">', image_url, resource.name
-    )
-
-    return HttpResponse(html)
 
 
 @require_POST

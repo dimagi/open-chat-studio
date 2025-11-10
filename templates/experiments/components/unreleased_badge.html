@@ -1,7 +1,7 @@
 {% if has_changes %}
     <div class="tooltip" data-tip="There are unreleased changes">
         <a class="badge badge-warning badge-sm"
-           href="{% url 'experiments:create_version' experiment.team.slug experiment.id %}">
+           href="{% url 'chatbots:create_version' experiment.team.slug experiment.id %}">
             Draft
         </a>
     </div>

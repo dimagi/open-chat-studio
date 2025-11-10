@@ -11,7 +11,6 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.chat.channels import WebChannel
-from apps.chat.models import Chat
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
@@ -387,28 +386,32 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
     assert fs_resource.files.filter(name="fs.text").exists()
 
 
-@pytest.mark.django_db()
-@pytest.mark.parametrize("version_number", [1, 2])
-def test_start_authed_web_session_with_version(version_number, client):
-    team = TeamWithUsersFactory()
-    working_experiment = ExperimentFactory(team=team)
-    working_experiment.create_new_version()
+# Test for start_authed_web_session moved to chatbots
+# See: apps/chatbots/tests/test_chatbot_views.py
+# The view has been removed from experiments and is now chatbots:start_authed_web_session
 
-    client.force_login(working_experiment.team.members.first())
-    url = reverse(
-        "experiments:start_authed_web_session",
-        kwargs={
-            "team_slug": working_experiment.team.slug,
-            "experiment_id": working_experiment.id,
-            "version_number": version_number,
-        },
-    )
-
-    response = client.post(url, data={})
-    assert response.status_code == 302
-    assert working_experiment.sessions.count() == 1
-    expected_chat_metadata = {Chat.MetadataKeys.EXPERIMENT_VERSION: version_number}
-    assert working_experiment.sessions.first().chat.metadata == expected_chat_metadata
+# @pytest.mark.django_db()
+# @pytest.mark.parametrize("version_number", [1, 2])
+# def test_start_authed_web_session_with_version(version_number, client):
+#     team = TeamWithUsersFactory()
+#     working_experiment = ExperimentFactory(team=team)
+#     working_experiment.create_new_version()
+#
+#     client.force_login(working_experiment.team.members.first())
+#     url = reverse(
+#         "chatbots:start_authed_web_session",
+#         kwargs={
+#             "team_slug": working_experiment.team.slug,
+#             "experiment_id": working_experiment.id,
+#             "version_number": version_number,
+#         },
+#     )
+#
+#     response = client.post(url, data={})
+#     assert response.status_code == 302
+#     assert working_experiment.sessions.count() == 1
+#     expected_chat_metadata = {Chat.MetadataKeys.EXPERIMENT_VERSION: version_number}
+#     assert working_experiment.sessions.first().chat.metadata == expected_chat_metadata
 
 
 @pytest.mark.django_db()
@@ -587,32 +590,3 @@ class TestVerifyPublicChatToken:
         )
         assert response.url == expected_redirect_url
         record_consent_and_redirect.assert_not_called()
-
-
-@pytest.mark.django_db()
-class TestCreateExperimentVersionView:
-    @pytest.mark.parametrize("in_sync_with_openai", [True, False])
-    @mock.patch("apps.experiments.views.experiment.messages")
-    @mock.patch("apps.experiments.views.experiment.async_create_experiment_version.delay")
-    def test_create_version_with_assistant(self, delay, messages, in_sync_with_openai, client):
-        delay.return_value = "a7a82d12-0abe-4466-92c7-95e4ed8eaf5c"
-        team = TeamWithUsersFactory()
-        experiment = ExperimentFactory(
-            assistant=OpenAiAssistantFactory(team=team), owner=team.members.first(), team=team
-        )
-        client.force_login(experiment.owner)
-        post_data = {"version_description": "Some description", "is_default_version": True}
-        url = reverse("experiments:create_version", args=[experiment.team.slug, experiment.id])
-
-        with mock.patch("apps.experiments.views.CreateExperimentVersion._is_assistant_out_of_sync") as out_of_sync:
-            out_of_sync.return_value = not in_sync_with_openai
-            client.post(url, data=post_data)
-
-        if in_sync_with_openai:
-            expected_message = "Creating new version. This might take a few minutes."
-            messages.success.assert_called_with(mock.ANY, expected_message)
-            assert delay.called is True
-        else:
-            expected_message = "Assistant is out of sync with OpenAI. Please update the assistant first."
-            messages.error.assert_called_with(mock.ANY, expected_message)
-            assert delay.called is False

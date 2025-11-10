@@ -157,8 +157,12 @@ class File(BaseTeamModel, VersionsMixin):
         return self.collections.all()
 
     def download_link(self, experiment_session_id: int) -> str:
+        """Returns the absolute URL for downloading this file.
+        
+        Uses chatbots app URLs since experiments have been migrated to chatbots.
+        """
         return absolute_url(
-            reverse("experiments:download_file", args=[get_slug_for_team(self.team_id), experiment_session_id, self.id])
+            reverse("chatbots:download_file", args=[get_slug_for_team(self.team_id), experiment_session_id, self.id])
         )
 
     def get_absolute_url(self):
