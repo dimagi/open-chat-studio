@@ -258,7 +258,7 @@ def cleanup_old_preview_evaluation_runs():
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def upload_dataset_csv_task(self, dataset_id, file_id, team_id):
+def update_dataset_from_csv_task(self, dataset_id, file_id, team_id):
     """
     Process CSV upload for dataset asynchronously with progress tracking.
 

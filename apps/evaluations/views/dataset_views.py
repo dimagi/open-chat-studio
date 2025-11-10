@@ -31,7 +31,7 @@ from apps.evaluations.tables import (
     EvaluationDatasetTable,
     EvaluationSessionsSelectionTable,
 )
-from apps.evaluations.tasks import upload_dataset_csv_task
+from apps.evaluations.tasks import update_dataset_from_csv_task
 from apps.evaluations.utils import (
     generate_csv_column_suggestions,
     make_evaluation_messages_from_sessions,
@@ -624,7 +624,7 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
             expiry_date=timezone.now() + timedelta(days=3),
         )
 
-        task = upload_dataset_csv_task.delay(dataset.id, file_instance.id, request.team.id)
+        task = update_dataset_from_csv_task.delay(dataset.id, file_instance.id, request.team.id)
         return JsonResponse({"success": True, "task_id": task.id})
 
     except Exception as e:
