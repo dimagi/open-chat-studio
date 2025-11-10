@@ -61,7 +61,6 @@ dependencies = [
     "taskbadger",
     "tenacity",
     "tiktoken",
-    "transformers>=4.48.0", # this is required by the tokenizer that langchain uses
     "turn-python>=1.0.0",
     "twilio",
     "whitenoise[brotli]",
