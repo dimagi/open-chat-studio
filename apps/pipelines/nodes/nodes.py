@@ -149,6 +149,9 @@ class LLMResponseMixin(BaseModel):
 
     @field_validator("llm_model_parameters", mode="before")
     def ensure_default_parameters_are_present(cls, value, info: FieldValidationInfo):
+        if not info.data.get("llm_provider_model_id"):
+            return {}
+
         try:
             model = LlmProviderModel.objects.get(id=info.data.get("llm_provider_model_id"))
             if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
@@ -159,7 +162,7 @@ class LLMResponseMixin(BaseModel):
                         "temperature": info.data.get("llm_temperature"),
                     },
                 ).model_dump()
-        except (LlmProviderModel.DoesNotExist, Exception):
+        except Exception:
             pass
         return value or {}
 
