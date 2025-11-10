@@ -145,7 +145,8 @@ paths:
   /api/chat/start/:
     post:
       operationId: chat_start_session
-      description: Start a new chat session for a widget
+      description: Start a new chat session - supports both authenticated users and
+        embedded widgets
       summary: Start a new chat session for a widget
       tags:
       - Chat
@@ -1304,6 +1305,7 @@ components:
       - slack
       - commcare_connect
       - evaluations
+      - embedded_widget
       type: string
       description: |-
         * `telegram` - Telegram
@@ -1315,6 +1317,7 @@ components:
         * `slack` - Slack
         * `commcare_connect` - CommCare Connect
         * `evaluations` - Evaluations
+        * `embedded_widget` - Embedded Widget
     SessionStatusEnum:
       enum:
       - active

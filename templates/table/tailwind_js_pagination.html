@@ -28,13 +28,13 @@ Override pagination and sorting in base template to use htmx
 {% block prev-page-link-attr %}
     hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.previous_page_number %}"
     hx-trigger="click"
-    hx-target="div.table-container"
+    hx-target="closest div.table-container"
     hx-swap="outerHTML"
 {% endblock prev-page-link-attr %}
 
 {% block next-page-link-attr %}
     hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.next_page_number %}"
     hx-trigger="click"
-    hx-target="div.table-container"
+    hx-target="closest div.table-container"
     hx-swap="outerHTML"
 {% endblock next-page-link-attr %}

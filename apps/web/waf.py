@@ -35,9 +35,12 @@ def waf_allow(kind: WafRule):
     NOTE: This must be the top most decorator applied to the function or class.
     """
 
-    def inner(fn):
-        waf_allow.views[kind].add(fn)
-        return fn
+    def inner(view_func):
+        if hasattr(view_func, "view_class"):
+            waf_allow.views[kind].add(view_func.view_class)
+        else:
+            waf_allow.views[kind].add(view_func)
+        return view_func
 
     return inner
 

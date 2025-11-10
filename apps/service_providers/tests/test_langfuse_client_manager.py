@@ -4,52 +4,21 @@ import time
 from unittest import mock
 
 import pytest
-from langfuse._client.resource_manager import LangfuseResourceManager
 
 from apps.service_providers.tracing.langfuse import ClientManager
 
 
-def mock_client_factory():
-    """Factory method that creates mock clients and 'registers' them with the LangfuseResourceManager"""
-
-    def mock_register_client(**kwargs):
-        public_key = kwargs["public_key"]
-        if public_key not in mock_register_client.registry:
-            mock_register_client.registry[public_key] = mock.MagicMock(name=public_key)
-            with LangfuseResourceManager._lock:
-                LangfuseResourceManager._instances[public_key] = mock_register_client.registry[public_key]
-
-        return mock_register_client.registry[public_key]
-
-    mock_register_client.registry = {}
-
-    return mock_register_client
-
-
 @pytest.fixture()
-def mock_client_registry():
-    return mock_client_factory()
-
-
-@pytest.fixture()
-def langfuse_mock(mock_client_registry):
+def langfuse_mock():
     """Mock the Langfuse client."""
-    with (
-        mock.patch(
-            "apps.service_providers.tracing.langfuse._create_client_from_instance",
-            new=lambda instance, public_key: instance,
-        ),
-        mock.patch("langfuse.Langfuse", side_effect=mock_client_registry) as mock_langfuse,
-    ):
+    with mock.patch("langfuse.Langfuse") as mock_langfuse:
         yield mock_langfuse
 
 
 @pytest.fixture()
 def client_manager():
     """Return a ClientManager with a short timeout for testing."""
-    manager = ClientManager(stale_timeout=0.5)
-    yield manager
-    manager.shutdown()
+    return ClientManager(stale_timeout=1)
 
 
 @pytest.fixture()
@@ -58,15 +27,14 @@ def config():
     return {"public_key": "test_key", "secret_key": "test_secret"}
 
 
-def test_get_creates_new_client(client_manager, config, langfuse_mock, mock_client_registry):
+def test_get_creates_new_client(client_manager, config, langfuse_mock):
     # Act
     client = client_manager.get(config)
 
     # Assert
     langfuse_mock.assert_called_with(**config)
-    assert len(mock_client_registry.registry) == 1
-    assert client == mock_client_registry.registry[config["public_key"]]
-    assert len(client_manager.key_timestamps) == 1
+    assert client == langfuse_mock.return_value
+    assert len(client_manager.clients) == 1
 
 
 def test_get_reuses_existing_client(client_manager, config, langfuse_mock):
@@ -79,12 +47,21 @@ def test_get_reuses_existing_client(client_manager, config, langfuse_mock):
     # Assert
     langfuse_mock.assert_not_called()
     assert first_client == second_client
-    assert len(client_manager.key_timestamps) == 1
+    assert len(client_manager.clients) == 1
 
 
 def test_get_creates_different_clients_for_different_configs(client_manager, config, langfuse_mock):
     # Arrange
     other_config = {"public_key": "other_key", "secret_key": "other_secret"}
+
+    # Need different return values for different configs
+    def side_effect(**kwargs):
+        if kwargs["public_key"] == "test_key":
+            return mock.MagicMock(name="client1")
+        else:
+            return mock.MagicMock(name="client2")
+
+    langfuse_mock.side_effect = side_effect
 
     # Act
     first_client = client_manager.get(config)
@@ -92,57 +69,79 @@ def test_get_creates_different_clients_for_different_configs(client_manager, con
 
     # Assert
     assert first_client != second_client
-    assert len(client_manager.key_timestamps) == 2
+    assert len(client_manager.clients) == 2
 
 
 def test_prune_stale_clients(client_manager, config, langfuse_mock):
+    # Set up different clients for different configs
+    def side_effect(**kwargs):
+        if kwargs["public_key"] == "test_key":
+            return mock.MagicMock(name="client1")
+        else:
+            return mock.MagicMock(name="client2")
+
+    langfuse_mock.side_effect = side_effect
+
     # Arrange
     other_config = {"public_key": "other_key", "secret_key": "other_secret"}
     first_client = client_manager.get(config)
 
-    time.sleep(0.4)
+    time.sleep(0.5)
     client_manager.get(other_config)  # Get second client
-    assert len(client_manager.key_timestamps) == 2
+    assert len(client_manager.clients) == 2
 
-    time.sleep(0.1)  # Sleep longer than the stale timeout
+    # Act
+    time.sleep(0.6)  # Sleep longer than the stale timeout
     client_manager._prune_stale()
 
-    assert len(client_manager.key_timestamps) == 1
+    # Assert
+    assert len(client_manager.clients) == 1
     first_client.shutdown.assert_called_once()
 
 
-def test_max_clients_limit(client_manager, langfuse_mock, mock_client_registry):
+def test_max_clients_limit(client_manager, langfuse_mock):
     """Test that the max_clients limit is enforced by removing oldest client."""
     # Arrange
     client_manager.max_clients = 3
 
     # Create unique mock clients that return different timestamps
+    clients = []
     configs = []
 
     for i in range(4):
         config = {"public_key": f"key_{i}", "secret_key": f"secret_{i}"}
         configs.append(config)
 
+        client = mock.MagicMock(name=f"client{i}")
+        clients.append(client)
+
+    def side_effect(**kwargs):
+        for i, c in enumerate(configs):
+            if kwargs["public_key"] == c["public_key"]:
+                return clients[i]
+        return mock.MagicMock()
+
+    langfuse_mock.side_effect = side_effect
+
     # Add clients with increasing timestamps
-    clients = []
     for config in configs:
-        clients.append(client_manager.get(config))
+        client_manager.get(config)
         time.sleep(0.1)  # Ensure timestamps are different
 
-    assert len(client_manager.key_timestamps) == 4
+    assert len(client_manager.clients) == 4
 
     # Act: add one more client to exceed the limit
     client_manager._prune_stale()
 
     # Assert: should still have 3 clients but the oldest one should be removed
-    assert len(client_manager.key_timestamps) == 3
+    assert len(client_manager.clients) == 3
     clients[0].shutdown.assert_called_once()  # The oldest client should be shut down
 
     # The remaining clients should be the newer ones
-    assert configs[0]["public_key"] not in client_manager.key_timestamps
-    assert configs[1]["public_key"] in client_manager.key_timestamps
-    assert configs[2]["public_key"] in client_manager.key_timestamps
-    assert configs[3]["public_key"] in client_manager.key_timestamps
+    remaining_clients = [c[1] for c in client_manager.clients.values()]
+    assert clients[1] in remaining_clients
+    assert clients[2] in remaining_clients
+    assert clients[3] in remaining_clients
 
 
 def test_prune_thread_starts_automatically(langfuse_mock):
@@ -160,9 +159,10 @@ def test_prune_thread_starts_automatically(langfuse_mock):
         thread_mock.return_value.start.assert_called_once()
 
 
-def test_thread_safety_with_concurrent_access(client_manager, langfuse_mock):
+def test_thread_safety_with_concurrent_access(langfuse_mock):
     """Test that the ClientManager is thread-safe with concurrent access."""
     # Arrange
+    client_manager = ClientManager()
     configs = [{"public_key": f"key_{i}", "secret_key": f"secret_{i}"} for i in range(10)]
 
     results = []
@@ -182,7 +182,7 @@ def test_thread_safety_with_concurrent_access(client_manager, langfuse_mock):
 
     # Assert
     assert len(results) == 10
-    assert len(client_manager.key_timestamps) == 10
+    assert len(client_manager.clients) == 10
 
 
 def test_prune_worker(client_manager, config, langfuse_mock):

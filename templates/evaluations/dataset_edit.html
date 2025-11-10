@@ -23,7 +23,7 @@
     </div>
   </div>
 
-  <div x-data="datasetModeSelector({ defaultMode: 'manual' })" x-init="init()" class="mt-6">
+  <div x-data="datasetModeSelector({ defaultMode: 'manual', sessionIdsFetchUrl: '{% url 'evaluations:dataset_sessions_selection_json' team.slug %}' })" x-init="init()" class="mt-6">
     <h3 class="text-lg font-semibold mb-4">{% translate "Add Messages to Dataset" %}</h3>
 
     <!-- Mode selection -->
