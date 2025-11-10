@@ -217,6 +217,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
     permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
+        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
         timezone = self.request.session.get("detected_tz", None)
         filter_params = FilterParams.from_request(self.request)
 
@@ -228,27 +229,38 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
         # Use Exists for filtering instead of Count with IN subquery - avoids cartesian product
         has_messages = Exists(filtered_messages)
 
-        # Build the query with optimized annotations
+        # Build the query with basic filtering only
         query_set = (
             ExperimentSession.objects.filter(team=self.request.team)
-            .filter(has_messages)  # Filter early with Exists - THIS IS THE KEY OPTIMIZATION
+            .filter(has_messages)  # Filter early with Exists
             .select_related("team", "participant__user", "chat", "experiment")
-            .annotate_with_versions_list()
         )
 
         # Apply session filter (this will add first_message_created_at and last_message_created_at)
         session_filter = ExperimentSessionFilter()
         query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
 
-        # Add message count annotation at the end
-        query_set = query_set.annotate(
+        return query_set.order_by("experiment__name")
+
+    def get_table_data(self):
+        """Add expensive annotations only to the paginated data, not for counting."""
+        queryset = super().get_table_data()
+
+        # Get filter params for message count
+        timezone = self.request.session.get("detected_tz", None)
+        filter_params = FilterParams.from_request(self.request)
+        message_filter = ChatMessageFilter()
+        base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
+        filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
+
+        # Add expensive annotations only to paginated data
+        queryset = queryset.annotate_with_versions_list().annotate(
             message_count=Coalesce(
                 Count("chat__messages", filter=Q(chat__messages__in=filtered_messages.values("pk")), distinct=True),
                 0,
             )
-        ).order_by("experiment__name")
-
-        return query_set
+        )
+        return queryset
 
 
 class DatasetSessionsSelectionJson(DatasetSessionsSelectionTableView):

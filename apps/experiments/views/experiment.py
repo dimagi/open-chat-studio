@@ -128,27 +128,12 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
     permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
+        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
         experiment_filter = Q()
         if experiment_id := self.kwargs.get("experiment_id"):
             experiment_filter = Q(experiment__id=experiment_id)
 
-        query_set = (
-            ExperimentSession.objects.with_last_message_created_at()
-            .filter(experiment_filter, team=self.request.team)
-            # Select related source
-            # experiment: participant.get_link_to_experiment_data
-            # participant__user: str(participant)
-            # chat: tags prefetch
-            .select_related("experiment", "participant__user", "chat")
-            .annotate_with_versions_list()
-            .prefetch_related(
-                Prefetch(
-                    "chat__tagged_items",
-                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                    to_attr="prefetched_tagged_items",
-                ),
-            )
-        )
+        query_set = ExperimentSession.objects.filter(experiment_filter, team=self.request.team)
         timezone = self.request.session.get("detected_tz", None)
 
         session_filter = ExperimentSessionFilter()
@@ -156,6 +141,26 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
         )
         return query_set
+
+    def get_table_data(self):
+        """Add expensive annotations only to the paginated data, not for counting."""
+        queryset = super().get_table_data()
+        # Add expensive annotations after filtering but before display
+        queryset = (
+            # Select related source
+            # experiment: participant.get_link_to_experiment_data
+            # participant__user: str(participant)
+            # chat: tags prefetch
+            queryset.select_related("experiment", "participant__user", "chat").prefetch_related(
+                Prefetch(
+                    "chat__tagged_items",
+                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                    to_attr="prefetched_tagged_items",
+                ),
+            )
+        )
+        # annotate_with_last_message_created_at is done by ExperimentSessionFilter
+        return queryset.annotate_with_versions_list()
 
 
 class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
