@@ -1,5 +1,4 @@
 import json
-import logging
 import unicodedata
 from typing import Annotated, Any, Literal, Self
 
@@ -24,7 +23,6 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
-from apps.assistants.models import OpenAiAssistant
 from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
@@ -50,14 +48,7 @@ from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
-from apps.service_providers.llm_service.adapters import AssistantAdapter
-from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
-from apps.service_providers.llm_service.runnables import (
-    AgentAssistantChat,
-    AssistantChat,
-    ChainOutput,
-)
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
@@ -923,6 +914,9 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
 
     def _process(self, state: PipelineState) -> PipelineState:
         try:
+            from apps.assistants.models import OpenAiAssistant
+            from apps.service_providers.llm_service.runnables import ChainOutput
+
             assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
         except OpenAiAssistant.DoesNotExist:
             raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
@@ -946,7 +940,13 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
     def _get_attachments(self, state) -> list:
         return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
-    def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession):
+    def _get_assistant_runnable(self, assistant, session: ExperimentSession):
+        import logging
+
+        from apps.service_providers.llm_service.adapters import AssistantAdapter
+        from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
+        from apps.service_providers.llm_service.runnables import AgentAssistantChat, AssistantChat
+
         history_manager = AssistantPipelineHistoryManager()
         adapter = AssistantAdapter.for_pipeline(session=session, node=self, disabled_tools=self.disabled_tools)
 
