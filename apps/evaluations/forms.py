@@ -1,13 +1,15 @@
+import csv
 import importlib
 import json
+from io import StringIO
 
 from django import forms
 from django.forms.widgets import RadioSelect
 from pydantic import ValidationError as PydanticValidationError
 
-from apps.chat.models import ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
+    DatasetCreationStatus,
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
@@ -15,8 +17,13 @@ from apps.evaluations.models import (
     Evaluator,
     ExperimentVersionSelection,
 )
-from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
+from apps.evaluations.tasks import (
+    create_dataset_from_csv_task,
+    create_dataset_from_sessions_task,
+)
+from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.files.models import File
 
 
 class StyledRadioSelect(RadioSelect):
@@ -320,15 +327,25 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
         return session_ids, filtered_session_ids
 
-    def _create_messages_from_sessions(self, session_ids, filtered_session_ids):
-        """Creates EvaluationMessage objects from sessions."""
-        return EvaluationMessage.create_from_sessions(
-            team=self.team,
-            external_session_ids=session_ids,
-            filtered_session_ids=filtered_session_ids,
-            filter_params=self.filter_params,
-            timezone=self.timezone,
+    def _save_clone(self, dataset):
+        """Dispatch async task to clone messages from sessions."""
+        session_ids = self.cleaned_data.get("session_ids", [])
+        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
+
+        if not session_ids and not filtered_session_ids:
+            return
+
+        task = create_dataset_from_sessions_task.delay(
+            dataset.id,
+            self.team.id,
+            list(session_ids),
+            list(filtered_session_ids),
+            self.filter_params.to_query() if self.filter_params else None,
+            self.timezone,
         )
+
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
 
 
 class EvaluationDatasetForm(EvaluationDatasetBaseForm):
@@ -344,7 +361,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         required=False,
     )
 
-    csv_data = forms.CharField(
+    csv_file_id = forms.CharField(
         widget=forms.HiddenInput(),
         required=False,
     )
@@ -381,8 +398,8 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         elif mode == "manual":
             cleaned_data["message_pairs"] = self._clean_manual()
         elif mode == "csv":
-            csv_data, column_mapping, history_column = self._clean_csv()
-            cleaned_data["csv_data"] = csv_data
+            csv_file, column_mapping, history_column = self._clean_csv()
+            cleaned_data["csv_file"] = csv_file
             cleaned_data["column_mapping"] = column_mapping
             cleaned_data["history_column"] = history_column
         return cleaned_data
@@ -432,24 +449,34 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
 
     def _clean_csv(self):
         column_mapping_str = self.data.get("column_mapping", "")
-        csv_data_str = self.data.get("csv_data", "")
+        csv_file_id_str = self.data.get("csv_file_id", "")
         history_column = self.data.get("history_column", "").strip()
         populate_history = self.data.get("populate_history") == "on"
 
-        if not csv_data_str:
+        if not csv_file_id_str:
             raise forms.ValidationError("Please upload a CSV file.")
+
+        try:
+            csv_file_id = int(csv_file_id_str)
+            csv_file = File.objects.get(id=csv_file_id, team=self.team)
+        except (ValueError, File.DoesNotExist) as err:
+            raise forms.ValidationError("Invalid or missing CSV file.") from err
+
+        try:
+            file_content = csv_file.file.read().decode("utf-8")
+            csv_reader = csv.DictReader(StringIO(file_content))
+            csv_columns = set(csv_reader.fieldnames or [])
+        except Exception as err:
+            raise forms.ValidationError(f"Error reading CSV file: {str(err)}") from err
+
         column_mapping = {}
         if column_mapping_str:
             try:
                 column_mapping = json.loads(column_mapping_str)
             except json.JSONDecodeError as err:
                 raise forms.ValidationError("Invalid column mapping data.") from err
-        try:
-            csv_data = json.loads(csv_data_str)
-        except json.JSONDecodeError as err:
-            raise forms.ValidationError("Invalid CSV data.") from err
 
-        if not csv_data:
+        if not csv_columns:
             raise forms.ValidationError("CSV data appears to be empty or invalid.")
 
         if not column_mapping.get("input") or not column_mapping.get("output"):
@@ -459,8 +486,6 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             raise forms.ValidationError(
                 "Cannot both automatically populate history and use a history column. Please choose one option."
             )
-
-        csv_columns = set(csv_data[0].keys()) if csv_data else set()
 
         mapped_columns = set()
         if input_col := column_mapping.get("input"):
@@ -497,10 +522,13 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
                             "and underscores."
                         )
 
+        input_col = column_mapping.get("input", "")
+        output_col = column_mapping.get("output", "")
         valid_rows = 0
-        for i, row in enumerate(csv_data):
-            input_content = row.get(column_mapping.get("input", ""), "").strip()
-            output_content = row.get(column_mapping.get("output", ""), "").strip()
+
+        for i, row in enumerate(csv_reader):
+            input_content = row.get(input_col, "").strip()
+            output_content = row.get(output_col, "").strip()
             if input_content and output_content:
                 valid_rows += 1
 
@@ -515,7 +543,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         if valid_rows == 0:
             raise forms.ValidationError("No valid message pairs found in CSV data.")
 
-        return csv_data, column_mapping, history_column
+        return csv_file, column_mapping, history_column
 
     def _is_valid_python_identifier(self, name):
         """Check if a string is a valid Python identifier."""
@@ -530,33 +558,30 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         if not commit:
             return dataset
 
+        dataset.status = DatasetCreationStatus.PENDING
         dataset.save()
 
         mode = self.cleaned_data.get("mode")
-        evaluation_messages = []
+
+        if mode == "manual":
+            # Manual mode is synchronous as there are a small number of items
+            self._save_manual(dataset)
+            dataset.status = DatasetCreationStatus.COMPLETED
+            dataset.save(update_fields=["status"])
+            return dataset
 
         if mode == "clone":
-            evaluation_messages = self._save_clone()
-        elif mode == "manual":
-            evaluation_messages = self._save_manual()
+            self._save_clone(dataset)
         elif mode == "csv":
-            evaluation_messages = self._save_csv()
-        if evaluation_messages:
-            EvaluationMessage.objects.bulk_create(evaluation_messages)
-            dataset.messages.set(evaluation_messages)
+            self._save_csv(dataset)
 
         return dataset
 
-    def _save_clone(self):
-        session_ids = self.cleaned_data.get("session_ids", [])
-        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
+    def _save_manual(self, dataset):
+        """Create messages from manual input synchronously."""
+        message_pairs = self.cleaned_data.get("message_pairs", [])
 
-        if session_ids or filtered_session_ids:
-            return self._create_messages_from_sessions(session_ids, filtered_session_ids)
-        return []
-
-    def _save_manual(self):
-        return [
+        evaluation_messages = [
             EvaluationMessage(
                 input=pair["human"],
                 output=pair["ai"],
@@ -566,81 +591,24 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
                 session_state=pair.get("session_state", {}),
                 metadata={"created_mode": "manual"},
             )
-            for pair in self.cleaned_data.get("message_pairs", [])
+            for pair in message_pairs
         ]
 
-    def _save_csv(self):
-        csv_data = self.cleaned_data.get("csv_data", [])
+        created_messages = EvaluationMessage.objects.bulk_create(evaluation_messages)
+        dataset.messages.set(created_messages)
+
+    def _save_csv(self, dataset):
+        """Dispatch async task to create messages from CSV."""
         column_mapping = self.cleaned_data.get("column_mapping", {})
         populate_history = self.cleaned_data.get("populate_history", False)
         history_column = self.cleaned_data.get("history_column", "")
+        csv_file = self.cleaned_data["csv_file"]
 
-        evaluation_messages = []
-        auto_history = []  # For auto-populate mode
-
-        for row in csv_data:
-            # Extract mapped columns
-            input_content = row.get(column_mapping.get("input", ""), "").strip()
-            output_content = row.get(column_mapping.get("output", ""), "").strip()
-            if not input_content or not output_content:
-                continue
-
-            context = {}
-            if context_mapping := column_mapping.get("context"):
-                for field_name, csv_column in context_mapping.items():
-                    if csv_column in row:
-                        context[field_name] = parse_csv_value_as_json(row[csv_column])
-
-            participant_data = {}
-            if participant_data_mapping := column_mapping.get("participant_data"):
-                for field_name, csv_column in participant_data_mapping.items():
-                    if csv_column in row:
-                        participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
-
-            session_state = {}
-            if session_state_mapping := column_mapping.get("session_state"):
-                for field_name, csv_column in session_state_mapping.items():
-                    if csv_column in row:
-                        session_state[field_name] = parse_csv_value_as_json(row[csv_column])
-
-            message_history = []
-            if populate_history:
-                # Use auto-populated history from previous messages
-                message_history = [msg.copy() for msg in auto_history]
-            elif history_column and history_column in row:
-                # Parse history from CSV column
-                history_text = row[history_column].strip()
-                if history_text:
-                    message_history = parse_history_text(history_text)
-
-            evaluation_messages.append(
-                EvaluationMessage(
-                    input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
-                    output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
-                    context=context,
-                    participant_data=participant_data,
-                    session_state=session_state,
-                    history=message_history,
-                    metadata={"created_mode": "csv"},
-                )
-            )
-
-            if populate_history:
-                auto_history.append(
-                    {
-                        "message_type": ChatMessageType.HUMAN,
-                        "content": input_content.strip(),
-                        "summary": None,
-                    }
-                )
-                auto_history.append(
-                    {
-                        "message_type": ChatMessageType.AI,
-                        "content": output_content.strip(),
-                        "summary": None,
-                    }
-                )
-        return evaluation_messages
+        task = create_dataset_from_csv_task.delay(
+            dataset.id, csv_file.id, self.team.id, column_mapping, history_column, populate_history
+        )
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
 
 
 def _get_message_pair_value(field_name: str, pair_index: int, field_value: str) -> dict:
@@ -688,40 +656,21 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
 
     def save(self, commit=True):
         """Save the dataset and clone messages if mode is 'clone'."""
-        instance = super().save(commit=commit)
+        dataset = super().save(commit=commit)
 
-        if commit and self.cleaned_data.get("mode") == "clone":
-            self._clone_messages_to_dataset(instance)
+        if commit:
+            # Clear any previous error states on any save
+            if dataset.is_failed or dataset.error_message:
+                dataset.error_message = ""
+                # If not cloning (which sets its own status), mark as completed
+                mode = self.cleaned_data.get("mode")
+                if mode != "clone":
+                    dataset.status = DatasetCreationStatus.COMPLETED
+                dataset.save(update_fields=["error_message", "status"])
 
-        return instance
+            if self.cleaned_data.get("mode") == "clone":
+                dataset.status = DatasetCreationStatus.PENDING
+                dataset.save(update_fields=["status"])
+                self._save_clone(dataset)
 
-    def _clone_messages_to_dataset(self, dataset: EvaluationDataset):
-        """
-        Clone messages from sessions into the existing dataset, avoiding duplicates.
-        Uses ChatMessage IDs for duplicate detection.
-        """
-        session_ids = self.cleaned_data.get("session_ids", set())
-        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
-
-        if not session_ids and not filtered_session_ids:
-            return
-
-        new_evaluation_messages = self._create_messages_from_sessions(session_ids, filtered_session_ids)
-        existing_chat_message_pairs = set(
-            dataset.messages.filter(
-                input_chat_message_id__isnull=False,
-                expected_output_chat_message_id__isnull=False,
-            ).values_list("input_chat_message_id", "expected_output_chat_message_id")
-        )
-
-        # Filter out duplicates based on ChatMessage IDs
-        messages_to_add = []
-        for msg in new_evaluation_messages:
-            chat_pair = (msg.input_chat_message_id, msg.expected_output_chat_message_id)
-            if chat_pair not in existing_chat_message_pairs:
-                messages_to_add.append(msg)
-                existing_chat_message_pairs.add(chat_pair)
-
-        if messages_to_add:
-            created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
-            dataset.messages.add(*created_messages)
+        return dataset
