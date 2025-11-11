@@ -148,7 +148,7 @@ class LlmService(pydantic.BaseModel):
     def get_assistant(self, assistant_id: str, as_agent=False):
         raise NotImplementedError
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, temperature: float | None = None, **kwargs) -> BaseChatModel:
         raise NotImplementedError
 
     def transcribe_audio(self, audio: BytesIO) -> str:
@@ -252,10 +252,9 @@ class OpenAIGenericService(LlmService):
     openai_api_key: str
     openai_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         model = ChatOpenAI(
             model=llm_model,
-            temperature=1 if llm_model.startswith(("o3", "o4", "gpt-5")) else temperature,
             **self._get_model_kwargs(**kwargs),
         )
         try:
@@ -393,13 +392,12 @@ class AzureLlmService(LlmService):
     openai_api_base: str
     openai_api_version: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
             openai_api_key=self.openai_api_key,
             deployment_name=llm_model,
-            temperature=temperature,
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
@@ -413,12 +411,11 @@ class AnthropicLlmService(LlmService):
     anthropic_api_key: str
     anthropic_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return ChatAnthropic(
             anthropic_api_key=self.anthropic_api_key,
             anthropic_api_url=self.anthropic_api_base,
             model=llm_model,
-            temperature=temperature,
             **self._get_model_kwargs(**kwargs),
         )
 
@@ -460,10 +457,9 @@ class DeepSeekLlmService(LlmService):
     deepseek_api_key: str
     deepseek_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return ChatOpenAI(
             model=llm_model,
-            temperature=temperature,
             openai_api_key=self.deepseek_api_key,
             openai_api_base=self.deepseek_api_base,
         )
@@ -478,11 +474,10 @@ class DeepSeekLlmService(LlmService):
 class GoogleLlmService(LlmService):
     google_api_key: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return ChatGoogleGenerativeAI(
             model=llm_model,
             google_api_key=self.google_api_key,
-            temperature=temperature,
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
