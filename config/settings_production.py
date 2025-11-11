@@ -62,9 +62,6 @@ match EMAIL_BACKEND:
 
 SERVER_EMAIL = "noreply@dimagi.com"
 DEFAULT_FROM_EMAIL = "noreply@dimagi.com"
-ADMINS = [
-    ("Dimagi Bots", "noreply@dimagi.com"),
-]
 
 # Mailchimp setup
 

@@ -520,8 +520,6 @@ PROJECT_METADATA = {
 
 USE_HTTPS_IN_ABSOLUTE_URLS = False  # set this to True in production to have URLs generated with https instead of http
 
-ADMINS = [("Dimagi Admins", "devops+openchatstudio@dimagi.com")]
-
 # Add your google analytics ID to the environment to connect to Google Analytics
 GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
 
