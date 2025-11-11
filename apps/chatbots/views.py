@@ -40,7 +40,12 @@ from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
-from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
+from apps.pipelines.views import (
+    _pipeline_node_default_values,
+    _pipeline_node_parameter_values,
+    _pipeline_node_schemas,
+    llm_model_parameter_context,
+)
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -276,6 +281,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
                 exclude_services = []
             synthetic_voices = SyntheticVoice.get_for_team(self.request.team, exclude_services=exclude_services)
             synthetic_voices = synthetic_voices.filter(service__iexact=experiment.voice_provider.type)
+
         return {
             **data,
             "pipeline_id": experiment.pipeline_id,
@@ -290,6 +296,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "origin": "chatbots",
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
+            **llm_model_parameter_context(),
         }
 
 

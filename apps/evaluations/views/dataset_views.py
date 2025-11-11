@@ -1,7 +1,9 @@
 import csv
 import json
 import logging
+from datetime import timedelta
 from io import StringIO
+from itertools import islice
 
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -10,6 +12,7 @@ from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
@@ -17,13 +20,18 @@ from django_tables2 import SingleTableView
 
 from apps.chat.models import ChatMessage
 from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
-from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMessageContent
+from apps.evaluations.models import (
+    DatasetCreationStatus,
+    EvaluationDataset,
+    EvaluationMessage,
+    EvaluationMessageContent,
+)
 from apps.evaluations.tables import (
     DatasetMessagesTable,
     EvaluationDatasetTable,
     EvaluationSessionsSelectionTable,
 )
-from apps.evaluations.tasks import upload_dataset_csv_task
+from apps.evaluations.tasks import update_dataset_from_csv_task
 from apps.evaluations.utils import (
     generate_csv_column_suggestions,
     make_evaluation_messages_from_sessions,
@@ -36,6 +44,7 @@ from apps.experiments.filters import (
     get_filter_context_data,
 )
 from apps.experiments.models import ExperimentSession
+from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -107,6 +116,7 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(self._get_filter_context_data())
+        context["celery_job_id"] = self.object.job_id
         return context
 
     def form_valid(self, form):
@@ -205,7 +215,15 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     def form_valid(self, form):
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
-        return super().form_valid(form)
+        response = super().form_valid(form)
+
+        mode = form.cleaned_data.get("mode")
+        if mode == "manual":
+            messages.success(self.request, "Dataset created successfully!")
+        else:
+            messages.success(self.request, "Dataset created! Messages are being created in the background.")
+
+        return response
 
 
 class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -299,6 +317,12 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
     """Add a new message pair to an existing dataset and return updated table."""
     try:
         dataset = get_object_or_404(EvaluationDataset, id=dataset_id, team__slug=team_slug)
+
+        # Clear any previous error states when manually adding a message
+        if dataset.is_failed or dataset.error_message:
+            dataset.error_message = ""
+            dataset.status = DatasetCreationStatus.COMPLETED
+            dataset.save(update_fields=["error_message", "status"])
 
         form_data = _get_message_form_data(request)
         errors, data = _get_message_data_and_errors(form_data)
@@ -457,7 +481,7 @@ def delete_message(request, team_slug, message_id):
 @login_and_team_required
 @require_POST
 def parse_csv_columns(request, team_slug: str):
-    """Parse uploaded CSV and return column names and sample data."""
+    """Parse uploaded CSV, save to File model, and return column names and sample data."""
     try:
         csv_file = request.FILES.get("csv_file")
         if not csv_file:
@@ -467,24 +491,37 @@ def parse_csv_columns(request, team_slug: str):
         csv_reader = csv.DictReader(StringIO(file_content))
         columns = csv_reader.fieldnames or []
 
-        all_rows = list(csv_reader)
+        sample_rows = list(islice(csv_reader, 3))
 
-        for row in all_rows:
+        # This is for proper display in the sample
+        for row in sample_rows:
             for key, value in row.items():
                 if isinstance(value, str):
                     value_stripped = value.strip()
                     if value_stripped.startswith(("{", "[")):
                         row[key] = normalize_json_quotes(value)
 
-        sample_rows = all_rows[:3]
-        total_rows = len(all_rows)
+        total_rows = len(sample_rows) + sum(1 for _ in csv_reader)
+
         suggestions = generate_csv_column_suggestions(columns)
+
+        csv_file.seek(0)
+        file_instance = File.create(
+            filename=csv_file.name,
+            file_obj=csv_file,
+            team_id=request.team.id,
+            metadata={
+                "upload_timestamp": timezone.now().isoformat(),
+            },
+            purpose=FilePurpose.EVALUATION_DATASET,
+            expiry_date=timezone.now() + timedelta(days=3),
+        )
 
         return JsonResponse(
             {
                 "columns": columns,
                 "sample_rows": sample_rows,
-                "all_rows": all_rows,
+                "file_id": file_instance.id,
                 "total_rows": total_rows,
                 "suggestions": suggestions,
             }
@@ -574,20 +611,20 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
         if not csv_file:
             return JsonResponse({"error": "No CSV file provided"}, status=400)
 
-        # This will pass the whole file as a dict to celery. If files are
-        # large, this could be memory inefficient. The alternative would be to
-        # store the file on disk and fetch it in the task. Instead, we ensure
-        # the file is below a certain size.
+        # Save the CSV file to the Files model for processing
+        file_instance = File.create(
+            filename=csv_file.name,
+            file_obj=csv_file,
+            team_id=request.team.id,
+            metadata={
+                "upload_timestamp": timezone.now().isoformat(),
+                "dataset_id": dataset.id,
+            },
+            purpose=FilePurpose.EVALUATION_DATASET,
+            expiry_date=timezone.now() + timedelta(days=3),
+        )
 
-        MAX_CSV_SIZE = 5 * 1024 * 1024  # 5MB limit
-        if csv_file.size > MAX_CSV_SIZE:
-            return JsonResponse({"error": "CSV file too large (max 5MB)"}, status=400)
-        file_content = csv_file.read().decode("utf-8")
-
-        if not file_content.strip():
-            return JsonResponse({"error": "CSV file is empty"}, status=400)
-
-        task = upload_dataset_csv_task.delay(dataset.id, file_content, request.team.id)
+        task = update_dataset_from_csv_task.delay(dataset.id, file_instance.id, request.team.id)
         return JsonResponse({"success": True, "task_id": task.id})
 
     except Exception as e:

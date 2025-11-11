@@ -25,6 +25,12 @@
       "type": "number",
       "ui:widget": "range"
     },
+    "llm_model_parameters": {
+      "additionalProperties": true,
+      "title": "Llm Model Parameters",
+      "type": "object",
+      "ui:widget": "none"
+    },
     "history_type": {
       "enum": [
         "node",
