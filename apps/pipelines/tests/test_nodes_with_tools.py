@@ -154,5 +154,6 @@ def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_mod
         participant_data={"test": "abc", "other": "xyz"},
     )
     output = graph.invoke(state)
+    print(output)
     assert output["messages"][-1] == "123"
     assert output["participant_data"] == {"test": ["123", "next"], "other": "xyz"}

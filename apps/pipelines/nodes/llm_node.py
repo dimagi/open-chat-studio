@@ -25,6 +25,8 @@ class StateSchema(AgentState):
     # allows tools to manipulate participant data and session state
     participant_data: Annotated[dict, operator.or_]
     session_state: Annotated[dict, operator.or_]
+    # Track current context size (updated after each model call via post_model_hook)
+    current_context_tokens: Annotated[int, operator.add]
 
 
 def execute_sub_agent(node, state: PipelineState):
@@ -40,6 +42,7 @@ def execute_sub_agent(node, state: PipelineState):
         messages=[formatted_input],
         participant_data=state.get("participant_data") or {},
         session_state=state.get("session_state") or {},
+        current_context_tokens=0,  # Will be updated by post_model_hook after first LLM call
     )
     result = agent.invoke(inputs)
     final_message = result["messages"][-1]
@@ -83,6 +86,40 @@ def _process_agent_output(node, session, message):
     return ai_message, ai_message_metadata
 
 
+def _create_token_tracking_hook(node, session: ExperimentSession):
+    """
+    Create a post_model_hook that recalculates context size after each LLM call.
+    This ensures tool validation always has an accurate view of current context usage.
+    """
+
+    def post_model_hook(state: StateSchema) -> dict:
+        """
+        Recalculate current context size after each model response.
+        This accounts for all accumulated messages including agent reasoning.
+        """
+        import logging
+
+        logger = logging.getLogger("ocs.tools")
+        model_name = node.get_llm_provider_model().name
+        token_counter = node.get_llm_service().get_token_counter(model_name)
+
+        # Count tokens in all current messages (includes model responses, tool calls, etc.)
+        total_tokens = token_counter.get_tokens_from_messages(state.get("messages", []))
+
+        logger.info(
+            "Post-model hook: Updated context size: %s",
+            total_tokens,
+            extra={
+                "current_context_tokens": total_tokens,
+                "message_count": len(state.get("messages", [])),
+            },
+        )
+
+        return {"current_context_tokens": total_tokens}
+
+    return post_model_hook
+
+
 def build_node_agent(node, state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
     prompt_context = _get_prompt_context(node, session, state)
 
@@ -100,12 +137,16 @@ def build_node_agent(node, state: PipelineState, session: ExperimentSession, too
         history = node.get_history(session, [prompt] + state["messages"])
         return [prompt] + history + state["messages"]
 
+    # Create post-model hook for token tracking
+    post_model_hook = _create_token_tracking_hook(node, session)
+
     return create_react_agent(
         # TODO: I think this will fail with google builtin tools
         model=node.get_chat_model(),
         tools=tools,
         prompt=prompt_callable,
         state_schema=StateSchema,
+        post_model_hook=post_model_hook,
     )
 
 
@@ -139,13 +180,36 @@ def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
 
 def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: ToolCallbacks) -> list[dict | BaseTool]:
     """Get instantiated tools for the given node configuration."""
-    tools = get_node_tools(node.django_node, session, tool_callbacks=tool_callbacks)
+    # Create validator for tool response size checking
+    from apps.chat.agent.tool_response_validator import ToolResponseSizeValidator, wrap_tool_with_validation
+
+    max_token_limit = (
+        node.user_max_token_limit
+        if node.user_max_token_limit is not None
+        else node.get_llm_provider_model().max_token_limit
+    )
+    model_name = node.get_llm_provider_model().name
+    token_counter = node.get_llm_service().get_token_counter(model_name)
+    validator = ToolResponseSizeValidator(
+        token_counter=token_counter,
+        max_token_limit=max_token_limit,
+    )
+
+    # Pass validator to get_node_tools which wraps all tools
+    tools = get_node_tools(node.django_node, session, tool_callbacks=tool_callbacks, response_size_validator=validator)
+
+    # Add provider-specific tools
     tools.extend(node.get_llm_service().attach_built_in_tools(node.built_in_tools, node.tool_config))
+
+    # Add collection search tool if configured
     if node.collection_index_id:
         collection = Collection.objects.get(id=node.collection_index_id)
-        tools.append(
-            collection.get_search_tool(max_results=node.max_results, generate_citations=node.generate_citations)
+        search_tool = collection.get_search_tool(
+            max_results=node.max_results, generate_citations=node.generate_citations
         )
+        # Wrap search tool with validation
+        search_tool = wrap_tool_with_validation(search_tool, validator)
+        tools.append(search_tool)
 
     if node.disabled_tools:
         # Model builtin tools doesn't have a name attribute and are dicts

@@ -573,14 +573,28 @@ def get_assistant_tools(assistant, experiment_session: ExperimentSession | None 
 
 
 def get_node_tools(
-    node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
+    node: Node,
+    experiment_session: ExperimentSession | None = None,
+    tool_callbacks: ToolCallbacks | None = None,
+    response_size_validator=None,
 ) -> list[BaseTool]:
+    """Get all tools for the node and wrap them with validation if provided."""
+
+    # Collect all tools from different sources (no changes to these functions)
     tool_names = node.params.get("tools") or []
     if node.requires_attachment_tool():
         tool_names.append(AgentTools.ATTACH_MEDIA)
+
     tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
     tools.extend(get_custom_action_tools(node))
     tools.extend(get_mcp_tool_instances(node, experiment_session.team))
+
+    # Wrap all tools with validation if validator provided
+    if response_size_validator:
+        from apps.chat.agent.tool_response_validator import wrap_tool_with_validation
+
+        tools = [wrap_tool_with_validation(tool, response_size_validator) for tool in tools]
+
     return tools
 
 
