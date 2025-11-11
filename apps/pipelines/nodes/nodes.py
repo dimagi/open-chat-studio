@@ -1,7 +1,7 @@
 import json
 import logging
 import unicodedata
-from functools import cache
+from functools import lru_cache
 from typing import Annotated, Any, Literal, Self
 
 import tiktoken
@@ -141,7 +141,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
 
-@cache
+@lru_cache
 def get_llm_provider_model(llm_provider_model_id: int):
     try:
         return LlmProviderModel.objects.get(id=llm_provider_model_id)
