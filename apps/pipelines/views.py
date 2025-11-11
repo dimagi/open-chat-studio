@@ -28,6 +28,8 @@ from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.tables import PipelineTable
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
+from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
+from apps.service_providers.llm_service.model_parameters import LLM_MODEL_PARAMETER_SCHEMAS
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -109,6 +111,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
             "read_only": pipeline.is_a_version,
+            **llm_model_parameter_context(),
         }
 
 
@@ -296,6 +299,13 @@ def _get_node_schema(node_class):
             any_of = value.pop("anyOf")
             value["type"] = [item["type"] for item in any_of if item["type"] != "null"][0]  # take the first type
     return schema
+
+
+def llm_model_parameter_context():
+    return {
+        "llm_model_params": {model: param.__name__ for model, param in LLM_MODEL_PARAMETERS.items()},
+        "llm_model_param_schemas": LLM_MODEL_PARAMETER_SCHEMAS,
+    }
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)

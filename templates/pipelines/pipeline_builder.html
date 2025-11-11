@@ -47,6 +47,8 @@
   {{ flags_enabled|json_script:"flags-enabled" }}
   {{ origin|json_script:"pipeline-request-origin" }}
   {{ read_only|json_script:"read-only" }}
+  {{ llm_model_params|json_script:"llm-model-params" }}
+  {{ llm_model_param_schemas|json_script:"llm-model-parameter-schemas" }}
   <script src="{% static 'js/pipeline-bundle.js' %}"></script>
   <script type="module">
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';
