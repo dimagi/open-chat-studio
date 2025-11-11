@@ -9,34 +9,44 @@ def _populate_temperature_params(apps, schema_editor):
 
     For all Nodes using LLM models that support temperature parameter, we need to populate the `llm_model_parameters`
     param in the node param with the existing temperature value.
+
+    For now we're not going to remove the existing `llm_temperature` param, just to be safe. It should be OK to leave it
+    in the node's params, since we don't use it anymore.
     """
     models_supporting_temperature = []
-    for model, params in LLM_MODEL_PARAMETERS.items():
-        if hasattr(params, 'llm_temperature'):
+    for model, param_cls in LLM_MODEL_PARAMETERS.items():
+        if "temperature" in param_cls.model_fields:
             models_supporting_temperature.append(model)
 
     Node = apps.get_model('pipelines', 'Node')
     LlmProviderModel = apps.get_model('service_providers', 'LlmProviderModel')
 
-    supported_model_ids = LlmProviderModel.objects.filter(name__in=models_supporting_temperature).values_list('id', flat=True)
+    supported_model_ids = list(LlmProviderModel.objects.filter(name__in=models_supporting_temperature).values_list('id', flat=True))
 
     nodes_to_save = []
-    for idx, node in enumerate(Node.objects.filter(params__llm_provider_model_id__in=supported_model_ids).iterator()):
+    
+    # Some ids are saved as strings, others as ints, so we need to check for both
+    int_ids = [id for id in supported_model_ids]
+    str_ids = [str(id) for id in supported_model_ids]
+    for node in Node.objects.filter(
+        params__llm_provider_model_id__in=int_ids + str_ids
+    ).iterator():
         params = node.params
-        llm_model_params = params.get("llm_model_params", {})
+        llm_model_params = params.get("llm_model_parameters", {})
         
         # llm_temperature should exist for all these models, but default to 0.7 just in case
         llm_model_params["temperature"] = params.get("llm_temperature", 0.7)
-        params["llm_model_params"] = llm_model_params
-        node.params = params
+        params["llm_model_parameters"] = llm_model_params
         nodes_to_save.append(node)
-        if len(idx) % 100 == 0:
+
+        if len(nodes_to_save) >= 100:
             Node.objects.bulk_update(nodes_to_save, ['params'])
             nodes_to_save = []
     
     
     # Final save for any remaining nodes
-    Node.objects.bulk_update(nodes_to_save, ['params'])
+    if nodes_to_save:
+        Node.objects.bulk_update(nodes_to_save, ['params'])
 
 class Migration(migrations.Migration):
 

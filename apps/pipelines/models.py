@@ -232,6 +232,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         nodes = []
 
         for node in self.node_set.all():
+            print(f"Node params:\n{node.params}")
             nodes.append(
                 FlowNode(
                     id=node.flow_id,
