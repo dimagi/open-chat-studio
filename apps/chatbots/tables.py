@@ -123,3 +123,4 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No sessions yet!"
+        order_by = ("-last_message",)
