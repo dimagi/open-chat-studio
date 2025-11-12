@@ -66,6 +66,8 @@ from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
+logger = logging.getLogger("ocs.pipelines.nodes")
+
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
 
@@ -203,9 +205,9 @@ class LLMResponseMixin(BaseModel):
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
     def get_chat_model(self):
-        return self.get_llm_service().get_chat_model(
-            get_llm_provider_model(self.llm_provider_model_id).name, **self.llm_model_parameters
-        )
+        model_name = get_llm_provider_model(self.llm_provider_model_id).name
+        logger.debug(f"Calling {model_name} with parameters: {self.llm_model_parameters}")
+        return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
 
 
 class HistoryMixin(LLMResponseMixin):
