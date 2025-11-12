@@ -395,6 +395,7 @@ class AzureLlmService(LlmService):
             openai_api_version=self.openai_api_version,
             openai_api_key=self.openai_api_key,
             deployment_name=llm_model,
+            **kwargs,
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
@@ -456,9 +457,7 @@ class DeepSeekLlmService(LlmService):
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return ChatOpenAI(
-            model=llm_model,
-            openai_api_key=self.deepseek_api_key,
-            openai_api_base=self.deepseek_api_base,
+            model=llm_model, openai_api_key=self.deepseek_api_key, openai_api_base=self.deepseek_api_base, **kwargs
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
@@ -472,10 +471,7 @@ class GoogleLlmService(LlmService):
     google_api_key: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        return ChatGoogleGenerativeAI(
-            model=llm_model,
-            google_api_key=self.google_api_key,
-        )
+        return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
