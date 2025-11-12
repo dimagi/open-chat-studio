@@ -253,10 +253,7 @@ class OpenAIGenericService(LlmService):
     openai_api_base: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        model = ChatOpenAI(
-            model=llm_model,
-            **self._get_model_kwargs(**kwargs),
-        )
+        model = ChatOpenAI(model=llm_model, **self._get_model_kwargs(**kwargs), use_responses_api=True)
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
