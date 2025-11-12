@@ -40,7 +40,7 @@ class BasicParameters(LLMModelParamBase):
 class OpenAIReasoningParameters(LLMModelParamBase):
     effort: OpenAIReasoningEffortParameter = Field(
         title="Reasoning Effort",
-        default="medium",
+        default=OpenAIReasoningEffortParameter.MEDIUM,
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIReasoningEffortParameter.labels),
     )
 
@@ -48,13 +48,13 @@ class OpenAIReasoningParameters(LLMModelParamBase):
 class GPT5Parameters(LLMModelParamBase):
     effort: GPT5ReasoningEffortParameter = Field(
         title="Reasoning Effort",
-        default="medium",
+        default=GPT5ReasoningEffortParameter.MEDIUM,
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT5ReasoningEffortParameter.labels),
     )
 
     verbosity: OpenAIVerbosityParameter = Field(
         title="Verbosity",
-        default="medium",
+        default=OpenAIVerbosityParameter.MEDIUM,
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
     )
 
@@ -63,7 +63,7 @@ class GPT5ProParameters(LLMModelParamBase):
     # gpt-5-pro only supports high effort, which is also its default
     verbosity: OpenAIVerbosityParameter = Field(
         title="Verbosity",
-        default="medium",
+        default=OpenAIVerbosityParameter.MEDIUM,
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
     )
 
