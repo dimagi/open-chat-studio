@@ -7,11 +7,11 @@ def _populate_temperature_params(apps, schema_editor):
     """
     This is data migration that prepares the addition of the temperature parameter to the LLM model parameters.
 
-    For all Nodes using LLM models that support temperature parameter, we need to populate the `llm_model_parameters`
-    param in the node param with the existing temperature value.
+    All nodes that uses LLM models that supports temperature should be updated so that its `llm_model_parameters`
+    parameter contains the same value as the existing toplevel `llm_temperature` value.
 
-    For now we're not going to remove the existing `llm_temperature` param, just to be safe. It should be OK to leave it
-    in the node's params, since we don't use it anymore.
+    For now we're not going to remove the existing `llm_temperature` toplevel parameter, just to be safe.
+    It should be OK to leave it there indefinitely, since we wouldn't be using it anymore.
     """
     models_supporting_temperature = []
     for model, param_cls in LLM_MODEL_PARAMETERS.items():
