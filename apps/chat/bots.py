@@ -18,7 +18,7 @@ from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, ParticipantData, SafetyLayer
 from apps.files.models import File
 from apps.pipelines.nodes.base import Intents, PipelineState
-from apps.service_providers.llm_service.default_models import get_default_model
+from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
 from apps.service_providers.tracing import TraceInfo, TracingService
@@ -566,9 +566,10 @@ class EventBot:
             raise Exception("No LLM provider found")
 
         model = get_default_model(provider.type)
+        params = get_model_parameters(model.name, temperature=0.7)
 
         service = provider.get_llm_service()
-        llm = service.get_chat_model(model.name, 0.7)
+        llm = service.get_chat_model(model.name, **params)
 
         if not self.trace_service:
             self.trace_service = (
