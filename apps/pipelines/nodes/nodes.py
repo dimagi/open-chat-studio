@@ -154,25 +154,13 @@ class LLMResponseMixin(BaseModel):
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
     llm_model_parameters: dict[str, Any] = Field(default_factory=dict, json_schema_extra=UiSchema(widget=Widgets.none))
 
-    @field_validator("llm_model_parameters", mode="before")
-    def ensure_default_parameters_are_present(cls, value, info: FieldValidationInfo):
-        if not info.data.get("llm_provider_model_id"):
-            return {}
-
-        try:
-            model = get_llm_provider_model(info.data.get("llm_provider_model_id"))
-            # Default to BasicParameters class. This should only happen for unknown models.
-            if params_cls := LLM_MODEL_PARAMETERS.get(model.name, BasicParameters):
-                return params_cls.model_validate(
-                    value or {},
-                    context={
-                        "model_max_token_limit": model.max_token_limit,
-                        "temperature": info.data.get("llm_temperature"),
-                    },
-                ).model_dump()
-        except Exception:
-            pass
-        return value or {}
+    @model_validator(mode="before")
+    @classmethod
+    def ensure_default_parameters(cls, data) -> Self:
+        model = get_llm_provider_model(data["llm_provider_model_id"])
+        if params_cls := LLM_MODEL_PARAMETERS.get(model.name, BasicParameters):
+            data["llm_model_parameters"] = params_cls.model_validate(data.get("llm_model_parameters", {})).model_dump()
+        return data
 
     @model_validator(mode="after")
     def validate_llm_model(self):
@@ -194,10 +182,7 @@ class LLMResponseMixin(BaseModel):
 
         # Validate model parameters
         if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
-            params_cls.model_validate(
-                self.llm_model_parameters,
-                context={"temperature": self.llm_temperature},
-            )
+            params_cls.model_validate(self.llm_model_parameters)
 
         return self
 
@@ -216,10 +201,6 @@ class LLMResponseMixin(BaseModel):
         return self.get_llm_service().get_chat_model(
             get_llm_provider_model(self.llm_provider_model_id).name, **self.llm_model_parameters
         )
-
-    @property
-    def llm_temperature(self) -> float:
-        return self.llm_model_parameters.get("llm_temperature", 0.7)
 
 
 class HistoryMixin(LLMResponseMixin):
