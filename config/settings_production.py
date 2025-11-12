@@ -60,11 +60,8 @@ match EMAIL_BACKEND:
     case _:
         raise Exception(f"Unknown email backend: {EMAIL_BACKEND}")
 
-SERVER_EMAIL = "noreply@dimagi.com"
-DEFAULT_FROM_EMAIL = "noreply@dimagi.com"
-ADMINS = [
-    ("Dimagi Bots", "noreply@dimagi.com"),
-]
+SERVER_EMAIL = env("DJANGO_SERVER_EMAIL", default="noreply@dimagi.com")
+DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL", default="noreply@dimagi.com")
 
 # Mailchimp setup
 

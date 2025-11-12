@@ -36,6 +36,13 @@ class EvaluationRunType(models.TextChoices):
     PREVIEW = "preview", "Preview"
 
 
+class DatasetCreationStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    PROCESSING = "processing", "Processing"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+
+
 class ExperimentVersionSelection(models.TextChoices):
     """Choices for experiment version selection including sentinel values"""
 
@@ -129,7 +136,7 @@ class EvaluationMessage(BaseModel):
             for session_id, message_id in regular_messages.values_list("chat__experiment_session__external_id", "id"):
                 message_ids_per_session[session_id].append(message_id)
 
-        if filtered_session_ids and filter_params:
+        if filtered_session_ids and filter_params is not None:
             filtered_messages = base_queryset.filter(chat__experiment_session__external_id__in=filtered_session_ids)
             message_filter = ChatMessageFilter()
             filtered_messages = message_filter.apply(filtered_messages, filter_params, timezone)
@@ -194,12 +201,36 @@ class EvaluationMessage(BaseModel):
 class EvaluationDataset(BaseTeamModel):
     name = models.CharField(max_length=255)
     messages = models.ManyToManyField(EvaluationMessage)
+    status = models.CharField(
+        max_length=20,
+        choices=DatasetCreationStatus.choices,
+        default=DatasetCreationStatus.COMPLETED,
+        help_text="Status of dataset creation",
+    )
+    job_id = models.CharField(max_length=255, blank=True)
+    error_message = models.TextField(blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.messages.count()} messages)"
 
     def get_absolute_url(self):
         return reverse("evaluations:dataset_edit", args=[get_slug_for_team(self.team_id), self.id])
+
+    @property
+    def is_processing(self):
+        return self.status == DatasetCreationStatus.PROCESSING
+
+    @property
+    def is_failed(self):
+        return self.status == DatasetCreationStatus.FAILED
+
+    @property
+    def is_complete(self):
+        return self.status == DatasetCreationStatus.COMPLETED
+
+    @property
+    def is_pending(self):
+        return self.status == DatasetCreationStatus.PENDING
 
     class Meta:
         unique_together = ("name", "team")
