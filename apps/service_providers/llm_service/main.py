@@ -148,7 +148,7 @@ class LlmService(pydantic.BaseModel):
     def get_assistant(self, assistant_id: str, as_agent=False):
         raise NotImplementedError
 
-    def get_chat_model(self, llm_model: str, temperature: float | None = None, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         raise NotImplementedError
 
     def transcribe_audio(self, audio: BytesIO) -> str:
