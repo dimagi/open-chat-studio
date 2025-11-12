@@ -111,14 +111,18 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
 
         # Populate history on the chat with the history from the EvaluationMessage
         if message.history:
+            # Set explicit timestamps with incremental offsets to ensure proper chronological ordering
+            # when messages are retrieved with order_by("created_at")
+            base_time = timezone.now() - timedelta(seconds=len(message.history))
             history_messages = [
                 ChatMessage(
                     chat=chat,
                     message_type=history_entry.get("message_type", ChatMessageType.HUMAN),
                     content=history_entry.get("content", ""),
                     summary=history_entry.get("summary"),
+                    created_at=base_time + timedelta(seconds=idx),
                 )
-                for history_entry in message.history
+                for idx, history_entry in enumerate(message.history)
             ]
             ChatMessage.objects.bulk_create(history_messages)
 
