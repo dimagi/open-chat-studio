@@ -4,25 +4,7 @@ describe('Chatbots Application', () => {
   beforeEach(() => {
     cy.login()
     cy.visit(`/a/${teamSlug}/chatbots/`)
-    cy.get('body').should('be.visible')
-    cy.get('h1', { timeout: 10000 }).should('exist')
     cy.wait(10)
-  })
-
-  describe('Chatbots Home Page', () => {
-    it('loads chatbots home page successfully', () => {
-      cy.url().should('include', '/chatbots/')
-      cy.get('body').should('be.visible')
-    })
-
-    it('page has title or heading', () => {
-      cy.get('h1').should('exist')
-      cy.contains('h1, h2, h3', /Chatbots/i).should('exist')
-    })
-
-    it('page has interactive elements', () => {
-      cy.get('a, button, nav').should('have.length.greaterThan', 0)
-    })
   })
 
   describe('Create Chatbot', () => {

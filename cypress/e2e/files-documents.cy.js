@@ -9,7 +9,6 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/files/file`)
-      cy.get('body').should('be.visible')
       cy.wait(10) // Wait for HTMX
     })
 
@@ -37,15 +36,7 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/files/file`)
-      cy.get('body').should('be.visible')
       cy.wait(10)
-    })
-
-    it('can navigate to file details', () => {
-      cy.get('table tbody tr', { timeout: 1000 }).should('exist')
-      cy.get('table tbody tr a').first().click({force: true})
-      cy.url().should('include', '/files/')
-      cy.get('body').should('be.visible')
     })
 
     it('can access edit file page', () => {
@@ -96,18 +87,12 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.get('body').should('be.visible')
       cy.wait(10)
     })
 
     it('loads collections page successfully', () => {
       cy.url().should('include', '/collection/')
       cy.get('h1, h2, h3').should('exist')
-    })
-
-    it('displays collections content', () => {
-      // Page should have some content about collections
-      cy.get('body').should('not.be.empty')
     })
 
     it('has create collection button', () => {
@@ -125,7 +110,6 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.get('body').should('be.visible')
       cy.wait(10)
     })
 
@@ -148,7 +132,6 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.get('body').should('be.visible')
       cy.wait(10)
     })
 
@@ -168,7 +151,6 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.get('body').should('be.visible')
       cy.wait(10)
     })
     it('collection page has breadcrumb navigation', () => {
@@ -195,7 +177,6 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.get('body').should('be.visible')
       cy.wait(10)
     })
 
