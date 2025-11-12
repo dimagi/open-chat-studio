@@ -41,7 +41,7 @@ class SanitizedJSONField(models.JSONField):
         elif isinstance(data, str):
             # Remove null bytes and control characters (except common whitespace like \n, \r, \t)
             # This removes characters in the range \x00-\x1f except \t (0x09), \n (0x0a), \r (0x0d)
-            sanitized = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', data)
+            sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", data)
             return sanitized
         else:
             # Return primitives (int, float, bool, None) as-is
