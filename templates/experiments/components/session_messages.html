@@ -22,6 +22,9 @@
                         tags: {{ message.all_tag_names|to_json }},
                         get isSelected() { return commentsRow === {{ forloop.counter }} },
                         }'
+                {% if request.GET.message_id == message.id|stringformat:"s" %}
+                  id="{{ message.id }}" style="background-color: lightyellow;"
+                {% endif %}
               >
                 <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter|add:-1 }}</td>
                 <td class="px-3 py-2 text-sm flex flex-col gap-2">
@@ -246,9 +249,21 @@
     }
   }
 
+  function scrollToMessage() {
+    const element = document.getElementById("{{ request.GET.message_id }}");
+    if (element) {
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeTranslationForms);
   } else {
     initializeTranslationForms();
   }
+
+  document.addEventListener('htmx:afterSettle', scrollToMessage);
 </script>
