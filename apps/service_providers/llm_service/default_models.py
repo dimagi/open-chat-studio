@@ -23,7 +23,7 @@ class Model:
     is_default: bool = False
     deprecated: bool = False
     is_translation_default: bool = False
-    parameters: BaseModel | None = None
+    parameters: type[BaseModel] | None = None
 
 
 def k(n: int) -> int:
