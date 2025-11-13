@@ -23,7 +23,7 @@ class Model:
     is_default: bool = False
     deprecated: bool = False
     is_translation_default: bool = False
-    parameters: BaseModel | None = None
+    parameters: type[BaseModel] | None = None
 
 
 def k(n: int) -> int:
@@ -77,10 +77,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4-0613", k(8), deprecated=True),
         Model("gpt-3.5-turbo", k(16)),
         Model("gpt-3.5-turbo-1106", k(16)),
-        Model("gpt-5", k(8), parameters=GPT5Parameters),
-        Model("gpt-5-mini", k(8), parameters=GPT5Parameters),
-        Model("gpt-5-nano", k(8), parameters=GPT5Parameters),
-        Model("gpt-5-pro", k(8), parameters=GPT5ProParameters),
+        Model("gpt-5", k(400), parameters=GPT5Parameters),
+        Model("gpt-5-mini", k(400), parameters=GPT5Parameters),
+        Model("gpt-5-nano", k(400), parameters=GPT5Parameters),
+        Model("gpt-5-pro", k(400), parameters=GPT5ProParameters),
     ],
     "groq": [
         Model("whisper-large-v3", k(8)),
