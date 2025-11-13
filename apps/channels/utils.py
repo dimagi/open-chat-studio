@@ -56,6 +56,9 @@ def validate_embed_key_for_experiment(token: str, origin_domain: str, experiment
     if not allowed_domains:
         return None
 
+    if any(domain == "*" for domain in allowed_domains):
+        return channel
+
     for allowed_domain in allowed_domains:
         if match_domain_pattern(origin_domain, allowed_domain):
             return channel

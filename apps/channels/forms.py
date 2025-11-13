@@ -20,6 +20,8 @@ from apps.service_providers.models import MessagingProvider, MessagingProviderTy
 from apps.teams.models import Team
 from apps.web.meta import absolute_url
 
+ALL_DOMAINS = "*"
+
 logger = logging.getLogger("ocs.channels")
 
 
@@ -585,7 +587,9 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         super().__init__(*args, **kwargs)
 
         if self.channel:
-            self.initial["allowed_domains"] = self.channel.extra_data.get("allowed_domains", [])
+            self.initial["allowed_domains"] = [
+                domain for domain in self.channel.extra_data.get("allowed_domains", []) if domain != ALL_DOMAINS
+            ]
             widget_token = self.channel.extra_data.get("widget_token")
             if widget_token:
                 self.initial["widget_token"] = widget_token
@@ -603,6 +607,9 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         else:
             # Generate token here so it's available when check_usage_by_another_experiment is called
             cleaned_data["widget_token"] = secrets.token_urlsafe(24)
+
+        if not cleaned_data["allowed_domains"]:
+            cleaned_data["allowed_domains"] = [ALL_DOMAINS]
 
         return cleaned_data
 
