@@ -7,11 +7,8 @@ import logging
 def update_embedding_models(apps, schema_editor):
     from apps.service_providers.llm_service.default_models import _update_embedding_provider_models
     EmbeddingProviderModel = apps.get_model("service_providers", "EmbeddingProviderModel")
-    try:
-        _update_embedding_provider_models(EmbeddingProviderModel)
-    except Exception as e:
-        logging.error(f"Error updating EmbeddingProviderModel: {e}")
-        raise
+    _update_embedding_provider_models(EmbeddingProviderModel)
+
 
 class Migration(migrations.Migration):
 
