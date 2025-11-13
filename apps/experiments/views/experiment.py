@@ -35,6 +35,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django.utils.timesince import timesince
 from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
@@ -1069,27 +1070,6 @@ def _get_languages_for_chat(session):
     return available_languages, translatable_languages
 
 
-def _format_time_gap(time_delta):
-    """Format a time delta into a human-readable string for display in time gap separators."""
-    total_seconds = int(time_delta.total_seconds())
-
-    # Calculate time components
-    days = total_seconds // 86400
-    hours = (total_seconds % 86400) // 3600
-    minutes = (total_seconds % 3600) // 60
-
-    if days > 0:
-        if hours > 0:
-            return f"{days} day{'s' if days != 1 else ''}, {hours} hour{'s' if hours != 1 else ''} later"
-        return f"{days} day{'s' if days != 1 else ''} later"
-    elif hours > 0:
-        if minutes > 0 and hours < 24:
-            return f"{hours} hour{'s' if hours != 1 else ''}, {minutes} minute{'s' if minutes != 1 else ''} later"
-        return f"{hours} hour{'s' if hours != 1 else ''} later"
-    else:
-        return f"{minutes} minute{'s' if minutes != 1 else ''} later"
-
-
 def _add_time_gap_info(messages, gap_threshold_hours=4):
     """
     Add time gap information to messages for display in the template.
@@ -1109,7 +1089,7 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
 
             if time_diff > threshold:
                 message.time_gap = time_diff
-                message.time_gap_text = _format_time_gap(time_diff)
+                message.time_gap_text = f"{timesince(prev_message.created_at, message.created_at)} later"
 
         enhanced_messages.append(message)
 
