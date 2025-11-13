@@ -1079,7 +1079,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     selected_tags = list(filter(None, request.GET.get("tag_filter", "").split(",")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
-    message_id = request.GET.get("message_id")
+    message_id = int(request.GET.get("message_id", 0))
 
     chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
     all_tags = (

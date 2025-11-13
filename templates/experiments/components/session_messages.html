@@ -17,13 +17,13 @@
           <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
             {% for message in messages %}
               <tr
-                class="{% if message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
+                class="{% if message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% elif message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
                 x-data='{
                         tags: {{ message.all_tag_names|to_json }},
                         get isSelected() { return commentsRow === {{ forloop.counter }} },
                         }'
-                {% if request.GET.message_id == message.id|stringformat:"s" %}
-                  id="{{ message.id }}" style="background-color: lightyellow;"
+                {% if message_id == message.id %}
+                  id="{{ message.id }}"
                 {% endif %}
               >
                 <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter|add:-1 }}</td>
@@ -249,8 +249,9 @@
     }
   }
 
+  {% if message_id %}
   function scrollToMessage() {
-    const element = document.getElementById("{{ request.GET.message_id }}");
+    const element = document.getElementById("{{ message_id }}");
     if (element) {
       element.scrollIntoView({
         behavior: 'smooth',
@@ -258,12 +259,12 @@
       });
     }
   }
+  document.addEventListener('htmx:afterSettle', scrollToMessage);
+  {% endif %}
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeTranslationForms);
   } else {
     initializeTranslationForms();
   }
-
-  document.addEventListener('htmx:afterSettle', scrollToMessage);
 </script>
