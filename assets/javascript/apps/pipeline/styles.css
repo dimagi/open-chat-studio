@@ -12,3 +12,14 @@
     stroke: var(--color-secondary);
     stroke-width: 2px;
 }
+
+/* Disable DaisyUI's base-select picker inside the graph canvas */
+.react-flow__node select.select {
+    appearance: auto !important;
+}
+
+@supports selector(::picker(select)) {
+    .react-flow__node select.select::picker(select) {
+        all: unset;
+    }
+}
