@@ -12,10 +12,10 @@ class ParticipantFilter(MultiColumnFilter):
     filters: ClassVar[Sequence[ColumnFilter]] = [
         TimestampFilter(label="Created On", column="created_at", query_param="created_on"),
         StringColumnFilter(
-            label="Participant",
+            label="Name/Identifier",
             column="identifier",
             query_param="participant",
-            or_columns=["name"],
+            or_columns=["name"],  # Searches BOTH identifier and name
         ),
         StringColumnFilter(label="Remote ID", column="remote_id", query_param="remote_id"),
         ChannelsFilter(column="platform"),
