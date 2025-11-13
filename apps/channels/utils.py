@@ -6,6 +6,8 @@ from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment
 
+ALL_DOMAINS = "*"
+
 
 def match_domain_pattern(origin_domain: str, allowed_pattern: str) -> bool:
     """Check if origin domain matches the allowed domain pattern."""
@@ -53,10 +55,7 @@ def validate_embed_key_for_experiment(token: str, origin_domain: str, experiment
         return None
 
     allowed_domains = channel.extra_data.get("allowed_domains", [])
-    if not allowed_domains:
-        return None
-
-    if any(domain == "*" for domain in allowed_domains):
+    if not allowed_domains or any(domain == ALL_DOMAINS for domain in allowed_domains):
         return channel
 
     for allowed_domain in allowed_domains:

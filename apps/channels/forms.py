@@ -15,13 +15,11 @@ from telebot import TeleBot, apihelper, types
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.utils import validate_domain_or_wildcard, validate_platform_availability
+from apps.channels.utils import ALL_DOMAINS, validate_domain_or_wildcard, validate_platform_availability
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
 from apps.web.meta import absolute_url
-
-ALL_DOMAINS = "*"
 
 logger = logging.getLogger("ocs.channels")
 
