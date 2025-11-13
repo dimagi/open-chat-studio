@@ -370,7 +370,7 @@ class ChatbotSessionsTableView(ExperimentSessionsTableView):
     def get_table_data(self):
         """Add message_count annotation to the paginated data."""
         queryset = super().get_table_data()
-        return queryset.annotate_with_message_count()
+        return queryset.annotate_with_message_count().annotate_with_last_message_created_at()
 
     def get_table(self, **kwargs):
         """
