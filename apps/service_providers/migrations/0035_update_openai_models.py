@@ -1,11 +1,6 @@
 from django.db import migrations
-import logging
 
-
-def _update_openai_models(apps, schema_editor):
-    from apps.service_providers.llm_service.default_models import _update_llm_provider_models
-    LlmProviderModel = apps.get_model("service_providers", "LlmProviderModel")
-    _update_llm_provider_models(LlmProviderModel)
+from apps.service_providers.migration_utils import llm_model_migration
 
 
 class Migration(migrations.Migration):
@@ -15,5 +10,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(_update_openai_models, reverse_code=migrations.RunPython.noop),
+        llm_model_migration(),
     ]
