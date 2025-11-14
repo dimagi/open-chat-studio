@@ -40,6 +40,7 @@ class TestEmbeddedWidgetChannelForm:
             ("example.com", True, ["example.com"]),
             ("example.com\n*.subdomain.com", True, ["example.com", "*.subdomain.com"]),
             ("invalid..domain", False, None),  # Invalid domain format
+            ("", False, None),  # empty domain and not 'allow_all_domains'
         ],
     )
     def test_domain_validation(self, domains_input, is_valid, expected_domains):
@@ -51,6 +52,21 @@ class TestEmbeddedWidgetChannelForm:
             assert form.cleaned_data["allowed_domains"] == expected_domains
         else:
             assert "allowed_domains" in form.errors
+
+    @pytest.mark.parametrize(
+        ("domains_input", "allow_all_input", "expected_domains"),
+        [
+            ("", True, ["*"]),
+            ("example.com\n*.subdomain.com", True, ["*"]),
+            ("example.com", False, ["example.com"]),
+        ],
+    )
+    def test_allow_all_domains(self, domains_input, allow_all_input, expected_domains):
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": domains_input, "allow_all_domains": allow_all_input}, experiment=Mock()
+        )
+        assert form.is_valid()
+        assert form.cleaned_data["allowed_domains"] == expected_domains
 
 
 class TestEmbeddedWidgetUtils:
