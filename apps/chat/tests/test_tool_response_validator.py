@@ -8,8 +8,10 @@ from typing import Annotated
 from unittest.mock import Mock
 
 import pytest
-from langchain_core.messages import ToolCall, ToolMessage
+from langchain_core.messages import AIMessage, ToolCall, ToolMessage
 from langchain_core.tools import InjectedToolCallId, StructuredTool
+from langgraph.constants import END
+from langgraph.graph import StateGraph
 from langgraph.prebuilt import InjectedState, ToolNode
 from langgraph.prebuilt._internal import ToolCallWithContext
 from langgraph.types import Command
@@ -120,7 +122,7 @@ def tool_with_both_injected():
 def state_schema():
     """Factory fixture to create StateSchema instances with custom parameters."""
     return StateSchema(
-        messages=["a message"],
+        messages=[{"role": "user", "content": "a message"}],
         participant_data={},
         session_state={},
         current_context_tokens=0,
@@ -355,3 +357,62 @@ class TestToolCalling:
         assert error_token_count > 0
         # Should be reasonable size (error messages are ~50-200 chars typically)
         assert error_token_count < 100
+
+
+def test_tool_wrapping_with_langgraph(state_schema, validator):
+    state_schema["current_context_tokens"] = 5
+    graph = _create_graph(validator)
+    res = graph.invoke(state_schema)
+    assert res["messages"][-1].content == "done"
+    assert res["current_context_tokens"] > 5  # expect it to be greater than the initial value
+
+
+def _create_graph(validator):
+    """Create a test graph that simulates parallel tool calls so that we can verify the cumulative
+    token counting in the state."""
+    tool1 = StructuredTool.from_function(
+        func=lambda query: f"Tool1: Result for {query}",
+        name="tool1",
+        description="A simple test tool",
+    )
+    tool2 = StructuredTool.from_function(
+        func=lambda query: f"Tool2: Result for {query}",
+        name="tool2",
+        description="A simple test tool",
+    )
+
+    workflow = StateGraph(StateSchema)
+
+    def node1(state: StateSchema):
+        last_message = state["messages"][-1]
+        if not isinstance(last_message, ToolMessage):
+            tool_calls = [
+                ToolCall(name="tool1", args={"query": "test1"}, id="123"),
+                ToolCall(name="tool2", args={"query": "test2"}, id="456"),
+            ]
+            return {"messages": AIMessage(content="call tool", tool_calls=tool_calls)}
+        return {"messages": [AIMessage(content="done")]}
+
+    tool_node = ToolNode(
+        [
+            wrap_tool_with_validation(tool1, validator),
+            wrap_tool_with_validation(tool2, validator),
+        ]
+    )
+
+    # Add nodes
+    workflow.add_node("node1", node1)
+    workflow.add_node("tools", tool_node)
+
+    def should_continue(state: StateSchema):
+        last_message = state["messages"][-1]
+        if isinstance(last_message, AIMessage) and last_message.tool_calls:
+            return "tools"
+        return "end"
+
+    # Define edges
+    workflow.set_entry_point("node1")
+    workflow.add_conditional_edges("node1", should_continue, {"tools": "tools", "end": END})
+    workflow.add_edge("tools", "node1")
+
+    return workflow.compile()
