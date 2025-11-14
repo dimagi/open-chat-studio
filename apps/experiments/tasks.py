@@ -54,10 +54,10 @@ def get_response_for_webchat_task(
     self, experiment_session_id: int, experiment_id: int, message_text: str, attachments: list | None = None
 ) -> dict:
     response = {"response": None, "message_id": None, "error": None}
+    experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
+        id=experiment_session_id
+    )
     try:
-        experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
-            id=experiment_session_id
-        )
         experiment = Experiment.objects.get(id=experiment_id)
         web_channel = WebChannel(
             experiment,
@@ -84,8 +84,9 @@ def get_response_for_webchat_task(
         logger.exception(e)
         response["error"] = str(e)
     finally:
-        experiment_session.seed_task_id = ""
-        experiment_session.save(update_fields=["seed_task_id"])
+        if experiment_session.seed_task_id:
+            experiment_session.seed_task_id = ""
+            experiment_session.save(update_fields=["seed_task_id"])
 
     return response
 

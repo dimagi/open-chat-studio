@@ -16,6 +16,17 @@
         <table class="min-w-full divide-y divide-gray-300 ">
           <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
             {% for message in messages %}
+              {% if message.time_gap_text %}
+                <tr class="bg-base-200/50">
+                  <td colspan="2" class="py-3 text-center">
+                    <div class="flex items-center justify-center gap-2 text-sm text-base-content/60">
+                      <div class="h-px flex-1 bg-base-content/20"></div>
+                      <span class="font-medium px-2">{{ message.time_gap_text }}</span>
+                      <div class="h-px flex-1 bg-base-content/20"></div>
+                    </div>
+                  </td>
+                </tr>
+              {% endif %}
               <tr
                 class="{% if message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
                 x-data='{
