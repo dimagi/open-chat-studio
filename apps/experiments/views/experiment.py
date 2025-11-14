@@ -1,7 +1,7 @@
 import logging
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import cached_property
 from typing import cast
 from urllib.parse import urlparse
@@ -1075,7 +1075,7 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
     Add time gap information to messages for display in the template.
     Returns a list of messages with time_gap and time_gap_text attributes added.
     """
-    threshold = timezone.timedelta(hours=gap_threshold_hours)
+    threshold = timedelta(hours=gap_threshold_hours)
     enhanced_messages = []
 
     for i, message in enumerate(messages):
