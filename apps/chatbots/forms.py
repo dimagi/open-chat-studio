@@ -65,7 +65,11 @@ class ChatbotSettingsForm(forms.ModelForm):
             "seed_message",
             "file_uploads_enabled",
         ]
-        labels = {"participant_allowlist": "Participant allowlist"}
+        labels = {
+            "participant_allowlist": "Participant allowlist",
+            "voice_provider": "Speech Provider",
+            "voice_response_behaviour": "Response Provider",
+        }
         help_texts = {
             "debug_mode_enabled": (
                 "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
