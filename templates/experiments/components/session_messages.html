@@ -28,11 +28,14 @@
                 </tr>
               {% endif %}
               <tr
-                class="{% if message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
+                class="{% if highlight_message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% elif message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
                 x-data='{
                         tags: {{ message.all_tag_names|to_json }},
                         get isSelected() { return commentsRow === {{ forloop.counter }} },
                         }'
+                {% if highlight_message_id == message.id %}
+                  id="{{ message.id }}"
+                {% endif %}
               >
                 <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter|add:-1 }}</td>
                 <td class="px-3 py-2 text-sm flex flex-col gap-2">
@@ -256,6 +259,19 @@
       setupTranslationFormBehavior("translation-provider-remaining", "translation-provider-model-remaining");
     }
   }
+
+  {% if highlight_message_id %}
+  function scrollToMessage() {
+    const element = document.getElementById("{{ highlight_message_id }}");
+    if (element) {
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }
+  document.addEventListener('htmx:afterSettle', scrollToMessage);
+  {% endif %}
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeTranslationForms);
