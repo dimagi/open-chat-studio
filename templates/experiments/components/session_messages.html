@@ -28,12 +28,12 @@
                 </tr>
               {% endif %}
               <tr
-                class="{% if message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% elif message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
+                class="{% if highlight_message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% elif message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
                 x-data='{
                         tags: {{ message.all_tag_names|to_json }},
                         get isSelected() { return commentsRow === {{ forloop.counter }} },
                         }'
-                {% if message_id == message.id %}
+                {% if highlight_message_id == message.id %}
                   id="{{ message.id }}"
                 {% endif %}
               >
@@ -260,9 +260,9 @@
     }
   }
 
-  {% if message_id %}
+  {% if highlight_message_id %}
   function scrollToMessage() {
-    const element = document.getElementById("{{ message_id }}");
+    const element = document.getElementById("{{ highlight_message_id }}");
     if (element) {
       element.scrollIntoView({
         behavior: 'smooth',
