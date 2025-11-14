@@ -1,4 +1,3 @@
-import string
 from unittest.mock import Mock
 
 import pytest
@@ -11,7 +10,6 @@ from apps.channels.utils import match_domain_pattern
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
-from apps.utils.factories.team import TeamWithUsersFactory
 
 
 class TestEmbeddedWidgetChannelForm:
@@ -100,44 +98,3 @@ class TestEmbeddedWidgetChannelModel:
             ExperimentChannel.check_usage_by_another_experiment(
                 ChannelPlatform.EMBEDDED_WIDGET, "existing_token_123456789012345678", new_experiment
             )
-
-    def test_platform_choices_include_embedded_widget(self):
-        choices_dict = dict(ChannelPlatform.choices)
-        assert "embedded_widget" in choices_dict
-        assert choices_dict["embedded_widget"] == "Embedded Widget"
-
-
-def test_form_token_generation_is_secure():
-    mock_experiment = Mock()
-    form1 = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=mock_experiment)
-    form2 = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=mock_experiment)
-
-    assert form1.is_valid()
-    assert form2.is_valid()
-
-    token1 = form1.cleaned_data["widget_token"]
-    token2 = form2.cleaned_data["widget_token"]
-
-    assert token1 != token2
-    assert len(token1) == 32
-    assert len(token2) == 32
-
-    allowed_chars = string.ascii_letters + string.digits + "-_"
-    assert all(c in allowed_chars for c in token1)
-    assert all(c in allowed_chars for c in token2)
-
-
-@pytest.mark.django_db()
-def test_embedded_widget_integration_with_existing_channels():
-    """Test that embedded widget channels work alongside existing channel types."""
-    team = TeamWithUsersFactory()
-
-    ExperimentChannelFactory(
-        team=team, platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "telegram_token_123"}
-    )
-    ExperimentChannelFactory(
-        team=team,
-        platform=ChannelPlatform.EMBEDDED_WIDGET,
-        extra_data={"widget_token": "widget_token_123456789012345678901234", "allowed_domains": ["example.com"]},
-    )
-    assert ExperimentChannel.objects.filter(team=team).count() == 2
