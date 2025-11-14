@@ -1080,7 +1080,6 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
 
     for i, message in enumerate(messages):
         # Add gap info attributes
-        message.time_gap = None
         message.time_gap_text = None
 
         if i > 0:
@@ -1088,7 +1087,6 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
             time_diff = message.created_at - prev_message.created_at
 
             if time_diff > threshold:
-                message.time_gap = time_diff
                 message.time_gap_text = f"{timesince(prev_message.created_at, message.created_at)} later"
 
         enhanced_messages.append(message)
