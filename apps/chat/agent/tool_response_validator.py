@@ -27,10 +27,16 @@ class ValidationResult:
 
 
 class ToolResponseSizeValidator:
-    """Validates tool response sizes against available context window space."""
+    """Validates tool response sizes against available context window space.
+
+    Note: Maintains a delta token count that LangGraph merges into cumulative state.
+    The 'current_context_tokens' value in state updates represents tokens added by each response.
+    """
 
     # Keep total context under 90% of max_token_limit
     CONTEXT_SAFETY_THRESHOLD = 0.90
+    # Warn if response uses more than this percentage of remaining space
+    RISKY_RESPONSE_THRESHOLD = 0.5
 
     def __init__(self, token_counter: TokenCounter, max_token_limit: int):
         """
@@ -76,6 +82,7 @@ class ToolResponseSizeValidator:
             error_msg = self._format_context_overflow_error(
                 tool_name, token_count, remaining_tokens, base_context_tokens, self.target_limit
             )
+            error_token_count = self.token_counter.get_tokens_from_text(error_msg)
             logger.warning(
                 "Tool response would exceed context window: tool=%s response_tokens=%d "
                 "remaining_tokens=%d current_total=%d target_limit=%d",
@@ -90,14 +97,15 @@ class ToolResponseSizeValidator:
                 token_count=token_count,
                 limit=remaining_tokens,
                 error_message=error_msg,
-                error_message_token_count=60,  # static estimate
+                error_message_token_count=error_token_count,
             )
 
-        # Warn if response uses more than 50% of remaining space (risky but allowed)
-        if remaining_tokens > 0 and token_count > (remaining_tokens * 0.5):
+        # Warn if response uses more than threshold of remaining space (risky but allowed)
+        if remaining_tokens > 0 and token_count > (remaining_tokens * self.RISKY_RESPONSE_THRESHOLD):
             logger.warning(
-                "Tool response uses >50%% of remaining context: tool=%s response_tokens=%d "
+                "Tool response uses >%.0f%% of remaining context: tool=%s response_tokens=%d "
                 "remaining_tokens=%d percentage=%.1f%%",
+                self.RISKY_RESPONSE_THRESHOLD * 100,
                 tool_name,
                 token_count,
                 remaining_tokens,
@@ -110,7 +118,7 @@ class ToolResponseSizeValidator:
             limit=remaining_tokens,
         )
 
-    def _extract_content(self, response: Any) -> str:
+    def _extract_content(self, response: str | Command | ToolMessage | Any) -> str:
         """Extract string content from different response types."""
         if isinstance(response, str):
             return response
@@ -118,11 +126,15 @@ class ToolResponseSizeValidator:
             # Extract content from ToolMessage in Command.update["messages"]
             messages = response.update.get("messages", [])
             if messages and isinstance(messages[0], ToolMessage):
-                return messages[0].content
+                return str(messages[0].content)
             return ""
         elif isinstance(response, ToolMessage):
-            return response.content
+            return str(response.content)
         else:
+            logger.warning(
+                "Unexpected response type for token counting: %s. Converting to string.",
+                type(response).__name__,
+            )
             return str(response)
 
     def _format_context_overflow_error(
@@ -220,6 +232,15 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
     original_invoke = tool.invoke
     original_ainvoke = tool.ainvoke
 
+    def _remove_injected_fields(kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Remove the injected fields that we added (action method doesn't expect them)."""
+        cleaned = kwargs.copy()
+        if added_state_field:
+            cleaned.pop(state_field_name, None)
+        if added_tool_call_id_field:
+            cleaned.pop(tool_call_id_field_name, None)
+        return cleaned
+
     # If we added any fields, we need to wrap _run to strip them out
     # before they reach the action method (which doesn't expect them)
     if added_state_field or added_tool_call_id_field:
@@ -228,12 +249,7 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
 
             @functools.wraps(original_run)
             def wrapped_run(*args, **kwargs):
-                # Remove the injected fields that we added (action method doesn't expect them)
-                if added_state_field:
-                    kwargs.pop(state_field_name, None)
-                if added_tool_call_id_field:
-                    kwargs.pop(tool_call_id_field_name, None)
-                return original_run(*args, **kwargs)
+                return original_run(*args, **_remove_injected_fields(kwargs))
 
             object.__setattr__(tool, "_run", wrapped_run)
 
@@ -243,16 +259,15 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
 
             @functools.wraps(original_arun)
             async def wrapped_arun(*args, **kwargs):
-                # Remove the injected fields that we added
-                if added_state_field:
-                    kwargs.pop(state_field_name, None)
-                if added_tool_call_id_field:
-                    kwargs.pop(tool_call_id_field_name, None)
-                return await original_arun(*args, **kwargs)
+                return await original_arun(*args, **_remove_injected_fields(kwargs))
 
             object.__setattr__(tool, "_arun", wrapped_arun)
 
-    def _validate_response(result: Any, graph_state: dict | None, tool_call_id: str | None = None) -> Any:
+    def _validate_response(
+        result: str | Command | ToolMessage | Any,
+        graph_state: dict[str, Any] | None,
+        tool_call_id: str | None = None,
+    ) -> str | Command | ToolMessage:
         """Common validation logic for both sync and async."""
         if graph_state is not None:
             current_context_tokens = graph_state.get("current_context_tokens", 0)
@@ -287,13 +302,15 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
             # Create state update with token count
             state_update = {"current_context_tokens": validation.token_count}
 
-            # If result is already a Command, merge the state updates
+            # If result is already a Command, merge the state updates and preserve all attributes
             if isinstance(result, Command):
                 existing_update = result.update or {}
                 merged_update = {**existing_update, **state_update}
+                # Preserve all Command attributes
                 return Command(
                     update=merged_update,
-                    goto=result.goto if hasattr(result, "goto") else None,
+                    goto=result.goto,
+                    graph=getattr(result, "graph", None),
                 )
             else:
                 # Result is not a Command - wrap it in ToolMessage and Command
