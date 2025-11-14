@@ -3,9 +3,6 @@ import os
 from celery import Celery
 from celery.app import trace
 
-# Pool size must be > the celery concurrency limit
-os.environ["DJANGO_DATABASE_POOL_MAX_SIZE"] = "110"
-
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
