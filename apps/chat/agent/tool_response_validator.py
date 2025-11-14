@@ -6,7 +6,7 @@ from typing import Annotated, Any
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
 from langchain_core.tools.base import _is_injected_arg_type, get_all_basemodel_annotations
-from langgraph.prebuilt import InjectedState
+from langgraph.prebuilt import InjectedState, InjectedToolCallId
 from langgraph.types import Command
 from pydantic import BaseModel, create_model
 
@@ -141,8 +141,8 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
     Wrap any BaseTool instance with response size validation.
 
     Works for all tool types by:
-    1. Detecting if tool already has an InjectedState field (by annotation, not name)
-    2. Adding InjectedState field to args_schema if not present
+    1. Detecting if tool already has InjectedState and InjectedToolCallId fields (by annotation, not name)
+    2. Adding InjectedState and InjectedToolCallId fields to args_schema if not present
     3. Wrapping invoke/ainvoke methods to validate responses using the injected state
 
     This avoids code duplication and works uniformly across:
@@ -157,40 +157,60 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
     Returns:
         The wrapped tool with validation and modified args_schema
     """
-    # Step 1: Check if tool already has an InjectedState field
+    # Step 1: Check if tool already has InjectedState and InjectedToolCallId fields
     state_field_name = None
+    tool_call_id_field_name = None
     original_schema = tool.args_schema
 
     if original_schema:
-        # Use LangChain's utility to find fields with InjectedState annotation
+        # Use LangChain's utility to find fields with injected annotations
         for name, type_ in get_all_basemodel_annotations(original_schema).items():
             if _is_injected_arg_type(type_, injected_type=InjectedState):
                 state_field_name = name
-                break
+            elif _is_injected_arg_type(type_, injected_type=InjectedToolCallId):
+                tool_call_id_field_name = name
 
-    # Step 2: Add state field to args_schema if not already present
-    added_state_field = False  # Track if we added the field
+    # Step 2: Add state and tool_call_id fields to args_schema if not already present
+    added_state_field = False  # Track if we added the state field
+    added_tool_call_id_field = False  # Track if we added the tool_call_id field
+
     if state_field_name is None:
         added_state_field = True
         state_field_name = "graph_state"  # Default name for new field
 
+    if tool_call_id_field_name is None:
+        added_tool_call_id_field = True
+        tool_call_id_field_name = "tool_call_id"  # Default name for new field
+
+    # Only modify schema if we need to add fields
+    if added_state_field or added_tool_call_id_field:
         if original_schema:
-            # Add state field to existing schema
+            # Add fields to existing schema
             schema_fields = original_schema.model_fields if hasattr(original_schema, "model_fields") else {}
             new_fields = {
                 **{name: (field.annotation, field) for name, field in schema_fields.items()},
-                state_field_name: (Annotated[dict, InjectedState], None),
             }
+            if added_state_field:
+                new_fields[state_field_name] = (Annotated[dict, InjectedState], None)
+            if added_tool_call_id_field:
+                new_fields[tool_call_id_field_name] = (Annotated[str, InjectedToolCallId], None)
+
             tool.args_schema = create_model(
-                f"{original_schema.__name__}WithState",
+                f"{original_schema.__name__}WithInjected",
                 **new_fields,
                 __base__=BaseModel,
             )
         else:
-            # If no schema exists, create a minimal one with just the state field
+            # If no schema exists, create a minimal one with the injected fields
+            new_fields = {}
+            if added_state_field:
+                new_fields[state_field_name] = (Annotated[dict, InjectedState], None)
+            if added_tool_call_id_field:
+                new_fields[tool_call_id_field_name] = (Annotated[str, InjectedToolCallId], None)
+
             tool.args_schema = create_model(
-                "MinimalStateSchema",
-                **{state_field_name: (Annotated[dict, InjectedState], None)},
+                "MinimalInjectedSchema",
+                **new_fields,
                 __base__=BaseModel,
             )
 
@@ -198,16 +218,19 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
     original_invoke = tool.invoke
     original_ainvoke = tool.ainvoke
 
-    # If we added the state field, we also need to wrap _run to strip it out
-    # before it reaches the action method (which doesn't expect it)
-    if added_state_field:
+    # If we added any fields, we need to wrap _run to strip them out
+    # before they reach the action method (which doesn't expect them)
+    if added_state_field or added_tool_call_id_field:
         if hasattr(tool, "_run"):
             original_run = tool._run
 
             @functools.wraps(original_run)
             def wrapped_run(*args, **kwargs):
-                # Remove the state field that we added (action method doesn't expect it)
-                kwargs.pop(state_field_name, None)
+                # Remove the injected fields that we added (action method doesn't expect them)
+                if added_state_field:
+                    kwargs.pop(state_field_name, None)
+                if added_tool_call_id_field:
+                    kwargs.pop(tool_call_id_field_name, None)
                 return original_run(*args, **kwargs)
 
             object.__setattr__(tool, "_run", wrapped_run)
@@ -218,8 +241,11 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
 
             @functools.wraps(original_arun)
             async def wrapped_arun(*args, **kwargs):
-                # Remove the state field that we added
-                kwargs.pop(state_field_name, None)
+                # Remove the injected fields that we added
+                if added_state_field:
+                    kwargs.pop(state_field_name, None)
+                if added_tool_call_id_field:
+                    kwargs.pop(tool_call_id_field_name, None)
                 return await original_arun(*args, **kwargs)
 
             object.__setattr__(tool, "_arun", wrapped_arun)
