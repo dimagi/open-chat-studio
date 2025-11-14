@@ -4,7 +4,6 @@ describe('Chatbots Application', () => {
   beforeEach(() => {
     cy.login()
     cy.visit(`/a/${teamSlug}/chatbots/`)
-    cy.wait(10)
   })
 
   describe('Create Chatbot', () => {
@@ -98,8 +97,6 @@ describe('Chatbots Application', () => {
       cy.get('table', { timeout: 10000 }).should('exist')
       // Type in search box
       cy.get('input[type="search"][name="search"]').type('test')
-      // Wait for HTMX to update the table
-      cy.wait(10)
       cy.get('table').should('exist')
     })
 
@@ -107,8 +104,6 @@ describe('Chatbots Application', () => {
       cy.get('input[type="checkbox"][name="show_archived"]', { timeout: 10000 }).should('exist')
       cy.get('table', { timeout: 10000 }).should('exist')
       cy.get('input[type="checkbox"][name="show_archived"]').click({force: true})
-      // Wait for HTMX to update
-      cy.wait(10)
       // Table should still be visible
       cy.get('table').should('exist')
     })

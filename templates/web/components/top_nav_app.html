@@ -5,7 +5,7 @@
     <div class="navbar bg-base-100 shadow-md">
       <div class="navbar-start">
         <div class="dropdown">
-          <div data-cy="btn-team-nav-mobile" class="lg:hidden">
+          <div data-cy="btn-nav-mobile" class="lg:hidden">
             <label tabindex="0" class="btn btn-ghost">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                    stroke="currentColor">
@@ -21,7 +21,7 @@
           <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 p-2 shadow-sm bg-base-200 rounded-box w-52 z-10">
             <li>
               <details>
-                <summary>Team</summary>
+                <summary data-cy="btn-nav-team-mobile">Team</summary>
                 <ul>
                   {% include "web/components/team_nav_items.html" %}
                 </ul>

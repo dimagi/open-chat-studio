@@ -103,7 +103,8 @@ describe('All Application Pages', () => {
     it(`should show mobile navigation`, () => {
       cy.viewport(768, 1024)
       cy.visit(`/a/${teamSlug}/chatbots/`)
-      cy.get(`[data-cy="btn-team-nav-mobile"]`).click()
+      cy.get(`[data-cy="btn-nav-mobile"]`).click()
+      cy.get(`[data-cy="btn-nav-team-mobile"]`).click()
       cy.get(`[data-cy="nav-team-settings"]`).should('be.visible')
       cy.get(`[data-cy="nav-add-team"]`).should('be.visible')
       cy.get(`[data-cy="nav-docs"]`).should('be.visible')

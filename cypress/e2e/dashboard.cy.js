@@ -68,14 +68,11 @@ describe('Dashboard Application', () => {
         .should('be.visible')
         .click()
 
-      // Wait for dropdown to open and select the first chatbot option
       cy.get('#id_experiments-ts-dropdown')
         .should('be.visible')
         .find('[role="option"]')
         .first()
         .click()
-      // Wait for dashboard to update
-      cy.wait(10)
     })
 
     it('can change date range', () => {
@@ -83,7 +80,6 @@ describe('Dashboard Application', () => {
       cy.get('select[name*="date_range"], #date-range-select').then(($select) => {
         if ($select.length > 0) {
           cy.wrap($select).select('7') // Select 7 days
-          cy.wait(10)
         }
       })
     })
@@ -93,7 +89,6 @@ describe('Dashboard Application', () => {
       cy.get('select[name*="granularity"]').then(($select) => {
         if ($select.length > 0) {
           cy.wrap($select).select('daily')
-          cy.wait(10)
         }
       })
     })
@@ -160,7 +155,6 @@ describe('Dashboard Application', () => {
 
     it('data loads without errors', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.wait(10) // Wait for initial load
       // Check that no error messages are displayed
       cy.contains(/error|failed|unavailable/i).should('not.exist')
     })

@@ -9,7 +9,6 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/files/file`)
-      cy.wait(10) // Wait for HTMX
     })
 
     it('loads files page successfully', () => {
@@ -23,7 +22,6 @@ describe('Files and Collections Application', () => {
     it('has search functionality', () => {
       cy.get('input[type="search"], input[name="search"]', { timeout: 10000 }).should('exist')
       cy.get('input[type="search"], input[name="search"]').type('test')
-      cy.wait(10)
     })
 
     it('displays file information in table', () => {
@@ -36,49 +34,31 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/files/file`)
-      cy.wait(10)
     })
 
     it('can access edit file page', () => {
       cy.get('table tbody tr', { timeout: 1000 }).should('exist')
       cy.get('table tbody tr a').first().click({force: true})
-      cy.wait(10)
-      cy.contains('button, a', /Edit/i, { timeout: 10000 }).should('exist').click({force: true})
+      cy.pageTitleEquals('Edit File')
       cy.get('form').should('exist')
-      cy.contains('h1', /Edit File/i).should('exist')
+      cy.contains('input[type="submit"]', /Update/i, { timeout: 10000 }).should('exist').click({force: true})
     })
 
     it('edit form shows file name field', () => {
       cy.get('table tbody tr', { timeout: 10000 }).should('exist')
       cy.get('table tbody tr a').first().click({force: true})
-      cy.wait(10)
-      cy.contains('button, a', /Edit/i, { timeout: 10000 }).click({force: true})
-      cy.get('input#id_name[name="name"]').should('exist')
-      cy.get('input#id_name').should('have.attr', 'required')
+      cy.get('input[name="name"]').should('exist').should('have.attr', 'required')
     })
 
     it('edit form has summary field', () => {
       cy.get('table tbody tr', { timeout: 10000 }).should('exist')
       cy.get('table tbody tr a').first().click({force: true})
-      cy.wait(10)
-      cy.contains('button, a', /Edit/i, { timeout: 10000 }).click({force: true})
-      cy.get('textarea#id_summary[name="summary"]').should('exist')
-    })
-
-    it('edit form has update button', () => {
-      cy.get('table tbody tr', { timeout: 10000 }).should('exist')
-      cy.get('table tbody tr a').first().click({force: true})
-      cy.wait(10)
-      cy.contains('button, a', /Edit/i, { timeout: 10000 }).click({force: true})
-      cy.get('input[type="submit"]').should('exist')
-      cy.get('input[type="submit"]').should('have.value', 'Update')
+      cy.get('textarea[name="summary"]').should('exist')
     })
 
     it('edit form displays collections', () => {
       cy.get('table tbody tr', { timeout: 10000 }).should('exist')
       cy.get('table tbody tr a').first().click({force: true})
-      cy.wait(10)
-      cy.contains('button, a', /Edit/i, { timeout: 10000 }).click({force: true})
       cy.contains('h3', /Collections/i).should('exist')
     })
   })
@@ -87,7 +67,6 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.wait(10)
     })
 
     it('loads collections page successfully', () => {
@@ -110,7 +89,6 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.wait(10)
     })
 
     it('navigates to collection details', () => {
@@ -132,7 +110,6 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.wait(10)
     })
 
     it('collection has search functionality', () => {
@@ -151,7 +128,6 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.wait(10)
     })
     it('collection page has breadcrumb navigation', () => {
       openFirstCollection()
@@ -177,12 +153,10 @@ describe('Files and Collections Application', () => {
     beforeEach(() => {
       cy.login()
       cy.visit(`/a/${teamSlug}/documents/collection/`)
-      cy.wait(10)
     })
 
     it('can navigate to file details', () => {
       openFirstCollection()
-      cy.wait(10)
       cy.get('#collection-files-container')
         .find('a.btn.btn-sm.btn-soft.btn-primary')
         .first()

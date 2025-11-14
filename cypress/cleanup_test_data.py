@@ -18,20 +18,25 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 django.setup()
 
-from django.contrib.auth import get_user_model
-from field_audit.models import AuditAction
+from django.contrib.auth import get_user_model  # noqa: E402
+from field_audit.models import AuditAction  # noqa: E402
 
-from apps.assistants.models import OpenAiAssistant
-from apps.chat.models import Chat
-from apps.documents.models import Collection
-from apps.experiments.models import Experiment, Participant
-from apps.files.models import File
-from apps.pipelines.models import Pipeline
-from apps.service_providers.models import LlmProvider
-from apps.teams.models import Team
+from apps.assistants.models import OpenAiAssistant  # noqa: E402
+from apps.chat.models import Chat  # noqa: E402
+from apps.documents.models import Collection  # noqa: E402
+from apps.experiments.models import Experiment, Participant  # noqa: E402
+from apps.files.models import File  # noqa: E402
+from apps.pipelines.models import Pipeline  # noqa: E402
+from apps.service_providers.models import LlmProvider  # noqa: E402
+from apps.teams.models import Team  # noqa: E402
 
 
 def cleanup_test_data():
+    from django.conf import settings
+
+    if not settings.DEBUG:
+        raise Exception("This script can only be used run in local test environments mode.")
+
     User = get_user_model()
 
     # Configuration - must match cypress.env.json
@@ -63,7 +68,12 @@ def cleanup_test_data():
         {"model": Experiment, "name": "Chatbots (Experiments)", "plural": "experiment(s)", "audit": True},
         {"model": Pipeline, "name": "Pipelines", "plural": "pipeline(s)", "audit": False},
         {"model": OpenAiAssistant, "name": "Assistants", "plural": "assistant(s)", "audit": True},
-        {"model": Participant, "name": "Participants", "plural": "participant(s) and their sessions/chats", "audit": False},
+        {
+            "model": Participant,
+            "name": "Participants",
+            "plural": "participant(s) and their sessions/chats",
+            "audit": False,
+        },
         {"model": Chat, "name": "Remaining Chats", "plural": "chat(s)", "audit": False},
         {"model": Collection, "name": "Collections", "plural": "collection(s)", "audit": True},
         {"model": LlmProvider, "name": "LLM Providers", "plural": "LLM provider(s)", "audit": True},
