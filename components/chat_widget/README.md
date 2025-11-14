@@ -48,7 +48,7 @@ also edit the `src/index.html` file to change the page that is loaded when you r
 
 ### Styling
 
-The component uses [Tailwind CSS](https://tailwindcss.com/) with [DaisyUI](https://daisyui.com/) for styling.
+The component uses [Tailwind CSS](https://tailwindcss.com/) for styling.
 
 ## Publishing
 
