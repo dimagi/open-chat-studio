@@ -174,15 +174,15 @@ class TestSchemaModification:
         assert "call_id" in wrapped.args_schema.model_fields
 
 
-class TestWrapped:
-    def test_wrapped(self, simple_tool, validator):
+class TestToolCalling:
+    def test_tool_call_returns_command(self, simple_tool, validator):
         wrapped = wrap_tool_with_validation(simple_tool, validator)
         node = ToolNode([wrapped])
         state = StateSchema(
             messages=["a message"],
             participant_data={},
             session_state={},
-            current_context_tokens=0,
+            current_context_tokens=100,
         )
         tool_call_id = "123"
         call = ToolCall(name=simple_tool.name, args={"query": "a query"}, id=tool_call_id, type="tool_call")
@@ -200,4 +200,211 @@ class TestWrapped:
         message = command.update["messages"][0]
         assert isinstance(message, ToolMessage)
         assert message.tool_call_id == tool_call_id
+        assert command.update["current_context_tokens"] == 1  # delta, not cumulative
+
+    def test_validation_failure_exceeds_token_limit(self, simple_tool, validator):
+        """Test that oversized responses return error messages instead of actual content."""
+        wrapped = wrap_tool_with_validation(simple_tool, validator)
+        node = ToolNode([wrapped])
+
+        state = StateSchema(
+            messages=["a message"],
+            participant_data={},
+            session_state={},
+            current_context_tokens=0,
+        )
+        tool_call_id = "456"
+
+        # Return 10,000 characters = 1,000 tokens (exceeds 900 target limit)
+        large_query = "x" * 10000
+        call = ToolCall(name=simple_tool.name, args={"query": large_query}, id=tool_call_id, type="tool_call")
+        call_with_context = ToolCallWithContext(
+            __type="tool_call_with_context",
+            tool_call=call,
+            state=state,
+        )
+
+        res = node.invoke(call_with_context)
+        command = res[0]
+
+        # Should return an error message, not the actual response
+        message = command.update["messages"][0]
+        assert isinstance(message, ToolMessage)
+        assert "Error:" in message.content
+        assert "tokens are available" in message.content
+        assert message.tool_call_id == tool_call_id
+        # Error message token count should be in the update
+        assert "current_context_tokens" in command.update
+
+    def test_async_tool_execution(self, validator):
+        """Test that async tools (_arun) are properly validated."""
+
+        async def async_action(query: str) -> str:
+            return f"Async result for {query}"
+
+        tool = StructuredTool.from_function(
+            coroutine=async_action,
+            name="async_tool",
+            description="An async tool",
+        )
+        wrapped = wrap_tool_with_validation(tool, validator)
+        node = ToolNode([wrapped])
+
+        state = StateSchema(
+            messages=["a message"],
+            participant_data={},
+            session_state={},
+            current_context_tokens=0,
+        )
+        tool_call_id = "async-123"
+        call = ToolCall(name=tool.name, args={"query": "test"}, id=tool_call_id, type="tool_call")
+        call_with_context = ToolCallWithContext(
+            __type="tool_call_with_context",
+            tool_call=call,
+            state=state,
+        )
+
+        # ToolNode.invoke handles async tools internally
+        res = node.invoke(call_with_context)
+        print(res, type(res))
+        command = res[0]
+
+        assert isinstance(command, Command)
+        message = command.update["messages"][0]
+        assert isinstance(message, ToolMessage)
+        assert message.tool_call_id == tool_call_id
+        assert "current_context_tokens" in command.update
+
+    def test_tool_returning_command_preserves_attributes(self, validator):
+        """Test that when a tool returns a Command, its attributes are preserved and merged."""
+
+        def command_returning_action(query: str) -> Command:
+            return Command(
+                update={
+                    "custom_field": "custom_value",
+                    "messages": [ToolMessage(content=query, tool_call_id=tool_call_id)],
+                },
+                goto="special_node",
+            )
+
+        tool = StructuredTool.from_function(
+            func=command_returning_action,
+            name="command_tool",
+            description="Tool that returns Command",
+        )
+        wrapped = wrap_tool_with_validation(tool, validator)
+        node = ToolNode([wrapped])
+
+        state = StateSchema(
+            messages=["a message"],
+            participant_data={},
+            session_state={},
+            current_context_tokens=0,
+        )
+        tool_call_id = "cmd-123"
+        call = ToolCall(name=tool.name, args={"query": "test"}, id=tool_call_id, type="tool_call")
+        call_with_context = ToolCallWithContext(
+            __type="tool_call_with_context",
+            tool_call=call,
+            state=state,
+        )
+
+        res = node.invoke(call_with_context)
+        command = res[0]
+
+        # Should preserve the goto attribute
+        assert command.goto == "special_node"
+        # Should merge updates (custom_field + current_context_tokens)
+        assert command.update["custom_field"] == "custom_value"
+        assert "current_context_tokens" in command.update
+
+    def test_validation_skipped_when_no_state(self, simple_tool, validator):
+        """Test that validation is skipped when graph_state is None."""
+        # This tests the case where a tool is called outside of LangGraph context
+        wrapped = wrap_tool_with_validation(simple_tool, validator)
+
+        # Call tool directly without state injection
+        call = ToolCall(name=simple_tool.name, args={"query": "test"}, id="123", type="tool_call")
+        result = wrapped.invoke(call)
+
+        # Should return ToolMessage, no Command wrapping
+        assert isinstance(result, ToolMessage)
+        assert "Result for test" in result.content
+
+    def test_tool_with_existing_injected_fields(self, validator):
+        """Test wrapping a tool that already has InjectedState and InjectedToolCallId."""
+
+        class ToolInputWithBoth(BaseModel):
+            query: str = Field(description="The query")
+            my_state: Annotated[dict, InjectedState]
+            my_call_id: Annotated[str, InjectedToolCallId]
+
+        def action_with_both(query: str, my_state: dict, my_call_id: str) -> str:
+            # Verify injected fields are accessible
+            assert isinstance(my_state, dict)
+            assert isinstance(my_call_id, str)
+            return f"Result for {query}"
+
+        tool = StructuredTool.from_function(
+            func=action_with_both,
+            name="tool_with_both",
+            description="Tool with both injected fields",
+            args_schema=ToolInputWithBoth,
+        )
+        wrapped = wrap_tool_with_validation(tool, validator)
+        node = ToolNode([wrapped])
+
+        state = StateSchema(
+            messages=["a message"],
+            participant_data={},
+            session_state={},
+            current_context_tokens=0,
+        )
+        tool_call_id = "both-123"
+        call = ToolCall(name=tool.name, args={"query": "test"}, id=tool_call_id, type="tool_call")
+        call_with_context = ToolCallWithContext(
+            __type="tool_call_with_context",
+            tool_call=call,
+            state=state,
+        )
+
+        res = node.invoke(call_with_context)
+        command = res[0]
+
+        # Should work correctly with existing fields
+        assert isinstance(command, Command)
+        message = command.update["messages"][0]
+        assert message.tool_call_id == tool_call_id
         assert command.update["current_context_tokens"] == 1
+
+    def test_error_message_token_count_accuracy(self, simple_tool, validator):
+        """Test that error messages themselves are token-counted correctly."""
+
+        wrapped = wrap_tool_with_validation(simple_tool, validator)
+        node = ToolNode([wrapped])
+
+        state = StateSchema(
+            messages=["a message"],
+            participant_data={},
+            session_state={},
+            current_context_tokens=1000,
+        )
+        tool_call_id = "error-123"
+        call = ToolCall(name=simple_tool.name, args={"query": "x" * 100000}, id=tool_call_id, type="tool_call")
+        call_with_context = ToolCallWithContext(
+            __type="tool_call_with_context",
+            tool_call=call,
+            state=state,
+        )
+
+        res = node.invoke(call_with_context)
+        command = res[0]
+
+        message = command.update["messages"][0]
+        assert "Error:" in message.content
+
+        # Verify error message token count is calculated
+        error_token_count = command.update["current_context_tokens"]
+        assert error_token_count > 0
+        # Should be reasonable size (error messages are ~50-200 chars typically)
+        assert error_token_count < 100
