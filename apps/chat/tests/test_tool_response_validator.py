@@ -192,8 +192,12 @@ class TestWrapped:
             state=state,
         )
         res = node.invoke(call_with_context)
-        assert isinstance(res, Command)
-        message = res.update["messages"][0]
+        # ToolNode returns a list of results
+        assert isinstance(res, list)
+        assert len(res) == 1
+        command = res[0]
+        assert isinstance(command, Command)
+        message = command.update["messages"][0]
         assert isinstance(message, ToolMessage)
         assert message.tool_call_id == tool_call_id
-        assert res.update["current_context_tokens"] == 1
+        assert command.update["current_context_tokens"] == 1

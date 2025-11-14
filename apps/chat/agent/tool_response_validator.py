@@ -157,7 +157,7 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
     Works for all tool types by:
     1. Detecting if tool already has InjectedState and InjectedToolCallId fields (by annotation, not name)
     2. Adding InjectedState and InjectedToolCallId fields to args_schema if not present
-    3. Wrapping invoke/ainvoke methods to validate responses using the injected state
+    3. Wrapping _run/_arun methods to validate responses using the injected state
 
     This avoids code duplication and works uniformly across:
     - CustomBaseTool instances
@@ -198,100 +198,13 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
 
     # Only modify schema if we need to add fields
     if added_state_field or added_tool_call_id_field:
-        if original_schema:
-            # Add fields to existing schema
-            schema_fields = original_schema.model_fields if hasattr(original_schema, "model_fields") else {}
-            new_fields = {
-                **{name: (field.annotation, field) for name, field in schema_fields.items()},
-            }
-            if added_state_field:
-                new_fields[state_field_name] = (Annotated[dict, InjectedState], None)
-            if added_tool_call_id_field:
-                new_fields[tool_call_id_field_name] = (Annotated[str, InjectedToolCallId], None)
-
-            tool.args_schema = create_model(
-                f"{original_schema.__name__}WithInjected",
-                **new_fields,
-                __base__=BaseModel,
-            )
-        else:
-            # If no schema exists, create a minimal one with the injected fields
-            new_fields = {}
-            if added_state_field:
-                new_fields[state_field_name] = (Annotated[dict, InjectedState], None)
-            if added_tool_call_id_field:
-                new_fields[tool_call_id_field_name] = (Annotated[str, InjectedToolCallId], None)
-
-            tool.args_schema = create_model(
-                "MinimalInjectedSchema",
-                **new_fields,
-                __base__=BaseModel,
-            )
+        tool.args_schema = _get_patched_schema(
+            original_schema,
+            state_field_name if added_state_field else None,
+            tool_call_id_field_name if added_tool_call_id_field else None,
+        )
 
     # Step 3: Wrap _run and _arun with validation and field cleanup
-    def _validate_response(
-        result: str | Command | ToolMessage | Any,
-        graph_state: dict[str, Any] | None,
-        tool_call_id: str | None = None,
-    ) -> str | Command | ToolMessage:
-        """Common validation logic for both sync and async."""
-        if graph_state is not None:
-            current_context_tokens = graph_state.get("current_context_tokens", 0)
-
-            validation = validator.validate_response(
-                response=result,
-                tool_name=tool.name,
-                base_context_tokens=current_context_tokens,
-            )
-
-            if not validation.is_valid:
-                # Return error as ToolMessage in Command with updated token count
-                error_msg = ToolMessage(
-                    content=validation.error_message,
-                    tool_call_id=tool_call_id or "",
-                )
-                return Command(
-                    update={
-                        "messages": [error_msg],
-                        "current_context_tokens": validation.error_message_token_count,
-                    }
-                )
-
-            logger.info(
-                "Tool response validated: tool=%s tokens=%d new_cumulative=%d remaining=%d",
-                tool.name,
-                validation.token_count,
-                current_context_tokens + validation.token_count,
-                validation.limit,
-            )
-
-            # Create state update with token count
-            state_update = {"current_context_tokens": validation.token_count}
-
-            # If result is already a Command, merge the state updates and preserve all attributes
-            if isinstance(result, Command):
-                existing_update = result.update or {}
-                merged_update = {**existing_update, **state_update}
-                # Preserve all Command attributes
-                return Command(
-                    update=merged_update,
-                    goto=result.goto,
-                    graph=getattr(result, "graph", None),
-                )
-            else:
-                # Result is not a Command - wrap it in ToolMessage and Command
-                if isinstance(result, ToolMessage):
-                    tool_message = result
-                else:
-                    # result is a string or other type
-                    tool_message = ToolMessage(
-                        content=str(result),
-                        tool_call_id=tool_call_id or "",
-                    )
-                return Command(update={"messages": [tool_message], **state_update})
-
-        return result
-
     def _remove_injected_fields(kwargs: dict[str, Any]) -> dict[str, Any]:
         """Remove the injected fields that we added (action method doesn't expect them)."""
         cleaned = kwargs.copy()
@@ -315,7 +228,7 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
             result = original_run(*args, **_remove_injected_fields(kwargs))
 
             # Validate response
-            return _validate_response(result, graph_state, tool_call_id)
+            return _validate_response(result, validator, tool.name, graph_state, tool_call_id)
 
         object.__setattr__(tool, "_run", wrapped_run)
 
@@ -330,11 +243,123 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
             tool_call_id = kwargs.get(tool_call_id_field_name)
 
             # Call original method
-            result = original_run(*args, **_remove_injected_fields(kwargs))
+            result = await original_arun(*args, **_remove_injected_fields(kwargs))
 
             # Validate response
-            return _validate_response(result, graph_state, tool_call_id)
+            return _validate_response(result, validator, tool.name, graph_state, tool_call_id)
 
         object.__setattr__(tool, "_arun", wrapped_arun)
 
     return tool
+
+
+def _get_patched_schema(
+    original_schema, state_field_name: str | None, tool_call_id_field_name: str | None
+) -> type[BaseModel]:
+    """Create new Pydantic schema with injected fields added to original schema."""
+    if original_schema:
+        # Add fields to existing schema
+        schema_fields = original_schema.model_fields if hasattr(original_schema, "model_fields") else {}
+        new_fields = {
+            **{name: (field.annotation, field) for name, field in schema_fields.items()},
+        }
+        if state_field_name:
+            new_fields[state_field_name] = (Annotated[dict, InjectedState], None)
+        if tool_call_id_field_name:
+            new_fields[tool_call_id_field_name] = (Annotated[str, InjectedToolCallId], None)
+
+        return create_model(
+            f"{original_schema.__name__}WithInjected",
+            **new_fields,
+            __base__=BaseModel,
+        )
+    else:
+        # If no schema exists, create a minimal one with the injected fields
+        new_fields = {}
+        if state_field_name:
+            new_fields[state_field_name] = (Annotated[dict, InjectedState], None)
+        if tool_call_id_field_name:
+            new_fields[tool_call_id_field_name] = (Annotated[str, InjectedToolCallId], None)
+
+        return create_model(
+            "MinimalInjectedSchema",
+            **new_fields,
+            __base__=BaseModel,
+        )
+
+
+def _validate_response(
+    result: str | Command | ToolMessage | Any,
+    validator: ToolResponseSizeValidator,
+    tool_name: str,
+    graph_state: dict[str, Any] | None,
+    tool_call_id: str | None = None,
+) -> str | Command | ToolMessage:
+    """Validate tool response and wrap in Command with token count.
+
+    Args:
+        result: The tool response to validate
+        validator: The validator instance to use
+        tool_name: Name of the tool that generated the response
+        graph_state: The LangGraph state dict containing current_context_tokens
+        tool_call_id: The tool call ID for creating ToolMessage
+
+    Returns:
+        Command with validated response or error message
+    """
+    if graph_state is not None:
+        current_context_tokens = graph_state.get("current_context_tokens", 0)
+
+        validation = validator.validate_response(
+            response=result,
+            tool_name=tool_name,
+            base_context_tokens=current_context_tokens,
+        )
+
+        if not validation.is_valid:
+            # Return error as ToolMessage in Command with updated token count
+            error_msg = ToolMessage(
+                content=validation.error_message,
+                tool_call_id=tool_call_id or "",
+            )
+            return Command(
+                update={
+                    "messages": [error_msg],
+                    "current_context_tokens": validation.error_message_token_count,
+                }
+            )
+
+        logger.info(
+            "Tool response validated: tool=%s tokens=%d new_cumulative=%d remaining=%d",
+            tool_name,
+            validation.token_count,
+            current_context_tokens + validation.token_count,
+            validation.limit,
+        )
+
+        # Create state update with token count
+        state_update = {"current_context_tokens": validation.token_count}
+
+        # If result is already a Command, merge the state updates and preserve all attributes
+        if isinstance(result, Command):
+            existing_update = result.update or {}
+            merged_update = {**existing_update, **state_update}
+            # Preserve all Command attributes
+            return Command(
+                update=merged_update,
+                goto=result.goto,
+                graph=getattr(result, "graph", None),
+            )
+        else:
+            # Result is not a Command - wrap it in ToolMessage and Command
+            if isinstance(result, ToolMessage):
+                tool_message = result
+            else:
+                # result is a string or other type
+                tool_message = ToolMessage(
+                    content=str(result),
+                    tool_call_id=tool_call_id or "",
+                )
+            return Command(update={"messages": [tool_message], **state_update})
+
+    return result
