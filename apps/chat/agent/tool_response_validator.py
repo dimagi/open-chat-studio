@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 
 from langchain_core.messages import ToolMessage
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, InjectedToolCallId
 from langchain_core.tools.base import _is_injected_arg_type, get_all_basemodel_annotations
-from langgraph.prebuilt import InjectedState, InjectedToolCallId
+from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from pydantic import BaseModel, create_model
 
@@ -23,6 +23,7 @@ class ValidationResult:
     token_count: int
     limit: int
     error_message: str | None = None
+    error_message_token_count: int | None = None
 
 
 class ToolResponseSizeValidator:
@@ -89,6 +90,7 @@ class ToolResponseSizeValidator:
                 token_count=token_count,
                 limit=remaining_tokens,
                 error_message=error_msg,
+                error_message_token_count=60,  # static estimate
             )
 
         # Warn if response uses more than 50% of remaining space (risky but allowed)
@@ -250,7 +252,7 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
 
             object.__setattr__(tool, "_arun", wrapped_arun)
 
-    def _validate_response(result: Any, graph_state: dict | None) -> Any:
+    def _validate_response(result: Any, graph_state: dict | None, tool_call_id: str | None = None) -> Any:
         """Common validation logic for both sync and async."""
         if graph_state is not None:
             current_context_tokens = graph_state.get("current_context_tokens", 0)
@@ -262,7 +264,17 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
             )
 
             if not validation.is_valid:
-                return validation.error_message
+                # Return error as ToolMessage in Command with updated token count
+                error_msg = ToolMessage(
+                    content=validation.error_message,
+                    tool_call_id=tool_call_id or "",
+                )
+                return Command(
+                    update={
+                        "messages": [error_msg],
+                        "current_context_tokens": validation.error_message_token_count,
+                    }
+                )
 
             logger.info(
                 "Tool response validated: tool=%s tokens=%d new_cumulative=%d remaining=%d",
@@ -272,25 +284,50 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
                 validation.limit,
             )
 
+            # Create state update with token count
+            state_update = {"current_context_tokens": validation.token_count}
+
+            # If result is already a Command, merge the state updates
+            if isinstance(result, Command):
+                existing_update = result.update or {}
+                merged_update = {**existing_update, **state_update}
+                return Command(
+                    update=merged_update,
+                    goto=result.goto if hasattr(result, "goto") else None,
+                )
+            else:
+                # Result is not a Command - wrap it in ToolMessage and Command
+                if isinstance(result, ToolMessage):
+                    tool_message = result
+                else:
+                    # result is a string or other type
+                    tool_message = ToolMessage(
+                        content=str(result),
+                        tool_call_id=tool_call_id or "",
+                    )
+                return Command(update={"messages": [tool_message], **state_update})
+
         return result
 
     @functools.wraps(original_invoke)
     def validated_invoke(input: dict[str, Any] | str, config: dict | None = None, **kwargs: Any) -> Any:
         """Wrapped invoke with validation."""
-        # Extract state for validation (but don't remove from kwargs - let it flow through)
+        # Extract state and tool_call_id for validation (but don't remove from kwargs - let it flow through)
         graph_state = kwargs.get(state_field_name)
+        tool_call_id = kwargs.get(tool_call_id_field_name)
 
         result = original_invoke(input, config, **kwargs)
-        return _validate_response(result, graph_state)
+        return _validate_response(result, graph_state, tool_call_id)
 
     @functools.wraps(original_ainvoke)
     async def validated_ainvoke(input: dict[str, Any] | str, config: dict | None = None, **kwargs: Any) -> Any:
         """Wrapped ainvoke with validation."""
-        # Extract state for validation (but don't remove from kwargs - let it flow through)
+        # Extract state and tool_call_id for validation (but don't remove from kwargs - let it flow through)
         graph_state = kwargs.get(state_field_name)
+        tool_call_id = kwargs.get(tool_call_id_field_name)
 
         result = await original_ainvoke(input, config, **kwargs)
-        return _validate_response(result, graph_state)
+        return _validate_response(result, graph_state, tool_call_id)
 
     # Step 4: Replace methods with validated versions
     # Use object.__setattr__ to bypass pydantic validation since BaseTool is a pydantic model

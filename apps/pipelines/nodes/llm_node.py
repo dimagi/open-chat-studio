@@ -86,40 +86,6 @@ def _process_agent_output(node, session, message):
     return ai_message, ai_message_metadata
 
 
-def _create_token_tracking_hook(node, session: ExperimentSession):
-    """
-    Create a post_model_hook that recalculates context size after each LLM call.
-    This ensures tool validation always has an accurate view of current context usage.
-    """
-
-    def post_model_hook(state: StateSchema) -> dict:
-        """
-        Recalculate current context size after each model response.
-        This accounts for all accumulated messages including agent reasoning.
-        """
-        import logging
-
-        logger = logging.getLogger("ocs.tools")
-        model_name = node.get_llm_provider_model().name
-        token_counter = node.get_llm_service().get_token_counter(model_name)
-
-        # Count tokens in all current messages (includes model responses, tool calls, etc.)
-        total_tokens = token_counter.get_tokens_from_messages(state.get("messages", []))
-
-        logger.info(
-            "Post-model hook: Updated context size: %s",
-            total_tokens,
-            extra={
-                "current_context_tokens": total_tokens,
-                "message_count": len(state.get("messages", [])),
-            },
-        )
-
-        return {"current_context_tokens": total_tokens}
-
-    return post_model_hook
-
-
 def build_node_agent(node, state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
     prompt_context = _get_prompt_context(node, session, state)
 
@@ -137,16 +103,12 @@ def build_node_agent(node, state: PipelineState, session: ExperimentSession, too
         history = node.get_history(session, [prompt] + state["messages"])
         return [prompt] + history + state["messages"]
 
-    # Create post-model hook for token tracking
-    post_model_hook = _create_token_tracking_hook(node, session)
-
     return create_react_agent(
         # TODO: I think this will fail with google builtin tools
         model=node.get_chat_model(),
         tools=tools,
         prompt=prompt_callable,
         state_schema=StateSchema,
-        post_model_hook=post_model_hook,
     )
 
 
