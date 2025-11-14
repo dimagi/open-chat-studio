@@ -228,41 +228,7 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
                 __base__=BaseModel,
             )
 
-    # Step 3: Store original methods and wrap _run if needed
-    original_invoke = tool.invoke
-    original_ainvoke = tool.ainvoke
-
-    def _remove_injected_fields(kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Remove the injected fields that we added (action method doesn't expect them)."""
-        cleaned = kwargs.copy()
-        if added_state_field:
-            cleaned.pop(state_field_name, None)
-        if added_tool_call_id_field:
-            cleaned.pop(tool_call_id_field_name, None)
-        return cleaned
-
-    # If we added any fields, we need to wrap _run to strip them out
-    # before they reach the action method (which doesn't expect them)
-    if added_state_field or added_tool_call_id_field:
-        if hasattr(tool, "_run"):
-            original_run = tool._run
-
-            @functools.wraps(original_run)
-            def wrapped_run(*args, **kwargs):
-                return original_run(*args, **_remove_injected_fields(kwargs))
-
-            object.__setattr__(tool, "_run", wrapped_run)
-
-        # Also wrap _arun if it exists and isn't just calling _run
-        if hasattr(tool, "_arun"):
-            original_arun = tool._arun
-
-            @functools.wraps(original_arun)
-            async def wrapped_arun(*args, **kwargs):
-                return await original_arun(*args, **_remove_injected_fields(kwargs))
-
-            object.__setattr__(tool, "_arun", wrapped_arun)
-
+    # Step 3: Wrap _run and _arun with validation and field cleanup
     def _validate_response(
         result: str | Command | ToolMessage | Any,
         graph_state: dict[str, Any] | None,
@@ -326,29 +292,49 @@ def wrap_tool_with_validation(tool: BaseTool, validator: ToolResponseSizeValidat
 
         return result
 
-    @functools.wraps(original_invoke)
-    def validated_invoke(input: dict[str, Any] | str, config: dict | None = None, **kwargs: Any) -> Any:
-        """Wrapped invoke with validation."""
-        # Extract state and tool_call_id for validation (but don't remove from kwargs - let it flow through)
-        graph_state = kwargs.get(state_field_name)
-        tool_call_id = kwargs.get(tool_call_id_field_name)
+    def _remove_injected_fields(kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Remove the injected fields that we added (action method doesn't expect them)."""
+        cleaned = kwargs.copy()
+        if added_state_field:
+            cleaned.pop(state_field_name, None)
+        if added_tool_call_id_field:
+            cleaned.pop(tool_call_id_field_name, None)
+        return cleaned
 
-        result = original_invoke(input, config, **kwargs)
-        return _validate_response(result, graph_state, tool_call_id)
+    # Wrap _run if it exists
+    if hasattr(tool, "_run"):
+        original_run = tool._run
 
-    @functools.wraps(original_ainvoke)
-    async def validated_ainvoke(input: dict[str, Any] | str, config: dict | None = None, **kwargs: Any) -> Any:
-        """Wrapped ainvoke with validation."""
-        # Extract state and tool_call_id for validation (but don't remove from kwargs - let it flow through)
-        graph_state = kwargs.get(state_field_name)
-        tool_call_id = kwargs.get(tool_call_id_field_name)
+        @functools.wraps(original_run)
+        def wrapped_run(*args, **kwargs):
+            # Extract injected fields for validation before removing them
+            graph_state = kwargs.get(state_field_name)
+            tool_call_id = kwargs.get(tool_call_id_field_name)
 
-        result = await original_ainvoke(input, config, **kwargs)
-        return _validate_response(result, graph_state, tool_call_id)
+            # Call original method
+            result = original_run(*args, **_remove_injected_fields(kwargs))
 
-    # Step 4: Replace methods with validated versions
-    # Use object.__setattr__ to bypass pydantic validation since BaseTool is a pydantic model
-    object.__setattr__(tool, "invoke", validated_invoke)
-    object.__setattr__(tool, "ainvoke", validated_ainvoke)
+            # Validate response
+            return _validate_response(result, graph_state, tool_call_id)
+
+        object.__setattr__(tool, "_run", wrapped_run)
+
+    # Wrap _arun if it exists
+    if hasattr(tool, "_arun"):
+        original_arun = tool._arun
+
+        @functools.wraps(original_arun)
+        async def wrapped_arun(*args, **kwargs):
+            # Extract injected fields for validation before removing them
+            graph_state = kwargs.get(state_field_name)
+            tool_call_id = kwargs.get(tool_call_id_field_name)
+
+            # Call original method
+            result = original_run(*args, **_remove_injected_fields(kwargs))
+
+            # Validate response
+            return _validate_response(result, graph_state, tool_call_id)
+
+        object.__setattr__(tool, "_arun", wrapped_arun)
 
     return tool
