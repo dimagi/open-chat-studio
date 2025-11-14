@@ -52,7 +52,7 @@ class ServiceProviderType:
 
 class ServiceProvider(ServiceProviderType, Enum):
     llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderTypes, ["name", "type"]
-    voice = const.VOICE, "Voice Service Provider", VoiceProvider, VoiceProviderType, ["name", "type"]
+    voice = const.VOICE, "Speech Service Provider", VoiceProvider, VoiceProviderType, ["name", "type"]
     messaging = const.MESSAGING, "Messaging Provider", MessagingProvider, MessagingProviderType, ["name", "type"]
     auth = const.AUTH, "Authentication Provider", AuthProvider, AuthProviderType, ["name", "type"]
     tracing = const.TRACING, "Tracing Provider", TraceProvider, TraceProviderType, ["name", "type"]
