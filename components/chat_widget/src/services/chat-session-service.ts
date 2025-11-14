@@ -119,7 +119,9 @@ export class ChatSessionService {
   }
 
   async pollTaskOnce(sessionId: string, taskId: string): Promise<ChatTaskPollResponse> {
-    const response = await fetch(`${this.apiBaseUrl}/api/chat/${sessionId}/${taskId}/poll/`);
+    const response = await fetch(`${this.apiBaseUrl}/api/chat/${sessionId}/${taskId}/poll/`, {
+      headers: this.getCommonHeaders(),
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to poll task: ${response.statusText}`);
@@ -190,7 +192,9 @@ export class ChatSessionService {
       url.searchParams.set('since', since);
     }
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), {
+      headers: this.getCommonHeaders(),
+    });
     if (!response.ok) {
       throw new Error(`Failed to poll messages: ${response.statusText}`);
     }
@@ -236,15 +240,21 @@ export class ChatSessionService {
   }
 
   private getJsonHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'x-ocs-widget-version': this.widgetVersion,
-    };
+    const headers = this.getCommonHeaders();
+    headers['Content-Type'] = 'application/json'
 
     const csrfToken = this.csrfTokenProvider(this.apiBaseUrl);
     if (csrfToken) {
       headers['X-CSRFToken'] = csrfToken;
     }
+
+    return headers;
+  }
+
+  private getCommonHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'x-ocs-widget-version': this.widgetVersion,
+    };
 
     if (this.embedKey) {
       headers['X-Embed-Key'] = this.embedKey;
