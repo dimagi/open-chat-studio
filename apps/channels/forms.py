@@ -559,7 +559,7 @@ class WidgetParams(forms.Widget):
 
 class EmbeddedWidgetChannelForm(ExtraFormBase):
     allow_all_domains = forms.BooleanField(
-        label="Allow all domains", required=False, help_text="All access from any domain."
+        label="Allow all domains", required=False, help_text="Allow access from any domain."
     )
     allowed_domains = SimpleArrayField(
         forms.CharField(
