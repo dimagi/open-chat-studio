@@ -91,6 +91,7 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
         accessor="message_count",
         orderable=True,
     )
+    last_message = TimeAgoColumn(accessor="last_message_created_at", verbose_name="Last activity", orderable=True)
 
     actions = actions.ActionsColumn(
         actions=[
@@ -118,7 +119,8 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
     class Meta:
         model = ExperimentSession
         # Ensure that chatbot is shown first
-        fields = ["chatbot", "participant", "message_count"]
+        fields = ["chatbot", "participant", "message_count", "last_message"]
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No sessions yet!"
+        order_by = ("-last_message",)

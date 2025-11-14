@@ -1,0 +1,38 @@
+# Locust Configuration File for Chat API Load Test
+# Copy this file to chat_api_load_test.conf and customize for your environment
+# Usage: CHATBOT_IDS="uuid" locust -f locust/chat_api_load_test.py --config locust/chat_api_load_test.conf
+
+[master]
+# Run in master mode (for distributed load testing)
+# master = true
+
+[runtime settings]
+# Target host
+host = https://www.openchatstudio.com
+
+# Number of concurrent users
+users = 10
+
+# Rate at which users are spawned (users per second)
+spawn-rate = 2
+
+# How long to run the test (e.g., 5m, 1h, 300s)
+run-time = 5m
+
+# Run without web UI
+# headless = true
+
+# HTML report output (requires headless mode)
+html = chat_api_load_test_report.html
+
+# CSV output
+# csv = reports/chat_api_load_test
+
+# Log file
+# logfile = logs/chat_api_load_test.log
+
+# Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+loglevel = INFO
+
+# Stop on failures
+# stop-timeout = 10
