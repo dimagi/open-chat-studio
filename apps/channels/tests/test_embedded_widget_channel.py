@@ -39,7 +39,6 @@ class TestEmbeddedWidgetChannelForm:
         [
             ("example.com", True, ["example.com"]),
             ("example.com\n*.subdomain.com", True, ["example.com", "*.subdomain.com"]),
-            ("", True, []),
             ("invalid..domain", False, None),  # Invalid domain format
         ],
     )

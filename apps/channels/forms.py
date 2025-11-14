@@ -616,7 +616,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         cleaned_data = super().clean()
 
         allow_all_domains = cleaned_data.pop("allow_all_domains", False)
-        if not allow_all_domains and not cleaned_data["allowed_domains"]:
+        if not allow_all_domains and not cleaned_data.get("allowed_domains"):
             raise ValidationError(
                 {"allowed_domains": "You must specify at least one domain or select 'Allow all domains'."}
             )
