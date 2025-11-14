@@ -28,7 +28,7 @@
   <div class="grid grid-cols-6">
     <div class="col-span-5">
       <div class="flex">
-        <h1 id="{{ title|slugify }}" class="{{ title_class|default:"pg-title" }} hover:cursor-pointer">
+        <h1 data-cy="{{ data_cy_title|default:"title" }}" id="{{ title|slugify }}" class="{{ title_class|default:"pg-title" }} hover:cursor-pointer">
           <a href="#{{ title|slugify }}">{{ title }}</a>
         </h1>
         {% if title_help_content %}
@@ -40,7 +40,7 @@
     {% if allow_new|default_if_none:True or actions %}
       <div class="justify-self-end join">
         {% if new_object_url %}
-          <a class="btn btn-sm {{ button_style|default:"btn-primary" }}"
+          <a data-cy="btn-new" class="btn btn-sm {{ button_style|default:"btn-primary" }}"
              href="{{ new_object_url }}">Add new
           </a>
         {% endif %}
