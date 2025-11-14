@@ -1,6 +1,7 @@
 import json
 
 from apps.chat.models import ChatMessage
+from apps.service_providers.llm_service.default_models import get_model_parameters
 from apps.teams.utils import current_team
 
 from .const import LANGUAGE_CHOICES
@@ -47,7 +48,8 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
         with current_team(llm_provider.team):
             llm_service = llm_provider.get_llm_service()
             model_name = llm_provider_model.name
-            llm = llm_service.get_chat_model(model_name, temperature=0.1)
+            params = get_model_parameters(model_name, temperature=0.1)
+            llm = llm_service.get_chat_model(model_name, **params)
             message_data = []
             for msg in messages_to_translate:
                 message_data.append({"id": str(msg.id), "content": msg.content, "role": msg.role})

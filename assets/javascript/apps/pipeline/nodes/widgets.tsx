@@ -768,7 +768,8 @@ export function LlmWidget(props: WidgetParams) {
       String(model.value) === String(selectedModelId)
     )?.label.split(": ")[1] || "";
 
-    const llmModelParamsSchemaName = modelParams[selectedModelName];
+    // Default tot BasicParameters if no specific schema found
+    const llmModelParamsSchemaName = modelParams[selectedModelName] || "BasicParameters";
     return modelParamSchemas[llmModelParamsSchemaName];
   }
 

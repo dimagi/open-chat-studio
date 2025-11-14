@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from apps.service_providers.llm_service.model_parameters import (
     AnthropicNonReasoningParameters,
     AnthropicReasoningParameters,
+    BasicParameters,
     ClaudeHaikuLatestParameters,
     ClaudeOpus4_20250514Parameters,
     GPT5Parameters,
@@ -23,7 +24,7 @@ class Model:
     is_default: bool = False
     deprecated: bool = False
     is_translation_default: bool = False
-    parameters: type[BaseModel] | None = None
+    parameters: type[BaseModel] = BasicParameters
 
 
 def k(n: int) -> int:
@@ -140,6 +141,12 @@ for _provider, models in DEFAULT_LLM_PROVIDER_MODELS.items():
     for model in models:
         if model.parameters:
             LLM_MODEL_PARAMETERS[model.name] = model.parameters
+
+
+def get_model_parameters(model_name: str, **param_overrides) -> dict:
+    """Return the model parameters, with any overrides applied."""
+    parameters_model = LLM_MODEL_PARAMETERS.get(model_name, BasicParameters)
+    return parameters_model(**param_overrides).model_dump()
 
 
 def get_default_model(provider_type: str) -> Model:

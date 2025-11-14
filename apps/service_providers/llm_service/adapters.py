@@ -25,6 +25,7 @@ from apps.chat.agent.tools import get_assistant_tools, get_tools
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
+from apps.service_providers.llm_service.default_models import get_model_parameters
 from apps.service_providers.llm_service.main import (
     AnthropicBuiltinTool,
     OpenAIAssistantRunnable,
@@ -123,7 +124,9 @@ class ChatAdapter(BaseAdapter):
         )
 
     def get_chat_model(self):
-        return self.get_llm_service().get_chat_model(self.provider_model_name, self.temperature)
+        model_name = self.provider_model_name
+        params = get_model_parameters(model_name, temperature=self.temperature)
+        return self.get_llm_service().get_chat_model(model_name, **params)
 
     def get_template_context(self, variables: list[str]) -> dict:
         return self.template_context.get_context(variables)

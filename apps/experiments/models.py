@@ -863,9 +863,12 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return Chip(label=label, url=url)
 
     def get_chat_model(self):
+        from apps.service_providers.llm_service.default_models import get_model_parameters
+
         service = self.get_llm_service()
         provider_model_name = self.get_llm_provider_model_name()
-        return service.get_chat_model(provider_model_name, self.temperature)
+        params = get_model_parameters(provider_model_name, temperature=self.temperature)
+        return service.get_chat_model(provider_model_name, **params)
 
     def get_llm_service(self):
         if self.assistant:
