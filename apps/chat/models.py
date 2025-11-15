@@ -4,6 +4,7 @@ from urllib.parse import quote
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.functional import classproperty
 from langchain_core.messages import BaseMessage, messages_from_dict
 
@@ -120,6 +121,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         # boolean indicating that this message has been synced to the thread
         "openai_thread_checkpoint",
     }
+    # override from BaseModel to allow setting created_at in evals
+    created_at = models.DateTimeField(default=timezone.now)
 
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
     message_type = models.CharField(max_length=10, choices=ChatMessageType.choices)
