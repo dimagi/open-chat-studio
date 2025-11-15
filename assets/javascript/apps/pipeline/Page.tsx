@@ -54,7 +54,7 @@ export default function Page() {
             ) : (
               <>
                 <div className="text-lg font-bold">{name}</div>
-                {!readOnly && 
+                {!readOnly && origin !== "chatbots" &&
                   <button className="btn btn-sm btn-ghost" onClick={() => setEditingName(true)}>
                     <i className="fa fa-pencil"></i>
                   </button>
