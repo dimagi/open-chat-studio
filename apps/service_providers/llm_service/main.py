@@ -253,7 +253,12 @@ class OpenAIGenericService(LlmService):
     openai_api_base: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        model = ChatOpenAI(model=llm_model, **self._get_model_kwargs(**kwargs), use_responses_api=True)
+        model_kwargs = self._get_model_kwargs(**kwargs)
+        if "temperature" in model_kwargs and llm_model.startswith(("o3", "o4", "gpt-5", "o1")):
+            # Remove the temperature parameter for custom reasoning models
+            model_kwargs.pop("temperature")
+
+        model = ChatOpenAI(model=llm_model, **model_kwargs, use_responses_api=True)
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
