@@ -592,9 +592,9 @@ class EventBot:
                 ],
                 config=config,
             )
-            span.set_outputs({"response": response.content})
+            span.set_outputs({"response": response.text()})
 
-            message = response.content
+            message = response.text()
             if self.history_manager:
                 self.history_manager.save_message_to_history(message, type_=ChatMessageType.AI)
         return message

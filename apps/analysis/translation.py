@@ -63,7 +63,7 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
 
             response = llm.invoke(prompt)
             try:
-                translated_data = json.loads(response.content)
+                translated_data = json.loads(response.text())
             except json.JSONDecodeError as e:
                 raise TranslationError(
                     f"Failed to parse LLM response as JSON for {target_language} translation. Error: {str(e)}"
