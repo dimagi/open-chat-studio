@@ -1,3 +1,5 @@
+from typing import Literal
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
@@ -6,19 +8,34 @@ from pydantic_core import ValidationError
 
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
+from apps.evaluations.utils import schema_to_pydantic_model
 from apps.pipelines.nodes.base import UiSchema, Widgets
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.default_models import get_model_parameters
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 from apps.service_providers.models import LlmProviderModel
-from apps.utils.langchain import dict_to_json_schema
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
 
 class EvaluatorSchema(BaseModel):
     label: str
     icon: str = None
+
+
+class FieldDefinition(BaseModel):
+    """Definition of a single field in the output schema."""
+
+    type: Literal["string"]
+    description: str  # TODO: add more types and validations, etc.
+
+    @property
+    def python_type(self) -> type:
+        """Get the corresponding Python type for this field."""
+        type_mapping = {
+            "string": str,
+        }
+        return type_mapping[self.type]
 
 
 class EvaluatorResult(BaseModel):
@@ -73,14 +90,15 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         ),
         json_schema_extra=UiSchema(widget=Widgets.text_editor),
     )
-    output_schema: dict = Field(
+    output_schema: dict[str, FieldDefinition] = Field(
         description="The expected output schema for the evaluation",
         json_schema_extra=UiSchema(widget=Widgets.key_value_pairs),
     )
 
     def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
-        output_schema = dict_to_json_schema(self.output_schema).model_json_schema()
-        llm = self.get_chat_model().with_structured_output(output_schema)
+        # Create a pydantic class so the llm output is validated
+        output_model = schema_to_pydantic_model(self.output_schema)
+        llm = self.get_chat_model().with_structured_output(output_model)
 
         prompt = PromptTemplate.from_template(self.prompt)
         try:
@@ -100,7 +118,8 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             full_history=message.full_history,
             generated_response=generated_response,
         )
-        result = llm.invoke(formatted_prompt)
+        result_model = llm.invoke(formatted_prompt)
+        result = result_model.model_dump()
         return EvaluatorResult(message=message.as_result_dict(), generated_response=generated_response, result=result)
 
 

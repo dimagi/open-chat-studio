@@ -4,6 +4,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import F
+from pydantic import BaseModel, Field, create_model
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
@@ -348,3 +349,36 @@ def parse_csv_value_as_json(value):
         except (json.JSONDecodeError, TypeError):
             return value
     return value
+
+
+def schema_to_pydantic_model(schema: dict, model_name: str = "DynamicModel") -> type[BaseModel]:
+    """Converts a typed schema dictionary to a Pydantic model.
+
+    Expected format:
+        {
+            "field_name": FieldDefinition(type="string", description="Field description")
+        }
+
+    Args:
+        schema: Dictionary mapping field names to FieldDefinition objects
+        model_name: Name for the generated Pydantic model
+
+    Returns:
+        Dynamically created Pydantic BaseModel class
+    """
+    from apps.evaluations.evaluators import FieldDefinition
+
+    pydantic_fields = {}
+
+    for field_name, field_def in schema.items():
+        if not isinstance(field_def, FieldDefinition):
+            raise ValueError(f"Field '{field_name}' must be a FieldDefinition object")
+
+        # Get the Python type from the field definition
+        python_type = field_def.python_type
+        # Make field optional (can be None)
+        field_type = python_type | None
+
+        pydantic_fields[field_name] = (field_type, Field(description=field_def.description))
+
+    return create_model(model_name, **pydantic_fields)

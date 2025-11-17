@@ -346,7 +346,10 @@
               if (this.getWidget(this.selectedSchema.properties[key]) === 'key_value_pairs') {
                 if (!this.keyValuePairs[key]) {
                   this.keyValuePairs[key] = this.params[key] && typeof this.params[key] === 'object'
-                    ? Object.entries(this.params[key]).map(([k, v]) => ({key: k, value: v}))
+                    ? Object.entries(this.params[key]).map(([k, v]) => ({
+                        key: k,
+                        value: v.description
+                      }))
                     : [{key: '', value: ''}];
                 }
               }
@@ -426,7 +429,10 @@
             const obj = {};
             pairs.forEach(pair => {
               if (pair.key.trim()) {
-                obj[pair.key] = pair.value;
+                obj[pair.key] = {
+                  type: "string",
+                  description: pair.value
+                };
               }
             });
             this.params[fieldName] = obj;
@@ -439,7 +445,10 @@
             Object.keys(this.selectedSchema.properties).forEach(fieldName => {
               if (this.getWidget(this.selectedSchema.properties[fieldName]) === 'key_value_pairs') {
                 if (this.params[fieldName] && typeof this.params[fieldName] === 'object') {
-                  this.keyValuePairs[fieldName] = Object.entries(this.params[fieldName]).map(([key, value]) => ({key, value}));
+                  this.keyValuePairs[fieldName] = Object.entries(this.params[fieldName]).map(([key, value]) => ({
+                    key,
+                    value: value.description
+                  }));
                 }
               }
             });

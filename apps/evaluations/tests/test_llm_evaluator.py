@@ -51,7 +51,7 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
         llm_provider_id=llm_provider.id,
         llm_provider_model_id=llm_provider_model.id,
         prompt=prompt + " {input.content}",
-        output_schema={"sentiment": "the sentiment of the conversation"},
+        output_schema={"sentiment": {"type": "string", "description": "the sentiment of the conversation"}},
     )
     evaluator = EvaluatorFactory(params=llm_evaluator.model_dump(), type="LlmEvaluator")
     dataset = EvaluationDatasetFactory(messages=[evaluation_message_1, evaluation_message_2])
@@ -127,7 +127,7 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
         llm_provider_id=llm_provider.id,
         llm_provider_model_id=llm_provider_model.id,
         prompt=prompt,
-        output_schema={"evaluation": "the evaluation result"},
+        output_schema={"evaluation": {"type": "string", "description": "the evaluation result"}},
     )
     evaluator = EvaluatorFactory(params=llm_evaluator.model_dump(), type="LlmEvaluator")
     dataset = EvaluationDatasetFactory(messages=[evaluation_message_1, evaluation_message_2])
@@ -176,7 +176,7 @@ def test_evaluator_with_missing_output(get_llm_service, llm_provider, llm_provid
         llm_provider_id=llm_provider.id,
         llm_provider_model_id=llm_provider_model.id,
         prompt=prompt,
-        output_schema={"assessment": "the assessment result"},
+        output_schema={"assessment": {"type": "string", "description": "the assessment result"}},
     )
     evaluator = EvaluatorFactory(params=llm_evaluator.model_dump(), type="LlmEvaluator")
     dataset = EvaluationDatasetFactory(messages=[evaluation_message])

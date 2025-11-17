@@ -73,17 +73,28 @@ class FakeLlm(FakeListChatModel):
         inputs, converting the result to the schema's expected format.
 
         Examples:
-            FakeLlm(responses=[{"name": "John"}]).with_structured_output(...) -> {"name": "John"}
-            FakeLlm(responses=["keyword"]).with_structured_output(router_schema) -> {"route": "keyword"}
-            FakeLlm(responses=[AIMessage(content="value")]).with_structured_output(...) -> {"route": "value"}
+            FakeLlm(responses=[{"name": "John"}]).with_structured_output(MyModel) -> MyModel(name="John")
+            FakeLlm(responses=[AIMessage(content="", tool_calls=[...])]).with_structured_output(MyModel) -> MyModel(...)
+            FakeLlm(responses=[{"name": "John"}]).with_structured_output({"type": "object", ...}) -> {"name": "John"}
         """
+        from langchain_core.messages import AIMessage
         from langchain_core.output_parsers.openai_tools import PydanticToolsParser
         from langchain_core.runnables import RunnableLambda
 
         if isinstance(schema, type) and is_basemodel_subclass(schema):
-            output_parser = PydanticToolsParser(tools=[cast(TypeBaseModel, schema)], first_tool_only=True)
-            llm = self.bind_tools([schema], tool_choice="any")
-            return llm | output_parser
+            first_response = self.responses[0] if self.responses else None
+            has_tool_calls = isinstance(first_response, AIMessage) and hasattr(first_response, "tool_calls")
+            if has_tool_calls:
+                output_parser = PydanticToolsParser(tools=[cast(TypeBaseModel, schema)], first_tool_only=True)
+                llm = self.bind_tools([schema], tool_choice="any")
+                return llm | output_parser
+            else:
+
+                def parse_response(_):
+                    response = self.responses[0] if self.responses else {}
+                    return schema(**response)
+
+                return RunnableLambda(parse_response)
         elif isinstance(schema, dict):
             # Handle JSON schema - for testing purposes, just return the response directly
             return RunnableLambda(lambda _: self.responses[0] if self.responses else {})
