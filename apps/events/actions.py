@@ -1,7 +1,7 @@
 from django.db.models import Case, DateTimeField, F, When
 from langchain.memory.prompt import SUMMARY_PROMPT
 from langchain.memory.summary import SummarizerMixin
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
