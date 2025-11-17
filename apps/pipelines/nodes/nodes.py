@@ -161,10 +161,8 @@ class LLMResponseMixin(BaseModel):
     def ensure_default_parameters(cls, data) -> Self:
         if llm_provider_model_id := data.get("llm_provider_model_id"):
             model = get_llm_provider_model(llm_provider_model_id)
-            if params_cls := LLM_MODEL_PARAMETERS.get(model.name, BasicParameters):
-                data["llm_model_parameters"] = params_cls.model_validate(
-                    data.get("llm_model_parameters", {})
-                ).model_dump()
+            params_cls = LLM_MODEL_PARAMETERS.get(model.name, BasicParameters)
+            data["llm_model_parameters"] = params_cls.model_validate(data.get("llm_model_parameters", {})).model_dump()
         else:
             data["llm_model_parameters"] = {}
         return data
