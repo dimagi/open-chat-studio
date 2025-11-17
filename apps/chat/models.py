@@ -208,6 +208,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     def _get_langchain_dict(self, content, message_type):
         return {
+            "id": self.id,
             "type": message_type,
             "data": {
                 "content": content,
