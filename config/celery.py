@@ -29,7 +29,10 @@ task_acks_late = True
 
 
 @signals.task_postrun.connect
-def close_db_connection(**kwargs):
+def close_db_connection(sender, **kwargs):
+    if getattr(sender.request, "is_eager", False):
+        return
+
     # Copied from https://github.com/celery/celery/blob/main/celery/fixups/django.py
     # Can be removed when upgrading Celery > 5.5.3
     for conn in db.connections.all():
