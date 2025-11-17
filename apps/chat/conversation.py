@@ -1,8 +1,6 @@
 import contextlib
 import logging
 
-from langchain.chains.llm import LLMChain
-from langchain.memory.prompt import SUMMARY_PROMPT
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, get_buffer_string, trim_messages
 from langchain_core.prompts import (
@@ -26,6 +24,29 @@ MESSAGES_TOO_LARGE_ERROR_MESSAGE = (
 INITIAL_SUMMARY_TOKENS_ESTIMATE = 20
 # The maximum number of messages that can be uncompressed
 MAX_UNCOMPRESSED_MESSAGES = 1000
+
+_DEFAULT_SUMMARIZER_TEMPLATE = """Progressively summarize the lines of conversation provided, adding onto the previous summary returning a new summary.
+
+EXAMPLE
+Current summary:
+The human asks what the AI thinks of artificial intelligence. The AI thinks artificial intelligence is a force for good.
+
+New lines of conversation:
+Human: Why do you think artificial intelligence is a force for good?
+AI: Because artificial intelligence will help humans reach their full potential.
+
+New summary:
+The human asks what the AI thinks of artificial intelligence. The AI thinks artificial intelligence is a force for good because it will help humans reach their full potential.
+END OF EXAMPLE
+
+Current summary:
+{summary}
+
+New lines of conversation:
+{new_lines}
+
+New summary:"""  # noqa: E501
+SUMMARY_PROMPT = PromptTemplate(input_variables=["summary", "new_lines"], template=_DEFAULT_SUMMARIZER_TEMPLATE)
 
 _SUMMARY_COMPRESSION_TEMPLATE = """Compress this summary into a shorter summary, about half of its original size:
     SUMMARY:
@@ -395,8 +416,8 @@ def _get_new_summary(llm, pruned_memory, summary, model_token_limit, first_call=
         else:
             raise ChatException("Unable to compress history")
 
-    chain = LLMChain(llm=llm, prompt=SUMMARY_PROMPT, name="compress_chat_history")
-    summary = chain.invoke(context)["text"]
+    chain = (SUMMARY_PROMPT | llm).with_config({"run_name": "compress_chat_history"})
+    summary = chain.invoke(context).text()
 
     if next_batch:
         return _get_new_summary(llm, next_batch, summary, model_token_limit, False)
@@ -419,8 +440,9 @@ def _reduce_summary_size(llm, summary, summary_token_limit) -> tuple:
     while summary and summary_tokens > summary_token_limit:
         if attempts == 3:
             raise ChatException("Too many attempts trying to reduce summary size.")
-        chain = LLMChain(llm=llm, prompt=SUMMARY_COMPRESSION_PROMPT, name="compress_chat_history")
-        summary = chain.invoke({"summary": summary})["text"]
+
+        chain = (SUMMARY_COMPRESSION_PROMPT | llm).with_config({"run_name": "compress_chat_history"})
+        summary = chain.invoke({"summary": summary}).text()
         summary_tokens = llm.get_num_tokens_from_messages([HumanMessage(content=summary)])
         attempts += 1
 
