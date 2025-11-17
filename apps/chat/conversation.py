@@ -110,7 +110,8 @@ class BasicConversation:
 
     def predict(self, input: str) -> tuple[str, int, int]:
         response = self.chain.invoke({"input": input, "history": self.messages})
-        return response.content, response.usage_metadata["input_tokens"], response.usage_metadata["output_tokens"]
+        usage = response.usage_metadata or {}
+        return response.content, usage.get("input_tokens", 0), usage.get("output_tokens", 0)
 
 
 def compress_chat_history(
