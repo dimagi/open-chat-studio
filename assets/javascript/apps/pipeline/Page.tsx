@@ -38,7 +38,8 @@ export default function Page() {
       <div className="flex flex-1">
         <div className="h-full w-full">
           <div className="flex gap-2">
-            {editingName ? (
+            {origin !== "chatbots" &&
+              (editingName ? (
               <>
                 <input
                   type="text"
@@ -54,13 +55,13 @@ export default function Page() {
             ) : (
               <>
                 <div className="text-lg font-bold">{name}</div>
-                {!readOnly && origin !== "chatbots" &&
+                {!readOnly &&
                   <button className="btn btn-sm btn-ghost" onClick={() => setEditingName(true)}>
                     <i className="fa fa-pencil"></i>
                   </button>
                 }
               </>
-            )}
+            ))}
             <div className="tooltip tooltip-right" data-tip={dirty ? (isSaving ? "Saving ..." : "Preparing to Save") : "Saved"}>
               <button className="btn btn-sm btn-circle no-animation self-center">
                 {dirty ?
