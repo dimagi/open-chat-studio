@@ -15,7 +15,7 @@ def _populate_temperature_params(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0034_update_openai_models'),
+        ('service_providers', '0035_update_openai_models'),
     ]
 
     operations = [
