@@ -258,7 +258,8 @@ class OpenAIGenericService(LlmService):
             # Remove the temperature parameter for custom reasoning models
             model_kwargs.pop("temperature")
 
-        model = ChatOpenAI(model=llm_model, **model_kwargs, use_responses_api=True)
+        use_responses_api = llm_model in ["gpt-5-pro"]
+        model = ChatOpenAI(model=llm_model, **model_kwargs, use_responses_api=use_responses_api)
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
