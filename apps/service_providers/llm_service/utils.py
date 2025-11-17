@@ -81,8 +81,8 @@ def populate_reference_section_from_citations(text: str, cited_files: list[File]
             tracked_file_ids.append(file_id)
 
             # Store the reference for this file (only once)
-            download_link = file.download_link(session.id)
-            file_references[citation_index] = f"[^{citation_index}]: [{file.name}]({download_link})"
+            download_link = file.citation_url(session.id)
+            file_references[citation_index] = f"[^{citation_index}]: [{file.citation_text}]({download_link})"
 
         return f"[^{citation_index}]"
 

@@ -177,6 +177,18 @@ class File(BaseTeamModel, VersionsMixin):
             reverse("experiments:download_file", args=[get_slug_for_team(self.team_id), experiment_session_id, self.id])
         )
 
+    def citation_url(self, experiment_session_id: int) -> str:
+        if citation_url := self.metadata.get("citation_url"):
+            return citation_url
+        return absolute_url(
+            reverse("experiments:download_file", args=[get_slug_for_team(self.team_id), experiment_session_id, self.id])
+        )
+
+    def citation_text(self):
+        if citation_text := self.metadata.get("citation_text"):
+            return citation_text
+        return self.name
+
     def get_absolute_url(self):
         return reverse("files:file_edit", args=[get_slug_for_team(self.team_id), self.id])
 
