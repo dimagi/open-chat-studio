@@ -31,5 +31,5 @@ def test_anthropic_service():
 def test_openai_service_get_num_tokens(model):
     service = OpenAILlmService(openai_api_key="123")
     # fine-tuned model
-    llm = service.get_chat_model(model, 0.5)
+    llm = service.get_chat_model(model, temperature=0.5)
     assert llm.get_num_tokens_from_messages([HumanMessage("Hello")]) > 0
