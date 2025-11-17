@@ -109,7 +109,7 @@ class FakeLlmService(LlmService):
     token_counter: TokenCounter
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def get_chat_model(self, llm_model: str, temperature: float):
+    def get_chat_model(self, llm_model: str, **kwargs):
         return self.llm
 
     def get_assistant(self, assistant_id: str, as_agent=False):
@@ -132,7 +132,7 @@ class FakeOpenAILlmService(OpenAIGenericService):
     token_counter: TokenCounter
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def get_chat_model(self, llm_model: str, temperature: float):
+    def get_chat_model(self, llm_model: str, **kwargs):
         return self.llm
 
     def get_assistant(self, assistant_id: str, as_agent=False):

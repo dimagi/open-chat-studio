@@ -8,6 +8,7 @@ from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
 from apps.pipelines.nodes.base import UiSchema, Widgets
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.llm_service.default_models import get_model_parameters
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 from apps.service_providers.models import LlmProviderModel
@@ -56,7 +57,9 @@ class LLMResponseMixin(BaseModel):
             raise EvaluationRunException("LLM Provider Model does not exist") from err
 
     def get_chat_model(self) -> BaseChatModel:
-        return self.get_llm_service().get_chat_model(self.get_llm_provider_model().name, self.llm_temperature)
+        model_name = self.get_llm_provider_model().name
+        params = get_model_parameters(model_name, temperature=self.llm_temperature)
+        return self.get_llm_service().get_chat_model(model_name, **params)
 
 
 class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
