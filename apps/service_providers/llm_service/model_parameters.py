@@ -138,7 +138,7 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
 
     @field_validator("thinking", mode="before")
     def check_temperature(cls, value: bool, info):
-        # Only when thinking is disabled can the model's temperature can be adjusted
+        # Only when thinking is disabled can the model's temperature be adjusted
         if value and info.data.get("temperature") != 1.0:
             raise PydanticCustomError(
                 "invalid_model_parameters",
