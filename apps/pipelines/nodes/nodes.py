@@ -339,7 +339,7 @@ class ToolConfigModel(BaseModel):
         return values if values else None
 
 
-class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
+class LLMResponseWithPrompt(HistoryMixin, OutputMessageTagMixin, PipelineNode):
     """Uses an LLM to respond to the input."""
 
     model_config = ConfigDict(
