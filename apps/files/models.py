@@ -184,6 +184,7 @@ class File(BaseTeamModel, VersionsMixin):
             reverse("experiments:download_file", args=[get_slug_for_team(self.team_id), experiment_session_id, self.id])
         )
 
+    @property
     def citation_text(self):
         if citation_text := self.metadata.get("citation_text"):
             return citation_text
