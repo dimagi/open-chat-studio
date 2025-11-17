@@ -1,3 +1,5 @@
+from django.db import migrations
+
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 
 
@@ -28,10 +30,11 @@ def populate_temperature_params(Node, LlmProviderModel):
     str_ids = [str(id) for id in supported_model_ids]
     for node in Node.objects.filter(params__llm_provider_model_id__in=int_ids + str_ids).iterator():
         params = node.params
-        llm_model_params = params.get("llm_model_parameters", {})
+        llm_model_params = params.get("llm_model_parameters") or {}
 
         # llm_temperature should exist for all these models, but default to 0.7 just in case
-        llm_model_params["temperature"] = params.get("llm_temperature", 0.7)
+        temp = params.get("llm_temperature")
+        llm_model_params["temperature"] = temp if temp is not None else 0.7
         params["llm_model_parameters"] = llm_model_params
         nodes_to_save.append(node)
 
@@ -42,7 +45,6 @@ def populate_temperature_params(Node, LlmProviderModel):
     # Final save for any remaining nodes
     if nodes_to_save:
         Node.objects.bulk_update(nodes_to_save, ["params"])
-from django.db import migrations
 
 
 def llm_model_migration():
