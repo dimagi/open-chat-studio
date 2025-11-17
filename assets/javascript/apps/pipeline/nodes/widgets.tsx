@@ -208,7 +208,9 @@ function SelectWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <div className="flex flex-row gap-2">
       <select
-        className="select w-full"
+        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+        // Should be resolved in future versions of browsers.
+        className="select appearance-none w-full"
         name={props.name}
         onChange={onUpdate}
         value={props.paramValue}
@@ -823,7 +825,9 @@ export function LlmWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <select
-        className="select w-full"
+        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+        // Should be resolved in future versions of browsers.
+        className="select appearance-none w-full"
         name={props.name}
         onChange={updateParamValue}
         value={value}
@@ -944,7 +948,9 @@ export function HistoryTypeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History" help_text={props.helpText}>
           <select
-            className={`select join-item ${historyType == 'named' ? '' : 'w-full'}`}
+            // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+            // Should be resolved in future versions of browsers.
+            className={`select appearance-none join-item ${historyType == 'named' ? '' : 'w-full'}`}
             name={props.name}
             onChange={props.updateParamValue}
             value={historyType}
@@ -1054,7 +1060,9 @@ export function HistoryModeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History Mode" help_text = "">
           <select
-            className="select join-item w-full"
+            // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+            // Should be resolved in future versions of browsers.
+            className="select appearance-none join-item w-full"
             name="history_mode"
             onChange={(e) => {
               setHistoryMode(e.target.value);
@@ -1356,7 +1364,9 @@ export function VoiceWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <select
-        className="select w-full"
+        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+        // Should be resolved in future versions of browsers.
+        className="select appearance-none w-full"
         name={props.name}
         onChange={updateParamValue}
         value={syntheticVoiceId}
