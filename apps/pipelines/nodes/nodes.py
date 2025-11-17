@@ -54,6 +54,7 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
+from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -64,6 +65,8 @@ from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
+
+logger = logging.getLogger("ocs.pipelines.nodes")
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
@@ -151,29 +154,18 @@ def get_llm_provider_model(llm_provider_model_id: int):
 class LLMResponseMixin(BaseModel):
     llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
-    llm_temperature: float = Field(
-        default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
-    )
     llm_model_parameters: dict[str, Any] = Field(default_factory=dict, json_schema_extra=UiSchema(widget=Widgets.none))
 
-    @field_validator("llm_model_parameters", mode="before")
-    def ensure_default_parameters_are_present(cls, value, info: FieldValidationInfo):
-        if not info.data.get("llm_provider_model_id"):
-            return {}
-
-        try:
-            model = get_llm_provider_model(info.data.get("llm_provider_model_id"))
-            if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
-                return params_cls.model_validate(
-                    value or {},
-                    context={
-                        "model_max_token_limit": model.max_token_limit,
-                        "temperature": info.data.get("llm_temperature"),
-                    },
-                ).model_dump()
-        except Exception:
-            pass
-        return value or {}
+    @model_validator(mode="before")
+    @classmethod
+    def ensure_default_parameters(cls, data) -> Self:
+        if llm_provider_model_id := data.get("llm_provider_model_id"):
+            model = get_llm_provider_model(llm_provider_model_id)
+            params_cls = LLM_MODEL_PARAMETERS.get(model.name, BasicParameters)
+            data["llm_model_parameters"] = params_cls.model_validate(data.get("llm_model_parameters", {})).model_dump()
+        else:
+            data["llm_model_parameters"] = {}
+        return data
 
     @model_validator(mode="after")
     def validate_llm_model(self):
@@ -195,10 +187,7 @@ class LLMResponseMixin(BaseModel):
 
         # Validate model parameters
         if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
-            params_cls.model_validate(
-                self.llm_model_parameters,
-                context={"temperature": self.llm_temperature},
-            )
+            params_cls.model_validate(self.llm_model_parameters)
 
         return self
 
@@ -214,9 +203,9 @@ class LLMResponseMixin(BaseModel):
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
     def get_chat_model(self):
-        return self.get_llm_service().get_chat_model(
-            get_llm_provider_model(self.llm_provider_model_id).name, self.llm_temperature, **self.llm_model_parameters
-        )
+        model_name = get_llm_provider_model(self.llm_provider_model_id).name
+        logger.debug(f"Calling {model_name} with parameters: {self.llm_model_parameters}")
+        return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
 
 
 class HistoryMixin(LLMResponseMixin):

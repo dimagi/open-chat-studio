@@ -1,7 +1,7 @@
 import logging
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import cached_property
 from typing import cast
 from urllib.parse import urlparse
@@ -35,6 +35,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django.utils.timesince import timesince
 from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
@@ -1069,6 +1070,30 @@ def _get_languages_for_chat(session):
     return available_languages, translatable_languages
 
 
+def _add_time_gap_info(messages, gap_threshold_hours=4):
+    """
+    Add time gap information to messages for display in the template.
+    Returns a list of messages with time_gap and time_gap_text attributes added.
+    """
+    threshold = timedelta(hours=gap_threshold_hours)
+    enhanced_messages = []
+
+    for i, message in enumerate(messages):
+        # Add gap info attributes
+        message.time_gap_text = None
+
+        if i > 0:
+            prev_message = messages[i - 1]
+            time_diff = message.created_at - prev_message.created_at
+
+            if time_diff > threshold:
+                message.time_gap_text = f"{timesince(prev_message.created_at, message.created_at)} later"
+
+        enhanced_messages.append(message)
+
+    return enhanced_messages
+
+
 @experiment_session_view()
 @verify_session_access_cookie
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -1079,6 +1104,10 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     selected_tags = list(filter(None, request.GET.get("tag_filter", "").split(",")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
+    try:
+        highlight_message_id = int(request.GET.get("message_id"))
+    except (ValueError, TypeError):
+        highlight_message_id = None
 
     chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
     all_tags = (
@@ -1132,11 +1161,20 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         total_pages = 1
         page_start_index = 1
     else:
+        # on the first load, scroll to the page to focus on a specific message id
+        if highlight_message_id and not request.GET.get("page"):
+            messages_before = messages_queryset.filter(id__lt=highlight_message_id).count()
+            page = (messages_before // page_size) + 1
+
         paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
         current_page = paginator.page(page)
-        current_page_messages = current_page.object_list
+        current_page_messages = list(current_page.object_list)
         total_pages = paginator.num_pages
         page_start_index = current_page.start_index()
+
+    # Add time gap information to messages
+    current_page_messages = _add_time_gap_info(current_page_messages)
+
     context = {
         "experiment_session": session,
         "experiment": experiment,
@@ -1158,6 +1196,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "default_translation_models_by_providers": get_default_translation_models_by_provider(),
         "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
         "all_tags": all_tags,
+        "highlight_message_id": highlight_message_id,
     }
 
     return TemplateResponse(
