@@ -1,7 +1,7 @@
 import logging
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import cached_property
 from typing import cast
 from urllib.parse import urlparse
@@ -35,11 +35,12 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django.utils.timesince import timesince
 from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
-from django.views.generic import CreateView, UpdateView
+from django.views.generic import CreateView
 from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
@@ -74,7 +75,6 @@ from apps.experiments.filters import (
 from apps.experiments.forms import (
     ConsentForm,
     ExperimentForm,
-    ExperimentInvitationForm,
     ExperimentVersionForm,
     SurveyCompletedForm,
     TranslateMessagesForm,
@@ -93,7 +93,6 @@ from apps.experiments.models import (
 from apps.experiments.tables import (
     ChildExperimentRoutesTable,
     ExperimentSessionsTable,
-    ExperimentTable,
     ExperimentVersionsTable,
     ParentExperimentRoutesTable,
     TerminalBotsTable,
@@ -115,21 +114,8 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.base_experiment_table_view import BaseExperimentTableView
 from apps.web.dynamic_filters.datastructures import FilterParams
-
-
-@login_and_team_required
-@permission_required("experiments.view_experiment", raise_exception=True)
-def experiments_home(request, team_slug: str):
-    """Redirect to chatbots home - there should be only one main homepage."""
-    return HttpResponseRedirect(reverse("chatbots:chatbots_home", args=[team_slug]))
-
-
-class ExperimentTableView(BaseExperimentTableView):
-    model = Experiment
-    table_class = ExperimentTable
-    permission_required = "experiments.view_experiment"
+from apps.web.waf import WafRule, waf_allow
 
 
 class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -144,27 +130,12 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
     permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
+        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
         experiment_filter = Q()
         if experiment_id := self.kwargs.get("experiment_id"):
             experiment_filter = Q(experiment__id=experiment_id)
 
-        query_set = (
-            ExperimentSession.objects.with_last_message_created_at()
-            .filter(experiment_filter, team=self.request.team)
-            # Select related source
-            # experiment: participant.get_link_to_experiment_data
-            # participant__user: str(participant)
-            # chat: tags prefetch
-            .select_related("experiment", "participant__user", "chat")
-            .annotate_with_versions_list()
-            .prefetch_related(
-                Prefetch(
-                    "chat__tagged_items",
-                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                    to_attr="prefetched_tagged_items",
-                ),
-            )
-        )
+        query_set = ExperimentSession.objects.filter(experiment_filter, team=self.request.team)
         timezone = self.request.session.get("detected_tz", None)
 
         session_filter = ExperimentSessionFilter()
@@ -172,6 +143,26 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
             query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
         )
         return query_set
+
+    def get_table_data(self):
+        """Add expensive annotations only to the paginated data, not for counting."""
+        queryset = super().get_table_data()
+        # Add expensive annotations after filtering but before display
+        queryset = (
+            # Select related source
+            # experiment: participant.get_link_to_experiment_data
+            # participant__user: str(participant)
+            # chat: tags prefetch
+            queryset.select_related("experiment", "participant__user", "chat").prefetch_related(
+                Prefetch(
+                    "chat__tagged_items",
+                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                    to_attr="prefetched_tagged_items",
+                ),
+            )
+        )
+        # annotate_with_last_message_created_at is done by ExperimentSessionFilter
+        return queryset.annotate_with_versions_list()
 
 
 class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -256,7 +247,7 @@ class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         if self.request.POST.get("action") == "save_and_archive":
             experiment = get_object_or_404(Experiment, id=experiment.id, team=self.request.team)
             experiment.archive()
-            return redirect("experiments:experiments_home", self.request.team.slug)
+            return redirect("chatbots:chatbots_home", self.request.team.slug)
         return response
 
 
@@ -295,28 +286,6 @@ class CreateExperiment(BaseExperimentView, CreateView):
         return super().dispatch(request, *args, **kwargs)
 
 
-class EditExperiment(BaseExperimentView, UpdateView):
-    title = "Update Experiment"
-    button_title = "Update"
-    permission_required = "experiments.change_experiment"
-
-    def get_initial(self):
-        initial = super().get_initial()
-        initial["type"] = "assistant" if self.object.assistant_id else "llm"
-        return initial
-
-    def get_object(self, queryset=None):
-        obj = super().get_object(queryset)
-        if obj.working_version:
-            raise Http404("Experiment not found.")
-        return obj
-
-    def post(self, request, *args, **kwargs):
-        if self.get_object().is_archived:
-            raise PermissionDenied("Cannot edit archived experiments.")
-        return super().post(request, *args, **kwargs)
-
-
 def _get_voice_provider_alpine_context(request):
     """Add context required by the experiments/experiment_form.html template."""
     exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
@@ -346,14 +315,6 @@ def _get_voice_provider_alpine_context(request):
         "llm_providers": request.team.llmprovider_set.all(),
         "llm_options": get_llm_provider_choices(request.team),
     }
-
-
-@login_and_team_required
-@permission_required("experiments.delete_experiment", raise_exception=True)
-def delete_experiment(request, team_slug: str, pk: int):
-    safety_layer = get_object_or_404(Experiment, id=pk, team=request.team)
-    safety_layer.delete()
-    return redirect("experiments:experiments_home", team_slug=team_slug)
 
 
 class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
@@ -457,21 +418,6 @@ class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionReq
         return f"{url}#versions"
 
 
-@login_and_team_required
-@permission_required("experiments.view_experiment", raise_exception=True)
-def version_create_status(request, team_slug: str, experiment_id: int):
-    experiment = Experiment.objects.get(id=experiment_id, team=request.team)
-    return TemplateResponse(
-        request,
-        "experiments/create_version_button.html",
-        {
-            "active_tab": "experiments",
-            "experiment": experiment,
-            "trigger_refresh": experiment.create_version_task_id is not None,
-        },
-    )
-
-
 def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
     experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
 
@@ -517,13 +463,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     context.update(filter_context)
 
     return TemplateResponse(request, template_name, context)
-
-
-@login_and_team_required
-@permission_required("experiments.view_experiment", raise_exception=True)
-def single_experiment_home(request, team_slug: str, experiment_id: int):
-    """Redirect to single chatbot home - chatbots should be the primary interface for individual experiments."""
-    return HttpResponseRedirect(reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id]))
 
 
 def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
@@ -627,6 +566,7 @@ def experiment_chat_session(
     )
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @experiment_session_view()
 @verify_session_access_cookie
 @require_POST
@@ -634,6 +574,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
     return _experiment_session_message(request, version_number)
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @experiment_session_view()
 @require_POST
 @xframe_options_exempt
@@ -937,54 +878,6 @@ def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, 
         return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
 
 
-@login_and_team_required
-@permission_required("experiments.invite_participants", raise_exception=True)
-def experiment_invitations(request, team_slug: str, experiment_id: int, origin="experiments"):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    experiment_version = experiment.default_version
-    sessions = experiment.sessions.order_by("-created_at").filter(
-        status__in=["setup", "pending"],
-        participant__isnull=False,
-    )
-    form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
-    if request.method == "POST":
-        post_form = ExperimentInvitationForm(request.POST)
-        if post_form.is_valid():
-            if ExperimentSession.objects.filter(
-                team=request.team,
-                experiment_id=experiment_id,
-                status__in=["setup", "pending"],
-                participant__identifier=post_form.cleaned_data["email"],
-            ).exists():
-                participant_email = post_form.cleaned_data["email"]
-                messages.info(request, f"{participant_email} already has a pending invitation.")
-            else:
-                with transaction.atomic():
-                    session = WebChannel.start_new_session(
-                        experiment,
-                        participant_identifier=post_form.cleaned_data["email"],
-                        session_status=SessionStatus.SETUP,
-                        timezone=request.session.get("detected_tz", None),
-                    )
-                if post_form.cleaned_data["invite_now"]:
-                    send_experiment_invitation(session)
-        else:
-            form = post_form
-
-    version_specific_vars = {
-        "experiment_name": experiment_version.name,
-        "experiment_description": experiment_version.description,
-    }
-    template_name = (
-        "chatbots/chatbot_invitations.html" if origin == "chatbots" else "experiments/experiment_invitations.html"
-    )
-    return TemplateResponse(
-        request,
-        template_name,
-        {"invitation_form": form, "experiment": experiment, "sessions": sessions, **version_specific_vars},
-    )
-
-
 @require_POST
 @permission_required("experiments.download_chats", raise_exception=True)
 @login_and_team_required
@@ -1177,6 +1070,30 @@ def _get_languages_for_chat(session):
     return available_languages, translatable_languages
 
 
+def _add_time_gap_info(messages, gap_threshold_hours=4):
+    """
+    Add time gap information to messages for display in the template.
+    Returns a list of messages with time_gap and time_gap_text attributes added.
+    """
+    threshold = timedelta(hours=gap_threshold_hours)
+    enhanced_messages = []
+
+    for i, message in enumerate(messages):
+        # Add gap info attributes
+        message.time_gap_text = None
+
+        if i > 0:
+            prev_message = messages[i - 1]
+            time_diff = message.created_at - prev_message.created_at
+
+            if time_diff > threshold:
+                message.time_gap_text = f"{timesince(prev_message.created_at, message.created_at)} later"
+
+        enhanced_messages.append(message)
+
+    return enhanced_messages
+
+
 @experiment_session_view()
 @verify_session_access_cookie
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -1187,6 +1104,10 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     selected_tags = list(filter(None, request.GET.get("tag_filter", "").split(",")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
+    try:
+        highlight_message_id = int(request.GET.get("message_id"))
+    except (ValueError, TypeError):
+        highlight_message_id = None
 
     chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
     all_tags = (
@@ -1240,11 +1161,20 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         total_pages = 1
         page_start_index = 1
     else:
+        # on the first load, scroll to the page to focus on a specific message id
+        if highlight_message_id and not request.GET.get("page"):
+            messages_before = messages_queryset.filter(id__lt=highlight_message_id).count()
+            page = (messages_before // page_size) + 1
+
         paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
         current_page = paginator.page(page)
-        current_page_messages = current_page.object_list
+        current_page_messages = list(current_page.object_list)
         total_pages = paginator.num_pages
         page_start_index = current_page.start_index()
+
+    # Add time gap information to messages
+    current_page_messages = _add_time_gap_info(current_page_messages)
+
     context = {
         "experiment_session": session,
         "experiment": experiment,
@@ -1266,6 +1196,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "default_translation_models_by_providers": get_default_translation_models_by_provider(),
         "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
         "all_tags": all_tags,
+        "highlight_message_id": highlight_message_id,
     }
 
     return TemplateResponse(
@@ -1483,7 +1414,7 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
     experiment.save()
     url = (
         reverse(
-            "experiments:single_experiment_home",
+            "chatbots:single_chatbot_home",
             kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
         )
         + "#versions"
@@ -1503,7 +1434,7 @@ def archive_experiment_version(request, team_slug: str, experiment_id: int, vers
     )
     url = (
         reverse(
-            "experiments:single_experiment_home",
+            "chatbots:single_chatbot_home",
             kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
         )
         + "#versions"
@@ -1528,53 +1459,10 @@ def update_version_description(request, team_slug: str, experiment_id: int, vers
 
 
 @login_and_team_required
-def experiment_version_details(request, team_slug: str, experiment_id: int, version_number: int):
-    try:
-        experiment_version = Experiment.objects.get_all().get(
-            team=request.team, working_version_id=experiment_id, version_number=version_number
-        )
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
-    return render(request, "experiments/components/experiment_version_details_content.html", context)
-
-
-@login_and_team_required
 def get_release_status_badge(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     context = {"has_changes": experiment.compare_with_latest(), "experiment": experiment}
     return render(request, "experiments/components/unreleased_badge.html", context)
-
-
-@login_and_team_required
-@permission_required(("experiments.change_experiment", "pipelines.add_pipeline"))
-def migrate_experiment_view(request, team_slug, experiment_id):
-    from apps.pipelines.helper import convert_non_pipeline_experiment_to_pipeline
-
-    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
-    failed_url = reverse(
-        "experiments:single_experiment_home",
-        kwargs={"team_slug": team_slug, "experiment_id": experiment_id},
-    )
-    if experiment.parent_links.exists():
-        messages.error(
-            request, "Child experiments will be migrated along with their 'parent'. Please migrate the parent."
-        )
-        return redirect(failed_url)
-
-    try:
-        with transaction.atomic():
-            experiment = Experiment.objects.get(id=experiment_id)
-            convert_non_pipeline_experiment_to_pipeline(experiment)
-        messages.success(request, f'Successfully migrated experiment "{experiment.name}" to chatbot!')
-        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
-    except Exception:
-        logging.exception(
-            "Failed to migrate experiment to chatbot", details={"team_slug": team_slug, "experiment_id": experiment_id}
-        )
-        messages.error(request, "There was an error during the migration. Please try again later.")
-        return redirect(failed_url)
 
 
 @cache_control(max_age=settings.EXPERIMENT_TREND_CACHE_TIMEOUT, private=True)

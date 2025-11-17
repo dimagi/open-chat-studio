@@ -2,7 +2,17 @@ import dataclasses
 from collections import defaultdict
 
 from django.db import transaction
+from pydantic import BaseModel
 
+from apps.service_providers.llm_service.model_parameters import (
+    AnthropicNonReasoningParameters,
+    AnthropicReasoningParameters,
+    ClaudeHaikuLatestParameters,
+    ClaudeOpus4_20250514Parameters,
+    GPT5Parameters,
+    GPT5ProParameters,
+    OpenAIReasoningParameters,
+)
 from apps.utils.deletion import get_related_objects, get_related_pipelines_queryset
 
 
@@ -13,6 +23,7 @@ class Model:
     is_default: bool = False
     deprecated: bool = False
     is_translation_default: bool = False
+    parameters: type[BaseModel] | None = None
 
 
 def k(n: int) -> int:
@@ -21,9 +32,9 @@ def k(n: int) -> int:
 
 DEFAULT_LLM_PROVIDER_MODELS = {
     "azure": [
-        Model("o4-mini", 200000),
-        Model("o3", 200000),
-        Model("o3-mini", 200000),
+        Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
+        Model("o3", 200000, parameters=OpenAIReasoningParameters),
+        Model("o3-mini", 200000, parameters=OpenAIReasoningParameters),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
         Model("gpt-4.1-nano", 1000000),
@@ -35,29 +46,29 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-35-turbo-16k", 16384, deprecated=True),
     ],
     "anthropic": [
-        Model("claude-sonnet-4-20250514", k(200)),
-        Model("claude-opus-4-20250514", k(200), is_translation_default=True),
-        Model("claude-3-7-sonnet-20250219", k(200)),
-        Model("claude-3-5-sonnet-latest", k(200)),
-        Model("claude-3-5-haiku-latest", k(200), is_default=True),
-        Model("claude-3-opus-latest", k(200), deprecated=True),
-        Model("claude-2.0", k(100), deprecated=True),
-        Model("claude-2.1", k(200), deprecated=True),
-        Model("claude-instant-1.2", k(100), deprecated=True),
+        Model("claude-sonnet-4-20250514", k(200), parameters=AnthropicReasoningParameters),
+        Model("claude-opus-4-20250514", k(200), is_translation_default=True, parameters=ClaudeOpus4_20250514Parameters),
+        Model("claude-3-7-sonnet-20250219", k(200), parameters=AnthropicNonReasoningParameters),
+        Model("claude-3-5-sonnet-latest", k(200), parameters=AnthropicNonReasoningParameters),
+        Model("claude-3-5-haiku-latest", k(200), is_default=True, parameters=ClaudeHaikuLatestParameters),
+        Model("claude-3-opus-latest", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
+        Model("claude-2.0", k(100), deprecated=True, parameters=AnthropicNonReasoningParameters),
+        Model("claude-2.1", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
+        Model("claude-instant-1.2", k(100), deprecated=True, parameters=AnthropicNonReasoningParameters),
     ],
     "openai": [
-        Model("o4-mini", 200000),
-        Model("o4-mini-high", 200000),
+        Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
+        Model("o4-mini-high", 200000, deprecated=True),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
         Model("gpt-4.1-nano", 1000000),
-        Model("o3", 128000),
-        Model("o3-mini", 128000),
+        Model("o3", 128000, parameters=OpenAIReasoningParameters),
+        Model("o3-mini", 128000, parameters=OpenAIReasoningParameters),
         Model("gpt-4o-mini", 128000),
         Model("gpt-4o", 128000),
         Model("chatgpt-4o-latest", 128000),
-        Model("o1-preview", 128000),
-        Model("o1-mini", 128000),
+        Model("o1-preview", 128000, deprecated=True),
+        Model("o1-mini", 128000, deprecated=True),
         Model("gpt-4", k(8)),
         Model("gpt-4-turbo", 128000),
         Model("gpt-4-turbo-preview", 128000),
@@ -66,6 +77,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4-0613", k(8), deprecated=True),
         Model("gpt-3.5-turbo", k(16)),
         Model("gpt-3.5-turbo-1106", k(16)),
+        Model("gpt-5", k(400), parameters=GPT5Parameters),
+        Model("gpt-5-mini", k(400), parameters=GPT5Parameters),
+        Model("gpt-5-nano", k(400), parameters=GPT5Parameters),
+        Model("gpt-5-pro", k(400), parameters=GPT5ProParameters),
     ],
     "groq": [
         Model("whisper-large-v3", k(8)),
@@ -118,6 +133,13 @@ DEFAULT_EMBEDDING_PROVIDER_MODELS = {
     "openai": ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
     "google": ["gemini-embedding-001"],
 }
+
+
+LLM_MODEL_PARAMETERS = {}
+for _provider, models in DEFAULT_LLM_PROVIDER_MODELS.items():
+    for model in models:
+        if model.parameters:
+            LLM_MODEL_PARAMETERS[model.name] = model.parameters
 
 
 def get_default_model(provider_type: str) -> Model:

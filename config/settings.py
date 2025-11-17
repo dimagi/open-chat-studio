@@ -35,7 +35,9 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DEBUG", default=True)
 IS_TESTING = "pytest" in sys.modules
-USE_DEBUG_TOOLBAR = DEBUG and not IS_TESTING
+USE_DEBUG_TOOLBAR = env.bool("USE_DEBUG_TOOLBAR", default=DEBUG)
+if IS_TESTING:
+    USE_DEBUG_TOOLBAR = False
 
 ALLOWED_HOSTS = ["*"]
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
@@ -223,6 +225,7 @@ else:
             "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="***"),
             "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
             "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
+            "CONN_HEALTH_CHECKS": True,
         }
     }
 
@@ -519,8 +522,6 @@ PROJECT_METADATA = {
 
 USE_HTTPS_IN_ABSOLUTE_URLS = False  # set this to True in production to have URLs generated with https instead of http
 
-ADMINS = [("Dimagi Admins", "devops+openchatstudio@dimagi.com")]
-
 # Add your google analytics ID to the environment to connect to Google Analytics
 GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
 
@@ -767,6 +768,7 @@ CORS_ALLOW_HEADERS = [
     # "x-csrftoken",
     "x-requested-with",
     "x-ocs-widget-version",
+    "x-embed-key",
 ]
 
 CORS_ALLOW_METHODS = [

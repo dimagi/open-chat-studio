@@ -5,9 +5,8 @@
   {{ form.non_field_errors }}
   {% render_form_fields form "name" %}
 
-  <div x-data="datasetBuilder()" x-init="init()">
-    {% render_form_fields form "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_data" %}
-
+  <div x-data="datasetModeSelectorBuilder()" x-init="init()">
+    {% render_form_fields form "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_file_id" %}
     <div x-show="!loaded" class="text-center py-8">
       <i class="fa-solid fa-spinner fa-spin fa-2x text-primary"></i>
     </div>
@@ -220,7 +219,7 @@
 
           <!-- Hidden fields for form submission -->
           <input type="hidden" name="column_mapping" x-model="columnMappingJson">
-          <input type="hidden" name="csv_data" x-model="csvDataJson">
+          <input type="hidden" name="csv_file_id" x-model="csvFileId">
         </div>
       </div>
 
@@ -270,16 +269,19 @@
         </div>
       </div>
     </dialog>
-  </div> <!-- End of datasetBuilder div -->
+  </div> <!-- End of datasetModeSelectorBuilder div -->
 {% endblock form %}
 
 {% block page_js %}
   <script src="{% static 'js/evaluations-bundle.js' %}"></script>
   <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
-    function datasetBuilder() {
+    function datasetModeSelectorBuilder() {
       // Extend the shared datasetModeSelector with create-specific functionality
-      const baseComponent = window.datasetModeSelector({ defaultMode: 'clone' });
+      const baseComponent = window.datasetModeSelector({
+        defaultMode: 'clone',
+        sessionIdsFetchUrl: "{% url 'evaluations:dataset_sessions_selection_json' team.slug %}"
+      });
 
       return {
         ...baseComponent,
@@ -304,7 +306,7 @@
         csvData: null,
         columnMapping: { input: '', output: '' },
         columnMappingJson: '{}',
-        csvDataJson: '[]',
+        csvFileId: '',
         contextMappings: [],
         participantDataMappings: [],
         sessionStateMappings: [],
@@ -373,6 +375,10 @@
           } else if (this.mode === 'csv') {
             if (!this.csvParsed || !this.columnMapping.input || !this.columnMapping.output) {
               this.errorMessages.push('Please upload a CSV file and map both input and output columns.');
+            }
+
+            if (!this.csvFileId) {
+              this.errorMessages.push('CSV file ID is missing. Please re-upload the CSV file.');
             }
 
             // Check for field validation errors across all field types
@@ -612,6 +618,7 @@
         resetCsv() {
           this.csvParsed = false;
           this.csvData = null;
+          this.csvFileId = '';
           this.columnMapping = { input: '', output: '' };
           this.contextMappings = [];
           this.participantDataMappings = [];
@@ -725,9 +732,9 @@
 
           this.columnMappingJson = JSON.stringify(mapping);
 
-          // Store CSV data for form submission
-          if (this.csvData) {
-            this.csvDataJson = JSON.stringify(this.csvData.all_rows || []);
+          // Store CSV file ID for form submission
+          if (this.csvData && this.csvData.file_id) {
+            this.csvFileId = this.csvData.file_id.toString();
           }
         },
 

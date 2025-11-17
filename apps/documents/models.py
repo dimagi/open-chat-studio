@@ -208,6 +208,10 @@ class Collection(BaseTeamModel, VersionsMixin):
             else:
                 # Create versions of file chunk embeddings and add them to the new collection
                 for embedding in self.filechunkembedding_set.iterator(chunk_size=50):
+                    # Skip embeddings for files that are no longer in the collection
+                    if embedding.file_id not in file_versions:
+                        continue
+
                     embedding_version = embedding.create_new_version(save=False)
                     embedding_version.collection = new_version
 

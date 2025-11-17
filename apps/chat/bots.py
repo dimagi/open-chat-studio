@@ -303,7 +303,7 @@ class PipelineBot:
         }
         with self.trace_service.span("Run Pipeline", inputs=kwargs | {"input_state": input_state.json_safe()}) as span:
             chat_message = self.invoke_pipeline(**kwargs)
-            span.set_current_span_outputs({"content": chat_message.content})
+            span.set_outputs({"content": chat_message.content})
             return chat_message
 
     def invoke_pipeline(
@@ -582,7 +582,7 @@ class EventBot:
             session=self.session,
             inputs={"input": event_prompt},
             metadata=self.trace_info.metadata,
-        ):
+        ) as span:
             config = self.trace_service.get_langchain_config()
             response = llm.invoke(
                 [
@@ -591,7 +591,7 @@ class EventBot:
                 ],
                 config=config,
             )
-            self.trace_service.set_current_span_outputs({"response": response.content})
+            span.set_outputs({"response": response.content})
 
             message = response.content
             if self.history_manager:

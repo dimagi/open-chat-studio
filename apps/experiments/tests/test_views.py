@@ -7,7 +7,7 @@ import pytest
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
-from django.test import RequestFactory, override_settings
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.chat.channels import WebChannel
@@ -21,7 +21,6 @@ from apps.experiments.models import (
 )
 from apps.experiments.views.experiment import (
     ExperimentForm,
-    ExperimentTableView,
     _verify_user_or_start_session,
 )
 from apps.teams.backends import add_user_to_team
@@ -386,25 +385,6 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
     assert ci_resource.files.filter(name="ci.text").exists()
     fs_resource = session.chat.attachments.get(tool_type="file_search")
     assert fs_resource.files.filter(name="fs.text").exists()
-
-
-class TestExperimentTableView:
-    def test_get_queryset(self, experiment):
-        team = experiment.team
-        experiment.create_new_version()
-        archived_working = ExperimentFactory(team=team)
-        archived_version = archived_working.create_new_version()
-        archived_version.is_archived = archived_working.is_archived = True
-        archived_version.save()
-        archived_working.save()
-        assert Experiment.objects.get_all().count() == 4
-
-        request = RequestFactory().get(reverse("experiments:table", args=[team.slug]))
-        request.team = team
-        view = ExperimentTableView()
-        view.request = request
-        view.kwargs = {}
-        assert list(view.get_queryset().all()) == [experiment]
 
 
 @pytest.mark.django_db()

@@ -1,6 +1,13 @@
 {
   "description": "Runs python",
   "properties": {
+    "code": {
+      "default": "# You must define a main function, which takes the node input as a string.\n# Return a string to pass to the next node.\n\n# Learn more about Python nodes at https://docs.openchatstudio.com/concepts/pipelines/nodes/#python-node\n\ndef main(input: str, **kwargs) -> str:\n    return input\n",
+      "description": "The code to run",
+      "title": "Code",
+      "type": "string",
+      "ui:widget": "code"
+    },
     "tag": {
       "default": "",
       "description": "The tag that the output message should be tagged with",
@@ -11,13 +18,6 @@
       "title": "Node Name",
       "type": "string",
       "ui:widget": "node_name"
-    },
-    "code": {
-      "default": "# You must define a main function, which takes the node input as a string.\n# Return a string to pass to the next node.\n\n# Learn more about Python nodes at https://docs.openchatstudio.com/concepts/pipelines/nodes/#python-node\n\ndef main(input: str, **kwargs) -> str:\n    return input\n",
-      "description": "The code to run",
-      "title": "Code",
-      "type": "string",
-      "ui:widget": "code"
     }
   },
   "required": [

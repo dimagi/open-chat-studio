@@ -2,3 +2,7 @@
        class="{{ css_class }}"
        value="{{ record.external_id }}"
        @change="{{ js_function }}">
+<span>{{ verbose_name }}</span>
+{% if help_content %}
+{% include "generic/help.html" %}
+{% endif %}

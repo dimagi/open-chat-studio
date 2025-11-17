@@ -7,7 +7,7 @@
         <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
           <ul>
             <li>Experiments</li>
-            <li><a href="{% url 'experiments:single_experiment_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
+            <li><a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
           </ul>
         </div>
       {% endif %}

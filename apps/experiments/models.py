@@ -800,7 +800,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse("experiments:single_experiment_home", args=[get_slug_for_team(self.team_id), self.id])
+        return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_version(self, version: int) -> "Experiment":
         """
@@ -1659,10 +1659,26 @@ class SessionStatus(models.TextChoices):
 class ExperimentSessionQuerySet(models.QuerySet):
     def annotate_with_last_message_created_at(self):
         """Annotate queryset with the created_at timestamp of the last message in each session."""
-        last_message_subquery = (
+        last_message_subquery = Subquery(
             ChatMessage.objects.filter(chat_id=OuterRef("chat_id")).order_by("-created_at").values("created_at")[:1]
         )
-        return self.annotate(last_message_created_at=models.Subquery(last_message_subquery))
+        return self.annotate(last_message_created_at=last_message_subquery)
+
+    def annotate_with_first_message_created_at(self):
+        """Annotate queryset with the created_at timestamp of the first message in each session."""
+        first_message_subquery = Subquery(
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id")).order_by("created_at").values("created_at")[:1]
+        )
+        return self.annotate(first_message_created_at=first_message_subquery)
+
+    def annotate_with_message_count(self):
+        message_count_subquery = Subquery(
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
+            .values("chat")
+            .annotate(count=Count("id"))
+            .values("count")[:1]
+        )
+        return self.annotate(message_count=message_count_subquery)
 
     def annotate_with_versions_list(self):
         """Annotate queryset with a comma-separated list of experiment versions used in each session."""
@@ -1850,12 +1866,12 @@ class ExperimentSession(BaseTeamModel):
                     session=self,
                     inputs={"input": instruction_prompt},
                     metadata=trace_info.metadata,
-                ):
+                ) as span:
                     bot_message = self._bot_prompt_for_user(
                         instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
                     )
                     self.try_send_message(message=bot_message)
-                    trace_service.set_current_span_outputs({"response": bot_message})
+                    span.set_outputs({"response": bot_message})
                     trace_info = trace_service.get_trace_metadata()
                 return trace_info
         except Exception as e:

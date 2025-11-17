@@ -12,18 +12,60 @@
 {% endblock form %}
 
 {% block post_form %}
-  <h2 class="pg-subtitle">{% translate "Dataset Messages" %}</h2>
-  <div id="dataset-messages-table"
-       hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}"
-       hx-trigger="load, refreshTable from:body"
-       hx-target="this"
-       hx-swap="innerHTML">
-    <div class="text-center py-4">
-      <i class="fa-solid fa-spinner fa-spin"></i> {% translate "Loading messages..." %}
+  {% if object.is_processing or object.is_pending %}
+    <div class="mb-6">
+      <h2 class="text-lg font-semibold mb-4">{% translate "Creating Dataset Messages" %}</h2>
+      <div class="progress-wrapper">
+        <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
+        </div>
+      </div>
+      <div id="progress-bar-message" class="mt-2 text-sm text-center">{% translate "Waiting for task to start..." %}</div>
     </div>
-  </div>
 
-  <div x-data="datasetModeSelector({ defaultMode: 'manual' })" x-init="init()" class="mt-6">
+    <script>
+      const progressUrl = "{% url 'celery_progress:task_status' celery_job_id %}";
+      CeleryProgressBar.initProgressBar(progressUrl, {
+        onSuccess: () => {
+          location.reload()  // Reload to show completed dataset
+        },
+        onProgress: (progressBarElement, progressBarMessageElement, progress) => {
+          progressBarElement.style.width = progress.percent + "%";
+          let description = progress.description || progress.current + ' of ' + progress.total + ' processed';
+          if (progress.current === 0) {
+            if (progress.pending === true) {
+              progressBarMessageElement.textContent = '{% translate "Waiting for task to start..." %}';
+            } else {
+              progressBarMessageElement.textContent = '{% translate "Task started..." %}';
+            }
+          } else {
+            progressBarMessageElement.textContent = description;
+          }
+        }
+      });
+    </script>
+  {% else %}
+    {% if object.is_failed and object.error_message %}
+      <div class="alert alert-error mb-4">
+        <i class="fa-solid fa-exclamation-triangle"></i>
+        <div>
+          <h3 class="font-bold">{% translate "Dataset Creation Failed" %}</h3>
+          <p>{{ object.error_message }}</p>
+          <p class="text-sm mt-2">{% translate "You can still add messages manually below." %}</p>
+        </div>
+      </div>
+    {% endif %}
+    <h2 class="pg-subtitle">{% translate "Dataset Messages" %}</h2>
+    <div id="dataset-messages-table"
+         hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}"
+         hx-trigger="load, refreshTable from:body"
+         hx-target="this"
+         hx-swap="innerHTML">
+      <div class="text-center py-4">
+        <i class="fa-solid fa-spinner fa-spin"></i> {% translate "Loading messages..." %}
+      </div>
+    </div>
+
+  <div x-data="datasetModeSelector({ defaultMode: 'manual', sessionIdsFetchUrl: '{% url 'evaluations:dataset_sessions_selection_json' team.slug %}' })" x-init="init()" class="mt-6">
     <h3 class="text-lg font-semibold mb-4">{% translate "Add Messages to Dataset" %}</h3>
 
     <!-- Mode selection -->
@@ -139,6 +181,8 @@
       </div>
     </div>
   </div>
+
+  {% endif %}
 
   <dialog id="editMessageModal" class="modal"></dialog>
 {% endblock post_form %}

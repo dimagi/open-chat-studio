@@ -148,7 +148,7 @@ class LlmService(pydantic.BaseModel):
     def get_assistant(self, assistant_id: str, as_agent=False):
         raise NotImplementedError
 
-    def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
         raise NotImplementedError
 
     def transcribe_audio(self, audio: BytesIO) -> str:
@@ -252,11 +252,11 @@ class OpenAIGenericService(LlmService):
     openai_api_key: str
     openai_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
         model = ChatOpenAI(
             model=llm_model,
             temperature=1 if llm_model.startswith(("o3", "o4", "gpt-5")) else temperature,
-            **self._get_model_kwargs(),
+            **self._get_model_kwargs(**kwargs),
         )
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
@@ -278,11 +278,11 @@ class OpenAIGenericService(LlmService):
         """Get token counter for this LLM service."""
         return OpenAITokenCounter(model=model)
 
-    def _get_model_kwargs(self):
-        return {
-            "openai_api_key": self.openai_api_key,
-            "openai_api_base": self.openai_api_base,
-        }
+    def _get_model_kwargs(self, **kwargs) -> dict:
+        if effort := kwargs.pop("effort", None):
+            kwargs["reasoning"] = {"effort": effort}
+
+        return {"openai_api_key": self.openai_api_key, "openai_api_base": self.openai_api_base, **kwargs}
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
@@ -346,9 +346,9 @@ class OpenAILlmService(OpenAIGenericService):
     openai_api_base: str = None
     openai_organization: str = None
 
-    def _get_model_kwargs(self):
+    def _get_model_kwargs(self, **kwargs) -> dict:
         return {
-            **super()._get_model_kwargs(),
+            **super()._get_model_kwargs(**kwargs),
             "openai_organization": self.openai_organization,
         }
 
@@ -397,7 +397,7 @@ class AzureLlmService(LlmService):
     openai_api_base: str
     openai_api_version: str
 
-    def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
@@ -421,13 +421,24 @@ class AnthropicLlmService(LlmService):
     anthropic_api_key: str
     anthropic_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
         return ChatAnthropic(
             anthropic_api_key=self.anthropic_api_key,
             anthropic_api_url=self.anthropic_api_base,
             model=llm_model,
             temperature=temperature,
+            **self._get_model_kwargs(**kwargs),
         )
+
+    def _get_model_kwargs(self, **kwargs) -> dict:
+        budget_tokens = kwargs.pop("budget_tokens", 1024)
+        if kwargs.pop("thinking", False):
+            kwargs["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": budget_tokens,
+            }
+
+        return kwargs
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
@@ -461,7 +472,7 @@ class DeepSeekLlmService(LlmService):
     deepseek_api_key: str
     deepseek_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
         return ChatOpenAI(
             model=llm_model,
             temperature=temperature,
@@ -483,7 +494,7 @@ class DeepSeekLlmService(LlmService):
 class GoogleLlmService(LlmService):
     google_api_key: str
 
-    def get_chat_model(self, llm_model: str, temperature: float) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
         return ChatGoogleGenerativeAI(
             model=llm_model,
             google_api_key=self.google_api_key,

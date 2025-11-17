@@ -176,6 +176,7 @@ def _new_api_message(request, experiment_id: uuid, version=None):
     )
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @require_POST
 @csrf_exempt
 @verify_hmac
@@ -235,7 +236,6 @@ class BaseChannelDialogView(View):
 
         platform_form = form.channel_form
         extra_form = form.extra_form if hasattr(form, "extra_form") else None
-
         context.update(
             {
                 "experiment": self.experiment,
