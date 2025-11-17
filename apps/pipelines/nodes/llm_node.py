@@ -166,8 +166,9 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
         search_tool = collection.get_search_tool(
             max_results=node.max_results, generate_citations=node.generate_citations
         )
-        # Wrap search tool with validation
-        search_tool = wrap_tool_with_validation(search_tool, validator)
+        if isinstance(search_tool, BaseTool):
+            # Wrap search tool with validation
+            search_tool = wrap_tool_with_validation(search_tool, validator)
         tools.append(search_tool)
 
     if node.disabled_tools:
