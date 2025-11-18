@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: 22.x
       - name: Install dependencies
-        run: npm install --include=optional
+        run: npm ci
       - name: Build front end
         run: npm run build
       - name: Check types
@@ -52,7 +52,7 @@ jobs:
           node-version: 22.x
       - name: Install dependencies
         run: |
-          npm install
+          npm ci
           sudo apt-get install -y ripgrep
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
