@@ -22,6 +22,7 @@ from django.templatetags.static import static as static_url
 from django.urls import include, path
 from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
+from oauth2_provider import urls as oauth2_urls
 
 from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
@@ -63,6 +64,7 @@ urlpatterns = [
     # redirect Django admin login to main login page
     path("django-admin/login/", RedirectView.as_view(pattern_name=settings.LOGIN_URL)),
     path("django-admin/", admin.site.urls),
+    path("o/", include(oauth2_urls)),
     path("i18n/", include("django.conf.urls.i18n")),
     path(
         "sitemap.xml",

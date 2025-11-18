@@ -89,6 +89,7 @@ THIRD_PARTY_APPS = [
     "health_check.contrib.redis",
     "template_partials",
     "silk",
+    "oauth2_provider",
 ]
 
 PROJECT_APPS = [
