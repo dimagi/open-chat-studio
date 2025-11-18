@@ -174,31 +174,24 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
-        query_set = (
+        queryset = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
             .select_related("team", "owner")
         )
         show_archived = self.request.GET.get("show_archived") == "on"
         if not show_archived:
-            query_set = query_set.filter(is_archived=False)
+            queryset = queryset.filter(is_archived=False)
 
         search = self.request.GET.get("search")
         if search:
-            query_set = similarity_search(
-                query_set,
+            queryset = similarity_search(
+                queryset,
                 search_phase=search,
                 columns=["name", "description"],
                 extra_conditions=Q(owner__username__icontains=search),
                 score=0.1,
             )
-        return query_set
-
-    def get_table_data(self):
-        """Add expensive annotations only to the paginated data, not for counting."""
-        from apps.experiments.models import ExperimentSession
-
-        queryset = super().get_table_data()
 
         # Define subqueries (moved from get_queryset)
         session_count_subquery = (
