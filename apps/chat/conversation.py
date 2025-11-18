@@ -1,7 +1,7 @@
 import contextlib
 import logging
 
-from langchain_classic.memory.prompt import SUMMARY_PROMPT
+from langchain.memory.prompt import SUMMARY_PROMPT
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, get_buffer_string, trim_messages
 from langchain_core.prompts import (
