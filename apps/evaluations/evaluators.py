@@ -1,5 +1,3 @@
-from typing import Literal
-
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
@@ -7,6 +5,7 @@ from pydantic.config import ConfigDict
 from pydantic_core import ValidationError
 
 from apps.evaluations.exceptions import EvaluationRunException
+from apps.evaluations.field_definitions import FieldDefinition
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.utils import schema_to_pydantic_model
 from apps.pipelines.nodes.base import UiSchema, Widgets
@@ -21,21 +20,6 @@ from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code
 class EvaluatorSchema(BaseModel):
     label: str
     icon: str = None
-
-
-class FieldDefinition(BaseModel):
-    """Definition of a single field in the output schema."""
-
-    type: Literal["string"]
-    description: str  # TODO: add more types and validations, etc.
-
-    @property
-    def python_type(self) -> type:
-        """Get the corresponding Python type for this field."""
-        type_mapping = {
-            "string": str,
-        }
-        return type_mapping[self.type]
 
 
 class EvaluatorResult(BaseModel):

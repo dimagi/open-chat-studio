@@ -356,7 +356,7 @@ def schema_to_pydantic_model(schema: dict, model_name: str = "DynamicModel") -> 
 
     Expected format:
         {
-            "field_name": FieldDefinition(type="string", description="Field description")
+            "field_name": FieldDefinition(type="string"|"int", description="...", ...)
         }
 
     Args:
@@ -366,19 +366,13 @@ def schema_to_pydantic_model(schema: dict, model_name: str = "DynamicModel") -> 
     Returns:
         Dynamically created Pydantic BaseModel class
     """
-    from apps.evaluations.evaluators import FieldDefinition
 
     pydantic_fields = {}
 
     for field_name, field_def in schema.items():
-        if not isinstance(field_def, FieldDefinition):
-            raise ValueError(f"Field '{field_name}' must be a FieldDefinition object")
-
-        # Get the Python type from the field definition
-        python_type = field_def.python_type
-        # Make field optional (can be None)
-        field_type = python_type | None
-
-        pydantic_fields[field_name] = (field_type, Field(description=field_def.description))
+        pydantic_fields[field_name] = (
+            field_def.python_type,
+            Field(**field_def.model_dump(exclude={"type"}, exclude_none=True)),
+        )
 
     return create_model(model_name, **pydantic_fields)
