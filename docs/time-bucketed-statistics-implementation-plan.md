@@ -6,6 +6,17 @@ This document provides a complete implementation plan for caching experiment and
 
 ## Design Decisions
 
+### Key Performance Optimizations
+
+This implementation uses SQL-based aggregation throughout to minimize Python loops and database queries:
+
+1. **Manager Methods**: Participant counts computed by summing `new_participant_count` from buckets (not querying sessions)
+2. **Update Tasks**: All statistics aggregated in SQL keyed by truncated date (hourly/daily/monthly)
+3. **Participant Counting**: Uses `ParticipantData` model for accurate unique participant tracking per experiment
+4. **Compression Tasks**: Filter old buckets directly in SQL using date comparisons (no Python loops)
+5. **Date Calculations**: Uses `dateutil.relativedelta` for accurate relative date calculations
+6. **Bulk Operations**: Uses `bulk_update()` to minimize database round-trips
+
 ### Key Simplifications
 
 1. **No Denormalized Totals Tables**: Query totals by summing across buckets (typically 1-30 buckets)
@@ -157,23 +168,16 @@ class ExperimentStatisticsBucketManager(models.Manager):
         """
         from django.db.models import Sum, Max
 
-        buckets = self.filter(experiment=experiment)
-
-        aggregates = buckets.aggregate(
+        aggregates = self.filter(experiment=experiment).aggregate(
             total_sessions=Sum('session_count'),
+            total_participants=Sum('new_participant_count'),
             total_messages=Sum('human_message_count'),
             last_activity=Max('last_activity_at'),
         )
 
-        # Participant count needs special handling (can't sum new_participant_count)
-        from apps.experiments.models import ExperimentSession
-        participant_count = ExperimentSession.objects.filter(
-            experiment=experiment
-        ).values('participant').distinct().count()
-
         return {
             'total_sessions': aggregates['total_sessions'] or 0,
-            'total_participants': participant_count,
+            'total_participants': aggregates['total_participants'] or 0,
             'total_messages': aggregates['total_messages'] or 0,
             'last_activity': aggregates['last_activity'],
         }
@@ -185,37 +189,25 @@ class ExperimentStatisticsBucketManager(models.Manager):
         """
         from django.db.models import Sum, Max
 
-        # Get bucket aggregates per experiment
+        # Get bucket aggregates per experiment (including participant count from buckets)
         bucket_data = self.filter(
             experiment_id__in=experiment_ids
         ).values('experiment_id').annotate(
             total_sessions=Sum('session_count'),
+            total_participants=Sum('new_participant_count'),
             total_messages=Sum('human_message_count'),
             last_activity=Max('last_activity_at'),
         )
 
-        # Get participant counts per experiment
-        from apps.experiments.models import ExperimentSession
-        participant_data = ExperimentSession.objects.filter(
-            experiment_id__in=experiment_ids
-        ).values('experiment_id').annotate(
-            participant_count=models.Count('participant', distinct=True)
-        )
-
-        # Combine results
+        # Build results dict
         results = {}
         for bucket in bucket_data:
             results[bucket['experiment_id']] = {
                 'total_sessions': bucket['total_sessions'] or 0,
+                'total_participants': bucket['total_participants'] or 0,
                 'total_messages': bucket['total_messages'] or 0,
                 'last_activity': bucket['last_activity'],
-                'total_participants': 0,  # Will be updated below
             }
-
-        for participant in participant_data:
-            exp_id = participant['experiment_id']
-            if exp_id in results:
-                results[exp_id]['total_participants'] = participant['participant_count']
 
         return results
 
@@ -385,6 +377,9 @@ Static configuration for statistics bucket compression.
 """
 
 from datetime import timedelta
+from django.utils import timezone
+from dateutil.relativedelta import relativedelta
+
 from apps.experiments.models import (
     ExperimentStatisticsBucket,
     SessionStatisticsBucket,
@@ -401,38 +396,15 @@ class CompressionPolicy:
     - 30+ days: Compress daily -> monthly
     """
 
-    # Thresholds (how old data must be before compression)
-    HOURLY_TO_DAILY_THRESHOLD = timedelta(days=1)
-    DAILY_TO_MONTHLY_THRESHOLD = timedelta(days=30)
+    @classmethod
+    def get_hourly_to_daily_cutoff(cls):
+        """Get cutoff datetime for compressing hourly buckets to daily (1 day ago)."""
+        return timezone.now() - relativedelta(days=1)
 
     @classmethod
-    def should_compress_to_daily(cls, bucket_start):
-        """Check if an hourly bucket should be compressed to daily."""
-        from django.utils import timezone
-        age = timezone.now() - bucket_start
-        return age > cls.HOURLY_TO_DAILY_THRESHOLD
-
-    @classmethod
-    def should_compress_to_monthly(cls, bucket_start):
-        """Check if a daily bucket should be compressed to monthly."""
-        from django.utils import timezone
-        age = timezone.now() - bucket_start
-        return age > cls.DAILY_TO_MONTHLY_THRESHOLD
-
-    @classmethod
-    def get_target_bucket_size(cls, current_size, bucket_start):
-        """
-        Determine the target bucket size for compression.
-        Returns None if no compression needed.
-        """
-        if current_size == ExperimentStatisticsBucket.BucketSize.HOUR:
-            if cls.should_compress_to_daily(bucket_start):
-                return ExperimentStatisticsBucket.BucketSize.DAY
-        elif current_size == ExperimentStatisticsBucket.BucketSize.DAY:
-            if cls.should_compress_to_monthly(bucket_start):
-                return ExperimentStatisticsBucket.BucketSize.MONTH
-
-        return None
+    def get_daily_to_monthly_cutoff(cls):
+        """Get cutoff datetime for compressing daily buckets to monthly (30 days ago)."""
+        return timezone.now() - relativedelta(days=30)
 
 
 # Configuration for scheduled tasks
@@ -504,11 +476,13 @@ def update_experiment_buckets(experiment_id=None, hours_back=24):
 
 def _update_experiment_buckets(experiment, cutoff):
     """Update buckets for a single experiment using SQL aggregation."""
-    from django.db.models import Count, Max
+    from django.db.models import Count, Max, OuterRef, Subquery
     from django.db.models.functions import TruncHour
+    from apps.participants.models import ParticipantData
 
-    # Use SQL to group messages by hour
-    message_aggregates = ChatMessage.objects.filter(
+    # Aggregate all statistics keyed by hour in single SQL query
+    # Get message counts and last activity per hour
+    message_stats = ChatMessage.objects.filter(
         chat__experiment_session__experiment=experiment,
         message_type=ChatMessageType.HUMAN,
         created_at__gte=cutoff,
@@ -519,47 +493,59 @@ def _update_experiment_buckets(experiment, cutoff):
         last_activity=Max('created_at'),
     )
 
-    # Update or create buckets for each hour
-    for agg in message_aggregates:
-        hour_start = agg['hour']
-        hour_end = hour_start + timedelta(hours=1)
+    # Get session counts per hour
+    session_stats = ExperimentSession.objects.filter(
+        experiment=experiment,
+        created_at__gte=cutoff,
+    ).annotate(
+        hour=TruncHour('created_at')
+    ).values('hour').annotate(
+        session_count=Count('id'),
+    )
 
-        # Get session and participant counts for this hour bucket
-        # Count sessions created in this hour
-        session_count = ExperimentSession.objects.filter(
-            experiment=experiment,
-            created_at__gte=hour_start,
-            created_at__lt=hour_end,
-        ).count()
+    # Get participant counts per hour using ParticipantData
+    participant_stats = ParticipantData.objects.filter(
+        experiment=experiment,
+        created_at__gte=cutoff,
+    ).annotate(
+        hour=TruncHour('created_at')
+    ).values('hour').annotate(
+        participant_count=Count('id'),
+    )
 
-        # Count NEW participants (whose first session was in this hour)
-        # This is the minimum created_at for each participant
-        new_participant_count = ExperimentSession.objects.filter(
-            experiment=experiment,
-            created_at__gte=hour_start,
-            created_at__lt=hour_end,
-        ).values('participant').annotate(
-            first_session=models.Min('created_at')
-        ).filter(
-            first_session__gte=hour_start,
-            first_session__lt=hour_end
-        ).count()
+    # Build dictionaries for fast lookup
+    message_dict = {item['hour']: item for item in message_stats}
+    session_dict = {item['hour']: item for item in session_stats}
+    participant_dict = {item['hour']: item for item in participant_stats}
 
-        # Create or update bucket
+    # Get all unique hours from all queries
+    all_hours = set(message_dict.keys()) | set(session_dict.keys()) | set(participant_dict.keys())
+
+    # Bulk create/update buckets
+    buckets_to_update = []
+    for hour_start in all_hours:
         bucket, created = ExperimentStatisticsBucket.get_or_create_bucket(
             experiment,
             hour_start,
             ExperimentStatisticsBucket.BucketSize.HOUR
         )
 
-        bucket.session_count = session_count
-        bucket.new_participant_count = new_participant_count
-        bucket.human_message_count = agg['message_count']
-        bucket.last_activity_at = agg['last_activity']
-        bucket.save()
+        # Update bucket with aggregated statistics
+        bucket.human_message_count = message_dict.get(hour_start, {}).get('message_count', 0)
+        bucket.last_activity_at = message_dict.get(hour_start, {}).get('last_activity')
+        bucket.session_count = session_dict.get(hour_start, {}).get('session_count', 0)
+        bucket.new_participant_count = participant_dict.get(hour_start, {}).get('participant_count', 0)
+        buckets_to_update.append(bucket)
+
+    # Bulk update all buckets
+    if buckets_to_update:
+        ExperimentStatisticsBucket.objects.bulk_update(
+            buckets_to_update,
+            ['human_message_count', 'last_activity_at', 'session_count', 'new_participant_count']
+        )
 
     logger.info(
-        f"Updated {message_aggregates.count()} hourly buckets for experiment {experiment.id}"
+        f"Updated {len(buckets_to_update)} hourly buckets for experiment {experiment.id}"
     )
 
 
@@ -596,8 +582,8 @@ def _update_session_buckets(session, cutoff):
     """Update buckets for a single session using SQL aggregation."""
     from django.db.models.functions import TruncHour
 
-    # Use SQL to group messages by hour
-    message_aggregates = ChatMessage.objects.filter(
+    # Aggregate message statistics keyed by hour in single SQL query
+    message_stats = ChatMessage.objects.filter(
         chat=session.chat,
         message_type=ChatMessageType.HUMAN,
         created_at__gte=cutoff,
@@ -608,9 +594,10 @@ def _update_session_buckets(session, cutoff):
         last_activity=Max('created_at'),
     )
 
-    # Update or create hourly buckets for each hour
-    for agg in message_aggregates:
-        hour_start = agg['hour']
+    # Bulk create/update buckets
+    buckets_to_update = []
+    for stat in message_stats:
+        hour_start = stat['hour']
 
         bucket, created = SessionStatisticsBucket.get_or_create_bucket(
             session,
@@ -618,12 +605,19 @@ def _update_session_buckets(session, cutoff):
             SessionStatisticsBucket.BucketSize.HOUR
         )
 
-        bucket.human_message_count = agg['message_count']
-        bucket.last_activity_at = agg['last_activity']
-        bucket.save()
+        bucket.human_message_count = stat['message_count']
+        bucket.last_activity_at = stat['last_activity']
+        buckets_to_update.append(bucket)
+
+    # Bulk update all buckets
+    if buckets_to_update:
+        SessionStatisticsBucket.objects.bulk_update(
+            buckets_to_update,
+            ['human_message_count', 'last_activity_at']
+        )
 
     logger.info(
-        f"Updated {message_aggregates.count()} hourly buckets for session {session.id}"
+        f"Updated {len(buckets_to_update)} hourly buckets for session {session.id}"
     )
 ```
 
@@ -641,32 +635,36 @@ def compress_experiment_buckets():
     """
     from apps.experiments.statistics_config import CompressionPolicy
     from django.db.models import Sum, Max
+    from django.db.models.functions import TruncDate, TruncMonth
 
-    # Compress hourly to daily
-    hourly_buckets = ExperimentStatisticsBucket.objects.filter(
+    # Get cutoff dates
+    hourly_cutoff = CompressionPolicy.get_hourly_to_daily_cutoff()
+    daily_cutoff = CompressionPolicy.get_daily_to_monthly_cutoff()
+
+    # Compress hourly to daily - filter old buckets in SQL
+    old_hourly_buckets = ExperimentStatisticsBucket.objects.filter(
         bucket_size=ExperimentStatisticsBucket.BucketSize.HOUR,
-    )
+        bucket_start__lt=hourly_cutoff,
+    ).annotate(
+        date=TruncDate('bucket_start')
+    ).values('experiment_id', 'date').distinct()
 
-    days_to_compress = set()
-    for bucket in hourly_buckets:
-        if CompressionPolicy.should_compress_to_daily(bucket.bucket_start):
-            days_to_compress.add((bucket.experiment_id, bucket.bucket_start.date()))
+    days_to_compress = [(item['experiment_id'], item['date']) for item in old_hourly_buckets]
 
     logger.info(f"Compressing {len(days_to_compress)} days from hourly to daily")
 
     for experiment_id, date in days_to_compress:
         _compress_hourly_to_daily(experiment_id, date)
 
-    # Compress daily to monthly
-    daily_buckets = ExperimentStatisticsBucket.objects.filter(
+    # Compress daily to monthly - filter old buckets in SQL
+    old_daily_buckets = ExperimentStatisticsBucket.objects.filter(
         bucket_size=ExperimentStatisticsBucket.BucketSize.DAY,
-    )
+        bucket_start__lt=daily_cutoff,
+    ).annotate(
+        month=TruncMonth('bucket_start')
+    ).values('experiment_id', 'month').distinct()
 
-    months_to_compress = set()
-    for bucket in daily_buckets:
-        if CompressionPolicy.should_compress_to_monthly(bucket.bucket_start):
-            month_start = bucket.bucket_start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            months_to_compress.add((bucket.experiment_id, month_start))
+    months_to_compress = [(item['experiment_id'], item['month']) for item in old_daily_buckets]
 
     logger.info(f"Compressing {len(months_to_compress)} months from daily to monthly")
 
@@ -788,16 +786,20 @@ def compress_session_buckets():
     - Hourly -> Daily (for buckets older than 1 day)
     """
     from apps.experiments.statistics_config import CompressionPolicy
+    from django.db.models.functions import TruncDate
 
-    # Compress hourly to daily
-    hourly_buckets = SessionStatisticsBucket.objects.filter(
+    # Get cutoff date
+    hourly_cutoff = CompressionPolicy.get_hourly_to_daily_cutoff()
+
+    # Compress hourly to daily - filter old buckets in SQL
+    old_hourly_buckets = SessionStatisticsBucket.objects.filter(
         bucket_size=SessionStatisticsBucket.BucketSize.HOUR,
-    )
+        bucket_start__lt=hourly_cutoff,
+    ).annotate(
+        date=TruncDate('bucket_start')
+    ).values('session_id', 'date').distinct()
 
-    days_to_compress = set()
-    for bucket in hourly_buckets:
-        if CompressionPolicy.should_compress_to_daily(bucket.bucket_start):
-            days_to_compress.add((bucket.session_id, bucket.bucket_start.date()))
+    days_to_compress = [(item['session_id'], item['date']) for item in old_hourly_buckets]
 
     logger.info(f"Compressing {len(days_to_compress)} session days from hourly to daily")
 
@@ -1628,29 +1630,27 @@ class TestExperimentStatisticsBucket:
 
 @pytest.mark.django_db
 class TestCompressionPolicy:
-    def test_should_compress_to_daily(self):
-        """Test hourly -> daily compression threshold."""
+    def test_hourly_to_daily_cutoff(self):
+        """Test hourly -> daily compression cutoff calculation."""
         from apps.experiments.statistics_config import CompressionPolicy
+        from dateutil.relativedelta import relativedelta
 
-        # Recent bucket (< 1 day old) should not compress
-        recent = timezone.now() - timedelta(hours=12)
-        assert CompressionPolicy.should_compress_to_daily(recent) is False
+        cutoff = CompressionPolicy.get_hourly_to_daily_cutoff()
+        expected = timezone.now() - relativedelta(days=1)
 
-        # Old bucket (> 1 day old) should compress
-        old = timezone.now() - timedelta(days=2)
-        assert CompressionPolicy.should_compress_to_daily(old) is True
+        # Cutoff should be approximately 1 day ago (within 1 second)
+        assert abs((cutoff - expected).total_seconds()) < 1
 
-    def test_should_compress_to_monthly(self):
-        """Test daily -> monthly compression threshold."""
+    def test_daily_to_monthly_cutoff(self):
+        """Test daily -> monthly compression cutoff calculation."""
         from apps.experiments.statistics_config import CompressionPolicy
+        from dateutil.relativedelta import relativedelta
 
-        # Recent bucket (< 30 days old) should not compress
-        recent = timezone.now() - timedelta(days=15)
-        assert CompressionPolicy.should_compress_to_monthly(recent) is False
+        cutoff = CompressionPolicy.get_daily_to_monthly_cutoff()
+        expected = timezone.now() - relativedelta(days=30)
 
-        # Old bucket (> 30 days old) should compress
-        old = timezone.now() - timedelta(days=35)
-        assert CompressionPolicy.should_compress_to_monthly(old) is True
+        # Cutoff should be approximately 30 days ago (within 1 second)
+        assert abs((cutoff - expected).total_seconds()) < 1
 
 
 @pytest.mark.django_db
