@@ -45,6 +45,12 @@ class BaseDocumentLoader(ABC, Generic[ConfigType]):
         """
         Load documents from the external source.
 
+        Document metadata:
+            * collection_id: (required) The ID of the collection.
+            * source_type: (required) The type of the loader.
+            * citation_text: (optional) Custom citation text.
+            * citation_url: (optional) Custom URL to use when citing the document as a source.
+
         Returns:
             List of LangChain Document objects
         """
