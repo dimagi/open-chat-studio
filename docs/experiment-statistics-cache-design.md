@@ -39,9 +39,43 @@ A two-tier caching system with periodic aggregation:
 2. **Periodic background tasks** to update and compress statistics
 3. **Hybrid update strategy** combining scheduled updates with live updates for recent data
 
+## Schema Design: Two Approaches
+
+### Approach Comparison
+
+There are two primary approaches for structuring the cache:
+
+1. **Single-Row Aggregates** (Simpler): One row per experiment/session with total counts
+2. **Time-Bucketed Data** (More Powerful): Multiple rows per experiment with time-series data
+
+#### Quick Comparison Table
+
+| Aspect | Single-Row | Time-Bucketed |
+|--------|-----------|---------------|
+| **Query Simplicity** | ✅ Very simple (single row) | ⚠️ Requires SUM across buckets |
+| **Storage Efficiency** | ✅ Minimal storage | ⚠️ More storage (multiple buckets) |
+| **Compression** | ⚠️ Manual deletion only | ✅ Natural (merge old buckets) |
+| **Trend Analysis** | ❌ No historical data | ✅ Built-in time-series |
+| **Incremental Updates** | ⚠️ Need full recalc | ✅ Update current bucket only |
+| **Fast Totals** | ✅ Single row lookup | ⚠️ Need to sum (or denormalize) |
+| **Data Lifecycle** | ⚠️ Manual management | ✅ Automatic aging |
+| **Initial Complexity** | ✅ Simple | ⚠️ More complex |
+
+#### Recommendation
+
+**Hybrid Approach**: Use time-bucketed storage with denormalized totals:
+
+- **Time buckets** for historical tracking, trends, and incremental updates
+- **Denormalized totals** (materialized view or separate table) for fast lookups
+- Best of both worlds: performance + flexibility
+
+---
+
 ## Database Schema
 
-### 1. Experiment Statistics Cache
+### Option A: Single-Row Aggregates (Original Design)
+
+#### 1. Experiment Statistics Cache
 
 ```python
 # apps/experiments/models.py
@@ -160,6 +194,420 @@ class StatisticsUpdateLog(BaseModel):
             models.Index(fields=['-created_at']),
         ]
 ```
+
+---
+
+### Option B: Time-Bucketed Statistics (Recommended)
+
+This approach stores statistics in time buckets, enabling trend analysis, natural compression, and efficient incremental updates.
+
+#### 1. Experiment Statistics Buckets
+
+```python
+# apps/experiments/models.py
+
+class ExperimentStatisticsBucket(BaseTeamModel):
+    """
+    Time-bucketed statistics for experiments.
+    Enables historical tracking, trends, and efficient updates.
+    """
+
+    class BucketSize(models.TextChoices):
+        HOUR = 'hour', 'Hourly'
+        DAY = 'day', 'Daily'
+        WEEK = 'week', 'Weekly'
+        MONTH = 'month', 'Monthly'
+
+    experiment = models.ForeignKey(
+        Experiment,
+        on_delete=models.CASCADE,
+        related_name='statistics_buckets'
+    )
+
+    # Time bucket definition
+    bucket_size = models.CharField(
+        max_length=10,
+        choices=BucketSize.choices,
+        default=BucketSize.HOUR
+    )
+    bucket_start = models.DateTimeField(db_index=True)
+    bucket_end = models.DateTimeField(db_index=True)
+
+    # Aggregate statistics for this time period
+    session_count = models.IntegerField(default=0)
+    new_participant_count = models.IntegerField(
+        default=0,
+        help_text="New participants in this bucket"
+    )
+    human_message_count = models.IntegerField(default=0)
+    last_activity_at = models.DateTimeField(null=True, blank=True)
+
+    # Metadata
+    last_updated_at = models.DateTimeField(auto_now=True)
+    is_finalized = models.BooleanField(
+        default=False,
+        help_text="Whether this bucket is complete and won't be updated"
+    )
+
+    class Meta:
+        db_table = 'experiments_experiment_statistics_bucket'
+        unique_together = [('experiment', 'bucket_start', 'bucket_size')]
+        indexes = [
+            models.Index(fields=['experiment', 'bucket_start', 'bucket_size']),
+            models.Index(fields=['bucket_start', 'bucket_end']),
+            models.Index(fields=['is_finalized']),
+        ]
+        ordering = ['-bucket_start']
+
+    def __str__(self):
+        return f"{self.experiment.name} - {self.bucket_size} ({self.bucket_start.date()})"
+
+    @classmethod
+    def get_bucket_boundaries(cls, dt, bucket_size):
+        """Calculate bucket start/end for a given datetime."""
+        from django.utils import timezone
+
+        if bucket_size == cls.BucketSize.HOUR:
+            start = dt.replace(minute=0, second=0, microsecond=0)
+            end = start + timedelta(hours=1)
+        elif bucket_size == cls.BucketSize.DAY:
+            start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timedelta(days=1)
+        elif bucket_size == cls.BucketSize.WEEK:
+            start = dt - timedelta(days=dt.weekday())
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timedelta(weeks=1)
+        elif bucket_size == cls.BucketSize.MONTH:
+            start = dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            if start.month == 12:
+                end = start.replace(year=start.year + 1, month=1)
+            else:
+                end = start.replace(month=start.month + 1)
+
+        return start, end
+
+    @classmethod
+    def get_or_create_bucket(cls, experiment, dt, bucket_size):
+        """Get or create a bucket for the given experiment and datetime."""
+        start, end = cls.get_bucket_boundaries(dt, bucket_size)
+
+        bucket, created = cls.objects.get_or_create(
+            experiment=experiment,
+            bucket_size=bucket_size,
+            bucket_start=start,
+            defaults={
+                'bucket_end': end,
+                'team': experiment.team,
+            }
+        )
+        return bucket
+```
+
+#### 2. Session Statistics Buckets
+
+```python
+# apps/experiments/models.py
+
+class SessionStatisticsBucket(BaseTeamModel):
+    """
+    Time-bucketed statistics for experiment sessions.
+    """
+
+    class BucketSize(models.TextChoices):
+        HOUR = 'hour', 'Hourly'
+        DAY = 'day', 'Daily'
+
+    session = models.ForeignKey(
+        ExperimentSession,
+        on_delete=models.CASCADE,
+        related_name='statistics_buckets'
+    )
+
+    # Time bucket
+    bucket_size = models.CharField(
+        max_length=10,
+        choices=BucketSize.choices,
+        default=BucketSize.HOUR
+    )
+    bucket_start = models.DateTimeField(db_index=True)
+    bucket_end = models.DateTimeField(db_index=True)
+
+    # Statistics for this period
+    human_message_count = models.IntegerField(default=0)
+    last_activity_at = models.DateTimeField(null=True, blank=True)
+
+    # Metadata
+    last_updated_at = models.DateTimeField(auto_now=True)
+    is_finalized = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'experiments_session_statistics_bucket'
+        unique_together = [('session', 'bucket_start', 'bucket_size')]
+        indexes = [
+            models.Index(fields=['session', 'bucket_start']),
+            models.Index(fields=['is_finalized']),
+        ]
+
+    @classmethod
+    def get_bucket_boundaries(cls, dt, bucket_size):
+        """Calculate bucket start/end for a given datetime."""
+        if bucket_size == cls.BucketSize.HOUR:
+            start = dt.replace(minute=0, second=0, microsecond=0)
+            end = start + timedelta(hours=1)
+        elif bucket_size == cls.BucketSize.DAY:
+            start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timedelta(days=1)
+
+        return start, end
+```
+
+#### 3. Denormalized Totals (For Fast Access)
+
+```python
+# apps/experiments/models.py
+
+class ExperimentStatisticsTotals(BaseTeamModel):
+    """
+    Denormalized totals for fast access.
+    Computed by summing buckets, refreshed periodically.
+    """
+
+    experiment = models.OneToOneField(
+        Experiment,
+        on_delete=models.CASCADE,
+        related_name='statistics_totals',
+        primary_key=True
+    )
+
+    # Aggregate totals (sum of all buckets)
+    total_session_count = models.IntegerField(default=0)
+    total_participant_count = models.IntegerField(default=0)
+    total_human_message_count = models.IntegerField(default=0)
+    last_activity_at = models.DateTimeField(null=True, blank=True)
+
+    # Metadata
+    last_updated_at = models.DateTimeField(auto_now=True)
+    oldest_bucket_start = models.DateTimeField(null=True, blank=True)
+    newest_bucket_end = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'experiments_experiment_statistics_totals'
+
+    def refresh_from_buckets(self):
+        """Recalculate totals from bucket data."""
+        from django.db.models import Sum, Max, Min
+
+        bucket_aggregates = self.experiment.statistics_buckets.aggregate(
+            total_sessions=Sum('session_count'),
+            total_messages=Sum('human_message_count'),
+            last_activity=Max('last_activity_at'),
+            oldest_bucket=Min('bucket_start'),
+            newest_bucket=Max('bucket_end'),
+        )
+
+        # Get unique participant count (needs special handling)
+        from apps.experiments.models import ExperimentSession
+        participant_count = ExperimentSession.objects.filter(
+            experiment=self.experiment
+        ).values('participant').distinct().count()
+
+        self.total_session_count = bucket_aggregates['total_sessions'] or 0
+        self.total_participant_count = participant_count
+        self.total_human_message_count = bucket_aggregates['total_messages'] or 0
+        self.last_activity_at = bucket_aggregates['last_activity']
+        self.oldest_bucket_start = bucket_aggregates['oldest_bucket']
+        self.newest_bucket_end = bucket_aggregates['newest_bucket']
+        self.save()
+
+class SessionStatisticsTotals(BaseTeamModel):
+    """
+    Denormalized session totals for fast access.
+    """
+
+    session = models.OneToOneField(
+        ExperimentSession,
+        on_delete=models.CASCADE,
+        related_name='statistics_totals',
+        primary_key=True
+    )
+
+    total_human_message_count = models.IntegerField(default=0)
+    last_activity_at = models.DateTimeField(null=True, blank=True)
+    experiment_versions = models.CharField(max_length=500, blank=True)
+
+    last_updated_at = models.DateTimeField(auto_now=True)
+    is_complete = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'experiments_session_statistics_totals'
+
+    def refresh_from_buckets(self):
+        """Recalculate totals from bucket data."""
+        from django.db.models import Sum, Max
+
+        bucket_aggregates = self.session.statistics_buckets.aggregate(
+            total_messages=Sum('human_message_count'),
+            last_activity=Max('last_activity_at'),
+        )
+
+        # Get experiment versions (stored separately)
+        from django.contrib.contenttypes.models import ContentType
+        from apps.annotations.models import CustomTaggedItem
+        from apps.chat.models import Chat, ChatMessage
+
+        message_ct = ContentType.objects.get_for_model(ChatMessage)
+        versions = CustomTaggedItem.objects.filter(
+            content_type=message_ct,
+            object_id__in=ChatMessage.objects.filter(
+                chat=self.session.chat
+            ).values('id'),
+            tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+        ).values_list('tag__name', flat=True).distinct().order_by('tag__name')
+
+        self.total_human_message_count = bucket_aggregates['total_messages'] or 0
+        self.last_activity_at = bucket_aggregates['last_activity']
+        self.experiment_versions = ', '.join(versions) if versions else ''
+        self.is_complete = self.session.status == SessionStatus.COMPLETE
+        self.save()
+```
+
+#### 4. Bucket Compression and Lifecycle
+
+```python
+# apps/experiments/models.py
+
+class BucketCompressionPolicy(models.Model):
+    """
+    Defines how buckets are compressed over time.
+    E.g., "After 7 days, compress hourly to daily"
+    """
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+
+    # Age threshold
+    age_days = models.IntegerField(
+        help_text="Compress buckets older than this many days"
+    )
+
+    # Compression action
+    source_bucket_size = models.CharField(
+        max_length=10,
+        choices=ExperimentStatisticsBucket.BucketSize.choices
+    )
+    target_bucket_size = models.CharField(
+        max_length=10,
+        choices=ExperimentStatisticsBucket.BucketSize.choices
+    )
+
+    # Whether to delete source buckets after compression
+    delete_source = models.BooleanField(default=True)
+
+    # Active status
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'experiments_bucket_compression_policy'
+        ordering = ['age_days']
+
+# Default policies could be:
+# - 7 days: hour -> day
+# - 30 days: day -> week
+# - 90 days: week -> month
+# - 365 days: delete monthly buckets (keep totals only)
+```
+
+#### Time-Bucketed Design Benefits
+
+**1. Natural Incremental Updates**
+```python
+# When a new message arrives, only update the current hour bucket
+current_bucket = ExperimentStatisticsBucket.get_or_create_bucket(
+    experiment, timezone.now(), BucketSize.HOUR
+)
+current_bucket.human_message_count += 1
+current_bucket.last_activity_at = timezone.now()
+current_bucket.save()
+```
+
+**2. Built-in Trend Analysis**
+```python
+# Get activity for last 7 days
+seven_days_ago = timezone.now() - timedelta(days=7)
+daily_buckets = ExperimentStatisticsBucket.objects.filter(
+    experiment=experiment,
+    bucket_size=BucketSize.DAY,
+    bucket_start__gte=seven_days_ago
+).order_by('bucket_start')
+
+# Can easily plot trends, show sparklines, etc.
+```
+
+**3. Automatic Compression**
+```python
+# Compress old hourly buckets to daily
+from django.db.models import Sum, Max
+
+hourly_buckets = ExperimentStatisticsBucket.objects.filter(
+    experiment=experiment,
+    bucket_size=BucketSize.HOUR,
+    bucket_start__date=target_date
+)
+
+aggregates = hourly_buckets.aggregate(
+    total_sessions=Sum('session_count'),
+    total_messages=Sum('human_message_count'),
+    last_activity=Max('last_activity_at'),
+)
+
+# Create daily bucket
+daily_bucket = ExperimentStatisticsBucket.objects.create(
+    experiment=experiment,
+    bucket_size=BucketSize.DAY,
+    bucket_start=target_date.replace(hour=0, minute=0),
+    bucket_end=target_date.replace(hour=0, minute=0) + timedelta(days=1),
+    session_count=aggregates['total_sessions'],
+    human_message_count=aggregates['total_messages'],
+    last_activity_at=aggregates['last_activity'],
+    is_finalized=True,
+)
+
+# Delete hourly buckets
+hourly_buckets.delete()
+```
+
+**4. Flexible Retention**
+```python
+# Keep different granularities for different time periods:
+# - Last 48 hours: hourly buckets
+# - Last 30 days: daily buckets
+# - Last 12 months: weekly buckets
+# - Older: monthly buckets or delete (keep totals only)
+```
+
+---
+
+### Option C: Hybrid (Best of Both Worlds)
+
+Combine time buckets with denormalized totals:
+
+**Schema**:
+- `ExperimentStatisticsBucket` - Time-series data
+- `ExperimentStatisticsTotals` - Denormalized totals (materialized sum of buckets)
+- Automatic refresh of totals from buckets
+
+**Advantages**:
+- ✅ Fast total queries (single row lookup)
+- ✅ Historical trend data available
+- ✅ Efficient incremental updates (update current bucket)
+- ✅ Natural compression (merge old buckets)
+- ✅ Flexible data lifecycle
+
+**Complexity**: Moderate (two related tables to manage)
+
+**Recommendation**: **This is the best long-term solution** - start with Option A for simplicity, then migrate to Option C when trend analysis is needed.
+
+---
 
 ## Update Strategies
 
@@ -922,17 +1370,72 @@ Weekly time saved: ~2 hours
 
 ## Recommendation
 
-**Start with Strategy 1** (Scheduled Full Refresh):
+### Phased Implementation Approach
 
-1. **Phase 1**: Implement basic cache tables and scheduled refresh
-2. **Measure**: Track performance improvements and cache hit rates
-3. **Iterate**: Add incremental updates if needed
-4. **Scale**: Implement compression when data volume requires it
+**Phase 1: Start Simple (Option A - Single-Row Aggregates)**
+
+Implement the simple single-row cache first:
+1. Create `ExperimentStatistics` and `SessionStatistics` tables
+2. Implement scheduled full refresh (Strategy 1)
+3. Update views to use cached data
+4. Measure performance improvements
+
+**Timeline**: 1-2 weeks
+**Benefits**:
+- ✅ Immediate 10-50x performance improvement
+- ✅ Low implementation risk
+- ✅ Simple to understand and debug
+- ✅ Quick to deploy
+
+**Phase 2: Add Intelligence (If Needed)**
+
+If requirements emerge for trend analysis or better incremental updates:
+1. Migrate to time-bucketed design (Option B/C)
+2. Backfill historical buckets from existing data
+3. Implement bucket compression policies
+4. Add trend visualization
+
+**Timeline**: 2-3 weeks
+**Benefits**:
+- ✅ Historical trend data available
+- ✅ More efficient incremental updates
+- ✅ Natural data compression
+- ✅ Enables time-series analysis
+
+### Decision Matrix
+
+**Choose Option A (Single-Row)** if:
+- ✅ You only need current totals (no trends)
+- ✅ You want the simplest solution
+- ✅ You can tolerate full recalculation
+- ✅ Storage optimization isn't critical yet
+
+**Choose Option C (Time-Bucketed + Totals)** if:
+- ✅ You need trend analysis / historical data
+- ✅ You have very large data volumes (millions of messages)
+- ✅ You want efficient incremental updates
+- ✅ You need flexible data retention policies
+- ✅ You already have requirements for activity charts/graphs
+
+### Final Recommendation
+
+**Start with Option A** because:
+1. It solves the immediate performance problem
+2. It's the simplest to implement and test
+3. It can be migrated to Option C later if needed
+4. The performance improvement alone justifies the effort
+
+**Migrate to Option C when**:
+- You need to show activity trends over time
+- Data volume requires more efficient compression
+- You want to add activity charts/sparklines to the UI
+- You need more granular activity tracking
 
 This approach provides:
-- ✅ Immediate performance improvements
-- ✅ Simple, maintainable code
-- ✅ Low risk
+- ✅ Immediate performance improvements (Option A)
+- ✅ Simple, maintainable code initially
+- ✅ Low risk, incremental delivery
+- ✅ Clear migration path to advanced features (Option C)
 - ✅ Foundation for future enhancements
 
 ## Success Metrics
@@ -1006,12 +1509,35 @@ Execution time: 50 ms
 
 ## Conclusion
 
-This design provides a scalable, maintainable solution for caching experiment statistics that:
+This design document presents a comprehensive solution for caching experiment statistics with two complementary approaches:
 
-1. **Dramatically improves performance** through pre-computed SQL caches
-2. **Maintains accuracy** through scheduled refreshes
-3. **Scales efficiently** with data compression and retention policies
+### Option A: Single-Row Aggregates
+A simple, proven approach that:
+- ✅ **Solves the immediate problem** with 10-50x performance improvement
+- ✅ **Minimal complexity** - easy to implement, test, and maintain
+- ✅ **Quick delivery** - can be implemented in 1-2 weeks
+- ✅ **Low risk** - straightforward logic, easy to debug
+
+### Option C: Time-Bucketed + Totals
+A sophisticated approach that:
+- ✅ **Enables trend analysis** with built-in time-series data
+- ✅ **Scales better** with natural compression and efficient incremental updates
+- ✅ **Flexible data lifecycle** - automatic aging and retention policies
+- ✅ **Future-proof** - supports advanced features like activity charts
+
+### Core Benefits (Both Options)
+
+1. **Dramatic performance improvements** through pre-computed SQL caches
+2. **Maintains accuracy** through scheduled and/or incremental refreshes
+3. **Scales efficiently** with smart compression and retention policies
 4. **Follows Django patterns** and existing codebase conventions
-5. **Provides flexibility** for future enhancements (incremental, hybrid strategies)
+5. **Graceful degradation** when cache is missing or stale
+6. **Clear migration path** from simple to advanced
 
-The phased implementation approach allows for incremental delivery of value while minimizing risk.
+### Recommended Path Forward
+
+1. **Start with Option A** for immediate wins (1-2 weeks)
+2. **Measure and validate** performance improvements
+3. **Migrate to Option C** when trend analysis or advanced features are needed (2-3 weeks)
+
+This phased approach delivers immediate value while building a foundation for future enhancements, all while minimizing risk and complexity.
