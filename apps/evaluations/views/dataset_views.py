@@ -6,6 +6,7 @@ from io import StringIO
 from itertools import islice
 
 from django.contrib import messages
+from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.functions import Coalesce
@@ -278,15 +279,12 @@ def get_base_session_queryset(request):
     return query_set
 
 
-class DatasetSessionsSelectionJson(DatasetSessionsSelectionTableView):
-    """Return the filtered items in DatasetSessionsSelectionTableView in a JSON format without pagination."""
-
-    table_pagination = False
-
-    def get(self, request, *args, **kwargs):
-        query_set = get_base_session_queryset(self.request)
-        session_keys = list(query_set.values_list("external_id", flat=True))
-        return JsonResponse(session_keys, safe=False)
+@login_and_team_required
+@permission_required("experiments.view_experimentsession")
+def dataset_sessions_selection_json(request, team_slug: str):
+    query_set = get_base_session_queryset(request)
+    session_keys = list(query_set.values_list("external_id", flat=True))
+    return JsonResponse(session_keys, safe=False)
 
 
 class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):

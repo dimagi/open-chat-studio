@@ -59,7 +59,7 @@ urlpatterns = [
     ),
     path(
         "sessions_selection_json",
-        dataset_views.DatasetSessionsSelectionJson.as_view(),
+        dataset_views.dataset_sessions_selection_json,
         name="dataset_sessions_selection_json",
     ),
     path(
