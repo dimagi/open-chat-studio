@@ -27,10 +27,13 @@
 
               <div class="flex items-center gap-3">
                 <div x-show="selectedSessionIds.size + filteredSessionIds.size > 0" class="text-sm font-medium">
-                  <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> selected
+                  <span x-text="selectedSessionIds.size + filteredSessionIds.size"></span> session<span x-show="selectedSessionIds.size + filteredSessionIds.size !== 1">s</span> of <span x-text="allSessionIds.size"></span> selected
                   <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
                     Clear
                   </button>
+                </div>
+                <div x-show="selectedSessionIds.size + filteredSessionIds.size == 0 && allSessionIds.size > 0" class="text-sm font-medium">
+                  <span x-text="allSessionIds.size"></span> session<span x-show="allSessionIds.size !== 1">s</span>
                 </div>
               </div>
             </div>
