@@ -38,14 +38,16 @@ This implementation uses SQL-based aggregation throughout to minimize Python loo
 
 ### Trade-offs
 
-**Benefits**:
+#### Benefits
+
 - ✅ No sync issues between buckets and totals
 - ✅ Simpler schema (2 tables instead of 4+)
 - ✅ Historical data naturally preserved
 - ✅ Easy to understand and debug
 - ✅ Flexible querying (can sum any time range)
 
-**Considerations**:
+#### Considerations
+
 - ⚠️ Totals require SUM() across buckets (typically 1-30 rows)
 - ⚠️ Slightly slower than single-row lookup, but still fast enough
 
@@ -528,7 +530,7 @@ def update_experiment_buckets(experiment_id=None, hours_back=24):
 
 def _update_experiment_buckets(experiment, cutoff):
     """Update buckets for a single experiment using SQL aggregation."""
-    from django.db.models import Count, Max, OuterRef, Subquery
+    from django.db.models import Count, Max
     from django.db.models.functions import TruncHour
     from apps.participants.models import ParticipantData
 
@@ -652,8 +654,8 @@ def _update_session_buckets(session, cutoff):
     # Get experiment versions per hour
     message_ct = ContentType.objects.get_for_model(ChatMessage)
 
-    # Get all messages with their versions, grouped by hour
-    messages_with_versions = ChatMessage.objects.filter(
+    # Get all messages with their hours
+    messages_with_hours = ChatMessage.objects.filter(
         chat=session.chat,
         message_type=ChatMessageType.HUMAN,
         created_at__gte=cutoff,
@@ -661,23 +663,33 @@ def _update_session_buckets(session, cutoff):
         hour=TruncHour('created_at')
     ).values('id', 'hour')
 
-    # Build a mapping of hour -> message IDs
-    hour_message_ids = {}
-    for msg in messages_with_versions:
-        hour = msg['hour']
-        if hour not in hour_message_ids:
-            hour_message_ids[hour] = []
-        hour_message_ids[hour].append(msg['id'])
+    # Build mapping of message_id -> hour
+    message_to_hour = {msg['id']: msg['hour'] for msg in messages_with_hours}
+    message_ids = list(message_to_hour.keys())
 
-    # Get versions for all messages
-    hour_versions = {}
-    for hour, message_ids in hour_message_ids.items():
-        versions = CustomTaggedItem.objects.filter(
+    # Fetch all versions for all messages at once (single query instead of N queries)
+    if message_ids:
+        version_data = CustomTaggedItem.objects.filter(
             content_type=message_ct,
             object_id__in=message_ids,
             tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-        ).values_list('tag__name', flat=True).distinct()
-        hour_versions[hour] = sorted(set(versions))
+        ).values('object_id', 'tag__name')
+
+        # Group versions by hour
+        hour_versions = {}
+        for item in version_data:
+            msg_id = item['object_id']
+            version = item['tag__name']
+            hour = message_to_hour.get(msg_id)
+            if hour:
+                if hour not in hour_versions:
+                    hour_versions[hour] = set()
+                hour_versions[hour].add(version)
+
+        # Sort versions for each hour
+        hour_versions = {hour: sorted(versions) for hour, versions in hour_versions.items()}
+    else:
+        hour_versions = {}
 
     # Bulk create/update buckets
     buckets_to_update = []
@@ -1112,7 +1124,10 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return table
 
     def get_queryset(self):
-        """Returns a lightweight queryset for counting."""
+        """Returns queryset with database-level ordering by last activity."""
+        from django.db.models import OuterRef, Subquery, Max
+        from apps.experiments.models import ExperimentStatisticsBucket
+
         query_set = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
@@ -1131,6 +1146,18 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
                 extra_conditions=Q(owner__username__icontains=search),
                 score=0.1,
             )
+
+        # Annotate with last activity from buckets for database-level ordering
+        last_activity_subquery = ExperimentStatisticsBucket.objects.filter(
+            experiment=OuterRef('pk')
+        ).values('experiment').annotate(
+            max_activity=Max('last_activity_at')
+        ).values('max_activity')[:1]
+
+        query_set = query_set.annotate(
+            cached_last_activity=Subquery(last_activity_subquery)
+        ).order_by('-cached_last_activity', '-created_at')
+
         return query_set
 
     def get_table_data(self):
@@ -1162,12 +1189,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
             experiments_with_stats.append(experiment)
 
-        # Sort by last activity
-        experiments_with_stats.sort(
-            key=lambda e: e.last_message if e.last_message else timezone.datetime.min.replace(tzinfo=timezone.utc),
-            reverse=True
-        )
-
+        # Already sorted at database level, no need to sort in Python
         return experiments_with_stats
 ```
 
@@ -1489,7 +1511,8 @@ class Command(BaseCommand):
 
 ### Phase 1: Foundation (Week 1)
 
-**Tasks**:
+#### Tasks
+
 1. Create custom PostgreSQL `array_concat` aggregate function migration
 2. Create models (`ExperimentStatisticsBucket`, `SessionStatisticsBucket`)
 3. Create `ArrayConcat` aggregate class in models
@@ -1497,13 +1520,14 @@ class Command(BaseCommand):
 5. Add `statistics_config.py` with compression policy
 6. Create management commands
 
-**Deliverables**:
+#### Deliverables
+
 - Django migrations (including custom aggregate function)
 - Empty tables ready for data
 - Custom aggregate function ready for use
 - Management commands for manual control
 
-**Testing**:
+#### Testing
 ```bash
 # Create migrations
 python manage.py makemigrations experiments
@@ -1519,16 +1543,18 @@ python manage.py dbshell
 
 ### Phase 2: Backfill (Week 1-2)
 
-**Tasks**:
+#### Tasks
+
 1. Implement backfill task
 2. Test on staging environment
 3. Run backfill for production data (in batches)
 
-**Deliverables**:
+#### Deliverables
+
 - Historical data loaded into buckets
 - Verified accuracy against live queries
 
-**Testing**:
+#### Testing
 ```bash
 # Backfill single experiment (test)
 python manage.py backfill_statistics --experiment-id=1
@@ -1542,16 +1568,16 @@ python manage.py backfill_statistics --async
 
 ### Phase 3: Scheduled Updates (Week 2)
 
-**Tasks**:
+#### Tasks
 1. Implement update tasks (`update_experiment_buckets`, `update_session_buckets`)
 2. Add to SCHEDULED_TASKS
 3. Monitor task execution
 
-**Deliverables**:
+#### Deliverables
 - Automated bucket updates every 2 minutes
 - Monitoring/logging in place
 
-**Testing**:
+#### Testing
 ```bash
 # Run manually first
 python manage.py refresh_statistics --hours-back=1
@@ -1565,16 +1591,16 @@ inv celery
 
 ### Phase 4: Compression (Week 2)
 
-**Tasks**:
+#### Tasks
 1. Implement compression tasks
 2. Test compression on old data
 3. Add to SCHEDULED_TASKS (hourly)
 
-**Deliverables**:
+#### Deliverables
 - Automatic compression of old buckets
 - Reduced storage footprint
 
-**Testing**:
+#### Testing
 ```bash
 # Run compression manually
 python manage.py refresh_statistics --compress
@@ -1586,18 +1612,18 @@ python manage.py show_statistics --experiment-id=1 --buckets
 
 ### Phase 5: View Integration (Week 3)
 
-**Tasks**:
+#### Tasks
 1. Update `ChatbotExperimentTableView` to use buckets
 2. Update `ChatbotSessionsTableView` to use buckets
 3. Add fallback logic for missing cache
 4. Performance testing
 
-**Deliverables**:
+#### Deliverables
 - Views using cached statistics
 - Fast page loads (< 2 seconds)
 - Graceful degradation
 
-**Testing**:
+#### Testing
 ```bash
 # Load test page
 # Measure query count and time
@@ -1606,13 +1632,13 @@ python manage.py show_statistics --experiment-id=1 --buckets
 
 ### Phase 6: Monitoring & Optimization (Week 3-4)
 
-**Tasks**:
+#### Tasks
 1. Add monitoring for cache freshness
 2. Tune batch sizes and intervals
 3. Add admin interface for cache management
 4. Document for team
 
-**Deliverables**:
+#### Deliverables
 - Production-ready system
 - Monitoring dashboards
 - Team documentation
