@@ -277,7 +277,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
         fields = []
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
-            "data-redirect-url": None,
+            "data-redirect-target": "_blank",
         }
         attrs = {"class": "table w-full"}
         orderable = False
