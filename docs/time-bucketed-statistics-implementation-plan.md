@@ -17,6 +17,7 @@ This implementation uses SQL-based aggregation throughout to minimize Python loo
 5. **Date Calculations**: Uses `dateutil.relativedelta` for accurate relative date calculations
 6. **Bulk Operations**: Uses `bulk_update()` to minimize database round-trips
 7. **Experiment Versions**: Stored in buckets as ArrayField, eliminating need for separate queries to CustomTaggedItem
+8. **Custom PostgreSQL Aggregate**: Uses `array_concat` aggregate to concatenate version arrays in SQL, enabling single-query retrieval for multiple sessions
 
 ### Key Simplifications
 
@@ -51,6 +52,37 @@ This implementation uses SQL-based aggregation throughout to minimize Python loo
 ---
 
 ## Database Schema
+
+### 0. Custom PostgreSQL Aggregate Function
+
+To efficiently aggregate experiment versions across buckets, we'll create a custom PostgreSQL aggregate function:
+
+```python
+# apps/experiments/migrations/XXXX_add_array_concat_aggregate.py
+
+from django.db import migrations
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ('experiments', 'PREVIOUS_MIGRATION'),
+    ]
+
+    operations = [
+        migrations.RunSQL(
+            sql="""
+            CREATE AGGREGATE array_concat (anycompatiblearray) (
+                sfunc = array_cat,
+                stype = anycompatiblearray,
+                initcond = '{}'
+            );
+            """,
+            reverse_sql="DROP AGGREGATE IF EXISTS array_concat(anycompatiblearray);",
+        ),
+    ]
+```
+
+This aggregate allows us to concatenate arrays directly in SQL, enabling single-query aggregation of experiment versions.
 
 ### 1. Experiment Statistics Buckets
 
@@ -312,6 +344,13 @@ class SessionStatisticsBucket(BaseTeamModel):
         return bucket, created
 
 
+class ArrayConcat(models.Aggregate):
+    """Custom aggregate to concatenate arrays in PostgreSQL using array_concat."""
+    function = 'array_concat'
+    name = 'ArrayConcat'
+    output_field = ArrayField(models.CharField(max_length=50))
+
+
 class SessionStatisticsBucketManager(models.Manager):
     """Manager with helper methods for querying session statistics."""
 
@@ -346,44 +385,31 @@ class SessionStatisticsBucketManager(models.Manager):
 
     def get_totals_for_sessions(self, session_ids):
         """
-        Get totals for multiple sessions efficiently.
+        Get totals for multiple sessions efficiently using custom array_concat aggregate.
         Returns dict mapping session_id -> totals dict.
         """
         from django.db.models import Sum, Max
 
+        # Single query to get all statistics including concatenated versions
         bucket_data = self.filter(
             session_id__in=session_ids
         ).values('session_id').annotate(
             total_messages=Sum('human_message_count'),
             last_activity=Max('last_activity_at'),
+            all_versions=ArrayConcat('experiment_versions'),
         )
 
         results = {}
         for bucket in bucket_data:
+            # Deduplicate and sort versions in Python (lightweight operation)
+            all_versions = bucket['all_versions'] or []
+            sorted_versions = sorted(set(all_versions))
+
             results[bucket['session_id']] = {
                 'total_messages': bucket['total_messages'] or 0,
                 'last_activity': bucket['last_activity'],
-                'experiment_versions': '',  # Will be populated below
+                'experiment_versions': ', '.join(sorted_versions) if sorted_versions else '',
             }
-
-        # Get experiment versions for each session
-        buckets_with_versions = self.filter(
-            session_id__in=session_ids
-        ).values('session_id', 'experiment_versions')
-
-        # Build version sets per session
-        session_versions = {}
-        for bucket in buckets_with_versions:
-            session_id = bucket['session_id']
-            if session_id not in session_versions:
-                session_versions[session_id] = set()
-            session_versions[session_id].update(bucket['experiment_versions'])
-
-        # Add sorted versions to results
-        for session_id, versions in session_versions.items():
-            if session_id in results:
-                sorted_versions = sorted(versions)
-                results[session_id]['experiment_versions'] = ', '.join(sorted_versions) if sorted_versions else ''
 
         return results
 
@@ -1464,14 +1490,17 @@ class Command(BaseCommand):
 ### Phase 1: Foundation (Week 1)
 
 **Tasks**:
-1. Create models (`ExperimentStatisticsBucket`, `SessionStatisticsBucket`)
-2. Create migration files
-3. Add `statistics_config.py` with compression policy
-4. Create management commands
+1. Create custom PostgreSQL `array_concat` aggregate function migration
+2. Create models (`ExperimentStatisticsBucket`, `SessionStatisticsBucket`)
+3. Create `ArrayConcat` aggregate class in models
+4. Create migration files for models
+5. Add `statistics_config.py` with compression policy
+6. Create management commands
 
 **Deliverables**:
-- Django migrations
+- Django migrations (including custom aggregate function)
 - Empty tables ready for data
+- Custom aggregate function ready for use
 - Management commands for manual control
 
 **Testing**:
@@ -1482,9 +1511,10 @@ python manage.py makemigrations experiments
 # Apply migrations
 python manage.py migrate
 
-# Verify tables exist
+# Verify tables and function exist
 python manage.py dbshell
 \dt experiments_*_bucket
+\df array_concat
 ```
 
 ### Phase 2: Backfill (Week 1-2)
