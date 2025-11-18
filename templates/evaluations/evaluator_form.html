@@ -178,8 +178,9 @@
                         <select x-model="pair.type"
                                 @change="updateKeyValuePairs(fieldName)"
                                 class="select select-bordered w-full select-sm">
-                          <option value="string">{% translate "Text (string)" %}</option>
+                          <option value="string">{% translate "Text" %}</option>
                           <option value="int">{% translate "Integer" %}</option>
+                          <option value="choice">{% translate "Choice" %}</option>
                         </select>
                       </div>
 
@@ -267,6 +268,34 @@
                                    placeholder="{% translate "Regex pattern (optional)" %}"
                                    class="input input-bordered w-full input-sm">
                           </div>
+                        </div>
+                      </details>
+
+                      <!-- Choice Options -->
+                      <details x-show="pair.type === 'choice'" class="mb-2" open>
+                        <summary class="cursor-pointer text-sm font-medium mb-2">
+                          {% translate "Choices" %}
+                        </summary>
+                        <div class="ml-4 space-y-2">
+                          <template x-for="(choice, choiceIndex) in (pair.choices || [])" :key="choiceIndex">
+                            <div class="flex gap-2 items-center">
+                              <input type="text"
+                                     x-model="pair.choices[choiceIndex]"
+                                     @input="updateKeyValuePairs(fieldName)"
+                                     placeholder="{% translate "Choice value" %}"
+                                     class="input input-bordered w-full input-sm">
+                              <button type="button"
+                                      @click="pair.choices.splice(choiceIndex, 1); updateKeyValuePairs(fieldName)"
+                                      class="btn btn-outline btn-xs btn-error">
+                                <i class="fa fa-trash"></i>
+                              </button>
+                            </div>
+                          </template>
+                          <button type="button"
+                                  @click="if (!pair.choices) pair.choices = []; pair.choices.push(''); updateKeyValuePairs(fieldName)"
+                                  class="btn btn-outline btn-primary btn-xs mt-2">
+                            <i class="fa fa-plus"></i> {% translate "Add Choice" %}
+                          </button>
                         </div>
                       </details>
 
@@ -514,7 +543,8 @@
               le: null,
               min_length: null,
               max_length: null,
-              pattern: null
+              pattern: null,
+              choices: []
             }];
           }
           return this.keyValuePairs[fieldName];
@@ -532,7 +562,8 @@
             le: null,
             min_length: null,
             max_length: null,
-            pattern: null
+            pattern: null,
+            choices: []
           });
         },
 
@@ -589,6 +620,14 @@
                   if (pair.pattern && pair.pattern.trim() !== '') {
                     fieldDef.pattern = pair.pattern.trim();
                   }
+                } else if (pair.type === 'choice') {
+                  // Add choices array, filtering out empty values
+                  if (pair.choices && Array.isArray(pair.choices)) {
+                    const validChoices = pair.choices.filter(c => c && c.trim() !== '');
+                    if (validChoices.length > 0) {
+                      fieldDef.choices = validChoices;
+                    }
+                  }
                 }
 
                 obj[pair.name.trim()] = fieldDef;
@@ -613,7 +652,8 @@
                       le: value.le !== undefined ? value.le : null,
                       min_length: value.min_length !== undefined ? value.min_length : null,
                       max_length: value.max_length !== undefined ? value.max_length : null,
-                      pattern: value.pattern || null
+                      pattern: value.pattern || null,
+                      choices: value.choices || []
                     };
                   });
                 }

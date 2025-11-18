@@ -372,7 +372,7 @@ def schema_to_pydantic_model(schema: dict, model_name: str = "DynamicModel") -> 
     for field_name, field_def in schema.items():
         pydantic_fields[field_name] = (
             field_def.python_type,
-            Field(**field_def.model_dump(exclude={"type"}, exclude_none=True)),
+            Field(**field_def.pydantic_fields),
         )
 
     return create_model(model_name, **pydantic_fields)

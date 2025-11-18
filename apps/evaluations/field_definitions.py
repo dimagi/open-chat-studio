@@ -19,6 +19,10 @@ class BaseFieldDefinition(BaseModel):
         """Get the corresponding Python type. Must be implemented by subclasses."""
         raise NotImplementedError
 
+    @property
+    def pydantic_fields(self) -> dict:
+        return self.model_dump(exclude={"type"}, exclude_none=True)
+
 
 class StringFieldDefinition(BaseFieldDefinition):
     """String field with validation constraints."""
@@ -47,4 +51,24 @@ class IntFieldDefinition(BaseFieldDefinition):
         return int
 
 
-FieldDefinition = StringFieldDefinition | IntFieldDefinition
+class ChoiceFieldDefinition(BaseFieldDefinition):
+    """Choice field with enumerated valid values."""
+
+    type: Literal["choice"]
+    choices: list[str]
+
+    @property
+    def python_type(self) -> type:
+        return str
+
+    @property
+    def pydantic_fields(self) -> dict:
+        """Return field kwargs for Pydantic with enum constraint in JSON schema."""
+        fields = super().pydantic_fields
+        if self.choices:
+            fields["json_schema_extra"] = {"enum": self.choices}
+
+        return fields
+
+
+FieldDefinition = StringFieldDefinition | IntFieldDefinition | ChoiceFieldDefinition
