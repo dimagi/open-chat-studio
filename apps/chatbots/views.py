@@ -194,9 +194,9 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
                 score=0.1,
             )
 
-        # Define subqueries (moved from get_queryset)
         session_count_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
@@ -204,6 +204,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
         participant_count_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
             .values("count")
@@ -211,15 +212,20 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
         interaction_count_subquery = (
             Trace.objects.filter(experiment=OuterRef("pk"))
+            .exclude(session__experiment_channel__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
         )
 
         last_activity_subquery = (
-            Trace.objects.filter(experiment=OuterRef("pk")).order_by("-timestamp").values("timestamp")[:1]
+            Trace.objects.filter(experiment=OuterRef("pk"))
+            .exclude(session__experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .order_by("-timestamp")
+            .values("timestamp")[:1]
         )
 
+        # Add expensive annotations only to paginated data
         queryset = queryset.annotate(
             session_count=Subquery(session_count_subquery, output_field=IntegerField()),
             participant_count=Subquery(participant_count_subquery, output_field=IntegerField()),
