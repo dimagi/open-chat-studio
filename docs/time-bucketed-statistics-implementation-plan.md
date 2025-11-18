@@ -16,6 +16,7 @@ This implementation uses SQL-based aggregation throughout to minimize Python loo
 4. **Compression Tasks**: Filter old buckets directly in SQL using date comparisons (no Python loops)
 5. **Date Calculations**: Uses `dateutil.relativedelta` for accurate relative date calculations
 6. **Bulk Operations**: Uses `bulk_update()` to minimize database round-trips
+7. **Experiment Versions**: Stored in buckets as ArrayField, eliminating need for separate queries to CustomTaggedItem
 
 ### Key Simplifications
 
@@ -221,6 +222,8 @@ ExperimentStatisticsBucket.add_to_class('objects', ExperimentStatisticsBucketMan
 ```python
 # apps/experiments/models.py
 
+from django.contrib.postgres.fields import ArrayField
+
 class SessionStatisticsBucket(BaseTeamModel):
     """
     Time-bucketed statistics for experiment sessions.
@@ -255,6 +258,12 @@ class SessionStatisticsBucket(BaseTeamModel):
         null=True,
         blank=True,
         help_text="Timestamp of last human message in this bucket"
+    )
+    experiment_versions = ArrayField(
+        models.CharField(max_length=50),
+        default=list,
+        blank=True,
+        help_text="List of experiment version numbers used in this bucket"
     )
 
     # Metadata
@@ -309,7 +318,7 @@ class SessionStatisticsBucketManager(models.Manager):
     def get_totals_for_session(self, session):
         """
         Get aggregated totals for a session across all buckets.
-        Returns dict with total_messages, last_activity.
+        Returns dict with total_messages, last_activity, experiment_versions.
         """
         from django.db.models import Sum, Max
 
@@ -318,24 +327,21 @@ class SessionStatisticsBucketManager(models.Manager):
             last_activity=Max('last_activity_at'),
         )
 
-        # Get experiment versions (not stored in buckets)
-        from django.contrib.contenttypes.models import ContentType
-        from apps.annotations.models import CustomTaggedItem
-        from apps.chat.models import Chat, ChatMessage
+        # Get experiment versions from all buckets (already cached)
+        buckets = self.filter(session=session).values_list('experiment_versions', flat=True)
 
-        message_ct = ContentType.objects.get_for_model(ChatMessage)
-        versions = CustomTaggedItem.objects.filter(
-            content_type=message_ct,
-            object_id__in=ChatMessage.objects.filter(
-                chat=session.chat
-            ).values('id'),
-            tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-        ).values_list('tag__name', flat=True).distinct().order_by('tag__name')
+        # Combine and deduplicate versions from all buckets
+        all_versions = set()
+        for bucket_versions in buckets:
+            all_versions.update(bucket_versions)
+
+        # Sort versions for consistent output
+        sorted_versions = sorted(all_versions)
 
         return {
             'total_messages': aggregates['total_messages'] or 0,
             'last_activity': aggregates['last_activity'],
-            'experiment_versions': ', '.join(versions) if versions else '',
+            'experiment_versions': ', '.join(sorted_versions) if sorted_versions else '',
         }
 
     def get_totals_for_sessions(self, session_ids):
@@ -357,7 +363,27 @@ class SessionStatisticsBucketManager(models.Manager):
             results[bucket['session_id']] = {
                 'total_messages': bucket['total_messages'] or 0,
                 'last_activity': bucket['last_activity'],
+                'experiment_versions': '',  # Will be populated below
             }
+
+        # Get experiment versions for each session
+        buckets_with_versions = self.filter(
+            session_id__in=session_ids
+        ).values('session_id', 'experiment_versions')
+
+        # Build version sets per session
+        session_versions = {}
+        for bucket in buckets_with_versions:
+            session_id = bucket['session_id']
+            if session_id not in session_versions:
+                session_versions[session_id] = set()
+            session_versions[session_id].update(bucket['experiment_versions'])
+
+        # Add sorted versions to results
+        for session_id, versions in session_versions.items():
+            if session_id in results:
+                sorted_versions = sorted(versions)
+                results[session_id]['experiment_versions'] = ', '.join(sorted_versions) if sorted_versions else ''
 
         return results
 
@@ -581,6 +607,9 @@ def update_session_buckets(session_id=None, hours_back=24):
 def _update_session_buckets(session, cutoff):
     """Update buckets for a single session using SQL aggregation."""
     from django.db.models.functions import TruncHour
+    from django.contrib.contenttypes.models import ContentType
+    from apps.annotations.models import CustomTaggedItem
+    from apps.chat.models import Chat
 
     # Aggregate message statistics keyed by hour in single SQL query
     message_stats = ChatMessage.objects.filter(
@@ -593,6 +622,36 @@ def _update_session_buckets(session, cutoff):
         message_count=Count('id'),
         last_activity=Max('created_at'),
     )
+
+    # Get experiment versions per hour
+    message_ct = ContentType.objects.get_for_model(ChatMessage)
+
+    # Get all messages with their versions, grouped by hour
+    messages_with_versions = ChatMessage.objects.filter(
+        chat=session.chat,
+        message_type=ChatMessageType.HUMAN,
+        created_at__gte=cutoff,
+    ).annotate(
+        hour=TruncHour('created_at')
+    ).values('id', 'hour')
+
+    # Build a mapping of hour -> message IDs
+    hour_message_ids = {}
+    for msg in messages_with_versions:
+        hour = msg['hour']
+        if hour not in hour_message_ids:
+            hour_message_ids[hour] = []
+        hour_message_ids[hour].append(msg['id'])
+
+    # Get versions for all messages
+    hour_versions = {}
+    for hour, message_ids in hour_message_ids.items():
+        versions = CustomTaggedItem.objects.filter(
+            content_type=message_ct,
+            object_id__in=message_ids,
+            tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+        ).values_list('tag__name', flat=True).distinct()
+        hour_versions[hour] = sorted(set(versions))
 
     # Bulk create/update buckets
     buckets_to_update = []
@@ -607,13 +666,14 @@ def _update_session_buckets(session, cutoff):
 
         bucket.human_message_count = stat['message_count']
         bucket.last_activity_at = stat['last_activity']
+        bucket.experiment_versions = hour_versions.get(hour_start, [])
         buckets_to_update.append(bucket)
 
     # Bulk update all buckets
     if buckets_to_update:
         SessionStatisticsBucket.objects.bulk_update(
             buckets_to_update,
-            ['human_message_count', 'last_activity_at']
+            ['human_message_count', 'last_activity_at', 'experiment_versions']
         )
 
     logger.info(
@@ -833,6 +893,12 @@ def _compress_session_hourly_to_daily(session_id, date):
         last_activity=Max('last_activity_at'),
     )
 
+    # Combine experiment versions from all hourly buckets
+    all_versions = set()
+    for bucket in hourly_buckets:
+        all_versions.update(bucket.experiment_versions)
+    combined_versions = sorted(all_versions)
+
     with transaction.atomic():
         # Create or update daily bucket
         session = ExperimentSession.objects.get(id=session_id)
@@ -844,6 +910,7 @@ def _compress_session_hourly_to_daily(session_id, date):
                 'bucket_end': day_end,
                 'human_message_count': aggregates['total_messages'] or 0,
                 'last_activity_at': aggregates['last_activity'],
+                'experiment_versions': combined_versions,
                 'team_id': session.team_id,
             }
         )
@@ -1103,10 +1170,12 @@ class ChatbotSessionsTableView(ExperimentSessionsTableView):
             stats = stats_map.get(session.id, {
                 'total_messages': 0,
                 'last_activity': None,
+                'experiment_versions': '',
             })
 
             session.message_count = stats['total_messages']
             session.last_message_created_at = stats['last_activity']
+            session.experiment_versions = stats['experiment_versions']
 
             sessions_with_stats.append(session)
 
