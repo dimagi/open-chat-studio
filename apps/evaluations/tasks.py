@@ -111,16 +111,7 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
 
         # Populate history on the chat with the history from the EvaluationMessage
         if message.history:
-            history_messages = [
-                ChatMessage(
-                    chat=chat,
-                    message_type=history_entry.get("message_type", ChatMessageType.HUMAN),
-                    content=history_entry.get("content", ""),
-                    summary=history_entry.get("summary"),
-                )
-                for history_entry in message.history
-            ]
-            ChatMessage.objects.bulk_create(history_messages)
+            _create_message_history(chat, message.history)
 
     except Exception as e:
         logger.exception(f"Error populating eval data {message.id}: {e}")
@@ -148,6 +139,23 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
         return session.id, None
+
+
+def _create_message_history(chat, history: list[dict]):
+    # Set explicit timestamps with incremental offsets to ensure proper chronological ordering
+    # when messages are retrieved with order_by("created_at")
+    base_time = timezone.now() - timedelta(seconds=len(history))
+    history_messages = [
+        ChatMessage(
+            chat=chat,
+            message_type=history_entry.get("message_type", ChatMessageType.HUMAN),
+            content=history_entry.get("content", ""),
+            summary=history_entry.get("summary"),
+            created_at=base_time + timedelta(seconds=idx),
+        )
+        for idx, history_entry in enumerate(history)
+    ]
+    ChatMessage.objects.bulk_create(history_messages)
 
 
 @shared_task(base=TaskbadgerTask)
