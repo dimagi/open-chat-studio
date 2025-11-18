@@ -19,7 +19,7 @@ from waffle import flag_is_active
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
@@ -50,6 +50,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
+from apps.trace.models import Trace
 from apps.utils.search import similarity_search
 from apps.web.waf import WafRule, waf_allow
 
@@ -208,26 +209,23 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
             .values("count")
         )
 
-        messages_count_subquery = (
-            ChatMessage.objects.filter(chat__experiment_session__experiment_id=OuterRef("pk"))
-            .values("chat__experiment_session__experiment_id")
+        interaction_count_subquery = (
+            Trace.objects.filter(experiment=OuterRef("pk"))
+            .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
         )
 
-        last_message_subquery = (
-            ChatMessage.objects.filter(chat__experiment_session__experiment_id=OuterRef("pk"))
-            .order_by("-created_at")
-            .values("created_at")[:1]
+        last_activity_subquery = (
+            Trace.objects.filter(experiment=OuterRef("pk")).order_by("-timestamp").values("timestamp")[:1]
         )
 
-        # Add expensive annotations only to paginated data
         queryset = queryset.annotate(
             session_count=Subquery(session_count_subquery, output_field=IntegerField()),
             participant_count=Subquery(participant_count_subquery, output_field=IntegerField()),
-            messages_count=Subquery(messages_count_subquery, output_field=IntegerField()),
-            last_message=Subquery(last_message_subquery, output_field=DateTimeField()),
-        ).order_by(F("last_message").desc(nulls_last=True))
+            interaction_count=Subquery(interaction_count_subquery, output_field=IntegerField()),
+            last_activity=Subquery(last_activity_subquery, output_field=DateTimeField()),
+        ).order_by(F("last_activity").desc(nulls_last=True))
         return queryset
 
 
