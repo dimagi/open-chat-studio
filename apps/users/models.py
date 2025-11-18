@@ -4,6 +4,7 @@ from django.contrib.auth.models import AbstractUser, UserManager
 from django.db import models
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
+from oauth2_provider.models import AbstractApplication, ApplicationManager
 
 from apps.users.model_audit_fields import CUSTOM_USER_FIELDS
 from apps.web.storage_backends import get_public_media_storage
@@ -42,3 +43,8 @@ class CustomUser(AbstractUser):
     def gravatar_id(self) -> str:
         # https://en.gravatar.com/site/implement/hash/
         return hashlib.md5(self.email.lower().strip().encode("utf-8")).hexdigest()
+
+
+class OAuth2Application(AbstractApplication):
+    # Custom application model can be extended here if needed
+    objects = ApplicationManager()

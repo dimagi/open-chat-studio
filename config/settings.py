@@ -818,3 +818,4 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
 
 
 OAUTH2_PROVIDER = {"PKCE_REQUIRED": False}
+OAUTH2_PROVIDER_APPLICATION_MODEL = "users.OAuth2Application"
