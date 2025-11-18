@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
-from django_tables2 import SingleTableView
+from django_tables2 import LazyPaginator, SingleTableView
 
 from apps.chat.models import ChatMessage
 from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
@@ -231,8 +231,9 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
 
     model = ExperimentSession
     table_class = EvaluationSessionsSelectionTable
-    template_name = "table/single_table.html"
+    template_name = "table/single_table_lazy_pagination.html"
     permission_required = "experiments.view_experimentsession"
+    paginator_class = LazyPaginator
 
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
