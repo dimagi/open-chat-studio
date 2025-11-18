@@ -51,6 +51,20 @@ class IntFieldDefinition(BaseFieldDefinition):
         return int
 
 
+class FloatFieldDefinition(BaseFieldDefinition):
+    """Float field with validation constraints."""
+
+    type: Literal["float"]
+    ge: float | None = None
+    le: float | None = None
+    gt: float | None = None
+    lt: float | None = None
+
+    @property
+    def python_type(self) -> type:
+        return float
+
+
 class ChoiceFieldDefinition(BaseFieldDefinition):
     """Choice field with enumerated valid values."""
 
@@ -71,4 +85,4 @@ class ChoiceFieldDefinition(BaseFieldDefinition):
         return fields
 
 
-FieldDefinition = StringFieldDefinition | IntFieldDefinition | ChoiceFieldDefinition
+FieldDefinition = StringFieldDefinition | IntFieldDefinition | FloatFieldDefinition | ChoiceFieldDefinition

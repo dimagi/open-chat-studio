@@ -180,6 +180,7 @@
                                 class="select select-bordered w-full select-sm">
                           <option value="string">{% translate "Text" %}</option>
                           <option value="int">{% translate "Integer" %}</option>
+                          <option value="float">{% translate "Float" %}</option>
                           <option value="choice">{% translate "Choice" %}</option>
                         </select>
                       </div>
@@ -218,6 +219,39 @@
                                 <span class="label-text text-xs">{% translate "Maximum" %}</span>
                               </label>
                               <input type="number"
+                                     x-model="pair.le"
+                                     @input="updateKeyValuePairs(fieldName)"
+                                     placeholder="{% translate "Max (inclusive)" %}"
+                                     class="input input-bordered w-full input-sm">
+                            </div>
+                          </div>
+                        </div>
+                      </details>
+
+                      <!-- Float Constraints -->
+                      <details x-show="pair.type === 'float'" class="mb-2" open>
+                        <summary class="cursor-pointer text-sm font-medium mb-2">
+                          {% translate "Constraints" %}
+                        </summary>
+                        <div class="ml-4 space-y-2">
+                          <div class="grid grid-cols-2 gap-2">
+                            <div>
+                              <label class="label py-0">
+                                <span class="label-text text-xs">{% translate "Minimum" %}</span>
+                              </label>
+                              <input type="number"
+                                     step="any"
+                                     x-model="pair.ge"
+                                     @input="updateKeyValuePairs(fieldName)"
+                                     placeholder="{% translate "Min (inclusive)" %}"
+                                     class="input input-bordered w-full input-sm">
+                            </div>
+                            <div>
+                              <label class="label py-0">
+                                <span class="label-text text-xs">{% translate "Maximum" %}</span>
+                              </label>
+                              <input type="number"
+                                     step="any"
                                      x-model="pair.le"
                                      @input="updateKeyValuePairs(fieldName)"
                                      placeholder="{% translate "Max (inclusive)" %}"
@@ -594,6 +628,14 @@
                   if (pair.le !== null && pair.le !== undefined && pair.le !== '') {
                     fieldDef.le = parseInt(pair.le);
                   }
+                } else if (pair.type === 'float') {
+                  // Add float constraints if present
+                  if (pair.ge !== null && pair.ge !== undefined && pair.ge !== '') {
+                    fieldDef.ge = parseFloat(pair.ge);
+                  }
+                  if (pair.le !== null && pair.le !== undefined && pair.le !== '') {
+                    fieldDef.le = parseFloat(pair.le);
+                  }
                 } else if (pair.type === 'string') {
                   // Add string constraints if present
                   const minLength = pair.min_length !== null && pair.min_length !== undefined && pair.min_length !== ''
@@ -644,12 +686,21 @@
               if (this.getWidget(this.selectedSchema.properties[fieldName]) === 'key_value_pairs') {
                 if (this.params[fieldName] && typeof this.params[fieldName] === 'object') {
                   this.keyValuePairs[fieldName] = Object.entries(this.params[fieldName]).map(([name, value]) => {
+                    let geValue = null;
+                    let leValue = null;
+                    if (value.type === 'int') {
+                        geValue = value.ge !== undefined ? parseInt(value.ge) : null;
+                        leValue = value.le !== undefined ? parseInt(value.le) : null;
+                    } else if (value.type === 'float') {
+                        geValue = value.ge !== undefined ? parseFloat(value.ge) : null;
+                        leValue = value.le !== undefined ? parseFloat(value.le) : null;
+                    }
                     return {
                       name: name,
                       type: value.type || 'string',
                       description: value.description || '',
-                      ge: value.ge !== undefined ? value.ge : null,
-                      le: value.le !== undefined ? value.le : null,
+                      ge: geValue,
+                      le: leValue,
                       min_length: value.min_length !== undefined ? value.min_length : null,
                       max_length: value.max_length !== undefined ? value.max_length : null,
                       pattern: value.pattern || null,
