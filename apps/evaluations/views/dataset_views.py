@@ -252,7 +252,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
                 0,
             )
         )
-        return queryset
+        return queryset.select_related("team", "participant__user", "chat", "experiment").order_by("experiment__name")
 
 
 def get_base_session_queryset(request):
@@ -269,17 +269,13 @@ def get_base_session_queryset(request):
     has_messages = Exists(filtered_messages)
 
     # Build the query with basic filtering only
-    query_set = (
-        ExperimentSession.objects.filter(team=request.team)
-        .filter(has_messages)  # Filter early with Exists
-        .select_related("team", "participant__user", "chat", "experiment")
-    )
+    query_set = ExperimentSession.objects.filter(team=request.team).filter(has_messages)
 
     # Apply session filter (this will add first_message_created_at and last_message_created_at)
     session_filter = ExperimentSessionFilter()
     query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
 
-    return query_set.order_by("experiment__name")
+    return query_set
 
 
 class DatasetSessionsSelectionJson(DatasetSessionsSelectionTableView):
