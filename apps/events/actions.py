@@ -1,5 +1,6 @@
 from django.db.models import Case, DateTimeField, F, When
 from langchain.memory.prompt import SUMMARY_PROMPT
+from langchain_core.messages import get_buffer_string
 from langchain_core.prompts.prompt import PromptTemplate
 
 from apps.chat.models import ChatMessageType
@@ -51,7 +52,8 @@ class SummarizeConversationAction(EventActionHandlerBase):
 
         llm = session.experiment.get_chat_model()
         chain = (prompt | llm).with_config({"run_name": "generate_summary"})
-        summary = chain.invoke({"summary": current_summary or "", "new_lines": messages}).text()
+        new_lines = get_buffer_string(messages)
+        summary = chain.invoke({"summary": current_summary or "", "new_lines": new_lines}).text()
 
         return summary
 
