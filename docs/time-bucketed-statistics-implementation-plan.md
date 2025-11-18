@@ -16,8 +16,7 @@ This implementation uses SQL-based aggregation throughout to minimize Python loo
 4. **Compression Tasks**: Filter old buckets directly in SQL using date comparisons (no Python loops)
 5. **Date Calculations**: Uses `dateutil.relativedelta` for accurate relative date calculations
 6. **Bulk Operations**: Uses `bulk_update()` to minimize database round-trips
-7. **Experiment Versions**: Stored in buckets as ArrayField, eliminating need for separate queries to CustomTaggedItem
-8. **Custom PostgreSQL Aggregate**: Uses `array_concat` aggregate to concatenate version arrays in SQL, enabling single-query retrieval for multiple sessions
+7. **Experiment Versions**: Cached directly on session model, avoiding temporal redundancy in time buckets
 
 ### Key Simplifications
 
@@ -54,37 +53,6 @@ This implementation uses SQL-based aggregation throughout to minimize Python loo
 ---
 
 ## Database Schema
-
-### 0. Custom PostgreSQL Aggregate Function
-
-To efficiently aggregate experiment versions across buckets, we'll create a custom PostgreSQL aggregate function:
-
-```python
-# apps/experiments/migrations/XXXX_add_array_concat_aggregate.py
-
-from django.db import migrations
-
-
-class Migration(migrations.Migration):
-    dependencies = [
-        ('experiments', 'PREVIOUS_MIGRATION'),
-    ]
-
-    operations = [
-        migrations.RunSQL(
-            sql="""
-            CREATE AGGREGATE array_concat (anycompatiblearray) (
-                sfunc = array_cat,
-                stype = anycompatiblearray,
-                initcond = '{}'
-            );
-            """,
-            reverse_sql="DROP AGGREGATE IF EXISTS array_concat(anycompatiblearray);",
-        ),
-    ]
-```
-
-This aggregate allows us to concatenate arrays directly in SQL, enabling single-query aggregation of experiment versions.
 
 ### 1. Experiment Statistics Buckets
 
@@ -251,12 +219,33 @@ class ExperimentStatisticsBucketManager(models.Manager):
 ExperimentStatisticsBucket.add_to_class('objects', ExperimentStatisticsBucketManager())
 ```
 
-### 2. Session Statistics Buckets
+### 2. Cached Experiment Versions on Session
+
+Add a field to the `ExperimentSession` model to cache experiment versions:
 
 ```python
 # apps/experiments/models.py
 
 from django.contrib.postgres.fields import ArrayField
+
+class ExperimentSession(BaseTeamModel):
+    # ... existing fields ...
+
+    # Cached statistics
+    cached_experiment_versions = ArrayField(
+        models.CharField(max_length=50),
+        default=list,
+        blank=True,
+        help_text="Cached list of unique experiment version numbers used in this session"
+    )
+```
+
+This field stores all unique experiment versions seen in the session, updated periodically by the statistics tasks.
+
+### 3. Session Statistics Buckets
+
+```python
+# apps/experiments/models.py
 
 class SessionStatisticsBucket(BaseTeamModel):
     """
@@ -292,12 +281,6 @@ class SessionStatisticsBucket(BaseTeamModel):
         null=True,
         blank=True,
         help_text="Timestamp of last human message in this bucket"
-    )
-    experiment_versions = ArrayField(
-        models.CharField(max_length=50),
-        default=list,
-        blank=True,
-        help_text="List of experiment version numbers used in this bucket"
     )
 
     # Metadata
@@ -346,13 +329,6 @@ class SessionStatisticsBucket(BaseTeamModel):
         return bucket, created
 
 
-class ArrayConcat(models.Aggregate):
-    """Custom aggregate to concatenate arrays in PostgreSQL using array_concat."""
-    function = 'array_concat'
-    name = 'ArrayConcat'
-    output_field = ArrayField(models.CharField(max_length=50))
-
-
 class SessionStatisticsBucketManager(models.Manager):
     """Manager with helper methods for querying session statistics."""
 
@@ -368,49 +344,50 @@ class SessionStatisticsBucketManager(models.Manager):
             last_activity=Max('last_activity_at'),
         )
 
-        # Get experiment versions from all buckets (already cached)
-        buckets = self.filter(session=session).values_list('experiment_versions', flat=True)
-
-        # Combine and deduplicate versions from all buckets
-        all_versions = set()
-        for bucket_versions in buckets:
-            all_versions.update(bucket_versions)
-
-        # Sort versions for consistent output
-        sorted_versions = sorted(all_versions)
+        # Get experiment versions from session's cached field
+        experiment_versions = ', '.join(session.cached_experiment_versions) if session.cached_experiment_versions else ''
 
         return {
             'total_messages': aggregates['total_messages'] or 0,
             'last_activity': aggregates['last_activity'],
-            'experiment_versions': ', '.join(sorted_versions) if sorted_versions else '',
+            'experiment_versions': experiment_versions,
         }
 
     def get_totals_for_sessions(self, session_ids):
         """
-        Get totals for multiple sessions efficiently using custom array_concat aggregate.
+        Get totals for multiple sessions efficiently.
         Returns dict mapping session_id -> totals dict.
         """
         from django.db.models import Sum, Max
+        from apps.experiments.models import ExperimentSession
 
-        # Single query to get all statistics including concatenated versions
+        # Get bucket aggregates per session
         bucket_data = self.filter(
             session_id__in=session_ids
         ).values('session_id').annotate(
             total_messages=Sum('human_message_count'),
             last_activity=Max('last_activity_at'),
-            all_versions=ArrayConcat('experiment_versions'),
         )
 
+        # Get cached experiment versions from sessions
+        sessions = ExperimentSession.objects.filter(
+            id__in=session_ids
+        ).values('id', 'cached_experiment_versions')
+
+        # Build version mapping
+        version_map = {
+            s['id']: ', '.join(s['cached_experiment_versions']) if s['cached_experiment_versions'] else ''
+            for s in sessions
+        }
+
+        # Combine results
         results = {}
         for bucket in bucket_data:
-            # Deduplicate and sort versions in Python (lightweight operation)
-            all_versions = bucket['all_versions'] or []
-            sorted_versions = sorted(set(all_versions))
-
-            results[bucket['session_id']] = {
+            session_id = bucket['session_id']
+            results[session_id] = {
                 'total_messages': bucket['total_messages'] or 0,
                 'last_activity': bucket['last_activity'],
-                'experiment_versions': ', '.join(sorted_versions) if sorted_versions else '',
+                'experiment_versions': version_map.get(session_id, ''),
             }
 
         return results
@@ -651,46 +628,6 @@ def _update_session_buckets(session, cutoff):
         last_activity=Max('created_at'),
     )
 
-    # Get experiment versions per hour
-    message_ct = ContentType.objects.get_for_model(ChatMessage)
-
-    # Get all messages with their hours
-    messages_with_hours = ChatMessage.objects.filter(
-        chat=session.chat,
-        message_type=ChatMessageType.HUMAN,
-        created_at__gte=cutoff,
-    ).annotate(
-        hour=TruncHour('created_at')
-    ).values('id', 'hour')
-
-    # Build mapping of message_id -> hour
-    message_to_hour = {msg['id']: msg['hour'] for msg in messages_with_hours}
-    message_ids = list(message_to_hour.keys())
-
-    # Fetch all versions for all messages at once (single query instead of N queries)
-    if message_ids:
-        version_data = CustomTaggedItem.objects.filter(
-            content_type=message_ct,
-            object_id__in=message_ids,
-            tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-        ).values('object_id', 'tag__name')
-
-        # Group versions by hour
-        hour_versions = {}
-        for item in version_data:
-            msg_id = item['object_id']
-            version = item['tag__name']
-            hour = message_to_hour.get(msg_id)
-            if hour:
-                if hour not in hour_versions:
-                    hour_versions[hour] = set()
-                hour_versions[hour].add(version)
-
-        # Sort versions for each hour
-        hour_versions = {hour: sorted(versions) for hour, versions in hour_versions.items()}
-    else:
-        hour_versions = {}
-
     # Bulk create/update buckets
     buckets_to_update = []
     for stat in message_stats:
@@ -704,15 +641,29 @@ def _update_session_buckets(session, cutoff):
 
         bucket.human_message_count = stat['message_count']
         bucket.last_activity_at = stat['last_activity']
-        bucket.experiment_versions = hour_versions.get(hour_start, [])
         buckets_to_update.append(bucket)
 
     # Bulk update all buckets
     if buckets_to_update:
         SessionStatisticsBucket.objects.bulk_update(
             buckets_to_update,
-            ['human_message_count', 'last_activity_at', 'experiment_versions']
+            ['human_message_count', 'last_activity_at']
         )
+
+    # Update session's cached experiment versions
+    message_ct = ContentType.objects.get_for_model(ChatMessage)
+    all_versions = CustomTaggedItem.objects.filter(
+        content_type=message_ct,
+        object_id__in=ChatMessage.objects.filter(
+            chat=session.chat,
+            message_type=ChatMessageType.HUMAN,
+        ).values_list('id', flat=True),
+        tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+    ).values_list('tag__name', flat=True).distinct()
+
+    # Update session with sorted unique versions
+    session.cached_experiment_versions = sorted(set(all_versions))
+    session.save(update_fields=['cached_experiment_versions'])
 
     logger.info(
         f"Updated {len(buckets_to_update)} hourly buckets for session {session.id}"
@@ -931,12 +882,6 @@ def _compress_session_hourly_to_daily(session_id, date):
         last_activity=Max('last_activity_at'),
     )
 
-    # Combine experiment versions from all hourly buckets
-    all_versions = set()
-    for bucket in hourly_buckets:
-        all_versions.update(bucket.experiment_versions)
-    combined_versions = sorted(all_versions)
-
     with transaction.atomic():
         # Create or update daily bucket
         session = ExperimentSession.objects.get(id=session_id)
@@ -948,7 +893,6 @@ def _compress_session_hourly_to_daily(session_id, date):
                 'bucket_end': day_end,
                 'human_message_count': aggregates['total_messages'] or 0,
                 'last_activity_at': aggregates['last_activity'],
-                'experiment_versions': combined_versions,
                 'team_id': session.team_id,
             }
         )
@@ -1513,18 +1457,16 @@ class Command(BaseCommand):
 
 #### Tasks
 
-1. Create custom PostgreSQL `array_concat` aggregate function migration
+1. Add `cached_experiment_versions` field to `ExperimentSession` model
 2. Create models (`ExperimentStatisticsBucket`, `SessionStatisticsBucket`)
-3. Create `ArrayConcat` aggregate class in models
-4. Create migration files for models
-5. Add `statistics_config.py` with compression policy
-6. Create management commands
+3. Create migration files for models
+4. Add `statistics_config.py` with compression policy
+5. Create management commands
 
 #### Deliverables
 
-- Django migrations (including custom aggregate function)
+- Django migrations (including session field and bucket tables)
 - Empty tables ready for data
-- Custom aggregate function ready for use
 - Management commands for manual control
 
 #### Testing
@@ -1535,10 +1477,10 @@ python manage.py makemigrations experiments
 # Apply migrations
 python manage.py migrate
 
-# Verify tables and function exist
+# Verify tables exist
 python manage.py dbshell
 \dt experiments_*_bucket
-\df array_concat
+\d experiments_experimentsession
 ```
 
 ### Phase 2: Backfill (Week 1-2)
