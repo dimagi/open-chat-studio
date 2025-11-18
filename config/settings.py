@@ -815,3 +815,6 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
             return "silky" in request.htmx.current_url
 
     return "silky" in request.headers.get("referer", "")
+
+
+OAUTH2_PROVIDER = {"PKCE_REQUIRED": False}
