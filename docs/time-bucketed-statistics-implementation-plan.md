@@ -85,7 +85,7 @@ class ExperimentStatisticsBucket(BaseTeamModel):
     session_count = models.IntegerField(default=0)
     new_participant_count = models.IntegerField(
         default=0,
-        help_text="New participants that started in this bucket"
+        help_text="Participants whose first session was created in this bucket"
     )
     human_message_count = models.IntegerField(default=0)
     last_activity_at = models.DateTimeField(
@@ -96,19 +96,14 @@ class ExperimentStatisticsBucket(BaseTeamModel):
 
     # Metadata
     last_updated_at = models.DateTimeField(auto_now=True)
-    is_finalized = models.BooleanField(
-        default=False,
-        help_text="Whether this bucket is complete and won't be updated"
-    )
 
     class Meta:
         db_table = 'experiments_experiment_statistics_bucket'
         unique_together = [('experiment', 'bucket_start', 'bucket_size')]
         indexes = [
-            models.Index(fields=['experiment', 'bucket_start', 'bucket_size']),
-            models.Index(fields=['bucket_start', 'bucket_end']),
-            models.Index(fields=['is_finalized', 'bucket_size']),
-            models.Index(fields=['experiment', 'is_finalized']),
+            # unique_together already creates an index on (experiment, bucket_start, bucket_size)
+            # Add index for time-range queries
+            models.Index(fields=['bucket_start']),
         ]
         ordering = ['-bucket_start']
 
@@ -272,15 +267,13 @@ class SessionStatisticsBucket(BaseTeamModel):
 
     # Metadata
     last_updated_at = models.DateTimeField(auto_now=True)
-    is_finalized = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'experiments_session_statistics_bucket'
         unique_together = [('session', 'bucket_start', 'bucket_size')]
         indexes = [
-            models.Index(fields=['session', 'bucket_start', 'bucket_size']),
-            models.Index(fields=['is_finalized', 'bucket_size']),
-            models.Index(fields=['session', 'is_finalized']),
+            # unique_together already creates an index on (session, bucket_start, bucket_size)
+            models.Index(fields=['bucket_start']),
         ]
         ordering = ['-bucket_start']
 
@@ -452,12 +445,6 @@ STATISTICS_CONFIG = {
 
     # Batch size for processing
     'BATCH_SIZE': 100,
-
-    # Whether to finalize old buckets
-    'AUTO_FINALIZE': True,
-
-    # Age threshold for auto-finalizing buckets
-    'FINALIZE_AGE': timedelta(hours=2),
 }
 ```
 
@@ -516,64 +503,64 @@ def update_experiment_buckets(experiment_id=None, hours_back=24):
 
 
 def _update_experiment_buckets(experiment, cutoff):
-    """Update buckets for a single experiment."""
+    """Update buckets for a single experiment using SQL aggregation."""
     from django.db.models import Count, Max
+    from django.db.models.functions import TruncHour
 
-    # Get all messages for this experiment since cutoff
-    messages = ChatMessage.objects.filter(
+    # Use SQL to group messages by hour
+    message_aggregates = ChatMessage.objects.filter(
         chat__experiment_session__experiment=experiment,
         message_type=ChatMessageType.HUMAN,
         created_at__gte=cutoff,
-    ).order_by('created_at')
+    ).annotate(
+        hour=TruncHour('created_at')
+    ).values('hour').annotate(
+        message_count=Count('id'),
+        last_activity=Max('created_at'),
+    )
 
-    # Group messages by hour
-    hourly_data = {}
-    for message in messages:
-        hour_start = message.created_at.replace(minute=0, second=0, microsecond=0)
+    # Update or create buckets for each hour
+    for agg in message_aggregates:
+        hour_start = agg['hour']
+        hour_end = hour_start + timedelta(hours=1)
 
-        if hour_start not in hourly_data:
-            hourly_data[hour_start] = {
-                'message_count': 0,
-                'last_activity': message.created_at,
-                'sessions': set(),
-                'participants': set(),
-            }
+        # Get session and participant counts for this hour bucket
+        # Count sessions created in this hour
+        session_count = ExperimentSession.objects.filter(
+            experiment=experiment,
+            created_at__gte=hour_start,
+            created_at__lt=hour_end,
+        ).count()
 
-        hourly_data[hour_start]['message_count'] += 1
-        hourly_data[hour_start]['last_activity'] = max(
-            hourly_data[hour_start]['last_activity'],
-            message.created_at
-        )
+        # Count NEW participants (whose first session was in this hour)
+        # This is the minimum created_at for each participant
+        new_participant_count = ExperimentSession.objects.filter(
+            experiment=experiment,
+            created_at__gte=hour_start,
+            created_at__lt=hour_end,
+        ).values('participant').annotate(
+            first_session=models.Min('created_at')
+        ).filter(
+            first_session__gte=hour_start,
+            first_session__lt=hour_end
+        ).count()
 
-        session = message.chat.experiment_session
-        hourly_data[hour_start]['sessions'].add(session.id)
-        if session.participant_id:
-            hourly_data[hour_start]['participants'].add(session.participant_id)
-
-    # Update or create hourly buckets
-    for hour_start, data in hourly_data.items():
+        # Create or update bucket
         bucket, created = ExperimentStatisticsBucket.get_or_create_bucket(
             experiment,
             hour_start,
             ExperimentStatisticsBucket.BucketSize.HOUR
         )
 
-        # Recalculate bucket stats from scratch for this hour
-        hour_end = hour_start + timedelta(hours=1)
-
-        hour_sessions = ExperimentSession.objects.filter(
-            experiment=experiment,
-            created_at__gte=hour_start,
-            created_at__lt=hour_end,
-        )
-
-        bucket.session_count = hour_sessions.count()
-        bucket.new_participant_count = hour_sessions.values('participant').distinct().count()
-        bucket.human_message_count = data['message_count']
-        bucket.last_activity_at = data['last_activity']
+        bucket.session_count = session_count
+        bucket.new_participant_count = new_participant_count
+        bucket.human_message_count = agg['message_count']
+        bucket.last_activity_at = agg['last_activity']
         bucket.save()
 
-    logger.info(f"Updated {len(hourly_data)} hourly buckets for experiment {experiment.id}")
+    logger.info(
+        f"Updated {message_aggregates.count()} hourly buckets for experiment {experiment.id}"
+    )
 
 
 @shared_task
@@ -606,44 +593,38 @@ def update_session_buckets(session_id=None, hours_back=24):
 
 
 def _update_session_buckets(session, cutoff):
-    """Update buckets for a single session."""
-    # Get all human messages for this session since cutoff
-    messages = ChatMessage.objects.filter(
+    """Update buckets for a single session using SQL aggregation."""
+    from django.db.models.functions import TruncHour
+
+    # Use SQL to group messages by hour
+    message_aggregates = ChatMessage.objects.filter(
         chat=session.chat,
         message_type=ChatMessageType.HUMAN,
         created_at__gte=cutoff,
-    ).order_by('created_at')
+    ).annotate(
+        hour=TruncHour('created_at')
+    ).values('hour').annotate(
+        message_count=Count('id'),
+        last_activity=Max('created_at'),
+    )
 
-    # Group messages by hour
-    hourly_data = {}
-    for message in messages:
-        hour_start = message.created_at.replace(minute=0, second=0, microsecond=0)
+    # Update or create hourly buckets for each hour
+    for agg in message_aggregates:
+        hour_start = agg['hour']
 
-        if hour_start not in hourly_data:
-            hourly_data[hour_start] = {
-                'message_count': 0,
-                'last_activity': message.created_at,
-            }
-
-        hourly_data[hour_start]['message_count'] += 1
-        hourly_data[hour_start]['last_activity'] = max(
-            hourly_data[hour_start]['last_activity'],
-            message.created_at
-        )
-
-    # Update or create hourly buckets
-    for hour_start, data in hourly_data.items():
         bucket, created = SessionStatisticsBucket.get_or_create_bucket(
             session,
             hour_start,
             SessionStatisticsBucket.BucketSize.HOUR
         )
 
-        bucket.human_message_count = data['message_count']
-        bucket.last_activity_at = data['last_activity']
+        bucket.human_message_count = agg['message_count']
+        bucket.last_activity_at = agg['last_activity']
         bucket.save()
 
-    logger.info(f"Updated {len(hourly_data)} hourly buckets for session {session.id}")
+    logger.info(
+        f"Updated {message_aggregates.count()} hourly buckets for session {session.id}"
+    )
 ```
 
 ### 2. Compression Tasks
@@ -664,7 +645,6 @@ def compress_experiment_buckets():
     # Compress hourly to daily
     hourly_buckets = ExperimentStatisticsBucket.objects.filter(
         bucket_size=ExperimentStatisticsBucket.BucketSize.HOUR,
-        is_finalized=False,
     )
 
     days_to_compress = set()
@@ -680,7 +660,6 @@ def compress_experiment_buckets():
     # Compress daily to monthly
     daily_buckets = ExperimentStatisticsBucket.objects.filter(
         bucket_size=ExperimentStatisticsBucket.BucketSize.DAY,
-        is_finalized=False,
     )
 
     months_to_compress = set()
@@ -735,7 +714,6 @@ def _compress_hourly_to_daily(experiment_id, date):
                 'new_participant_count': aggregates['total_participants'] or 0,
                 'human_message_count': aggregates['total_messages'] or 0,
                 'last_activity_at': aggregates['last_activity'],
-                'is_finalized': True,
                 'team_id': experiment.team_id,
             }
         )
@@ -791,7 +769,6 @@ def _compress_daily_to_monthly(experiment_id, month_start):
                 'new_participant_count': aggregates['total_participants'] or 0,
                 'human_message_count': aggregates['total_messages'] or 0,
                 'last_activity_at': aggregates['last_activity'],
-                'is_finalized': True,
                 'team_id': experiment.team_id,
             }
         )
@@ -815,7 +792,6 @@ def compress_session_buckets():
     # Compress hourly to daily
     hourly_buckets = SessionStatisticsBucket.objects.filter(
         bucket_size=SessionStatisticsBucket.BucketSize.HOUR,
-        is_finalized=False,
     )
 
     days_to_compress = set()
@@ -866,7 +842,6 @@ def _compress_session_hourly_to_daily(session_id, date):
                 'bucket_end': day_end,
                 'human_message_count': aggregates['total_messages'] or 0,
                 'last_activity_at': aggregates['last_activity'],
-                'is_finalized': True,
                 'team_id': session.team_id,
             }
         )
@@ -1378,8 +1353,7 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"  {bucket.bucket_size:6s} | {bucket.bucket_start} | "
                     f"Sessions: {bucket.session_count:4d} | "
-                    f"Messages: {bucket.human_message_count:5d} | "
-                    f"{'[finalized]' if bucket.is_finalized else ''}"
+                    f"Messages: {bucket.human_message_count:5d}"
                 )
 
     def _show_session_stats(self, session_id, show_buckets):
@@ -1408,8 +1382,7 @@ class Command(BaseCommand):
             for bucket in buckets:
                 self.stdout.write(
                     f"  {bucket.bucket_size:6s} | {bucket.bucket_start} | "
-                    f"Messages: {bucket.human_message_count:5d} | "
-                    f"{'[finalized]' if bucket.is_finalized else ''}"
+                    f"Messages: {bucket.human_message_count:5d}"
                 )
 ```
 
@@ -1731,7 +1704,6 @@ class TestCompressionTasks:
         daily_bucket = daily_buckets.first()
         assert daily_bucket.session_count == 24
         assert daily_bucket.human_message_count == 240
-        assert daily_bucket.is_finalized is True
 ```
 
 ### Integration Tests
@@ -1933,12 +1905,10 @@ class ExperimentStatisticsBucketAdmin(admin.ModelAdmin):
         'bucket_start',
         'session_count',
         'human_message_count',
-        'is_finalized',
         'last_updated_at',
     ]
     list_filter = [
         'bucket_size',
-        'is_finalized',
         'bucket_start',
     ]
     search_fields = ['experiment__name']
@@ -1949,7 +1919,7 @@ class ExperimentStatisticsBucketAdmin(admin.ModelAdmin):
     ]
     date_hierarchy = 'bucket_start'
 
-    actions = ['refresh_buckets', 'finalize_buckets']
+    actions = ['refresh_buckets']
 
     def refresh_buckets(self, request, queryset):
         """Manually refresh selected buckets."""
@@ -1965,12 +1935,6 @@ class ExperimentStatisticsBucketAdmin(admin.ModelAdmin):
         )
     refresh_buckets.short_description = "Refresh selected buckets"
 
-    def finalize_buckets(self, request, queryset):
-        """Mark selected buckets as finalized."""
-        count = queryset.update(is_finalized=True)
-        self.message_user(request, f"Finalized {count} buckets")
-    finalize_buckets.short_description = "Mark as finalized"
-
 
 @admin.register(SessionStatisticsBucket)
 class SessionStatisticsBucketAdmin(admin.ModelAdmin):
@@ -1979,12 +1943,10 @@ class SessionStatisticsBucketAdmin(admin.ModelAdmin):
         'bucket_size',
         'bucket_start',
         'human_message_count',
-        'is_finalized',
         'last_updated_at',
     ]
     list_filter = [
         'bucket_size',
-        'is_finalized',
         'bucket_start',
     ]
     readonly_fields = [
