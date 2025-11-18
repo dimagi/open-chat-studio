@@ -104,8 +104,8 @@ def test_populate_reference_section_from_citations(text, file_setups, expected_o
     cited_files = []
     for file_setup in file_setups:
         file = FileFactory(id=file_setup["id"], name=file_setup["name"], team=session.team)
-        # Mock the download_link method to return a predictable URL
-        file.download_link = Mock(return_value=f"http://example.com/download/{file_setup['id']}")
+        # Mock the get_citation_url method to return a predictable URL
+        file.get_citation_url = Mock(return_value=f"http://example.com/download/{file_setup['id']}")
         cited_files.append(file)
 
     # Test the function
