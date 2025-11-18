@@ -177,7 +177,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         queryset = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
-            .select_related("team", "owner")
+            .select_related("team")
         )
         show_archived = self.request.GET.get("show_archived") == "on"
         if not show_archived:
