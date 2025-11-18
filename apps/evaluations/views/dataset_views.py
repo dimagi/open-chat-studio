@@ -236,34 +236,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
     paginator_class = LazyPaginator
 
     def get_queryset(self):
-        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
-        timezone = self.request.session.get("detected_tz", None)
-        filter_params = FilterParams.from_request(self.request)
-
-        # Get filtered message IDs more efficiently
-        message_filter = ChatMessageFilter()
-        base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
-        filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
-
-        # Use Exists for filtering instead of Count with IN subquery - avoids cartesian product
-        has_messages = Exists(filtered_messages)
-
-        # Build the query with basic filtering only
-        query_set = (
-            ExperimentSession.objects.filter(team=self.request.team)
-            .filter(has_messages)  # Filter early with Exists
-            .select_related("team", "participant__user", "chat", "experiment")
-        )
-
-        # Apply session filter (this will add first_message_created_at and last_message_created_at)
-        session_filter = ExperimentSessionFilter()
-        query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
-
-        return query_set.order_by("experiment__name")
-
-    def get_table_data(self):
-        """Add expensive annotations only to the paginated data, not for counting."""
-        queryset = super().get_table_data()
+        queryset = get_base_session_queryset(self.request)
 
         # Get filter params for message count
         timezone = self.request.session.get("detected_tz", None)
@@ -282,13 +255,40 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
         return queryset
 
 
+def get_base_session_queryset(request):
+    """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
+    timezone = request.session.get("detected_tz", None)
+    filter_params = FilterParams.from_request(request)
+
+    # Get filtered message IDs more efficiently
+    message_filter = ChatMessageFilter()
+    base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
+    filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
+
+    # Use Exists for filtering instead of Count with IN subquery - avoids cartesian product
+    has_messages = Exists(filtered_messages)
+
+    # Build the query with basic filtering only
+    query_set = (
+        ExperimentSession.objects.filter(team=request.team)
+        .filter(has_messages)  # Filter early with Exists
+        .select_related("team", "participant__user", "chat", "experiment")
+    )
+
+    # Apply session filter (this will add first_message_created_at and last_message_created_at)
+    session_filter = ExperimentSessionFilter()
+    query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
+
+    return query_set.order_by("experiment__name")
+
+
 class DatasetSessionsSelectionJson(DatasetSessionsSelectionTableView):
     """Return the filtered items in DatasetSessionsSelectionTableView in a JSON format without pagination."""
 
     table_pagination = False
 
     def get(self, request, *args, **kwargs):
-        query_set = self.get_queryset()
+        query_set = get_base_session_queryset(self.request)
         session_keys = list(query_set.values_list("external_id", flat=True))
         return JsonResponse(session_keys, safe=False)
 
