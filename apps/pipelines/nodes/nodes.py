@@ -202,12 +202,6 @@ class LLMResponseMixin(BaseModel):
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
-    def get_llm_provider_model(self):
-        try:
-            return LlmProviderModel.objects.get(id=self.llm_provider_model_id)
-        except LlmProviderModel.DoesNotExist as err:
-            raise PipelineNodeBuildError("LLM Provider Model does not exist") from err
-
     def get_chat_model(self):
         model_name = get_llm_provider_model(self.llm_provider_model_id).name
         logger.debug(f"Calling {model_name} with parameters: {self.llm_model_parameters}")

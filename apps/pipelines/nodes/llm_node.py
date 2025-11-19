@@ -12,6 +12,7 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.nodes import get_llm_provider_model
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
@@ -145,7 +146,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     # Create validator for tool response size checking
     from apps.chat.agent.tool_response_validator import ToolResponseSizeValidator, wrap_tool_with_validation
 
-    model = node.get_llm_provider_model()
+    model = get_llm_provider_model(node.self.llm_provider_model_id)
     max_token_limit = node.user_max_token_limit if node.user_max_token_limit is not None else model.max_token_limit
     model_name = model.name
     token_counter = node.get_llm_service().get_token_counter(model_name)
