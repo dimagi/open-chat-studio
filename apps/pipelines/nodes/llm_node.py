@@ -177,14 +177,18 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
             tools.append(search_tool)
         else:
             # Multiple collections: check if they're remote or local
-            collections = Collection.objects.in_bulk(node.collection_index_ids)
-            first_collection = next(iter(collections.values()))
+            collections = list(
+                Collection.objects.filter(id__in=node.collection_index_ids).only(
+                    "is_remote_index", "openai_vector_store_id"
+                )
+            )
+            first_collection = collections[0]
 
-            if first_collection.is_remote_index:
+            if first_collection and first_collection.is_remote_index:
                 # All remote: create OpenAI builtin tool with multiple vector stores
                 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 
-                vector_store_ids = [collection.openai_vector_store_id for collection in collections.values()]
+                vector_store_ids = [collection.openai_vector_store_id for collection in collections]
                 search_tool = OpenAIBuiltinTool(
                     type="file_search",
                     vector_store_ids=vector_store_ids,
