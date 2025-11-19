@@ -184,9 +184,10 @@ class LlmService(pydantic.BaseModel):
         final_text = ""
         cited_file_ids_remote = []
         cited_file_ids = []
-        cited_files = []
         generated_files: list[File] = []
-        if isinstance(llm_outputs, list):
+        if isinstance(llm_output, str):
+            final_text = llm_output
+        elif isinstance(llm_outputs, list):
             for output in llm_outputs:
                 # Populate text
                 final_text = "\n".join([final_text, output.get("text", "")]).strip()
@@ -202,10 +203,11 @@ class LlmService(pydantic.BaseModel):
                 for generated_file in generated_files:
                     final_text = self.replace_file_links(text=final_text, file=generated_file, session=session)
         else:
-            final_text = llm_outputs
-            # This path is followed when OCS citations are injected into the output
-            cited_file_ids.extend(extract_file_ids_from_ocs_citations(llm_outputs))
+            raise TypeError(f"Unexpected llm_output type: {type(llm_output).__name__}")
 
+        cited_file_ids.extend(extract_file_ids_from_ocs_citations(final_text))
+
+        cited_files = []
         if include_citations:
             cited_files = File.objects.filter(
                 Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=session.team_id
