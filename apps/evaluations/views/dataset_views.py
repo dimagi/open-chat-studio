@@ -257,7 +257,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
 
 
 def get_base_session_queryset(request):
-    """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
+    """Returns a queryset with filtering applied but without any annotations or related model selection."""
     timezone = request.session.get("detected_tz", None)
     filter_params = FilterParams.from_request(request)
 
