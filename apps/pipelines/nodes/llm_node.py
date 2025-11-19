@@ -12,7 +12,7 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
-from apps.pipelines.nodes.nodes import get_llm_provider_model
+from apps.pipelines.nodes.helpers import get_llm_provider_model
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
