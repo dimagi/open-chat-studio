@@ -436,11 +436,10 @@ class SearchIndexTool(CustomBaseTool):
 class MultiSearchIndexTool(CustomBaseTool):
     name: str = AgentTools.MULTI_SEARCH_INDEX
     description: str = (
-        "Performs semantic search across multiple document collections using natural language queries. "
-        "This tool analyzes the content across all specified collections to find relevant information, quotes, "
-        "and passages that best match your query. Results clearly indicate which collection each result came from. "
-        "Use this to extract specific information or find relevant sections when you need to search across "
-        "multiple document sources."
+        "Performs semantic search on a specific document collection using natural language queries. "
+        "This tool analyzes the content of the specified collection to find relevant information, quotes, "
+        "and passages that best match your query. Results indicate which collection they came from. "
+        "To search multiple collections, make multiple tool calls with different collection_ids."
     )
     requires_session: bool = False
     args_schema: type[schemas.MultiSearchIndexSchema] = schemas.MultiSearchIndexSchema
@@ -448,63 +447,33 @@ class MultiSearchIndexTool(CustomBaseTool):
     generate_citations: bool = True
 
     @transaction.atomic
-    def action(self, collection_ids: list[int], query: str) -> str:
+    def action(self, collection_id: int, query: str) -> str:
         """
-        Search across multiple collection indexes for the most relevant file chunks based on the query.
-        Results are grouped by collection to show which index each result came from.
+        Search a specific collection index for the most relevant file chunks based on the query.
         """
         from apps.documents.models import Collection
 
-        if not collection_ids:
-            return "No collection indexes were specified for the search."
+        try:
+            collection = Collection.objects.get(id=collection_id, is_index=True)
+        except Collection.DoesNotExist:
+            return f"Collection with ID {collection_id} not found or is not a valid index."
 
-        # Get all collections
-        collections = {
-            col.id: col for col in Collection.objects.filter(id__in=collection_ids, is_index=True)
-        }
+        query_vector = collection.get_query_vector(query)
 
-        if not collections:
-            return "None of the specified collections were found or are valid indexes."
+        # Get embeddings for this collection
+        embeddings = list(
+            FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
+            .filter(collection_id=collection_id)
+            .order_by("distance")
+            .select_related("file")
+            .only("text", "file__name")[:self.max_results]
+        )
 
-        all_results = []
-
-        # Search each collection
-        for collection_id in collection_ids:
-            if collection_id not in collections:
-                continue
-
-            collection = collections[collection_id]
-            query_vector = collection.get_query_vector(query)
-
-            # Get embeddings for this collection
-            embeddings = list(
-                FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
-                .filter(collection_id=collection_id)
-                .order_by("distance")
-                .select_related("file")
-                .only("text", "file__name", "distance")[:self.max_results]
-            )
-
-            # Store results with collection info
-            for embedding in embeddings:
-                all_results.append({
-                    "embedding": embedding,
-                    "collection": collection,
-                    "distance": embedding.distance,
-                })
-
-        if not all_results:
-            return "\nThe semantic search did not return any results from any of the specified collections."
-
-        # Sort all results by distance (best matches first) and take top max_results
-        all_results.sort(key=lambda x: x["distance"])
-        top_results = all_results[:self.max_results]
+        if not embeddings:
+            return f"\nThe semantic search did not return any results from collection '{collection.name}' (ID: {collection_id})."
 
         # Format results with collection information
-        retrieved_chunks = "\n".join([
-            self._format_result(result["embedding"], result["collection"])
-            for result in top_results
-        ])
+        retrieved_chunks = "\n".join([self._format_result(embedding, collection) for embedding in embeddings])
 
         response_template = """
 {header}

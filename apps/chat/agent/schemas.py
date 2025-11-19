@@ -86,9 +86,9 @@ class SearchIndexSchema(BaseModel):
 
 
 class MultiSearchIndexSchema(BaseModel):
-    collection_ids: list[int] = Field(
-        description="A list of collection index IDs to search across. "
-        "The search will be performed on all specified collections and results will indicate their source."
+    collection_id: int = Field(
+        description="The collection index ID to search. "
+        "Multiple collections can be searched by making multiple tool calls with different collection_ids."
     )
     query: str = Field(
         description="A natural language query to search for relevant information in the documents. "
