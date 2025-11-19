@@ -124,6 +124,7 @@ PROJECT_APPS = [
     "apps.trace",
     "apps.mcp_integrations",
     "apps.filters",
+    "apps.oauth",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -818,4 +819,4 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
 
 
 OAUTH2_PROVIDER = {"PKCE_REQUIRED": False}
-OAUTH2_PROVIDER_APPLICATION_MODEL = "users.OAuth2Application"
+OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
