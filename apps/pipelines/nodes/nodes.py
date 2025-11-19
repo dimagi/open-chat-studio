@@ -425,6 +425,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             "source_material": self.source_material_id,
             "tools": self.tools,
             "media": self.collection_id,
+            "collection_indexes": self.collection_index_ids,
         }
         try:
             # FUTURE TODO: add temp_state and session_state to PromptVars

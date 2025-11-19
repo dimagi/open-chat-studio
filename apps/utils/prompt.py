@@ -13,6 +13,7 @@ class PromptVars(models.TextChoices):
     SOURCE_MATERIAL = "source_material"
     CURRENT_DATETIME = "current_datetime"
     MEDIA = "media"
+    COLLECTION_INDEXES = "collection_indexes"
 
     @staticmethod
     def pipeline_extra_known_vars() -> set[str]:
@@ -40,7 +41,7 @@ PROMPT_VARS_REQUIRED_BY_TOOL = {
 }
 
 # These prompt variables require resources to be specified by the user
-PROMPT_VARS_REQUIRING_RESOURCES = [PromptVars.SOURCE_MATERIAL, PromptVars.MEDIA]
+PROMPT_VARS_REQUIRING_RESOURCES = [PromptVars.SOURCE_MATERIAL, PromptVars.MEDIA, PromptVars.COLLECTION_INDEXES]
 
 
 def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
