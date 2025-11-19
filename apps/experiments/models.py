@@ -602,6 +602,7 @@ class AgentTools(models.TextChoices):
     ATTACH_MEDIA = "attach-media", gettext("Attach Media")
     END_SESSION = "end-session", gettext("End Session")
     SEARCH_INDEX = "file-search", gettext("File Search")
+    MULTI_SEARCH_INDEX = "multi-file-search", gettext("Multi-Collection Search")
     SET_SESSION_STATE = "set-session-state", gettext("Set Session State")
     GET_SESSION_STATE = "get-session-state", gettext("Get Session State")
     CALCULATOR = "calculator", gettext("Calculator")

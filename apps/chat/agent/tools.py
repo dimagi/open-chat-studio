@@ -433,6 +433,113 @@ class SearchIndexTool(CustomBaseTool):
         ).strip()
 
 
+class MultiSearchIndexTool(CustomBaseTool):
+    name: str = AgentTools.MULTI_SEARCH_INDEX
+    description: str = (
+        "Performs semantic search across multiple document collections using natural language queries. "
+        "This tool analyzes the content across all specified collections to find relevant information, quotes, "
+        "and passages that best match your query. Results clearly indicate which collection each result came from. "
+        "Use this to extract specific information or find relevant sections when you need to search across "
+        "multiple document sources."
+    )
+    requires_session: bool = False
+    args_schema: type[schemas.MultiSearchIndexSchema] = schemas.MultiSearchIndexSchema
+    max_results: int = 5
+    generate_citations: bool = True
+
+    @transaction.atomic
+    def action(self, collection_ids: list[int], query: str) -> str:
+        """
+        Search across multiple collection indexes for the most relevant file chunks based on the query.
+        Results are grouped by collection to show which index each result came from.
+        """
+        from apps.documents.models import Collection
+
+        if not collection_ids:
+            return "No collection indexes were specified for the search."
+
+        # Get all collections
+        collections = {
+            col.id: col for col in Collection.objects.filter(id__in=collection_ids, is_index=True)
+        }
+
+        if not collections:
+            return "None of the specified collections were found or are valid indexes."
+
+        all_results = []
+
+        # Search each collection
+        for collection_id in collection_ids:
+            if collection_id not in collections:
+                continue
+
+            collection = collections[collection_id]
+            query_vector = collection.get_query_vector(query)
+
+            # Get embeddings for this collection
+            embeddings = list(
+                FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
+                .filter(collection_id=collection_id)
+                .order_by("distance")
+                .select_related("file")
+                .only("text", "file__name", "distance")[:self.max_results]
+            )
+
+            # Store results with collection info
+            for embedding in embeddings:
+                all_results.append({
+                    "embedding": embedding,
+                    "collection": collection,
+                    "distance": embedding.distance,
+                })
+
+        if not all_results:
+            return "\nThe semantic search did not return any results from any of the specified collections."
+
+        # Sort all results by distance (best matches first) and take top max_results
+        all_results.sort(key=lambda x: x["distance"])
+        top_results = all_results[:self.max_results]
+
+        # Format results with collection information
+        retrieved_chunks = "\n".join([
+            self._format_result(result["embedding"], result["collection"])
+            for result in top_results
+        ])
+
+        response_template = """
+{header}
+{citation_prompt}
+<context>
+{retrieved_chunks}
+</context>
+{footer}
+"""
+        citation_prompt = CITATION_PROMPT if self.generate_citations else ""
+        return response_template.format(
+            header=SEARCH_TOOL_HEADER,
+            footer=_get_search_tool_footer(self.generate_citations),
+            retrieved_chunks=retrieved_chunks,
+            citation_prompt=citation_prompt,
+        )
+
+    def _format_result(self, embedding: FileChunkEmbedding, collection) -> str:
+        """
+        Format the result from the search index with collection information.
+        """
+        chunk_with_collection = f"""
+<file>
+  <file_id>{embedding.file_id}</file_id>
+  <filename>{embedding.file.name}</filename>
+  <collection_id>{collection.id}</collection_id>
+  <collection_name>{collection.name}</collection_name>
+  <context>
+    <![CDATA[{embedding.text}]]>
+  </context>
+</file>
+"""
+        return chunk_with_collection.strip()
+
+
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
     current_weekday = date.weekday()
     day_diff = new_weekday - current_weekday
@@ -553,6 +660,7 @@ TOOL_CLASS_MAP = {
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
     AgentTools.SEARCH_INDEX: SearchIndexTool,
+    AgentTools.MULTI_SEARCH_INDEX: MultiSearchIndexTool,
     AgentTools.SET_SESSION_STATE: SetSessionStateTool,
     AgentTools.GET_SESSION_STATE: GetSessionStateTool,
     AgentTools.CALCULATOR: CalculatorTool,
