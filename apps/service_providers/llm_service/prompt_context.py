@@ -84,8 +84,8 @@ class PromptTemplateContext:
     def get_collection_index_summaries(self):
         """
         Example output:
-        Collection Index (id=1): This is a collection about product documentation
-        Collection Index (id=2): Customer support FAQ database
+        Collection Index (id=1, name=Product collection): This is a collection about product documentation
+        Collection Index (id=2, name=FAQ): Customer support FAQ database
         """
         from apps.documents.models import Collection
 

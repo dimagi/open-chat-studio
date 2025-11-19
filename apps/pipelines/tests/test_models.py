@@ -145,7 +145,7 @@ class TestVersioningNodes:
 
         node_version = pipeline_version.node_set.get(type=node_type)
         assert node_version.params["collection_id"] == str(collection_version.id)
-        assert node_version.params["collection_index_ids"] == [collection_index_version.id]
+        assert node_version.params["collection_index_ids"] == [str(collection_index_version.id)]
         assert node_version.params["source_material_id"] == str(source_material_version.id)
 
         # Second versioning without changes - should reuse existing dependency versions
@@ -153,7 +153,7 @@ class TestVersioningNodes:
 
         node_version_2 = pipeline_version_2.node_set.get(type=node_type)
         assert node_version_2.params["collection_id"] == str(collection_version.id)
-        assert node_version_2.params["collection_index_ids"] == [collection_index_version.id]
+        assert node_version_2.params["collection_index_ids"] == [str(collection_index_version.id)]
         assert node_version_2.params["source_material_id"] == str(source_material_version.id)
 
 
