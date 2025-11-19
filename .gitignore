@@ -35,3 +35,6 @@ docs/claude
 
 # TypeScript build cache
 tsconfig.tsbuildinfo
+
+# Code review artifacts
+CODE_REVIEW.md
