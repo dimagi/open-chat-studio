@@ -359,7 +359,7 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
         default_factory=list,
         title="Collection Indexes",
         json_schema_extra={
-            **UiSchema(widget=Widgets.searchable_multiselect, options_source=OptionsSource.collection_index),
+            **UiSchema(widget=Widgets.searchable_multiselect, options_source=OptionsSource.collection_index).model_dump(),
             "uniqueItems": True,
         },
     )
@@ -488,6 +488,28 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
                 f"All collection indexes must use the same LLM provider as the node. "
                 f"Incompatible collections: {', '.join(incompatible_collections)}",
             )
+
+        # Validate that all collections are the same type (either all remote or all local)
+        # Only applies when multiple collections are selected
+        if len(collections) > 1:
+            is_remote_flags = [collection.is_remote_index for collection in collections.values()]
+            if not all(is_remote_flags) and any(is_remote_flags):
+                remote_collections = [
+                    f"{collection.name} (ID: {cid})"
+                    for cid, collection in collections.items()
+                    if collection.is_remote_index
+                ]
+                local_collections = [
+                    f"{collection.name} (ID: {cid})"
+                    for cid, collection in collections.items()
+                    if not collection.is_remote_index
+                ]
+                raise PydanticCustomError(
+                    "mixed_collection_types",
+                    f"All collection indexes must be the same type (either all remote or all local). "
+                    f"Remote collections: {', '.join(remote_collections)}. "
+                    f"Local collections: {', '.join(local_collections)}.",
+                )
 
         return value
 

@@ -168,17 +168,39 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
             # Single collection: use the existing single-index search tool
             collection_id = node.collection_index_ids[0]
             collection = Collection.objects.get(id=collection_id)
-            search_tool = collection.get_search_tool(max_results=node.max_results, generate_citations=node.generate_citations)
+            search_tool = collection.get_search_tool(
+                max_results=node.max_results, generate_citations=node.generate_citations
+            )
             if isinstance(search_tool, BaseTool):
                 # Wrap search tool with validation
                 search_tool = wrap_tool_with_validation(search_tool, validator)
             tools.append(search_tool)
         else:
-            # Multiple collections: use the multi-index search tool
-            search_tool = MultiSearchIndexTool(max_results=node.max_results, generate_citations=node.generate_citations)
-            tools.append(wrap_tool_with_validation(search_tool, validator))
-    
-   if node.disabled_tools:
+            # Multiple collections: check if they're remote or local
+            collections = Collection.objects.in_bulk(node.collection_index_ids)
+            first_collection = next(iter(collections.values()))
+
+            if first_collection.is_remote_index:
+                # All remote: create OpenAI builtin tool with multiple vector stores
+                from apps.service_providers.llm_service.main import OpenAIBuiltinTool
+
+                vector_store_ids = [
+                    collection.openai_vector_store_id for collection in collections.values()
+                ]
+                search_tool = OpenAIBuiltinTool(
+                    type="file_search",
+                    vector_store_ids=vector_store_ids,
+                    max_num_results=node.max_results,
+                )
+                tools.append(search_tool)
+            else:
+                # All local: use the multi-index search tool
+                search_tool = MultiSearchIndexTool(
+                    max_results=node.max_results, generate_citations=node.generate_citations
+                )
+                tools.append(wrap_tool_with_validation(search_tool, validator))
+
+    if node.disabled_tools:
         # Model builtin tools doesn't have a name attribute and are dicts
         return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
     return tools
