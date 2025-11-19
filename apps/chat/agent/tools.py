@@ -94,6 +94,83 @@ def _get_search_tool_footer(with_citations: bool):
     return SEARCH_TOOL_BASE_FOOTER.format(citations_note=citations_note)
 
 
+def _perform_collection_search(
+    collection, query: str, max_results: int = 5, generate_citations: bool = True, include_collection_info: bool = False
+) -> str:
+    """
+    Shared search logic for both SearchIndexTool and MultiSearchIndexTool.
+
+    Args:
+        collection: The Collection object to search
+        query: The search query string
+        max_results: Maximum number of results to return
+        generate_citations: Whether to include citation prompt in response
+        include_collection_info: Whether to include collection_id and collection_name in results
+
+    Returns:
+        Formatted search results string
+    """
+    query_vector = collection.get_query_vector(query)
+
+    # Get embeddings for this collection
+    embeddings = list(
+        FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
+        .filter(collection_id=collection.id)
+        .order_by("distance")
+        .select_related("file")
+        .only("text", "file__name")[:max_results]
+    )
+
+    if not embeddings:
+        if include_collection_info:
+            return f"\nThe semantic search did not return any results from collection '{collection.name}' (ID: {collection.id})."
+        return "\nThe semantic search did not return any results."
+
+    # Format results
+    if include_collection_info:
+        retrieved_chunks = "\n".join([
+            _format_result_with_collection(embedding, collection) for embedding in embeddings
+        ])
+    else:
+        retrieved_chunks = "\n".join([
+            CHUNK_TEMPLATE.format(
+                file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+            ).strip()
+            for embedding in embeddings
+        ])
+
+    response_template = """
+{header}
+{citation_prompt}
+<context>
+{retrieved_chunks}
+</context>
+{footer}
+"""
+    citation_prompt = CITATION_PROMPT if generate_citations else ""
+    return response_template.format(
+        header=SEARCH_TOOL_HEADER,
+        footer=_get_search_tool_footer(generate_citations),
+        retrieved_chunks=retrieved_chunks,
+        citation_prompt=citation_prompt,
+    )
+
+
+def _format_result_with_collection(embedding: FileChunkEmbedding, collection) -> str:
+    """Format a search result with collection information included."""
+    return f"""
+<file>
+  <file_id>{embedding.file_id}</file_id>
+  <filename>{embedding.file.name}</filename>
+  <collection_id>{collection.id}</collection_id>
+  <collection_name>{collection.name}</collection_name>
+  <context>
+    <![CDATA[{embedding.text}]]>
+  </context>
+</file>
+""".strip()
+
+
 @dataclass
 class SearchToolConfig:
     index_id: int
@@ -390,47 +467,14 @@ class SearchIndexTool(CustomBaseTool):
         Do a simple search for the top most relevant file chunks based on the query provided by the user. A little query
         rewriting is automatically done by the LLM, since it decides what query to use when invoking this tool.
         """
-        # - [ ] Generate references
-        index = self.search_config.get_index()
-        max_results = self.search_config.max_results
-
-        query_vector = index.get_query_vector(query)
-        # This query is automatically team scoped
-        embeddings = list(
-            FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
-            .filter(collection_id=index.id)
-            .order_by("distance")
-            .select_related("file")
-            .only("text", "file__name")[:max_results]
+        collection = self.search_config.get_index()
+        return _perform_collection_search(
+            collection=collection,
+            query=query,
+            max_results=self.search_config.max_results,
+            generate_citations=self.search_config.generate_citations,
+            include_collection_info=False,
         )
-        if not embeddings:
-            return "\nThe semantic search did not return any results."
-
-        retrieved_chunks = "\n".join([self._format_result(embedding) for embedding in embeddings])
-        response_template = """
-{header}
-{citation_prompt}
-<context>
-{retrieved_chunks}
-</context>
-{footer}
-"""
-        citation_prompt = CITATION_PROMPT if self.search_config.generate_citations else ""
-        return response_template.format(
-            header=SEARCH_TOOL_HEADER,
-            footer=_get_search_tool_footer(self.search_config.generate_citations),
-            retrieved_chunks=retrieved_chunks,
-            citation_prompt=citation_prompt,
-        )
-
-    def _format_result(self, embedding: FileChunkEmbedding) -> str:
-        """
-        Format the result from the search index into a more structured format.
-        """
-
-        return CHUNK_TEMPLATE.format(
-            file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
-        ).strip()
 
 
 class MultiSearchIndexTool(CustomBaseTool):
@@ -458,55 +502,13 @@ class MultiSearchIndexTool(CustomBaseTool):
         except Collection.DoesNotExist:
             return f"Collection with ID {collection_id} not found or is not a valid index."
 
-        query_vector = collection.get_query_vector(query)
-
-        # Get embeddings for this collection
-        embeddings = list(
-            FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
-            .filter(collection_id=collection_id)
-            .order_by("distance")
-            .select_related("file")
-            .only("text", "file__name")[:self.max_results]
+        return _perform_collection_search(
+            collection=collection,
+            query=query,
+            max_results=self.max_results,
+            generate_citations=self.generate_citations,
+            include_collection_info=True,
         )
-
-        if not embeddings:
-            return f"\nThe semantic search did not return any results from collection '{collection.name}' (ID: {collection_id})."
-
-        # Format results with collection information
-        retrieved_chunks = "\n".join([self._format_result(embedding, collection) for embedding in embeddings])
-
-        response_template = """
-{header}
-{citation_prompt}
-<context>
-{retrieved_chunks}
-</context>
-{footer}
-"""
-        citation_prompt = CITATION_PROMPT if self.generate_citations else ""
-        return response_template.format(
-            header=SEARCH_TOOL_HEADER,
-            footer=_get_search_tool_footer(self.generate_citations),
-            retrieved_chunks=retrieved_chunks,
-            citation_prompt=citation_prompt,
-        )
-
-    def _format_result(self, embedding: FileChunkEmbedding, collection) -> str:
-        """
-        Format the result from the search index with collection information.
-        """
-        chunk_with_collection = f"""
-<file>
-  <file_id>{embedding.file_id}</file_id>
-  <filename>{embedding.file.name}</filename>
-  <collection_id>{collection.id}</collection_id>
-  <collection_name>{collection.name}</collection_name>
-  <context>
-    <![CDATA[{embedding.text}]]>
-  </context>
-</file>
-"""
-        return chunk_with_collection.strip()
 
 
 def _move_datetime_to_new_weekday_and_time(date: datetime, new_weekday: int, new_hour: int, new_minute: int):
