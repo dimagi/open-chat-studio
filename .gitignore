@@ -32,3 +32,6 @@ tmp_schema.yml
 # Sentry Config File
 .env.sentry-build-plugin
 docs/claude
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
