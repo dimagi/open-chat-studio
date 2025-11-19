@@ -2,6 +2,7 @@ import re
 from io import BytesIO
 
 import httpx
+from django.conf import settings
 from langchain_core.messages import HumanMessage
 
 from apps.experiments.models import ExperimentSession
@@ -129,14 +130,27 @@ def get_openai_container_file_contents(
 def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
     parts = [{"type": "text", "text": message}]
     for att in attachments:
-        download_url = att.download_link
+        if att.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
+            raise ValueError(f"File {att.name} exceeds maximum size")
+
         mime_type = att.content_type or ""
-        parts.append(
-            {
-                "type": "image" if mime_type.startswith("image/") else "file",
-                "source_type": "url",
-                "url": download_url,
-                "mime_type": mime_type,
-            }
-        )
+        if mime_type.startswith("image/"):
+            parts.append(
+                {
+                    "type": "image",
+                    "source_type": "url",
+                    "url": att.download_link,
+                    "mime_type": mime_type,
+                }
+            )
+        else:
+            parts.append(
+                {
+                    "type": "file",
+                    "source_type": "base64",
+                    "data": att.read_base64(),
+                    "mime_type": mime_type,
+                    "filename": att.name,
+                }
+            )
     return HumanMessage(content=parts)
