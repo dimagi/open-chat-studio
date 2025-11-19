@@ -1,4 +1,5 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo} from "react";
+import Select from 'react-select';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
@@ -28,6 +29,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return SelectWidget
     case "multiselect":
       return MultiSelectWidget
+    case "collection_index_multiselect":
+      return CollectionIndexMultiSelectWidget
     case "llm_provider_model":
       return LlmWidget
     case "history":
@@ -283,6 +286,54 @@ function MultiSelectWidget(props: WidgetParams) {
       ))}
     </InputField>
   )
+}
+
+function CollectionIndexMultiSelectWidget(props: WidgetParams) {
+  const options = getSelectOptions(props.schema);
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  // Convert paramValue (array of IDs) to react-select format
+  const selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
+  const selectedOptions = options.filter(option =>
+    selectedValues.includes(option.value) || selectedValues.includes(Number(option.value))
+  );
+
+  const handleChange = (selectedOptions: any) => {
+    const values = selectedOptions ? selectedOptions.map((option: Option) => Number(option.value)) : [];
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        next.data.params[props.name] = values;
+      })
+    );
+  };
+
+  // Convert options to react-select format
+  const selectOptions = options.map(option => ({
+    value: option.value,
+    label: option.label
+  }));
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <Select
+        isMulti
+        options={selectOptions}
+        value={selectedOptions}
+        onChange={handleChange}
+        isDisabled={props.readOnly}
+        className="react-select-container"
+        classNamePrefix="react-select"
+        placeholder="Select collection indexes..."
+        isClearable={true}
+        styles={{
+          control: (base) => ({
+            ...base,
+            minHeight: '3rem',
+          }),
+        }}
+      />
+    </InputField>
+  );
 }
 
 export function CodeWidget(props: WidgetParams) {

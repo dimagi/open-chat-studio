@@ -108,7 +108,7 @@
       "title": "Collection Indexes",
       "type": "array",
       "ui:optionsSource": "collection_index",
-      "ui:widget": "multiselect"
+      "ui:widget": "collection_index_multiselect"
     },
     "max_results": {
       "default": 20,
