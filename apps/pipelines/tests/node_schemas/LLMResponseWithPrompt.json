@@ -1,6 +1,11 @@
 {
   "description": "Uses an LLM to respond to the input.",
   "properties": {
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
     "tag": {
       "default": "",
       "description": "The tag that the output message should be tagged with",
@@ -74,11 +79,6 @@
       "title": "Max History Length",
       "type": "integer",
       "ui:widget": "none"
-    },
-    "name": {
-      "title": "Node Name",
-      "type": "string",
-      "ui:widget": "node_name"
     },
     "source_material_id": {
       "default": null,
@@ -185,9 +185,9 @@
     }
   },
   "required": [
+    "name",
     "llm_provider_id",
-    "llm_provider_model_id",
-    "name"
+    "llm_provider_model_id"
   ],
   "title": "LLMResponseWithPrompt",
   "type": "object",

@@ -6,6 +6,7 @@ from io import StringIO
 from itertools import islice
 
 from django.contrib import messages
+from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.functions import Coalesce
@@ -16,7 +17,7 @@ from django.utils import timezone
 from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
-from django_tables2 import SingleTableView
+from django_tables2 import LazyPaginator, SingleTableView
 
 from apps.chat.models import ChatMessage
 from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
@@ -231,38 +232,12 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
 
     model = ExperimentSession
     table_class = EvaluationSessionsSelectionTable
-    template_name = "table/single_table.html"
+    template_name = "table/single_table_lazy_pagination.html"
     permission_required = "experiments.view_experimentsession"
+    paginator_class = LazyPaginator
 
     def get_queryset(self):
-        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
-        timezone = self.request.session.get("detected_tz", None)
-        filter_params = FilterParams.from_request(self.request)
-
-        # Get filtered message IDs more efficiently
-        message_filter = ChatMessageFilter()
-        base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
-        filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
-
-        # Use Exists for filtering instead of Count with IN subquery - avoids cartesian product
-        has_messages = Exists(filtered_messages)
-
-        # Build the query with basic filtering only
-        query_set = (
-            ExperimentSession.objects.filter(team=self.request.team)
-            .filter(has_messages)  # Filter early with Exists
-            .select_related("team", "participant__user", "chat", "experiment")
-        )
-
-        # Apply session filter (this will add first_message_created_at and last_message_created_at)
-        session_filter = ExperimentSessionFilter()
-        query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
-
-        return query_set.order_by("experiment__name")
-
-    def get_table_data(self):
-        """Add expensive annotations only to the paginated data, not for counting."""
-        queryset = super().get_table_data()
+        queryset = get_base_session_queryset(self.request)
 
         # Get filter params for message count
         timezone = self.request.session.get("detected_tz", None)
@@ -278,18 +253,38 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
                 0,
             )
         )
-        return queryset
+        return queryset.select_related("team", "participant__user", "chat", "experiment").order_by("experiment__name")
 
 
-class DatasetSessionsSelectionJson(DatasetSessionsSelectionTableView):
-    """Return the filtered items in DatasetSessionsSelectionTableView in a JSON format without pagination."""
+def get_base_session_queryset(request):
+    """Returns a queryset with filtering applied but without any annotations or related model selection."""
+    timezone = request.session.get("detected_tz", None)
+    filter_params = FilterParams.from_request(request)
 
-    table_pagination = False
+    # Get filtered message IDs more efficiently
+    message_filter = ChatMessageFilter()
+    base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
+    filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
 
-    def get(self, request, *args, **kwargs):
-        query_set = self.get_queryset()
-        session_keys = list(query_set.values_list("external_id", flat=True))
-        return JsonResponse(session_keys, safe=False)
+    # Use Exists for filtering instead of Count with IN subquery - avoids cartesian product
+    has_messages = Exists(filtered_messages)
+
+    # Build the query with basic filtering only
+    query_set = ExperimentSession.objects.filter(team=request.team).filter(has_messages)
+
+    # Apply session filter (this will add first_message_created_at and last_message_created_at)
+    session_filter = ExperimentSessionFilter()
+    query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
+
+    return query_set
+
+
+@login_and_team_required
+@permission_required("experiments.view_experimentsession")
+def dataset_sessions_selection_json(request, team_slug: str):
+    query_set = get_base_session_queryset(request)
+    session_keys = list(query_set.values_list("external_id", flat=True))
+    return JsonResponse(session_keys, safe=False)
 
 
 class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):

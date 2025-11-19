@@ -1816,7 +1816,7 @@ class ExperimentSession(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse(
-            "experiments:experiment_session_view",
+            "chatbots:chatbot_session_view",
             args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
         )
 
