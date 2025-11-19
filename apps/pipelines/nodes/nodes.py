@@ -367,7 +367,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     collection_index_ids: list[int] = Field(
         default_factory=list,
         title="Collection Indexes",
-        json_schema_extra=UiSchema(widget=Widgets.searchable_multiselect, options_source=OptionsSource.collection_index),
+        json_schema_extra={
+            **UiSchema(widget=Widgets.searchable_multiselect, options_source=OptionsSource.collection_index),
+            "uniqueItems": True,
+        },
     )
     max_results: OptionalInt = Field(
         default=20,
@@ -459,16 +462,42 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         if not isinstance(value, list):
             value = [value]
 
+        # Filter out empty values
+        value = [v for v in value if v]
+        if not value:
+            return []
+
+        # Get llm_provider_id from node data
         llm_provider_id = info.data.get("llm_provider_id")
-        for collection_id in value:
-            if not collection_id:
-                continue
-            collection = Collection.objects.get(id=collection_id)
+        if not llm_provider_id:
+            # If no LLM provider is set, we can't validate compatibility
+            # This will be caught by other validation if llm_provider_id is required
+            return value
+
+        # Bulk fetch all collections to avoid N+1 queries
+        collections = Collection.objects.in_bulk(value)
+
+        # Check for non-existent collections
+        missing_ids = set(value) - set(collections.keys())
+        if missing_ids:
+            raise PydanticCustomError(
+                "collection_not_found",
+                f"Collection(s) with ID(s) {sorted(missing_ids)} not found",
+            )
+
+        # Validate that all collections use the same LLM provider
+        incompatible_collections = []
+        for collection_id, collection in collections.items():
             if collection.llm_provider_id != llm_provider_id:
-                raise PydanticCustomError(
-                    "invalid_collection_index",
-                    f"All collection indexes must use the same LLM provider as the node ({collection.llm_provider.name})",
-                )
+                incompatible_collections.append(f"{collection.name} (ID: {collection_id})")
+
+        if incompatible_collections:
+            raise PydanticCustomError(
+                "invalid_collection_index",
+                f"All collection indexes must use the same LLM provider as the node. "
+                f"Incompatible collections: {', '.join(incompatible_collections)}",
+            )
+
         return value
 
     def _process(self, state: PipelineState) -> PipelineState:

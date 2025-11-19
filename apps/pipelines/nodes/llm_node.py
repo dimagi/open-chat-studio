@@ -140,15 +140,28 @@ def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
 
 def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: ToolCallbacks) -> list[dict | BaseTool]:
     """Get instantiated tools for the given node configuration."""
+    from apps.chat.agent.tools import MultiSearchIndexTool
+
     tools = get_node_tools(node.django_node, session, tool_callbacks=tool_callbacks)
     tools.extend(node.get_llm_service().attach_built_in_tools(node.built_in_tools, node.tool_config))
-    # For now, just take the first collection index ID from the list
+
+    # Add search tool based on number of collection indexes
     if node.collection_index_ids:
-        collection_id = node.collection_index_ids[0]
-        collection = Collection.objects.get(id=collection_id)
-        tools.append(
-            collection.get_search_tool(max_results=node.max_results, generate_citations=node.generate_citations)
-        )
+        if len(node.collection_index_ids) == 1:
+            # Single collection: use the existing single-index search tool
+            collection_id = node.collection_index_ids[0]
+            collection = Collection.objects.get(id=collection_id)
+            tools.append(
+                collection.get_search_tool(max_results=node.max_results, generate_citations=node.generate_citations)
+            )
+        else:
+            # Multiple collections: use the multi-index search tool
+            tools.append(
+                MultiSearchIndexTool(
+                    max_results=node.max_results,
+                    generate_citations=node.generate_citations,
+                )
+            )
 
     if node.disabled_tools:
         # Model builtin tools doesn't have a name attribute and are dicts

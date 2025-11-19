@@ -108,7 +108,8 @@
       "title": "Collection Indexes",
       "type": "array",
       "ui:optionsSource": "collection_index",
-      "ui:widget": "searchable_multiselect"
+      "ui:widget": "searchable_multiselect",
+      "uniqueItems": true
     },
     "max_results": {
       "default": 20,

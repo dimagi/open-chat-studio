@@ -602,7 +602,7 @@ class AgentTools(models.TextChoices):
     ATTACH_MEDIA = "attach-media", gettext("Attach Media")
     END_SESSION = "end-session", gettext("End Session")
     SEARCH_INDEX = "file-search", gettext("File Search")
-    MULTI_SEARCH_INDEX = "multi-file-search", gettext("Multi-Collection Search")
+    MULTI_SEARCH_INDEX = "multi-index-search", gettext("Multi-Collection Search")
     SET_SESSION_STATE = "set-session-state", gettext("Set Session State")
     GET_SESSION_STATE = "get-session-state", gettext("Get Session State")
     CALCULATOR = "calculator", gettext("Calculator")
@@ -614,7 +614,7 @@ class AgentTools(models.TextChoices):
     @staticmethod
     def user_tool_choices(include_end_session: bool = True) -> list[tuple]:
         """Returns the set of tools that a user should be able to attach to the bot"""
-        excluded_tools = [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX]
+        excluded_tools = [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX, AgentTools.MULTI_SEARCH_INDEX]
         if not include_end_session:
             excluded_tools.append(AgentTools.END_SESSION)
         return [(tool.value, tool.label) for tool in AgentTools if tool not in excluded_tools]

@@ -68,9 +68,9 @@ def _set_versioned_param_list_values(node_version: Self, param_name: str, param_
             if param_instance := param_cls.objects.filter(id=param_instance_id).first():
                 if not param_instance.has_versions or param_instance.compare_with_latest():
                     new_instance_version = param_instance.create_new_version()
-                    versioned_ids.append(new_instance_version.id)
+                    versioned_ids.append(str(new_instance_version.id))
                 else:
-                    versioned_ids.append(param_instance.latest_version.id)
+                    versioned_ids.append(str(param_instance.latest_version.id))
         node_version.params[param_name] = versioned_ids
 
 

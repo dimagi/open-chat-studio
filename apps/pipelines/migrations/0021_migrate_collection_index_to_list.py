@@ -3,12 +3,12 @@
 from django.db import migrations
 
 
-def migrate_collection_index_id_to_ids(apps, schema_editor):
+def migrate_collection_index_id_to_ids(apps, _schema_editor):
     """Migrate collection_index_id to collection_index_ids (as a list)"""
     Node = apps.get_model("pipelines", "Node")
 
     nodes_to_update = []
-    for idx, node in enumerate(Node.objects.filter(type="LLMResponseWithPrompt").iterator(100)):
+    for node in Node.objects.filter(type="LLMResponseWithPrompt").iterator(100):
         # If the node has a collection_index_id, convert it to a list
         if "collection_index_id" in node.params and node.params["collection_index_id"]:
             node.params["collection_index_ids"] = [node.params["collection_index_id"]]
@@ -23,7 +23,8 @@ def migrate_collection_index_id_to_ids(apps, schema_editor):
                 node.params["collection_index_ids"] = []
             nodes_to_update.append(node)
 
-        if idx % 100 == 0 and nodes_to_update:
+        # Batch update when buffer reaches 100 items
+        if len(nodes_to_update) >= 100:
             Node.objects.bulk_update(nodes_to_update, ["params"])
             nodes_to_update = []
 
@@ -32,12 +33,12 @@ def migrate_collection_index_id_to_ids(apps, schema_editor):
         Node.objects.bulk_update(nodes_to_update, ["params"])
 
 
-def reverse_migration(apps, schema_editor):
+def reverse_migration(apps, _schema_editor):
     """Reverse the migration by converting collection_index_ids back to collection_index_id"""
     Node = apps.get_model("pipelines", "Node")
 
     nodes_to_update = []
-    for idx, node in enumerate(Node.objects.filter(type="LLMResponseWithPrompt").iterator(100)):
+    for node in Node.objects.filter(type="LLMResponseWithPrompt").iterator(100):
         if "collection_index_ids" in node.params:
             # Take the first ID if it exists, otherwise set to None
             collection_ids = node.params.get("collection_index_ids", [])
@@ -49,7 +50,8 @@ def reverse_migration(apps, schema_editor):
             del node.params["collection_index_ids"]
             nodes_to_update.append(node)
 
-        if idx % 100 == 0 and nodes_to_update:
+        # Batch update when buffer reaches 100 items
+        if len(nodes_to_update) >= 100:
             Node.objects.bulk_update(nodes_to_update, ["params"])
             nodes_to_update = []
 
