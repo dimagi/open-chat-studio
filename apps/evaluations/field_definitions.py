@@ -4,6 +4,7 @@ Defines typed field definitions with validation constraints for different data t
 Uses discriminated unions to ensure type-specific constraints are enforced.
 """
 
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel
@@ -66,23 +67,13 @@ class FloatFieldDefinition(BaseFieldDefinition):
 
 
 class ChoiceFieldDefinition(BaseFieldDefinition):
-    """Choice field with enumerated valid values."""
-
     type: Literal["choice"]
     choices: list[str]
 
     @property
     def python_type(self) -> type:
-        return str
-
-    @property
-    def pydantic_fields(self) -> dict:
-        """Return field kwargs for Pydantic with enum constraint in JSON schema."""
-        fields = super().pydantic_fields
-        if self.choices:
-            fields["json_schema_extra"] = {"enum": self.choices}
-
-        return fields
+        members = {c.upper(): c for c in self.choices}
+        return StrEnum("DynamicEnum", members)
 
 
 FieldDefinition = StringFieldDefinition | IntFieldDefinition | FloatFieldDefinition | ChoiceFieldDefinition

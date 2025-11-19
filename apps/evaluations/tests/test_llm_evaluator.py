@@ -5,8 +5,10 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from apps.evaluations.evaluators import LlmEvaluator
+from apps.evaluations.field_definitions import ChoiceFieldDefinition, IntFieldDefinition, StringFieldDefinition
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
 from apps.evaluations.tasks import evaluate_single_message_task
+from apps.evaluations.utils import schema_to_pydantic_model
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationDatasetFactory,
@@ -42,6 +44,7 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
     )
     service = build_fake_llm_service(responses=[response], token_counts=[30])
     get_llm_service.return_value = service
+
     prompt = "evaluate the sentiment of the following conversation"
 
     message_1 = "Hello, I'm upbeat and friendly"
@@ -226,3 +229,84 @@ def test_evaluator_with_missing_output(get_llm_service, llm_provider, llm_provid
     assert results[0].output["message"]["input"] == {"content": "Hello, I need help", "role": "human"}
     assert "result" in results[0].output
     assert "assessment" in results[0].output["result"]
+
+
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_evaluators_return_typed_pydantic_model(get_llm_service):
+    output_schema = {
+        "sentiment": StringFieldDefinition(type="string", description="the sentiment of the conversation"),
+        "value": IntFieldDefinition(type="int", description="the value of the conversation"),
+        "choices": ChoiceFieldDefinition(
+            type="choice", description="the choice of the conversation", choices=["foo", "bar", "baz"]
+        ),
+    }
+    output_model = schema_to_pydantic_model(output_schema)
+    assert output_model.model_json_schema() == {
+        "$defs": {"DynamicEnum": {"enum": ["foo", "bar", "baz"], "title": "DynamicEnum", "type": "string"}},
+        "properties": {
+            "sentiment": {"description": "the sentiment of the conversation", "title": "Sentiment", "type": "string"},
+            "value": {"description": "the value of the conversation", "title": "Value", "type": "integer"},
+            "choices": {
+                "$ref": "#/$defs/DynamicEnum",
+                "choices": ["foo", "bar", "baz"],
+                "description": "the choice of the conversation",
+            },
+        },
+        "required": ["sentiment", "value", "choices"],
+        "title": "DynamicModel",
+        "type": "object",
+    }
+
+    response = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "DynamicModel",
+                "args": {
+                    "sentiment": "positive",  # a string
+                    "value": 5,  # an int
+                    "choices": "foo",  # an enum member
+                },
+                "id": "call_123",
+            }
+        ],
+    )
+    service = build_fake_llm_service(responses=[response], token_counts=[30])
+    get_llm_service.return_value = service
+
+    llm = service.get_chat_model("gpt-4o")
+    structured_llm = llm.with_structured_output(output_model)
+    result = structured_llm.invoke("test prompt")
+    assert isinstance(result, output_model), f"Expected {type(output_model)} instance, got {type(result)}"
+    assert hasattr(result, "sentiment"), "Expected model to have 'sentiment' attribute"
+    assert result.sentiment == "positive"
+
+    assert hasattr(result, "value"), "Expected model to have 'value' attribute"
+    assert result.value == 5
+
+    assert hasattr(result, "choices"), "Expected model to have 'choices' attribute"
+    assert result.choices == "foo"
+    assert isinstance(result.choices, str)
+
+    # Test that invalid enum values are rejected
+    invalid_response = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "DynamicModel",
+                "args": {
+                    "sentiment": "positive",
+                    "value": 5,
+                    "choices": "invalid_choice",  # Not in ["foo", "bar", "baz"]
+                },
+                "id": "call_456",
+            }
+        ],
+    )
+    invalid_service = build_fake_llm_service(responses=[invalid_response], token_counts=[30])
+    invalid_llm = invalid_service.get_chat_model("gpt-4o")
+    invalid_structured_llm = invalid_llm.with_structured_output(output_model)
+
+    # Should raise validation error for invalid enum value
+    with pytest.raises(ValueError, match="enum"):
+        invalid_structured_llm.invoke("test prompt")
