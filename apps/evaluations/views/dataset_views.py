@@ -8,7 +8,7 @@ from itertools import islice
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -238,20 +238,8 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
 
     def get_queryset(self):
         queryset = get_base_session_queryset(self.request)
-
-        # Get filter params for message count
-        timezone = self.request.session.get("detected_tz", None)
-        filter_params = FilterParams.from_request(self.request)
-        message_filter = ChatMessageFilter()
-        base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
-        filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
-
-        # Add expensive annotations only to paginated data
         queryset = queryset.annotate_with_versions_list().annotate(
-            message_count=Coalesce(
-                Count("chat__messages", filter=Q(chat__messages__in=filtered_messages.values("pk")), distinct=True),
-                0,
-            )
+            message_count=Coalesce(Count("chat__messages", distinct=True), 0)
         )
         return queryset.select_related("team", "participant__user", "chat", "experiment").order_by("experiment__name")
 
