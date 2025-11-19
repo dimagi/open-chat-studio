@@ -1,7 +1,7 @@
 import dataclasses
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, cast
+from typing import Any
 from unittest import mock
 from unittest.mock import patch
 
@@ -13,7 +13,6 @@ from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, Base
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from langchain_core.utils.pydantic import TypeBaseModel, is_basemodel_subclass
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
@@ -67,38 +66,6 @@ class FakeLlm(FakeListChatModel):
 
     def bind_tools(self, tools, *args, **kwargs):
         return self.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
-
-    def with_structured_output(self, schema) -> RunnableSerializable:
-        """with_structured_output returns a runnable that handles both regular message inputs and ChatPromptValue
-        inputs, converting the result to the schema's expected format.
-
-        Examples:
-            FakeLlm(responses=[{"name": "John"}]).with_structured_output(MyModel) -> MyModel(name="John")
-            FakeLlm(responses=[AIMessage(content="", tool_calls=[...])]).with_structured_output(MyModel) -> MyModel(...)
-            FakeLlm(responses=[{"name": "John"}]).with_structured_output({"type": "object", ...}) -> {"name": "John"}
-        """
-        from langchain_core.messages import AIMessage
-        from langchain_core.output_parsers.openai_tools import PydanticToolsParser
-        from langchain_core.runnables import RunnableLambda
-
-        if isinstance(schema, type) and is_basemodel_subclass(schema):
-            first_response = self.responses[0] if self.responses else None
-            has_tool_calls = isinstance(first_response, AIMessage) and hasattr(first_response, "tool_calls")
-            if has_tool_calls:
-                output_parser = PydanticToolsParser(tools=[cast(TypeBaseModel, schema)], first_tool_only=True)
-                llm = self.bind_tools([schema], tool_choice="any")
-                return llm | output_parser
-            else:
-
-                def parse_response(_):
-                    response = self.responses[0] if self.responses else {}
-                    return schema(**response)
-
-                return RunnableLambda(parse_response)
-        elif isinstance(schema, dict):
-            # Handle JSON schema - for testing purposes, just return the response directly
-            return RunnableLambda(lambda _: self.responses[0] if self.responses else {})
-        raise Exception("Unsupported schema type, only pydantic models and dicts are supported")
 
 
 @dataclasses.dataclass

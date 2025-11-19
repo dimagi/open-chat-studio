@@ -2,6 +2,7 @@ from typing import cast
 from unittest import mock
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
@@ -29,7 +30,17 @@ def llm_provider_model():
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
-    service = build_fake_llm_service(responses=[{"sentiment": "positive"}], token_counts=[30])
+    response = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "DynamicModel",
+                "args": {"sentiment": "positive"},
+                "id": "call_123",
+            }
+        ],
+    )
+    service = build_fake_llm_service(responses=[response], token_counts=[30])
     get_llm_service.return_value = service
     prompt = "evaluate the sentiment of the following conversation"
 
@@ -90,7 +101,17 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider_model):
-    service = build_fake_llm_service(responses=[{"evaluation": "context_variables_working"}], token_counts=[30])
+    response = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "DynamicModel",
+                "args": {"evaluation": "context_variables_working"},
+                "id": "call_456",
+            }
+        ],
+    )
+    service = build_fake_llm_service(responses=[response], token_counts=[30])
     get_llm_service.return_value = service
 
     prompt = (
@@ -159,7 +180,17 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_evaluator_with_missing_output(get_llm_service, llm_provider, llm_provider_model):
     """Test that the evaluator handles evaluation messages with missing AI output gracefully."""
-    service = build_fake_llm_service(responses=[{"assessment": "no response to evaluate"}], token_counts=[30])
+    response = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "DynamicModel",
+                "args": {"assessment": "no response to evaluate"},
+                "id": "call_789",
+            }
+        ],
+    )
+    service = build_fake_llm_service(responses=[response], token_counts=[30])
     get_llm_service.return_value = service
 
     prompt = "Evaluate the AI response to: {input.content}. Response: {output.content}"
