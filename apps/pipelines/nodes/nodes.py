@@ -424,7 +424,6 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
             context["collection_index_summaries"] = self.collection_index_ids
 
         try:
-            # FUTURE TODO: add temp_state and session_state to PromptVars
             known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
             validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
             return self
