@@ -358,10 +358,9 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
     collection_index_ids: list[int] = Field(
         default_factory=list,
         title="Collection Indexes",
-        json_schema_extra={
-            **UiSchema(widget=Widgets.searchable_multiselect, options_source=OptionsSource.collection_index).model_dump(),
-            "uniqueItems": True,
-        },
+        json_schema_extra=UiSchema(
+            widget=Widgets.searchable_multiselect, options_source=OptionsSource.collection_index
+        ),
     )
     max_results: OptionalInt = Field(
         default=20,
