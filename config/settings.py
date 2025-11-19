@@ -407,6 +407,7 @@ SITE_ID = 1
 # DRF config
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "oauth2_provider.contrib.rest_framework.OAuth2Authentication",
         "apps.api.permissions.ApiKeyAuthentication",
         "apps.api.permissions.BearerTokenAuthentication",
     ],
