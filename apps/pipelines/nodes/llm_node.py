@@ -144,8 +144,8 @@ def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
 
 def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: ToolCallbacks) -> list[dict | BaseTool]:
     """Get instantiated tools for the given node configuration."""
-    from apps.chat.agent.tools import MultiSearchIndexTool
     from apps.chat.agent.tool_response_validator import ToolResponseSizeValidator, wrap_tool_with_validation
+    from apps.chat.agent.tools import MultiSearchIndexTool
 
     model = get_llm_provider_model(node.llm_provider_model_id)
     max_token_limit = node.user_max_token_limit if node.user_max_token_limit is not None else model.max_token_limit
@@ -184,9 +184,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
                 # All remote: create OpenAI builtin tool with multiple vector stores
                 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 
-                vector_store_ids = [
-                    collection.openai_vector_store_id for collection in collections.values()
-                ]
+                vector_store_ids = [collection.openai_vector_store_id for collection in collections.values()]
                 search_tool = OpenAIBuiltinTool(
                     type="file_search",
                     vector_store_ids=vector_store_ids,
