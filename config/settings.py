@@ -819,5 +819,9 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
     return "silky" in request.headers.get("referer", "")
 
 
-OAUTH2_PROVIDER = {"PKCE_REQUIRED": False}
+OAUTH2_PROVIDER = {
+    "PKCE_REQUIRED": False,
+    "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.TeamScopedOAuth2Validator",
+    "SCOPES_BACKEND_CLASS": "apps.oauth.scopes.TeamScopedScopesBackend",
+}
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"

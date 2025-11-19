@@ -24,6 +24,7 @@ from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 from oauth2_provider import urls as oauth2_urls
 
+from apps.oauth.views import TeamScopedAuthorizationView
 from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
 from apps.web.sitemaps import StaticViewSitemap
@@ -67,6 +68,7 @@ urlpatterns = [
     # Redirects to prevent users from accessing oauth2 provider views directly
     path("o/applications/", RedirectView.as_view(pattern_name="web:home")),
     path("o/authorized_tokens/", RedirectView.as_view(pattern_name="web:home")),
+    path("o/authorize/", TeamScopedAuthorizationView.as_view(), name="oauth_authorize"),
     path("o/", include(oauth2_urls)),
     path("i18n/", include("django.conf.urls.i18n")),
     path(

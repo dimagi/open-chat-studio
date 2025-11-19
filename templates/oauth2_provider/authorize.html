@@ -1,0 +1,39 @@
+{% extends "oauth2_provider/base.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="block-center">
+    {% if not error %}
+        <form id="authorizationForm" method="post">
+            <h3>{% translate "Authorize" %} {{ application.name }}?</h3>
+            {% csrf_token %}
+
+            {% for field in form %}
+                {% if field.is_hidden and field.name != 'teams' %}
+                    {{ field }}
+                {% endif %}
+            {% endfor %}
+
+            <div class="team-selection">
+                <h4>{% translate "Select Teams to Grant Access" %}</h4>
+                <p>{% translate "This application will only be able to access data from the selected teams." %}</p>
+                {{ form.teams }}
+                {{ form.teams.errors }}
+            </div>
+
+            {{ form.errors }}
+            {{ form.non_field_errors }}
+
+            <div class="control-group">
+                <div class="controls">
+                    <input type="submit" class="btn btn-large" value="{% translate "Cancel" %}"/>
+                    <input type="submit" class="btn btn-large btn-primary" name="allow" value="{% translate "Authorize" %}"/>
+                </div>
+            </div>
+        </form>
+    {% else %}
+        <h2>Error: {{ error.error }}</h2>
+        <p>{{ error.description }}</p>
+    {% endif %}
+</div>
+{% endblock content %}
