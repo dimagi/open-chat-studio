@@ -469,16 +469,17 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
         # Check for non-existent collections
         missing_ids = set(value) - set(collections.keys())
         if missing_ids:
+            names = ", ".join([collections[missing_id] for missing_id in missing_ids])
             raise PydanticCustomError(
                 "collection_not_found",
-                f"Collection(s) with ID(s) {sorted(missing_ids)} not found",
+                f"Collection(s) with name(s) {names} not found",
             )
 
         # Validate that all collections use the same LLM provider
         incompatible_collections = []
-        for collection_id, collection in collections.items():
+        for collection in collections.values():
             if collection.llm_provider_id != llm_provider_id:
-                incompatible_collections.append(f"{collection.name} (ID: {collection_id})")
+                incompatible_collections.append(f"{collection.name}")
 
         if incompatible_collections:
             raise PydanticCustomError(
@@ -493,20 +494,24 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
             is_remote_flags = [collection.is_remote_index for collection in collections.values()]
             if not all(is_remote_flags) and any(is_remote_flags):
                 remote_collections = [
-                    f"{collection.name} (ID: {cid})"
-                    for cid, collection in collections.items()
-                    if collection.is_remote_index
+                    f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
                 ]
                 local_collections = [
-                    f"{collection.name} (ID: {cid})"
-                    for cid, collection in collections.items()
-                    if not collection.is_remote_index
+                    f"{collection.name}" for cid, collection in collections.items() if not collection.is_remote_index
                 ]
                 raise PydanticCustomError(
                     "mixed_collection_types",
                     f"All collection indexes must be the same type (either all remote or all local). "
                     f"Remote collections: {', '.join(remote_collections)}. "
                     f"Local collections: {', '.join(local_collections)}.",
+                )
+
+            missing_summary = [collection.name for collection in collections.values() if not collection.summary]
+            if missing_summary:
+                raise PydanticCustomError(
+                    "collections_missing_summary",
+                    "When using multiple collection indexes, the collections must have a summary. "
+                    f"Collections missing summary: {', '.join(missing_summary)}",
                 )
 
         return value
