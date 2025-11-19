@@ -130,7 +130,7 @@ def get_openai_container_file_contents(
 def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
     parts = [{"type": "text", "text": message}]
     for att in attachments:
-        if att.size > settings.MAX_FILE_SIZE_MB:
+        if att.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
             raise ValueError(f"File {att.name} exceeds maximum size")
 
         mime_type = att.content_type or ""
