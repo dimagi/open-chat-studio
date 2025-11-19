@@ -95,6 +95,7 @@ Changelog = "https://docs.openchatstudio.com/changelog/"
 addopts = "--ds=config.settings --reuse-db --strict-markers --tb=short"
 python_files = "tests.py test_*.py *_tests.py"
 norecursedirs = ".* build dist venv node_modules compose assets static"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 exclude = [
@@ -146,6 +147,7 @@ dev = [
     "pytest-xdist",
     "django-debug-toolbar>=5.2.0",
     "djlint>=1.36.4",
+    "pytest-asyncio>=1.3.0",
 ]
 docs = [
     "mkdocs-material>=9.6.12",
