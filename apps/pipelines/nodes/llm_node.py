@@ -6,7 +6,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt.chat_agent_executor import AgentState, create_react_agent
 
-from apps.chat.agent.tools import get_node_tools
+from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
@@ -173,6 +173,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
 def _get_search_tool(node, validator):
     from apps.chat.agent.tool_response_validator import wrap_tool_with_validation
     from apps.chat.agent.tools import MultiSearchIndexTool
+    from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 
     if not node.collection_index_ids:
         return None
@@ -185,13 +186,18 @@ def _get_search_tool(node, validator):
     if len(collections) == 1:
         # Single collection: use the existing single-index search tool
         collection = collections[0]
-        search_tool = collection.get_search_tool(
-            max_results=node.max_results, generate_citations=node.generate_citations
+        if collection.is_remote_index:
+            return OpenAIBuiltinTool(
+                type="file_search",
+                vector_store_ids=[collection.openai_vector_store_id],
+                max_num_results=node.max_results,
+            )
+
+        search_config = SearchToolConfig(
+            index_id=collection.id, max_results=node.max_results, generate_citations=node.generate_citations
         )
-        if isinstance(search_tool, BaseTool):
-            # Wrap search tool with validation
-            search_tool = wrap_tool_with_validation(search_tool, validator)
-        return search_tool
+        search_tool = SearchIndexTool(search_config=search_config)
+        return wrap_tool_with_validation(search_tool, validator)
 
     # Multiple collections: check if they're remote or local
     first_collection = collections[0]
@@ -199,7 +205,6 @@ def _get_search_tool(node, validator):
     if first_collection and first_collection.is_remote_index:
         # All remote: create OpenAI builtin tool with multiple vector stores
         # We can assume this is true because of the node validation
-        from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 
         vector_store_ids = [collection.openai_vector_store_id for collection in collections]
         return OpenAIBuiltinTool(
