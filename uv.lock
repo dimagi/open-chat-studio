@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.13"
 
 [[package]]
@@ -848,6 +848,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e8/ea/3d0fb10e6ebbceab57b5e228c8ae5e4ebed3b6d6767d07468923ca000fa3/django_htmx-1.26.0.tar.gz", hash = "sha256:88ecc2f8a3f13ad5a50e6b16be127f04fba369124cc40a09b21ce33babb04aa6", size = 65345, upload-time = "2025-09-22T09:23:41.582Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dd/fc/dbbc54af504427f5f248a73cf9a2d40bfd22631bbf042d313563acc4d223/django_htmx-1.26.0-py3-none-any.whl", hash = "sha256:3a80ffaa6df5a07e833752cd8ada7cee0fa711787841ab17a805075b1aecacc7", size = 62122, upload-time = "2025-09-22T09:23:40.18Z" },
+]
+
+[[package]]
+name = "django-oauth-toolkit"
+version = "3.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "jwcrypto" },
+    { name = "oauthlib" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b7/9f/2f183535b1ae1e3b6b07b59e74e75c47c057a690a83cc7ed1edc2621f3a4/django_oauth_toolkit-3.1.0.tar.gz", hash = "sha256:d5a59d07588cfefa8818e99d65040a252eb2ede22512483e2240c91d0b885c8e", size = 102563, upload-time = "2025-10-03T16:12:25.236Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1f/40/c36397edbd020319403a76ce3229f757c262db8652a424f354d848799271/django_oauth_toolkit-3.1.0-py3-none-any.whl", hash = "sha256:10ddc90804297d913dfb958edd58d5fac541eb1ca912f47893ca1e482bb2a11f", size = 78658, upload-time = "2025-10-03T16:12:24.038Z" },
 ]
 
 [[package]]
@@ -1725,6 +1740,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/12/ce/eb5396b34c28cbac19a6a8632f0e03d309135d77285536258b82120198d8/jsonschema_specifications-2023.7.1.tar.gz", hash = "sha256:c91a50404e88a1f6ba40636778e2ee08f6e24c5613fe4c53ac24578a5a7f72bb", size = 12689, upload-time = "2023-07-18T15:25:46.815Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1c/24/83349ac2189cc2435e84da3f69ba3c97314d3c0622628e55171c6798ed80/jsonschema_specifications-2023.7.1-py3-none-any.whl", hash = "sha256:05adf340b659828a004220a9613be00fa3f223f2b82002e273dee62fd50524b1", size = 17835, upload-time = "2023-07-18T15:25:45.245Z" },
+]
+
+[[package]]
+name = "jwcrypto"
+version = "1.5.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e1/db/870e5d5fb311b0bcf049630b5ba3abca2d339fd5e13ba175b4c13b456d08/jwcrypto-1.5.6.tar.gz", hash = "sha256:771a87762a0c081ae6166958a954f80848820b2ab066937dc8b8379d65b1b039", size = 87168, upload-time = "2024-03-06T19:58:31.831Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/58/4a1880ea64032185e9ae9f63940c9327c6952d5584ea544a8f66972f2fda/jwcrypto-1.5.6-py3-none-any.whl", hash = "sha256:150d2b0ebbdb8f40b77f543fb44ffd2baeff48788be71f67f03566692fd55789", size = 92520, upload-time = "2024-03-06T19:58:29.765Z" },
 ]
 
 [[package]]
