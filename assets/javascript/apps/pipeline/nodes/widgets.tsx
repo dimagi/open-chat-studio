@@ -292,14 +292,33 @@ function CollectionIndexMultiSelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   const setNode = usePipelineStore((state) => state.setNode);
 
-  // Convert paramValue (array of IDs) to react-select format
+  // Determine the type from schema for proper type conversion
+  const itemType = props.schema.items?.type || 'string';
+
+  // Type conversion function based on schema
+  const convertValue = (value: any) => {
+    switch (itemType) {
+      case 'integer':
+      case 'number':
+        return Number(value);
+      case 'boolean':
+        return Boolean(value);
+      case 'string':
+      default:
+        return String(value);
+    }
+  };
+
+  // Convert paramValue (array) to react-select format
   const selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
-  const selectedOptions = options.filter(option =>
-    selectedValues.includes(option.value) || selectedValues.includes(Number(option.value))
-  );
+  const selectedOptions = options.filter(option => {
+    // Check both string and converted values for matching
+    const convertedValue = convertValue(option.value);
+    return selectedValues.includes(option.value) || selectedValues.some(v => v === convertedValue);
+  });
 
   const handleChange = (selectedOptions: any) => {
-    const values = selectedOptions ? selectedOptions.map((option: Option) => Number(option.value)) : [];
+    const values = selectedOptions ? selectedOptions.map((option: Option) => convertValue(option.value)) : [];
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
         next.data.params[props.name] = values;
@@ -323,7 +342,7 @@ function CollectionIndexMultiSelectWidget(props: WidgetParams) {
         isDisabled={props.readOnly}
         className="react-select-container"
         classNamePrefix="react-select"
-        placeholder="Select collection indexes..."
+        placeholder={`Select ${props.label.toLowerCase()}...`}
         isClearable={true}
         styles={{
           control: (base) => ({
