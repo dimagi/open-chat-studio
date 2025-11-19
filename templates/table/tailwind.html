@@ -20,7 +20,7 @@
                         </a>
                         <a class="join-item btn">
                           {% block pagination_info %}
-                            {% with current_position=table.page.end_index total=table.page.paginator.num_pages %}
+                            {% with current_position=table.page.end_index total=table.page.paginator.count %}
                               {% blocktranslate %}
                                 {{ current_position }} of {{ total }}
                               {% endblocktranslate %}
