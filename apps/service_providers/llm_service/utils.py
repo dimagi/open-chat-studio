@@ -2,6 +2,7 @@ import re
 from io import BytesIO
 
 import httpx
+from django.conf import settings
 from langchain_core.messages import HumanMessage
 
 from apps.experiments.models import ExperimentSession
@@ -129,6 +130,9 @@ def get_openai_container_file_contents(
 def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
     parts = [{"type": "text", "text": message}]
     for att in attachments:
+        if att.size > settings.MAX_FILE_SIZE_MB:
+            raise ValueError(f"File {att.name} exceeds maximum size")
+
         mime_type = att.content_type or ""
         if mime_type.startswith("image/"):
             parts.append(
