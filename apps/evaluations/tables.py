@@ -264,7 +264,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
     session = actions.ActionsColumn(
         actions=[
             chip_action(
-                label_factory=lambda record, _: record.external_id,
+                label="View Session",
                 url_factory=_chip_session_url_factory,
                 open_url_in_new_tab=True,
             ),
@@ -277,7 +277,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
         fields = []
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
-            "data-redirect-url": None,
+            "data-redirect-target": "_blank",
         }
         attrs = {"class": "table w-full"}
         orderable = False

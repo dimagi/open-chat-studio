@@ -86,10 +86,12 @@ def _queryset_update_with_auditing(queryset, **kw):
     Copied from `field_audit.models.AuditingQuerySet.update` so that it can be called with querysets
     that are not AuditingQuerySets.
     """
+    from field_audit import AuditService
     from field_audit.models import AuditEvent
 
+    audit_service = AuditService()
     fields_to_update = set(kw.keys())
-    audited_fields = set(AuditEvent.field_names(queryset.model))
+    audited_fields = set(audit_service.get_field_names(queryset.model))
     fields_to_audit = fields_to_update & audited_fields
     if not fields_to_audit:
         # no audited fields are changing
@@ -120,7 +122,7 @@ def _queryset_update_with_auditing(queryset, **kw):
         request = field_audit.request.get()
         audit_events = []
         for pk, old_values_for_pk in old_values.items():
-            audit_event = AuditEvent.make_audit_event_from_values(
+            audit_event = audit_service.make_audit_event_from_values(
                 old_values_for_pk, new_values[pk], pk, queryset.model, request
             )
             if audit_event:

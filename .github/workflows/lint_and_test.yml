@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: 22.x
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Build front end
         run: npm run build
       - name: Check types
@@ -52,7 +52,7 @@ jobs:
           node-version: 22.x
       - name: Install dependencies
         run: |
-          npm install
+          npm ci
           sudo apt-get install -y ripgrep
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
@@ -116,6 +116,7 @@ jobs:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
           SECRET_KEY: secret-test-key
+          PYTHONWARNINGS: default
         run: uv run pytest -n auto --cov --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
 
       - name: Upload results to Codecov

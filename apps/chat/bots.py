@@ -4,7 +4,6 @@ import textwrap
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
-from langchain.memory import ConversationBufferMemory
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import chain
 from pydantic import ValidationError
@@ -37,7 +36,6 @@ def create_conversation(
         return BasicConversation(
             prompt_str=prompt_str,
             source_material=source_material,
-            memory=ConversationBufferMemory(return_messages=True),
             llm=llm,
         )
     except ValidationError as e:
