@@ -222,8 +222,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, sy
             ]
         ),
         OptionsSource.collection_index: (
-            [_option("", "Select a Collection Index")]
-            + [
+            [
                 _option(
                     value=index["id"],
                     label=f"{index['name']} ({'Remote' if index['is_remote_index'] else 'Local'})",
