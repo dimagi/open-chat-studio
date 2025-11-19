@@ -29,8 +29,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return SelectWidget
     case "multiselect":
       return MultiSelectWidget
-    case "collection_index_multiselect":
-      return CollectionIndexMultiSelectWidget
+    case "searchable_multiselect":
+      return SearchableMultiSelectWidget
     case "llm_provider_model":
       return LlmWidget
     case "history":
@@ -288,7 +288,7 @@ function MultiSelectWidget(props: WidgetParams) {
   )
 }
 
-function CollectionIndexMultiSelectWidget(props: WidgetParams) {
+function SearchableMultiSelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   const setNode = usePipelineStore((state) => state.setNode);
 
