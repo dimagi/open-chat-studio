@@ -192,12 +192,12 @@ class LlmService(pydantic.BaseModel):
                 # Populate text
                 final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
-                annotations = output.get("annotations", [])
+                annotation_entries = output.get("annotations", [])
                 if include_citations:
-                    external_ids = self.get_cited_file_ids(annotations)
+                    external_ids = self.get_cited_file_ids(annotation_entries)
                     cited_file_ids_remote.extend(external_ids)
 
-                generated_files.extend(self.get_generated_files(annotations, session.team_id))
+                generated_files.extend(self.get_generated_files(annotation_entries, session.team_id))
 
                 # Replace generated file links with actual file download links
                 for generated_file in generated_files:
