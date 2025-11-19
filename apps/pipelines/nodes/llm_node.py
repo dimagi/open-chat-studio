@@ -1,10 +1,10 @@
 import operator
 from typing import Annotated
 
+from langchain.agents import AgentState, create_agent
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
-from langgraph.prebuilt.chat_agent_executor import AgentState, create_react_agent
 
 from apps.chat.agent.tools import get_node_tools
 from apps.documents.models import Collection
@@ -100,7 +100,7 @@ def build_node_agent(node, state: PipelineState, session: ExperimentSession, too
         history = node.get_history(session, [prompt] + state["messages"])
         return [prompt] + history + state["messages"]
 
-    return create_react_agent(
+    return create_agent(
         # TODO: I think this will fail with google builtin tools
         model=node.get_chat_model(),
         tools=tools,

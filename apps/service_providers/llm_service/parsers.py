@@ -1,7 +1,7 @@
 import json
 from json import JSONDecodeError
 
-from langchain.agents.output_parsers.tools import ToolAgentAction, parse_ai_message_to_tool_action
+from langchain_classic.agents.output_parsers.tools import ToolAgentAction, parse_ai_message_to_tool_action
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage, ToolCall

@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 
 import httpx
 from django.conf import settings
-from langchain.chains.openai_functions.openapi import _format_url
+from langchain_classic.chains.openai_functions.openapi import _format_url
 from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool, StructuredTool, ToolException

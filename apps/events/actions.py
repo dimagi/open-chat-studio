@@ -1,5 +1,5 @@
 from django.db.models import Case, DateTimeField, F, When
-from langchain.memory.prompt import SUMMARY_PROMPT
+from langchain_classic.memory.prompt import SUMMARY_PROMPT
 from langchain_core.messages import get_buffer_string
 from langchain_core.prompts.prompt import PromptTemplate
 

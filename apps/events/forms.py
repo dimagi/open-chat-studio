@@ -1,6 +1,6 @@
 from django import forms
 from django.db.models import Q, Subquery
-from langchain.memory.prompt import SUMMARY_PROMPT
+from langchain_classic.memory.prompt import SUMMARY_PROMPT
 
 from apps.events.models import TimePeriod
 from apps.experiments.models import Experiment, ExperimentRoute
