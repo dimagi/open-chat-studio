@@ -109,7 +109,9 @@ class TestDeleteCollection:
 
         collection = self.setup_collection(is_index=is_index)
         client.force_login(collection.team.members.first())
-        node = NodeFactory(pipeline=experiment.pipeline, type="LlmNode", params={"collection_index_id": collection.id})
+        node = NodeFactory(
+            pipeline=experiment.pipeline, type="LlmNode", params={"collection_index_ids": [collection.id]}
+        )
         experiment.create_new_version()
 
         url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])

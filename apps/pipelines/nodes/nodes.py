@@ -364,10 +364,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         title="Media",
         json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection),
     )
-    collection_index_id: OptionalInt = Field(
-        None,
-        title="Collection Index",
-        json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection_index),
+    collection_index_ids: list[int] = Field(
+        default_factory=list,
+        title="Collection Indexes",
+        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.collection_index),
     )
     max_results: OptionalInt = Field(
         default=20,
@@ -446,17 +446,25 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             return []
         return value
 
-    @field_validator("collection_index_id", mode="before")
-    def validate_collection_index_id(cls, value, info: FieldValidationInfo):
+    @field_validator("collection_index_ids", mode="before")
+    def validate_collection_index_ids(cls, value, info: FieldValidationInfo):
         if not value:
-            return value
+            return []
 
-        collection = Collection.objects.get(id=value)
-        if collection.llm_provider_id != info.data.get("llm_provider_id"):
-            raise PydanticCustomError(
-                "invalid_collection_index",
-                f"The collection index and node must use the same LLM provider ({collection.llm_provider.name})",
-            )
+        # Ensure value is a list
+        if not isinstance(value, list):
+            value = [value]
+
+        llm_provider_id = info.data.get("llm_provider_id")
+        for collection_id in value:
+            if not collection_id:
+                continue
+            collection = Collection.objects.get(id=collection_id)
+            if collection.llm_provider_id != llm_provider_id:
+                raise PydanticCustomError(
+                    "invalid_collection_index",
+                    f"All collection indexes must use the same LLM provider as the node ({collection.llm_provider.name})",
+                )
         return value
 
     def _process(self, state: PipelineState) -> PipelineState:

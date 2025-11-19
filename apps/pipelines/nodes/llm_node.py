@@ -141,8 +141,10 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     """Get instantiated tools for the given node configuration."""
     tools = get_node_tools(node.django_node, session, tool_callbacks=tool_callbacks)
     tools.extend(node.get_llm_service().attach_built_in_tools(node.built_in_tools, node.tool_config))
-    if node.collection_index_id:
-        collection = Collection.objects.get(id=node.collection_index_id)
+    # For now, just take the first collection index ID from the list
+    if node.collection_index_ids:
+        collection_id = node.collection_index_ids[0]
+        collection = Collection.objects.get(id=collection_id)
         tools.append(
             collection.get_search_tool(max_results=node.max_results, generate_citations=node.generate_citations)
         )

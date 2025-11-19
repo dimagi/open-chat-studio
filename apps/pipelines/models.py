@@ -57,6 +57,23 @@ def _set_versioned_param_value(node_version: Self, param_name: str, param_cls):
                 node_version.params[param_name] = str(param_instance.latest_version.id)
 
 
+def _set_versioned_param_list_values(node_version: Self, param_name: str, param_cls):
+    """
+    Handles list parameters referencing versioned models with the same logic as _set_versioned_param_value
+    but for a list of IDs.
+    """
+    if param_instance_ids := node_version.params.get(param_name):
+        versioned_ids = []
+        for param_instance_id in param_instance_ids:
+            if param_instance := param_cls.objects.filter(id=param_instance_id).first():
+                if not param_instance.has_versions or param_instance.compare_with_latest():
+                    new_instance_version = param_instance.create_new_version()
+                    versioned_ids.append(new_instance_version.id)
+                else:
+                    versioned_ids.append(param_instance.latest_version.id)
+        node_version.params[param_name] = versioned_ids
+
+
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
     def get_queryset(self):
         return (
@@ -384,7 +401,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if not is_copy and self.type == LLMResponseWithPrompt.__name__:
             _set_versioned_param_value(new_version, "source_material_id", SourceMaterial)
             _set_versioned_param_value(new_version, "collection_id", Collection)
-            _set_versioned_param_value(new_version, "collection_index_id", Collection)
+            _set_versioned_param_list_values(new_version, "collection_index_ids", Collection)
 
         new_version.save()
         if self.params.get("custom_actions"):
@@ -446,10 +463,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                     name = "media"
                     if value:
                         value = Collection.objects.filter(id=value).first()
-                case "collection_index_id":
-                    name = "Collection Index"
+                case "collection_index_ids":
+                    name = "Collection Indexes"
                     if value:
-                        value = Collection.objects.filter(id=value).first()
+                        # Convert list of IDs to list of Collection objects
+                        value = list(Collection.objects.filter(id__in=value))
                 case "source_material_id":
                     name = "source_material"
                     if value:
@@ -490,14 +508,13 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             nodes.AssistantNode.__name__: [ModelParamSpec(param_name="assistant_id", model_cls=OpenAiAssistant)],
             nodes.LLMResponseWithPrompt.__name__: [
                 ModelParamSpec(param_name="collection_id", model_cls=Collection),
-                ModelParamSpec(param_name="collection_index_id", model_cls=Collection),
                 # TODO: Custom actions needed
                 # TODO: Source material needed
             ],
         }
 
         for spec in model_param_specs.get(self.type, []):
-            if instance_id := self.params[spec.param_name]:
+            if instance_id := self.params.get(spec.param_name):
                 try:
                     obj = spec.get_object(instance_id)
                     obj.archive()
@@ -505,6 +522,18 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                     versioning_logger.exception(
                         f"Failed to archive {spec.param_name} with id {instance_id}, since it could not be found"
                     )
+
+        # Handle list parameters separately (e.g., collection_index_ids)
+        if self.type == nodes.LLMResponseWithPrompt.__name__:
+            if collection_index_ids := self.params.get("collection_index_ids"):
+                for collection_id in collection_index_ids:
+                    try:
+                        collection = Collection.objects.get(id=collection_id)
+                        collection.archive()
+                    except ObjectDoesNotExist:
+                        versioning_logger.exception(
+                            f"Failed to archive collection_index_ids with id {collection_id}, since it could not be found"
+                        )
 
 
 class PipelineEventInputs(models.TextChoices):
