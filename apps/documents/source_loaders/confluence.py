@@ -54,6 +54,8 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
                         "collection_id": self.collection.id,
                         "source_type": "confluence",
                         "base_url": self.config.base_url,
+                        "citation_text": document.metadata.get("title"),
+                        "citation_url": document.metadata.get("source"),
                     }
                 )
                 yield document

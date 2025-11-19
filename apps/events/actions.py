@@ -1,7 +1,7 @@
 from django.db.models import Case, DateTimeField, F, When
 from langchain.memory.prompt import SUMMARY_PROMPT
-from langchain.memory.summary import SummarizerMixin
-from langchain_core.prompts import PromptTemplate
+from langchain_core.messages import get_buffer_string
+from langchain_core.prompts.prompt import PromptTemplate
 
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
@@ -43,17 +43,17 @@ class EndConversationAction(EventActionHandlerBase):
 class SummarizeConversationAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
         try:
-            prompt_text = action.params["prompt"]
+            prompt = PromptTemplate(template=action.params["prompt"], input_variables=["summary", "new_lines"])
         except KeyError:
-            prompt_text = SUMMARY_PROMPT
+            prompt = SUMMARY_PROMPT
         history = session.chat.get_langchain_messages_until_marker(marker=PipelineChatHistoryModes.SUMMARIZE)
         current_summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else ""
         messages = session.chat.get_langchain_messages()
-        prompt = PromptTemplate(template=prompt_text, input_variables=["summary", "new_lines"])
 
-        summary = SummarizerMixin(llm=session.experiment.get_chat_model(), prompt=prompt).predict_new_summary(
-            messages, current_summary
-        )
+        llm = session.experiment.get_chat_model()
+        chain = (prompt | llm).with_config({"run_name": "generate_summary"})
+        new_lines = get_buffer_string(messages)
+        summary = chain.invoke({"summary": current_summary or "", "new_lines": new_lines}).text()
 
         return summary
 

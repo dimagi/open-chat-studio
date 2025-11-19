@@ -33,7 +33,6 @@
     "autoprefixer": "^10.4.20",
     "babel-loader": "^9.2.1",
     "css-loader": "^7.1.2",
-    "cypress": "^15.5.0",
     "daisyui": "^5.3.2",
     "eslint": "^9.36.0",
     "eslint-plugin-react": "^7.37.4",
@@ -79,5 +78,8 @@
     "tailwindcss": "^4.1.4",
     "tom-select": "^2.3.1",
     "zustand": "^5.0.3"
+  },
+  "optionalDependencies": {
+    "cypress": "^15.5.0"
   }
 }

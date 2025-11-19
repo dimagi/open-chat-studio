@@ -48,6 +48,8 @@ class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
                         "source_type": "github",
                         "repo_url": str(self.config.repo_url),
                         "branch": self.config.branch,
+                        # override source with correct web url
+                        "source": f"{self.config.repo_url}/blob/{self.config.branch}/{document.metadata['path']}",
                     }
                 )
                 yield document

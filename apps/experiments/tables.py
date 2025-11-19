@@ -118,7 +118,7 @@ class ExperimentSessionsTable(tables.Table):
     tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html", orderable=False)
     versions = columns.Column(verbose_name="Versions", accessor="experiment_versions", orderable=False)
     state = columns.Column(verbose_name="State", accessor="status", orderable=True)
-    remote_id = columns.Column(verbose_name="Remote Id", accessor="participant.remote_id")
+    remote_id = columns.Column(verbose_name="Remote Id", accessor="participant__remote_id")
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(

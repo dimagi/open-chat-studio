@@ -124,7 +124,7 @@ def process_transcript_analysis(self, analysis_id):
                     try:
                         # Process with LLM
                         response = llm.invoke(prompt)
-                        answer = response.content
+                        answer = response.text()
 
                         # Add to row
                         session_row.append(answer)
