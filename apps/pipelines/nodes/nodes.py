@@ -208,7 +208,7 @@ class LLMResponseMixin(BaseModel):
         return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
 
 
-class HistoryMixin(LLMResponseMixin):
+class LLMHistoryMixin(LLMResponseMixin):
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.NONE,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
@@ -339,7 +339,7 @@ class ToolConfigModel(BaseModel):
         return values if values else None
 
 
-class LLMResponseWithPrompt(HistoryMixin, OutputMessageTagMixin, PipelineNode):
+class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode):
     """Uses an LLM to respond to the input."""
 
     model_config = ConfigDict(
@@ -591,7 +591,7 @@ class RouterMixin(BaseModel):
         return []
 
 
-class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
+class RouterNode(RouterMixin, PipelineRouterNode, LLMHistoryMixin):
     """Routes the input to one of the linked nodes using an LLM"""
 
     model_config = ConfigDict(
