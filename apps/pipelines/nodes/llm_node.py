@@ -146,7 +146,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     # Create validator for tool response size checking
     from apps.chat.agent.tool_response_validator import ToolResponseSizeValidator, wrap_tool_with_validation
 
-    model = get_llm_provider_model(node.self.llm_provider_model_id)
+    model = get_llm_provider_model(node.llm_provider_model_id)
     max_token_limit = node.user_max_token_limit if node.user_max_token_limit is not None else model.max_token_limit
     model_name = model.name
     token_counter = node.get_llm_service().get_token_counter(model_name)
