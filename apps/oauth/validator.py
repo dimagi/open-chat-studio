@@ -51,7 +51,7 @@ class TeamScopedOAuth2Validator(OAuth2Validator):
 
         # Extract team scopes from token
         access_token = request.access_token
-        team_slugs, _ = self.extract_team_scopes(access_token.scope.split())
+        team_slugs = self.extract_team_scopes(access_token.scope.split())
 
         if team_slugs:
             # Verify user is still member of all teams
