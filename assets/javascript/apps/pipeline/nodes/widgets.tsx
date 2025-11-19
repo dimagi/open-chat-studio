@@ -326,17 +326,11 @@ function SearchableMultiSelectWidget(props: WidgetParams) {
     );
   };
 
-  // Convert options to react-select format
-  const selectOptions = options.map(option => ({
-    value: option.value,
-    label: option.label
-  }));
-
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <Select
         isMulti
-        options={selectOptions}
+        options={options}
         value={selectedOptions}
         onChange={handleChange}
         isDisabled={props.readOnly}
