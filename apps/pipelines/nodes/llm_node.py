@@ -144,8 +144,7 @@ def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
 
 def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: ToolCallbacks) -> list[dict | BaseTool]:
     """Get instantiated tools for the given node configuration."""
-    from apps.chat.agent.tool_response_validator import ToolResponseSizeValidator, wrap_tool_with_validation
-    from apps.chat.agent.tools import MultiSearchIndexTool
+    from apps.chat.agent.tool_response_validator import ToolResponseSizeValidator
 
     model = get_llm_provider_model(node.llm_provider_model_id)
     max_token_limit = node.user_max_token_limit if node.user_max_token_limit is not None else model.max_token_limit
@@ -162,47 +161,53 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     # Add provider-specific tools
     tools.extend(node.get_llm_service().attach_built_in_tools(node.built_in_tools, node.tool_config))
 
-    # Add search tool based on number of collection indexes
-    if node.collection_index_ids:
-        if len(node.collection_index_ids) == 1:
-            # Single collection: use the existing single-index search tool
-            collection_id = node.collection_index_ids[0]
-            collection = Collection.objects.get(id=collection_id)
-            search_tool = collection.get_search_tool(
-                max_results=node.max_results, generate_citations=node.generate_citations
-            )
-            if isinstance(search_tool, BaseTool):
-                # Wrap search tool with validation
-                search_tool = wrap_tool_with_validation(search_tool, validator)
-            tools.append(search_tool)
-        else:
-            # Multiple collections: check if they're remote or local
-            collections = list(
-                Collection.objects.filter(id__in=node.collection_index_ids).only(
-                    "is_remote_index", "openai_vector_store_id"
-                )
-            )
-            first_collection = collections[0]
-
-            if first_collection and first_collection.is_remote_index:
-                # All remote: create OpenAI builtin tool with multiple vector stores
-                from apps.service_providers.llm_service.main import OpenAIBuiltinTool
-
-                vector_store_ids = [collection.openai_vector_store_id for collection in collections]
-                search_tool = OpenAIBuiltinTool(
-                    type="file_search",
-                    vector_store_ids=vector_store_ids,
-                    max_num_results=node.max_results,
-                )
-                tools.append(search_tool)
-            else:
-                # All local: use the multi-index search tool
-                search_tool = MultiSearchIndexTool(
-                    max_results=node.max_results, generate_citations=node.generate_citations
-                )
-                tools.append(wrap_tool_with_validation(search_tool, validator))
+    if search_tool := _get_search_tool(node, validator):
+        tools.append(search_tool)
 
     if node.disabled_tools:
         # Model builtin tools doesn't have a name attribute and are dicts
         return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
     return tools
+
+
+def _get_search_tool(node, validator):
+    from apps.chat.agent.tool_response_validator import wrap_tool_with_validation
+    from apps.chat.agent.tools import MultiSearchIndexTool
+
+    if not node.collection_index_ids:
+        return None
+
+    collections = list(Collection.objects.filter(id__in=node.collection_index_ids, is_index=True))
+    if not collections:
+        # collections probably deleted
+        return None
+
+    if len(collections) == 1:
+        # Single collection: use the existing single-index search tool
+        collection = collections[0]
+        search_tool = collection.get_search_tool(
+            max_results=node.max_results, generate_citations=node.generate_citations
+        )
+        if isinstance(search_tool, BaseTool):
+            # Wrap search tool with validation
+            search_tool = wrap_tool_with_validation(search_tool, validator)
+        return search_tool
+
+    # Multiple collections: check if they're remote or local
+    first_collection = collections[0]
+
+    if first_collection and first_collection.is_remote_index:
+        # All remote: create OpenAI builtin tool with multiple vector stores
+        # We can assume this is true because of the node validation
+        from apps.service_providers.llm_service.main import OpenAIBuiltinTool
+
+        vector_store_ids = [collection.openai_vector_store_id for collection in collections]
+        return OpenAIBuiltinTool(
+            type="file_search",
+            vector_store_ids=vector_store_ids,
+            max_num_results=node.max_results,
+        )
+    else:
+        # All local: use the multi-index search tool
+        search_tool = MultiSearchIndexTool(max_results=node.max_results, generate_citations=node.generate_citations)
+        return wrap_tool_with_validation(search_tool, validator)
