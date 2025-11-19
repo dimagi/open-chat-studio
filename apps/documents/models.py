@@ -72,6 +72,7 @@ class CollectionFile(models.Model):
 )
 class Collection(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=255)
+    summary = models.TextField(blank=True, help_text="Optional description of this collection")
     files = models.ManyToManyField("files.File", blank=False, through=CollectionFile, related_name="collections")
     working_version = models.ForeignKey(
         "self",
@@ -133,6 +134,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             instance=self,
             fields=[
                 VersionField(group_name="General", name="name", raw_value=self.name),
+                VersionField(group_name="General", name="summary", raw_value=self.summary),
                 VersionField(group_name="General", name="llm_provider", raw_value=self.llm_provider),
                 VersionField(
                     group_name="General", name="embedding_provider_model", raw_value=self.embedding_provider_model

@@ -15,6 +15,7 @@ class CollectionForm(forms.ModelForm):
         model = Collection
         fields = [
             "name",
+            "summary",
             "is_index",
             "llm_provider",
             "embedding_provider_model",
