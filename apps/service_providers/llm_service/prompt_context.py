@@ -32,7 +32,7 @@ class PromptTemplateContext:
             "participant_data": self.get_participant_data,
             "current_datetime": self.get_current_datetime,
             "media": self.get_media_summaries,
-            "collection_indexes": self.get_collection_index_summaries,
+            "collection_index_summaries": self.get_collection_index_summaries,
         }
 
     def get_context(self, variables: list[str]) -> dict:

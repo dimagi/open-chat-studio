@@ -425,8 +425,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             "source_material": self.source_material_id,
             "tools": self.tools,
             "media": self.collection_id,
-            "collection_indexes": self.collection_index_ids,
         }
+        # Only require collection_index_summaries variable if multiple indexes are selected
+        if len(self.collection_index_ids) > 1:
+            context["collection_index_summaries"] = self.collection_index_ids
+
         try:
             # FUTURE TODO: add temp_state and session_state to PromptVars
             known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
