@@ -338,12 +338,6 @@ function SearchableMultiSelectWidget(props: WidgetParams) {
         classNamePrefix="react-select"
         placeholder={`Select ${props.label.toLowerCase()}...`}
         isClearable={true}
-        styles={{
-          control: (base) => ({
-            ...base,
-            minHeight: '3rem',
-          }),
-        }}
       />
     </InputField>
   );
