@@ -84,6 +84,11 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         output_model = schema_to_pydantic_model(self.output_schema)
         llm = self.get_chat_model().with_structured_output(output_model)
 
+        llm_with_retry = llm.with_retry(
+            stop_after_attempt=3,
+            retry_if_exception_type=(ValueError,),
+        )
+
         prompt = PromptTemplate.from_template(self.prompt)
         try:
             input = EvaluationMessageContent.model_validate(message.input)
@@ -102,7 +107,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             full_history=message.full_history,
             generated_response=generated_response,
         )
-        result_model = llm.invoke(formatted_prompt)
+        result_model = llm_with_retry.invoke(formatted_prompt)
         result = result_model.model_dump()
         return EvaluatorResult(message=message.as_result_dict(), generated_response=generated_response, result=result)
 
