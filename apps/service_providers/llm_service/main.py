@@ -186,7 +186,7 @@ class LlmService(pydantic.BaseModel):
         cited_file_ids = []
         generated_files: list[File] = []
         if isinstance(output_content, str):
-            final_text = llm_output
+            final_text = output_content
         elif isinstance(output_content, list):
             for output in output_content:
                 # Populate text
@@ -205,6 +205,7 @@ class LlmService(pydantic.BaseModel):
         else:
             raise TypeError(f"Unexpected llm_output type: {type(llm_output).__name__}")
 
+        print(final_text, type(final_text))
         cited_file_ids.extend(extract_file_ids_from_ocs_citations(final_text))
 
         cited_files = []
