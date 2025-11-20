@@ -24,3 +24,21 @@ class ApiScheme(OpenApiAuthenticationExtension):
 
 class BearerScheme(TokenScheme):
     target_class = "apps.api.permissions.BearerTokenAuthentication"
+
+
+class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
+    target_class = "apps.oauth.permissions.OAuth2TeamsAuthentication"
+    name = "OAuth2TeamsAuth"
+    match_subclasses = True
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "oauth2",
+            "flows": {
+                "authorizationCode": {
+                    "authorizationUrl": "/o/authorize/",
+                    "tokenUrl": "/o/token/",
+                    "scopes": {},  # No specific scopes defined, since the user will select these when giving consent
+                }
+            },
+        }
