@@ -70,7 +70,11 @@ class CollectionFile(models.Model):
 )
 class Collection(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=255)
-    summary = models.TextField(blank=True, help_text="Optional description of this collection")
+    summary = models.TextField(
+        blank=True,
+        help_text="Description of this collection used to with additional context to LLMs to allow "
+        "them to make decisions about when to search this collection.",
+    )
     files = models.ManyToManyField("files.File", blank=False, through=CollectionFile, related_name="collections")
     working_version = models.ForeignKey(
         "self",

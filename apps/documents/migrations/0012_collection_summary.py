@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
             model_name="collection",
             name="summary",
             field=models.TextField(
-                blank=True, help_text="Optional description of this collection"
+                blank=True, help_text="Description of this collection used to with additional context to LLMs to allow them to make decisions about when to search this collection."
             ),
         ),
     ]
