@@ -451,8 +451,13 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
         if not isinstance(value, list):
             value = [value]
 
+        try:
+            value = [int(v) for v in value]
+        except (ValueError, TypeError) as e:
+            raise PydanticCustomError("Non-integer IDs for Collection") from e
+
         # Filter out empty values
-        value = [v for v in value if v]
+        value = [v for v in value if v is not None]
         if not value:
             return []
 
@@ -501,7 +506,7 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
                 ]
                 raise PydanticCustomError(
                     "mixed_collection_types",
-                    f"All collection indexes must be the same type (either all remote or all local). "
+                    "All collection indexes must be the same type (either all remote or all local). "
                     f"Remote collections: {', '.join(remote_collections)}. "
                     f"Local collections: {', '.join(local_collections)}.",
                 )
