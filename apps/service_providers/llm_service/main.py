@@ -185,7 +185,7 @@ class LlmService(pydantic.BaseModel):
         cited_file_ids_remote = []
         cited_file_ids = []
         generated_files: list[File] = []
-        if isinstance(llm_output, str):
+        if isinstance(llm_outputs, str):
             final_text = llm_output
         elif isinstance(llm_outputs, list):
             for output in llm_outputs:
