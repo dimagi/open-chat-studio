@@ -13,6 +13,8 @@ Include technical details required to understand the change.
 ### Migrations
 <!-- 
 There may be a potentially long window during the deployment where migrations are applied, but the old code is still running. We need to ensure that migrations can be applied to the current running code without breaking it, to the extent possible.
+
+Delete this section if there are no migration.
  -->
 - [ ] The migrations are backwards compatible
 
