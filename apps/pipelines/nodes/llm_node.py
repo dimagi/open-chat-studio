@@ -214,5 +214,9 @@ def _get_search_tool(node, validator):
         )
     else:
         # All local: use the multi-index search tool
-        search_tool = SearchCollectionByIdTool(max_results=node.max_results, generate_citations=node.generate_citations)
+        search_tool = SearchCollectionByIdTool(
+            max_results=node.max_results,
+            generate_citations=node.generate_citations,
+            allowed_collection_ids=node.collection_index_ids,
+        )
         return wrap_tool_with_validation(search_tool, validator)

@@ -494,6 +494,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
     args_schema: type[schemas.MultiSearchIndexSchema] = schemas.MultiSearchIndexSchema
     max_results: int = 5
     generate_citations: bool = True
+    allowed_collection_ids: list[int]
 
     @transaction.atomic
     def action(self, collection_index_id: int, query: str) -> str:
@@ -502,10 +503,14 @@ class SearchCollectionByIdTool(CustomBaseTool):
         """
         from apps.documents.models import Collection
 
+        not_found = f"Collection index with ID {collection_index_id} not found."
+        if collection_index_id not in self.allowed_collection_ids:
+            return not_found
+
         try:
             collection = Collection.objects.get(id=collection_index_id, is_index=True)
         except Collection.DoesNotExist:
-            return f"Collection index with ID {collection_index_id} not found or is not a valid index."
+            return not_found
 
         return _perform_collection_search(
             collection=collection,
