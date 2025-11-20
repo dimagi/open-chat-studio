@@ -29,7 +29,9 @@
               <i class="fa-solid fa-triangle-exclamation text-warning" aria-hidden="true"></i> File limit reached
             </div>
           {% endif %}
-          <div class="text-sm text-base-content/60 mt-1">{{ collection.summary }}</div>
+          {% if collection.summary %}
+            <div class="text-sm text-base-content/60 mt-1">{{ collection.summary }}</div>
+          {% endif %}
         </div>
         <div class="join flex items-center">
           {% if not read_only %}
