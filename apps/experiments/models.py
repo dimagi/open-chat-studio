@@ -1735,6 +1735,16 @@ class ExperimentSession(BaseTeamModel):
         blank=True,
     )
     state = SanitizedJSONField(default=dict)
+    platform = models.CharField(max_length=128, blank=True, default="", help_text="Denormalized platform name")
+    experiment_versions = ArrayField(
+        models.PositiveIntegerField(),
+        default=list,
+        blank=True,
+        help_text="Array of unique experiment version numbers seen by this session",
+    )
+    last_activity_at = models.DateTimeField(
+        null=True, blank=True, help_text="Timestamp of the last user interaction"
+    )
 
     class Meta:
         ordering = ["-created_at"]
