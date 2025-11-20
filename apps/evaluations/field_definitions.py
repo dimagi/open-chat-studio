@@ -43,8 +43,6 @@ class IntFieldDefinition(BaseFieldDefinition):
     type: Literal["int"]
     ge: int | None = None
     le: int | None = None
-    gt: int | None = None
-    lt: int | None = None
 
     @property
     def python_type(self) -> type:
@@ -57,8 +55,6 @@ class FloatFieldDefinition(BaseFieldDefinition):
     type: Literal["float"]
     ge: float | None = None
     le: float | None = None
-    gt: float | None = None
-    lt: float | None = None
 
     @property
     def python_type(self) -> type:
