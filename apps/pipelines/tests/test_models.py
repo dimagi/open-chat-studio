@@ -82,7 +82,7 @@ class TestVersioningNodes:
         pipeline = PipelineFactory()
         if is_index:
             param_name = "collection_index_ids"
-            param_value = [str(collection.id)]
+            param_value = [collection.id]
         else:
             param_name = "collection_id"
             param_value = str(collection.id)
