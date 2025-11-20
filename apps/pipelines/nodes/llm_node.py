@@ -172,7 +172,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
 
 def _get_search_tool(node, validator):
     from apps.chat.agent.tool_response_validator import wrap_tool_with_validation
-    from apps.chat.agent.tools import MultiSearchIndexTool
+    from apps.chat.agent.tools import SearchCollectionByIdTool
     from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 
     if not node.collection_index_ids:
@@ -214,5 +214,5 @@ def _get_search_tool(node, validator):
         )
     else:
         # All local: use the multi-index search tool
-        search_tool = MultiSearchIndexTool(max_results=node.max_results, generate_citations=node.generate_citations)
+        search_tool = SearchCollectionByIdTool(max_results=node.max_results, generate_citations=node.generate_citations)
         return wrap_tool_with_validation(search_tool, validator)

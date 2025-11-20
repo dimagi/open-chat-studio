@@ -98,7 +98,7 @@ def _perform_collection_search(
     collection, query: str, max_results: int = 5, generate_citations: bool = True, include_collection_info: bool = False
 ) -> str:
     """
-    Shared search logic for both SearchIndexTool and MultiSearchIndexTool.
+    Shared search logic for both SearchIndexTool and SearchCollectionByIdTool.
 
     Args:
         collection: The Collection object to search
@@ -482,8 +482,8 @@ class SearchIndexTool(CustomBaseTool):
         )
 
 
-class MultiSearchIndexTool(CustomBaseTool):
-    name: str = AgentTools.MULTI_SEARCH_INDEX
+class SearchCollectionByIdTool(CustomBaseTool):
+    name: str = AgentTools.SEARCH_INDEX_BY_ID
     description: str = (
         "Performs semantic search on a specific document collection using natural language queries. "
         "This tool analyzes the content of the specified collection to find relevant information, quotes, "
@@ -636,7 +636,7 @@ TOOL_CLASS_MAP = {
     AgentTools.END_SESSION: EndSessionTool,
     AgentTools.ATTACH_MEDIA: AttachMediaTool,
     AgentTools.SEARCH_INDEX: SearchIndexTool,
-    AgentTools.MULTI_SEARCH_INDEX: MultiSearchIndexTool,
+    AgentTools.SEARCH_INDEX_BY_ID: SearchCollectionByIdTool,
     AgentTools.SET_SESSION_STATE: SetSessionStateTool,
     AgentTools.GET_SESSION_STATE: GetSessionStateTool,
     AgentTools.CALCULATOR: CalculatorTool,
