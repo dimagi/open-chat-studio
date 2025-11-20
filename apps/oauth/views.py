@@ -13,13 +13,8 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
         return kwargs
 
     def form_valid(self, form):
-        selected_teams = form.cleaned_data.get("teams", [])
-
+        selected_team_slug = form.cleaned_data.get("team", [])
         # Encode as team scopes
-        team_scopes = [f"team:{slug}" for slug in selected_teams]
-
-        if team_scopes:
-            # Override scope with custom team scopes
-            form.cleaned_data["scope"] = " ".join(team_scopes)
-
+        # Override scope with custom team scopes
+        form.cleaned_data["scope"] = f"team:{selected_team_slug}"
         return super().form_valid(form)
