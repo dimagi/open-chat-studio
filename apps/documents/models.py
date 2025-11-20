@@ -17,6 +17,7 @@ from apps.teams.utils import get_slug_for_team
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
     get_related_pipeline_experiments_queryset,
+    get_related_pipeline_experiments_queryset_list_param,
     get_related_pipelines_queryset,
     get_related_pipelines_queryset_for_list_param,
 )
@@ -243,7 +244,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         # TODO: Update assistant archive code to use get_related_pipeline_experiments_queryset
         ids = list(self.versions.values_list("id", flat=True)) + [self.id]
 
-        index_references = get_related_pipeline_experiments_queryset(ids, "collection_index_ids").filter(
+        index_references = get_related_pipeline_experiments_queryset_list_param(ids, "collection_index_ids").filter(
             models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
         )
         collection_references = get_related_pipeline_experiments_queryset(ids, "collection_id").filter(

@@ -2,7 +2,7 @@ from collections import Counter
 from collections.abc import Generator
 from functools import reduce
 from operator import or_
-from typing import Any
+from typing import Any, Literal
 
 from django.conf import settings
 from django.contrib.admin.utils import NestedObjects
@@ -238,8 +238,20 @@ def get_related_pipelines_queryset_for_list_param(instance, pipeline_param_key: 
 
 
 def get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key: str):
-    """Get all experiments that reference any id in `instance_ids`, located at the `pipeline_param_key` parameter"""
+    """Get all experiments that reference any id in `instance_ids`, located at the `pipeline_param_key`
+    parameter"""
+    return _get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key, "__in")
 
+
+def get_related_pipeline_experiments_queryset_list_param(instance_ids, pipeline_param_key: str):
+    """Get all experiments that reference any id in `instance_ids`, located at the `pipeline_param_key`
+    parameter where the param value is a list."""
+    return _get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key, "__contains")
+
+
+def _get_related_pipeline_experiments_queryset(
+    instance_ids, pipeline_param_key: str, operator: Literal["__in", "__contains"]
+):
     from apps.experiments.models import Experiment
 
     instance_ids_str = [str(instance_id) for instance_id in instance_ids]
@@ -247,8 +259,8 @@ def get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key: 
     return (
         Experiment.objects.exclude(pipeline=None)
         .filter(
-            Q(**{f"pipeline__node__params__{pipeline_param_key}__in": instance_ids_int})
-            | Q(**{f"pipeline__node__params__{pipeline_param_key}__in": instance_ids_str})
+            Q(**{f"pipeline__node__params__{pipeline_param_key}{operator}": instance_ids_int})
+            | Q(**{f"pipeline__node__params__{pipeline_param_key}{operator}": instance_ids_str})
         )
         .distinct()
     )
