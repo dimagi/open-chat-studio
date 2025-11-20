@@ -278,10 +278,6 @@ class OpenAIGenericService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def get_token_counter(self, model: str):
-        """Get token counter for this LLM service."""
-        return OpenAITokenCounter(model=model)
-
     def _get_model_kwargs(self, **kwargs) -> dict:
         if effort := kwargs.pop("effort", None):
             kwargs["reasoning"] = {"effort": effort}
@@ -413,10 +409,6 @@ class AzureLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def get_token_counter(self, model: str):
-        """Get token counter for this LLM service."""
-        return OpenAITokenCounter(model=model)
-
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
 
@@ -445,10 +437,6 @@ class AnthropicLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
-
-    def get_token_counter(self, model: str):
-        """Get token counter for this LLM service."""
-        return AnthropicTokenCounter(model=model, api_key=self.anthropic_api_key)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         config = config or {}
@@ -483,10 +471,6 @@ class DeepSeekLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def get_token_counter(self, model: str):
-        """Get token counter for this LLM service."""
-        return OpenAITokenCounter(model=model)
-
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
 
@@ -499,10 +483,6 @@ class GoogleLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
-
-    def get_token_counter(self, model: str):
-        """Get token counter for this LLM service."""
-        return GeminiTokenCounter(model=model, google_api_key=self.google_api_key)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []

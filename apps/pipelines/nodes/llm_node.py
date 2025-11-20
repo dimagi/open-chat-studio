@@ -12,7 +12,6 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
-from apps.pipelines.nodes.helpers import get_llm_provider_model
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
@@ -26,8 +25,6 @@ class StateSchema(AgentState):
     # allows tools to manipulate participant data and session state
     participant_data: Annotated[dict, operator.or_]
     session_state: Annotated[dict, operator.or_]
-    # Track current context size (updated after each model call via post_model_hook)
-    current_context_tokens: Annotated[int, operator.add]
 
 
 def execute_sub_agent(node, state: PipelineState):
@@ -43,7 +40,6 @@ def execute_sub_agent(node, state: PipelineState):
         messages=[formatted_input],
         participant_data=state.get("participant_data") or {},
         session_state=state.get("session_state") or {},
-        current_context_tokens=0,  # Will be updated by post_model_hook after first LLM call
     )
     result = agent.invoke(inputs)
     final_message = result["messages"][-1]
@@ -144,24 +140,9 @@ def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
 
 def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: ToolCallbacks) -> list[dict | BaseTool]:
     """Get instantiated tools for the given node configuration."""
-    from apps.chat.agent.tool_response_validator import ToolResponseSizeValidator
-
-    model = get_llm_provider_model(node.llm_provider_model_id)
-    max_token_limit = node.user_max_token_limit if node.user_max_token_limit is not None else model.max_token_limit
-    model_name = model.name
-    token_counter = node.get_llm_service().get_token_counter(model_name)
-    validator = ToolResponseSizeValidator(
-        token_counter=token_counter,
-        max_token_limit=max_token_limit,
-    )
-
-    # Pass validator to get_node_tools which wraps all tools
-    tools = get_node_tools(node.django_node, session, tool_callbacks=tool_callbacks, response_size_validator=validator)
-
-    # Add provider-specific tools
+    tools = get_node_tools(node.django_node, session, tool_callbacks=tool_callbacks)
     tools.extend(node.get_llm_service().attach_built_in_tools(node.built_in_tools, node.tool_config))
-
-    if search_tool := _get_search_tool(node, validator):
+    if search_tool := _get_search_tool(node):
         tools.append(search_tool)
 
     if node.disabled_tools:
@@ -170,8 +151,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     return tools
 
 
-def _get_search_tool(node, validator):
-    from apps.chat.agent.tool_response_validator import wrap_tool_with_validation
+def _get_search_tool(node):
     from apps.chat.agent.tools import SearchCollectionByIdTool
     from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 
@@ -197,7 +177,7 @@ def _get_search_tool(node, validator):
             index_id=collection.id, max_results=node.max_results, generate_citations=node.generate_citations
         )
         search_tool = SearchIndexTool(search_config=search_config)
-        return wrap_tool_with_validation(search_tool, validator)
+        return search_tool
 
     # Multiple collections: check if they're remote or local
     first_collection = collections[0]
@@ -219,4 +199,4 @@ def _get_search_tool(node, validator):
             generate_citations=node.generate_citations,
             allowed_collection_ids=node.collection_index_ids,
         )
-        return wrap_tool_with_validation(search_tool, validator)
+        return search_tool
