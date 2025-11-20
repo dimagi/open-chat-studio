@@ -480,19 +480,6 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
                 f"Collection index(s) with ID(s) {ids_str} not found",
             )
 
-        # Validate that all collections use the same LLM provider
-        incompatible_collections = []
-        for collection in collections.values():
-            if collection.llm_provider_id != llm_provider_id:
-                incompatible_collections.append(f"{collection.name}")
-
-        if incompatible_collections:
-            raise PydanticCustomError(
-                "invalid_collection_index",
-                f"All collection indexes must use the same LLM provider as the node. "
-                f"Incompatible collections: {', '.join(incompatible_collections)}",
-            )
-
         # Validate that all collections are the same type (either all remote or all local)
         # Only applies when multiple collections are selected
         if len(collections) > 1:
@@ -511,13 +498,28 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
                     f"Local collections: {', '.join(local_collections)}.",
                 )
 
-            missing_summary = [collection.name for collection in collections.values() if not collection.summary]
-            if missing_summary:
-                raise PydanticCustomError(
-                    "collections_missing_summary",
-                    "When using multiple collection indexes, the collections must have a summary. "
-                    f"Collections missing summary: {', '.join(missing_summary)}",
-                )
+            if is_remote_flags:
+                # Validate that all remote collections use the same LLM provider as this node
+                incompatible_collections = [
+                    collection.name
+                    for collection in collections.values()
+                    if collection.llm_provider_id != llm_provider_id
+                ]
+                if incompatible_collections:
+                    raise PydanticCustomError(
+                        "invalid_collection_index",
+                        f"All collection indexes must use the same LLM provider as the node. "
+                        f"Incompatible collections: {', '.join(incompatible_collections)}",
+                    )
+            else:
+                # local indexes must have a summary
+                missing_summary = [collection.name for collection in collections.values() if not collection.summary]
+                if missing_summary:
+                    raise PydanticCustomError(
+                        "collections_missing_summary",
+                        "When using multiple collection indexes, the collections must have a summary. "
+                        f"Collections missing summary: {', '.join(missing_summary)}",
+                    )
 
         return value
 
