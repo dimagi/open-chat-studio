@@ -4,7 +4,6 @@ Defines typed field definitions with validation constraints for different data t
 Uses discriminated unions to ensure type-specific constraints are enforced.
 """
 
-from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel
@@ -72,8 +71,15 @@ class ChoiceFieldDefinition(BaseFieldDefinition):
 
     @property
     def python_type(self) -> type:
-        members = {c.upper(): c for c in self.choices}
-        return StrEnum("DynamicEnum", members)
+        """Return Literal type with allowed choice values."""
+        if not self.choices:
+            raise ValueError("Choice field must have at least one choice")
+
+        # Check for empty or whitespace-only strings
+        if any(not c or not c.strip() for c in self.choices):
+            raise ValueError("Choice field cannot contain empty or whitespace-only strings")
+
+        return Literal[tuple(self.choices)]
 
 
 FieldDefinition = StringFieldDefinition | IntFieldDefinition | FloatFieldDefinition | ChoiceFieldDefinition

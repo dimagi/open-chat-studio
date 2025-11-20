@@ -242,13 +242,14 @@ def test_evaluators_return_typed_pydantic_model(get_llm_service):
     }
     output_model = schema_to_pydantic_model(output_schema)
     assert output_model.model_json_schema() == {
-        "$defs": {"DynamicEnum": {"enum": ["foo", "bar", "baz"], "title": "DynamicEnum", "type": "string"}},
         "properties": {
             "sentiment": {"description": "the sentiment of the conversation", "title": "Sentiment", "type": "string"},
             "value": {"description": "the value of the conversation", "title": "Value", "type": "integer"},
             "choices": {
-                "$ref": "#/$defs/DynamicEnum",
+                "title": "Choices",
+                "type": "string",
                 "choices": ["foo", "bar", "baz"],
+                "enum": ["foo", "bar", "baz"],
                 "description": "the choice of the conversation",
             },
         },
@@ -308,5 +309,5 @@ def test_evaluators_return_typed_pydantic_model(get_llm_service):
     invalid_structured_llm = invalid_llm.with_structured_output(output_model)
 
     # Should raise validation error for invalid enum value
-    with pytest.raises(ValueError, match="enum"):
+    with pytest.raises(ValueError, match="invalid_choice"):
         invalid_structured_llm.invoke("test prompt")
