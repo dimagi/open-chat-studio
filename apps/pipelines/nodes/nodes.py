@@ -1,6 +1,7 @@
 import json
 import logging
 import unicodedata
+from functools import lru_cache
 from typing import Annotated, Any, Literal, Self
 
 import tiktoken
@@ -46,7 +47,6 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
-from apps.pipelines.nodes.helpers import get_llm_provider_model
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -61,6 +61,7 @@ from apps.service_providers.llm_service.runnables import (
     AssistantChat,
     ChainOutput,
 )
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
@@ -142,6 +143,14 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
 
+@lru_cache
+def get_llm_provider_model(llm_provider_model_id: int):
+    try:
+        return LlmProviderModel.objects.get(id=llm_provider_model_id)
+    except LlmProviderModel.DoesNotExist:
+        raise PipelineNodeBuildError(f"LLM provider model with id {llm_provider_model_id} does not exist") from None
+
+
 class LLMResponseMixin(BaseModel):
     llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
@@ -199,7 +208,7 @@ class LLMResponseMixin(BaseModel):
         return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
 
 
-class LLMHistoryMixin(LLMResponseMixin):
+class HistoryMixin(LLMResponseMixin):
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.NONE,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
@@ -330,7 +339,7 @@ class ToolConfigModel(BaseModel):
         return values if values else None
 
 
-class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode):
+class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     """Uses an LLM to respond to the input."""
 
     model_config = ConfigDict(
@@ -658,7 +667,7 @@ class RouterMixin(BaseModel):
         return []
 
 
-class RouterNode(RouterMixin, PipelineRouterNode, LLMHistoryMixin):
+class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
     """Routes the input to one of the linked nodes using an LLM"""
 
     model_config = ConfigDict(

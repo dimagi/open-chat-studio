@@ -12,7 +12,7 @@ reviews:
     - path: "**/*.py"
       instructions: |
         Do not review for Python compatibility below 3.13
-    - path: ""**/migrations/*.py"
+    - path: "**/migrations/*.py"
       instructions: |
         Ensure that Django migrations are backwards compatible with the previous code to prevent errors during rollout.
   auto_review:
