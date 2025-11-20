@@ -1,4 +1,5 @@
 from collections import Counter
+from collections.abc import Generator
 from functools import reduce
 from operator import or_
 from typing import Any
@@ -207,7 +208,7 @@ def has_related_objects(instance, pipeline_param_key: str = None) -> bool:
     return any(queryset.exists() for queryset in _get_related_objects_querysets(instance, pipeline_param_key))
 
 
-def _get_related_objects_querysets(instance, pipeline_param_key: str = None) -> list:
+def _get_related_objects_querysets(instance, pipeline_param_key: str = None) -> Generator[Any | None, Any, None]:
     for related in get_candidate_relations_to_delete(instance._meta):
         related_objects = getattr(instance, related.get_accessor_name(), None)
         if related_objects is not None:
@@ -222,6 +223,16 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str = None):
 
     pipelines = Node.objects.filter(
         Q(**{f"params__{pipeline_param_key}": instance.id}) | Q(**{f"params__{pipeline_param_key}": str(instance.id)})
+    )
+    return pipelines
+
+
+def get_related_pipelines_queryset_for_list_param(instance, pipeline_param_key: str = None):
+    from apps.pipelines.models import Node
+
+    pipelines = Node.objects.filter(
+        Q(**{f"params__{pipeline_param_key}__contains": instance.id})
+        | Q(**{f"params__{pipeline_param_key}__contains": str(instance.id)})
     )
     return pipelines
 

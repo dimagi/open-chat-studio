@@ -18,6 +18,7 @@ from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
     get_related_pipeline_experiments_queryset,
     get_related_pipelines_queryset,
+    get_related_pipelines_queryset_for_list_param,
 )
 
 
@@ -229,7 +230,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         return reverse("documents:single_collection_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_related_nodes_queryset(self) -> models.QuerySet:
-        index_references = get_related_pipelines_queryset(self, "collection_index_ids").distinct()
+        index_references = get_related_pipelines_queryset_for_list_param(self, "collection_index_ids").distinct()
         collection_references = get_related_pipelines_queryset(self, "collection_id").distinct()
         return index_references | collection_references
 
