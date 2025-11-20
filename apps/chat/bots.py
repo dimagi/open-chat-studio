@@ -4,7 +4,6 @@ import textwrap
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
-from langchain.memory import ConversationBufferMemory
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import chain
 from pydantic import ValidationError
@@ -18,7 +17,7 @@ from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import Experiment, ExperimentRoute, ExperimentSession, ParticipantData, SafetyLayer
 from apps.files.models import File
 from apps.pipelines.nodes.base import Intents, PipelineState
-from apps.service_providers.llm_service.default_models import get_default_model
+from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.runnables import create_experiment_runnable
 from apps.service_providers.tracing import TraceInfo, TracingService
@@ -37,7 +36,6 @@ def create_conversation(
         return BasicConversation(
             prompt_str=prompt_str,
             source_material=source_material,
-            memory=ConversationBufferMemory(return_messages=True),
             llm=llm,
         )
     except ValidationError as e:
@@ -566,9 +564,10 @@ class EventBot:
             raise Exception("No LLM provider found")
 
         model = get_default_model(provider.type)
+        params = get_model_parameters(model.name, temperature=0.7)
 
         service = provider.get_llm_service()
-        llm = service.get_chat_model(model.name, 0.7)
+        llm = service.get_chat_model(model.name, **params)
 
         if not self.trace_service:
             self.trace_service = (
@@ -591,9 +590,9 @@ class EventBot:
                 ],
                 config=config,
             )
-            span.set_outputs({"response": response.content})
+            span.set_outputs({"response": response.text()})
 
-            message = response.content
+            message = response.text()
             if self.history_manager:
                 self.history_manager.save_message_to_history(message, type_=ChatMessageType.AI)
         return message

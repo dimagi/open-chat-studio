@@ -1,17 +1,40 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 language: en-US
 early_access: true
 reviews:
   high_level_summary: false
   review_status: false
-  poem: false
-  collapse_walkthrough: true
   changed_files_summary: false
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  poem: false
   path_instructions:
     - path: "**/*.py"
       instructions: |
         Do not review for Python compatibility below 3.13
-  abort_on_close: true
+    - path: ""**/migrations/*.py"
+      instructions: |
+        Ensure that Django migrations are backwards compatible with the previous code to prevent errors during rollout.
   auto_review:
-    enabled: true
     auto_incremental_review: false
+    ignore_title_keywords:
+      - wip
+      - draft
+      - ignore
+    labels:
+      - '!wip'
     drafts: true
+    ignore_usernames:
+      - dependabot
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+chat:
+  auto_reply: false
+knowledge_base:
+  issues:
+    scope: local
+  pull_requests:
+    scope: local

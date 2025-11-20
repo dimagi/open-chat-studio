@@ -1104,6 +1104,10 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     selected_tags = list(filter(None, request.GET.get("tag_filter", "").split(",")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
+    try:
+        highlight_message_id = int(request.GET.get("message_id"))
+    except (ValueError, TypeError):
+        highlight_message_id = None
 
     chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
     all_tags = (
@@ -1157,6 +1161,11 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         total_pages = 1
         page_start_index = 1
     else:
+        # on the first load, scroll to the page to focus on a specific message id
+        if highlight_message_id and not request.GET.get("page"):
+            messages_before = messages_queryset.filter(id__lt=highlight_message_id).count()
+            page = (messages_before // page_size) + 1
+
         paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
         current_page = paginator.page(page)
         current_page_messages = list(current_page.object_list)
@@ -1187,6 +1196,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "default_translation_models_by_providers": get_default_translation_models_by_provider(),
         "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
         "all_tags": all_tags,
+        "highlight_message_id": highlight_message_id,
     }
 
     return TemplateResponse(

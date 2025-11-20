@@ -148,7 +148,7 @@ class LlmService(pydantic.BaseModel):
     def get_assistant(self, assistant_id: str, as_agent=False):
         raise NotImplementedError
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         raise NotImplementedError
 
     def transcribe_audio(self, audio: BytesIO) -> str:
@@ -252,12 +252,13 @@ class OpenAIGenericService(LlmService):
     openai_api_key: str
     openai_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
-        model = ChatOpenAI(
-            model=llm_model,
-            temperature=1 if llm_model.startswith(("o3", "o4", "gpt-5")) else temperature,
-            **self._get_model_kwargs(**kwargs),
-        )
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        model_kwargs = self._get_model_kwargs(**kwargs)
+        if "temperature" in model_kwargs and llm_model.startswith(("o3", "o4", "gpt-5", "o1")):
+            # Remove the temperature parameter for custom reasoning models
+            model_kwargs.pop("temperature")
+
+        model = ChatOpenAI(model=llm_model, **model_kwargs, use_responses_api=True)
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
@@ -273,6 +274,10 @@ class OpenAIGenericService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
+
+    def get_token_counter(self, model: str):
+        """Get token counter for this LLM service."""
+        return OpenAITokenCounter(model=model)
 
     def _get_model_kwargs(self, **kwargs) -> dict:
         if effort := kwargs.pop("effort", None):
@@ -393,17 +398,21 @@ class AzureLlmService(LlmService):
     openai_api_base: str
     openai_api_version: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
             openai_api_key=self.openai_api_key,
             deployment_name=llm_model,
-            temperature=temperature,
+            **kwargs,
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
+
+    def get_token_counter(self, model: str):
+        """Get token counter for this LLM service."""
+        return OpenAITokenCounter(model=model)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
@@ -413,12 +422,11 @@ class AnthropicLlmService(LlmService):
     anthropic_api_key: str
     anthropic_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return ChatAnthropic(
             anthropic_api_key=self.anthropic_api_key,
             anthropic_api_url=self.anthropic_api_base,
             model=llm_model,
-            temperature=temperature,
             **self._get_model_kwargs(**kwargs),
         )
 
@@ -434,6 +442,10 @@ class AnthropicLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
+
+    def get_token_counter(self, model: str):
+        """Get token counter for this LLM service."""
+        return AnthropicTokenCounter(model=model, api_key=self.anthropic_api_key)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         config = config or {}
@@ -460,16 +472,17 @@ class DeepSeekLlmService(LlmService):
     deepseek_api_key: str
     deepseek_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return ChatOpenAI(
-            model=llm_model,
-            temperature=temperature,
-            openai_api_key=self.deepseek_api_key,
-            openai_api_base=self.deepseek_api_base,
+            model=llm_model, openai_api_key=self.deepseek_api_key, openai_api_base=self.deepseek_api_base, **kwargs
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
+
+    def get_token_counter(self, model: str):
+        """Get token counter for this LLM service."""
+        return OpenAITokenCounter(model=model)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
@@ -478,15 +491,15 @@ class DeepSeekLlmService(LlmService):
 class GoogleLlmService(LlmService):
     google_api_key: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
-        return ChatGoogleGenerativeAI(
-            model=llm_model,
-            google_api_key=self.google_api_key,
-            temperature=temperature,
-        )
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
+
+    def get_token_counter(self, model: str):
+        """Get token counter for this LLM service."""
+        return GeminiTokenCounter(model=model, google_api_key=self.google_api_key)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []

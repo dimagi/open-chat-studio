@@ -1,6 +1,11 @@
 {
   "description": "Uses an LLM to respond to the input.",
   "properties": {
+    "name": {
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
     "tag": {
       "default": "",
       "description": "The tag that the output message should be tagged with",
@@ -16,14 +21,6 @@
       "title": "Llm Provider Model Id",
       "type": "integer",
       "ui:widget": "none"
-    },
-    "llm_temperature": {
-      "default": 0.7,
-      "maximum": 2.0,
-      "minimum": 0.0,
-      "title": "Temperature",
-      "type": "number",
-      "ui:widget": "range"
     },
     "llm_model_parameters": {
       "additionalProperties": true,
@@ -82,11 +79,6 @@
       "title": "Max History Length",
       "type": "integer",
       "ui:widget": "none"
-    },
-    "name": {
-      "title": "Node Name",
-      "type": "string",
-      "ui:widget": "node_name"
     },
     "source_material_id": {
       "default": null,
@@ -190,9 +182,9 @@
     }
   },
   "required": [
+    "name",
     "llm_provider_id",
-    "llm_provider_model_id",
-    "name"
+    "llm_provider_model_id"
   ],
   "title": "LLMResponseWithPrompt",
   "type": "object",

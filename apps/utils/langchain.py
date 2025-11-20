@@ -109,7 +109,7 @@ class FakeLlmService(LlmService):
     token_counter: TokenCounter
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def get_chat_model(self, llm_model: str, temperature: float):
+    def get_chat_model(self, llm_model: str, **kwargs):
         return self.llm
 
     def get_assistant(self, assistant_id: str, as_agent=False):
@@ -118,6 +118,10 @@ class FakeLlmService(LlmService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(self.token_counter)
+
+    def get_token_counter(self, model: str):
+        """Get token counter for this LLM service."""
+        return self.token_counter
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         return []
@@ -128,7 +132,7 @@ class FakeOpenAILlmService(OpenAIGenericService):
     token_counter: TokenCounter
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def get_chat_model(self, llm_model: str, temperature: float):
+    def get_chat_model(self, llm_model: str, **kwargs):
         return self.llm
 
     def get_assistant(self, assistant_id: str, as_agent=False):
@@ -137,6 +141,10 @@ class FakeOpenAILlmService(OpenAIGenericService):
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(self.token_counter)
+
+    def get_token_counter(self, model: str):
+        """Get token counter for this LLM service."""
+        return self.token_counter
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
         return []

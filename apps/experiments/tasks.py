@@ -113,7 +113,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
     source_material = SourceMaterial.objects.filter(id=data_dict["sourceMaterialID"]).first()
     source_material_material = source_material.material if source_material else ""
 
-    llm = llm_service.get_chat_model(llm_provider_model.name, float(data_dict["temperature"]))
+    llm = llm_service.get_chat_model(llm_provider_model.name, temperature=float(data_dict["temperature"]))
     conversation = create_conversation(data_dict["prompt"], source_material_material, llm)
     conversation.load_memory_from_messages(_convert_prompt_builder_history(messages_history))
     input_formatter = data_dict["inputFormatter"]
