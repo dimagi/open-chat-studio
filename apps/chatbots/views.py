@@ -19,7 +19,7 @@ from waffle import flag_is_active
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
@@ -50,6 +50,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
+from apps.trace.models import Trace
 from apps.utils.search import similarity_search
 from apps.web.waf import WafRule, waf_allow
 
@@ -174,35 +175,28 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
-        query_set = (
+        queryset = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
-            .select_related("team", "owner")
+            .select_related("team")
         )
         show_archived = self.request.GET.get("show_archived") == "on"
         if not show_archived:
-            query_set = query_set.filter(is_archived=False)
+            queryset = queryset.filter(is_archived=False)
 
         search = self.request.GET.get("search")
         if search:
-            query_set = similarity_search(
-                query_set,
+            queryset = similarity_search(
+                queryset,
                 search_phase=search,
                 columns=["name", "description"],
                 extra_conditions=Q(owner__username__icontains=search),
                 score=0.1,
             )
-        return query_set
 
-    def get_table_data(self):
-        """Add expensive annotations only to the paginated data, not for counting."""
-        from apps.experiments.models import ExperimentSession
-
-        queryset = super().get_table_data()
-
-        # Define subqueries (moved from get_queryset)
         session_count_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
@@ -210,31 +204,34 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
         participant_count_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
             .values("count")
         )
 
-        messages_count_subquery = (
-            ChatMessage.objects.filter(chat__experiment_session__experiment_id=OuterRef("pk"))
-            .values("chat__experiment_session__experiment_id")
+        interaction_count_subquery = (
+            Trace.objects.filter(experiment=OuterRef("pk"))
+            .exclude(session__experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
         )
 
-        last_message_subquery = (
-            ChatMessage.objects.filter(chat__experiment_session__experiment_id=OuterRef("pk"))
-            .order_by("-created_at")
-            .values("created_at")[:1]
+        last_activity_subquery = (
+            Trace.objects.filter(experiment=OuterRef("pk"))
+            .exclude(session__experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .order_by("-timestamp")
+            .values("timestamp")[:1]
         )
 
         # Add expensive annotations only to paginated data
         queryset = queryset.annotate(
             session_count=Subquery(session_count_subquery, output_field=IntegerField()),
             participant_count=Subquery(participant_count_subquery, output_field=IntegerField()),
-            messages_count=Subquery(messages_count_subquery, output_field=IntegerField()),
-            last_message=Subquery(last_message_subquery, output_field=DateTimeField()),
-        ).order_by(F("last_message").desc(nulls_last=True))
+            interaction_count=Subquery(interaction_count_subquery, output_field=IntegerField()),
+            last_activity=Subquery(last_activity_subquery, output_field=DateTimeField()),
+        ).order_by(F("last_activity").desc(nulls_last=True))
         return queryset
 
 
@@ -295,6 +292,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "origin": "chatbots",
+            "allow_edit_name": False,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
             **llm_model_parameter_context(),
         }

@@ -176,8 +176,8 @@ class TestDistinctAggregationIssues:
             team=team,
         )
 
-        # Create 3 messages
-        now = timezone.now()
+        # Create 3 messages at noon to avoid midnight date boundary issues
+        now = timezone.now().replace(hour=12, minute=0, second=0, microsecond=0)
         for i in range(3):
             ChatMessage.objects.create(
                 chat=session.chat,

@@ -8,8 +8,7 @@ def _populate_temperature_params(apps, schema_editor):
     This is data migration that prepares the addition of the temperature parameter to the LLM model parameters.
     """
     Node = apps.get_model('pipelines', 'Node')
-    LlmProviderModel = apps.get_model('service_providers', 'LlmProviderModel')
-    migration_utils.populate_temperature_params(Node, LlmProviderModel)
+    migration_utils.populate_temperature_params(Node)
 
 
 class Migration(migrations.Migration):

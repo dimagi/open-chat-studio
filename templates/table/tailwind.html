@@ -19,11 +19,13 @@
                             <span aria-hidden="true">«</span>
                         </a>
                         <a class="join-item btn">
+                          {% block pagination_info %}
                             {% with current_position=table.page.end_index total=table.page.paginator.count %}
-                                {% blocktranslate %}
-                                    {{ current_position }} of {{ total }}
-                                {% endblocktranslate %}
+                              {% blocktranslate %}
+                                {{ current_position }} of {{ total }}
+                              {% endblocktranslate %}
                             {% endwith %}
+                          {% endblock pagination_info %}
                         </a>
                         <a class="join-item btn"
                            {% if table.page.has_next %}

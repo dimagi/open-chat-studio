@@ -3,6 +3,7 @@ import pytest
 from apps.channels.datamodels import Attachment
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.langchain import mock_llm
 
 
@@ -15,10 +16,19 @@ def session():
 def test_get_response_for_webchat_task(session):
     """Basic test for the code in the task. Not intended to test the functions called in the task."""
 
+    file1 = FileFactory(file__data="# a python file\nimport sys")
+    file2 = FileFactory(file__data='{"key": "value"}')
+
     attachments = [
-        Attachment(file_id=1, type="code_interpreter", name="code.py", size=100, download_link="http://localhost:8000"),
         Attachment(
-            file_id=2, type="file_search", name="file_search.json", size=100, download_link="http://localhost:8000"
+            file_id=file1.id, type="code_interpreter", name="code.py", size=100, download_link="http://localhost:8000"
+        ),
+        Attachment(
+            file_id=file2.id,
+            type="file_search",
+            name="file_search.json",
+            size=100,
+            download_link="http://localhost:8000",
         ),
     ]
     with mock_llm(responses=["how can I help?"]):
