@@ -167,15 +167,15 @@ class LlmService(pydantic.BaseModel):
         self, llm_output, session: ExperimentSession, include_citations: bool = True
     ) -> LlmChatResponse:
         if isinstance(llm_output, dict):
-            llm_outputs = llm_output.get("output", "")
+            output_content = llm_output.get("output", "")
         elif isinstance(llm_output, str):
-            llm_outputs = llm_output
+            output_content = llm_output
         elif isinstance(llm_output, list):
             # Normalize list outputs: support list[dict] and list[str]
             if all(isinstance(o, dict) for o in llm_output):
-                llm_outputs = llm_output
+                output_content = llm_output
             elif all(isinstance(o, str) for o in llm_output):
-                llm_outputs = "\n".join(llm_output)
+                output_content = "\n".join(llm_output)
             else:
                 raise TypeError("Unexpected mixed or unsupported list element types in llm_output")
         else:
@@ -185,10 +185,10 @@ class LlmService(pydantic.BaseModel):
         cited_file_ids_remote = []
         cited_file_ids = []
         generated_files: list[File] = []
-        if isinstance(llm_outputs, str):
+        if isinstance(output_content, str):
             final_text = llm_output
-        elif isinstance(llm_outputs, list):
-            for output in llm_outputs:
+        elif isinstance(output_content, list):
+            for output in output_content:
                 # Populate text
                 final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
