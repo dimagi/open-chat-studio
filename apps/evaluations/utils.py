@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, create_model
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
+from apps.evaluations.field_definitions import FieldDefinition
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationMessage
@@ -351,12 +352,12 @@ def parse_csv_value_as_json(value):
     return value
 
 
-def schema_to_pydantic_model(schema: dict, model_name: str = "DynamicModel") -> type[BaseModel]:
+def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str = "DynamicModel") -> type[BaseModel]:
     """Converts a typed schema dictionary to a Pydantic model.
 
     Expected format:
         {
-            "field_name": FieldDefinition(type="string"|"int", description="...", ...)
+            "field_name": FieldDefinition(...)
         }
 
     Args:
