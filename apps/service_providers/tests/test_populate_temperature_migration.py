@@ -2,7 +2,7 @@ import pytest
 
 from apps.pipelines.models import Node
 from apps.service_providers import migration_utils
-from apps.service_providers.models import LlmProviderModel, LlmProviderTypes
+from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 
@@ -72,7 +72,7 @@ def test_populate_temperature_params_migration():
     )
 
     # Apply the migration logic
-    migration_utils.populate_temperature_params(Node, LlmProviderModel)
+    migration_utils.populate_temperature_params(Node)
 
     # Verify the results
     node_o4_mini.refresh_from_db()

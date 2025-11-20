@@ -1,7 +1,7 @@
 from django.db import migrations
 
 
-def populate_temperature_params(Node, LlmProviderModel):
+def populate_temperature_params(Node):
     """
     This migration prepares the addition of the temperature parameter to the LLM model parameters.
 
