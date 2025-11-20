@@ -2580,7 +2580,7 @@ requires-dist = [
     { name = "django-field-audit", specifier = ">=1.2.7" },
     { name = "django-health-check" },
     { name = "django-htmx", specifier = ">=1.26.0" },
-    { name = "django-oauth-toolkit" },
+    { name = "django-oauth-toolkit", specifier = ">=3.1.0,<4.0.0" },
     { name = "django-pydantic-field" },
     { name = "django-redis" },
     { name = "django-silk", specifier = ">=5.4.3" },
