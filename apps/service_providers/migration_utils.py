@@ -16,14 +16,13 @@ def populate_temperature_params(Node, LlmProviderModel):
     for node in Node.objects.filter(type__in=node_types).iterator():
         params = node.params
         temp = params.get("llm_temperature")
-        temp = temp if temp is not None else 0.7
         try:
-            temp = float(temp)
+            temp = float(temp) if temp is not None else 0.7
         except (ValueError, TypeError):
             temp = 0.7
         original_llm_model_params = params.get("llm_model_parameters")
         llm_model_params = original_llm_model_params.copy() if original_llm_model_params else {}
-        llm_model_params["temperature"] = temp if temp is not None else 0.7
+        llm_model_params["temperature"] = temp
         if llm_model_params != original_llm_model_params:
             params["llm_model_parameters"] = llm_model_params
             nodes_to_save.append(node)
