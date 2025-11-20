@@ -9,6 +9,14 @@ A summary of the change, the reason for its implementation, and relevant links.
 Include technical details required to understand the change.
 -->
 
+
+### Migrations
+<!-- 
+There may be a potentially long window during the deployment where migrations are applied, but the old code is still running. We need to ensure that migrations can be applied to the current running code without breaking it, to the extent possible.
+ -->
+- [ ] The migrations are backwards compatible
+
+
 ### Demo
 <!--
 If relevant, include screenshots or a loom video to demonstrate the new behaviour
