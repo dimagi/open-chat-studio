@@ -407,7 +407,7 @@ SITE_ID = 1
 # DRF config
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "oauth2_provider.contrib.rest_framework.OAuth2Authentication",
+        "apps.oauth.permissions.OAuth2TeamsAuthentication",
         "apps.api.permissions.ApiKeyAuthentication",
         "apps.api.permissions.BearerTokenAuthentication",
     ],
@@ -820,7 +820,7 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
 
 
 OAUTH2_PROVIDER = {
-    "PKCE_REQUIRED": False,
+    "PKCE_REQUIRED": False,  # Temporary disable PKCE requirement for easier testing
     "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.TeamScopedOAuth2Validator",
     "SCOPES_BACKEND_CLASS": "apps.oauth.scopes.TeamScopedScopesBackend",
 }
