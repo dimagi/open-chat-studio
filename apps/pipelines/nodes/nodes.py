@@ -474,10 +474,10 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
         # Check for non-existent collections
         missing_ids = set(value) - set(collections.keys())
         if missing_ids:
-            names = ", ".join([collections[missing_id] for missing_id in missing_ids])
+            ids_str = ", ".join(str(missing_id) for missing_id in missing_ids)
             raise PydanticCustomError(
                 "collection_not_found",
-                f"Collection(s) with name(s) {names} not found",
+                f"Collection index(s) with ID(s) {ids_str} not found",
             )
 
         # Validate that all collections use the same LLM provider
