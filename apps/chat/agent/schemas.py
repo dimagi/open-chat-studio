@@ -86,7 +86,7 @@ class SearchIndexSchema(BaseModel):
 
 
 class MultiSearchIndexSchema(BaseModel):
-    collection_id: int = Field(
+    collection_index_id: int = Field(
         description="The collection index ID to search. "
         "Multiple collections can be searched by making multiple tool calls with different collection_ids."
     )

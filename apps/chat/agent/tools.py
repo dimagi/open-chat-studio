@@ -123,21 +123,26 @@ def _perform_collection_search(
 
     if not embeddings:
         if include_collection_info:
-            return f"\nThe semantic search did not return any results from collection '{collection.name}' (ID: {collection.id})."
+            return (
+                f"\nThe semantic search did not return any results from "
+                f"collection '{collection.name}' (ID: {collection.id})."
+            )
         return "\nThe semantic search did not return any results."
 
     # Format results
     if include_collection_info:
-        retrieved_chunks = "\n".join([
-            _format_result_with_collection(embedding, collection) for embedding in embeddings
-        ])
+        retrieved_chunks = "\n".join(
+            [_format_result_with_collection(embedding, collection) for embedding in embeddings]
+        )
     else:
-        retrieved_chunks = "\n".join([
-            CHUNK_TEMPLATE.format(
-                file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
-            ).strip()
-            for embedding in embeddings
-        ])
+        retrieved_chunks = "\n".join(
+            [
+                CHUNK_TEMPLATE.format(
+                    file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+                ).strip()
+                for embedding in embeddings
+            ]
+        )
 
     response_template = """
 {header}
@@ -491,16 +496,16 @@ class MultiSearchIndexTool(CustomBaseTool):
     generate_citations: bool = True
 
     @transaction.atomic
-    def action(self, collection_id: int, query: str) -> str:
+    def action(self, collection_index_id: int, query: str) -> str:
         """
         Search a specific collection index for the most relevant file chunks based on the query.
         """
         from apps.documents.models import Collection
 
         try:
-            collection = Collection.objects.get(id=collection_id, is_index=True)
+            collection = Collection.objects.get(id=collection_index_id, is_index=True)
         except Collection.DoesNotExist:
-            return f"Collection with ID {collection_id} not found or is not a valid index."
+            return f"Collection index with ID {collection_index_id} not found or is not a valid index."
 
         return _perform_collection_search(
             collection=collection,
