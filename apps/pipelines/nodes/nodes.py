@@ -454,7 +454,10 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
         try:
             value = [int(v) for v in value]
         except (ValueError, TypeError) as e:
-            raise PydanticCustomError("Non-integer IDs for Collection") from e
+            raise PydanticCustomError(
+                "invalid_collection_index",
+                "Collection index IDs must be integers",
+            ) from e
 
         # Filter out empty values
         value = [v for v in value if v is not None]
@@ -498,7 +501,7 @@ class LLMResponseWithPrompt(LLMHistoryMixin, OutputMessageTagMixin, PipelineNode
                     f"Local collections: {', '.join(local_collections)}.",
                 )
 
-            if is_remote_flags:
+            if all(is_remote_flags):
                 # Validate that all remote collections use the same LLM provider as this node
                 incompatible_collections = [
                     collection.name
