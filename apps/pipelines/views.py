@@ -155,7 +155,6 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, sy
     source_materials = SourceMaterial.objects.filter(**common_filters).values("id", "topic").all()
     assistants = OpenAiAssistant.objects.filter(**common_filters).values("id", "name").all()
     collections = Collection.objects.filter(**common_filters).filter(is_index=False).values("id", "name").all()
-    # Until OCS fully supports RAG, we can only use remote indexes
     collection_indexes = (
         Collection.objects.filter(**common_filters)
         .filter(team=team, is_index=True)
