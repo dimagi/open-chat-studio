@@ -22,13 +22,14 @@
             {% endif %}
           </div>
           <div class="text-sm text-base-content/60 mt-1">
-            <i class="fa fa-file-o" aria-hidden="true"></i> <span class="font-bold">{{ collection_files_count }}</span> uploaded, <span class="font-bold">{{ files_remaining }}</span> remaining
+            <i class="fa fa-file-o" aria-hidden="true"></i> <span class="font-bold">{{ collection_files_count }}</span> uploaded (max {{ max_files }})
           </div>
           {% if collection_files_count == max_files_per_collection %}
             <div class="text-sm text-base-content/60 mt-1">
               <i class="fa-solid fa-triangle-exclamation text-warning" aria-hidden="true"></i> File limit reached
             </div>
           {% endif %}
+          <div class="text-sm text-base-content/60 mt-1">{{ collection.summary }}</div>
         </div>
         <div class="join flex items-center">
           {% if not read_only %}
