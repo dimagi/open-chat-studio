@@ -23,11 +23,11 @@ The optimization strategy consists of five main components:
 │  Database   │   Query     │   Caching   │    Filter    │
 │  Indexing   │ Optimization│   Strategy  │ Optimization │
 ├─────────────┼─────────────┼─────────────┼──────────────┤
-│ - New       │ - Post-     │ - Signal    │ - Optimized  │
-│   indexes   │   pagination│   based     │   tag        │
-│ - Partial   │   annotation│   invalidation│ filtering  │
-│   indexes   │ - Combined  │ - Cache     │ - Subquery   │
-│             │   aggregates│   warming   │   reduction  │
+│ - New       │ - Two-step  │ - Signal    │ - Optimized  │
+│   indexes   │   fetch     │   based     │   tag        │
+│ - Partial   │ - Combined  │   invalidation│ filtering  │
+│   indexes   │   aggregates│ - Cache     │ - Subquery   │
+│             │ - Lazy cols │   warming   │   reduction  │
 └─────────────┴─────────────┴─────────────┴──────────────┘
                             │
                             ▼
@@ -195,9 +195,32 @@ class Migration(migrations.Migration):
 
 ## 2. Query Optimization Patterns
 
-### 2.1 Post-Pagination Annotation Pattern
+### 2.1 Two-Step Fetch Pattern
 
-Move expensive annotations after pagination to reduce computation.
+**Important:** The commonly attempted "post-pagination annotation" approach using `get_table_data()` does NOT work. This is because `get_table_data()` is called during view processing, before the template renders. The paginator's COUNT query still operates on the fully annotated queryset.
+
+The correct solution is the **two-step fetch pattern**:
+1. Paginate using a lightweight queryset (fast COUNT)
+2. Fetch annotated data only for the paginated IDs
+
+#### Why `get_table_data()` Doesn't Work
+
+```python
+# This approach is INCORRECT - annotations still apply to full queryset
+class ChatbotExperimentTableView(SingleTableView):
+    def get_queryset(self):
+        return Experiment.objects.filter(team=self.request.team)
+
+    def get_table_data(self):
+        # This is called BEFORE pagination, not after
+        # The COUNT query will still include these annotations
+        return super().get_table_data().annotate(
+            session_count=Subquery(...),  # Still evaluated for ALL rows
+        )
+```
+
+The flow is: `get_table_data()` → `Table.__init__(queryset)` → template renders → pagination.
+The Table object receives the full annotated queryset before pagination occurs.
 
 #### Current (Bad)
 
@@ -205,7 +228,7 @@ Move expensive annotations after pagination to reduce computation.
 class ChatbotExperimentTableView(SingleTableView):
     def get_queryset(self):
         queryset = Experiment.objects.filter(team=self.request.team)
-        # Expensive annotations on ENTIRE dataset
+        # Expensive annotations on ENTIRE dataset - evaluated for COUNT
         queryset = queryset.annotate(
             session_count=Subquery(...),
             participant_count=Subquery(...),
@@ -215,16 +238,23 @@ class ChatbotExperimentTableView(SingleTableView):
         return queryset.order_by("-last_activity")
 ```
 
-#### Proposed (Good)
+#### Proposed (Good) - Two-Step Fetch
 
 ```python
-class ChatbotExperimentTableView(SingleTableView):
-    def get_queryset(self):
-        """Return base queryset with only lightweight annotations for sorting."""
-        queryset = Experiment.objects.filter(team=self.request.team)
+class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView):
+    model = Experiment
+    table_class = ChatbotExperimentTable
+    paginate_by = 25
 
-        # Only annotate what's needed for sorting/filtering
-        # Use a lightweight last_activity from a subquery
+    def get_queryset(self):
+        """Return lightweight queryset for fast pagination COUNT."""
+        queryset = Experiment.objects.filter(
+            team=self.request.team,
+            is_archived=False,
+        )
+
+        # Only annotate what's needed for sorting
+        # This annotation is cheaper than the display annotations
         queryset = queryset.annotate(
             last_activity=Subquery(
                 Trace.objects.filter(
@@ -234,28 +264,170 @@ class ChatbotExperimentTableView(SingleTableView):
         )
         return queryset.order_by(F("last_activity").desc(nulls_last=True))
 
-    def get_table_data(self):
-        """Apply expensive annotations only to paginated data."""
-        paginated_data = super().get_table_data()
+    def get_context_data(self, **kwargs):
+        """Fetch enriched data only for the paginated page."""
+        context = super().get_context_data(**kwargs)
 
-        # Now annotate only the paginated page (typically 25 items)
-        return paginated_data.annotate(
+        # Get the paginated page object
+        page_obj = context.get('page_obj')
+        if not page_obj:
+            return context
+
+        # Extract IDs from the paginated lightweight queryset
+        experiment_ids = list(page_obj.object_list.values_list('id', flat=True))
+
+        if not experiment_ids:
+            return context
+
+        # Fetch full data with expensive annotations for only these IDs
+        enriched_queryset = Experiment.objects.filter(
+            id__in=experiment_ids
+        ).annotate(
             session_count=self._session_count_subquery(),
             participant_count=self._participant_count_subquery(),
             interaction_count=self._interaction_count_subquery(),
+            last_activity=self._last_activity_subquery(),
+        ).select_related(
+            'llm_provider', 'llm_provider_model'
         )
 
+        # Preserve the original ordering
+        id_order = {id: index for index, id in enumerate(experiment_ids)}
+        enriched_list = sorted(
+            enriched_queryset,
+            key=lambda x: id_order.get(x.id, 0)
+        )
+
+        # Replace the table with enriched data
+        context['table'] = self.table_class(enriched_list)
+
+        return context
+
     def _session_count_subquery(self):
-        """Optimized session count using filtered subquery."""
-        return Subquery(
-            ExperimentSession.objects.filter(
-                experiment_id=OuterRef("pk"),
-                team_id=self.request.team.id,
-            ).values("experiment_id").annotate(
-                count=Count("id")
-            ).values("count")[:1],
+        """Optimized session count subquery."""
+        return Coalesce(
+            Subquery(
+                ExperimentSession.objects.filter(
+                    experiment_id=OuterRef("pk"),
+                    team_id=self.request.team.id,
+                ).values("experiment_id").annotate(
+                    count=Count("id")
+                ).values("count")[:1]
+            ),
+            0,
             output_field=IntegerField(),
         )
+
+    def _participant_count_subquery(self):
+        """Optimized participant count subquery."""
+        return Coalesce(
+            Subquery(
+                ExperimentSession.objects.filter(
+                    experiment_id=OuterRef("pk"),
+                    team_id=self.request.team.id,
+                ).values("experiment_id").annotate(
+                    count=Count("participant", distinct=True)
+                ).values("count")[:1]
+            ),
+            0,
+            output_field=IntegerField(),
+        )
+```
+
+#### Alternative: Custom Paginator Approach
+
+For more complex cases, create a custom paginator that separates counting from data fetching:
+
+```python
+class AnnotationAwarePaginator(Paginator):
+    """Paginator that uses a lightweight queryset for counting."""
+
+    def __init__(self, object_list, per_page, count_queryset=None, **kwargs):
+        super().__init__(object_list, per_page, **kwargs)
+        self._count_queryset = count_queryset
+
+    @cached_property
+    def count(self):
+        """Use lightweight queryset for counting if provided."""
+        if self._count_queryset is not None:
+            return self._count_queryset.count()
+        return super().count
+
+class ChatbotExperimentTableView(SingleTableView):
+    def get_paginator(self, queryset, per_page, **kwargs):
+        # Create lightweight queryset for counting (no annotations)
+        count_queryset = Experiment.objects.filter(
+            team=self.request.team,
+            is_archived=False,
+        )
+
+        return AnnotationAwarePaginator(
+            queryset,
+            per_page,
+            count_queryset=count_queryset,
+            **kwargs
+        )
+```
+
+#### Session Table Example
+
+```python
+class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView):
+    model = ExperimentSession
+    table_class = ExperimentSessionsTable
+    paginate_by = 25
+
+    def get_queryset(self):
+        """Lightweight queryset with filter annotations but not display annotations."""
+        queryset = ExperimentSession.objects.filter(
+            team=self.request.team,
+            experiment=self.experiment,
+        )
+
+        # Apply filters - these may need annotations for filtering
+        session_filter = ExperimentSessionFilter()
+        queryset = session_filter.apply(queryset, self.filter_params)
+
+        # Add only annotations needed for sorting
+        queryset = queryset.annotate(
+            last_message_created_at=Subquery(
+                ChatMessage.objects.filter(
+                    chat_id=OuterRef("chat_id")
+                ).order_by("-created_at").values("created_at")[:1]
+            )
+        )
+
+        return queryset.order_by("-last_message_created_at")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        page_obj = context.get('page_obj')
+        if not page_obj:
+            return context
+
+        session_ids = list(page_obj.object_list.values_list('id', flat=True))
+
+        if not session_ids:
+            return context
+
+        # Fetch with expensive annotations for display
+        enriched_queryset = ExperimentSession.objects.filter(
+            id__in=session_ids
+        ).select_related(
+            "experiment", "participant__user", "chat"
+        ).prefetch_related(
+            "chat__messages__tags__tag"
+        ).annotate_with_message_count(
+        ).annotate_with_versions_list()
+
+        # Preserve ordering
+        id_order = {id: idx for idx, id in enumerate(session_ids)}
+        enriched_list = sorted(enriched_queryset, key=lambda x: id_order.get(x.id, 0))
+
+        context['table'] = self.table_class(enriched_list)
+
+        return context
 ```
 
 ### 2.2 Combined Aggregate Pattern
@@ -878,10 +1050,11 @@ def refresh_dashboard_materialized_view():
 
 **Estimated Impact: 30-40% additional improvement**
 
-1. **Implement post-pagination annotation pattern**
+1. **Implement two-step fetch pattern**
    - Modify ChatbotExperimentTableView
    - Modify ChatbotSessionsTableView
    - Modify DatasetSessionsSelectionTableView
+   - Use lightweight queryset for COUNT, enriched queryset for display
 
 2. **Optimize version annotation**
    - Simplify nested OuterRef
