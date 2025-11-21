@@ -1697,7 +1697,7 @@ class ExperimentSessionQuerySet(models.QuerySet):
             .values("versions")[:1],
             output_field=CharField(),
         )
-        return self.annotate(experiment_versions=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
+        return self.annotate(versions_list=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
 
 
 class ExperimentSessionObjectManager(models.Manager):
