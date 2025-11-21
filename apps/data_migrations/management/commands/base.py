@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from apps.data_migrations.utils.migrations import is_migration_applied, mark_migration_applied
+from apps.data_migrations.utils.migrations import is_migration_applied, run_once
 
 
 class IdempotentCommand(BaseCommand):
@@ -64,11 +64,14 @@ class IdempotentCommand(BaseCommand):
         # Execute migration
         self.stdout.write(f"Starting migration: {self.migration_name}")
         try:
-            result = self.perform_migration(dry_run=False)
+            with run_once(self.migration_name) as migration_context:
+                if not migration_context.should_run and not force:
+                    self.stdout.write(
+                        self.style.WARNING(f"Migration '{self.migration_name}' was already applied during execution")
+                    )
+                    return
 
-            # Mark as applied (only if not forced, or not already marked)
-            if not force or not is_migration_applied(self.migration_name):
-                mark_migration_applied(self.migration_name)
+                result = self.perform_migration(dry_run=False)
 
             self.stdout.write(self.style.SUCCESS(f"Migration '{self.migration_name}' completed successfully"))
 

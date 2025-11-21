@@ -1,4 +1,4 @@
-from functools import wraps
+from contextlib import ContextDecorator
 
 from django.core.management import call_command
 from django.db import migrations, transaction
@@ -78,40 +78,48 @@ def mark_migration_applied(name: str) -> CustomMigration:
     return migration
 
 
-def run_once(name: str):
+class run_once(ContextDecorator):
     """
-    Decorator to ensure a function runs only once.
+    Context manager and decorator to ensure code runs only once.
 
-    Wraps the function in an atomic transaction and checks if the
-    migration has already been applied before running.
+    Can be used as a decorator or context manager. Wraps execution in an
+    atomic transaction and marks the migration as applied on success.
 
     Args:
         name: Unique migration identifier
 
-    Returns:
-        Decorator function
-
-    Example:
+    Example as decorator:
         @run_once("my_migration_2024_11_21")
         def my_migration_function():
             # Migration logic here
             pass
+
+    Example as context manager:
+        with run_once("my_migration_2024_11_21"):
+            # Migration logic here
+            pass
     """
 
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            with transaction.atomic():
-                if is_migration_applied(name):
-                    return False
+    def __init__(self, name: str):
+        self.name = name
+        self.should_run = False
 
-                result = func(*args, **kwargs)
-                mark_migration_applied(name)
-                return result
+    def __enter__(self):
+        self._transaction = transaction.atomic()
+        self._transaction.__enter__()
 
-        return wrapper
+        if is_migration_applied(self.name):
+            self.should_run = False
+        else:
+            self.should_run = True
 
-    return decorator
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None and self.should_run:
+            mark_migration_applied(self.name)
+
+        return self._transaction.__exit__(exc_type, exc_val, exc_tb)
 
 
 def check_migration_in_django_migration(apps, name: str) -> bool:
