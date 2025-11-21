@@ -1,16 +1,33 @@
+paths-ignore: &paths_ignore
+  - 'components/**'
+  - 'docs/**'
+  - 'mkdocs.yml'
+  - 'README.md'
+  - 'CLAUDE.md'
+  - 'LICENSE'
+  - '.coderabbit.yaml'
+  - 'locust/**'
+  - 'cypress/**'
+  - 'cypress.config.ts'
+  - 'cypress.env.json'
+  - 'Dockerfile'
+  - 'docker-compose-dev.yml'
+  - 'heroku.yml'
+  - 'app.json'
+  - 'scripts/**'
+  - 'media/**'
+
 name: Lint and Test
 on:
   pull_request:
     paths-ignore:
-      - 'components/**'
-      - 'docs/**'
+      - *paths_ignore
   push:
     branches:
       - main
     paths-ignore:
-      - 'components/**'
-      - 'docs/**'
-      - 'mkdocs.yml'
+      - *paths_ignore
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
