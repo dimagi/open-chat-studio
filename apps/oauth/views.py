@@ -8,6 +8,12 @@ from .forms import TeamScopedAllowForm
 
 
 class TeamScopedAuthorizationView(BaseAuthorizationView):
+    """Authorization view that supports team-scoped OAuth access.
+
+    The team can be specified via the 'team' URL parameter (optional).
+    If not provided, defaults to the user's team on the current session.
+    """
+
     form_class = TeamScopedAllowForm
     template_name = "oauth2_provider/authorize.html"
 

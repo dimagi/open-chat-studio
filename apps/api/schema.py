@@ -28,7 +28,7 @@ class BearerScheme(TokenScheme):
 
 class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
     target_class = "apps.oauth.permissions.OAuth2TeamsAuthentication"
-    name = "OAuth2TeamsAuth"
+    name = "OAuth2"
     match_subclasses = True
 
     def get_security_definition(self, auto_schema):

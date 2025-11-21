@@ -205,7 +205,7 @@ paths:
       tags:
       - Experiments
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -229,7 +229,7 @@ paths:
       tags:
       - Experiments
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -252,7 +252,7 @@ paths:
       tags:
       - Files
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -311,7 +311,7 @@ paths:
               $ref: '#/components/schemas/CreateChatCompletionRequest'
         required: true
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -379,7 +379,7 @@ paths:
               $ref: '#/components/schemas/CreateChatCompletionRequest'
         required: true
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -434,7 +434,7 @@ paths:
                 summary: Update and delete participant schedules
         required: true
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -482,7 +482,7 @@ paths:
       tags:
       - Experiment Sessions
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -504,7 +504,7 @@ paths:
               $ref: '#/components/schemas/ExperimentSessionCreate'
         required: true
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -532,7 +532,7 @@ paths:
       tags:
       - Experiment Sessions
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -556,7 +556,7 @@ paths:
       tags:
       - Experiment Sessions
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -581,7 +581,7 @@ paths:
             schema:
               $ref: '#/components/schemas/Patchedupdate_state_serializer'
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -631,7 +631,7 @@ paths:
                 summary: User has not given consent
         required: true
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -684,7 +684,7 @@ paths:
               $ref: '#/components/schemas/ApiMessage'
         required: true
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -724,7 +724,7 @@ paths:
               $ref: '#/components/schemas/ApiMessage'
         required: true
       security:
-      - OAuth2TeamsAuth: []
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -1417,7 +1417,7 @@ components:
       - state
       - success
   securitySchemes:
-    OAuth2TeamsAuth:
+    OAuth2:
       type: oauth2
       flows:
         authorizationCode:
