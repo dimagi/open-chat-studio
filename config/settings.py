@@ -821,8 +821,11 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
 
 OAUTH2_PROVIDER = {
     "PKCE_REQUIRED": False,  # Temporary disable PKCE requirement for easier testing
-    "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.TeamScopedOAuth2Validator",
-    "SCOPES_BACKEND_CLASS": "apps.oauth.scopes.TeamScopedScopesBackend",
+    "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.APIScopedValidator",
+    "SCOPES": {
+        "trigger_bot_message": "Trigger the bot to send a message to the user",
+        "list_experiments": "List Experiments",
+    },
 }
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"

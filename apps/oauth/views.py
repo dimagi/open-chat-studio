@@ -1,5 +1,8 @@
 from oauth2_provider.views.base import AuthorizationView as BaseAuthorizationView
 
+from apps.teams.models import Team
+from apps.teams.utils import set_current_team
+
 from .forms import TeamScopedAllowForm
 
 
@@ -14,7 +17,6 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
 
     def form_valid(self, form):
         selected_team_slug = form.cleaned_data.get("team", [])
-        # Encode as team scopes
-        # Override scope with custom team scopes
-        form.cleaned_data["scope"] = f"team:{selected_team_slug}"
+        # Set the team as thread context so the validator can pick it up
+        set_current_team(Team.objects.get(slug=selected_team_slug))
         return super().form_valid(form)

@@ -13,11 +13,17 @@
             {% endif %}
         {% endfor %}
 
-        <div class="team-selection">
-            <h4>{% translate "Select Teams to Grant Access" %}</h4>
+        <div>
+            <h4>{% translate "Select your team" %}</h4>
             <p>{% translate "This application will only be able to access data from the selected team." %}</p>
             {{ form.team }}
             {{ form.team.errors }}
+        </div>
+
+        <div>
+            <h4>{% translate "Select which APIs to grant access to" %}</h4>
+            {{ form.apis }}
+            {{ form.apis.errors }}
         </div>
 
 
