@@ -259,7 +259,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
-    versions = columns.Column(verbose_name="Versions", accessor="experiment_versions", orderable=False)
+    versions = columns.Column(verbose_name="Versions", accessor="versions_list", orderable=False)
     message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
     session = actions.ActionsColumn(
         actions=[
