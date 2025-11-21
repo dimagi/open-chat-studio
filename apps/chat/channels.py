@@ -1313,7 +1313,7 @@ def _start_experiment_session(
                 "status": session_status,
                 "participant": participant,
                 "chat": chat,
-                "platform": experiment_channel.get_platform_display(),
+                "platform": experiment_channel.platform,
             },
         )
 

@@ -8,22 +8,6 @@ def backfill_session_fields(apps, schema_editor):
     """Backfill platform, experiment_versions, and last_activity_at fields for ExperimentSession."""
     ExperimentSession = apps.get_model("experiments", "ExperimentSession")
     Trace = apps.get_model("trace", "Trace")
-    ChannelPlatform = None
-
-    # Import ChannelPlatform for label lookup
-    try:
-        from apps.channels.models import ChannelPlatform
-    except ImportError:
-        pass
-
-    def get_platform_label(platform_value):
-        """Get the display label for a platform value."""
-        if ChannelPlatform:
-            try:
-                return ChannelPlatform(platform_value).label
-            except ValueError:
-                return platform_value
-        return platform_value
 
     # Process sessions in batches
     batch_size = 1000
@@ -62,11 +46,11 @@ def backfill_session_fields(apps, schema_editor):
         # Update sessions
         sessions_to_update = []
         for session in batch:
-            # Set platform
+            # Set platform (use the value, not the label)
             if session.experiment_channel:
-                session.platform = get_platform_label(session.experiment_channel.platform)
+                session.platform = session.experiment_channel.platform
             elif session.participant:
-                session.platform = get_platform_label(session.participant.platform)
+                session.platform = session.participant.platform
 
             # Set experiment_versions and last_activity_at from trace data
             if session.id in trace_data:
