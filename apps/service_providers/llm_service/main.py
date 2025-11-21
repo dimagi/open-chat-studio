@@ -205,7 +205,6 @@ class LlmService(pydantic.BaseModel):
         else:
             raise TypeError(f"Unexpected llm_output type: {type(llm_output).__name__}")
 
-        print(final_text, type(final_text))
         cited_file_ids.extend(extract_file_ids_from_ocs_citations(final_text))
 
         cited_files = []
