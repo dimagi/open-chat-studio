@@ -1,8 +1,51 @@
 from functools import wraps
 
-from django.db import transaction
+from django.core.management import call_command
+from django.db import migrations, transaction
 
 from apps.data_migrations.models import CustomMigration
+
+
+class RunDataMigration(migrations.operations.base.Operation):
+    """
+    Custom migration operation to run a data migration management command.
+
+    This operation calls the specified management command during migration
+    and handles reversal by unmarking the migration.
+
+    Example:
+        from apps.data_migrations.utils.migrations import RunDataMigration
+
+        class Migration(migrations.Migration):
+            operations = [
+                RunDataMigration("my_migration"),
+            ]
+    """
+
+    reversible = True
+    reduces_to_sql = False
+
+    def __init__(self, command_name):
+        self.command_name = command_name
+
+    def state_forwards(self, app_label, state):
+        pass
+
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        call_command(self.command_name)
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+        call_command("custom_migrations", "unmark", self.command_name)
+
+    def describe(self):
+        return f"Run data migration: {self.command_name}"
+
+    def deconstruct(self):
+        return (
+            self.__class__.__qualname__,
+            [self.command_name],
+            {},
+        )
 
 
 def is_migration_applied(name: str) -> bool:

@@ -35,30 +35,20 @@ python manage.py my_migration --force      # Re-run
 
 ### Django Migration
 
-Use the utility functions within Django migrations:
+Use `RunDataMigration` to run your management command within a Django migration:
 
 ```python
 from django.db import migrations
-from apps.data_migrations.utils.migrations import (
-    check_migration_in_django_migration,
-    mark_migration_in_django_migration,
-)
-
-MIGRATION_NAME = "populate_new_field_2024_11_21"
-
-def migrate_data(apps, schema_editor):
-    if check_migration_in_django_migration(apps, MIGRATION_NAME):
-        return
-
-    MyModel = apps.get_model("myapp", "MyModel")
-    MyModel.objects.filter(new_field=None).update(new_field="default")
-
-    mark_migration_in_django_migration(apps, MIGRATION_NAME)
+from apps.data_migrations.utils.migrations import RunDataMigration
 
 class Migration(migrations.Migration):
     dependencies = [("myapp", "0001_initial")]
-    operations = [migrations.RunPython(migrate_data, migrations.RunPython.noop)]
+    operations = [
+        RunDataMigration("my_migration"),
+    ]
 ```
+
+This automatically handles idempotency and supports migration reversal.
 
 ## Managing Migrations
 
