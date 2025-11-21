@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from drf_spectacular.utils import OpenApiExample, extend_schema
+from oauth2_provider.decorators import protected_resource
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -126,6 +127,7 @@ def consent(request: Request):
     ],
 )
 @api_view(["POST"])
+@protected_resource(scopes=["trigger_bot_message"])
 @transaction.atomic
 def trigger_bot_message(request):
     """
