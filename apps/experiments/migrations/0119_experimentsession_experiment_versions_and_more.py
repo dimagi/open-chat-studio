@@ -26,9 +26,4 @@ class Migration(migrations.Migration):
             name='platform',
             field=models.CharField(blank=True, max_length=128, null=True),
         ),
-        migrations.AlterField(
-            model_name='experimentsession',
-            name='seed_task_id',
-            field=models.CharField(blank=True, help_text='System ID of the seed message task, if present.', max_length=40, null=True),
-        ),
     ]
