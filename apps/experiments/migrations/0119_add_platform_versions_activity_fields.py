@@ -37,7 +37,6 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 blank=True,
                 default="",
-                help_text="Denormalized platform name",
                 max_length=128,
             ),
         ),

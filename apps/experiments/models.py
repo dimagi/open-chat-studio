@@ -1735,7 +1735,7 @@ class ExperimentSession(BaseTeamModel):
         blank=True,
     )
     state = SanitizedJSONField(default=dict)
-    platform = models.CharField(max_length=128, blank=True, default="", help_text="Denormalized platform name")
+    platform = models.CharField(max_length=128, blank=True, default="")
     experiment_versions = ArrayField(
         models.PositiveIntegerField(),
         default=list,
