@@ -14,7 +14,6 @@ class CustomMigration(models.Model):
     applied_at = models.DateTimeField(auto_now_add=True, help_text="Timestamp when migration was applied")
 
     class Meta:
-        db_table = "custom_migrations"
         ordering = ["-applied_at"]
 
     def __str__(self):
