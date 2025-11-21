@@ -24,8 +24,9 @@ class RunDataMigration(migrations.operations.base.Operation):
     reduces_to_sql = False
     category = OperationCategory.PYTHON
 
-    def __init__(self, command_name):
+    def __init__(self, command_name, elidable=False):
         self.command_name = command_name
+        self.elidable = elidable
 
     def state_forwards(self, app_label, state):
         pass
@@ -37,10 +38,13 @@ class RunDataMigration(migrations.operations.base.Operation):
         return f"Run data migration: {self.command_name}"
 
     def deconstruct(self):
+        kwargs = {}
+        if self.elidable:
+            kwargs["elidable"] = self.elidable
         return (
             self.__class__.__qualname__,
             [self.command_name],
-            {},
+            kwargs,
         )
 
 
