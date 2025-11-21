@@ -1738,7 +1738,7 @@ class ExperimentSession(BaseTeamModel):
     platform = models.CharField(max_length=128, blank=True, null=True)  # noqa: DJ001
     experiment_versions = ArrayField(
         models.PositiveIntegerField(),
-        default=list,
+        null=True,
         blank=True,
         help_text="Array of unique experiment version numbers seen by this session",
     )
