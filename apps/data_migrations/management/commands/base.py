@@ -66,8 +66,8 @@ class IdempotentCommand(BaseCommand):
         try:
             result = self.perform_migration(dry_run=False)
 
-            # Mark as applied (only if not forced, to preserve original timestamp)
-            if not force:
+            # Mark as applied (only if not forced, or not already marked)
+            if not force or not is_migration_applied(self.migration_name):
                 mark_migration_applied(self.migration_name)
 
             self.stdout.write(self.style.SUCCESS(f"Migration '{self.migration_name}' completed successfully"))
