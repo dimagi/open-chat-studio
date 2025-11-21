@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
             field=django.contrib.postgres.fields.ArrayField(
                 base_field=models.PositiveIntegerField(),
                 blank=True,
-                default=list,
+                null=True,
                 help_text="Array of unique experiment version numbers seen by this session",
                 size=None,
             ),
@@ -36,7 +36,7 @@ class Migration(migrations.Migration):
             name="platform",
             field=models.CharField(
                 blank=True,
-                default="",
+                null=True,
                 max_length=128,
             ),
         ),
