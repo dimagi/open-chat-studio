@@ -1,7 +1,9 @@
 import textwrap
 
+from django.conf import settings
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view, inline_serializer
+from oauth2_provider.contrib.rest_framework import TokenHasScope
 from rest_framework import filters, mixins, serializers, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -31,7 +33,7 @@ update_state_response_serializer = inline_serializer(
 @extend_schema_view(
     list=extend_schema(
         operation_id="session_list",
-        summary="List Experiment Sessions",
+        summary=settings.API_SUMMARIES["list_chatbot_sessions"],
         tags=["Experiment Sessions"],
         parameters=[
             OpenApiParameter(
@@ -56,7 +58,7 @@ update_state_response_serializer = inline_serializer(
     ),
     retrieve=extend_schema(
         operation_id="session_retrieve",
-        summary="Retrieve Experiment Session",
+        summary=settings.API_SUMMARIES["retrieve_chatbot_session"],
         tags=["Experiment Sessions"],
         responses=ExperimentSessionSerializer(include_messages=True),
         parameters=[
@@ -76,13 +78,13 @@ update_state_response_serializer = inline_serializer(
     ),
     create=extend_schema(
         operation_id="session_create",
-        summary="Create Experiment Session",
+        summary=settings.API_SUMMARIES["create_chatbot_session"],
         tags=["Experiment Sessions"],
         request=ExperimentSessionCreateSerializer,
     ),
     end_experiment_session=extend_schema(
         operation_id="session_end",
-        summary="End Experiment Session",
+        summary=settings.API_SUMMARIES["end_chatbot_session"],
         tags=["Experiment Sessions"],
         parameters=[
             OpenApiParameter(
@@ -97,7 +99,7 @@ update_state_response_serializer = inline_serializer(
     ),
     update_state=extend_schema(
         operation_id="session_update_state",
-        summary="Update Experiment Session State",
+        summary=settings.API_SUMMARIES["update_chatbot_session_state"],
         tags=["Experiment Sessions"],
         parameters=[
             OpenApiParameter(
@@ -112,13 +114,26 @@ update_state_response_serializer = inline_serializer(
     ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [DjangoModelPermissionsWithView]
+    permission_classes = [DjangoModelPermissionsWithView, TokenHasScope]
     serializer_class = ExperimentSessionSerializer
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
     lookup_field = "external_id"
     lookup_url_kwarg = "id"
+
+    def get_required_scopes(self, request, view):
+        if self.action == "list":
+            return ["list_sessions"]
+        elif self.action == "retrieve":
+            return ["retrieve_session"]
+        elif self.action == "create":
+            return ["create_session"]
+        elif self.action == "end_experiment_session":
+            return ["end_session"]
+        elif self.action == "update_state":
+            return ["update_session_state"]
+        return []
 
     def get_serializer(self, *args, **kwargs):
         action = self.action

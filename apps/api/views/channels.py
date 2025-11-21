@@ -84,7 +84,7 @@ def consent(request: Request):
 
 @extend_schema(
     operation_id="trigger_bot_message",
-    summary="Trigger the bot to send a message to the user",
+    summary=settings.API_SUMMARIES["trigger_bot_message"],
     tags=["Channels"],
     request=TriggerBotMessageRequest(),
     responses={
