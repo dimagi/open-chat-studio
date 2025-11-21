@@ -1697,7 +1697,7 @@ class ExperimentSessionQuerySet(models.QuerySet):
             .values("versions")[:1],
             output_field=CharField(),
         )
-        return self.annotate(versions_list=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
+        return self.annotate(experiment_versions=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
 
 
 class ExperimentSessionObjectManager(models.Manager):
@@ -1724,8 +1724,8 @@ class ExperimentSession(BaseTeamModel):
 
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="sessions")
     chat = models.OneToOneField(Chat, related_name="experiment_session", on_delete=models.CASCADE)
-    seed_task_id = models.CharField(
-        max_length=40, blank=True, default="", help_text="System ID of the seed message task, if present."
+    seed_task_id = models.CharField(  # noqa: DJ001
+        max_length=40, blank=True, null=True, help_text="System ID of the seed message task, if present."
     )
     experiment_channel = models.ForeignKey(
         "bot_channels.experimentchannel",
@@ -1735,7 +1735,7 @@ class ExperimentSession(BaseTeamModel):
         blank=True,
     )
     state = SanitizedJSONField(default=dict)
-    platform = models.CharField(max_length=128, blank=True, default="")
+    platform = models.CharField(max_length=128, blank=True, null=True)  # noqa: DJ001
     experiment_versions = ArrayField(
         models.PositiveIntegerField(),
         default=list,
