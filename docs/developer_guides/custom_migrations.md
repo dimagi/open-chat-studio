@@ -48,7 +48,7 @@ class Migration(migrations.Migration):
     ]
 ```
 
-This automatically handles idempotency and supports migration reversal.
+This automatically handles idempotency.
 
 ## Managing Migrations
 
