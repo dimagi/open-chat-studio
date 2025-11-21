@@ -862,20 +862,18 @@ class ChannelBase(ABC):
         if not self.experiment_session:
             return
 
-        update_fields = {"last_activity_at": timezone.now()}
+        update_fields = ["last_activity_at"]
+        self.experiment_session.last_activity_at = timezone.now()
 
         # Add experiment version to the list if it's a versioned experiment
         if self.experiment.is_a_version:
             version_number = self.experiment.version_number
             current_versions = self.experiment_session.experiment_versions or []
             if version_number not in current_versions:
-                update_fields["experiment_versions"] = current_versions + [version_number]
+                self.experiment_session.experiment_versions = current_versions + [version_number]
+                update_fields.append("experiment_versions")
 
-        ExperimentSession.objects.filter(pk=self.experiment_session.pk).update(**update_fields)
-
-        # Update the in-memory instance
-        for field, value in update_fields.items():
-            setattr(self.experiment_session, field, value)
+        self.experiment_session.save(update_fields=update_fields)
 
 
 class WebChannel(ChannelBase):
