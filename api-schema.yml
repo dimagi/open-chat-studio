@@ -188,7 +188,7 @@ paths:
   /api/experiments/:
     get:
       operationId: experiment_list
-      summary: List Experiments
+      summary: List Chatbots
       parameters:
       - name: cursor
         required: false
@@ -218,7 +218,7 @@ paths:
   /api/experiments/{id}/:
     get:
       operationId: experiment_retrieve
-      summary: Retrieve Experiment
+      summary: Retrieve Chatbot
       parameters:
       - in: path
         name: id
@@ -443,7 +443,7 @@ paths:
   /api/sessions/:
     get:
       operationId: session_list
-      summary: List Experiment Sessions
+      summary: List Chatbot Sessions
       parameters:
       - name: cursor
         required: false
@@ -494,7 +494,7 @@ paths:
           description: ''
     post:
       operationId: session_create
-      summary: Create Experiment Session
+      summary: Create Chatbot Session
       tags:
       - Experiment Sessions
       requestBody:
@@ -521,7 +521,7 @@ paths:
 
         Retrieve the details of an session. This includes the messages exchanged during the session ordered
         by the creation date.
-      summary: Retrieve Experiment Session
+      summary: Retrieve Chatbot Session
       parameters:
       - in: path
         name: id
@@ -545,7 +545,7 @@ paths:
   /api/sessions/{id}/end_experiment_session/:
     post:
       operationId: session_end
-      summary: End Experiment Session
+      summary: End Chatbot Session
       parameters:
       - in: path
         name: id
@@ -565,7 +565,7 @@ paths:
   /api/sessions/{id}/update_state/:
     patch:
       operationId: session_update_state
-      summary: Update Experiment Session State
+      summary: Update Chatbot Session State
       parameters:
       - in: path
         name: id
