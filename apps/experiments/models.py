@@ -1697,7 +1697,7 @@ class ExperimentSessionQuerySet(models.QuerySet):
             .values("versions")[:1],
             output_field=CharField(),
         )
-        return self.annotate(experiment_versions=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
+        return self.annotate(versions_list=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
 
 
 class ExperimentSessionObjectManager(models.Manager):
@@ -1742,9 +1742,7 @@ class ExperimentSession(BaseTeamModel):
         blank=True,
         help_text="Array of unique experiment version numbers seen by this session",
     )
-    last_activity_at = models.DateTimeField(
-        null=True, blank=True, help_text="Timestamp of the last user interaction"
-    )
+    last_activity_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last user interaction")
 
     class Meta:
         ordering = ["-created_at"]
