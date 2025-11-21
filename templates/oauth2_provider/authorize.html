@@ -13,19 +13,19 @@
             {% endif %}
         {% endfor %}
 
+        <p>{% translate "Application requires the following permissions" %}</p>
+        <ul>
+            {% for scope in scopes_descriptions %}
+                <li>{{ scope }}</li>
+            {% endfor %}
+        </ul>
+
         <div>
             <h4>{% translate "Select your team" %}</h4>
             <p>{% translate "This application will only be able to access data from the selected team." %}</p>
-            {{ form.team }}
-            {{ form.team.errors }}
+            {{ form.team_slug }}
+            {{ form.team_slug.errors }}
         </div>
-
-        <div>
-            <h4>{% translate "Select which APIs to grant access to" %}</h4>
-            {{ form.apis }}
-            {{ form.apis.errors }}
-        </div>
-
 
         <div class="control-group">
             <div class="controls">
