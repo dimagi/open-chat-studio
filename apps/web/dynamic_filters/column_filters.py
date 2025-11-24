@@ -10,9 +10,8 @@ from .base import DATE_RANGE_OPTIONS, TYPE_TIMESTAMP, ChoiceColumnFilter, Column
 
 class ParticipantFilter(StringColumnFilter):
     query_param: str = "participant"
-    column: str = "participant__identifier"
+    columns: list[str] = ["participant__identifier", "participant__name"]
     label: str = "Participant"
-    or_columns: list[str] = ["participant__name"]
 
 
 class ExperimentFilter(ChoiceColumnFilter):
