@@ -245,14 +245,14 @@ jobs:
       run: |
           aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE_DJANGO $ECS_SERVICE_CELERY $ECS_SERVICE_CELERY_BEAT
 
-    - name: Update deployment status (success)
-      if: success()
-      uses: chrnorm/deployment-status@v2
-      with:
-        token: '${{ github.token }}'
-        environment-url: ${{ steps.deployment.outputs.environment_url }}
-        deployment-id: ${{ steps.deployment.outputs.deployment_id }}
-        state: 'success'
+#    - name: Update deployment status (success)
+#      if: success()
+#      uses: chrnorm/deployment-status@v2
+#      with:
+#        token: '${{ github.token }}'
+#        environment-url: ${{ steps.deployment.outputs.environment_url }}
+#        deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+#        state: 'success'
 
 #    - name: Update deployment status (failure)
 #      if: failure()
