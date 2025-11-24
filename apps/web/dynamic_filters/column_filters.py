@@ -12,6 +12,7 @@ class ParticipantFilter(StringColumnFilter):
     query_param: str = "participant"
     column: str = "participant__identifier"
     label: str = "Participant"
+    or_columns: list[str] = ["participant__name"]
 
 
 class ExperimentFilter(ChoiceColumnFilter):
