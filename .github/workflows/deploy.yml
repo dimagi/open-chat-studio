@@ -110,13 +110,13 @@ jobs:
     - name: Build and push
       uses: docker/build-push-action@v6
       with:
-        push: true
         tags: |
           ${{ steps.image-name.outputs.image }}
           ${{ steps.image-name.outputs.image_latest }}
         file: Dockerfile
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true
         build-args: |
           SECRET_KEY=dummy-secret-key-for-build
           DJANGO_ALLOWED_HOSTS=localhost
