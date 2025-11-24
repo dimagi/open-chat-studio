@@ -65,12 +65,15 @@ jobs:
       run: |
         # you can't reference the `env` context when defining other env vars to do it here
         APP_NAME="${{ fromJSON(vars.DEPLOY_APP_NAME)[env.DEPLOY_ENV] }}"
+        AWS_REGION="${{ fromJSON(vars.DEPLOY_AWS_REGION)[env.DEPLOY_ENV] }}"
         echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
+        echo "AWS_REGION=$AWS_REGION" >> "$GITHUB_ENV"
         echo "ECR_REPOSITORY=$APP_NAME-${{ env.DEPLOY_ENV }}-ecr-repo" >> "$GITHUB_ENV"
         echo "ECS_CLUSTER=$APP_NAME-${{ env.DEPLOY_ENV }}-Cluster" >> "$GITHUB_ENV"
         echo "ECS_SERVICE_DJANGO=$APP_NAME-${{ env.DEPLOY_ENV }}-Django" >> "$GITHUB_ENV"
         echo "ECS_SERVICE_CELERY=$APP_NAME-${{ env.DEPLOY_ENV }}-Celery" >> "$GITHUB_ENV"
         echo "ECS_SERVICE_CELERY_BEAT=$APP_NAME-${{ env.DEPLOY_ENV }}-CeleryBeat" >> "$GITHUB_ENV"
+        echo "DJANGO_STACK_NAME=$APP_NAME-${{ env.DEPLOY_ENV }}-$AWS_REGION-django-stack" >> "$GITHUB_ENV"
 
     - name: Create GitHub deployment
       uses: chrnorm/deployment-action@v2
@@ -127,11 +130,11 @@ jobs:
         container-name: web
         image: ${{ steps.image-name.outputs.image }}
 
-    - name: Update ECS task def for Django migrations container
-      id: django-migrations-def
+    - name: Update ECS task def for Migration container
+      id: migration-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.8.1
       with:
-        task-definition: ${{ steps.django-web-def.outputs.task-definition }}
+        task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-Migration
         container-name: migrate
         image: ${{ steps.image-name.outputs.image }}
 
@@ -151,10 +154,68 @@ jobs:
         container-name: celery-beat
         image: ${{ steps.image-name.outputs.image }}
 
+    - name: Get stack outputs for network config
+      id: stack-outputs
+      run: |
+        OUTPUTS=$(aws cloudformation describe-stacks \
+          --stack-name "$DJANGO_STACK_NAME" \
+          --query 'Stacks[0].Outputs' \
+          --output json)
+
+        echo "subnets=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey | endswith("PrivateSubnets")) | .OutputValue')" >> $GITHUB_OUTPUT
+        echo "security_group=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey | endswith("ServiceSecurityGroup")) | .OutputValue')" >> $GITHUB_OUTPUT
+
+    - name: Run migration task
+      id: run-migration
+      run: |
+        # Register task definition with new image
+        TASK_DEF_ARN=$(aws ecs register-task-definition \
+          --cli-input-json file://${{ steps.migration-def.outputs.task-definition }} \
+          --query 'taskDefinition.taskDefinitionArn' \
+          --output text)
+
+        # Run the migration task
+        TASK_ARN=$(aws ecs run-task \
+          --cluster "$ECS_CLUSTER" \
+          --task-definition "$TASK_DEF_ARN" \
+          --launch-type FARGATE \
+          --network-configuration "awsvpcConfiguration={subnets=[${{ steps.stack-outputs.outputs.subnets }}],securityGroups=[${{ steps.stack-outputs.outputs.security_group }}],assignPublicIp=DISABLED}" \
+          --query 'tasks[0].taskArn' \
+          --output text)
+
+        echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
+        echo "Started migration task: $TASK_ARN"
+
+    - name: Wait for migration to complete
+      run: |
+        echo "Waiting for migration task to complete..."
+        aws ecs wait tasks-stopped \
+          --cluster "$ECS_CLUSTER" \
+          --tasks "${{ steps.run-migration.outputs.task_arn }}"
+
+        # Check exit code
+        EXIT_CODE=$(aws ecs describe-tasks \
+          --cluster "$ECS_CLUSTER" \
+          --tasks "${{ steps.run-migration.outputs.task_arn }}" \
+          --query 'tasks[0].containers[0].exitCode' \
+          --output text)
+
+        if [ "$EXIT_CODE" != "0" ]; then
+          echo "Migration failed with exit code: $EXIT_CODE"
+
+          # Get logs for debugging
+          TASK_ID=$(echo "${{ steps.run-migration.outputs.task_arn }}" | cut -d'/' -f3)
+          echo "Check logs in CloudWatch for task: $TASK_ID"
+
+          exit 1
+        fi
+
+        echo "Migration completed successfully"
+
     - name: Deploy Django Web
       uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       with:
-        task-definition: ${{ steps.django-migrations-def.outputs.task-definition }}
+        task-definition: ${{ steps.django-web-def.outputs.task-definition }}
         service: ${{ env.ECS_SERVICE_DJANGO }}
         cluster: ${{ env.ECS_CLUSTER }}
         wait-for-service-stability: false
