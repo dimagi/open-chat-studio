@@ -1,10 +1,7 @@
 import json
 
 import pytest
-from django.contrib.messages.storage.fallback import FallbackStorage
-from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import QueryDict
-from django.test import RequestFactory
 
 from apps.experiments.models import Participant
 from apps.participants.filters import ParticipantFilter
@@ -17,13 +14,6 @@ def _get_querydict(params: dict) -> QueryDict:
     query_dict = QueryDict("", mutable=True)
     query_dict.update(params)
     return query_dict
-
-
-def attach_session_middleware_to_request(request):
-    session_middleware = SessionMiddleware(lambda req: None)
-    session_middleware.process_request(request)
-    request.session.save()
-    request._messages = FallbackStorage(request)
 
 
 @pytest.mark.django_db()
@@ -46,14 +36,10 @@ class TestParticipantFilter:
             "filter_0_operator": Operators.CONTAINS,
             "filter_0_value": "AP",
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         queryset = Participant.objects.filter(team=participants[0].team)
         participant_filter = ParticipantFilter()
-        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), None)
 
         # Should match AP1, AP2, AP3 (identifier contains "AP") AND "AP Smith" (name contains "AP")
         assert filtered.count() == 4
@@ -67,14 +53,10 @@ class TestParticipantFilter:
             "filter_0_operator": Operators.CONTAINS,
             "filter_0_value": "Anderson",
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         queryset = Participant.objects.filter(team=participants[0].team)
         participant_filter = ParticipantFilter()
-        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), None)
 
         # Should match "Bob Anderson"
         assert filtered.count() == 1
@@ -88,14 +70,10 @@ class TestParticipantFilter:
             "filter_0_operator": Operators.DOES_NOT_CONTAIN,
             "filter_0_value": "AP",
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         queryset = Participant.objects.filter(team=participants[0].team)
         participant_filter = ParticipantFilter()
-        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), None)
 
         # Should exclude anyone with "AP" in identifier OR name
         # This excludes AP1, AP2, AP3, and "AP Smith"
@@ -111,14 +89,10 @@ class TestParticipantFilter:
             "filter_0_operator": Operators.STARTS_WITH,
             "filter_0_value": "AP",
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         queryset = Participant.objects.filter(team=participants[0].team)
         participant_filter = ParticipantFilter()
-        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), None)
 
         # Should match AP1, AP2, AP3 (identifier starts with "AP") AND "AP Smith" (name starts with "AP")
         assert filtered.count() == 4
@@ -132,14 +106,10 @@ class TestParticipantFilter:
             "filter_0_operator": Operators.ENDS_WITH,
             "filter_0_value": "Smith",
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         queryset = Participant.objects.filter(team=participants[0].team)
         participant_filter = ParticipantFilter()
-        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), None)
 
         # Should match "AP Smith" (name ends with "Smith")
         assert filtered.count() == 1
@@ -153,14 +123,10 @@ class TestParticipantFilter:
             "filter_0_operator": Operators.ANY_OF,
             "filter_0_value": json.dumps(["AP1", "David Jones", "XYZ123"]),
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         queryset = Participant.objects.filter(team=participants[0].team)
         participant_filter = ParticipantFilter()
-        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = participant_filter.apply(queryset, FilterParams(_get_querydict(params)), None)
 
         # Should match AP1 (identifier), XYZ123 (identifier), and David Jones (name)
         assert filtered.count() == 3
