@@ -101,12 +101,14 @@
       "ui:widget": "select",
       "type": "integer"
     },
-    "collection_index_id": {
-      "default": null,
-      "title": "Collection Index",
+    "collection_index_ids": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Collection Indexes",
+      "type": "array",
       "ui:optionsSource": "collection_index",
-      "ui:widget": "select",
-      "type": "integer"
+      "ui:widget": "searchable_multiselect"
     },
     "max_results": {
       "default": 20,

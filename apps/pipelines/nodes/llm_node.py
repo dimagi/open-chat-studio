@@ -6,7 +6,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt.chat_agent_executor import AgentState, create_react_agent
 
-from apps.chat.agent.tools import get_node_tools
+from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
@@ -132,6 +132,7 @@ def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
         session,
         source_material_id=node.source_material_id,
         collection_id=node.collection_id,
+        collection_index_ids=node.collection_index_ids,
         extra=extra_prompt_context,
         participant_data=state.get("participant_data") or {},
     )
@@ -141,13 +142,61 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     """Get instantiated tools for the given node configuration."""
     tools = get_node_tools(node.django_node, session, tool_callbacks=tool_callbacks)
     tools.extend(node.get_llm_service().attach_built_in_tools(node.built_in_tools, node.tool_config))
-    if node.collection_index_id:
-        collection = Collection.objects.get(id=node.collection_index_id)
-        tools.append(
-            collection.get_search_tool(max_results=node.max_results, generate_citations=node.generate_citations)
-        )
+    if search_tool := _get_search_tool(node):
+        tools.append(search_tool)
 
     if node.disabled_tools:
         # Model builtin tools doesn't have a name attribute and are dicts
         return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
     return tools
+
+
+def _get_search_tool(node):
+    from apps.chat.agent.tools import SearchCollectionByIdTool
+    from apps.service_providers.llm_service.main import OpenAIBuiltinTool
+
+    if not node.collection_index_ids:
+        return None
+
+    collections = list(Collection.objects.filter(id__in=node.collection_index_ids, is_index=True))
+    if not collections:
+        # collections probably deleted
+        return None
+
+    if len(collections) == 1:
+        # Single collection: use the existing single-index search tool
+        collection = collections[0]
+        if collection.is_remote_index:
+            return OpenAIBuiltinTool(
+                type="file_search",
+                vector_store_ids=[collection.openai_vector_store_id],
+                max_num_results=node.max_results,
+            )
+
+        search_config = SearchToolConfig(
+            index_id=collection.id, max_results=node.max_results, generate_citations=node.generate_citations
+        )
+        search_tool = SearchIndexTool(search_config=search_config)
+        return search_tool
+
+    # Multiple collections: check if they're remote or local
+    first_collection = collections[0]
+
+    if first_collection and first_collection.is_remote_index:
+        # All remote: create OpenAI builtin tool with multiple vector stores
+        # We can assume this is true because of the node validation
+
+        vector_store_ids = [collection.openai_vector_store_id for collection in collections]
+        return OpenAIBuiltinTool(
+            type="file_search",
+            vector_store_ids=vector_store_ids,
+            max_num_results=node.max_results,
+        )
+    else:
+        # All local: use the multi-index search tool
+        search_tool = SearchCollectionByIdTool(
+            max_results=node.max_results,
+            generate_citations=node.generate_citations,
+            allowed_collection_ids=node.collection_index_ids,
+        )
+        return search_tool

@@ -364,10 +364,12 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         title="Media",
         json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection),
     )
-    collection_index_id: OptionalInt = Field(
-        None,
-        title="Collection Index",
-        json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection_index),
+    collection_index_ids: list[int] = Field(
+        default_factory=list,
+        title="Collection Indexes",
+        json_schema_extra=UiSchema(
+            widget=Widgets.searchable_multiselect, options_source=OptionsSource.collection_index
+        ),
     )
     max_results: OptionalInt = Field(
         default=20,
@@ -426,8 +428,11 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             "tools": self.tools,
             "media": self.collection_id,
         }
+        # Only require collection_index_summaries variable if multiple indexes are selected
+        if len(self.collection_index_ids) > 1:
+            context["collection_index_summaries"] = self.collection_index_ids
+
         try:
-            # FUTURE TODO: add temp_state and session_state to PromptVars
             known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
             validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
             return self
@@ -446,17 +451,88 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             return []
         return value
 
-    @field_validator("collection_index_id", mode="before")
-    def validate_collection_index_id(cls, value, info: FieldValidationInfo):
+    @field_validator("collection_index_ids", mode="before")
+    def validate_collection_index_ids(cls, value, info: FieldValidationInfo):
         if not value:
-            return value
+            return []
 
-        collection = Collection.objects.get(id=value)
-        if collection.llm_provider_id != info.data.get("llm_provider_id"):
+        # Ensure value is a list
+        if not isinstance(value, list):
+            value = [value]
+
+        try:
+            value = [int(v) for v in value]
+        except (ValueError, TypeError) as e:
             raise PydanticCustomError(
                 "invalid_collection_index",
-                f"The collection index and node must use the same LLM provider ({collection.llm_provider.name})",
+                "Collection index IDs must be integers",
+            ) from e
+
+        # Filter out empty values
+        value = [v for v in value if v is not None]
+        if not value:
+            return []
+
+        # Get llm_provider_id from node data
+        llm_provider_id = info.data.get("llm_provider_id")
+        if not llm_provider_id:
+            # If no LLM provider is set, we can't validate compatibility
+            # This will be caught by other validation if llm_provider_id is required
+            return value
+
+        # Bulk fetch all collections to avoid N+1 queries
+        collections = Collection.objects.in_bulk(value)
+
+        # Check for non-existent collections
+        missing_ids = set(value) - set(collections.keys())
+        if missing_ids:
+            ids_str = ", ".join(str(missing_id) for missing_id in missing_ids)
+            raise PydanticCustomError(
+                "collection_not_found",
+                f"Collection index(s) with ID(s) {ids_str} not found",
             )
+
+        # Validate that all collections are the same type (either all remote or all local)
+        # Only applies when multiple collections are selected
+        if len(collections) > 1:
+            is_remote_flags = [collection.is_remote_index for collection in collections.values()]
+            if not all(is_remote_flags) and any(is_remote_flags):
+                remote_collections = [
+                    f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
+                ]
+                local_collections = [
+                    f"{collection.name}" for cid, collection in collections.items() if not collection.is_remote_index
+                ]
+                raise PydanticCustomError(
+                    "mixed_collection_types",
+                    "All collection indexes must be the same type (either all remote or all local). "
+                    f"Remote collections: {', '.join(remote_collections)}. "
+                    f"Local collections: {', '.join(local_collections)}.",
+                )
+
+            if all(is_remote_flags):
+                # Validate that all remote collections use the same LLM provider as this node
+                incompatible_collections = [
+                    collection.name
+                    for collection in collections.values()
+                    if collection.llm_provider_id != llm_provider_id
+                ]
+                if incompatible_collections:
+                    raise PydanticCustomError(
+                        "invalid_collection_index",
+                        f"All collection indexes must use the same LLM provider as the node. "
+                        f"Incompatible collections: {', '.join(incompatible_collections)}",
+                    )
+            else:
+                # local indexes must have a summary
+                missing_summary = [collection.name for collection in collections.values() if not collection.summary]
+                if missing_summary:
+                    raise PydanticCustomError(
+                        "collections_missing_summary",
+                        "When using multiple collection indexes, the collections must have a summary. "
+                        f"Collections missing summary: {', '.join(missing_summary)}",
+                    )
+
         return value
 
     def _process(self, state: PipelineState) -> PipelineState:
