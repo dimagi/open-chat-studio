@@ -23,10 +23,10 @@ on:
         options:
           - dev
           - prod
-  workflow_run:
-    workflows: [ Lint and Test ]
-    types: [completed]
-    branches: [main]
+#  workflow_run:
+#    workflows: [ Lint and Test ]
+#    types: [completed]
+#    branches: [main]
 
 permissions:
   id-token: write
