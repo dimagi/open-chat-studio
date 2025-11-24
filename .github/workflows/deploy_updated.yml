@@ -226,7 +226,7 @@ jobs:
         fi
 
         echo "Migration completed successfully"
-      ENV:
+      env:
         LOG_GROUP: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-DjangoMigrationLogs
         LOG_STREAM_PREFIX: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-migrate/migrate
 
