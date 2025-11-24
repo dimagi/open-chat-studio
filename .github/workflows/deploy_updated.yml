@@ -22,7 +22,7 @@ on:
         type: choice
         options:
           - dev
-          - prod
+#          - prod
 #  workflow_run:
 #    workflows: [ Lint and Test ]
 #    types: [completed]
@@ -75,14 +75,14 @@ jobs:
         echo "ECS_SERVICE_CELERY_BEAT=$APP_NAME-${{ env.DEPLOY_ENV }}-CeleryBeat" >> "$GITHUB_ENV"
         echo "DJANGO_STACK_NAME=$APP_NAME-${{ env.DEPLOY_ENV }}-$AWS_REGION-django-stack" >> "$GITHUB_ENV"
 
-    - name: Create GitHub deployment
-      uses: chrnorm/deployment-action@v2
-      id: deployment
-      with:
-        token: '${{ github.token }}'
-        environment: "aws-${{ env.DEPLOY_ENV }}"
-        production-environment: ${{ env.DEPLOY_ENV == 'prod' }}
-        description: "Deploying ${{ github.head_ref || github.ref }} to AWS ${{ env.DEPLOY_ENV }}"
+#    - name: Create GitHub deployment
+#      uses: chrnorm/deployment-action@v2
+#      id: deployment
+#      with:
+#        token: '${{ github.token }}'
+#        environment: "aws-${{ env.DEPLOY_ENV }}"
+#        production-environment: ${{ env.DEPLOY_ENV == 'prod' }}
+#        description: "Deploying ${{ github.head_ref || github.ref }} to AWS ${{ env.DEPLOY_ENV }}"
 
 
     - name: configure aws credentials
@@ -249,23 +249,23 @@ jobs:
         deployment-id: ${{ steps.deployment.outputs.deployment_id }}
         state: 'success'
 
-    - name: Update deployment status (failure)
-      if: failure()
-      uses: chrnorm/deployment-status@v2
-      with:
-        token: '${{ github.token }}'
-        environment-url: ${{ steps.deployment.outputs.environment_url }}
-        deployment-id: ${{ steps.deployment.outputs.deployment_id }}
-        state: 'failure'
-
-    - name: Create Sentry release
-      if: success()
-      uses: getsentry/action-release@v3
-      env:
-        SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-        SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-        SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
-      with:
-        environment: "${{ env.DEPLOY_ENV == 'prod' && 'production' || 'development' }}"
-        ignore_empty: true
-        ignore_missing: true
+#    - name: Update deployment status (failure)
+#      if: failure()
+#      uses: chrnorm/deployment-status@v2
+#      with:
+#        token: '${{ github.token }}'
+#        environment-url: ${{ steps.deployment.outputs.environment_url }}
+#        deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+#        state: 'failure'
+#
+#    - name: Create Sentry release
+#      if: success()
+#      uses: getsentry/action-release@v3
+#      env:
+#        SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+#        SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+#        SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+#      with:
+#        environment: "${{ env.DEPLOY_ENV == 'prod' && 'production' || 'development' }}"
+#        ignore_empty: true
+#        ignore_missing: true
