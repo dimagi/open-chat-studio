@@ -170,28 +170,26 @@ class ChoiceColumnFilter(ColumnFilter):
 
 class StringColumnFilter(ColumnFilter):
     type: str = TYPE_STRING
-    or_columns: list[str] = Field(default_factory=list)
+    columns: list[str] = Field(default_factory=list)
 
     def _apply_with_lookup(self, queryset, lookup, value):
         """Apply filter with optional OR logic across multiple columns.
         queryset: The queryset to filter
-        lookup: The Django lookup to use (ex., 'icontains', 'istartswith'), or None for exact match
+        lookup: The Django lookup to use (e.g., 'icontains', 'istartswith'), or None for exact match
         value: The value to filter by
         """
-        if not self.or_columns:
-            # Original single-column behavior
-            filter_key = f"{self.column}__{lookup}" if lookup else self.column
-            return queryset.filter(**{filter_key: value})
-
-        # OR logic across self.column + or_columns
         from django.db.models import Q
 
-        filter_key = f"{self.column}__{lookup}" if lookup else self.column
-        q = Q(**{filter_key: value})
-        for col in self.or_columns:
-            col_key = f"{col}__{lookup}" if lookup else col
-            q |= Q(**{col_key: value})
-        return queryset.filter(q)
+        # Build Q object for OR logic
+        q = None
+        for col in self.columns:
+            filter_key = f"{col}__{lookup}" if lookup else col
+            if q is None:
+                q = Q(**{filter_key: value})
+            else:
+                q |= Q(**{filter_key: value})
+
+        return queryset.filter(q) if q else queryset
 
     def apply_equals(self, queryset, value, timezone=None) -> QuerySet:
         return self._apply_with_lookup(queryset, None, value)
@@ -200,15 +198,17 @@ class StringColumnFilter(ColumnFilter):
         return self._apply_with_lookup(queryset, "icontains", value)
 
     def apply_does_not_contain(self, queryset, value, timezone=None) -> QuerySet:
-        if not self.or_columns:
-            return queryset.exclude(**{f"{self.column}__icontains": value})
-
         from django.db.models import Q
 
-        q = Q(**{f"{self.column}__icontains": value})
-        for col in self.or_columns:
-            q |= Q(**{f"{col}__icontains": value})
-        return queryset.exclude(q)
+        # For exclusion: exclude if it matches ANY column
+        q = None
+        for col in self.columns:
+            if q is None:
+                q = Q(**{f"{col}__icontains": value})
+            else:
+                q |= Q(**{f"{col}__icontains": value})
+
+        return queryset.exclude(q) if q else queryset
 
     def apply_starts_with(self, queryset, value, timezone=None) -> QuerySet:
         return self._apply_with_lookup(queryset, "istartswith", value)
@@ -218,13 +218,15 @@ class StringColumnFilter(ColumnFilter):
 
     def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
         if values := self.values_list(value):
-            if not self.or_columns:
-                return queryset.filter(**{f"{self.column}__in": values})
-
             from django.db.models import Q
 
-            q = Q(**{f"{self.column}__in": values})
-            for col in self.or_columns:
-                q |= Q(**{f"{col}__in": values})
-            return queryset.filter(q)
+            # OR logic across multiple columns
+            q = None
+            for col in self.columns:
+                if q is None:
+                    q = Q(**{f"{col}__in": values})
+                else:
+                    q |= Q(**{f"{col}__in": values})
+
+            return queryset.filter(q) if q else queryset
         return queryset
