@@ -210,21 +210,46 @@ jobs:
         # Output migration logs
         LOG_STREAM="${LOG_STREAM_PREFIX}/${TASK_ID}"
         echo "Fetching migration logs from CloudWatch..."
-        echo "----------------------------------------"
-        aws logs get-log-events \
+
+        LOGS=$(aws logs get-log-events \
           --log-group-name "$LOG_GROUP" \
           --log-stream-name "$LOG_STREAM" \
           --limit 100 \
           --query 'events[*].message' \
-          --output json || echo "Could not fetch logs"
+          --output json 2>&1) || LOGS="Could not fetch logs"
+
+        # Output to console
         echo "----------------------------------------"
+        echo "$LOGS"
+        echo "----------------------------------------"
+
+        # Add to job summary
+        {
+          echo "## Migration Logs"
+          echo ""
+          echo "**Task ID:** \`$TASK_ID\`"
+          echo "**Log Group:** \`$LOG_GROUP\`"
+          echo "**Log Stream:** \`$LOG_STREAM\`"
+          echo ""
+          echo "<details>"
+          echo "<summary>View Logs</summary>"
+          echo ""
+          echo "\`\`\`json"
+          echo "$LOGS"
+          echo "\`\`\`"
+          echo "</details>"
+        } >> $GITHUB_STEP_SUMMARY
 
         if [ "$EXIT_CODE" != "0" ]; then
           echo "Migration failed with exit code: $EXIT_CODE"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "❌ **Migration failed with exit code: $EXIT_CODE**" >> $GITHUB_STEP_SUMMARY
           exit 1
         fi
 
         echo "Migration completed successfully"
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Migration completed successfully**" >> $GITHUB_STEP_SUMMARY
       env:
         LOG_GROUP: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-DjangoMigrationLogs
         LOG_STREAM_PREFIX: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-migrate/migrate
