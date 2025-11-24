@@ -191,7 +191,7 @@ jobs:
         echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
         echo "Started migration task: $TASK_ARN"
 
-    - name: Wait for migration to complete
+    - name: Wait for migration & output logs
       run: |
         echo "Waiting for migration task to complete..."
         aws ecs wait tasks-stopped \
