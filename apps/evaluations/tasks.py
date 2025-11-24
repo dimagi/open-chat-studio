@@ -29,8 +29,11 @@ from apps.evaluations.models import (
     Evaluator,
 )
 from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession
+
+# TODO: Update Participant import
 from apps.files.models import File
+from apps.participants.models import Participant
 from apps.teams.utils import current_team
 
 logger = logging.getLogger("ocs.evaluations")

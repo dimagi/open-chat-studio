@@ -8,7 +8,8 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.experiments.models import ExperimentSession, Participant, SessionStatus
+from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.participants.models import Participant
 from apps.web.meta import absolute_url
 
 STATUSES_FOR_COMPLETE_CHATS = [SessionStatus.PENDING_REVIEW, SessionStatus.COMPLETE, SessionStatus.UNKNOWN]

@@ -8,7 +8,7 @@ from django.db.models.functions import Coalesce, Length, TruncDate
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
-from apps.experiments.models import Participant
+from apps.participants.models import Participant
 
 
 def get_message_stats(start: datetime, end: datetime):

@@ -11,9 +11,12 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
-from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.experiments.models import Experiment
+
+# TODO: Update Participant import
 from apps.filters.models import FilterSet
 from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm
+from apps.participants.models import Participant, ParticipantData
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 

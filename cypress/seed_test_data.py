@@ -28,8 +28,9 @@ import pathlib
 from apps.assistants.models import OpenAiAssistant
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.documents.models import Collection
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File, FilePurpose
+from apps.participants.models import Participant
 from apps.pipelines.models import Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.models import Team

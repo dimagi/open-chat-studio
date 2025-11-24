@@ -1,6 +1,6 @@
 import pytest
 
-from apps.experiments.models import Participant
+from apps.participants.models import Participant
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.nodes import RenderTemplate
 from apps.utils.factories.experiment import ExperimentSessionFactory

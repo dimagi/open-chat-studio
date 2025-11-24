@@ -27,7 +27,7 @@ from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
+from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
 from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
@@ -40,6 +40,7 @@ from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
+from apps.participants.models import Participant
 from apps.pipelines.views import (
     _pipeline_node_default_values,
     _pipeline_node_parameter_values,

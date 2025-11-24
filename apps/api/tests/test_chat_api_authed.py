@@ -9,7 +9,10 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.experiments.models import ExperimentSession, Participant, ParticipantData
+from apps.experiments.models import ExperimentSession
+from apps.participants.models import Participant, ParticipantData
+
+# TODO: Update Participant import
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 

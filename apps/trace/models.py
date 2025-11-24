@@ -29,7 +29,7 @@ class Trace(models.Model):
         "experiments.ExperimentSession", on_delete=models.SET_NULL, null=True, related_name="traces"
     )
     participant = models.ForeignKey(
-        "experiments.Participant", on_delete=models.SET_NULL, null=True, related_name="traces"
+        "participants.Participant", on_delete=models.SET_NULL, null=True, related_name="traces"
     )
     input_message = models.ForeignKey(
         "chat.ChatMessage", on_delete=models.SET_NULL, null=True, blank=True, related_name="input_message_trace"

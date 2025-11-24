@@ -21,7 +21,8 @@ class SearchableModel:
 
 
 def get_searchable_models():
-    from apps.experiments.models import Experiment, ExperimentSession, Participant
+    from apps.experiments.models import Experiment, ExperimentSession
+    from apps.participants.models import Participant
 
     return [
         SearchableModel(Experiment, "public_id"),

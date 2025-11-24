@@ -18,7 +18,7 @@ def assign_model_to_team_migration(model_name, delete_if_no_team=False):
 def migrate_participants(apps, schema_editor):
     """Migrate participants to the default team, if they don't already exist there.
     If they do exist, migrate their sessions to the existing participant."""
-    Participant = apps.get_model("experiments.Participant")
+    Participant = apps.get_model("participants.Participant")
     ExperimentSession = apps.get_model("experiments.ExperimentSession")
     default_team = _get_default_team(apps)
     if default_team and Participant.objects.all().exists():

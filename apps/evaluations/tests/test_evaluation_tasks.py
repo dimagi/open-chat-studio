@@ -5,7 +5,10 @@ import pytest
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.evaluations.models import EvaluationResult, ExperimentVersionSelection
 from apps.evaluations.tasks import evaluate_single_message_task, run_bot_generation
-from apps.experiments.models import ExperimentSession, Participant
+from apps.experiments.models import ExperimentSession
+from apps.participants.models import Participant
+
+# TODO: Update Participant import
 from apps.pipelines.tests.utils import create_pipeline_model, end_node, render_template_node, start_node
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,

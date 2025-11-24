@@ -16,7 +16,9 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_commcare_connect_message
 from apps.chat.channels import CommCareConnectChannel
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ParticipantData
+from apps.participants.models import ParticipantData
+
+# TODO: Update Participant import
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
 

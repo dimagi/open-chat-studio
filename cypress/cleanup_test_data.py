@@ -24,8 +24,9 @@ from field_audit.models import AuditAction  # noqa: E402
 from apps.assistants.models import OpenAiAssistant  # noqa: E402
 from apps.chat.models import Chat  # noqa: E402
 from apps.documents.models import Collection  # noqa: E402
-from apps.experiments.models import Experiment, Participant  # noqa: E402
+from apps.experiments.models import Experiment  # noqa: E402
 from apps.files.models import File  # noqa: E402
+from apps.participants.models import Participant  # noqa: E402
 from apps.pipelines.models import Pipeline  # noqa: E402
 from apps.service_providers.models import LlmProvider  # noqa: E402
 from apps.teams.models import Team  # noqa: E402

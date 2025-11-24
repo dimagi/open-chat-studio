@@ -2,7 +2,10 @@ import logging
 
 from django import forms
 
-from apps.experiments.models import Experiment, Participant
+from apps.experiments.models import Experiment
+from apps.participants.models import Participant
+
+# TODO: Update Participant import
 
 logger = logging.getLogger("ocs.participants")
 

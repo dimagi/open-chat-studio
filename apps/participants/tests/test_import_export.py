@@ -7,8 +7,8 @@ from django.db import IntegrityError
 from django.http import HttpResponse
 
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Participant, ParticipantData
 from apps.participants.import_export import export_participant_data_to_response, process_participant_import
+from apps.participants.models import Participant, ParticipantData
 
 
 @pytest.fixture()
@@ -236,7 +236,7 @@ user@example.com,web,User"""
         csv_file = io.BytesIO(csv_content.encode("utf-8"))
 
         # Mock Participant.objects.update_or_create to raise an exception
-        with patch("apps.experiments.models.Participant.objects.update_or_create") as mock_create:
+        with patch("apps.participants.models.Participant.objects.update_or_create") as mock_create:
             mock_create.side_effect = IntegrityError("Database error")
 
             result = process_participant_import(csv_file, None, team_with_users)

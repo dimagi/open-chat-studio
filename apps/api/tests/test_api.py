@@ -15,7 +15,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import ExperimentSession, Participant, ParticipantData, SessionStatus
+from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.participants.models import Participant, ParticipantData
+
+# TODO: Update Participant import
 from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory

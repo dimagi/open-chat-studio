@@ -5,7 +5,10 @@ from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
-from apps.experiments.models import ExperimentSession, Participant
+from apps.experiments.models import ExperimentSession
+from apps.participants.models import Participant
+
+# TODO: Update Participant import
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory

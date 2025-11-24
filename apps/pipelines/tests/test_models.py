@@ -6,7 +6,10 @@ import pytest
 from apps.channels.models import ExperimentChannel
 from apps.chat.bots import PipelineTestBot
 from apps.events.models import EventActionType
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession
+from apps.participants.models import Participant
+
+# TODO: Update Participant import
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 from apps.pipelines.tests.utils import (
     boolean_node,

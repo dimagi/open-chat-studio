@@ -13,8 +13,10 @@ from django.utils import timezone
 from apps.annotations.models import CustomTaggedItem, TagCategories
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession
+from apps.participants.models import Participant
 
+# TODO: Update Participant import
 from ..trace.models import Trace
 from .models import DashboardCache
 

@@ -14,7 +14,10 @@ from apps.chatbots.views import (
     chatbot_session_pagination_view,
     home,
 )
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession
+from apps.participants.models import Participant
+
+# TODO: Update Participant import
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
 

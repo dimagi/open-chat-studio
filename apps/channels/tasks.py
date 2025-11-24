@@ -20,7 +20,10 @@ from apps.chat.channels import (
     WhatsappChannel,
 )
 from apps.chat.models import ChatMessage
-from apps.experiments.models import ExperimentSession, ParticipantData
+from apps.experiments.models import ExperimentSession
+from apps.participants.models import ParticipantData
+
+# TODO: Update Participant import
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.taskbadger import update_taskbadger_data
 

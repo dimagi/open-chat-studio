@@ -5,7 +5,9 @@ import json
 from django.db import transaction
 from django.http import HttpResponse
 
-from apps.experiments.models import Participant, ParticipantData
+from apps.participants.models import Participant, ParticipantData
+
+# TODO: Update Participant import
 
 
 def process_participant_import(csv_file, experiment, team):

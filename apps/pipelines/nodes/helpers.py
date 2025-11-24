@@ -4,7 +4,10 @@ from django.db import transaction
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat
-from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Participant
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession
+from apps.participants.models import Participant
+
+# TODO: Update Participant import
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser

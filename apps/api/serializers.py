@@ -8,8 +8,11 @@ from taggit.serializers import TaggitSerializer, TagListSerializerField
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession
+
+# TODO: Update Participant import
 from apps.files.models import File
+from apps.participants.models import Participant
 from apps.teams.models import Team
 
 

@@ -4,7 +4,7 @@ import pytest
 from django.http import QueryDict
 from django.urls import reverse
 
-from apps.experiments.models import ParticipantData
+from apps.participants.models import ParticipantData
 from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
 
 

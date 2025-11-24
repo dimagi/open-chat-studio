@@ -5,7 +5,10 @@ from django.utils import timezone
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession
+from apps.participants.models import Participant
+
+# TODO: Update Participant import
 from apps.utils.factories.team import MembershipFactory, TeamFactory, get_test_user_groups
 from apps.utils.factories.user import UserFactory
 

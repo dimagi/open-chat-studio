@@ -31,8 +31,11 @@ from apps.channels.serializers import (
     CommCareConnectMessageSerializer,
 )
 from apps.channels.utils import validate_platform_availability
-from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.experiments.models import Experiment, ExperimentSession
+
+# TODO: Update Participant import
 from apps.experiments.views.utils import get_channels_context
+from apps.participants.models import ParticipantData
 from apps.teams.decorators import login_and_team_required
 from apps.web.waf import WafRule, waf_allow
 

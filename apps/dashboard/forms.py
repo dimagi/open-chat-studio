@@ -6,7 +6,10 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Experiment, Participant
+from apps.experiments.models import Experiment
+from apps.participants.models import Participant
+
+# TODO: Update Participant import
 
 
 class DashboardFilterForm(forms.Form):

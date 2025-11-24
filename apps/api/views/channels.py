@@ -18,7 +18,8 @@ from apps.api.permissions import verify_hmac
 from apps.api.serializers import TriggerBotMessageRequest
 from apps.api.tasks import trigger_bot_message_task
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.experiments.models import Experiment
+from apps.participants.models import Participant, ParticipantData
 
 connect_logger = logging.getLogger("api.connect_channel")
 

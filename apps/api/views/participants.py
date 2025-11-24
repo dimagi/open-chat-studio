@@ -10,7 +10,8 @@ from apps.api.serializers import ParticipantDataUpdateRequest
 from apps.api.tasks import setup_connect_channels_for_bots
 from apps.channels.models import ChannelPlatform
 from apps.events.models import ScheduledMessage, TimePeriod
-from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.experiments.models import Experiment
+from apps.participants.models import Participant, ParticipantData
 
 
 @extend_schema(

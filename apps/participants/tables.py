@@ -1,8 +1,8 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
-from apps.experiments.models import Participant
 from apps.generics import actions
+from apps.participants.models import Participant
 
 
 class ParticipantTable(tables.Table):

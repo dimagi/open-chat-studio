@@ -6,7 +6,8 @@ from django.db.models import Subquery
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase
-from apps.experiments.models import Experiment, ParticipantData
+from apps.experiments.models import Experiment
+from apps.participants.models import ParticipantData
 from apps.service_providers.tracing import TraceInfo
 from apps.teams.utils import current_team
 

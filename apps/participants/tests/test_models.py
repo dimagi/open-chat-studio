@@ -1,7 +1,7 @@
 import pytest
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ParticipantData
+from apps.participants.models import ParticipantData
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 
 

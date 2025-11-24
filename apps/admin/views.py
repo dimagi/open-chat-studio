@@ -19,7 +19,7 @@ from apps.admin.forms import DateRangeForm, DateRanges, FlagUpdateForm, OcsConfi
 from apps.admin.models import OcsConfiguration
 from apps.admin.queries import get_message_stats, get_participant_stats, get_whatsapp_numbers, usage_to_csv
 from apps.admin.serializers import StatsSerializer
-from apps.experiments.models import Participant
+from apps.participants.models import Participant
 from apps.teams.flags import get_all_flag_info
 from apps.teams.models import Flag, Team
 

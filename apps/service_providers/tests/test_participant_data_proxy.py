@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.experiments.models import Participant
+from apps.participants.models import Participant
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 

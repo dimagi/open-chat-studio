@@ -26,10 +26,11 @@ from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ApiChannel
 from apps.chat.models import Chat, ChatAttachment
-from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.models import File
+from apps.participants.models import Participant, ParticipantData
 
 AUTH_CLASSES = [SessionAuthentication]
 

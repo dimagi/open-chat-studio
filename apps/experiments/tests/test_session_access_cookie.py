@@ -4,7 +4,7 @@ from django.core import signing
 from django.urls import reverse
 
 from apps.experiments.decorators import CHAT_SESSION_ACCESS_COOKIE, CHAT_SESSION_ACCESS_SALT
-from apps.experiments.models import Participant
+from apps.participants.models import Participant
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 

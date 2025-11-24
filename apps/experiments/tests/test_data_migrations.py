@@ -1,7 +1,10 @@
 import pytest
 
 from apps.experiments.migration_utils import reconcile_connect_participants
-from apps.experiments.models import ExperimentSession, Participant, ParticipantData
+from apps.experiments.models import ExperimentSession
+from apps.participants.models import Participant, ParticipantData
+
+# TODO: Update Participant import
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 
