@@ -208,9 +208,36 @@ jobs:
         if [ "$EXIT_CODE" != "0" ]; then
           echo "Migration failed with exit code: $EXIT_CODE"
 
-          # Get logs for debugging
+          # Get task details for log configuration
           TASK_ID=$(echo "${{ steps.run-migration.outputs.task_arn }}" | cut -d'/' -f3)
-          echo "Check logs in CloudWatch for task: $TASK_ID"
+
+          # Get log configuration from task definition
+          TASK_DETAILS=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.run-migration.outputs.task_arn }}" \
+            --query 'tasks[0]' \
+            --output json)
+
+          LOG_GROUP=$(echo "$TASK_DETAILS" | jq -r '.containers[0].logConfiguration.options."awslogs-group" // empty')
+          LOG_STREAM_PREFIX=$(echo "$TASK_DETAILS" | jq -r '.containers[0].logConfiguration.options."awslogs-stream-prefix" // empty')
+          CONTAINER_NAME=$(echo "$TASK_DETAILS" | jq -r '.containers[0].name')
+
+          if [ -n "$LOG_GROUP" ]; then
+            LOG_STREAM="${LOG_STREAM_PREFIX}/${CONTAINER_NAME}/${TASK_ID}"
+            echo "Fetching logs from CloudWatch..."
+            echo "Log group: $LOG_GROUP"
+            echo "Log stream: $LOG_STREAM"
+            echo "----------------------------------------"
+            aws logs get-log-events \
+              --log-group-name "$LOG_GROUP" \
+              --log-stream-name "$LOG_STREAM" \
+              --limit 100 \
+              --query 'events[*].message' \
+              --output json || echo "Could not fetch logs"
+            echo "----------------------------------------"
+          else
+            echo "Could not determine log configuration. Check CloudWatch for task: $TASK_ID"
+          fi
 
           exit 1
         fi
