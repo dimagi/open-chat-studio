@@ -156,13 +156,20 @@ jobs:
     - name: Get stack outputs for network config
       id: stack-outputs
       run: |
+        set -e
         OUTPUTS=$(aws cloudformation describe-stacks \
           --stack-name "$DJANGO_STACK_NAME" \
           --query 'Stacks[0].Outputs' \
-          --output json)
+          --output json) || { echo "Failed to retrieve CloudFormation stack outputs"; exit 1; }
 
-        echo "subnets=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey | endswith("PrivateSubnets")) | .OutputValue')" >> $GITHUB_OUTPUT
-        echo "security_group=$(echo $OUTPUTS | jq -r '.[] | select(.OutputKey | endswith("ServiceSecurityGroup")) | .OutputValue')" >> $GITHUB_OUTPUT
+        SUBNETS=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey | endswith("PrivateSubnets")) | .OutputValue')
+        SG=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey | endswith("ServiceSecurityGroup")) | .OutputValue')
+        
+        [[ -z "$SUBNETS" ]] && { echo "Error: Could not find subnets in stack outputs"; exit 1; }
+        [[ -z "$SG" ]] && { echo "Error: Could not find security group in stack outputs"; exit 1; }
+        
+        echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
+        echo "security_group=$SG" >> $GITHUB_OUTPUT
 
     - name: Run migration task
       id: run-migration
