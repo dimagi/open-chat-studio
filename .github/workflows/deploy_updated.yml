@@ -169,13 +169,15 @@ jobs:
     - name: Run migration task
       id: run-migration
       run: |
-        # Register task definition with new image (strip metadata fields that cause issues)
-        TASK_DEF_ARN=$(cat ${{ steps.migration-def.outputs.task-definition }} | \
-          jq 'del(.tags, .registeredAt, .registeredBy, .taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities)' | \
-          aws ecs register-task-definition \
-            --cli-input-json file:///dev/stdin \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
+        # Strip metadata fields that cause issues when re-registering
+        jq 'del(.tags, .registeredAt, .registeredBy, .taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities)' \
+          ${{ steps.migration-def.outputs.task-definition }} > /tmp/migration-task-def.json
+
+        # Register task definition with new image
+        TASK_DEF_ARN=$(aws ecs register-task-definition \
+          --cli-input-json file:///tmp/migration-task-def.json \
+          --query 'taskDefinition.taskDefinitionArn' \
+          --output text)
 
         # Run the migration task
         TASK_ARN=$(aws ecs run-task \
