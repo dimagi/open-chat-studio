@@ -71,7 +71,11 @@ class Migration(migrations.Migration):
                     bases=(models.Model, apps.utils.models.VersioningMixin),
                 ),
             ],
-            # No database operations needed - tables already exist
+            # No database operations needed for forward migration - tables already exist
+            # For reverse, also no database operations - we just update Django's state
             database_operations=[],
         ),
     ]
+    
+    # Note: This migration is reversible but requires coordination with experiments.0121
+    # Rolling back will move the model definitions back to experiments app without touching the database
