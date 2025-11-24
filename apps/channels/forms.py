@@ -8,13 +8,14 @@ import phonenumbers
 from django import forms
 from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.utils import validate_domain_or_wildcard, validate_platform_availability
+from apps.channels.utils import ALL_DOMAINS, validate_domain_or_wildcard, validate_platform_availability
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
@@ -557,6 +558,9 @@ class WidgetParams(forms.Widget):
 
 
 class EmbeddedWidgetChannelForm(ExtraFormBase):
+    allow_all_domains = forms.BooleanField(
+        label="Allow all domains", required=False, help_text="Allow access from any domain."
+    )
     allowed_domains = SimpleArrayField(
         forms.CharField(
             max_length=100,
@@ -583,9 +587,13 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         if self.channel:
-            self.initial["allowed_domains"] = self.channel.extra_data.get("allowed_domains", [])
+            allowed_domains = self.channel.extra_data.get("allowed_domains", [])
+            self.initial["allowed_domains"] = [domain for domain in allowed_domains if domain != ALL_DOMAINS]
+            if not self.is_bound:
+                # only set this if the form is not bound to avoid overriding the value from request.POST
+                self.initial["allow_all_domains"] = any(domain == ALL_DOMAINS for domain in allowed_domains)
+
             widget_token = self.channel.extra_data.get("widget_token")
             if widget_token:
                 self.initial["widget_token"] = widget_token
@@ -593,9 +601,25 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
                     experiment=self.channel.experiment, widget_token=widget_token
                 )
 
+        self.form_attrs = {
+            "x-data": json.dumps(
+                {
+                    "allowAllDomains": self.initial.get("allow_all_domains", False),
+                }
+            )
+        }
+        self.fields["allow_all_domains"].widget.attrs["x-model.boolean"] = "allowAllDomains"
+        self.fields["allowed_domains"].widget.attrs[":disabled"] = "allowAllDomains === true"
+
     def clean(self):
         """Generate or preserve the widget token"""
         cleaned_data = super().clean()
+
+        allow_all_domains = cleaned_data.pop("allow_all_domains", False)
+        if not allow_all_domains and not cleaned_data.get("allowed_domains"):
+            raise ValidationError(
+                {"allowed_domains": "You must specify at least one domain or select 'Allow all domains'."}
+            )
 
         # If editing existing channel, preserve the token
         if self.channel and self.channel.extra_data.get("widget_token"):
@@ -603,6 +627,9 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         else:
             # Generate token here so it's available when check_usage_by_another_experiment is called
             cleaned_data["widget_token"] = secrets.token_urlsafe(24)
+
+        if allow_all_domains:
+            cleaned_data["allowed_domains"] = [ALL_DOMAINS]
 
         return cleaned_data
 

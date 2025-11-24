@@ -1,3 +1,4 @@
+import base64
 import logging
 from functools import cached_property
 from typing import Literal
@@ -63,6 +64,10 @@ class Attachment(BaseModel):
 
     def read_text(self):
         return self.document.get_contents_as_string()
+
+    def read_base64(self):
+        data = self.read_bytes()
+        return base64.b64encode(data).decode("utf-8")
 
 
 class BaseMessage(BaseModel):

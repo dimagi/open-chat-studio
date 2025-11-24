@@ -11,12 +11,14 @@ class PromptTemplateContext:
         session,
         source_material_id: int = None,
         collection_id: int = None,
+        collection_index_ids: list[int] = None,
         extra: dict = None,
         participant_data: dict = None,
     ):
         self.session = session
         self.source_material_id = source_material_id
         self.collection_id = collection_id
+        self.collection_index_ids = collection_index_ids or []
         self.extra = extra or {}
         self.context_cache = {}
         if participant_data is None:
@@ -30,6 +32,7 @@ class PromptTemplateContext:
             "participant_data": self.get_participant_data,
             "current_datetime": self.get_current_datetime,
             "media": self.get_media_summaries,
+            "collection_index_summaries": self.get_collection_index_summaries,
         }
 
     def get_context(self, variables: list[str]) -> dict:
@@ -77,6 +80,25 @@ class PromptTemplateContext:
             )
         except Collection.DoesNotExist:
             return ""
+
+    def get_collection_index_summaries(self):
+        """
+        Example output:
+        Collection Index (id=1, name=Product collection): This is a collection about product documentation
+        Collection Index (id=2, name=FAQ): Customer support FAQ database
+        """
+        from apps.documents.models import Collection
+
+        if not self.collection_index_ids:
+            return ""
+
+        collections = Collection.objects.filter(id__in=self.collection_index_ids).values_list("id", "name", "summary")
+        return "\n".join(
+            [
+                f"Collection Index (id={id}, name={name}): {summary}"
+                for id, name, summary in collections
+            ]
+        )
 
     def get_participant_data(self):
         data = self.participant_data_proxy.get() or {}

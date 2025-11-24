@@ -93,7 +93,7 @@ def single_collection_home(request, team_slug: str, pk: int):
         "file_search_supported_file_types": settings.SUPPORTED_FILE_TYPES["file_search"],
         "max_summary_length": settings.MAX_SUMMARY_LENGTH,
         "max_files_per_collection": settings.MAX_FILES_PER_COLLECTION,
-        "files_remaining": settings.MAX_FILES_PER_COLLECTION - collection_files_count,
+        "max_files": settings.MAX_FILES_PER_COLLECTION,
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
         "document_source_types": list(SourceType),
         "read_only": collection.is_a_version,

@@ -15,6 +15,7 @@ class CollectionForm(forms.ModelForm):
         model = Collection
         fields = [
             "name",
+            "summary",
             "is_index",
             "llm_provider",
             "embedding_provider_model",
@@ -23,6 +24,7 @@ class CollectionForm(forms.ModelForm):
         labels = {
             "is_index": "Create file index",
             "is_remote_index": "Use the provider hosted index",
+            "summary": "Summary for LLM",
         }
         help_texts = {
             "is_index": "If checked, the files will be indexed and searchable using RAG",

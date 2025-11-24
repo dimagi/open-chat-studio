@@ -2,7 +2,7 @@
 {% if team %}
   {% if request.team_membership %}
     <li>
-      <a href="{% url 'single_team:manage_team' team.slug %}">
+      <a data-cy="nav-team-settings" href="{% url 'single_team:manage_team' team.slug %}">
         <i class="fa fa-gear"></i>
         {% translate "Team Settings" %}
       </a>
@@ -25,14 +25,14 @@
 {% endif %}
 {% if request.user.is_authenticated %}
   <li>
-    <a href="{% url 'teams:create_team' %}">
+    <a data-cy="nav-add-team" href="{% url 'teams:create_team' %}">
       <i class="fa fa-plus"></i>
       {% translate "Add Team" %}
     </a>
   </li>
 {% endif %}
  <li>
-   <a href="{{ project_meta.DOCS_URL }}" target="_blank">
+   <a data-cy="nav-docs" href="{{ project_meta.DOCS_URL }}" target="_blank">
     <i class="fa-solid fa-circle-question"></i>
     {% translate "Docs" %}
    </a>

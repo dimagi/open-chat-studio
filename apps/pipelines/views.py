@@ -36,7 +36,6 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.web.waf import WafRule, waf_allow
 
-from ..experiments.helpers import update_experiment_name_by_pipeline_id
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
 from ..utils.prompt import PromptVars
@@ -109,6 +108,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
                 include_versions=pipeline.is_a_version,
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
+            "allow_edit_name": True,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
             "read_only": pipeline.is_a_version,
             **llm_model_parameter_context(),
@@ -155,9 +155,11 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, sy
     source_materials = SourceMaterial.objects.filter(**common_filters).values("id", "topic").all()
     assistants = OpenAiAssistant.objects.filter(**common_filters).values("id", "name").all()
     collections = Collection.objects.filter(**common_filters).filter(is_index=False).values("id", "name").all()
-    # Until OCS fully supports RAG, we can only use remote indexes
     collection_indexes = (
-        Collection.objects.filter(**common_filters).filter(team=team, is_index=True).values("id", "name").all()
+        Collection.objects.filter(**common_filters)
+        .filter(team=team, is_index=True)
+        .values("id", "name", "is_remote_index")
+        .all()
     )
 
     def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):
@@ -219,11 +221,10 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, sy
             ]
         ),
         OptionsSource.collection_index: (
-            [_option("", "Select a Collection Index")]
-            + [
+            [
                 _option(
                     value=index["id"],
-                    label=index["name"],
+                    label=f"{index['name']} ({'Remote' if index['is_remote_index'] else 'Local'})",
                     edit_url=reverse(
                         "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": index["id"]}
                     ),
@@ -321,8 +322,6 @@ def pipeline_data(request, team_slug: str, pk: int):
             pipeline.save()
             pipeline.update_nodes_from_data()
             pipeline.refresh_from_db(fields=["node_set"])
-            if getattr(data, "experiment_name", None):
-                update_experiment_name_by_pipeline_id(pk, data.experiment_name)
         return JsonResponse({"data": pipeline.flow_data, "errors": pipeline.validate()})
 
     try:
