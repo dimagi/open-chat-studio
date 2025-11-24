@@ -11,7 +11,7 @@
 
 # Note: The names of repository, cluster, services match what is configured in https://github.com/dimagi/ocs-deploy
 
-name: Deploy to Amazon ECS
+name: Deploy to Amazon ECS (separate migrations)
 
 on:
   workflow_dispatch:
