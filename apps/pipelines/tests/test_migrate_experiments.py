@@ -1,8 +1,10 @@
 import pytest
 
-from apps.chat.tests.test_routing import _make_experiment_with_routing
-from apps.experiments.models import ExperimentRoute
+from apps.experiments.models import ExperimentRoute, ExperimentRouteType
 from apps.pipelines.helper import convert_non_pipeline_experiment_to_pipeline
+from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.team import TeamFactory
 
 
 @pytest.mark.django_db()
@@ -26,3 +28,33 @@ def test_migrate_experiment_with_children(assistant_children):
     routes = ExperimentRoute.objects.get_all().select_related("child").filter(parent=experiment)
     assert all(route.is_archived for route in routes)
     assert all(route.child.is_archived for route in routes)
+
+
+def _make_experiment_with_routing(with_default=True, assistant_children=False, with_terminal=False):
+    team = TeamFactory()
+    experiments = ExperimentFactory.create_batch(5 if with_terminal else 4, team=team)
+    router = experiments[0]
+    if assistant_children:
+        for exp in experiments[1:]:
+            exp.assistant = OpenAiAssistantFactory(team=team)
+            exp.save()
+
+    children = [
+        ExperimentRoute(team=team, parent=router, child=experiments[1], keyword="keyword1", is_default=False),
+        ExperimentRoute(
+            # make the middle one the default to avoid first / last false positives
+            team=team,
+            parent=router,
+            child=experiments[2],
+            keyword="keyword2",
+            is_default=with_default,
+        ),
+        ExperimentRoute(team=team, parent=router, child=experiments[3], keyword="keyword3", is_default=False),
+    ]
+    if with_terminal:
+        children.append(
+            ExperimentRoute(team=team, parent=router, child=experiments[4], type=ExperimentRouteType.TERMINAL)
+        )
+    ExperimentRoute.objects.bulk_create(children)
+
+    return router
