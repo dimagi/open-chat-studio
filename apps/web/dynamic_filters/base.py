@@ -181,15 +181,13 @@ class StringColumnFilter(ColumnFilter):
         from django.db.models import Q
 
         # Build Q object for OR logic
-        q = None
+        q = Q()
+
         for col in self.columns:
             filter_key = f"{col}__{lookup}" if lookup else col
-            if q is None:
-                q = Q(**{filter_key: value})
-            else:
-                q |= Q(**{filter_key: value})
+            q |= Q(**{filter_key: value})
 
-        return queryset.filter(q) if q else queryset
+        return queryset.filter(q)
 
     def apply_equals(self, queryset, value, timezone=None) -> QuerySet:
         return self._apply_with_lookup(queryset, None, value)
@@ -201,14 +199,11 @@ class StringColumnFilter(ColumnFilter):
         from django.db.models import Q
 
         # For exclusion: exclude if it matches ANY column
-        q = None
+        q = Q()
         for col in self.columns:
-            if q is None:
-                q = Q(**{f"{col}__icontains": value})
-            else:
-                q |= Q(**{f"{col}__icontains": value})
+            q |= Q(**{f"{col}__icontains": value})
 
-        return queryset.exclude(q) if q else queryset
+        return queryset.exclude(q)
 
     def apply_starts_with(self, queryset, value, timezone=None) -> QuerySet:
         return self._apply_with_lookup(queryset, "istartswith", value)
@@ -221,12 +216,9 @@ class StringColumnFilter(ColumnFilter):
             from django.db.models import Q
 
             # OR logic across multiple columns
-            q = None
+            q = Q()
             for col in self.columns:
-                if q is None:
-                    q = Q(**{f"{col}__in": values})
-                else:
-                    q |= Q(**{f"{col}__in": values})
+                q |= Q(**{f"{col}__in": values})
+            return queryset.filter(q)
 
-            return queryset.filter(q) if q else queryset
         return queryset
