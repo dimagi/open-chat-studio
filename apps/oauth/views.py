@@ -4,7 +4,7 @@ from apps.teams.helpers import get_default_team_from_request
 from apps.teams.models import Membership, Team
 from apps.teams.utils import set_current_team
 
-from .forms import TeamScopedAllowForm
+from .forms import AuthorizationForm
 
 
 class TeamScopedAuthorizationView(BaseAuthorizationView):
@@ -14,7 +14,7 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
     If not provided, defaults to the user's team on the current session.
     """
 
-    form_class = TeamScopedAllowForm
+    form_class = AuthorizationForm
     template_name = "oauth2_provider/authorize.html"
 
     def get_form_kwargs(self):

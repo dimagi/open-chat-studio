@@ -409,9 +409,9 @@ SITE_ID = 1
 # DRF config
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "apps.oauth.permissions.OAuth2TeamsAuthentication",
         "apps.api.permissions.ApiKeyAuthentication",
         "apps.api.permissions.BearerTokenAuthentication",
+        "apps.oauth.permissions.OAuth2TeamsAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
