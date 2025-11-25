@@ -32,7 +32,7 @@ def test_migrate_experiment_with_children(assistant_children):
 
 def _make_experiment_with_routing(with_default=True, assistant_children=False, with_terminal=False):
     team = TeamFactory()
-    experiments = ExperimentFactory.create_batch(5 if with_terminal else 4, team=team)
+    experiments = ExperimentFactory.create_batch(5 if with_terminal else 4, team=team, pipeline=None)
     router = experiments[0]
     if assistant_children:
         for exp in experiments[1:]:
