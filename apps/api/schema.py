@@ -27,7 +27,7 @@ class BearerScheme(TokenScheme):
 
 
 class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
-    target_class = "apps.oauth.permissions.OAuth2TeamsAuthentication"
+    target_class = "apps.oauth.permissions.OAuth2AccessTokenAuthentication"
     name = "OAuth2"
     match_subclasses = True
 

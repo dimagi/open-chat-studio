@@ -16,7 +16,7 @@ from apps.teams.helpers import get_team_membership_for_request
 from .models import OAuth2AccessToken
 
 
-class OAuth2TeamsAuthentication(OAuth2Authentication):
+class OAuth2AccessTokenAuthentication(OAuth2Authentication):
     """
     OAuth2 authentication backend that sets the team on the request.
     """
