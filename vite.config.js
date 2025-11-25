@@ -22,11 +22,15 @@ export default defineConfig({
     manifest: "manifest.json",
     sourcemap: true,  // For Sentry
 
+    // Increase chunk size limit to allow large bundles
+    chunkSizeWarningLimit: 10000,
+
     rollupOptions: {
       input: {
         'site-base': path.resolve(__dirname, './assets/site-base.js'),
         'site-tailwind': path.resolve(__dirname, './assets/site-tailwind.js'),
         'site': path.resolve(__dirname, './assets/javascript/site.js'),
+        'window-shims': path.resolve(__dirname, './assets/javascript/window-shims.js'),
         'app': path.resolve(__dirname, './assets/javascript/app.js'),
         'pipeline': path.resolve(__dirname, './assets/javascript/apps/pipeline.tsx'),
         'adminDashboard': path.resolve(__dirname, './assets/javascript/admin-dashboard.js'),
@@ -47,6 +51,9 @@ export default defineConfig({
           }
           return 'assets/[name]-[hash][extname]';
         },
+        format: 'es',  // ES format - plugin will wrap in IIFE
+        // Prevent code splitting - inline everything into each entry
+        manualChunks: () => null,
       },
     },
   },
