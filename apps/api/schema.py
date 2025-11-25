@@ -38,7 +38,7 @@ class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
                 "authorizationCode": {
                     "authorizationUrl": "/o/authorize/",
                     "tokenUrl": "/o/token/",
-                    "scopes": {},  # No specific scopes defined, since the user will select these when giving consent
+                    "scopes": settings.OAUTH2_PROVIDER.get("SCOPES", {}),
                 }
             },
         }
