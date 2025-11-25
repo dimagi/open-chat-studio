@@ -29,6 +29,7 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.team import TeamFactory
 
+from ..models import DashboardCache
 from ..services import DashboardService
 
 
@@ -167,14 +168,8 @@ class TestDistinctAggregationIssues:
     """Test cases for aggregation accuracy"""
 
     def test_session_analytics_no_duplicate_sessions(self):
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
-        participant = ParticipantFactory(team=team)
-        session = ExperimentSessionFactory(
-            experiment=experiment,
-            participant=participant,
-            team=team,
-        )
+        DashboardCache.objects.all().delete()
+        session = ExperimentSessionFactory()
 
         # Create 3 messages at noon to avoid midnight date boundary issues
         now = timezone.now().replace(hour=12, minute=0, second=0, microsecond=0)
@@ -183,11 +178,11 @@ class TestDistinctAggregationIssues:
                 chat=session.chat,
                 message_type=ChatMessageType.HUMAN,
                 content=f"Message {i}",
-                created_at=now - timedelta(hours=i),
+                created_at=now - timedelta(hours=i + 1),
             )
 
-        service = DashboardService(team)
-        data = service.get_session_analytics_data(granularity="daily")
+        service = DashboardService(session.team)
+        data = service.get_session_analytics_data(granularity="daily", start_date=now - timedelta(days=1), end_date=now)
 
         # Extract session counts from the data
         session_data = data.get("sessions", [])
