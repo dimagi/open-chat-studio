@@ -205,9 +205,9 @@ paths:
       tags:
       - Experiments
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           content:
@@ -229,9 +229,9 @@ paths:
       tags:
       - Experiments
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           content:
@@ -252,9 +252,9 @@ paths:
       tags:
       - Files
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           content:
@@ -311,9 +311,9 @@ paths:
               $ref: '#/components/schemas/CreateChatCompletionRequest'
         required: true
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           content:
@@ -379,9 +379,9 @@ paths:
               $ref: '#/components/schemas/CreateChatCompletionRequest'
         required: true
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           content:
@@ -434,9 +434,9 @@ paths:
                 summary: Update and delete participant schedules
         required: true
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           description: No response body
@@ -482,9 +482,9 @@ paths:
       tags:
       - Experiment Sessions
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           content:
@@ -504,9 +504,9 @@ paths:
               $ref: '#/components/schemas/ExperimentSessionCreate'
         required: true
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '201':
           content:
@@ -532,9 +532,9 @@ paths:
       tags:
       - Experiment Sessions
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           content:
@@ -556,9 +556,9 @@ paths:
       tags:
       - Experiment Sessions
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           description: No response body
@@ -581,9 +581,9 @@ paths:
             schema:
               $ref: '#/components/schemas/Patchedupdate_state_serializer'
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           content:
@@ -631,9 +631,9 @@ paths:
                 summary: User has not given consent
         required: true
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           description: No response body
@@ -684,9 +684,9 @@ paths:
               $ref: '#/components/schemas/ApiMessage'
         required: true
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           content:
@@ -724,9 +724,9 @@ paths:
               $ref: '#/components/schemas/ApiMessage'
         required: true
       security:
-      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
+      - OAuth2: []
       responses:
         '200':
           content:
