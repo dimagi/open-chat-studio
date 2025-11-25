@@ -67,3 +67,7 @@ export const trendsChart = (ctx, dataUrl) => {
 
 export default { trendsChart };
 
+// Backward compatibility shim (TODO: Remove after Phase 6)
+window.SiteJS = window.SiteJS || {};
+window.SiteJS.trends = { trendsChart };
+

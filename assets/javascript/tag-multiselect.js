@@ -59,3 +59,7 @@ export const setupTagSelects = () => {
   configureTomSelect();
   htmx.on("htmx:afterSwap", () => { configureTomSelect() });
 }
+
+// Backward compatibility shim (TODO: Remove after Phase 6)
+window.SiteJS = window.SiteJS || {};
+window.SiteJS.tagMultiselect = { setupTagSelects };

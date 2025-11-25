@@ -11,3 +11,7 @@ export function renderPipeline(containerId: string, team_slug: string, pipelineI
   const root = document.querySelector(containerId)!;
   createRoot(root).render(<App team_slug={team_slug} pipelineId={pipelineId} />);
 }
+
+// Backward compatibility shim (TODO: Remove after Phase 6)
+(window as any).SiteJS = (window as any).SiteJS || {};
+(window as any).SiteJS.pipeline = { renderPipeline };

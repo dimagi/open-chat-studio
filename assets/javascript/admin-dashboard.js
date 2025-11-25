@@ -118,3 +118,10 @@ export const cumulativeChartWithDates = (
     }
   })
 }
+
+// Backward compatibility shim (TODO: Remove after Phase 6)
+window.SiteJS = window.SiteJS || {};
+window.SiteJS.adminDashboard = {
+  barChartWithDates,
+  cumulativeChartWithDates
+};

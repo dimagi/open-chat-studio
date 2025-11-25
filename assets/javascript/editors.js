@@ -622,3 +622,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize Prompt editors
   PromptEditor.initAll();
 });
+
+// Backward compatibility shim (TODO: Remove after Phase 6)
+window.SiteJS = window.SiteJS || {};
+window.SiteJS.editors = {
+  initJsonEditors,
+  createJsonEditor,
+  destroyAllEditors,
+  initPythonEditors,
+  createPythonEditor,
+  initPromptEditors,
+  createPromptEditor,
+  createDiffView
+};
