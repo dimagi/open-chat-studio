@@ -2,10 +2,7 @@ import json
 from datetime import timedelta
 
 import pytest
-from django.contrib.messages.storage.fallback import FallbackStorage
-from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import QueryDict
-from django.test import RequestFactory
 from django.utils import timezone
 from time_machine import travel
 
@@ -32,13 +29,6 @@ def _get_tag(team: Team, name: str, tag_category: TagCategories | None = None) -
         category=tag_category or TagCategories.BOT_RESPONSE,
     )
     return tag
-
-
-def attach_session_middleware_to_request(request):
-    session_middleware = SessionMiddleware(lambda req: None)
-    session_middleware.process_request(request)
-    request.session.save()
-    request._messages = FallbackStorage(request)
 
 
 @pytest.mark.django_db()
@@ -123,14 +113,10 @@ class TestExperimentSessionFilters:
             "filter_0_operator": Operators.EQUALS,
             "filter_0_value": "test.user@example.com",
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         queryset = session.experiment.sessions.all()
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
         assert filtered.first() == session
 
@@ -139,35 +125,35 @@ class TestExperimentSessionFilters:
         params["filter_0_value"] = "user@"
 
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
 
         # Test DOES_NOT_CONTAIN
         params["filter_0_operator"] = Operators.DOES_NOT_CONTAIN
         params["filter_0_value"] = "nonexistent"
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
 
         # Test STARTS_WITH
         params["filter_0_operator"] = Operators.STARTS_WITH
         params["filter_0_value"] = "test"
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
 
         # Test ENDS_WITH
         params["filter_0_operator"] = Operators.ENDS_WITH
         params["filter_0_value"] = "@example.com"
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
 
         # Test ANY_OF
         params["filter_0_operator"] = Operators.ANY_OF
         params["filter_0_value"] = json.dumps(["test.user@example.com", "another@example.com"])
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
         assert filtered.first() == session
 
@@ -198,16 +184,11 @@ class TestExperimentSessionFilters:
                 message_type=ChatMessageType.HUMAN,
                 created_at=timezone.now() + timedelta(hours=1),
             )
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        time_zone = request.session.get("detected_tz", None)
-        # Test
         # Test ON first message
         sessions_queryset = session1.experiment.sessions.all()
         params = {"filter_0_column": "first_message", "filter_0_operator": Operators.ON, "filter_0_value": "2025-01-01"}
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(sessions_queryset, FilterParams(_get_querydict(params)), time_zone)
+        filtered = session_filter.apply(sessions_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
         assert filtered.first() == session1
 
@@ -218,7 +199,7 @@ class TestExperimentSessionFilters:
             "filter_0_value": "2025-01-02",
         }
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(sessions_queryset, FilterParams(_get_querydict(params)), time_zone)
+        filtered = session_filter.apply(sessions_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
         assert filtered.first() == session1
 
@@ -229,7 +210,7 @@ class TestExperimentSessionFilters:
             "filter_0_value": "2025-01-01",
         }
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(sessions_queryset, FilterParams(_get_querydict(params)), time_zone)
+        filtered = session_filter.apply(sessions_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
         assert filtered.first() == session2
 
@@ -244,25 +225,20 @@ class TestExperimentSessionFilters:
             "filter_0_operator": Operators.ANY_OF,
             "filter_0_value": json.dumps(["important"]),
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
-
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 2
 
         # Test ANY_OF with multiple tags
         params["filter_0_value"] = json.dumps(["important", "follow-up"])
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 2
 
         # Test ALL_OF with multiple tags
         params["filter_0_operator"] = Operators.ALL_OF
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
         assert filtered.first() == sessions[1]
 
@@ -277,20 +253,16 @@ class TestExperimentSessionFilters:
             "filter_0_operator": Operators.ANY_OF,
             "filter_0_value": json.dumps(["v1"]),
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 2
 
         # Test ALL_OF with both versions
         params["filter_0_operator"] = Operators.ALL_OF
         params["filter_0_value"] = json.dumps(["v1", "v2"])
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
         assert filtered.first() == sessions[1]
 
@@ -311,13 +283,9 @@ class TestExperimentSessionFilters:
             "filter_1_operator": Operators.ANY_OF,
             "filter_1_value": json.dumps(["important"]),
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
         assert filtered.first() == sessions[0]
 
@@ -325,14 +293,10 @@ class TestExperimentSessionFilters:
         """Test behavior with empty or invalid filters"""
         # Empty filter values should be ignored
         params = {"filter_0_column": "participant", "filter_0_operator": Operators.EQUALS, "filter_0_value": ""}
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(
-            base_session.experiment.sessions.all(), FilterParams(_get_querydict(params)), timezone
+            base_session.experiment.sessions.all(), FilterParams(_get_querydict(params)), None
         )
         assert filtered.count() == base_session.experiment.sessions.count()
 
@@ -341,7 +305,7 @@ class TestExperimentSessionFilters:
         params["filter_0_value"] = "test"
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(
-            base_session.experiment.sessions.all(), FilterParams(_get_querydict(params)), timezone
+            base_session.experiment.sessions.all(), FilterParams(_get_querydict(params)), None
         )
         assert filtered.count() == base_session.experiment.sessions.count()
 
@@ -356,34 +320,30 @@ class TestExperimentSessionFilters:
             "filter_0_operator": Operators.ANY_OF,
             "filter_0_value": json.dumps(["important"]),
         }
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
 
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert set(filtered) == set(sessions), f"Expected both sessions with 'important', got {filtered}"
 
         params["filter_0_value"] = json.dumps(["follow-up"])
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert set(filtered) == {sessions[1]}, f"Expected session2 with 'follow-up', got {filtered}"
 
         params["filter_0_value"] = json.dumps(["important", "follow-up"])
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert set(filtered) == set(sessions), f"Expected both sessions with either tag, got {filtered}"
 
         params["filter_0_operator"] = Operators.ALL_OF
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert list(filtered) == [sessions[1]], f"Expected only session2 with both tags, got {list(filtered)}"
 
         params["filter_0_operator"] = Operators.EXCLUDES
         params["filter_0_value"] = json.dumps(["important"])
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert list(filtered) == [], f"Expected no sessions to exclude 'important', got {list(filtered)}"
 
     def test_state_filters(self, sessions_with_statuses):
@@ -399,19 +359,14 @@ class TestExperimentSessionFilters:
             "filter_0_value": json.dumps([SessionStatus.ACTIVE.value]),
         }
 
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
-
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert all(s.status == SessionStatus.ACTIVE for s in filtered)
 
         params["filter_0_operator"] = Operators.EXCLUDES
         params["filter_0_value"] = json.dumps([SessionStatus.ACTIVE.value])
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert all(s.status != SessionStatus.ACTIVE for s in filtered)
 
     def test_remote_id_filters(self, sessions_with_statuses):
@@ -430,16 +385,11 @@ class TestExperimentSessionFilters:
             "filter_0_value": json.dumps([test_id]),
         }
 
-        factory = RequestFactory()
-        request = factory.get("/")
-        attach_session_middleware_to_request(request)
-        timezone = request.session.get("detected_tz", None)
-
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert all(s.participant.remote_id == test_id for s in filtered)
 
         params["filter_0_operator"] = Operators.EXCLUDES
         session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)), timezone)
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert all(s.participant.remote_id != test_id for s in filtered)
