@@ -1,29 +1,23 @@
-import * as JsCookie from "js-cookie"; // generated
+/**
+ * BACKWARD COMPATIBILITY SHIM
+ *
+ * This file maintains the legacy window.SiteJS global during migration.
+ * TODO: Remove this file completely after Phase 6 when all templates are migrated.
+ *
+ * Migration status: Phase 0 - Compatibility shim active
+ */
 
-// pass-through for Cookies API
-export const Cookies = JsCookie.default;
+import Cookies from "./utils/cookies.js";
+import { copyToClipboard, copyTextToClipboard } from "./utils/clipboard.js";
 
-export async function copyToClipboard (callee, elementId) {
-  const element = document.getElementById(elementId)
-  let text;
-  if (element.tagName === "INPUT") {
-    text = element.value;
-  } else {
-    text = element.innerHTML;
+// Legacy global namespace for backward compatibility
+window.SiteJS = {
+  app: {
+    Cookies,
+    copyToClipboard,
+    copyTextToClipboard
   }
-  await copyTextToClipboard(callee, text);
-}
+};
 
-export async function copyTextToClipboard (callee, text) {
-  try {
-    await navigator.clipboard.writeText(text).then(() => {
-      const prevHTML = callee.innerHTML
-      callee.innerHTML = '<span><i class="fa-solid fa-check"></i>Copied!</span>'
-      setTimeout(() => {
-        callee.innerHTML = prevHTML;
-      }, 2000);
-    })
-  } catch (err) {
-    console.error('Failed to copy: ', err)
-  }
-}
+// Keep named exports for any direct imports (will be removed in Phase 6)
+export { Cookies, copyToClipboard, copyTextToClipboard };
