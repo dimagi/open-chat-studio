@@ -5,16 +5,12 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import openai
 from django.db import transaction
-from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain.agents.output_parsers import tools as lc_tools_parser
 from langchain_core.agents import AgentFinish
 from langchain_core.load import Serializable
-from langchain_core.messages import BaseMessage
 from langchain_core.messages.tool import ToolMessage, tool_call
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import (
-    Runnable,
     RunnableConfig,
     RunnableSerializable,
     ensure_config,
@@ -25,16 +21,13 @@ from pydantic import ConfigDict
 from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
-from apps.service_providers.llm_service.adapters import AssistantAdapter, ChatAdapter
-from apps.service_providers.llm_service.datamodels import LlmChatResponse
+from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import (
     AssistantPipelineHistoryManager,
     ExperimentHistoryManager,
 )
 from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.parsers import custom_parse_ai_message
-from apps.service_providers.llm_service.utils import format_multimodal_input
-from apps.utils.prompt import OcsPromptTemplate
 
 lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
 if TYPE_CHECKING:
@@ -70,27 +63,7 @@ def create_experiment_runnable(
         runnable.experiment = experiment
         return runnable
 
-    assert experiment.llm_provider, "Experiment must have an LLM provider"
-    assert experiment.llm_provider_model.name, "Experiment must have an LLM model"
-    assert experiment.llm_provider.type == experiment.llm_provider_model.type, (
-        "Experiment provider and provider model should be of the same type"
-    )
-
-    history_manager = ExperimentHistoryManager.for_llm_chat(
-        session=session,
-        experiment=experiment,
-        trace_service=trace_service,
-    )
-
-    chat_adapter = ChatAdapter.for_experiment(experiment=experiment, session=session)
-    if experiment.tools_enabled and not disable_tools:
-        runnable = AgentLLMChat(adapter=chat_adapter, history_manager=history_manager)
-    else:
-        runnable = SimpleLLMChat(adapter=chat_adapter, history_manager=history_manager)
-
-    # This is a temporary hack until we return an object with metadata about the run
-    runnable.experiment = experiment
-    return runnable
+    raise NotImplementedError("Only assistant runnables are supported")
 
 
 class ChainOutput(Serializable):
@@ -112,169 +85,6 @@ class ChainOutput(Serializable):
     def get_lc_namespace(cls) -> list[str]:
         """Get the namespace of the langchain object."""
         return ["ocs", "schema", "chain_output"]
-
-
-class LLMChat(RunnableSerializable[str, ChainOutput]):
-    adapter: ChatAdapter
-    history_manager: ExperimentHistoryManager
-    experiment: Experiment | None = None
-    history: list[BaseMessage] = []
-    cancelled: bool = False
-    last_cancel_check: float | None = None
-    check_every_ms: int = 1000
-    input_key: str = "input"
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    @classmethod
-    def is_lc_serializable(cls) -> bool:
-        return False
-
-    def invoke(
-        self,
-        input: str,
-        config: RunnableConfig | None = None,
-        attachments: list = None,
-        *args,
-        **kwargs,
-    ) -> ChainOutput:
-        ai_message = None
-        ai_message_metadata = {}
-        callback = self.adapter.callback_handler
-        config = ensure_config(config)
-        merged_config = merge_configs(ensure_config(config), {"callbacks": [callback]})
-        configurable = config.get("configurable", {})
-        include_conversation_history = configurable.get("include_conversation_history", True)
-        save_input_to_history = configurable.get("save_input_to_history", True)
-        save_output_to_history = configurable.get("save_output_to_history", True)
-        experiment_tag = configurable.get("experiment_tag")
-
-        try:
-            if attachments:
-                input = format_multimodal_input(message=input, attachments=attachments)
-            if include_conversation_history:
-                self._populate_memory(input)
-
-            llm_response = self._get_output_check_cancellation(input, merged_config)
-            ai_message = llm_response.text
-            ai_message_metadata = self.adapter.get_output_message_metadata(
-                cited_files=llm_response.cited_files, generated_files=llm_response.generated_files
-            )
-            if self.adapter.expect_citations:
-                ai_message = self.adapter.add_citation_section_from_cited_files(
-                    ai_message, cited_files=llm_response.cited_files
-                )
-            else:
-                ai_message = self.adapter.remove_file_citations(ai_message)
-
-            result = ChainOutput(
-                output=ai_message, prompt_tokens=callback.prompt_tokens, completion_tokens=callback.completion_tokens
-            )
-            if self.cancelled:
-                raise GenerationCancelled(result)
-        finally:
-            self.history_manager.add_messages_to_history(
-                input=input,
-                save_input_to_history=save_input_to_history,
-                input_message_metadata={},
-                output=ai_message,
-                save_output_to_history=save_output_to_history,
-                experiment_tag=experiment_tag,
-                output_message_metadata=ai_message_metadata,
-            )
-
-        return result
-
-    def _get_input(self, input: str):
-        return {self.input_key: self.adapter.format_input(input)}
-
-    def _get_output_check_cancellation(self, input, config) -> LlmChatResponse:
-        chain = self._build_chain().with_config(run_name="get_llm_response")
-        context = self._get_input_chain_context()
-
-        chat_response = LlmChatResponse(text="")
-        for output in chain.stream({**self._get_input(input), **context}, config):
-            chat_response += self._parse_output(output)
-            if self._chat_is_cancelled():
-                break
-
-        return chat_response
-
-    def _parse_output(self, output) -> LlmChatResponse:
-        return LlmChatResponse(text=output)
-
-    def _chat_is_cancelled(self):
-        if self.cancelled:
-            return True
-
-        if self.last_cancel_check and self.check_every_ms:
-            if self.last_cancel_check + self.check_every_ms > time.time():
-                return False
-
-        self.last_cancel_check = time.time()
-
-        self.cancelled = self.adapter.check_cancellation()
-        return self.cancelled
-
-    def _build_chain(self) -> Runnable[dict[str, Any], Any]:
-        raise NotImplementedError
-
-    def _get_input_chain_context(self, with_history=True) -> dict:
-        prompt = self.prompt
-        context = self.adapter.get_template_context(prompt.input_variables)
-        if with_history:
-            context.update({"history": self.history})
-
-        return context
-
-    @property
-    def prompt(self):
-        return OcsPromptTemplate.from_messages(
-            [
-                ("system", self.adapter.get_prompt()),
-                ("placeholder", "{history}"),
-                ("human", "{input}"),
-            ]
-        )
-
-    def _populate_memory(self, input: str):
-        input_messages = self.get_input_messages(input)
-        self.history = self.history_manager.get_chat_history(input_messages)
-
-    def get_input_messages(self, input: str) -> list[BaseMessage]:
-        """Return a list of messages which represent the fully populated LLM input.
-        This will be used during history compression.
-        """
-        context = self._get_input_chain_context(with_history=False)
-        try:
-            return self.prompt.format_messages(**{**self._get_input(input), **context})
-        except KeyError as e:
-            raise GenerationError(str(e)) from e
-
-
-class SimpleLLMChat(LLMChat):
-    def _build_chain(self) -> Runnable[dict[str, Any], Any]:
-        return self.prompt | self.adapter.get_chat_model() | StrOutputParser()
-
-
-class AgentLLMChat(LLMChat):
-    def _parse_output(self, output) -> LlmChatResponse:
-        output_parser = self.adapter.get_llm_service().get_output_parser()
-        return output_parser(output, session=self.adapter.session, include_citations=self.adapter.expect_citations)
-
-    def _build_chain(self) -> Runnable[dict[str, Any], dict]:
-        agent = create_tool_calling_agent(
-            llm=self.adapter.get_chat_model(), tools=self.adapter.get_allowed_tools(), prompt=self.prompt
-        )
-        return AgentExecutor.from_agent_and_tools(
-            agent=agent,
-            tools=self.adapter.get_callable_tools(),
-            max_execution_time=120,
-        )
-
-    @property
-    def prompt(self):
-        prompt = super().prompt
-        return OcsPromptTemplate.from_messages(prompt.messages + [("placeholder", "{agent_scratchpad}")])
 
 
 class AssistantChat(RunnableSerializable[dict, ChainOutput]):
