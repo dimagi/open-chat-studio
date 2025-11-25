@@ -89,6 +89,7 @@ THIRD_PARTY_APPS = [
     "health_check.contrib.redis",
     "template_partials",
     "silk",
+    "django_vite",
 ]
 
 PROJECT_APPS = [
@@ -339,6 +340,16 @@ STATIC_URL = "/static/"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+
+# Vite configuration
+DJANGO_VITE = {
+    "default": {
+        "dev_mode": DEBUG,
+        "dev_server_host": "localhost",
+        "dev_server_port": 5173,
+        "manifest_path": BASE_DIR / "static" / "manifest.json",
+    }
+}
 
 STORAGES = {
     "default": {
