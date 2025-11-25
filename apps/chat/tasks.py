@@ -1,15 +1,8 @@
 from uuid import UUID
 
-from celery.app import shared_task
-from django.conf import settings
-from django.core.mail import send_mail
 from django.db.models import OuterRef, Subquery
-from django.template.loader import render_to_string
-from django.urls import reverse
-from django.utils.translation import gettext_lazy as _
 
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
-from apps.web.meta import absolute_url
 
 STATUSES_FOR_COMPLETE_CHATS = [SessionStatus.PENDING_REVIEW, SessionStatus.COMPLETE, SessionStatus.UNKNOWN]
 
@@ -35,36 +28,4 @@ def _get_latest_sessions_for_participants(
         ExperimentSession.objects.filter(id__in=Subquery(latest_participant_session_ids))
         .prefetch_related("experiment")
         .all()
-    )
-
-
-@shared_task(ignore_result=True)
-def notify_users_of_safety_violations_task(experiment_session_id: int, safety_layer_id: int):
-    experiment_session = ExperimentSession.objects.get(id=experiment_session_id)
-    experiment = experiment_session.experiment
-    if not experiment.safety_violation_notification_emails:
-        return
-
-    email_context = {
-        "session_link": absolute_url(
-            reverse(
-                "chatbots:chatbot_session_view",
-                kwargs={
-                    "session_id": experiment_session.external_id,
-                    "experiment_id": experiment.public_id,
-                    "team_slug": experiment.team.slug,
-                },
-            )
-        ),
-        "safety_layer_link": absolute_url(
-            reverse("experiments:safety_edit", kwargs={"pk": safety_layer_id, "team_slug": experiment.team.slug})
-        ),
-    }
-    send_mail(
-        subject=_("A Safety Layer was breached"),
-        message=render_to_string("experiments/email/safety_violation.txt", context=email_context),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=experiment.safety_violation_notification_emails,
-        fail_silently=False,
-        html_message=render_to_string("experiments/email/safety_violation.html", context=email_context),
     )
