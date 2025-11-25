@@ -1,3 +1,5 @@
+import Cookies from '../../utils/cookies.js';
+
 // Shared session management functionality for dataset forms
 const sessionManagement = {
   initializeSelections(component) {
@@ -269,7 +271,7 @@ window.datasetModeSelector = function(options = {}) {
         method: 'GET',
         credentials: 'same-origin',
         headers: {
-          'X-CSRFToken': window.SiteJS.app.Cookies.get('csrftoken'),
+          'X-CSRFToken': Cookies.get('csrftoken'),
           'Accept': 'application/json'
         }
       })
