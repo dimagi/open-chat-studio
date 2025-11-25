@@ -4,8 +4,6 @@ from apps.chat.models import Chat, ChatMessage
 from apps.experiments import models
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import (
-    LlmProviderFactory,
-    LlmProviderModelFactory,
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamFactory
@@ -61,10 +59,8 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     owner = factory.SubFactory(UserFactory)
     name = factory.Sequence(lambda n: f"Test Experiment {n}")
-    prompt_text = "You are a helpful assistant"
+    pipeline = factory.SubFactory("apps.utils.factories.pipelines.PipelineFactory")
     consent_form = factory.SubFactory(ConsentFormFactory, team=factory.SelfAttribute("..team"))
-    llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
-    llm_provider_model = factory.SubFactory(LlmProviderModelFactory, team=factory.SelfAttribute("..team"))
     pre_survey = factory.SubFactory(SurveyFactory, team=factory.SelfAttribute("..team"))
     public_id = factory.Faker("uuid4")
     synthetic_voice = factory.SubFactory(SyntheticVoiceFactory)

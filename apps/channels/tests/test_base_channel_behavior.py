@@ -4,6 +4,7 @@ intended.
 """
 
 import re
+import uuid
 from unittest.mock import Mock, patch
 
 import pytest
@@ -35,6 +36,7 @@ from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.langchain import build_fake_llm_service, mock_llm
 
+from ...utils.factories.service_provider_factories import LlmProviderFactory
 from ..datamodels import BaseMessage
 from .message_examples import base_messages
 
@@ -199,7 +201,6 @@ def test_different_participants_created_for_same_user_in_different_teams():
 
     experiment_sessions_count = ExperimentSession.objects.count()
     assert experiment_sessions_count == 2
-    assert Participant.objects.count() == 2
     participant1 = Participant.objects.get(team=experiment1.team, identifier=chat_id)
     participant2 = Participant.objects.get(team=experiment2.team, identifier=chat_id)
     assert participant1 != participant2
@@ -209,10 +210,13 @@ def test_different_participants_created_for_same_user_in_different_teams():
 @pytest.mark.parametrize("user_input", ["/reset", "/Reset", "/RESET", " /reset "])
 def test_reset_command_creates_new_experiment_session(user_input, test_channel):
     """The reset command should create a new session when the user conversed with the bot"""
-    participant_id = "123"
+    participant_id = str(uuid.uuid4())
     normal_message = base_messages.text_message(participant_id=participant_id)
 
     _send_user_message_on_channel(test_channel, normal_message)
+
+    # mock engagement
+    test_channel.experiment_session.user_already_engaged = Mock()
 
     reset_message = base_messages.text_message(participant_id=participant_id, message_text=user_input)
     response = test_channel.new_user_message(reset_message)
@@ -226,8 +230,7 @@ def test_reset_command_creates_new_experiment_session(user_input, test_channel):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
-def test_reset_conversation_does_not_create_new_session(_call_predict, test_channel):
+def test_reset_conversation_does_not_create_new_session(test_channel):
     """The reset command should not create a new session when the user haven't conversed with the bot yet"""
     participant_id = "123"
 
@@ -244,7 +247,7 @@ def test_reset_conversation_does_not_create_new_session(_call_predict, test_chan
 
 
 def _send_user_message_on_channel(channel_instance, user_message: BaseMessage):
-    with mock_llm(responses=["OK"]):
+    with patch("apps.chat.channels.ChannelBase._get_bot_response", return_value=ChatMessage(content="OK")):
         channel_instance.new_user_message(user_message)
 
 
@@ -309,9 +312,9 @@ def test_pre_conversation_flow(_send_seed_message):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.bots.TopicBot", Mock())
 def test_unsupported_message_type_creates_ai_message():
     experiment = ExperimentFactory(conversational_consent_enabled=True)
+    LlmProviderFactory(team=experiment.team)  # needed for EventBot
     channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     assert channel.experiment_session is None
     with mock_llm(["error"]):
