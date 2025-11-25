@@ -101,53 +101,6 @@ class TestExperimentSessionFilters:
 
         return [session1, session2]
 
-    @pytest.mark.parametrize(
-        ("operator", "value", "count"),
-        [
-            (Operators.EQUALS, "something else", 0),
-            (Operators.EQUALS, "test.user@example.com", 1),
-            (Operators.EQUALS, "TEST.user@example.com", 0),  # case-sensitive
-            (Operators.CONTAINS, "user@", 1),
-            (Operators.CONTAINS, "user1@", 0),
-            (Operators.DOES_NOT_CONTAIN, "user1@", 1),
-            (Operators.DOES_NOT_CONTAIN, "user@", 0),
-            (Operators.STARTS_WITH, "test", 1),
-            (Operators.STARTS_WITH, "tester", 0),
-            (Operators.ENDS_WITH, "example.com", 1),
-            (Operators.ENDS_WITH, "domain.com", 0),
-            (Operators.ANY_OF, json.dumps(["test.user@example.com", "another@example.com"]), 1),
-            (Operators.ANY_OF, json.dumps(["tester@example.com", "another@example.com"]), 0),
-            # test matching name
-            (Operators.EQUALS, "Jeremy Fisher", 1),
-            (Operators.CONTAINS, "remy", 1),
-            (Operators.DOES_NOT_CONTAIN, "Ptolemy", 1),
-            (Operators.STARTS_WITH, "jeremy", 1),
-            (Operators.ENDS_WITH, "fisher", 1),
-            (Operators.ANY_OF, json.dumps(["Jeremy Fisher", "Sir Ptolemy Tortoise"]), 1),
-            (Operators.ANY_OF, json.dumps(["jeremy fisher"]), 0),  # case-sensitive
-        ],
-    )
-    def test_participant_filters(self, base_session, operator, value, count):
-        """Test all participant filter operators"""
-        session = base_session
-        session.participant.name = "Jeremy Fisher"
-        session.participant.identifier = "test.user@example.com"
-        session.participant.save()
-
-        # Test EQUALS
-        params = {
-            "filter_0_column": "participant",
-            "filter_0_operator": operator,
-            "filter_0_value": value,
-        }
-
-        queryset = session.experiment.sessions.all()
-        session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
-        assert filtered.count() == count
-        if count == 1:
-            assert filtered.first() == session
-
     @travel("2025-01-03 10:00:00", tick=False)
     def test_message_timestamp_filters(self):
         """Test message timestamp filtering"""
@@ -384,3 +337,60 @@ class TestExperimentSessionFilters:
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert all(s.participant.remote_id != test_id for s in filtered)
+
+
+@pytest.mark.django_db()
+class TestParticipantFilter:
+    @pytest.fixture(scope="class")
+    def session(self, django_db_setup, django_db_blocker):
+        """Create a base experiment session with participant"""
+        with django_db_blocker.unblock():
+            session = ExperimentSessionFactory(
+                participant__name="Jeremy Fisher", participant__identifier="test.user@example.com"
+            )
+            yield session
+            session.delete()
+
+    @pytest.mark.parametrize(
+        ("operator", "value", "count"),
+        [
+            (Operators.EQUALS, "something else", 0),
+            (Operators.EQUALS, "test.user@example.com", 1),
+            (Operators.EQUALS, "TEST.user@example.com", 0),  # case-sensitive
+            (Operators.CONTAINS, "user@", 1),
+            (Operators.CONTAINS, "user1@", 0),
+            (Operators.DOES_NOT_CONTAIN, "user1@", 1),
+            (Operators.DOES_NOT_CONTAIN, "user@", 0),
+            (Operators.STARTS_WITH, "test", 1),
+            (Operators.STARTS_WITH, "tester", 0),
+            (Operators.ENDS_WITH, "example.com", 1),
+            (Operators.ENDS_WITH, "domain.com", 0),
+            (Operators.ANY_OF, json.dumps(["test.user@example.com", "another@example.com"]), 1),
+            (Operators.ANY_OF, json.dumps(["tester@example.com", "another@example.com"]), 0),
+            # test matching name
+            (Operators.EQUALS, "Jeremy Fisher", 1),
+            (Operators.CONTAINS, "remy", 1),
+            (Operators.DOES_NOT_CONTAIN, "Ptolemy", 1),
+            (Operators.STARTS_WITH, "jeremy", 1),
+            (Operators.ENDS_WITH, "fisher", 1),
+            (Operators.ANY_OF, json.dumps(["Jeremy Fisher", "Sir Ptolemy Tortoise"]), 1),
+            (Operators.ANY_OF, json.dumps(["jeremy fisher"]), 0),  # case-sensitive
+        ],
+    )
+    def test_participant_filters(self, session, operator, value, count):
+        """Test all participant filter operators"""
+
+        params = _get_querydict(
+            {
+                "filter_0_column": "participant",
+                "filter_0_operator": operator,
+                "filter_0_value": value,
+            }
+        )
+
+        queryset = session.experiment.sessions.all()
+        session_filter = ExperimentSessionFilter()
+        filtered = session_filter.apply(queryset, FilterParams(params))
+        assert filtered.count() == count
+        if count == 1:
+            assert filtered.first() == session
