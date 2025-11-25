@@ -11,8 +11,11 @@
   {% include "account/components/api_keys.html" %}
 {% endblock app %}
 
+{% load django_vite %}
 {% block page_js %}
-  <script>
+  <script type="module">
+    import Cookies from '{% vite_asset_url 'assets/javascript/utils/cookies.js' %}';
+
     document.addEventListener('DOMContentLoaded', () => {
       const uploadUrl = '{% url "users:upload_profile_image" %}';
       document.getElementById("profile-upload").onchange = function() {
@@ -43,7 +46,7 @@
       // upload to server
         let formData = new FormData();
         formData.append("avatar", file);
-        formData.append('csrfmiddlewaretoken', SiteJS.app.Cookies.get('csrftoken'));
+        formData.append('csrfmiddlewaretoken', Cookies.get('csrftoken'));
         fetch(uploadUrl, {method: "POST", body: formData, credentials: 'same-origin'}).then(
           function (response) {
             if (response.ok) {

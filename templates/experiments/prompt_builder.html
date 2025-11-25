@@ -1,7 +1,6 @@
 {% extends "web/app/app_base.html" %}
 {% load django_vite static tz %}
 {% block page_js %}
-    {% vite_asset 'assets/javascript/tiktoken.js' %}
 {% endblock page_js %}
 
 {% block body_wrapper %}
@@ -46,8 +45,9 @@
     </div>
 
     {{ llm_options|json_script:"llmModelOptions" }}
-    <script>
-        const App = SiteJS.app;
+    <script type="module">
+        import Cookies from '{% vite_asset_url 'assets/javascript/utils/cookies.js' %}';
+        import { countGPTTokens } from '{% vite_asset_url 'assets/javascript/tiktoken.js' %}';
 
     // alpine:init is dispatched on the document
         document.addEventListener('alpine:init', () => {
@@ -59,7 +59,7 @@
                 init() {
                     Alpine.effect(() => {
                         if (Alpine.store('promptBuilder').currentState && Alpine.store('promptBuilder').currentState.prompt !== undefined) {
-                            const count = SiteJS.tokenCounter.countGPTTokens(Alpine.store('promptBuilder').currentState.prompt)
+                            const count = countGPTTokens(Alpine.store('promptBuilder').currentState.prompt)
                             Alpine.store('promptBuilder').promptTokenCount = `(~${count} tokens)`;
                         } else {
                             Alpine.store('promptBuilder').promptTokenCount = '';
@@ -173,7 +173,7 @@
                 credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': App.Cookies.get('csrftoken'),
+                    'X-CSRFToken': Cookies.get('csrftoken'),
                 },
             })
                 .then(response => response.json())

@@ -250,9 +250,7 @@
             this.applySavedFilter(selectedSavedFilter);
           }
         })
-        
 
-        const App = SiteJS.app;
         this.loadFiltersFromQueryString(window.location.search);
 
         // Load starred filters on initialization
@@ -608,7 +606,7 @@
             method: 'GET',
             credentials: 'same-origin',
             headers: {
-              'X-CSRFToken': SiteJS.app.Cookies.get('csrftoken'),
+              'X-CSRFToken': this.$cookies.get('csrftoken'),
               'Accept': 'application/json'
             }
           })
@@ -864,7 +862,7 @@
       async savedFilterRequest(filterId, method, body) {
         const base = "{% url 'filters:filter_set' request.team.slug '000' %}";
         const url = base.replace("000", filterId);
-        const opts = {method, credentials:"same-origin", headers: { "X-CSRFToken": SiteJS.app.Cookies.get("csrftoken")}
+        const opts = {method, credentials:"same-origin", headers: { "X-CSRFToken": this.$cookies.get("csrftoken")}
         };
         if (body) {
           opts.headers["Content-Type"] = "application/json";
