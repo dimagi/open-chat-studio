@@ -2,7 +2,6 @@ import textwrap
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view, inline_serializer
-from oauth2_provider.contrib.rest_framework import TokenHasResourceScope
 from rest_framework import filters, mixins, serializers, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -12,6 +11,7 @@ from apps.annotations.models import TagCategories
 from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSessionSerializer
 from apps.experiments.models import ExperimentSession
+from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 update_state_serializer = inline_serializer(
     name="update_state_serializer",
@@ -113,7 +113,7 @@ update_state_response_serializer = inline_serializer(
     ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [DjangoModelPermissionsWithView, TokenHasResourceScope]
+    permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
     serializer_class = ExperimentSessionSerializer
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["created_at"]

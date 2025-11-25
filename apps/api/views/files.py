@@ -6,7 +6,7 @@ from rest_framework.decorators import api_view, permission_classes, renderer_cla
 from rest_framework.renderers import BaseRenderer
 
 from apps.files.models import File
-from apps.oauth.permissions import TokenHasRequiredScope
+from apps.oauth.permissions import TokenHasRequiredOAuthScope
 
 
 class BinaryRenderer(BaseRenderer):
@@ -22,7 +22,7 @@ class BinaryRenderer(BaseRenderer):
 @extend_schema(operation_id="file_content", summary="Download File Content", tags=["Files"], responses=bytes)
 @api_view(["GET"])
 @renderer_classes([BinaryRenderer])
-@permission_classes([TokenHasRequiredScope("sessions:read", "chatbots:read")])
+@permission_classes([TokenHasRequiredOAuthScope("sessions:read", "chatbots:read")])
 @permission_required("files.view_file")
 def file_content_view(request, pk: int):
     file = get_object_or_404(File, id=pk, team=request.team)

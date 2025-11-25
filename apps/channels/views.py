@@ -33,7 +33,7 @@ from apps.channels.serializers import (
 from apps.channels.utils import validate_platform_availability
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.experiments.views.utils import get_channels_context
-from apps.oauth.permissions import TokenHasRequiredScope
+from apps.oauth.permissions import TokenHasRequiredOAuthScope
 from apps.teams.decorators import login_and_team_required
 from apps.web.waf import WafRule, waf_allow
 
@@ -118,14 +118,14 @@ def new_api_message_schema(versioned: bool):
 
 @new_api_message_schema(versioned=False)
 @api_view(["POST"])
-@permission_classes([TokenHasRequiredScope("chatbots:interact")])
+@permission_classes([TokenHasRequiredOAuthScope("chatbots:interact")])
 def new_api_message(request, experiment_id: uuid):
     return _new_api_message(request, experiment_id)
 
 
 @new_api_message_schema(versioned=True)
 @api_view(["POST"])
-@permission_classes([TokenHasRequiredScope("chatbots:interact")])
+@permission_classes([TokenHasRequiredOAuthScope("chatbots:interact")])
 def new_api_message_versioned(request, experiment_id: uuid, version=None):
     return _new_api_message(request, experiment_id, version)
 

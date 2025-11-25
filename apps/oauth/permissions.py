@@ -1,7 +1,19 @@
-from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHasScope
+"""
+OAuth2 authentication and permission classes for team-based access control.
+
+This module provides custom authentication and authorization backends that extend Django REST
+Framework's OAuth2 functionality with team-aware scoping. It ensures that:
+- Scope validation is only applied to OAuth2 tokens (not other auth types)
+- Team membership is validated and attached to requests
+- Fine-grained permission control via required scopes
+"""
+
+from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHasResourceScope, TokenHasScope
 from rest_framework import exceptions
 
 from apps.teams.helpers import get_team_membership_for_request
+
+from .models import OAuth2AccessToken
 
 
 class OAuth2TeamsAuthentication(OAuth2Authentication):
@@ -29,19 +41,44 @@ class OAuth2TeamsAuthentication(OAuth2Authentication):
         return user, access_token
 
 
-def TokenHasRequiredScope(*required_scopes):
+class TokenHasOAuthScope(TokenHasScope):
+    """
+    OAuth scope checking should only be done for OAuth2 tokens. This class overrides the
+    default behavior to skip scope checking for other token types.
+    """
+
+    def has_permission(self, request, view):
+        token = request.auth
+
+        if not token:
+            return False
+
+        if not isinstance(token, OAuth2AccessToken):
+            # Only check OAuth scopes when using OAuth2 tokens
+            return True
+
+        return super().has_permission(request, view)
+
+
+class TokenHasOAuthResourceScope(TokenHasResourceScope, TokenHasOAuthScope):
+    """An implementation of TokenHasResourceScope that uses TokenHasOAuthScope"""
+
+    pass
+
+
+def TokenHasRequiredOAuthScope(*required_scopes):
     """
     Factory function that creates a TokenHasScope permission class with required scopes.
     Works with DRF's @permission_classes decorator.
 
     Usage:
         @api_view(['GET'])
-        @permission_classes([TokenHasRequiredScope('read', 'write')])
+        @permission_classes([TokenHasRequiredOAuthScope('read', 'write')])
         def my_view(request):
             return Response({'message': 'Hello!'})
     """
 
-    class _TokenHasRequiredScope(TokenHasScope):
+    class _TokenHasRequiredScope(TokenHasOAuthScope):
         def has_permission(self, request, view):
             # Set required_scopes on the view for the parent class to check
             view.required_scopes = required_scopes

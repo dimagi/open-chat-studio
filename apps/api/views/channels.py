@@ -19,7 +19,7 @@ from apps.api.serializers import TriggerBotMessageRequest
 from apps.api.tasks import trigger_bot_message_task
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment, Participant, ParticipantData
-from apps.oauth.permissions import TokenHasRequiredScope
+from apps.oauth.permissions import TokenHasRequiredOAuthScope
 
 connect_logger = logging.getLogger("api.connect_channel")
 
@@ -127,7 +127,7 @@ def consent(request: Request):
     ],
 )
 @api_view(["POST"])
-@permission_classes([TokenHasRequiredScope("chatbots:interact")])
+@permission_classes([TokenHasRequiredOAuthScope("chatbots:interact")])
 @transaction.atomic
 def trigger_bot_message(request):
     """
