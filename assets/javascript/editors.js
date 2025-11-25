@@ -623,7 +623,9 @@ document.addEventListener("DOMContentLoaded", () => {
   PromptEditor.initAll();
 });
 
-// Backward compatibility shim (TODO: Remove after Phase 6)
+// Temporary global for templates not yet migrated
+// Used by: templates/evaluations/*.html, templates/participants/single_participant_home.html
+// TODO: Migrate templates to use direct imports
 window.SiteJS = window.SiteJS || {};
 window.SiteJS.editors = {
   initJsonEditors,

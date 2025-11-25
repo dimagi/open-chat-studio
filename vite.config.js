@@ -27,7 +27,6 @@ export default defineConfig({
         'site-base': path.resolve(__dirname, './assets/site-base.js'),
         'site-tailwind': path.resolve(__dirname, './assets/site-tailwind.js'),
         'site': path.resolve(__dirname, './assets/javascript/site.js'),
-        'app': path.resolve(__dirname, './assets/javascript/app.js'),
         'pipeline': path.resolve(__dirname, './assets/javascript/apps/pipeline.tsx'),
         'adminDashboard': path.resolve(__dirname, './assets/javascript/admin-dashboard.js'),
         'trends': path.resolve(__dirname, './assets/javascript/trends.js'),

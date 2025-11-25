@@ -67,7 +67,9 @@ export const trendsChart = (ctx, dataUrl) => {
 
 export default { trendsChart };
 
-// Backward compatibility shim (TODO: Remove after Phase 6)
+
+// Temporary global for templates not yet migrated
+// Used by: templates/table/trends_chart.html (HTMX-rendered sparklines)
+// TODO: Migrate template to use direct imports
 window.SiteJS = window.SiteJS || {};
 window.SiteJS.trends = { trendsChart };
-

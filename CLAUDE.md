@@ -244,6 +244,88 @@ Key settings in `.env` file such as database connection strings, credentials for
 - **Theme Support**: All UI components must support both light and dark modes
 - **Component Priority**: Always prefer DaisyUI widgets over custom implementations
 
+### Alpine.js & JavaScript Patterns
+
+#### Alpine Magic Properties
+Available globally in all templates via Alpine.js plugins:
+
+**$cookies** - Access to js-cookie API:
+```html
+<script>
+  // In Alpine components
+  const token = this.$cookies.get('csrftoken');
+  this.$cookies.set('key', 'value', { expires: 7 });
+</script>
+```
+
+**$clipboard** - Clipboard utilities:
+```html
+<!-- Copy element content by ID -->
+<button @click="$clipboard.copy($el, 'element-id')">Copy</button>
+
+<!-- Copy text directly -->
+<button @click="$clipboard.copyText($el, 'text to copy')">Copy Text</button>
+```
+
+#### Modern JavaScript Patterns
+
+**ES Module Imports** (for standalone scripts):
+```html
+{% load django_vite %}
+<script type="module">
+  import Cookies from '{% vite_asset_url 'assets/javascript/utils/cookies.js' %}';
+  import { setupTagSelects } from '{% vite_asset_url 'assets/javascript/tag-multiselect.js' %}';
+
+  // Use directly
+  const token = Cookies.get('csrftoken');
+  setupTagSelects();
+</script>
+```
+
+**onclick Replacement**:
+```html
+<!-- OLD (deprecated) -->
+<div onclick="SiteJS.app.copyToClipboard(this, 'id')">
+
+<!-- NEW (use Alpine @click) -->
+<div @click="$clipboard.copy($el, 'id')">
+```
+
+**CSRF Token Pattern**:
+```html
+<script>
+  // In Alpine components
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': this.$cookies.get('csrftoken')
+    }
+  });
+</script>
+
+<script type="module">
+  // In standalone scripts
+  import Cookies from '{% vite_asset_url 'assets/javascript/utils/cookies.js' %}';
+
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': Cookies.get('csrftoken')
+    }
+  });
+</script>
+```
+
+#### Legacy window.SiteJS (Temporary)
+Some templates still use `window.SiteJS.*` for complex functionality (editors, charts, pipeline). These will be migrated to direct imports in the future:
+- `SiteJS.editors.*` - Code editors (evaluations, participants)
+- `SiteJS.adminDashboard.*` - Chart rendering
+- `SiteJS.trends.*` - Sparkline charts
+- `SiteJS.tagMultiselect.*` - Tag selection
+- `SiteJS.pipeline.*` - React pipeline builder
+
+**Do not add new code using window.SiteJS** - use Alpine magics or direct imports instead.
+
 ### Git Usage Guidelines
 - **Logical Commits**: Break work into logical chunks and commit after completing each coherent piece of functionality
 - **Commit Messages**: Write concise commit messages that describe the change's purpose, not an exhaustive list of modifications

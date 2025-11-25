@@ -119,7 +119,9 @@ export const cumulativeChartWithDates = (
   })
 }
 
-// Backward compatibility shim (TODO: Remove after Phase 6)
+// Temporary global for templates not yet migrated
+// Used by: templates/admin/home.html (HTMX-rendered charts)
+// TODO: Migrate template to use direct imports
 window.SiteJS = window.SiteJS || {};
 window.SiteJS.adminDashboard = {
   barChartWithDates,

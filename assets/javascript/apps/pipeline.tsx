@@ -12,6 +12,8 @@ export function renderPipeline(containerId: string, team_slug: string, pipelineI
   createRoot(root).render(<App team_slug={team_slug} pipelineId={pipelineId} />);
 }
 
-// Backward compatibility shim (TODO: Remove after Phase 6)
+// Temporary global for templates not yet migrated
+// Used by: templates/pipelines/pipeline_builder.html
+// TODO: Migrate template to use direct imports
 (window as any).SiteJS = (window as any).SiteJS || {};
 (window as any).SiteJS.pipeline = { renderPipeline };

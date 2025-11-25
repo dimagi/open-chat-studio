@@ -60,6 +60,8 @@ export const setupTagSelects = () => {
   htmx.on("htmx:afterSwap", () => { configureTomSelect() });
 }
 
-// Backward compatibility shim (TODO: Remove after Phase 6)
+// Temporary global for templates not yet migrated
+// Used by: templates/experiments/experiment_session_view.html
+// TODO: Migrate template to use direct imports
 window.SiteJS = window.SiteJS || {};
 window.SiteJS.tagMultiselect = { setupTagSelects };
