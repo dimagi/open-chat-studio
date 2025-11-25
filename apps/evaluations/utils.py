@@ -4,9 +4,11 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import F
+from pydantic import BaseModel, Field, create_model
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
+from apps.evaluations.field_definitions import FieldDefinition
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationMessage
@@ -348,3 +350,30 @@ def parse_csv_value_as_json(value):
         except (json.JSONDecodeError, TypeError):
             return value
     return value
+
+
+def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str = "DynamicModel") -> type[BaseModel]:
+    """Converts a typed schema dictionary to a Pydantic model.
+
+    Expected format:
+        {
+            "field_name": FieldDefinition(...)
+        }
+
+    Args:
+        schema: Dictionary mapping field names to FieldDefinition objects
+        model_name: Name for the generated Pydantic model
+
+    Returns:
+        Dynamically created Pydantic BaseModel class
+    """
+
+    pydantic_fields = {}
+
+    for field_name, field_def in schema.items():
+        pydantic_fields[field_name] = (
+            field_def.python_type,
+            Field(**field_def.pydantic_fields),
+        )
+
+    return create_model(model_name, **pydantic_fields)

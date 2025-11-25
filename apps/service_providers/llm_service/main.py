@@ -167,15 +167,15 @@ class LlmService(pydantic.BaseModel):
         self, llm_output, session: ExperimentSession, include_citations: bool = True
     ) -> LlmChatResponse:
         if isinstance(llm_output, dict):
-            llm_outputs = llm_output.get("output", "")
+            output_content = llm_output.get("output", "")
         elif isinstance(llm_output, str):
-            llm_outputs = llm_output
+            output_content = llm_output
         elif isinstance(llm_output, list):
             # Normalize list outputs: support list[dict] and list[str]
             if all(isinstance(o, dict) for o in llm_output):
-                llm_outputs = llm_output
+                output_content = llm_output
             elif all(isinstance(o, str) for o in llm_output):
-                llm_outputs = "\n".join(llm_output)
+                output_content = "\n".join(llm_output)
             else:
                 raise TypeError("Unexpected mixed or unsupported list element types in llm_output")
         else:
@@ -184,28 +184,30 @@ class LlmService(pydantic.BaseModel):
         final_text = ""
         cited_file_ids_remote = []
         cited_file_ids = []
-        cited_files = []
         generated_files: list[File] = []
-        if isinstance(llm_outputs, list):
-            for output in llm_outputs:
+        if isinstance(output_content, str):
+            final_text = output_content
+        elif isinstance(output_content, list):
+            for output in output_content:
                 # Populate text
                 final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
-                annotations = output.get("annotations", [])
+                annotation_entries = output.get("annotations", [])
                 if include_citations:
-                    external_ids = self.get_cited_file_ids(annotations)
+                    external_ids = self.get_cited_file_ids(annotation_entries)
                     cited_file_ids_remote.extend(external_ids)
 
-                generated_files.extend(self.get_generated_files(annotations, session.team_id))
+                generated_files.extend(self.get_generated_files(annotation_entries, session.team_id))
 
                 # Replace generated file links with actual file download links
                 for generated_file in generated_files:
                     final_text = self.replace_file_links(text=final_text, file=generated_file, session=session)
         else:
-            final_text = llm_outputs
-            # This path is followed when OCS citations are injected into the output
-            cited_file_ids.extend(extract_file_ids_from_ocs_citations(llm_outputs))
+            raise TypeError(f"Unexpected llm_output type: {type(llm_output).__name__}")
 
+        cited_file_ids.extend(extract_file_ids_from_ocs_citations(final_text))
+
+        cited_files = []
         if include_citations:
             cited_files = File.objects.filter(
                 Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=session.team_id

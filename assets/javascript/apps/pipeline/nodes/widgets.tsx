@@ -1,4 +1,5 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo} from "react";
+import Select from 'react-select';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
@@ -28,6 +29,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return SelectWidget
     case "multiselect":
       return MultiSelectWidget
+    case "searchable_multiselect":
+      return SearchableMultiSelectWidget
     case "llm_provider_model":
       return LlmWidget
     case "history":
@@ -283,6 +286,61 @@ function MultiSelectWidget(props: WidgetParams) {
       ))}
     </InputField>
   )
+}
+
+function SearchableMultiSelectWidget(props: WidgetParams) {
+  const options = getSelectOptions(props.schema);
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  // Determine the type from schema for proper type conversion
+  const itemType = props.schema.items?.type || 'string';
+
+  // Type conversion function based on schema
+  const convertValue = (value: any) => {
+    switch (itemType) {
+      case 'integer':
+      case 'number':
+        return Number(value);
+      case 'boolean':
+        return Boolean(value);
+      case 'string':
+      default:
+        return String(value);
+    }
+  };
+
+  // Convert paramValue (array) to react-select format
+  const selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
+  const selectedOptions = options.filter(option => {
+    // Check both string and converted values for matching
+    const convertedValue = convertValue(option.value);
+    return selectedValues.includes(option.value) || selectedValues.some(v => v === convertedValue);
+  });
+
+  const handleChange = (selectedOptions: any) => {
+    const values = selectedOptions ? selectedOptions.map((option: Option) => convertValue(option.value)) : [];
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        next.data.params[props.name] = values;
+      })
+    );
+  };
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <Select
+        isMulti
+        options={options}
+        value={selectedOptions}
+        onChange={handleChange}
+        isDisabled={props.readOnly}
+        className="react-select-container"
+        classNamePrefix="react-select"
+        placeholder={`Select ${props.label.toLowerCase()}...`}
+        isClearable={true}
+      />
+    </InputField>
+  );
 }
 
 export function CodeWidget(props: WidgetParams) {

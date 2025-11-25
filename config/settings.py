@@ -124,6 +124,7 @@ PROJECT_APPS = [
     "apps.trace",
     "apps.mcp_integrations",
     "apps.filters",
+    "apps.data_migrations",
     "apps.oauth",
 ]
 
@@ -228,6 +229,7 @@ else:
             "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
             "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
             "CONN_HEALTH_CHECKS": True,
+            "DISABLE_SERVER_SIDE_CURSORS": env.bool("DJANGO_DISABLE_SERVER_SIDE_CURSORS", default=False),
         }
     }
 

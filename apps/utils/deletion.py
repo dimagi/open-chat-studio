@@ -1,7 +1,8 @@
 from collections import Counter
+from collections.abc import Generator
 from functools import reduce
 from operator import or_
-from typing import Any
+from typing import Any, Literal
 
 from django.conf import settings
 from django.contrib.admin.utils import NestedObjects
@@ -189,7 +190,7 @@ def _get_m2m_related_models(model):
     return m2m_models
 
 
-def get_related_objects(instance, pipeline_param_key: str = None) -> list:
+def get_related_objects(instance, pipeline_param_key: str | None = None) -> list:
     from apps.pipelines.models import Node
 
     related_objects = []
@@ -203,11 +204,11 @@ def get_related_objects(instance, pipeline_param_key: str = None) -> list:
     return related_objects
 
 
-def has_related_objects(instance, pipeline_param_key: str = None) -> bool:
+def has_related_objects(instance, pipeline_param_key: str | None = None) -> bool:
     return any(queryset.exists() for queryset in _get_related_objects_querysets(instance, pipeline_param_key))
 
 
-def _get_related_objects_querysets(instance, pipeline_param_key: str = None) -> list:
+def _get_related_objects_querysets(instance, pipeline_param_key: str | None = None) -> Generator[Any | None, Any, None]:
     for related in get_candidate_relations_to_delete(instance._meta):
         related_objects = getattr(instance, related.get_accessor_name(), None)
         if related_objects is not None:
@@ -217,7 +218,7 @@ def _get_related_objects_querysets(instance, pipeline_param_key: str = None) -> 
         yield get_related_pipelines_queryset(instance, pipeline_param_key)
 
 
-def get_related_pipelines_queryset(instance, pipeline_param_key: str = None):
+def get_related_pipelines_queryset(instance, pipeline_param_key: str | None = None):
     from apps.pipelines.models import Node
 
     pipelines = Node.objects.filter(
@@ -226,9 +227,31 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str = None):
     return pipelines
 
 
-def get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key: str):
-    """Get all experiments that reference any id in `instance_ids`, located at the `pipeline_param_key` parameter"""
+def get_related_pipelines_queryset_for_list_param(instance, pipeline_param_key: str | None = None):
+    from apps.pipelines.models import Node
 
+    pipelines = Node.objects.filter(
+        Q(**{f"params__{pipeline_param_key}__contains": instance.id})
+        | Q(**{f"params__{pipeline_param_key}__contains": str(instance.id)})
+    )
+    return pipelines
+
+
+def get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key: str):
+    """Get all experiments that reference any id in `instance_ids`, located at the `pipeline_param_key`
+    parameter"""
+    return _get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key, "__in")
+
+
+def get_related_pipeline_experiments_queryset_list_param(instance_ids, pipeline_param_key: str):
+    """Get all experiments that reference any id in `instance_ids`, located at the `pipeline_param_key`
+    parameter where the param value is a list."""
+    return _get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key, "__contains")
+
+
+def _get_related_pipeline_experiments_queryset(
+    instance_ids, pipeline_param_key: str, operator: Literal["__in", "__contains"]
+):
     from apps.experiments.models import Experiment
 
     instance_ids_str = [str(instance_id) for instance_id in instance_ids]
@@ -236,8 +259,8 @@ def get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key: 
     return (
         Experiment.objects.exclude(pipeline=None)
         .filter(
-            Q(**{f"pipeline__node__params__{pipeline_param_key}__in": instance_ids_int})
-            | Q(**{f"pipeline__node__params__{pipeline_param_key}__in": instance_ids_str})
+            Q(**{f"pipeline__node__params__{pipeline_param_key}{operator}": instance_ids_int})
+            | Q(**{f"pipeline__node__params__{pipeline_param_key}{operator}": instance_ids_str})
         )
         .distinct()
     )

@@ -157,6 +157,9 @@
   <!-- Collection Name -->
     <div class="mb-6">
       {% render_field form.name %}
+      <div x-show="isIndex">
+       {% render_field form.summary %}
+      </div>
     </div>
 
   <!-- Indexed Collection Options -->

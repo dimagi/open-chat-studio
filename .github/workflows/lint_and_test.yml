@@ -4,6 +4,22 @@ on:
     paths-ignore:
       - 'components/**'
       - 'docs/**'
+      - 'mkdocs.yml'
+      - 'README.md'
+      - 'CLAUDE.md'
+      - 'LICENSE'
+      - '.coderabbit.yaml'
+      - 'locust/**'
+      - 'cypress/**'
+      - 'cypress.config.ts'
+      - 'cypress.env.json'
+      - 'Dockerfile'
+      - 'docker-compose-dev.yml'
+      - 'heroku.yml'
+      - 'app.json'
+      - 'scripts/**'
+      - 'media/**'
+
   push:
     branches:
       - main
@@ -11,6 +27,21 @@ on:
       - 'components/**'
       - 'docs/**'
       - 'mkdocs.yml'
+      - 'README.md'
+      - 'CLAUDE.md'
+      - 'LICENSE'
+      - '.coderabbit.yaml'
+      - 'locust/**'
+      - 'cypress/**'
+      - 'cypress.config.ts'
+      - 'cypress.env.json'
+      - 'Dockerfile'
+      - 'docker-compose-dev.yml'
+      - 'heroku.yml'
+      - 'app.json'
+      - 'scripts/**'
+      - 'media/**'
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
