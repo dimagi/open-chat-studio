@@ -64,24 +64,3 @@ class TokenHasOAuthResourceScope(TokenHasResourceScope, TokenHasOAuthScope):
     """An implementation of TokenHasResourceScope that uses TokenHasOAuthScope"""
 
     pass
-
-
-def TokenHasRequiredOAuthScope(*required_scopes):
-    """
-    Factory function that creates a TokenHasScope permission class with required scopes.
-    Works with DRF's @permission_classes decorator.
-
-    Usage:
-        @api_view(['GET'])
-        @permission_classes([TokenHasRequiredOAuthScope('read', 'write')])
-        def my_view(request):
-            return Response({'message': 'Hello!'})
-    """
-
-    class _TokenHasRequiredScope(TokenHasOAuthScope):
-        def has_permission(self, request, view):
-            # Set required_scopes on the view for the parent class to check
-            view.required_scopes = required_scopes
-            return super().has_permission(request, view)
-
-    return _TokenHasRequiredScope

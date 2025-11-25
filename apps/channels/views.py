@@ -17,8 +17,8 @@ from django_htmx.http import HttpResponseClientRedirect
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.api.permissions import verify_hmac
 from apps.channels import tasks
@@ -33,7 +33,6 @@ from apps.channels.serializers import (
 from apps.channels.utils import validate_platform_availability
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.experiments.views.utils import get_channels_context
-from apps.oauth.permissions import TokenHasRequiredOAuthScope
 from apps.teams.decorators import login_and_team_required
 from apps.web.waf import WafRule, waf_allow
 
@@ -117,17 +116,19 @@ def new_api_message_schema(versioned: bool):
 
 
 @new_api_message_schema(versioned=False)
-@api_view(["POST"])
-@permission_classes([TokenHasRequiredOAuthScope("chatbots:interact")])
-def new_api_message(request, experiment_id: uuid):
-    return _new_api_message(request, experiment_id)
+class NewApiMessageView(APIView):
+    required_scopes = ("chatbots:interact",)
+
+    def post(self, request, experiment_id: uuid):
+        return _new_api_message(request, experiment_id)
 
 
 @new_api_message_schema(versioned=True)
-@api_view(["POST"])
-@permission_classes([TokenHasRequiredOAuthScope("chatbots:interact")])
-def new_api_message_versioned(request, experiment_id: uuid, version=None):
-    return _new_api_message(request, experiment_id, version)
+class NewApiMessageVersionedView(APIView):
+    required_scopes = ("chatbots:interact",)
+
+    def post(self, request, experiment_id: uuid, version=None):
+        return _new_api_message(request, experiment_id, version)
 
 
 def _new_api_message(request, experiment_id: uuid, version=None):
