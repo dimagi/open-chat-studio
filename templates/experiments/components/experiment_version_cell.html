@@ -6,7 +6,7 @@
 
     <input type="hidden" id="api-url-{{ record.version_number }}" value="{{ record.api_url }}">
     <button class="btn btn-ghost btn-xs no-animation normal-case! flex items-center"
-            onclick="SiteJS.app.copyToClipboard(this, 'api-url-{{ record.version_number }}')"
+            @click="$clipboard.copy($el, 'api-url-{{ record.version_number }}')"
             title="Copy API URL to clipboard">
       <i class="fa-solid fa-link"></i> API <i class="fa-regular fa-copy fa-sm pg-text-muted"></i>
     </button>

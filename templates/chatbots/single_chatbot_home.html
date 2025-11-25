@@ -93,7 +93,7 @@
       <div class="my-4">
         <h3 class="font-bold text-lg inline mr-4">Channels:</h3>
         <input id="api-url-link" type="hidden" value="{{ experiment.get_api_url }}" />
-        <button class="btn btn-ghost btn-sm no-animation normal-case!" onclick="SiteJS.app.copyToClipboard(this, 'api-url-link')" title="Copy to clipboard">
+        <button class="btn btn-ghost btn-sm no-animation normal-case!" @click="$clipboard.copy($el, 'api-url-link')" title="Copy to clipboard">
           <i class="fa-solid fa-link"></i> API <i class="fa-regular fa-copy fa-sm pg-text-muted"></i>
         </button>
         <div class="dropdown dropdown-hover">

@@ -96,9 +96,11 @@
     data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
   >
   </script>
-  <script>
+  <script type="module">
+    import { setupTagSelects } from '{% vite_asset_url 'assets/javascript/tag-multiselect.js' %}';
+
     window.addEventListener('load', () => {
-      SiteJS.tagMultiselect.setupTagSelects();
+      setupTagSelects();
     });
   </script>
 {% endblock page_js %}

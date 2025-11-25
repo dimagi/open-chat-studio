@@ -1,15 +1,18 @@
+{% load django_vite %}
 <div class="banners-container"
      hx-get="{% url 'banners:load_banners' %}"
      hx-trigger="load"
      hx-swap="innerHTML">
 </div>
-<script>
+<script type="module">
+    import Cookies from '{% vite_asset_url 'assets/javascript/utils/cookies.js' %}';
+
     function updateDismissedBanners(bannerId, bannerExpiry) {
         try {
             let cookieName = `dismissed_banner_${bannerId}`;
-            const dismissed = SiteJS.app.Cookies.get(cookieName);
+            const dismissed = Cookies.get(cookieName);
             if (!dismissed) {
-                SiteJS.app.Cookies.set(cookieName, 1, { expires: Number(bannerExpiry) });
+                Cookies.set(cookieName, 1, { expires: Number(bannerExpiry) });
             }
         } catch (error) {
             if (error instanceof TypeError) {

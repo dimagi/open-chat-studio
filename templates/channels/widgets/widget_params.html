@@ -12,7 +12,7 @@
              class="input input-bordered join-item flex-1 font-mono text-sm"
              readonly>
       <button class="btn btn-neutral join-item" type="button"
-              onclick="SiteJS.app.copyToClipboard(this, 'widget_chatbot_id')"
+              @click="$clipboard.copy($el, 'widget_chatbot_id')"
               title="Copy to clipboard">
           <i class="fa-solid fa-copy"></i> Copy
       </button>
@@ -25,7 +25,7 @@
              class="input input-bordered join-item flex-1 font-mono text-sm"
              readonly>
       <button class="btn btn-neutral join-item" type="button"
-              onclick="SiteJS.app.copyToClipboard(this, 'widget_token')"
+              @click="$clipboard.copy($el, 'widget_token')"
               title="Copy to clipboard">
           <i class="fa-solid fa-copy"></i> Copy
       </button>
@@ -36,7 +36,9 @@
     </h3>
     <div class="w-full">
       <p class="my-4">Use this HTML code to embed the chat window for your bot in a different site.</p>
-      <button class="my-2 btn btn-sm btn-primary justify-self-center" onclick="copyEmbed(event)" title="Copy to clipboard">
+      <button class="my-2 btn btn-sm btn-primary justify-self-center"
+              @click="$clipboard.copyText($el, `{% include "experiments/share/widget.html" with experiment=widget.experiment embed_key=widget.token %}`)"
+              title="Copy to clipboard">
         <i class="fa-regular fa-copy"></i> Copy Widget Embed Code
       </button>
       <p class="my-2 text-sm"><a href="{{ docs_base_url }}{{ docs_links.chat_widget }}" class="link" target="_blank">Learn more about embedding</a></p>
@@ -47,10 +49,3 @@
     </div>
   </div>
 </div>
-<script>
-  async function copyEmbed(event) {
-    event.preventDefault()
-    const code = `{% include "experiments/share/widget.html" with experiment=widget.experiment embed_key=widget.token %}`
-    await SiteJS.app.copyTextToClipboard(event.target, code)
-  }
-</script>
