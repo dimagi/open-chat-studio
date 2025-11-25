@@ -4,14 +4,14 @@ import uuid
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
-from oauth2_provider.decorators import protected_resource
 from rest_framework import serializers
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 
 from apps.api.serializers import ExperimentSessionCreateSerializer, MessageSerializer
 from apps.channels.tasks import handle_api_message
+from apps.oauth.permissions import TokenHasRequiredScope
 
 create_chat_completion_request = inline_serializer(
     "CreateChatCompletionRequest", {"messages": MessageSerializer(many=True)}
@@ -114,14 +114,14 @@ def chat_completions_schema(versioned: bool):
 
 @chat_completions_schema(versioned=False)
 @api_view(["POST"])
-@protected_resource(scopes=["openai_chat_completions"])
+@permission_classes([TokenHasRequiredScope("chatbots:chat")])
 def chat_completions(request, experiment_id: uuid.UUID):
     return _chat_completions(request, experiment_id)
 
 
 @chat_completions_schema(versioned=True)
 @api_view(["POST"])
-@protected_resource(scopes=["openai_chat_completions"])
+@permission_classes([TokenHasRequiredScope("chatbots:chat")])
 def chat_completions_version(request, experiment_id: uuid.UUID, version=None):
     return _chat_completions(request, experiment_id, version)
 

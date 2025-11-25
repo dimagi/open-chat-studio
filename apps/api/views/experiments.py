@@ -1,7 +1,6 @@
-from django.conf import settings
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
-from oauth2_provider.contrib.rest_framework import TokenHasScope
+from oauth2_provider.contrib.rest_framework import TokenHasResourceScope
 from rest_framework import mixins
 from rest_framework.viewsets import GenericViewSet
 
@@ -13,12 +12,12 @@ from apps.experiments.models import Experiment
 @extend_schema_view(
     list=extend_schema(
         operation_id="experiment_list",
-        summary=settings.API_SUMMARIES["list_chatbots"],
+        summary="List Experiments",
         tags=["Experiments"],
     ),
     retrieve=extend_schema(
         operation_id="experiment_retrieve",
-        summary=settings.API_SUMMARIES["retrieve_chatbot"],
+        summary="Retrieve Experiment",
         tags=["Experiments"],
         parameters=[
             OpenApiParameter(
@@ -31,17 +30,11 @@ from apps.experiments.models import Experiment
     ),
 )
 class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [DjangoModelPermissionsWithView, TokenHasScope]
+    permission_classes = [DjangoModelPermissionsWithView, TokenHasResourceScope]
+    required_scopes = ["chatbots"]
     serializer_class = ExperimentSerializer
     lookup_field = "public_id"
     lookup_url_kwarg = "id"
-
-    def get_required_scopes(self, request, view):
-        if self.action == "list":
-            return ["list_experiments"]
-        elif self.action == "retrieve":
-            return ["retrieve_experiment"]
-        return []
 
     def get_queryset(self):
         # Only return working experiments

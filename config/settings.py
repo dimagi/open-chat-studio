@@ -820,24 +820,16 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
 
 
 # API
-API_SUMMARIES = {
-    "trigger_bot_message": "Trigger the bot to send a message to the user",
-    "list_chatbots": "List Chatbots",
-    "retrieve_chatbot": "Retrieve Chatbot",
-    "list_chatbot_sessions": "List Chatbot Sessions",
-    "retrieve_chatbot_session": "Retrieve Chatbot Session",
-    "create_chatbot_session": "Create Chatbot Session",
-    "end_chatbot_session": "End Chatbot Session",
-    "update_chatbot_session_state": "Update Chatbot Session State",
-    "update_participant_data": "Update Participant Data",
-    "download_file": "Download File Content",
-    "openai_chat_completions": "Completions API for Chatbots",
-}
-
 OAUTH2_PROVIDER = {
     "PKCE_REQUIRED": False,  # Temporary disable PKCE requirement for easier testing
     "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.APIScopedValidator",
-    "SCOPES": API_SUMMARIES,
+    "SCOPES": {
+        "chatbots:read": "List and Retrieve Chatbot Data",
+        "chatbots:chat": "Converse with a Chatbot",
+        "sessions:read": "List and Read Sessions",
+        "sessions:write": "Manage Sessions",
+        "participants:write": "Update Participant Data",
+    },
 }
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"

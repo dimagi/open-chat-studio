@@ -1,13 +1,12 @@
-from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
-from oauth2_provider.decorators import protected_resource
-from rest_framework.decorators import api_view, renderer_classes
+from rest_framework.decorators import api_view, permission_classes, renderer_classes
 from rest_framework.renderers import BaseRenderer
 
 from apps.files.models import File
+from apps.oauth.permissions import TokenHasRequiredScope
 
 
 class BinaryRenderer(BaseRenderer):
@@ -20,15 +19,10 @@ class BinaryRenderer(BaseRenderer):
         return data
 
 
-@extend_schema(
-    operation_id="file_content",
-    summary=settings.API_SUMMARIES["download_file"],
-    tags=["Files"],
-    responses=bytes,
-)
+@extend_schema(operation_id="file_content", summary="Download File Content", tags=["Files"], responses=bytes)
 @api_view(["GET"])
 @renderer_classes([BinaryRenderer])
-@protected_resource(scopes=["download_file"])
+@permission_classes([TokenHasRequiredScope("sessions:read", "chatbots:read")])
 @permission_required("files.view_file")
 def file_content_view(request, pk: int):
     file = get_object_or_404(File, id=pk, team=request.team)

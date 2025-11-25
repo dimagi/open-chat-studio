@@ -1,11 +1,9 @@
-from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiExample, extend_schema
-from oauth2_provider.decorators import protected_resource
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import NotFound
 
 from apps.api.serializers import ParticipantDataUpdateRequest
@@ -13,11 +11,12 @@ from apps.api.tasks import setup_connect_channels_for_bots
 from apps.channels.models import ChannelPlatform
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.oauth.permissions import TokenHasRequiredScope
 
 
 @extend_schema(
     operation_id="update_participant_data",
-    summary=settings.API_SUMMARIES["update_participant_data"],
+    summary="Update Participant Data",
     tags=["Participants"],
     request=ParticipantDataUpdateRequest(),
     responses={200: {}},
@@ -70,7 +69,7 @@ from apps.experiments.models import Experiment, Participant, ParticipantData
     ],
 )
 @api_view(["POST"])
-@protected_resource(scopes=["update_participant_data"])
+@permission_classes([TokenHasRequiredScope("participants:write")])
 @permission_required("experiments.change_participantdata")
 def update_participant_data(request):
     return _update_participant_data(request)
@@ -78,7 +77,7 @@ def update_participant_data(request):
 
 @extend_schema(exclude=True)
 @api_view(["POST"])
-@protected_resource(scopes=["update_participant_data"])
+@permission_classes([TokenHasRequiredScope("participants:write")])
 @permission_required("experiments.change_participantdata")
 def update_participant_data_old(request):
     # This endpoint is kept for backwards compatibility of the path with a trailing "/"

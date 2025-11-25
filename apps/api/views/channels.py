@@ -9,9 +9,8 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from drf_spectacular.utils import OpenApiExample, extend_schema
-from oauth2_provider.decorators import protected_resource
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import Request
 
@@ -20,6 +19,7 @@ from apps.api.serializers import TriggerBotMessageRequest
 from apps.api.tasks import trigger_bot_message_task
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.oauth.permissions import TokenHasRequiredScope
 
 connect_logger = logging.getLogger("api.connect_channel")
 
@@ -84,7 +84,7 @@ def consent(request: Request):
 
 @extend_schema(
     operation_id="trigger_bot_message",
-    summary=settings.API_SUMMARIES["trigger_bot_message"],
+    summary="Trigger the bot to send a message to the user",
     tags=["Channels"],
     request=TriggerBotMessageRequest(),
     responses={
@@ -127,7 +127,7 @@ def consent(request: Request):
     ],
 )
 @api_view(["POST"])
-@protected_resource(scopes=["trigger_bot_message"])
+@permission_classes([TokenHasRequiredScope("chatbots:chat")])
 @transaction.atomic
 def trigger_bot_message(request):
     """
