@@ -1266,4 +1266,5 @@ def test_end_session_tool(get_llm_service, provider, provider_model, pipeline, e
     runnable = create_runnable(pipeline, nodes, edges)
 
     output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+    print(output)
     assert output["intents"] == [Intents.END_SESSION]
