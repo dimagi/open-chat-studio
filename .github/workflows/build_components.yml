@@ -33,7 +33,7 @@ jobs:
         run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
         shell: bash
       - name: Install dependencies
-        run: npm install
+        run: npm ci
         working-directory: ./components/chat_widget
       - name: Test
         run: npm run test

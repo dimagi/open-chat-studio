@@ -1,13 +1,8 @@
 import contextlib
 import logging
 
-from langchain.chains.conversation.base import ConversationChain
-from langchain.chains.llm import LLMChain
 from langchain.memory.prompt import SUMMARY_PROMPT
-from langchain_anthropic import ChatAnthropic
-from langchain_community.callbacks import get_openai_callback
 from langchain_core.language_models import BaseChatModel
-from langchain_core.memory import BaseMemory
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, get_buffer_string, trim_messages
 from langchain_core.prompts import (
     HumanMessagePromptTemplate,
@@ -53,14 +48,14 @@ class BasicConversation:
         self,
         prompt_str: str,
         source_material: str,
-        memory: BaseMemory,
         llm: BaseChatModel,
     ):
         self.prompt_str = prompt_str
         self.source_material = source_material
-        self.memory = memory
         self.llm = llm
         self._build_chain()
+
+        self.messages = []
 
     def _build_chain(self):
         prompt = OcsPromptTemplate.from_messages(
@@ -72,7 +67,7 @@ class BasicConversation:
         )
 
         # set output_key to match agent's output_key
-        self.chain = ConversationChain(memory=self.memory, prompt=prompt, llm=self.llm, output_key="output")
+        self.chain = prompt | self.llm
 
     @property
     def system_prompt(self):
@@ -83,7 +78,7 @@ class BasicConversation:
         return prompt_to_use
 
     def load_memory_from_messages(self, messages: list[BaseMessage]):
-        self.memory.chat_memory.messages = messages
+        self.messages = messages
 
     def load_memory_from_chat(self, chat: Chat, max_token_limit: int):
         self.load_memory_from_messages(self._get_optimized_history(chat, max_token_limit))
@@ -92,22 +87,9 @@ class BasicConversation:
         return compress_chat_history(chat, self.llm, max_token_limit, input_messages=[])
 
     def predict(self, input: str) -> tuple[str, int, int]:
-        if isinstance(self.llm, ChatAnthropic):
-            # Langchain has no inbuilt functionality to return prompt or
-            # completion tokens for Anthropic's models
-            # https://python.langchain.com/docs/modules/model_io/llms/token_usage_tracking
-            # Instead, we convert the prompt to a string, and count the tokens
-            # with Anthropic's token counter.
-            # TODO: When we enable the AgentExecuter for Anthropic models, we should revisit this
-            response = self.chain.invoke({"input": input})
-            prompt_tokens = self.llm.get_num_tokens_from_messages(response["history"][:-1])
-            completion_tokens = self.llm.get_num_tokens_from_messages([response["history"][-1]])
-            return response["output"], prompt_tokens, completion_tokens
-        else:
-            with get_openai_callback() as cb:
-                response = self.chain.invoke({"input": input})
-            output = response["output"]
-            return output, cb.prompt_tokens, cb.completion_tokens
+        response = self.chain.invoke({"input": input, "history": self.messages})
+        usage = response.usage_metadata or {}
+        return response.text(), usage.get("input_tokens", 0), usage.get("output_tokens", 0)
 
 
 def compress_chat_history(
@@ -229,7 +211,12 @@ def _compress_chat_history(
         return history, None, None
 
     total_messages = history.copy()
-    total_messages.extend(input_messages)
+    if input_messages and input_messages[0].type == "system" and total_messages and total_messages[0].type == "system":
+        # Move prompt and summary to the start of the list
+        # Avoids the Anthropic error: received multiple non-consecutive system messages
+        total_messages = [input_messages[0], total_messages[0]] + total_messages[1:] + input_messages[1:]
+    else:
+        total_messages.extend(input_messages)
     current_token_count = llm.get_num_tokens_from_messages(total_messages)
     if history_mode in [PipelineChatHistoryModes.SUMMARIZE, PipelineChatHistoryModes.TRUNCATE_TOKENS, None]:
         if current_token_count <= max_token_limit and len(total_messages) <= MAX_UNCOMPRESSED_MESSAGES:
@@ -271,7 +258,9 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
         )
     history_tokens = llm.get_num_tokens_from_messages(history)
     summary_tokens = (
-        llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+        # Use HumanMessage and not SystemMessage because the Anthropic count_tokens API does not process
+        # system messages.
+        llm.get_num_tokens_from_messages([HumanMessage(content=summary)])
         if summary
         else INITIAL_SUMMARY_TOKENS_ESTIMATE
     )
@@ -295,7 +284,7 @@ def summarize_history(llm, history, max_token_limit, input_message_tokens, summa
         summary_token_limit = max_token_limit - history_tokens - input_message_tokens
 
         if summary := _get_new_summary(llm, pruned_memory, summary, model_token_limit=max_token_limit):
-            summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+            summary_tokens = llm.get_num_tokens_from_messages([HumanMessage(content=summary)])
             if summary_tokens > summary_token_limit:
                 summary, summary_token_limit = _reduce_summary_size(llm, summary, summary_token_limit)
         else:
@@ -339,9 +328,9 @@ def compress_chat_history_from_messages(
             "Compressed chat history to %s tokens (%s prompt + %s summary + %s history)",
             input_message_tokens
             + llm.get_num_tokens_from_messages(history)
-            + llm.get_num_tokens_from_messages([SystemMessage(content=summary)]),
+            + llm.get_num_tokens_from_messages([HumanMessage(content=summary)]),
             input_message_tokens,
-            llm.get_num_tokens_from_messages([SystemMessage(content=summary)]),
+            llm.get_num_tokens_from_messages([HumanMessage(content=summary)]),
             llm.get_num_tokens_from_messages(history),
         )
     except ChatException as e:
@@ -406,8 +395,8 @@ def _get_new_summary(llm, pruned_memory, summary, model_token_limit, first_call=
         else:
             raise ChatException("Unable to compress history")
 
-    chain = LLMChain(llm=llm, prompt=SUMMARY_PROMPT, name="compress_chat_history")
-    summary = chain.invoke(context)["text"]
+    chain = (SUMMARY_PROMPT | llm).with_config({"run_name": "compress_chat_history"})
+    summary = chain.invoke(context).text()
 
     if next_batch:
         return _get_new_summary(llm, next_batch, summary, model_token_limit, False)
@@ -425,14 +414,15 @@ def _get_summarization_prompt_tokens_with_context(llm, summary, pruned_memory):
 def _reduce_summary_size(llm, summary, summary_token_limit) -> tuple:
     if summary_token_limit <= 0:
         raise ChatException("Unable to compress history: summary token <= 0")
-    summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+    summary_tokens = llm.get_num_tokens_from_messages([HumanMessage(content=summary)])
     attempts = 0
     while summary and summary_tokens > summary_token_limit:
         if attempts == 3:
             raise ChatException("Too many attempts trying to reduce summary size.")
-        chain = LLMChain(llm=llm, prompt=SUMMARY_COMPRESSION_PROMPT, name="compress_chat_history")
-        summary = chain.invoke({"summary": summary})["text"]
-        summary_tokens = llm.get_num_tokens_from_messages([SystemMessage(content=summary)])
+
+        chain = (SUMMARY_COMPRESSION_PROMPT | llm).with_config({"run_name": "compress_chat_history"})
+        summary = chain.invoke({"summary": summary}).text()
+        summary_tokens = llm.get_num_tokens_from_messages([HumanMessage(content=summary)])
         attempts += 1
 
     return summary, summary_tokens

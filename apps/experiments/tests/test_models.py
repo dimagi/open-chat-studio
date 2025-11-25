@@ -458,7 +458,7 @@ class TestExperimentSession:
                 )
 
         session = ExperimentSession.objects.all().annotate_with_versions_list().first()
-        assert session.experiment_versions == expected_display_val
+        assert session.versions_list == expected_display_val
 
     @pytest.mark.parametrize("participant_data_injected", [True, False])
     def test_requires_participant_data(self, participant_data_injected):

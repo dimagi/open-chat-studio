@@ -1,6 +1,7 @@
 import contextlib
 import mimetypes
 import pathlib
+from datetime import datetime
 
 import magic
 from django.conf import settings
@@ -22,6 +23,7 @@ from apps.web.meta import absolute_url
 class FilePurpose(models.TextChoices):
     ASSISTANT = "assistant", "Assistant"
     COLLECTION = "collection", "Collection"
+    EVALUATION_DATASET = "evaluation_dataset", "Evaluation Dataset"
 
 
 class FileObjectManager(VersionsObjectManagerMixin, models.Manager):
@@ -65,7 +67,17 @@ class File(BaseTeamModel, VersionsMixin):
         return cls.create(filename, external_file, team_id, external_id, external_source, metadata)
 
     @classmethod
-    def create(cls, filename, file_obj, team_id, external_id="", external_source="", metadata: dict = None):
+    def create(
+        cls,
+        filename: str,
+        file_obj,
+        team_id: int,
+        external_id: str = "",
+        external_source: str = "",
+        metadata: dict | None = None,
+        purpose: FilePurpose | None = None,
+        expiry_date: datetime | None = None,
+    ):
         content = file_obj.read() if file_obj else None
 
         content_type = mimetypes.guess_type(filename)[0]
@@ -83,7 +95,11 @@ class File(BaseTeamModel, VersionsMixin):
             team_id=team_id,
             content_type=content_type,
             metadata=metadata or {},
+            expiry_date=expiry_date,
         )
+
+        if purpose:
+            new_file.purpose = purpose
 
         if content:
             content_file = ContentFile(content, name=filename)
@@ -164,6 +180,19 @@ class File(BaseTeamModel, VersionsMixin):
         return absolute_url(
             reverse("chatbots:download_file", args=[get_slug_for_team(self.team_id), experiment_session_id, self.id])
         )
+
+    def get_citation_url(self, experiment_session_id: int) -> str:
+        if citation_url := self.metadata.get("citation_url"):
+            return citation_url
+        return absolute_url(
+            reverse("experiments:download_file", args=[get_slug_for_team(self.team_id), experiment_session_id, self.id])
+        )
+
+    @property
+    def citation_text(self):
+        if citation_text := self.metadata.get("citation_text"):
+            return citation_text
+        return self.name
 
     def get_absolute_url(self):
         return reverse("files:file_edit", args=[get_slug_for_team(self.team_id), self.id])

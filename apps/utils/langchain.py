@@ -1,7 +1,7 @@
 import dataclasses
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, cast
+from typing import Any
 from unittest import mock
 from unittest.mock import patch
 
@@ -13,7 +13,6 @@ from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, Base
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from langchain_core.utils.pydantic import TypeBaseModel, is_basemodel_subclass
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
@@ -68,27 +67,6 @@ class FakeLlm(FakeListChatModel):
     def bind_tools(self, tools, *args, **kwargs):
         return self.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
 
-    def with_structured_output(self, schema) -> RunnableSerializable:
-        """with_structured_output returns a runnable that handles both regular message inputs and ChatPromptValue
-        inputs, converting the result to the schema's expected format.
-
-        Examples:
-            FakeLlm(responses=[{"name": "John"}]).with_structured_output(...) -> {"name": "John"}
-            FakeLlm(responses=["keyword"]).with_structured_output(router_schema) -> {"route": "keyword"}
-            FakeLlm(responses=[AIMessage(content="value")]).with_structured_output(...) -> {"route": "value"}
-        """
-        from langchain_core.output_parsers.openai_tools import PydanticToolsParser
-        from langchain_core.runnables import RunnableLambda
-
-        if isinstance(schema, type) and is_basemodel_subclass(schema):
-            output_parser = PydanticToolsParser(tools=[cast(TypeBaseModel, schema)], first_tool_only=True)
-            llm = self.bind_tools([schema], tool_choice="any")
-            return llm | output_parser
-        elif isinstance(schema, dict):
-            # Handle JSON schema - for testing purposes, just return the response directly
-            return RunnableLambda(lambda _: self.responses[0] if self.responses else {})
-        raise Exception("Unsupported schema type, only pydantic models and dicts are supported")
-
 
 @dataclasses.dataclass
 class FakeTokenCounter(TokenCounter):
@@ -109,7 +87,7 @@ class FakeLlmService(LlmService):
     token_counter: TokenCounter
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def get_chat_model(self, llm_model: str, temperature: float):
+    def get_chat_model(self, llm_model: str, **kwargs):
         return self.llm
 
     def get_assistant(self, assistant_id: str, as_agent=False):
@@ -128,7 +106,7 @@ class FakeOpenAILlmService(OpenAIGenericService):
     token_counter: TokenCounter
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def get_chat_model(self, llm_model: str, temperature: float):
+    def get_chat_model(self, llm_model: str, **kwargs):
         return self.llm
 
     def get_assistant(self, assistant_id: str, as_agent=False):

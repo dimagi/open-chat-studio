@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import Count, F, OuterRef, Q, Subquery
+from django.db.models import Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -22,7 +22,7 @@ from waffle import flag_is_active
 from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
@@ -44,11 +44,17 @@ from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
-from apps.pipelines.views import _pipeline_node_default_values, _pipeline_node_parameter_values, _pipeline_node_schemas
+from apps.pipelines.views import (
+    _pipeline_node_default_values,
+    _pipeline_node_parameter_values,
+    _pipeline_node_schemas,
+    llm_model_parameter_context,
+)
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
+from apps.trace.models import Trace
 from apps.utils.search import similarity_search
 from apps.web.waf import WafRule, waf_allow
 
@@ -172,11 +178,29 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return table
 
     def get_queryset(self):
-        from apps.chat.models import ChatMessage
-        from apps.experiments.models import ExperimentSession
+        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
+        queryset = (
+            self.model.objects.get_all()
+            .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
+            .select_related("team")
+        )
+        show_archived = self.request.GET.get("show_archived") == "on"
+        if not show_archived:
+            queryset = queryset.filter(is_archived=False)
+
+        search = self.request.GET.get("search")
+        if search:
+            queryset = similarity_search(
+                queryset,
+                search_phase=search,
+                columns=["name", "description"],
+                extra_conditions=Q(owner__username__icontains=search),
+                score=0.1,
+            )
 
         session_count_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
@@ -184,48 +208,35 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
         participant_count_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
             .values("count")
         )
 
-        messages_count_subquery = (
-            ChatMessage.objects.filter(chat__experiment_session__experiment_id=OuterRef("pk"))
-            .values("chat__experiment_session__experiment_id")
+        interaction_count_subquery = (
+            Trace.objects.filter(experiment=OuterRef("pk"))
+            .exclude(session__experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
         )
 
-        last_message_subquery = (
-            ChatMessage.objects.filter(chat__experiment_session__experiment_id=OuterRef("pk"))
-            .order_by("-created_at")
-            .values("created_at")[:1]
+        last_activity_subquery = (
+            Trace.objects.filter(experiment=OuterRef("pk"))
+            .exclude(session__experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .order_by("-timestamp")
+            .values("timestamp")[:1]
         )
 
-        query_set = (
-            self.model.objects.get_all()
-            .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
-            .select_related("team", "owner")
-            .annotate(session_count=Subquery(session_count_subquery))
-            .annotate(participant_count=Subquery(participant_count_subquery))
-            .annotate(messages_count=Subquery(messages_count_subquery))
-            .annotate(last_message=Subquery(last_message_subquery))
-            .order_by(F("last_message").desc(nulls_last=True))
-        )
-        show_archived = self.request.GET.get("show_archived") == "on"
-        if not show_archived:
-            query_set = query_set.filter(is_archived=False)
-
-        search = self.request.GET.get("search")
-        if search:
-            query_set = similarity_search(
-                query_set,
-                search_phase=search,
-                columns=["name", "description"],
-                extra_conditions=Q(owner__username__icontains=search),
-                score=0.1,
-            )
-        return query_set
+        # Add expensive annotations only to paginated data
+        queryset = queryset.annotate(
+            session_count=Subquery(session_count_subquery, output_field=IntegerField()),
+            participant_count=Subquery(participant_count_subquery, output_field=IntegerField()),
+            interaction_count=Subquery(interaction_count_subquery, output_field=IntegerField()),
+            last_activity=Subquery(last_activity_subquery, output_field=DateTimeField()),
+        ).order_by(F("last_activity").desc(nulls_last=True))
+        return queryset
 
 
 class CreateChatbot(CreateExperiment):
@@ -271,6 +282,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
                 exclude_services = []
             synthetic_voices = SyntheticVoice.get_for_team(self.request.team, exclude_services=exclude_services)
             synthetic_voices = synthetic_voices.filter(service__iexact=experiment.voice_provider.type)
+
         return {
             **data,
             "pipeline_id": experiment.pipeline_id,
@@ -284,7 +296,9 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
             ),
             "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
             "origin": "chatbots",
+            "allow_edit_name": False,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
+            **llm_model_parameter_context(),
         }
 
 
@@ -461,19 +475,10 @@ def chatbot_version_create_status(
 class ChatbotSessionsTableView(ExperimentSessionsTableView):
     table_class = ChatbotSessionsTable
 
-    def get_queryset(self):
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                message_count=Subquery(
-                    ChatMessage.objects.filter(chat=OuterRef("chat"))
-                    .values("chat")
-                    .annotate(count=Count("id"))
-                    .values("count")[:1]
-                )
-            )
-        )
+    def get_table_data(self):
+        """Add message_count annotation to the paginated data."""
+        queryset = super().get_table_data()
+        return queryset.annotate_with_message_count().annotate_with_last_message_created_at()
 
     def get_table(self, **kwargs):
         """

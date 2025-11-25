@@ -13,7 +13,9 @@ type GetWidgetsParams = {
 }
 
 type GetWidgetParamsGeneric = GetWidgetsParams & {
-  widgetGenerator: (params: InputWidgetParams) => React.ReactElement<any>;
+  widgetGenerator: (
+    params: InputWidgetParams
+  ) => React.ReactElement<any>;
 }
 
 
@@ -43,7 +45,11 @@ const nodeTypeToInputParamsMap: Record<string, string[]> = {
 export const getWidgets = (
   {schema, nodeId, nodeData, updateParamValue}: GetWidgetsParams
 ) => {
-  return getWidgetsGeneric({schema, nodeId, nodeData, updateParamValue, widgetGenerator: getInputWidget});
+  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
+  const readOnly = usePipelineStore((state) => state.readOnly);
+  
+  const wrappedInputWidget = (params: InputWidgetParams) => getInputWidget(params, getNodeFieldError, readOnly);
+  return getWidgetsGeneric({schema, nodeId, nodeData, updateParamValue, widgetGenerator: wrappedInputWidget});
 }
 
 /**
@@ -112,14 +118,22 @@ export const getNodeInputWidget = (param: InputWidgetParams) => {
     /* name param is always in the advanced box */
     return <></>;
   }
-  return getInputWidget(param);
+
+  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
+  const readOnly = usePipelineStore((state) => state.readOnly);
+
+  return getInputWidget(param, getNodeFieldError, readOnly);
 }
 
 /**
  * Generates the appropriate input widget based on the input parameter type.
  * @returns The input widget for the specified parameter type.
  */
-export const getInputWidget = (params: InputWidgetParams) => {
+export const getInputWidget = (
+  params: InputWidgetParams,
+  getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined,
+  readOnly: boolean
+) => {
   if (params.name == "llm_model" || params.name == "max_token_limit") {
     /*
        This is here as we migrated llm_model to llm_provider_model_id, in October 2024.
@@ -141,8 +155,6 @@ export const getInputWidget = (params: InputWidgetParams) => {
     return <></>;
   }
 
-  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
-  const readOnly = usePipelineStore((state) => state.readOnly);
   const Widget = getWidget(widgetOrType, widgetSchema)
   let fieldError = getNodeFieldError(params.id, params.name);
   let paramValue = params.params[params.name];

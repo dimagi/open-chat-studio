@@ -4,6 +4,7 @@ from urllib.parse import quote
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.functional import classproperty
 from langchain_core.messages import BaseMessage, messages_from_dict
 
@@ -120,6 +121,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         # boolean indicating that this message has been synced to the thread
         "openai_thread_checkpoint",
     }
+    # override from BaseModel to allow setting created_at in evals
+    created_at = models.DateTimeField(default=timezone.now)
 
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
     message_type = models.CharField(max_length=10, choices=ChatMessageType.choices)
@@ -127,7 +130,9 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     summary = models.TextField(  # noqa DJ001
         null=True, blank=True, help_text="The summary of the conversation up to this point (not including this message)"
     )
-    translations = SanitizedJSONField(default=dict, help_text="Dictionary of translated text keyed by the language code")
+    translations = SanitizedJSONField(
+        default=dict, help_text="Dictionary of translated text keyed by the language code"
+    )
     metadata = SanitizedJSONField(default=dict)
 
     class Meta:

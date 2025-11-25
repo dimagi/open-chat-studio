@@ -170,23 +170,61 @@ class ChoiceColumnFilter(ColumnFilter):
 
 class StringColumnFilter(ColumnFilter):
     type: str = TYPE_STRING
+    or_columns: list[str] = Field(default_factory=list)
+
+    def _apply_with_lookup(self, queryset, lookup, value):
+        """Apply filter with optional OR logic across multiple columns.
+        queryset: The queryset to filter
+        lookup: The Django lookup to use (ex., 'icontains', 'istartswith'), or None for exact match
+        value: The value to filter by
+        """
+        if not self.or_columns:
+            # Original single-column behavior
+            filter_key = f"{self.column}__{lookup}" if lookup else self.column
+            return queryset.filter(**{filter_key: value})
+
+        # OR logic across self.column + or_columns
+        from django.db.models import Q
+
+        filter_key = f"{self.column}__{lookup}" if lookup else self.column
+        q = Q(**{filter_key: value})
+        for col in self.or_columns:
+            col_key = f"{col}__{lookup}" if lookup else col
+            q |= Q(**{col_key: value})
+        return queryset.filter(q)
 
     def apply_equals(self, queryset, value, timezone=None) -> QuerySet:
-        return queryset.filter(**{f"{self.column}": value})
+        return self._apply_with_lookup(queryset, None, value)
 
     def apply_contains(self, queryset, value, timezone=None) -> QuerySet:
-        return queryset.filter(**{f"{self.column}__icontains": value})
+        return self._apply_with_lookup(queryset, "icontains", value)
 
     def apply_does_not_contain(self, queryset, value, timezone=None) -> QuerySet:
-        return queryset.exclude(**{f"{self.column}__icontains": value})
+        if not self.or_columns:
+            return queryset.exclude(**{f"{self.column}__icontains": value})
+
+        from django.db.models import Q
+
+        q = Q(**{f"{self.column}__icontains": value})
+        for col in self.or_columns:
+            q |= Q(**{f"{col}__icontains": value})
+        return queryset.exclude(q)
 
     def apply_starts_with(self, queryset, value, timezone=None) -> QuerySet:
-        return queryset.filter(**{f"{self.column}__istartswith": value})
+        return self._apply_with_lookup(queryset, "istartswith", value)
 
     def apply_ends_with(self, queryset, value, timezone=None) -> QuerySet:
-        return queryset.filter(**{f"{self.column}__iendswith": value})
+        return self._apply_with_lookup(queryset, "iendswith", value)
 
     def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
         if values := self.values_list(value):
-            return queryset.filter(**{f"{self.column}__in": values})
+            if not self.or_columns:
+                return queryset.filter(**{f"{self.column}__in": values})
+
+            from django.db.models import Q
+
+            q = Q(**{f"{self.column}__in": values})
+            for col in self.or_columns:
+                q |= Q(**{f"{col}__in": values})
+            return queryset.filter(q)
         return queryset

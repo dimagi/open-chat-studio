@@ -41,9 +41,9 @@ class ChatbotTable(tables.Table):
         orderable=True,
     )
     participant_count = columns.Column(verbose_name="Total Participants", orderable=True)
-    last_message = TimeAgoColumn(verbose_name="Last activity", orderable=True)
+    last_activity = TimeAgoColumn(verbose_name="Last Activity", orderable=True)
     session_count = ColumnWithHelp(verbose_name="Total Sessions", orderable=True)
-    messages_count = ColumnWithHelp(verbose_name="Total Messages", orderable=True)
+    interaction_count = ColumnWithHelp(verbose_name="Total Interactions", orderable=True)
     trends = columns.TemplateColumn(
         verbose_name="Trends (last 48h)",
         template_name="table/trends_chart.html",
@@ -55,7 +55,7 @@ class ChatbotTable(tables.Table):
 
     class Meta:
         model = Experiment
-        fields = ("name", "participant_count", "session_count", "messages_count", "last_message", "trends")
+        fields = ("name", "participant_count", "session_count", "interaction_count", "last_activity", "trends")
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
             "data-redirect-url": _chatbot_url_factory,
@@ -91,6 +91,7 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
         accessor="message_count",
         orderable=True,
     )
+    last_message = TimeAgoColumn(accessor="last_message_created_at", verbose_name="Last activity", orderable=True)
 
     actions = actions.ActionsColumn(
         actions=[
@@ -118,7 +119,8 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
     class Meta:
         model = ExperimentSession
         # Ensure that chatbot is shown first
-        fields = ["chatbot", "participant", "message_count"]
+        fields = ["chatbot", "participant", "message_count", "last_message"]
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No sessions yet!"
+        order_by = ("-last_message",)

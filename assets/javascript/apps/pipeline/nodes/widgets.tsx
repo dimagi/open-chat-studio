@@ -1,4 +1,5 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo} from "react";
+import Select from 'react-select';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
@@ -8,6 +9,8 @@ import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
 import {produce} from "immer";
 import {CodeNodeEditor, PromptEditor} from "../components/CodeMirrorEditor";
+import {getInputWidget} from "./GetInputWidget";
+
 
 
 export function getWidget(name: string, params: PropertySchema) {
@@ -26,6 +29,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return SelectWidget
     case "multiselect":
       return MultiSelectWidget
+    case "searchable_multiselect":
+      return SearchableMultiSelectWidget
     case "llm_provider_model":
       return LlmWidget
     case "history":
@@ -68,6 +73,14 @@ interface WidgetParams {
 
 interface ToggleWidgetParams extends Omit<WidgetParams, 'paramValue'> {
   paramValue: boolean;
+}
+
+interface LLMModelParametersWidgetProps {
+  nodeId: string;
+  schema: any;
+  modelParameters: any;
+  readOnly: boolean;
+  getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
 }
 
 
@@ -198,7 +211,9 @@ function SelectWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <div className="flex flex-row gap-2">
       <select
-        className="select w-full"
+        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+        // Should be resolved in future versions of browsers.
+        className="select appearance-none w-full"
         name={props.name}
         onChange={onUpdate}
         value={props.paramValue}
@@ -271,6 +286,61 @@ function MultiSelectWidget(props: WidgetParams) {
       ))}
     </InputField>
   )
+}
+
+function SearchableMultiSelectWidget(props: WidgetParams) {
+  const options = getSelectOptions(props.schema);
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  // Determine the type from schema for proper type conversion
+  const itemType = props.schema.items?.type || 'string';
+
+  // Type conversion function based on schema
+  const convertValue = (value: any) => {
+    switch (itemType) {
+      case 'integer':
+      case 'number':
+        return Number(value);
+      case 'boolean':
+        return Boolean(value);
+      case 'string':
+      default:
+        return String(value);
+    }
+  };
+
+  // Convert paramValue (array) to react-select format
+  const selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
+  const selectedOptions = options.filter(option => {
+    // Check both string and converted values for matching
+    const convertedValue = convertValue(option.value);
+    return selectedValues.includes(option.value) || selectedValues.some(v => v === convertedValue);
+  });
+
+  const handleChange = (selectedOptions: any) => {
+    const values = selectedOptions ? selectedOptions.map((option: Option) => convertValue(option.value)) : [];
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        next.data.params[props.name] = values;
+      })
+    );
+  };
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <Select
+        isMulti
+        options={options}
+        value={selectedOptions}
+        onChange={handleChange}
+        isDisabled={props.readOnly}
+        className="react-select-container"
+        classNamePrefix="react-select"
+        placeholder={`Select ${props.label.toLowerCase()}...`}
+        isClearable={true}
+      />
+    </InputField>
+  );
 }
 
 export function CodeWidget(props: WidgetParams) {
@@ -701,20 +771,94 @@ export function KeywordsWidget(props: WidgetParams) {
   );
 }
 
+
+function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  const updateLLMParamValue = (event: ChangeEvent<HTMLSelectElement | HTMLTextAreaElement | HTMLInputElement>) => {
+    const paramName = event.target.name;
+    const {type} = event.target;
+    const paramValue = type === 'checkbox' ? (event.target as HTMLInputElement).checked : event.target.value;
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        next.data.params.llm_model_parameters = {...old.data.params.llm_model_parameters, [paramName]: paramValue};
+      })
+    );
+  };
+
+  return (
+    <div className="mt-4">
+      <div className="text-sm label font-bold">Model Parameters</div>
+      <div className="p-4">
+        {Object.getOwnPropertyNames(props.schema.properties).map((paramName) => {
+          const currentParamValue = props.modelParameters[paramName];
+          return (
+            <div key={`${props.nodeId}_${paramName}`}>
+              {getInputWidget(
+                {
+                  id: props.nodeId,
+                  name: paramName,
+                  schema: props.schema,
+                  params: {name: paramName, [paramName]: currentParamValue},
+                  updateParamValue: updateLLMParamValue,
+                  nodeType: "",
+                  required: true,
+                },
+                props.getNodeFieldError,
+                props.readOnly
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function LlmWidget(props: WidgetParams) {
 
-  const {parameterValues} = getCachedData();
+  const {parameterValues, modelParams, modelParamSchemas} = getCachedData();
+  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
+  const readOnly = usePipelineStore((state) => state.readOnly);
+
+  const getSelectedModelSchema = (selectedModelId: string) => {
+    const selectedModelName = parameterValues.LlmProviderModelId.find(model => 
+      String(model.value) === String(selectedModelId)
+    )?.label.split(": ")[1] || "";
+
+    // Default tot BasicParameters if no specific schema found
+    const llmModelParamsSchemaName = modelParams[selectedModelName] || "BasicParameters";
+    return modelParamSchemas[llmModelParamsSchemaName];
+  }
+
   const setNode = usePipelineStore((state) => state.setNode);
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
     const {value} = event.target;
     const [providerId, providerModelId] = value.split('|:|');
+
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
         next.data.params.llm_provider_id = providerId;
         next.data.params.llm_provider_model_id = providerModelId;
+
+        // Update the LLM parameters only when the model's parameter set changed
+        const currModelParamSchema = getSelectedModelSchema(providerModelId);
+        const prevModelParamSchema = getSelectedModelSchema(old.data.params.llm_provider_model_id);
+        
+        if (currModelParamSchema && prevModelParamSchema != currModelParamSchema) {
+          let defaultLlmParams = {};
+          // Update the parameter set in the state with the new model's default parameters
+          Object.getOwnPropertyNames(currModelParamSchema.properties).map((paramName) => {
+            defaultLlmParams = {...defaultLlmParams, [paramName]: currModelParamSchema.properties[paramName].default};
+          });
+          next.data.params.llm_model_parameters = defaultLlmParams;
+        } else {
+          next.data.params.llm_model_parameters = {};
+        }
       })
     );
   };
+
   const makeValue = (providerId: string, providerModelId: string) => {
     return providerId + '|:|' + providerModelId;
   };
@@ -728,13 +872,20 @@ export function LlmWidget(props: WidgetParams) {
     return acc;
   }, {} as ProviderModelsByType);
 
+  
   const providerId = concatenate(props.nodeParams.llm_provider_id);
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
+  const modelParameters = props.nodeParams.llm_model_parameters || {};
   const value = makeValue(providerId, providerModelId)
+  
+  const llmModelParamsSchema = getSelectedModelSchema(providerModelId);
+
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <select
-        className="select w-full"
+        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+        // Should be resolved in future versions of browsers.
+        className="select appearance-none w-full"
         name={props.name}
         onChange={updateParamValue}
         value={value}
@@ -754,6 +905,16 @@ export function LlmWidget(props: WidgetParams) {
             ))
         })}
       </select>
+
+      {llmModelParamsSchema && (
+        <ModelParametersWidget
+          nodeId={props.nodeId}
+          schema={llmModelParamsSchema}
+          modelParameters={modelParameters}
+          getNodeFieldError={getNodeFieldError}
+          readOnly={readOnly}
+        />
+      )}
     </InputField>
   );
 }
@@ -845,7 +1006,9 @@ export function HistoryTypeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History" help_text={props.helpText}>
           <select
-            className={`select join-item ${historyType == 'named' ? '' : 'w-full'}`}
+            // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+            // Should be resolved in future versions of browsers.
+            className={`select appearance-none join-item ${historyType == 'named' ? '' : 'w-full'}`}
             name={props.name}
             onChange={props.updateParamValue}
             value={historyType}
@@ -955,7 +1118,9 @@ export function HistoryModeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History Mode" help_text = "">
           <select
-            className="select join-item w-full"
+            // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+            // Should be resolved in future versions of browsers.
+            className="select appearance-none join-item w-full"
             name="history_mode"
             onChange={(e) => {
               setHistoryMode(e.target.value);
@@ -1257,7 +1422,9 @@ export function VoiceWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <select
-        className="select w-full"
+        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+        // Should be resolved in future versions of browsers.
+        className="select appearance-none w-full"
         name={props.name}
         onChange={updateParamValue}
         value={syntheticVoiceId}

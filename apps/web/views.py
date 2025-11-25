@@ -22,10 +22,12 @@ from apps.teams.roles import is_member
 from apps.web.admin import ADMIN_SLUG
 from apps.web.search import get_searchable_models
 from apps.web.superuser_utils import apply_temporary_superuser_access, remove_temporary_superuser_access
+from apps.web.waf import WafRule, waf_allow
 
 UUID_PATTERN = re.compile(r"^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$", re.IGNORECASE)
 
 
+@waf_allow(WafRule.NoUserAgent_HEADER)
 def home(request):
     if request.user.is_authenticated:
         team = request.team

@@ -85,6 +85,18 @@ class SearchIndexSchema(BaseModel):
     )
 
 
+class MultiSearchIndexSchema(BaseModel):
+    collection_index_id: int = Field(
+        description="The collection index ID to search. "
+        "Multiple collections can be searched by making multiple tool calls with different collection_ids."
+    )
+    query: str = Field(
+        description="A natural language query to search for relevant information in the documents. "
+        "Be specific and use keywords related to the information you're looking for. "
+        "The query will be used for semantic similarity matching against the file contents."
+    )
+
+
 class SetSessionStateSchema(BaseModel):
     key: str = Field(description="The key in the session state to set")
     value: str | int | dict | list = Field(description="The value to set in session state")

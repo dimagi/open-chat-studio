@@ -471,6 +471,7 @@ class Widgets(StrEnum):
     float = "float"
     range = "range"
     multiselect = "multiselect"
+    searchable_multiselect = "searchable_multiselect"
     none = "none"
 
     # special widgets

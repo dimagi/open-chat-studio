@@ -73,9 +73,12 @@ def _convert_to_waf_regex(pattern):
     pattern = re.sub(r"\?P<[^>]+>", "", pattern)
     pattern = re.sub(r"\\Z$", "$", pattern)
 
-    # Ensure pattern starts with ^
+    # Ensure pattern starts with ^/
     if not pattern.startswith("^"):
         pattern = "^" + pattern
+
+    if not pattern.startswith("^/"):
+        pattern = "^/" + pattern[1:]
 
     # Ensure pattern ends with $ (unless it already has an end-of-string marker)
     if not pattern.endswith("$") and not pattern.endswith("$)"):

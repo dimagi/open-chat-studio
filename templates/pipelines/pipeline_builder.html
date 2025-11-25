@@ -45,8 +45,10 @@
   {{ default_values|json_script:"default-values" }}
   {{ node_schemas|json_script:"node-schemas" }}
   {{ flags_enabled|json_script:"flags-enabled" }}
-  {{ origin|json_script:"pipeline-request-origin" }}
+  {{ allow_edit_name|json_script:"allow-edit-name" }}
   {{ read_only|json_script:"read-only" }}
+  {{ llm_model_params|json_script:"llm-model-params" }}
+  {{ llm_model_param_schemas|json_script:"llm-model-parameter-schemas" }}
   <script src="{% static 'js/pipeline-bundle.js' %}"></script>
   <script type="module">
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';

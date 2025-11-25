@@ -2,11 +2,18 @@ from django.urls import path, re_path
 from django.views.generic import TemplateView
 
 from . import views
+from .waf import WafRule, waf_allow
 
 app_name = "web"
 urlpatterns = [
     path("", views.home, name="home"),
-    path("robots.txt", TemplateView.as_view(template_name="robots.txt", content_type="text/plain"), name="robots.txt"),
+    path(
+        "robots.txt",
+        waf_allow(WafRule.NoUserAgent_HEADER)(
+            TemplateView.as_view(template_name="robots.txt", content_type="text/plain")
+        ),
+        name="robots.txt",
+    ),
     path("status/", views.HealthCheck.as_view()),
     path("status/<str:subset>/", views.HealthCheck.as_view()),
     path("sudo/<slug:slug>/", views.acquire_superuser_powers, name="sudo"),

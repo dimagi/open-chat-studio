@@ -18,6 +18,7 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
+    DatasetCreationStatus,
     EvaluationDataset,
     EvaluationMessage,
     EvaluationMessageContent,
@@ -29,9 +30,18 @@ from apps.evaluations.models import (
 )
 from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.files.models import File
 from apps.teams.utils import current_team
 
 logger = logging.getLogger("ocs.evaluations")
+
+
+def _save_dataset_error(dataset: EvaluationDataset, error_message: str):
+    """Helper to save dataset error status and clear job_id."""
+    dataset.status = DatasetCreationStatus.FAILED
+    dataset.error_message = error_message
+    dataset.job_id = ""
+    dataset.save(update_fields=["status", "error_message", "job_id"])
 
 
 @shared_task(base=TaskbadgerTask, rate_limit="0.5/s")
@@ -101,16 +111,7 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
 
         # Populate history on the chat with the history from the EvaluationMessage
         if message.history:
-            history_messages = [
-                ChatMessage(
-                    chat=chat,
-                    message_type=history_entry.get("message_type", ChatMessageType.HUMAN),
-                    content=history_entry.get("content", ""),
-                    summary=history_entry.get("summary"),
-                )
-                for history_entry in message.history
-            ]
-            ChatMessage.objects.bulk_create(history_messages)
+            _create_message_history(chat, message.history)
 
     except Exception as e:
         logger.exception(f"Error populating eval data {message.id}: {e}")
@@ -138,6 +139,23 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
         return session.id, None
+
+
+def _create_message_history(chat, history: list[dict]):
+    # Set explicit timestamps with incremental offsets to ensure proper chronological ordering
+    # when messages are retrieved with order_by("created_at")
+    base_time = timezone.now() - timedelta(seconds=len(history))
+    history_messages = [
+        ChatMessage(
+            chat=chat,
+            message_type=history_entry.get("message_type", ChatMessageType.HUMAN),
+            content=history_entry.get("content", ""),
+            summary=history_entry.get("summary"),
+            created_at=base_time + timedelta(seconds=idx),
+        )
+        for idx, history_entry in enumerate(history)
+    ]
+    ChatMessage.objects.bulk_create(history_messages)
 
 
 @shared_task(base=TaskbadgerTask)
@@ -248,9 +266,14 @@ def cleanup_old_preview_evaluation_runs():
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def upload_dataset_csv_task(self, dataset_id, csv_content, team_id):
+def update_dataset_from_csv_task(self, dataset_id, file_id, team_id):
     """
     Process CSV upload for dataset asynchronously with progress tracking.
+
+    Args:
+        dataset_id: ID of the EvaluationDataset to update
+        file_id: ID of the File instance containing the CSV data
+        team_id: ID of the team
     """
     progress_recorder = ProgressRecorder(self)
 
@@ -258,25 +281,188 @@ def upload_dataset_csv_task(self, dataset_id, csv_content, team_id):
         dataset = EvaluationDataset.objects.select_related("team").get(id=dataset_id, team_id=team_id)
         team = dataset.team
 
-        with current_team(team):
-            rows, columns = _parse_csv_content(csv_content, progress_recorder)
-            if not rows:
-                return {"success": False, "error": "CSV file is empty"}
+        csv_file = File.objects.get(id=file_id, team_id=team_id)
 
-            stats = process_csv_rows(dataset, rows, columns, progress_recorder, team)
-            progress_recorder.set_progress(100, 100, "Upload complete")
+        try:
+            csv_content = csv_file.file.read().decode("utf-8")
+            with current_team(team):
+                rows, columns = _parse_csv_content(csv_content, progress_recorder)
+                if not rows:
+                    return {"success": False, "error": "CSV file is empty"}
 
-            return {
-                "success": True,
-                "updated_count": stats["updated_count"],
-                "created_count": stats["created_count"],
-                "total_processed": stats["updated_count"] + stats["created_count"],
-                "errors": stats["error_messages"],
-            }
+                stats = process_csv_rows(dataset, rows, columns, progress_recorder, team)
+                progress_recorder.set_progress(100, 100, "Upload complete")
 
+                return {
+                    "success": True,
+                    "updated_count": stats["updated_count"],
+                    "created_count": stats["created_count"],
+                    "total_processed": stats["updated_count"] + stats["created_count"],
+                    "errors": stats["error_messages"],
+                }
+        finally:
+            csv_file.delete()
     except Exception as e:
         logger.error(f"Error in CSV upload task for dataset {dataset_id}: {str(e)}")
         return {"success": False, "error": str(e)}
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def create_dataset_from_csv_task(
+    self, dataset_id, file_id, team_id, column_mapping, history_column=None, populate_history=False
+):
+    """
+    Create dataset messages from CSV with column mapping asynchronously.
+
+    Args:
+        dataset_id: ID of the EvaluationDataset to populate
+        file_id: ID of the File instance containing the CSV data
+        team_id: ID of the team
+        column_mapping: Dictionary mapping CSV columns to message fields
+        history_column: Optional column name containing history data
+        populate_history: Whether to auto-populate history from previous messages
+    """
+    progress_recorder = ProgressRecorder(self)
+    dataset = None
+
+    try:
+        dataset = EvaluationDataset.objects.select_related("team").get(id=dataset_id, team_id=team_id)
+    except EvaluationDataset.DoesNotExist:
+        logger.error(f"Dataset {dataset_id} not found for team {team_id}")
+        return {"success": False, "error": "Dataset not found"}
+
+    team = dataset.team
+    dataset.status = DatasetCreationStatus.PROCESSING
+    dataset.save(update_fields=["status"])
+
+    try:
+        csv_file = File.objects.get(id=file_id, team_id=team_id)
+    except File.DoesNotExist:
+        logger.error(f"CSV file {file_id} not found for team {team_id}")
+        _save_dataset_error(dataset, "CSV file not found")
+        return {"success": False, "error": "CSV file not found"}
+
+    try:
+        try:
+            csv_content = csv_file.file.read().decode("utf-8")
+            csv_reader = csv.DictReader(StringIO(csv_content))
+        except UnicodeDecodeError as e:
+            logger.error(f"Failed to decode CSV file {file_id}: {e}")
+            message = "Failed to decode CSV file"
+            _save_dataset_error(dataset, message)
+            return {"success": False, "error": message}
+        except csv.Error as e:
+            logger.error(f"Failed to parse CSV file {file_id}: {e}")
+            message = "Failed to parse CSV file. Please ensure it's properly formatted."
+            _save_dataset_error(dataset, message)
+            return {"success": False, "error": message}
+
+        progress_recorder.set_progress(5, 100, "Parsing CSV...")
+
+        evaluation_messages = []
+        auto_history = []
+        row_count = 0
+
+        with current_team(team):
+            for row in csv_reader:
+                row_count += 1
+
+                # Extract mapped columns
+                input_content = row.get(column_mapping.get("input", ""), "").strip()
+                output_content = row.get(column_mapping.get("output", ""), "").strip()
+                if not input_content or not output_content:
+                    continue
+
+                context = {}
+                if context_mapping := column_mapping.get("context"):
+                    for field_name, csv_column in context_mapping.items():
+                        if csv_column in row:
+                            context[field_name] = parse_csv_value_as_json(row[csv_column])
+
+                participant_data = {}
+                if participant_data_mapping := column_mapping.get("participant_data"):
+                    for field_name, csv_column in participant_data_mapping.items():
+                        if csv_column in row:
+                            participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
+
+                session_state = {}
+                if session_state_mapping := column_mapping.get("session_state"):
+                    for field_name, csv_column in session_state_mapping.items():
+                        if csv_column in row:
+                            session_state[field_name] = parse_csv_value_as_json(row[csv_column])
+
+                message_history = []
+                if populate_history:
+                    # Use auto-populated history from previous messages
+                    message_history = [msg.copy() for msg in auto_history]
+                elif history_column and history_column in row:
+                    # Parse history from CSV column
+                    history_text = row[history_column].strip()
+                    if history_text:
+                        message_history = parse_history_text(history_text)
+
+                evaluation_messages.append(
+                    EvaluationMessage(
+                        input=EvaluationMessageContent(content=input_content, role="human").model_dump(),
+                        output=EvaluationMessageContent(content=output_content, role="ai").model_dump(),
+                        context=context,
+                        participant_data=participant_data,
+                        session_state=session_state,
+                        history=message_history,
+                        metadata={"created_mode": "csv"},
+                    )
+                )
+
+                if populate_history:
+                    auto_history.append(
+                        {
+                            "message_type": ChatMessageType.HUMAN,
+                            "content": input_content.strip(),
+                            "summary": None,
+                        }
+                    )
+                    auto_history.append(
+                        {
+                            "message_type": ChatMessageType.AI,
+                            "content": output_content.strip(),
+                            "summary": None,
+                        }
+                    )
+
+                # Update progress every 10 rows
+                if row_count % 10 == 0:
+                    progress = min(90, 5 + (row_count * 85 // max(row_count, 1)))
+                    progress_recorder.set_progress(progress, 100, f"Processing row {row_count}...")
+
+            if not evaluation_messages:
+                message = "No valid messages found in CSV"
+                _save_dataset_error(dataset, message)
+                return {"success": False, "error": message}
+
+            # Bulk create messages
+            progress_recorder.set_progress(95, 100, "Creating messages...")
+            created_messages = EvaluationMessage.objects.bulk_create(evaluation_messages)
+            dataset.messages.add(*created_messages)
+
+            # Mark as completed
+            dataset.status = DatasetCreationStatus.COMPLETED
+            dataset.job_id = ""
+            dataset.save(update_fields=["status", "job_id"])
+
+            progress_recorder.set_progress(100, 100, "Import complete")
+
+            return {
+                "success": True,
+                "created_count": len(created_messages),
+                "total_rows": row_count,
+            }
+    except Exception as e:
+        logger.exception(f"Unexpected error in CSV creation task for dataset {dataset_id}: {e}")
+        message = "An unexpected error occurred while processing the CSV file"
+        _save_dataset_error(dataset, message)
+        return {"success": False, "error": message}
+    finally:
+        csv_file.delete()
 
 
 def _parse_csv_content(csv_content, progress_recorder):
@@ -563,3 +749,97 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
         progress_recorder.set_progress(progress, 100, f"Processing row {processed_rows}/{total_rows}")
 
     return stats
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def create_dataset_from_sessions_task(
+    self, dataset_id, team_id, session_ids, filtered_session_ids, filter_query, timezone
+):
+    """
+    Clone messages from sessions asynchronously.
+
+    Args:
+        dataset_id: ID of the EvaluationDataset to populate
+        team_id: ID of the team
+        session_ids: List of session external IDs to clone from
+        filtered_session_ids: List of filtered session external IDs
+        filter_query: Serialized filter parameters as query string (or None)
+        timezone: Timezone for filtering
+    """
+    from django.http import QueryDict
+
+    from apps.web.dynamic_filters.datastructures import FilterParams
+
+    progress_recorder = ProgressRecorder(self)
+    dataset = None
+
+    try:
+        dataset = EvaluationDataset.objects.select_related("team").get(id=dataset_id, team_id=team_id)
+    except EvaluationDataset.DoesNotExist:
+        logger.error(f"Dataset {dataset_id} not found for team {team_id}")
+        return {"success": False, "error": "Dataset not found"}
+
+    team = dataset.team
+    dataset.status = DatasetCreationStatus.PROCESSING
+    dataset.save(update_fields=["status"])
+
+    try:
+        progress_recorder.set_progress(0, 100, "Starting clone...")
+
+        filter_params = FilterParams(QueryDict(filter_query)) if filter_query is not None else None
+
+        with current_team(team):
+            evaluation_messages = EvaluationMessage.create_from_sessions(
+                team=team,
+                external_session_ids=session_ids,
+                filtered_session_ids=filtered_session_ids,
+                filter_params=filter_params,
+                timezone=timezone,
+            )
+
+            progress_recorder.set_progress(
+                40, 100, f"Found {len(evaluation_messages)} messages, checking for duplicates..."
+            )
+
+            # Get existing chat message pairs to avoid duplicates
+            existing_chat_message_pairs = set(
+                dataset.messages.filter(
+                    input_chat_message_id__isnull=False,
+                    expected_output_chat_message_id__isnull=False,
+                ).values_list("input_chat_message_id", "expected_output_chat_message_id")
+            )
+
+            # Filter out duplicates based on ChatMessage IDs
+            messages_to_add = []
+            for msg in evaluation_messages:
+                chat_pair = (msg.input_chat_message_id, msg.expected_output_chat_message_id)
+                if chat_pair not in existing_chat_message_pairs:
+                    messages_to_add.append(msg)
+                    existing_chat_message_pairs.add(chat_pair)
+
+            if not messages_to_add:
+                dataset.status = DatasetCreationStatus.COMPLETED
+                dataset.job_id = ""
+                dataset.save(update_fields=["status", "job_id"])
+                progress_recorder.set_progress(100, 100, "Clone complete - no new messages to add")
+                return {"success": True, "created_count": 0, "duplicates_skipped": len(evaluation_messages)}
+
+            progress_recorder.set_progress(70, 100, f"Creating {len(messages_to_add)} new messages...")
+
+            created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
+            dataset.messages.add(*created_messages)
+
+            dataset.status = DatasetCreationStatus.COMPLETED
+            dataset.job_id = ""
+            dataset.save(update_fields=["status", "job_id"])
+
+            progress_recorder.set_progress(100, 100, "Clone complete")
+
+            duplicates_skipped = len(evaluation_messages) - len(messages_to_add)
+            return {"success": True, "created_count": len(created_messages), "duplicates_skipped": duplicates_skipped}
+
+    except Exception as e:
+        logger.exception(f"Error in clone task for dataset {dataset_id}: {e}")
+        message = "An error occurred while cloning messages from sessions"
+        _save_dataset_error(dataset, message)
+        return {"success": False, "error": message}

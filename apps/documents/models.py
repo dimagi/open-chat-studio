@@ -8,18 +8,18 @@ from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
     get_related_pipeline_experiments_queryset,
+    get_related_pipeline_experiments_queryset_list_param,
     get_related_pipelines_queryset,
+    get_related_pipelines_queryset_for_list_param,
 )
 
 
@@ -72,6 +72,11 @@ class CollectionFile(models.Model):
 )
 class Collection(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=255)
+    summary = models.TextField(
+        blank=True,
+        help_text="Description of this collection used to with additional context to LLMs to allow "
+        "them to make decisions about when to search this collection.",
+    )
     files = models.ManyToManyField("files.File", blank=False, through=CollectionFile, related_name="collections")
     working_version = models.ForeignKey(
         "self",
@@ -133,6 +138,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             instance=self,
             fields=[
                 VersionField(group_name="General", name="name", raw_value=self.name),
+                VersionField(group_name="General", name="summary", raw_value=self.summary),
                 VersionField(group_name="General", name="llm_provider", raw_value=self.llm_provider),
                 VersionField(
                     group_name="General", name="embedding_provider_model", raw_value=self.embedding_provider_model
@@ -211,7 +217,7 @@ class Collection(BaseTeamModel, VersionsMixin):
                     # Skip embeddings for files that are no longer in the collection
                     if embedding.file_id not in file_versions:
                         continue
-                    
+
                     embedding_version = embedding.create_new_version(save=False)
                     embedding_version.collection = new_version
 
@@ -225,7 +231,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         return reverse("documents:single_collection_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_related_nodes_queryset(self) -> models.QuerySet:
-        index_references = get_related_pipelines_queryset(self, "collection_index_id").distinct()
+        index_references = get_related_pipelines_queryset_for_list_param(self, "collection_index_ids").distinct()
         collection_references = get_related_pipelines_queryset(self, "collection_id").distinct()
         return index_references | collection_references
 
@@ -238,7 +244,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         # TODO: Update assistant archive code to use get_related_pipeline_experiments_queryset
         ids = list(self.versions.values_list("id", flat=True)) + [self.id]
 
-        index_references = get_related_pipeline_experiments_queryset(ids, "collection_index_id").filter(
+        index_references = get_related_pipeline_experiments_queryset_list_param(ids, "collection_index_ids").filter(
             models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
         )
         collection_references = get_related_pipeline_experiments_queryset(ids, "collection_id").filter(
@@ -304,26 +310,6 @@ class Collection(BaseTeamModel, VersionsMixin):
 
         index_manager = self.get_index_manager()
         return index_manager.get_embedding_vector(query)
-
-    def get_search_tool(self, max_results: int, generate_citations: bool = True) -> OpenAIBuiltinTool | SearchIndexTool:
-        """
-        Returns either the tool configuration. If the collection is a remote index, it returns the builtin file search
-        tool, otherwise it returns a SearchIndexTool.
-        """
-        if not self.is_index:
-            raise IndexConfigurationException("Non-indexed collections do not have search tools")
-
-        if self.is_remote_index:
-            return OpenAIBuiltinTool(
-                type="file_search",
-                vector_store_ids=[self.openai_vector_store_id],
-                max_num_results=max_results,
-            )
-
-        search_config = SearchToolConfig(
-            index_id=self.id, max_results=max_results, generate_citations=generate_citations
-        )
-        return SearchIndexTool(search_config=search_config)
 
     def add_files_to_index(
         self,

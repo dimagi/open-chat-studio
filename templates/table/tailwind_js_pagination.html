@@ -1,5 +1,5 @@
 {% extends "table/tailwind.html" %}
-{% load django_tables2 %}
+{% load django_tables2 i18n %}
 {% comment %}
 Override pagination and sorting in base template to use htmx
 {% endcomment %}
@@ -38,3 +38,13 @@ Override pagination and sorting in base template to use htmx
     hx-target="closest div.table-container"
     hx-swap="outerHTML"
 {% endblock next-page-link-attr %}
+
+{% if lazy_pagination %}
+  {% block pagination_info %}
+    {% with page_number=table.page.number %}
+      {% blocktranslate %}
+        Page {{ page_number }}
+      {% endblocktranslate %}
+    {% endwith %}
+  {% endblock pagination_info %}
+{% endif %}

@@ -5,13 +5,15 @@ from pydantic.config import ConfigDict
 from pydantic_core import ValidationError
 
 from apps.evaluations.exceptions import EvaluationRunException
+from apps.evaluations.field_definitions import FieldDefinition
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
+from apps.evaluations.utils import schema_to_pydantic_model
 from apps.pipelines.nodes.base import UiSchema, Widgets
 from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.llm_service.default_models import get_model_parameters
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 from apps.service_providers.models import LlmProviderModel
-from apps.utils.langchain import dict_to_json_schema
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
 
@@ -56,7 +58,9 @@ class LLMResponseMixin(BaseModel):
             raise EvaluationRunException("LLM Provider Model does not exist") from err
 
     def get_chat_model(self) -> BaseChatModel:
-        return self.get_llm_service().get_chat_model(self.get_llm_provider_model().name, self.llm_temperature)
+        model_name = self.get_llm_provider_model().name
+        params = get_model_parameters(model_name, temperature=self.llm_temperature)
+        return self.get_llm_service().get_chat_model(model_name, **params)
 
 
 class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
@@ -70,14 +74,20 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         ),
         json_schema_extra=UiSchema(widget=Widgets.text_editor),
     )
-    output_schema: dict = Field(
+    output_schema: dict[str, FieldDefinition] = Field(
         description="The expected output schema for the evaluation",
         json_schema_extra=UiSchema(widget=Widgets.key_value_pairs),
     )
 
     def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
-        output_schema = dict_to_json_schema(self.output_schema).model_json_schema()
-        llm = self.get_chat_model().with_structured_output(output_schema)
+        # Create a pydantic class so the llm output is validated
+        output_model = schema_to_pydantic_model(self.output_schema)
+        llm = self.get_chat_model().with_structured_output(output_model)
+
+        llm_with_retry = llm.with_retry(
+            stop_after_attempt=3,
+            retry_if_exception_type=(ValueError,),
+        )
 
         prompt = PromptTemplate.from_template(self.prompt)
         try:
@@ -97,7 +107,8 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             full_history=message.full_history,
             generated_response=generated_response,
         )
-        result = llm.invoke(formatted_prompt)
+        result_model = llm_with_retry.invoke(formatted_prompt)
+        result = result_model.model_dump()
         return EvaluatorResult(message=message.as_result_dict(), generated_response=generated_response, result=result)
 
 

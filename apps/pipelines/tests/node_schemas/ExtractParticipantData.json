@@ -17,13 +17,11 @@
       "type": "integer",
       "ui:widget": "none"
     },
-    "llm_temperature": {
-      "default": 0.7,
-      "maximum": 2.0,
-      "minimum": 0.0,
-      "title": "Temperature",
-      "type": "number",
-      "ui:widget": "range"
+    "llm_model_parameters": {
+      "additionalProperties": true,
+      "title": "Llm Model Parameters",
+      "type": "object",
+      "ui:widget": "none"
     },
     "name": {
       "title": "Node Name",
