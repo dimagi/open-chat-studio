@@ -101,61 +101,52 @@ class TestExperimentSessionFilters:
 
         return [session1, session2]
 
-    def test_participant_filters(self, base_session):
+    @pytest.mark.parametrize(
+        ("operator", "value", "count"),
+        [
+            (Operators.EQUALS, "something else", 0),
+            (Operators.EQUALS, "test.user@example.com", 1),
+            (Operators.EQUALS, "TEST.user@example.com", 0),  # case-sensitive
+            (Operators.CONTAINS, "user@", 1),
+            (Operators.CONTAINS, "user1@", 0),
+            (Operators.DOES_NOT_CONTAIN, "user1@", 1),
+            (Operators.DOES_NOT_CONTAIN, "user@", 0),
+            (Operators.STARTS_WITH, "test", 1),
+            (Operators.STARTS_WITH, "tester", 0),
+            (Operators.ENDS_WITH, "example.com", 1),
+            (Operators.ENDS_WITH, "domain.com", 0),
+            (Operators.ANY_OF, json.dumps(["test.user@example.com", "another@example.com"]), 1),
+            (Operators.ANY_OF, json.dumps(["tester@example.com", "another@example.com"]), 0),
+            # test matching name
+            (Operators.EQUALS, "Jeremy Fisher", 1),
+            (Operators.CONTAINS, "remy", 1),
+            (Operators.DOES_NOT_CONTAIN, "Ptolemy", 1),
+            (Operators.STARTS_WITH, "jeremy", 1),
+            (Operators.ENDS_WITH, "fisher", 1),
+            (Operators.ANY_OF, json.dumps(["Jeremy Fisher", "Sir Ptolemy Tortoise"]), 1),
+            (Operators.ANY_OF, json.dumps(["jeremy fisher"]), 0),  # case-sensitive
+        ],
+    )
+    def test_participant_filters(self, base_session, operator, value, count):
         """Test all participant filter operators"""
         session = base_session
+        session.participant.name = "Jeremy Fisher"
         session.participant.identifier = "test.user@example.com"
         session.participant.save()
 
         # Test EQUALS
         params = {
             "filter_0_column": "participant",
-            "filter_0_operator": Operators.EQUALS,
-            "filter_0_value": "test.user@example.com",
+            "filter_0_operator": operator,
+            "filter_0_value": value,
         }
 
         queryset = session.experiment.sessions.all()
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
-        assert filtered.count() == 1
-        assert filtered.first() == session
-
-        # Test CONTAINS
-        params["filter_0_operator"] = Operators.CONTAINS
-        params["filter_0_value"] = "user@"
-
-        session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
-        assert filtered.count() == 1
-
-        # Test DOES_NOT_CONTAIN
-        params["filter_0_operator"] = Operators.DOES_NOT_CONTAIN
-        params["filter_0_value"] = "nonexistent"
-        session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
-        assert filtered.count() == 1
-
-        # Test STARTS_WITH
-        params["filter_0_operator"] = Operators.STARTS_WITH
-        params["filter_0_value"] = "test"
-        session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
-        assert filtered.count() == 1
-
-        # Test ENDS_WITH
-        params["filter_0_operator"] = Operators.ENDS_WITH
-        params["filter_0_value"] = "@example.com"
-        session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
-        assert filtered.count() == 1
-
-        # Test ANY_OF
-        params["filter_0_operator"] = Operators.ANY_OF
-        params["filter_0_value"] = json.dumps(["test.user@example.com", "another@example.com"])
-        session_filter = ExperimentSessionFilter()
-        filtered = session_filter.apply(queryset, FilterParams(_get_querydict(params)))
-        assert filtered.count() == 1
-        assert filtered.first() == session
+        assert filtered.count() == count
+        if count == 1:
+            assert filtered.first() == session
 
     @travel("2025-01-03 10:00:00", tick=False)
     def test_message_timestamp_filters(self):
