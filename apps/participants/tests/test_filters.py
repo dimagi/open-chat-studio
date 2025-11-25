@@ -32,7 +32,7 @@ def participants_with_various_data(django_db_setup, django_db_blocker):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("operator", "value", "expected_identifiers", "test_description"),
+    ("operator", "value", "expected_identifiers"),
     [
         (Operators.CONTAINS, "AP", {"AP1", "AP2", "AP3", "XYZ123"}),
         (Operators.CONTAINS, "Anderson", {"AP2"}),
