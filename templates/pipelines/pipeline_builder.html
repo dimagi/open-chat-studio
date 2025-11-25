@@ -1,7 +1,6 @@
 {% extends "web/app/app_base.html" %}
-{% load static %}
+{% load django_vite static %}
 {% block page_head %}
-  <link rel="stylesheet" href="{% static 'css/pipeline.css' %}">
   <style>
     .react-flow__handle {
       width: 16px;
@@ -49,7 +48,7 @@
   {{ read_only|json_script:"read-only" }}
   {{ llm_model_params|json_script:"llm-model-params" }}
   {{ llm_model_param_schemas|json_script:"llm-model-parameter-schemas" }}
-  <script src="{% static 'js/pipeline-bundle.js' %}"></script>
+  {% vite_asset 'assets/javascript/apps/pipeline.tsx' %}
   <script type="module">
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';
     document.addEventListener('DOMContentLoaded', () => {

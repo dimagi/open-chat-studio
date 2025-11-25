@@ -1,5 +1,5 @@
 {% extends "generic/object_form.html" %}
-{% load form_tags i18n %}
+{% load django_vite form_tags i18n %}
 
 {% block form %}
   <div x-data="evaluatorForm">
@@ -435,7 +435,7 @@
 
 {% block page_js %}
   {{ block.super }}
-  <script src="{% load static %}{% static 'js/editors-bundle.js' %}"></script>
+  {% vite_asset 'assets/javascript/editors.js' %}
   {{ evaluator_schemas|json_script:"evaluator-schemas" }}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}

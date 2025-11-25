@@ -1,5 +1,5 @@
 {% extends "generic/object_form.html" %}
-{% load form_tags i18n static %}
+{% load django_vite form_tags i18n static %}
 
 {% block page_head %}
   {{ block.super }}
@@ -189,8 +189,8 @@
 
 {% block page_js %}
   {{ block.super }}
-  <script src="{% static 'js/evaluations-bundle.js' %}"></script>
-  <script src="{% static 'js/editors-bundle.js' %}"></script>
+  {% vite_asset 'assets/javascript/apps/evaluations/dataset-mode-selector.js' %}
+  {% vite_asset 'assets/javascript/editors.js' %}
   <script>
     window.addEventListener('load', () => {
       SiteJS.editors.initJsonEditors();

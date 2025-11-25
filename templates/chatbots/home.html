@@ -1,7 +1,7 @@
 {% extends "generic/object_home.html" %}
-{% load static %}
+{% load django_vite static %}
 
 {% block page_head %}
   {{ block.super }}
-  <script src="{% static 'js/trends-bundle.js' %}"></script>
+  {% vite_asset 'assets/javascript/trends.js' %}
 {% endblock page_head %}

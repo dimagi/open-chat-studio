@@ -1,7 +1,7 @@
 {% extends "web/app/app_base.html" %}
-{% load static %}
+{% load django_vite static %}
 {% block page_js %}
-  <script src="{% static 'js/editors-bundle.js' %}"></script>
+  {% vite_asset 'assets/javascript/editors.js' %}
   <script>
     window.addEventListener('load', () => {
       SiteJS.editors.initJsonEditors();

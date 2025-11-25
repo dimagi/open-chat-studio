@@ -1,4 +1,4 @@
-{% load django_htmx meta_tags static %}
+{% load django_htmx django_vite meta_tags static %}
 <!DOCTYPE html>
 <html lang="en" {% if dark_mode %}class="dark" data-theme="dark"{% endif %}>
   <head>
@@ -34,8 +34,11 @@
       {% endif %}
     {% endblock meta %}
     {% include "web/components/favicon.html" %}
-    <link rel="stylesheet" href="{% static 'css/site-base.css' %}">
-    <link rel="stylesheet" href="{% static 'css/site-tailwind.css' %}">
+    {% if debug %}
+      {% vite_hmr_client %}
+    {% endif %}
+    {% vite_asset 'assets/site-base.js' %}
+    {% vite_asset 'assets/site-tailwind.js' %}
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css" integrity="sha512-xh6O/CkQoPOWDdYTDqeRdPCVd1SpvCA9XXcUnZS2FmJNp1coAFzvtCN9BmamE+4aHK8yyUHUSCcJHgXloTyT2A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/v4-shims.min.css" integrity="sha512-ARfx5eajdcCAuWvuJrgUuJ6D25ON3KZRTCghNXXKeJldCQJ5bXS+6CvG2EhcFWITF95uwZydzpufSKvhmSpTxA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -52,7 +55,7 @@
     {% endif %}
 
     {% htmx_script %}
-    <script src="{% static 'js/site-bundle.js' %}"></script>
+    {% vite_asset 'assets/javascript/site.js' %}
     {% block page_head %}
     {% endblock page_head %}
   </head>

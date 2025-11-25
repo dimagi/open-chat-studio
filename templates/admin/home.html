@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags i18n static %}
+{% load django_vite form_tags i18n static %}
 {% block app %}
   <section class="app-card">
     <div class="flex justify-between items-center mb-6">
@@ -27,7 +27,7 @@
 {% endblock app %}
 
 {% block page_js %}
-  <script src="{% static 'js/adminDashboard-bundle.js' %}"></script>
+  {% vite_asset 'assets/javascript/admin-dashboard.js' %}
   <script>
     let messageChart;
     let participantChart;

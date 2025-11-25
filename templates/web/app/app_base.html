@@ -1,8 +1,8 @@
 {% extends "web/base.html" %}
-{% load static %}
+{% load django_vite static %}
 {% block page_head %}
   {{ block.super }}
-  <script src="{% static 'js/app-bundle.js' %}"></script>
+  {% vite_asset 'assets/javascript/app.js' %}
 {% endblock page_head %}
 
 {% block top_nav %}

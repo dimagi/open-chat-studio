@@ -1,7 +1,7 @@
 {% extends "web/app/app_base.html" %}
-{% load static tz %}
+{% load django_vite static tz %}
 {% block page_js %}
-    <script src="{% static 'js/tokenCounter-bundle.js' %}"></script>
+    {% vite_asset 'assets/javascript/tiktoken.js' %}
 {% endblock page_js %}
 
 {% block body_wrapper %}

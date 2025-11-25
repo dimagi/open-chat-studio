@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load i18n static %}
+{% load django_vite i18n static %}
 
 {% block title %}{% translate "Dashboard" %} - {{ block.super }}{% endblock %}
 
@@ -424,5 +424,5 @@
 {% endblock app %}
 
 {% block page_js %}
-  <script src="{% static 'js/dashboard-bundle.js' %}"></script>
+  {% vite_asset 'assets/javascript/dashboard.js' %}
 {% endblock page_js %}

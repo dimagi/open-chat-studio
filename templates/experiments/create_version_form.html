@@ -1,14 +1,9 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags static %}
-
-{% block page_head %}
-  {{ block.super }}
-  <link rel="stylesheet" href="{% static 'css/editors.css' %}">
-{% endblock page_head %}
+{% load django_vite form_tags static %}
 
 {% block page_js %}
   {{ block.super }}
-  <script src="{% static 'js/editors-bundle.js' %}"></script>
+  {% vite_asset 'assets/javascript/editors.js' %}
 {% endblock page_js %}
 
 {% block breadcrumbs %}

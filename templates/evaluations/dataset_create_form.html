@@ -1,5 +1,5 @@
 {% extends "generic/object_form.html" %}
-{% load form_tags i18n static %}
+{% load django_vite form_tags i18n static %}
 
 {% block form %}
   {{ form.non_field_errors }}
@@ -276,8 +276,8 @@
 {% endblock form %}
 
 {% block page_js %}
-  <script src="{% static 'js/evaluations-bundle.js' %}"></script>
-  <script src="{% static 'js/editors-bundle.js' %}"></script>
+  {% vite_asset 'assets/javascript/apps/evaluations/dataset-mode-selector.js' %}
+  {% vite_asset 'assets/javascript/editors.js' %}
   <script>
     function datasetModeSelectorBuilder() {
       // Extend the shared datasetModeSelector with create-specific functionality
