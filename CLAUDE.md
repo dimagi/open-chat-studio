@@ -49,14 +49,16 @@ inv schema                     # Generate OpenAPI schema
 inv translations               # Extract and compile messages
 ```
 
-### Frontend (Node.js/Webpack)
+### Frontend (Node.js/Vite)
 ```bash
-# Development builds
-npm run dev                    # Build assets once
-npm run dev-watch             # Build and watch for changes
+# Development server
+npm run dev                    # Start Vite dev server with HMR
 
 # Production build
 npm run build                 # Optimized production build
+
+# Preview production build
+npm run preview               # Preview production build locally
 
 # Code quality
 npm run lint                  # ESLint check and fix
