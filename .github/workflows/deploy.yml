@@ -65,12 +65,15 @@ jobs:
       run: |
         # you can't reference the `env` context when defining other env vars to do it here
         APP_NAME="${{ fromJSON(vars.DEPLOY_APP_NAME)[env.DEPLOY_ENV] }}"
+        AWS_REGION="${{ fromJSON(vars.DEPLOY_AWS_REGION)[env.DEPLOY_ENV] }}"
         echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
+        echo "AWS_REGION=$AWS_REGION" >> "$GITHUB_ENV"
         echo "ECR_REPOSITORY=$APP_NAME-${{ env.DEPLOY_ENV }}-ecr-repo" >> "$GITHUB_ENV"
         echo "ECS_CLUSTER=$APP_NAME-${{ env.DEPLOY_ENV }}-Cluster" >> "$GITHUB_ENV"
         echo "ECS_SERVICE_DJANGO=$APP_NAME-${{ env.DEPLOY_ENV }}-Django" >> "$GITHUB_ENV"
         echo "ECS_SERVICE_CELERY=$APP_NAME-${{ env.DEPLOY_ENV }}-Celery" >> "$GITHUB_ENV"
         echo "ECS_SERVICE_CELERY_BEAT=$APP_NAME-${{ env.DEPLOY_ENV }}-CeleryBeat" >> "$GITHUB_ENV"
+        echo "DJANGO_STACK_NAME=$APP_NAME-${{ env.DEPLOY_ENV }}-$AWS_REGION-django-stack" >> "$GITHUB_ENV"
 
     - name: Create GitHub deployment
       uses: chrnorm/deployment-action@v2
@@ -80,7 +83,6 @@ jobs:
         environment: "aws-${{ env.DEPLOY_ENV }}"
         production-environment: ${{ env.DEPLOY_ENV == 'prod' }}
         description: "Deploying ${{ github.head_ref || github.ref }} to AWS ${{ env.DEPLOY_ENV }}"
-
 
     - name: configure aws credentials
       uses: aws-actions/configure-aws-credentials@v5.1.0
@@ -108,13 +110,13 @@ jobs:
     - name: Build and push
       uses: docker/build-push-action@v6
       with:
-        push: true
         tags: |
           ${{ steps.image-name.outputs.image }}
           ${{ steps.image-name.outputs.image_latest }}
         file: Dockerfile
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true
         build-args: |
           SECRET_KEY=dummy-secret-key-for-build
           DJANGO_ALLOWED_HOSTS=localhost
@@ -127,11 +129,11 @@ jobs:
         container-name: web
         image: ${{ steps.image-name.outputs.image }}
 
-    - name: Update ECS task def for Django migrations container
-      id: django-migrations-def
+    - name: Update ECS task def for Migration container
+      id: migration-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1.8.1
       with:
-        task-definition: ${{ steps.django-web-def.outputs.task-definition }}
+        task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-Migration
         container-name: migrate
         image: ${{ steps.image-name.outputs.image }}
 
@@ -151,10 +153,117 @@ jobs:
         container-name: celery-beat
         image: ${{ steps.image-name.outputs.image }}
 
+    - name: Get stack outputs for network config
+      id: stack-outputs
+      run: |
+        set -e
+        OUTPUTS=$(aws cloudformation describe-stacks \
+          --stack-name "$DJANGO_STACK_NAME" \
+          --query 'Stacks[0].Outputs' \
+          --output json) || { echo "Failed to retrieve CloudFormation stack outputs"; exit 1; }
+
+        SUBNETS=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey | endswith("PrivateSubnets")) | .OutputValue')
+        SG=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey | endswith("ServiceSecurityGroup")) | .OutputValue')
+        
+        [[ -z "$SUBNETS" ]] && { echo "Error: Could not find subnets in stack outputs"; exit 1; }
+        [[ -z "$SG" ]] && { echo "Error: Could not find security group in stack outputs"; exit 1; }
+        
+        echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
+        echo "security_group=$SG" >> $GITHUB_OUTPUT
+
+    - name: Run migration task
+      id: run-migration
+      run: |
+        # Strip metadata fields that cause issues when re-registering
+        jq 'del(.tags, .registeredAt, .registeredBy, .taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities)' \
+          ${{ steps.migration-def.outputs.task-definition }} > /tmp/migration-task-def.json
+
+        # Register task definition with new image
+        TASK_DEF_ARN=$(aws ecs register-task-definition \
+          --cli-input-json file:///tmp/migration-task-def.json \
+          --query 'taskDefinition.taskDefinitionArn' \
+          --output text)
+
+        # Run the migration task
+        TASK_ARN=$(aws ecs run-task \
+          --cluster "$ECS_CLUSTER" \
+          --task-definition "$TASK_DEF_ARN" \
+          --launch-type FARGATE \
+          --network-configuration "awsvpcConfiguration={subnets=[${{ steps.stack-outputs.outputs.subnets }}],securityGroups=[${{ steps.stack-outputs.outputs.security_group }}],assignPublicIp=DISABLED}" \
+          --query 'tasks[0].taskArn' \
+          --output text)
+
+        echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
+        echo "Started migration task: $TASK_ARN"
+
+    - name: Wait for migration & output logs
+      run: |
+        echo "Waiting for migration task to complete..."
+        aws ecs wait tasks-stopped \
+          --cluster "$ECS_CLUSTER" \
+          --tasks "${{ steps.run-migration.outputs.task_arn }}"
+
+        # Check exit code
+        EXIT_CODE=$(aws ecs describe-tasks \
+          --cluster "$ECS_CLUSTER" \
+          --tasks "${{ steps.run-migration.outputs.task_arn }}" \
+          --query 'tasks[0].containers[0].exitCode' \
+          --output text)
+
+        # Get task details for log configuration
+        TASK_ID=$(echo "${{ steps.run-migration.outputs.task_arn }}" | cut -d'/' -f3)
+
+        # Output migration logs
+        LOG_STREAM="${LOG_STREAM_PREFIX}/${TASK_ID}"
+        echo "Fetching migration logs from CloudWatch..."
+
+        LOGS=$(aws logs get-log-events \
+          --log-group-name "$LOG_GROUP" \
+          --log-stream-name "$LOG_STREAM" \
+          --limit 100 \
+          --query 'events[*].message' \
+          --output json 2>&1) || LOGS="Could not fetch logs"
+
+        # Output to console
+        echo "----------------------------------------"
+        echo "$LOGS"
+        echo "----------------------------------------"
+
+        # Add to job summary
+        {
+          echo "## Migration Logs"
+          echo ""
+          echo "**Task ID:** \`$TASK_ID\`"
+          echo "**Log Group:** \`$LOG_GROUP\`"
+          echo "**Log Stream:** \`$LOG_STREAM\`"
+          echo ""
+          echo "<details>"
+          echo "<summary>View Logs</summary>"
+          echo ""
+          echo "\`\`\`json"
+          echo "$LOGS"
+          echo "\`\`\`"
+          echo "</details>"
+        } >> $GITHUB_STEP_SUMMARY
+
+        if [ "$EXIT_CODE" != "0" ]; then
+          echo "Migration failed with exit code: $EXIT_CODE"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "❌ **Migration failed with exit code: $EXIT_CODE**" >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
+
+        echo "Migration completed successfully"
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Migration completed successfully**" >> $GITHUB_STEP_SUMMARY
+      env:
+        LOG_GROUP: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-DjangoMigrationLogs
+        LOG_STREAM_PREFIX: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-migrate/migrate
+
     - name: Deploy Django Web
       uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       with:
-        task-definition: ${{ steps.django-migrations-def.outputs.task-definition }}
+        task-definition: ${{ steps.django-web-def.outputs.task-definition }}
         service: ${{ env.ECS_SERVICE_DJANGO }}
         cluster: ${{ env.ECS_CLUSTER }}
         wait-for-service-stability: false
