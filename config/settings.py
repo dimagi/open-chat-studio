@@ -123,6 +123,7 @@ PROJECT_APPS = [
     "apps.trace",
     "apps.mcp_integrations",
     "apps.filters",
+    "apps.data_migrations",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
