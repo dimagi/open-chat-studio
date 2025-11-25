@@ -2,14 +2,26 @@
 import htmx from 'htmx.org'
 import TomSelect from "tom-select";
 
-const urlData = document.getElementById('tag-multiselect');
-const linkTagUrl = urlData.getAttribute("data-linkTagUrl");
-const unlinkTagUrl = urlData.getAttribute("data-unlinkTagUrl");
 const tsBlur = new Event("ts-blur");
 let controlInstances = [];
 
+// Lazy-load URLs from DOM when needed
+function getUrls() {
+  const urlData = document.getElementById('tag-multiselect');
+  if (!urlData) {
+    return { linkTagUrl: null, unlinkTagUrl: null };
+  }
+  return {
+    linkTagUrl: urlData.getAttribute("data-linkTagUrl"),
+    unlinkTagUrl: urlData.getAttribute("data-unlinkTagUrl")
+  };
+}
+
 function addTag (name, el, objectInfo) {
   return function () {
+    const { linkTagUrl } = getUrls();
+    if (!linkTagUrl) return;
+
     let postData = {source: el, swap: 'none', values: {"tag_name": arguments[0], "object_info": objectInfo}};
     htmx.ajax('POST', linkTagUrl, postData);
     let dropdown_option = {text: arguments[0], value: arguments[0]};
@@ -22,6 +34,9 @@ function addTag (name, el, objectInfo) {
 
 function removeTag (name, el, objectInfo) {
   return function () {
+    const { unlinkTagUrl } = getUrls();
+    if (!unlinkTagUrl) return;
+
     let postData = {source: el, swap: 'none', values: {"tag_name": arguments[0], "object_info": objectInfo}};
     htmx.ajax('POST', unlinkTagUrl, postData);
   };

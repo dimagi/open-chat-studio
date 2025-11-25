@@ -1,13 +1,17 @@
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import path from 'path';
 
 export default defineConfig({
   base: '/static/',
 
+  // Use esbuild for JSX instead of React plugin to avoid Fast Refresh issues
+  esbuild: {
+    jsx: 'automatic',
+    jsxDev: false, // Disable dev-only JSX transforms
+  },
+
   plugins: [
-    react(),
     process.env.GITHUB_REF === 'refs/heads/main' && sentryVitePlugin({
       authToken: process.env.SENTRY_AUTH_TOKEN,
       org: process.env.SENTRY_ORG,
