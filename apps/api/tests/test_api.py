@@ -30,11 +30,12 @@ def experiment(db):
 
 
 @pytest.mark.django_db()
-def test_list_experiments(experiment):
+@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
+def test_list_experiments(auth_method, experiment):
     user = experiment.team.members.first()
     version1 = experiment.create_new_version()
     version2 = experiment.create_new_version()
-    client = ApiTestClient(user, experiment.team)
+    client = ApiTestClient(user, experiment.team, auth_method=auth_method)
     response = client.get(reverse("api:experiment-list"))
     assert response.status_code == 200
     expected_json = {
@@ -62,9 +63,10 @@ def test_list_experiments(experiment):
 
 
 @pytest.mark.django_db()
-def test_retrieve_experiments(experiment):
+@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
+def test_retrieve_experiments(auth_method, experiment):
     user = experiment.team.members.first()
-    client = ApiTestClient(user, experiment.team)
+    client = ApiTestClient(user, experiment.team, auth_method=auth_method)
     response = client.get(reverse("api:experiment-detail", kwargs={"id": experiment.public_id}))
     assert response.status_code == 200
     assert response.json() == {
@@ -103,12 +105,13 @@ def test_only_experiments_from_the_scoped_team_is_returned():
 
 
 @pytest.mark.django_db()
-def test_create_and_update_participant_data():
+@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
+def test_create_and_update_participant_data(auth_method):
     identifier = "part1"
     experiment = ExperimentFactory(team=TeamWithUsersFactory())
     experiment2 = ExperimentFactory(team=experiment.team)
     user = experiment.team.members.first()
-    client = ApiTestClient(user, experiment.team)
+    client = ApiTestClient(user, experiment.team, auth_method=auth_method)
 
     # This call should create ParticipantData
     data = {
@@ -549,7 +552,8 @@ def _setup_participant_data(
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @patch("apps.chat.channels.CommCareConnectClient")
-def test_generate_bot_message_and_send(ConnectClient, experiment):
+@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
+def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method):
     """
     Test that a bot message is generated and sent to a participant. If there isn't a session for the participant yet,
     we expect one to be created. The generated bot message should be saved as an AI message, but the prompt should not
@@ -574,7 +578,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment):
     )
 
     api_user = experiment.team.members.first()
-    client = ApiTestClient(api_user, experiment.team)
+    client = ApiTestClient(api_user, experiment.team, auth_method=auth_method)
 
     data = {
         "identifier": connect_id,

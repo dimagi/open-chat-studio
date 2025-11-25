@@ -12,6 +12,7 @@ from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHa
 from rest_framework import exceptions
 
 from apps.teams.helpers import get_team_membership_for_request
+from apps.teams.utils import set_current_team
 
 from .models import OAuth2AccessToken
 
@@ -38,6 +39,8 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
         if not request.team_membership:
             raise exceptions.AuthenticationFailed()
 
+        # this is unset by the request_finished signal
+        set_current_team(access_token.team)
         return user, access_token
 
 
