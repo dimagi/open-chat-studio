@@ -1,7 +1,7 @@
 import logging
 import re
 import time
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 import openai
 from django.db import transaction
@@ -19,7 +19,7 @@ from langchain_core.runnables.config import merge_configs
 from pydantic import ConfigDict
 
 from apps.chat.agent.openapi_tool import ToolArtifact
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment
 from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import (
@@ -43,27 +43,6 @@ class GenerationError(Exception):
 class GenerationCancelled(Exception):
     def __init__(self, output: "ChainOutput"):
         self.output = output
-
-
-def create_experiment_runnable(
-    experiment: Experiment, session: ExperimentSession, trace_service: Any, disable_tools: bool = False
-):
-    """Create an experiment runnable based on the experiment configuration."""
-
-    if assistant := experiment.assistant:
-        history_manager = ExperimentHistoryManager.for_assistant(
-            session=session, experiment=experiment, trace_service=trace_service
-        )
-        assistant_adapter = AssistantAdapter.for_experiment(experiment, session)
-        if assistant.tools_enabled and not disable_tools:
-            runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)
-        else:
-            runnable = AssistantChat(adapter=assistant_adapter, history_manager=history_manager)
-        # This is a temporary hack until we return an object with metadata about the run
-        runnable.experiment = experiment
-        return runnable
-
-    raise NotImplementedError("Only assistant runnables are supported")
 
 
 class ChainOutput(Serializable):
