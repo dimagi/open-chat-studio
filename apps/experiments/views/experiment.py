@@ -1,8 +1,6 @@
 import logging
-import unicodedata
 import uuid
 from datetime import datetime, timedelta
-from functools import cached_property
 from typing import cast
 from urllib.parse import urlparse
 
@@ -40,15 +38,11 @@ from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
-from django.views.generic import CreateView
-from django.views.generic.edit import FormView
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
-from waffle import flag_is_active
 
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.annotations.models import CustomTaggedItem, Tag
-from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
@@ -74,21 +68,16 @@ from apps.experiments.filters import (
 )
 from apps.experiments.forms import (
     ConsentForm,
-    ExperimentForm,
-    ExperimentVersionForm,
     SurveyCompletedForm,
     TranslateMessagesForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
-    AgentTools,
     Experiment,
-    ExperimentRoute,
     ExperimentRouteType,
     ExperimentSession,
     Participant,
     SessionStatus,
-    SyntheticVoice,
 )
 from apps.experiments.tables import (
     ChildExperimentRoutesTable,
@@ -99,11 +88,9 @@ from apps.experiments.tables import (
 )
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import (
-    async_create_experiment_version,
     async_export_chat,
     get_response_for_webchat_task,
 )
-from apps.experiments.views.prompt import PROMPT_DATA_SESSION_KEY
 from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
 from apps.filters.models import FilterSet
@@ -111,7 +98,7 @@ from apps.generics.chips import Chip
 from apps.generics.views import paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
-from apps.service_providers.utils import get_llm_provider_choices, get_models_by_team_grouped_by_provider
+from apps.service_providers.utils import get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -175,247 +162,6 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
         other_versions = Experiment.objects.get_all().filter(working_version=self.kwargs["experiment_id"]).all()
         return (experiment_row | other_versions).order_by("-version_number")
-
-
-class BaseExperimentView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
-    model = Experiment
-    template_name = "experiments/experiment_form.html"
-    form_class = ExperimentForm
-
-    @property
-    def extra_context(self):
-        if self.object and self.object.assistant_id:
-            experiment_type = "assistant"
-        elif self.object and self.object.pipeline_id:
-            experiment_type = "pipeline"
-        else:
-            experiment_type = "llm"
-        if self.request.POST.get("type"):
-            experiment_type = self.request.POST.get("type")
-
-        team_participant_identifiers = list(
-            self.request.team.participant_set.filter(user=None).values_list("identifier", flat=True)
-        )
-        disable_version_button = False
-        if self.object:
-            team_participant_identifiers.extend(self.object.participant_allowlist)
-            team_participant_identifiers = set(team_participant_identifiers)
-            disable_version_button = self.object.create_version_task_id
-
-        return {
-            **{
-                "title": self.title,
-                "button_text": self.button_title,
-                "active_tab": "experiments",
-                "experiment_type": experiment_type,
-                "available_tools": AgentTools.user_tool_choices(),
-                "team_participant_identifiers": team_participant_identifiers,
-                "disable_version_button": disable_version_button,
-            },
-            **_get_voice_provider_alpine_context(self.request),
-        }
-
-    def get_success_url(self):
-        return reverse("chatbots:single_chatbot_home", args=[self.request.team.slug, self.object.pk])
-
-    def get_queryset(self):
-        return Experiment.objects.get_all().filter(team=self.request.team)
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["request"] = self.request
-        return kwargs
-
-    def form_valid(self, form):
-        experiment = form.instance
-        if experiment.assistant and ExperimentRoute.objects.filter(parent=experiment):
-            messages.error(
-                request=self.request, message="Assistants cannot be routers. Please remove the routes first."
-            )
-            return render(self.request, self.template_name, self.get_context_data())
-
-        if experiment.conversational_consent_enabled and not experiment.seed_message:
-            messages.error(
-                request=self.request, message="A seed message is required when conversational consent is enabled!"
-            )
-            return render(self.request, self.template_name, self.get_context_data())
-        response = super().form_valid(form)
-
-        if self.request.POST.get("action") == "save_and_version":
-            return redirect("experiments:create_version", self.request.team.slug, experiment.id)
-
-        if self.request.POST.get("action") == "save_and_archive":
-            experiment = get_object_or_404(Experiment, id=experiment.id, team=self.request.team)
-            experiment.archive()
-            return redirect("chatbots:chatbots_home", self.request.team.slug)
-        return response
-
-
-class CreateExperiment(BaseExperimentView, CreateView):
-    title = "Create Experiment"
-    button_title = "Create"
-    permission_required = "experiments.add_experiment"
-
-    def get_initial(self):
-        initial = super().get_initial()
-        long_data = self.request.session.pop(PROMPT_DATA_SESSION_KEY, None)
-        if long_data:
-            initial.update(long_data)
-        return initial
-
-    def form_valid(self, form):
-        with transaction.atomic():
-            form.instance.name = unicodedata.normalize("NFC", form.instance.name)
-            self.object = form.save()
-
-        task_id = async_create_experiment_version.delay(
-            experiment_id=self.object.id, version_description="", make_default=True
-        )
-        self.object.create_version_task_id = task_id
-        self.object.save(update_fields=["create_version_task_id"])
-
-        return HttpResponseRedirect(self.get_success_url())
-
-    def form_invalid(self, form):
-        return self.render_to_response(self.get_context_data(form=form))
-
-    def dispatch(self, request, *args, **kwargs):
-        is_chatbot = kwargs.get("new_chatbot", False)
-        if not is_chatbot:
-            return HttpResponseRedirect(reverse("chatbots:new", args=[request.team.slug]))
-        return super().dispatch(request, *args, **kwargs)
-
-
-def _get_voice_provider_alpine_context(request):
-    """Add context required by the experiments/experiment_form.html template."""
-    exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-    if flag_is_active(request, "flag_open_ai_voice_engine"):
-        exclude_services = []
-
-    form_attrs = {"enctype": "multipart/form-data"}
-    if request.origin == "experiments":
-        form_attrs["x-data"] = "experiment"
-
-    return {
-        "form_attrs": form_attrs,
-        # map provider ID to provider type
-        "voice_providers_types": dict(request.team.voiceprovider_set.values_list("id", "type")),
-        "synthetic_voice_options": sorted(
-            [
-                {
-                    "value": voice.id,
-                    "text": str(voice),
-                    "type": voice.service.lower(),
-                    "provider_id": voice.voice_provider_id,
-                }
-                for voice in SyntheticVoice.get_for_team(request.team, exclude_services=exclude_services)
-            ],
-            key=lambda v: v["text"],
-        ),
-        "llm_providers": request.team.llmprovider_set.all(),
-        "llm_options": get_llm_provider_choices(request.team),
-    }
-
-
-class CreateExperimentVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
-    model = Experiment
-    form_class = ExperimentVersionForm
-    template_name = "experiments/create_version_form.html"
-    title = "Create Experiment Version"
-    button_title = "Create"
-    permission_required = "experiments.add_experiment"
-
-    @cached_property
-    def object(self):
-        return get_object_or_404(Experiment, pk=self.kwargs["experiment_id"], team=self.request.team)
-
-    @cached_property
-    def latest_version(self):
-        return self.object.latest_version
-
-    def get_form_kwargs(self) -> dict:
-        form_kwargs = super().get_form_kwargs()
-        if not self.latest_version:
-            form_kwargs["initial"] = {"is_default_version": True}
-        return form_kwargs
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        working_experiment = self.object
-        version = working_experiment.version_details
-        if self.latest_version:
-            # Populate diffs
-            version.compare(self.latest_version.version_details)
-
-        context["version_details"] = version
-        context["has_versions"] = self.latest_version is not None
-        context["experiment"] = working_experiment
-        return context
-
-    def form_valid(self, form):
-        description = form.cleaned_data["version_description"]
-        is_default = form.cleaned_data["is_default_version"]
-        working_version = self.object
-
-        if working_version.is_archived:
-            raise PermissionDenied("Unable to version an archived experiment.")
-
-        if working_version.create_version_task_id:
-            messages.error(self.request, "Version creation is already in progress.")
-            return HttpResponseRedirect(self.get_success_url())
-
-        error_msg = self._check_pipleline_and_assistant_for_errors()
-
-        if error_msg:
-            messages.error(self.request, error_msg)
-            return render(self.request, self.template_name, self.get_context_data(form=form))
-
-        task_id = async_create_experiment_version.delay(
-            experiment_id=working_version.id, version_description=description, make_default=is_default
-        )
-        working_version.create_version_task_id = task_id
-        working_version.save(update_fields=["create_version_task_id"])
-        messages.success(self.request, "Creating new version. This might take a few minutes.")
-
-        return HttpResponseRedirect(self.get_success_url())
-
-    def _check_pipleline_and_assistant_for_errors(self) -> str:
-        """Checks if the pipeline or assistant has errors before creating a new version."""
-        experiment = self.object
-
-        try:
-            if self._is_assistant_out_of_sync(experiment):
-                return "Assistant is out of sync with OpenAI. Please update the assistant first."
-        except OpenAiSyncError as e:
-            return str(e)
-
-        if pipeline := experiment.pipeline:
-            errors = pipeline.validate()
-            if errors:
-                return "Unable to create a new version when the pipeline has errors"
-
-    def _is_assistant_out_of_sync(self, experiment: Experiment) -> bool:
-        if not experiment.assistant:
-            return False
-
-        if not experiment.assistant.assistant_id:
-            return True
-
-        if len(get_diff_with_openai_assistant(experiment.assistant)) > 0:
-            return True
-
-        files_missing_local, files_missing_remote = get_out_of_sync_files(experiment.assistant)
-        return bool(files_missing_local or files_missing_remote)
-
-    def get_success_url(self):
-        url = reverse(
-            "chatbots:single_chatbot_home",
-            kwargs={
-                "team_slug": self.request.team.slug,
-                "experiment_id": self.kwargs["experiment_id"],
-            },
-        )
-        return f"{url}#versions"
 
 
 def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
