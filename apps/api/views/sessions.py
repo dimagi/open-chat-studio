@@ -32,7 +32,7 @@ update_state_response_serializer = inline_serializer(
 @extend_schema_view(
     list=extend_schema(
         operation_id="session_list",
-        summary="List Experiment Sessions",
+        summary="List Chatbot Sessions",
         tags=["Experiment Sessions"],
         parameters=[
             OpenApiParameter(
@@ -57,7 +57,7 @@ update_state_response_serializer = inline_serializer(
     ),
     retrieve=extend_schema(
         operation_id="session_retrieve",
-        summary="Retrieve Experiment Session",
+        summary="Retrieve Chatbot Session",
         tags=["Experiment Sessions"],
         responses=ExperimentSessionSerializer(include_messages=True),
         parameters=[
@@ -77,13 +77,13 @@ update_state_response_serializer = inline_serializer(
     ),
     create=extend_schema(
         operation_id="session_create",
-        summary="Create Experiment Session",
+        summary="Create Chatbot Session",
         tags=["Experiment Sessions"],
         request=ExperimentSessionCreateSerializer,
     ),
     end_experiment_session=extend_schema(
         operation_id="session_end",
-        summary="End Experiment Session",
+        summary="End Chatbot Session",
         tags=["Experiment Sessions"],
         parameters=[
             OpenApiParameter(
@@ -98,7 +98,7 @@ update_state_response_serializer = inline_serializer(
     ),
     update_state=extend_schema(
         operation_id="session_update_state",
-        summary="Update Experiment Session State",
+        summary="Update Chatbot Session State",
         tags=["Experiment Sessions"],
         parameters=[
             OpenApiParameter(

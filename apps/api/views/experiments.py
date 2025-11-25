@@ -12,12 +12,12 @@ from apps.experiments.models import Experiment
 @extend_schema_view(
     list=extend_schema(
         operation_id="experiment_list",
-        summary="List Experiments",
+        summary="List Chatbots",
         tags=["Experiments"],
     ),
     retrieve=extend_schema(
         operation_id="experiment_retrieve",
-        summary="Retrieve Experiment",
+        summary="Retrieve Chatbot",
         tags=["Experiments"],
         parameters=[
             OpenApiParameter(
