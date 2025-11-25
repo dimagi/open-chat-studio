@@ -825,7 +825,7 @@ OAUTH2_PROVIDER = {
     "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.APIScopedValidator",
     "SCOPES": {
         "chatbots:read": "List and Retrieve Chatbot Data",
-        "chatbots:chat": "Converse with a Chatbot",
+        "chatbots:interact": "Converse with a Chatbot",
         "sessions:read": "List and Read Sessions",
         "sessions:write": "Manage Sessions",
         "participants:write": "Update Participant Data",

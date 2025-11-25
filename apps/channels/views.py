@@ -118,14 +118,14 @@ def new_api_message_schema(versioned: bool):
 
 @new_api_message_schema(versioned=False)
 @api_view(["POST"])
-@permission_classes([TokenHasRequiredScope("chatbots:chat")])
+@permission_classes([TokenHasRequiredScope("chatbots:interact")])
 def new_api_message(request, experiment_id: uuid):
     return _new_api_message(request, experiment_id)
 
 
 @new_api_message_schema(versioned=True)
 @api_view(["POST"])
-@permission_classes([TokenHasRequiredScope("chatbots:chat")])
+@permission_classes([TokenHasRequiredScope("chatbots:interact")])
 def new_api_message_versioned(request, experiment_id: uuid, version=None):
     return _new_api_message(request, experiment_id, version)
 

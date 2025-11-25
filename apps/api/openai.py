@@ -114,14 +114,14 @@ def chat_completions_schema(versioned: bool):
 
 @chat_completions_schema(versioned=False)
 @api_view(["POST"])
-@permission_classes([TokenHasRequiredScope("chatbots:chat")])
+@permission_classes([TokenHasRequiredScope("chatbots:interact")])
 def chat_completions(request, experiment_id: uuid.UUID):
     return _chat_completions(request, experiment_id)
 
 
 @chat_completions_schema(versioned=True)
 @api_view(["POST"])
-@permission_classes([TokenHasRequiredScope("chatbots:chat")])
+@permission_classes([TokenHasRequiredScope("chatbots:interact")])
 def chat_completions_version(request, experiment_id: uuid.UUID, version=None):
     return _chat_completions(request, experiment_id, version)
 

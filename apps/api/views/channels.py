@@ -127,7 +127,7 @@ def consent(request: Request):
     ],
 )
 @api_view(["POST"])
-@permission_classes([TokenHasRequiredScope("chatbots:chat")])
+@permission_classes([TokenHasRequiredScope("chatbots:interact")])
 @transaction.atomic
 def trigger_bot_message(request):
     """
