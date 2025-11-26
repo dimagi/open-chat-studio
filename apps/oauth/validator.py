@@ -36,6 +36,12 @@ class APIScopedValidator(OAuth2Validator):
 
     def _create_access_token(self, expires, request, token, source_refresh_token=None):
         access_token = super()._create_access_token(expires, request, token, source_refresh_token)
-        access_token.team = request.team
+        access_token.team = getattr(request, "team", source_refresh_token.team)
         access_token.save()
         return access_token
+
+    def _create_refresh_token(self, request, refresh_token_code, access_token, previous_refresh_token):
+        refresh_token = super()._create_refresh_token(request, refresh_token_code, access_token, previous_refresh_token)
+        refresh_token.team = getattr(request, "team", previous_refresh_token.team)
+        refresh_token.save()
+        return refresh_token

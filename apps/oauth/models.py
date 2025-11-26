@@ -36,4 +36,4 @@ class OAuth2IDToken(AbstractIDToken):
 
 
 class OAuth2RefreshToken(AbstractRefreshToken):
-    pass
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True)
