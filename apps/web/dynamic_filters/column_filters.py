@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 
 import pytz
 from django.db.models import Q, QuerySet
-from pydantic import Field
 
 from apps.experiments.models import SessionStatus
 
@@ -11,9 +10,8 @@ from .base import DATE_RANGE_OPTIONS, TYPE_TIMESTAMP, ChoiceColumnFilter, Column
 
 class ParticipantFilter(StringColumnFilter):
     query_param: str = "participant"
-    column: str = "participant__identifier"
+    columns: list[str] = ["participant__identifier", "participant__name"]
     label: str = "Participant"
-    or_columns: list[str] = Field(default_factory=lambda: ["participant__name"])
 
 
 class ExperimentFilter(ChoiceColumnFilter):

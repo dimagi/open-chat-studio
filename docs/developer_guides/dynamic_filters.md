@@ -1,4 +1,3 @@
-
 # Dynamic Filters
 
 Dynamic filters provide a flexible way to filter data on the frontend and backend. This guide explains how to use and create new dynamic filters.
@@ -63,7 +62,16 @@ Provides methods for string-based filtering operations:
 - `apply_ends_with()` - Case-insensitive ends with
 - `apply_any_of()` - Match any value from a JSON list
 
-Requires setting a `column` class variable with the database field path.
+Requires setting a `columns` class variable with a list of database field paths. When multiple columns are provided, the filter automatically applies OR logic across all specified fields.
+
+**Examples:**
+```python
+# Single column search
+StringColumnFilter(columns=["name"], query_param="name", label="Name")
+
+# Multiple columns with OR logic (searches identifier OR name)
+StringColumnFilter(columns=["identifier", "name"], query_param="participant", label="Participant")
+```
 
 #### ChoiceColumnFilter
 Provides methods for choice-based filtering operations:
@@ -102,13 +110,13 @@ class ProductCategoryFilter(ChoiceColumnFilter):
     query_param: str = "category"
     column: str = "category__name"  # Database field path
     label: str = "Category"
-    
+
     def prepare(self, team, **kwargs):
         self.options = [
-            {"id": cat.id, "label": cat.name} 
+            {"id": cat.id, "label": cat.name}
             for cat in Category.objects.filter(team=team).all()
         ]
-        
+
 p_filter = ProductCategoryFilter()
 
 # Alternately, you can construct it directly using kwargs:
@@ -128,12 +136,17 @@ from apps.web.dynamic_filters.base import MultiColumnFilter
 
 class ProductInventoryFilter(MultiColumnFilter):
     """Filter for product inventory using multiple column filters."""
-    
+
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ProductCategoryFilter(),
         TimestampFilter(label="Created At", column="created_at", query_param="created_date"),
         TimestampFilter(label="Updated At", column="updated_at", query_param="last_updated"),
-        # Add more filters as needed
+        # Example: Search category name or description with OR logic
+        StringColumnFilter(
+            label="Category",
+            columns=["category__name", "category__description"],  # Searches both fields with OR logic
+            query_param="category_search"
+        ),
     ]
 
     def prepare_queryset(self, queryset):
@@ -195,18 +208,18 @@ class ProductInventoryView(SingleTableView):
     def get_queryset(self):
         """Apply filters to the queryset."""
         queryset = super().get_queryset()
-        
+
         # Create filter instance and apply it
         product_filter = ProductInventoryFilter()
         timezone = self.request.session.get("detected_tz")
-        
+
         filter_params = FilterParams.from_request(self.request)
         return product_filter.apply(queryset, filter_params, timezone)
 
     def get_context_data(self, **kwargs):
         """Add filter configuration to the template context."""
         context = super().get_context_data(**kwargs)
-        
+
         # Add filter context data using the helper function
         filter_context = get_filter_context_data(
             team=self.request.team,  # Assuming team is available in request
@@ -216,7 +229,7 @@ class ProductInventoryView(SingleTableView):
             table_container_id="product-table",
             table_type="your-table-type"
         )
-        
+
         context.update(filter_context)
         return context
 ```
