@@ -14,7 +14,11 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('teams', '0007_create_commcare_connect_flag'),
-        ('teams', '0007_create_commcare_connect_flag'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    run_before = [
+        ("oauth2_provider", "0001_initial"),
     ]
 
     operations = [
