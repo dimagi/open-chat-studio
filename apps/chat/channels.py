@@ -761,6 +761,56 @@ class ChannelBase(ABC):
             .first()
         )
 
+    async def _aload_latest_session(self):
+        """Loads the latest experiment session on the channel"""
+        from asgiref.sync import sync_to_async
+
+        # get_working_version() is a property that accesses FK
+        working_version = await sync_to_async(lambda: self.experiment.get_working_version())()
+
+        self.experiment_session = await (
+            ExperimentSession.objects.select_related("participant", "experiment", "chat")  # Prefetch related objects
+            .filter(
+                experiment=working_version,
+                participant__identifier=str(self.participant_identifier),
+            )
+            .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+            .order_by("-created_at")
+            .afirst()
+        )
+
+    async def _aget_or_create_participant(self):
+        """Async version of participant retrieval/creation."""
+        return await Participant.objects.aget_or_create(
+            identifier=str(self.participant_identifier),
+            team=self.experiment.team,
+            defaults={"platform": self.experiment_channel.platform},
+        )
+
+    async def _aensure_sessions_exists(self):
+        """Ensures both the experiment and chat sessions exist."""
+        await self._aload_latest_session()
+
+        if not self.experiment_session or self.message.message_text == "/reset":
+            from asgiref.sync import sync_to_async
+
+            # Get working version
+            experiment = await sync_to_async(lambda: self.experiment.get_working_version())()
+
+            # Get or create participant
+            participant, _ = await self._aget_or_create_participant()
+
+            # Create chat session
+            chat = await Chat.objects.acreate(team=self.experiment.team)
+
+            # Create experiment session
+            self.experiment_session = await ExperimentSession.objects.acreate(
+                team=self.experiment.team,
+                experiment=experiment,
+                participant=participant,
+                chat=chat,
+            )
+
     def _reset_session(self):
         """Resets the session by ending the current `experiment_session` (if one exists) and creating a new one"""
         if self.experiment_session:
@@ -874,6 +924,27 @@ class ChannelBase(ABC):
                 update_fields.append("experiment_versions")
 
         self.experiment_session.save(update_fields=update_fields)
+
+    async def _aupdate_session_activity(self):
+        """Update the session's last_activity_at and experiment_versions fields."""
+        if not self.experiment_session:
+            return
+
+        from asgiref.sync import sync_to_async
+
+        update_fields = ["last_activity_at"]
+        self.experiment_session.last_activity_at = timezone.now()
+
+        # Add experiment version to the list if it's a versioned experiment
+        is_version = await sync_to_async(lambda: self.experiment.is_a_version)()
+        if is_version:
+            version_number = await sync_to_async(lambda: self.experiment.version_number)()
+            current_versions = self.experiment_session.experiment_versions or []
+            if version_number not in current_versions:
+                self.experiment_session.experiment_versions = current_versions + [version_number]
+                update_fields.append("experiment_versions")
+
+        await self.experiment_session.asave(update_fields=update_fields)
 
 
 class WebChannel(ChannelBase):
