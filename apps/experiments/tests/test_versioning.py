@@ -126,7 +126,7 @@ class TestVersion:
         queryset = Experiment.objects.filter(id=experiment.id)
         # Compare with new version
         new_version = experiment.create_new_version()
-        experiment.prompt_text = "This now changed"
+        experiment.seed_message = "This now changed"
         experiment.save()
         version_field = VersionField(queryset=queryset)
         version_field.previous_field_version = VersionField(queryset=Experiment.objects.filter(id=new_version.id))
