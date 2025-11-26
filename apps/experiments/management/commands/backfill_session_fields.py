@@ -1,24 +1,17 @@
 from django.contrib.postgres.aggregates import ArrayAgg
-from django.core.management import BaseCommand
 from django.db.models import Max
 
+from apps.data_migrations.management.commands.base import IdempotentCommand
 from apps.experiments.models import ExperimentSession
 from apps.trace.models import Trace
 
 
-class Command(BaseCommand):
+class Command(IdempotentCommand):
     help = "Backfill platform, experiment_versions, and last_activity_at fields for ExperimentSession"
+    migration_name = "backfill_session_fields_2025_11_26"
 
-    def add_arguments(self, parser):
-        parser.add_argument(
-            "--batch-size",
-            type=int,
-            default=1000,
-            help="Number of sessions to process per batch (default: 1000)",
-        )
-
-    def handle(self, *args, **options):
-        batch_size = options["batch_size"]
+    def perform_migration(self, dry_run=False):
+        batch_size = 1000
 
         self.stdout.write("Aggregating trace data...")
 
@@ -39,11 +32,11 @@ class Command(BaseCommand):
         self.stdout.write(f"Found trace data for {len(trace_data)} sessions")
 
         # Process sessions in batches using iterator
-        sessions = ExperimentSession.objects.select_related(
-            "experiment_channel", "participant"
-        ).only(
-            "id", "experiment_channel__platform", "participant__platform"
-        ).iterator(chunk_size=batch_size)
+        sessions = (
+            ExperimentSession.objects.select_related("experiment_channel", "participant")
+            .only("id", "experiment_channel__platform", "participant__platform")
+            .iterator(chunk_size=batch_size)
+        )
 
         batch = []
         total_updated = 0
