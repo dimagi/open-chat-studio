@@ -123,6 +123,22 @@ def _process_files(session: ExperimentSession, cited_files: set[File], generated
     }
 
 
+async def _aprocess_files(session: ExperimentSession, cited_files: set[File], generated_files: set[File]) -> dict:
+    """Async version of file processing."""
+    from asgiref.sync import sync_to_async
+
+    if cited_files:
+        # attach_files is a model method - wrap it
+        await sync_to_async(session.chat.attach_files)(attachment_type="file_citation", files=cited_files)
+    if generated_files:
+        await sync_to_async(session.chat.attach_files)(attachment_type="code_interpreter", files=generated_files)
+
+    return {
+        "cited_files": [file.id for file in cited_files],
+        "generated_files": [file.id for file in generated_files],
+    }
+
+
 def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
     extra_prompt_context = {
         "temp_state": state.get("temp_state") or {},

@@ -458,6 +458,38 @@ class PipelineBot:
                 chat_message.create_and_add_tag(tag_value, self.session.team, category or "")
         return chat_message
 
+    async def _asave_message_to_history(
+        self,
+        message: str,
+        type_: ChatMessageType,
+        metadata: dict,
+        tags: list[tuple] = None,
+    ) -> ChatMessage:
+        """Async version of message saving."""
+        from asgiref.sync import sync_to_async
+
+        chat_message = await ChatMessage.objects.acreate(
+            chat=self.session.chat, message_type=type_.value, content=message, metadata=metadata
+        )
+
+        if tags:
+            for tag_value, category in tags:
+                # create_and_add_tag is a model method - wrap it
+                await sync_to_async(chat_message.create_and_add_tag)(tag_value, self.session.team, category or "")
+
+        return chat_message
+
+    async def _aget_participant_data(self):
+        """Async version of getting participant data."""
+        from apps.experiments.models import ParticipantData
+
+        participant_data, _ = await ParticipantData.objects.aget_or_create(
+            participant_id=self.session.participant_id,
+            experiment_id=self.session.experiment_id,
+            team_id=self.session.team_id,
+        )
+        return participant_data
+
     def synthesize_voice(self) -> tuple[SyntheticVoice] | None:
         from apps.experiments.models import SyntheticVoice
 
