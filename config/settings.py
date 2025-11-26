@@ -824,7 +824,7 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
 
 # API
 OAUTH2_PROVIDER = {
-    "PKCE_REQUIRED": False,  # Temporary disable PKCE requirement for easier testing
+    "PKCE_REQUIRED": True,
     "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.APIScopedValidator",
     "SCOPES": {
         "chatbots:read": "List and Retrieve Chatbot Data",
