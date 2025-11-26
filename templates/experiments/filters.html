@@ -274,7 +274,7 @@
             method: 'GET',
             credentials: 'same-origin',
             headers: {
-              'X-CSRFToken': App.Cookies.get('csrftoken'),
+              'X-CSRFToken': this.$cookies.get('csrftoken'),
               'Accept': 'application/json'
             }
           })

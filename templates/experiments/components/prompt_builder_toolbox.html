@@ -103,14 +103,17 @@
     </div>
 </div>
 
-<script>
-    function savePrompt() {
+{% load django_vite %}
+<script type="module">
+    import Cookies from '{% vite_asset_url 'assets/javascript/utils/cookies.js' %}';
+
+    window.savePrompt = function() {
         fetch('{% url "experiments:prompt_builder_start_save_process" team.slug %}', {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': App.Cookies.get('csrftoken')
+                'X-CSRFToken': Cookies.get('csrftoken')
             },
             body: JSON.stringify({
                 // data to forwarded to the 'create experiment' view
@@ -138,7 +141,7 @@
 
 
     // Submitting history and prompt to get AI response
-    function updateUIWithInputFormatting() {
+    window.updateUIWithInputFormatting = function() {
         // Apply input formatting only to the final message if it is from the User
         // Get the last item in the array and modify it appropriately.
         let inputFormatter = Alpine.store('promptBuilder').currentState.inputFormatter;
@@ -166,7 +169,7 @@
         }
     }
 
-    function replaceWaitingText(task_id, response_obj) {
+    window.replaceWaitingText = function(task_id, response_obj) {
         Alpine.store('promptBuilder').currentState.messages.forEach((message) => {
             if (message.task_id === task_id) {
                 message.message = response_obj.message;
@@ -183,8 +186,8 @@
         fetchAndReplaceHistory();
     }
 
-    function submitMessageHistoryToGetResponse() {
-        updateUIWithInputFormatting();
+    window.submitMessageHistoryToGetResponse = function() {
+        window.updateUIWithInputFormatting();
         const messagesArray = Alpine.store('promptBuilder').currentState.messages;
 
         const data = {
@@ -203,7 +206,7 @@
             credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': App.Cookies.get('csrftoken'),
+                'X-CSRFToken': Cookies.get('csrftoken'),
             },
             body: JSON.stringify(data),
         }).then((response) => {
@@ -223,7 +226,7 @@
                     const response = await fetch(taskUrl);
                     const jsonResponse = await response.json();
                     if (jsonResponse.progress.complete) {
-                        replaceWaitingText(jsonResponse.task_id, jsonResponse.progress.result);
+                        window.replaceWaitingText(jsonResponse.task_id, jsonResponse.progress.result);
                     } else {
                         window.setTimeout(checkIfAIResponseIsReady, 1000);
                     }
