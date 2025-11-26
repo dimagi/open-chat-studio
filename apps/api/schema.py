@@ -31,6 +31,36 @@ class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
     name = "OAuth2"
     match_subclasses = True
 
+    def get_security_requirement(self, auto_schema):
+        from apps.oauth.permissions import TokenHasOAuthResourceScope, TokenHasOAuthScope
+
+        view = auto_schema.view
+
+        # Check if view uses OAuth scope checking permissions
+        for permission in view.get_permissions():
+            if isinstance(permission, TokenHasOAuthResourceScope):
+                # Get the required scopes from the view
+                required_scopes = getattr(view, "required_scopes", [])
+                if not required_scopes:
+                    return {}
+
+                # Format scopes with :read or :write suffix like TokenHasResourceScope does
+                method = auto_schema.method.upper()
+                if method in ("GET", "HEAD", "OPTIONS"):
+                    scope_type = "read"
+                else:
+                    scope_type = "write"
+
+                formatted_scopes = [f"{scope}:{scope_type}" for scope in required_scopes]
+                return {self.name: formatted_scopes}
+            elif isinstance(permission, TokenHasOAuthScope):
+                # Get the required scopes from the view (TokenHasScope.get_scopes)
+                required_scopes = getattr(view, "required_scopes", [])
+                if required_scopes:
+                    return {self.name: required_scopes}
+
+        return {}
+
     def get_security_definition(self, auto_schema):
         return {
             "type": "oauth2",
