@@ -30,7 +30,9 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
                 team_slug = None
 
             if not team_slug:
-                team_slug = get_default_team_from_request(self.request).slug
+                if team := get_default_team_from_request(self.request):
+                    team_slug = team.slug
+                # If no team found, team_slug remains None and the form will handle it.
 
             initial["team_slug"] = team_slug
         return initial
