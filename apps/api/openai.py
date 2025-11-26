@@ -111,18 +111,18 @@ def chat_completions_schema(versioned: bool):
     )
 
 
-@chat_completions_schema(versioned=False)
 class ChatCompletionsView(APIView):
     required_scopes = ("chatbots:interact",)
 
+    @chat_completions_schema(versioned=False)
     def post(self, request, experiment_id: uuid.UUID):
         return _chat_completions(request, experiment_id)
 
 
-@chat_completions_schema(versioned=True)
 class ChatCompletionsVersionView(APIView):
     required_scopes = ("chatbots:interact",)
 
+    @chat_completions_schema(versioned=True)
     def post(self, request, experiment_id: uuid.UUID, version=None):
         return _chat_completions(request, experiment_id, version)
 

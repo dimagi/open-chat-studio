@@ -115,18 +115,18 @@ def new_api_message_schema(versioned: bool):
     )
 
 
-@new_api_message_schema(versioned=False)
 class NewApiMessageView(APIView):
     required_scopes = ("chatbots:interact",)
 
+    @new_api_message_schema(versioned=False)
     def post(self, request, experiment_id: uuid):
         return _new_api_message(request, experiment_id)
 
 
-@new_api_message_schema(versioned=True)
 class NewApiMessageVersionedView(APIView):
     required_scopes = ("chatbots:interact",)
 
+    @new_api_message_schema(versioned=True)
     def post(self, request, experiment_id: uuid, version=None):
         return _new_api_message(request, experiment_id, version)
 

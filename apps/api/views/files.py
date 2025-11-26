@@ -17,12 +17,12 @@ class BinaryRenderer(BaseRenderer):
         return data
 
 
-@extend_schema(operation_id="file_content", summary="Download File Content", tags=["Files"], responses=bytes)
 class FileContentView(APIView):
     required_scopes = ("sessions:read", "chatbots:read")
     renderer_classes = [BinaryRenderer]
     permission_required = "files.view_file"
 
+    @extend_schema(operation_id="file_content", summary="Download File Content", tags=["Files"], responses=bytes)
     def get(self, request, pk: int):
         file = get_object_or_404(File, id=pk, team=request.team)
         if not file.file:

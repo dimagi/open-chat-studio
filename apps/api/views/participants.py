@@ -12,64 +12,64 @@ from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, Participant, ParticipantData
 
 
-@extend_schema(
-    operation_id="update_participant_data",
-    summary="Update Participant Data",
-    tags=["Participants"],
-    request=ParticipantDataUpdateRequest(),
-    responses={200: {}},
-    examples=[
-        OpenApiExample(
-            name="CreateParticipantData",
-            summary="Create participant data for multiple experiments",
-            value={
-                "identifier": "part1",
-                "platform": "api",
-                "data": [
-                    {"experiment": "exp1", "data": {"name": "John"}},
-                    {
-                        "experiment": "exp2",
-                        "data": {"name": "Doe"},
-                        "schedules": [
-                            {
-                                "id": "sched1",
-                                "name": "Schedule 1",
-                                "date": "2022-01-01T00:00:00Z",
-                                "prompt": "Prompt 1",
-                            },
-                        ],
-                    },
-                ],
-            },
-        ),
-        OpenApiExample(
-            name="UpdateParticipantSchedules",
-            summary="Update and delete participant schedules",
-            value={
-                "identifier": "part1",
-                "platform": "api",
-                "data": [
-                    {
-                        "experiment": "exp1",
-                        "schedules": [
-                            {
-                                "id": "sched1",
-                                "name": "Schedule 1 updated",
-                                "date": "2022-01-01T00:00:00Z",
-                                "prompt": "Prompt updated",
-                            },
-                            {"id": "sched2", "delete": True},
-                        ],
-                    },
-                ],
-            },
-        ),
-    ],
-)
 class UpdateParticipantDataView(APIView):
     required_scopes = ("participants:write",)
     permission_required = "experiments.change_participantdata"
 
+    @extend_schema(
+        operation_id="update_participant_data",
+        summary="Update Participant Data",
+        tags=["Participants"],
+        request=ParticipantDataUpdateRequest(),
+        responses={200: {}},
+        examples=[
+            OpenApiExample(
+                name="CreateParticipantData",
+                summary="Create participant data for multiple experiments",
+                value={
+                    "identifier": "part1",
+                    "platform": "api",
+                    "data": [
+                        {"experiment": "exp1", "data": {"name": "John"}},
+                        {
+                            "experiment": "exp2",
+                            "data": {"name": "Doe"},
+                            "schedules": [
+                                {
+                                    "id": "sched1",
+                                    "name": "Schedule 1",
+                                    "date": "2022-01-01T00:00:00Z",
+                                    "prompt": "Prompt 1",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ),
+            OpenApiExample(
+                name="UpdateParticipantSchedules",
+                summary="Update and delete participant schedules",
+                value={
+                    "identifier": "part1",
+                    "platform": "api",
+                    "data": [
+                        {
+                            "experiment": "exp1",
+                            "schedules": [
+                                {
+                                    "id": "sched1",
+                                    "name": "Schedule 1 updated",
+                                    "date": "2022-01-01T00:00:00Z",
+                                    "prompt": "Prompt updated",
+                                },
+                                {"id": "sched2", "delete": True},
+                            ],
+                        },
+                    ],
+                },
+            ),
+        ],
+    )
     def post(self, request):
         return _update_participant_data(request)
 
