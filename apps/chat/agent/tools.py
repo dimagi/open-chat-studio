@@ -176,6 +176,80 @@ def _format_result_with_collection(embedding: FileChunkEmbedding, collection) ->
 """.strip()
 
 
+async def _aperform_collection_search(
+    collection, query: str, max_results: int = 5, generate_citations: bool = True, include_collection_info: bool = False
+) -> str:
+    """
+    Async version of collection search with vector query.
+
+    Args:
+        collection: The Collection object to search
+        query: The search query string
+        max_results: Maximum number of results to return
+        generate_citations: Whether to include citation prompt in response
+        include_collection_info: Whether to include collection_id and collection_name in results
+
+    Returns:
+        Formatted search results string
+    """
+    from asgiref.sync import sync_to_async
+
+    # Get query vector (sync method)
+    query_vector = await sync_to_async(collection.get_query_vector)(query)
+
+    # Async vector similarity search
+    embeddings = [
+        embedding
+        async for embedding in (
+            FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
+            .filter(collection_id=collection.id)
+            .order_by("distance")
+            .select_related("file")
+            .only("text", "file__name")[:max_results]
+            .aiterator(chunk_size=100)
+        )
+    ]
+
+    if not embeddings:
+        if include_collection_info:
+            return (
+                f"\nThe semantic search did not return any results from "
+                f"collection '{collection.name}' (ID: {collection.id})."
+            )
+        return "\nThe semantic search did not return any results."
+
+    # Format results (sync operation - fast)
+    if include_collection_info:
+        retrieved_chunks = "\n".join(
+            [_format_result_with_collection(embedding, collection) for embedding in embeddings]
+        )
+    else:
+        retrieved_chunks = "\n".join(
+            [
+                CHUNK_TEMPLATE.format(
+                    file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+                ).strip()
+                for embedding in embeddings
+            ]
+        )
+
+    response_template = """
+{header}
+{citation_prompt}
+<context>
+{retrieved_chunks}
+</context>
+{footer}
+"""
+    citation_prompt = CITATION_PROMPT if generate_citations else ""
+    return response_template.format(
+        header=SEARCH_TOOL_HEADER,
+        footer=_get_search_tool_footer(generate_citations),
+        retrieved_chunks=retrieved_chunks,
+        citation_prompt=citation_prompt,
+    )
+
+
 @dataclass
 class SearchToolConfig:
     index_id: int
@@ -197,19 +271,25 @@ class CustomBaseTool(BaseTool):
     tool_callbacks: ToolCallbacks | None = None
 
     def _run(self, *args, **kwargs):
+        """Sync version - wrap async for backward compatibility."""
+        return async_to_sync(self._arun)(*args, **kwargs)
+
+    async def _arun(self, *args, **kwargs) -> str:
+        """Async tool execution."""
         if self.requires_session and not self.experiment_session:
             return "I am unable to do this"
         try:
-            return self.action(*args, **kwargs)
+            return await self.aaction(*args, **kwargs)
         except Exception:
             logger.exception("Error executing tool: %s", self.name)
             return "Something went wrong"
 
-    async def _arun(self, *args, **kwargs) -> str:
-        """Use the tool asynchronously."""
-        return self._run(*args, **kwargs)
-
     def action(self, *args, **kwargs):
+        """Sync action - deprecated, use aaction."""
+        raise Exception("Not implemented - use aaction for async")
+
+    async def aaction(self, *args, **kwargs):
+        """Async action - override this in subclasses."""
         raise Exception("Not implemented")
 
 
@@ -326,7 +406,8 @@ class UpdateParticipantDataTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.UpdateUserDataSchema] = schemas.UpdateUserDataSchema
 
-    def action(self, key: str, value: Any, tool_call_id: str):
+    async def aaction(self, key: str, value: Any, tool_call_id: str):
+        """Async action for updating participant data."""
         return Command(
             update={
                 "participant_data": {key: value},
@@ -466,14 +547,10 @@ class SearchIndexTool(CustomBaseTool):
     args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
     search_config: SearchToolConfig
 
-    @transaction.atomic
-    def action(self, query: str) -> str:
-        """
-        Do a simple search for the top most relevant file chunks based on the query provided by the user. A little query
-        rewriting is automatically done by the LLM, since it decides what query to use when invoking this tool.
-        """
+    async def aaction(self, query: str) -> str:
+        """Async search with vector query."""
         collection = self.search_config.get_index()
-        return _perform_collection_search(
+        return await _aperform_collection_search(
             collection=collection,
             query=query,
             max_results=self.search_config.max_results,
