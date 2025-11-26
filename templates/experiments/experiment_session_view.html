@@ -89,6 +89,7 @@
 {% block page_js %}
   {{ block.super }}
   <script
+    type="module"
     id="tag-multiselect"
     src="{% static "js/tagMultiselect-bundle.js" %}"
     data-linkTagUrl="{% url 'annotations:link_tag' request.team.slug %}"
