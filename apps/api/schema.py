@@ -1,6 +1,9 @@
 from django.conf import settings
 from drf_spectacular.authentication import TokenScheme
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
+from rest_framework.permissions import SAFE_METHODS
+
+from apps.oauth.permissions import TokenHasOAuthResourceScope, TokenHasOAuthScope
 
 
 class ApiScheme(OpenApiAuthenticationExtension):
@@ -32,8 +35,6 @@ class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
     match_subclasses = True
 
     def get_security_requirement(self, auto_schema):
-        from apps.oauth.permissions import TokenHasOAuthResourceScope, TokenHasOAuthScope
-
         view = auto_schema.view
 
         # Check if view uses OAuth scope checking permissions
@@ -46,7 +47,7 @@ class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
 
                 # Format scopes with :read or :write suffix like TokenHasResourceScope does
                 method = auto_schema.method.upper()
-                if method in ("GET", "HEAD", "OPTIONS"):
+                if method in SAFE_METHODS:
                     scope_type = "read"
                 else:
                     scope_type = "write"
