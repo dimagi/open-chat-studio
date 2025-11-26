@@ -48,12 +48,12 @@
   {{ read_only|json_script:"read-only" }}
   {{ llm_model_params|json_script:"llm-model-params" }}
   {{ llm_model_param_schemas|json_script:"llm-model-parameter-schemas" }}
-  {% vite_asset 'assets/javascript/apps/pipeline.tsx' %}
   <script type="module">
+    import { renderPipeline } from '{% vite_asset_url 'assets/javascript/apps/pipeline.tsx' %}';
+
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';
     document.addEventListener('DOMContentLoaded', () => {
-      SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", {{ pipeline_id }});
-    }
-    )
+      renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", {{ pipeline_id }});
+    });
   </script>
 {% endblock page_js %}
