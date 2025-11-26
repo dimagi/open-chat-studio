@@ -35,13 +35,15 @@ class APIScopedValidator(OAuth2Validator):
         return True
 
     def _create_access_token(self, expires, request, token, source_refresh_token=None):
+        """This will be hit whenever an access token is created, including during refresh."""
         access_token = super()._create_access_token(expires, request, token, source_refresh_token)
-        access_token.team = getattr(request, "team", source_refresh_token.team)
+        access_token.team = getattr(request, "team", None) or source_refresh_token.team
         access_token.save()
         return access_token
 
     def _create_refresh_token(self, request, refresh_token_code, access_token, previous_refresh_token):
+        """This will be hit whenever an access token is created, including during refresh."""
         refresh_token = super()._create_refresh_token(request, refresh_token_code, access_token, previous_refresh_token)
-        refresh_token.team = getattr(request, "team", previous_refresh_token.team)
+        refresh_token.team = getattr(request, "team", None) or previous_refresh_token.team
         refresh_token.save()
         return refresh_token
