@@ -67,6 +67,57 @@ def execute_sub_agent(node, state: PipelineState):
     )
 
 
+async def aexecute_sub_agent(node, state: PipelineState):
+    """Async version of execute_sub_agent."""
+    from asgiref.sync import sync_to_async
+
+    user_input = state["last_node_input"]
+    session: ExperimentSession | None = state.get("experiment_session")
+    tool_callbacks = ToolCallbacks()
+
+    # Build agent (sync for now, complex construction)
+    agent = await sync_to_async(build_node_agent)(node, state, session, tool_callbacks)
+
+    # Format input
+    attachments = [att for att in state.get("temp_state", {}).get("attachments", [])]
+    formatted_input = await sync_to_async(format_multimodal_input)(message=user_input, attachments=attachments)
+
+    # Prepare inputs
+    inputs = StateSchema(
+        messages=[formatted_input],
+        participant_data=state.get("participant_data") or {},
+        session_state=state.get("session_state") or {},
+    )
+
+    # Async agent invocation
+    result = await agent.ainvoke(inputs)
+    final_message = result["messages"][-1]
+
+    # Process output
+    ai_message, ai_message_metadata = await _aprocess_agent_output(node, session, final_message)
+
+    # Save history
+    await _asave_node_history(node, session, user_input, ai_message)
+
+    voice_kwargs = {}
+    if node.synthetic_voice_id is not None:
+        voice_kwargs["synthetic_voice_id"] = node.synthetic_voice_id
+
+    return PipelineState.from_node_output(
+        node_name=node.name,
+        node_id=node.node_id,
+        output=ai_message,
+        output_message_metadata={
+            **ai_message_metadata,
+            **tool_callbacks.output_message_metadata,
+        },
+        intents=tool_callbacks.intents,
+        participant_data=result.get("participant_data") or {},
+        session_state=result.get("session_state") or {},
+        **voice_kwargs,
+    )
+
+
 def _process_agent_output(node, session, message):
     output_parser = node.get_llm_service().get_output_parser()
     parsed_output = output_parser(message.content, session=session, include_citations=node.generate_citations)
@@ -81,6 +132,42 @@ def _process_agent_output(node, session, message):
         ai_message = remove_citations_from_text(parsed_output.text)
 
     return ai_message, ai_message_metadata
+
+
+async def _aprocess_agent_output(node, session, message):
+    """Async version of processing agent output."""
+    from asgiref.sync import sync_to_async
+
+    # Get output parser (sync)
+    output_parser = await sync_to_async(node.get_llm_service().get_output_parser)()
+
+    # Parse output (sync)
+    parsed_output = await sync_to_async(output_parser)(
+        message.content, session=session, include_citations=node.generate_citations
+    )
+
+    # Process files (async version from Phase 3)
+    ai_message_metadata = await _aprocess_files(
+        session, cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
+    )
+
+    # Format message (sync)
+    if node.generate_citations:
+        ai_message = await sync_to_async(populate_reference_section_from_citations)(
+            parsed_output.text, cited_files=parsed_output.cited_files, session=session
+        )
+    else:
+        ai_message = await sync_to_async(remove_citations_from_text)(parsed_output.text)
+
+    return ai_message, ai_message_metadata
+
+
+async def _asave_node_history(node, session, user_input, ai_message):
+    """Async version of saving node history."""
+    from asgiref.sync import sync_to_async
+
+    # save_history is a node method - wrap it
+    await sync_to_async(node.save_history)(session, user_input, ai_message)
 
 
 def build_node_agent(node, state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
