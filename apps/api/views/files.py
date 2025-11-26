@@ -18,7 +18,7 @@ class BinaryRenderer(BaseRenderer):
 
 
 class FileContentView(APIView):
-    required_scopes = ("sessions:read", "chatbots:read")
+    required_scopes = ("files:read",)
     renderer_classes = [BinaryRenderer]
     permission_required = "files.view_file"
 

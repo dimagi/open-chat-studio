@@ -831,6 +831,7 @@ OAUTH2_PROVIDER = {
         "chatbots:interact": "Converse with a Chatbot and trigger bot messages",
         "sessions:read": "List and Read Sessions",
         "sessions:write": "Manage Sessions",
+        "files:read": "Download file content",
         "participants:write": "Update Participant Data",
     },
 }
