@@ -2,32 +2,39 @@
 {% load form_tags i18n %}
 
 {% block content %}
-<form id="authorizationForm" method="post" class="w-full max-w-md bg-gray-200 rounded-lg shadow-md p-8">
-    <h3 class="text-2xl font-bold text-gray-900 mb-6">{% translate "Authorize" %} {{ application.name }}?</h3>
-    {% csrf_token %}
+  {% if not error %}
+    <form id="authorizationForm" method="post" class="w-full max-w-md bg-gray-200 rounded-lg shadow-md p-8">
+      <h3 class="text-2xl font-bold text-gray-900 mb-6">{% translate "Authorize" %} {{ application.name }}?</h3>
+      {% csrf_token %}
 
-    <div class="mb-6">
+      <div class="mb-6">
         {% render_form_fields form "redirect_uri" "scope" "nonce" "client_id" "state" "response_type" "code_challenge" "code_challenge_method" "claims" %}
-    </div>
+      </div>
 
-    <div class="mb-6">
+      <div class="mb-6">
         <p class="text-lg font-semibold text-gray-900 mb-3">{% translate "Application requires the following permissions" %}</p>
         <ul class="list-disc list-inside space-y-2 text-gray-700">
-            {% for scope in scopes_descriptions %}
-                <li>{{ scope }}</li>
-            {% endfor %}
+          {% for scope in scopes_descriptions %}
+            <li>{{ scope }}</li>
+          {% endfor %}
         </ul>
-    </div>
+      </div>
 
-    <div>
+      <div>
         <h4 class="text-lg font-semibold text-gray-900 mb-2">{% translate "Select your team" %}</h4>
         <p class="text-sm text-gray-600 mb-3">{% translate "This application will only be able to access data from the selected team." %}</p>
         {% render_form_fields form "team_slug" %}
-    </div>
+      </div>
 
-    <div class="flex gap-3 justify-end">
+      <div class="flex gap-3 justify-end">
         <input type="submit" class="btn" value="{% translate "Cancel" %}"/>
         <input type="submit" class="btn btn-primary" name="allow" value="{% translate "Authorize" %}"/>
+      </div>
+    </form>
+  {% else %}
+    <div class="w-full max-w-md bg-gray-200 rounded-lg shadow-md p-8">
+      <h3 class="text-2xl font-bold text-gray-900 mb-6">{% translate "Error" %} {{ error.error }}?</h3>
+      <p>{{ error.description }}</p>
     </div>
-</form>
+  {% endif %}
 {% endblock content %}
