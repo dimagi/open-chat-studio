@@ -824,9 +824,12 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
 
 # API
 OAUTH2_PROVIDER = {
-    "PKCE_REQUIRED": True,
+    "OIDC_ENABLED": True,
+    "OIDC_RSA_PRIVATE_KEY": env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""),
+    "PKCE_REQUIRED": env.bool("OAUTH_PKCE_REQUIRED", default=True),
     "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.APIScopedValidator",
     "SCOPES": {
+        "openid": "OpenID Connect scope",
         "chatbots:read": "List and Retrieve Chatbot Data",
         "chatbots:interact": "Converse with a Chatbot and trigger bot messages",
         "sessions:read": "List and Read Sessions",
