@@ -21,6 +21,7 @@ class BinaryRenderer(BaseRenderer):
 class FileContentView(APIView):
     required_scopes = ("sessions:read", "chatbots:read")
     renderer_classes = [BinaryRenderer]
+    permission_required = "files.view_file"
 
     def get(self, request, pk: int):
         file = get_object_or_404(File, id=pk, team=request.team)

@@ -68,6 +68,7 @@ from apps.experiments.models import Experiment, Participant, ParticipantData
 )
 class UpdateParticipantDataView(APIView):
     required_scopes = ("participants:write",)
+    permission_required = "experiments.change_participantdata"
 
     def post(self, request):
         return _update_participant_data(request)
@@ -76,6 +77,7 @@ class UpdateParticipantDataView(APIView):
 @extend_schema(exclude=True)
 class UpdateParticipantDataOldView(APIView):
     required_scopes = ("participants:write",)
+    permission_required = "experiments.change_participantdata"
 
     def post(self, request):
         # This endpoint is kept for backwards compatibility of the path with a trailing "/"
