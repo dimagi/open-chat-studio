@@ -10,7 +10,8 @@ class APIScopedValidator(OAuth2Validator):
     OAuth2 validator that associates authorization codes and access tokens with teams.
 
     The flow is as follows:
-    1. When the user grants authorization, the selected team is set in the thread context.
+    1. When the user grants authorization, the selected team is set in the thread's context. This happens in the
+        TeamScopedAuthorizationView.
     2. When creating the authorization code, we read the team from the context and associate it with the code (Grant).
     3. When validating the code (from a new request context), we load the team from the Grant onto the request
     4. When creating the access token, we read the team from the request and associate it with the token.
