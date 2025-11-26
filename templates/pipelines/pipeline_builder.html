@@ -48,6 +48,7 @@
   {{ read_only|json_script:"read-only" }}
   {{ llm_model_params|json_script:"llm-model-params" }}
   {{ llm_model_param_schemas|json_script:"llm-model-parameter-schemas" }}
+  {% vite_react_refresh %}
   <script type="module">
     import { renderPipeline } from '{% vite_asset_url 'assets/javascript/apps/pipeline.tsx' %}';
 

@@ -7,7 +7,9 @@ export default defineConfig({
   base: '/static/',
 
   plugins: [
-    react(),
+    react({
+      include: '**/*.{jsx,tsx}',
+    }),
     process.env.GITHUB_REF === 'refs/heads/main' && sentryVitePlugin({
       authToken: process.env.SENTRY_AUTH_TOKEN,
       org: process.env.SENTRY_ORG,

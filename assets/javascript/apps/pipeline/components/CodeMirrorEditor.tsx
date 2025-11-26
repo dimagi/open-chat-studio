@@ -1,26 +1,26 @@
-import {githubDarkInit, githubLightInit} from "@uiw/codemirror-theme-github";
-import {ReactCodeMirrorProps} from "@uiw/react-codemirror/src";
 import React, {useEffect, useState} from "react";
 import CodeMirror, {EditorState} from "@uiw/react-codemirror";
+import {githubDarkInit, githubLightInit} from "@uiw/codemirror-theme-github";
+import {ReactCodeMirrorProps} from "@uiw/react-codemirror/src";
 import {autocompletion, CompletionContext, snippetCompletion as snip} from "@codemirror/autocomplete";
 import {python} from "@codemirror/lang-python";
 import {EditorView} from "@codemirror/view";
-import {textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme} from "../../../utils/codemirror-extensions.js";
-
-const githubDark = githubDarkInit({
-  "settings": {
-    background: "oklch(22% 0.016 252.42)",
-    foreground: "oklch(97% 0.029 256.847)",
-    fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
-  }
-})
-const githubLight = githubLightInit({
-  "settings": {
-    fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
-  }
-})
+import {textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme} from "../../../utils/codemirror-extensions";
 
 export function CodeMirrorEditor(props: ReactCodeMirrorProps) {
+  const githubDark = githubDarkInit({
+    "settings": {
+      background: "oklch(22% 0.016 252.42)",
+      foreground: "oklch(97% 0.029 256.847)",
+      fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
+    }
+  })
+  const githubLight = githubLightInit({
+    "settings": {
+      fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
+    }
+  })
+
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
