@@ -94,6 +94,8 @@ Changelog = "https://docs.openchatstudio.com/changelog/"
 
 [tool.pytest.ini_options]
 addopts = "--ds=config.settings --reuse-db --strict-markers --tb=short"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 python_files = "tests.py test_*.py *_tests.py"
 norecursedirs = ".* build dist venv node_modules compose assets static"
 
