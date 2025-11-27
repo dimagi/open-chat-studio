@@ -82,8 +82,8 @@ class run_once(ContextDecorator):
     """
     Context manager and decorator to ensure code runs only once.
 
-    Can be used as a decorator or context manager. Wraps execution in an
-    atomic transaction and marks the migration as applied on success.
+    Can be used as a decorator or context manager. Marks the migration as applied on success.
+    If `atomic` is True, it also wraps the code in a transaction.
 
     Args:
         name: Unique migration identifier

@@ -12,6 +12,8 @@ class IdempotentCommand(BaseCommand):
 
     Subclasses must define:
         - migration_name: Unique identifier for this migration
+        - atomic: Set to False to disable atomic migration
+        - disable_audit: Set to True to disable model auditing for this migration
         - perform_migration(): Method containing the actual migration logic
 
     Example:
