@@ -69,18 +69,16 @@ def execute_sub_agent(node, state: PipelineState):
 
 async def aexecute_sub_agent(node, state: PipelineState):
     """Async version of execute_sub_agent."""
-    from asgiref.sync import sync_to_async
-
     user_input = state["last_node_input"]
     session: ExperimentSession | None = state.get("experiment_session")
     tool_callbacks = ToolCallbacks()
 
     # Build agent (sync for now, complex construction)
-    agent = await sync_to_async(build_node_agent)(node, state, session, tool_callbacks)
+    agent = await abuild_node_agent(node, state, session, tool_callbacks)
 
     # Format input
     attachments = [att for att in state.get("temp_state", {}).get("attachments", [])]
-    formatted_input = await sync_to_async(format_multimodal_input)(message=user_input, attachments=attachments)
+    formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
 
     # Prepare inputs
     inputs = StateSchema(
@@ -97,7 +95,7 @@ async def aexecute_sub_agent(node, state: PipelineState):
     ai_message, ai_message_metadata = await _aprocess_agent_output(node, session, final_message)
 
     # Save history
-    await _asave_node_history(node, session, user_input, ai_message)
+    await node.asave_history(session, user_input, ai_message)
 
     voice_kwargs = {}
     if node.synthetic_voice_id is not None:
@@ -136,15 +134,12 @@ def _process_agent_output(node, session, message):
 
 async def _aprocess_agent_output(node, session, message):
     """Async version of processing agent output."""
-    from asgiref.sync import sync_to_async
+    service = await node.aget_llm_service()
+    output_parser = service.get_output_parser()
 
-    # Get output parser (sync)
-    output_parser = await sync_to_async(node.get_llm_service().get_output_parser)()
-
-    # Parse output (sync)
-    parsed_output = await sync_to_async(output_parser)(
-        message.content, session=session, include_citations=node.generate_citations
-    )
+    # Parse output
+    # TODO: output_parser is not async safe
+    parsed_output = output_parser(message.content, session=session, include_citations=node.generate_citations)
 
     # Process files (async version from Phase 3)
     ai_message_metadata = await _aprocess_files(
@@ -153,21 +148,13 @@ async def _aprocess_agent_output(node, session, message):
 
     # Format message (sync)
     if node.generate_citations:
-        ai_message = await sync_to_async(populate_reference_section_from_citations)(
+        ai_message = populate_reference_section_from_citations(
             parsed_output.text, cited_files=parsed_output.cited_files, session=session
         )
     else:
-        ai_message = await sync_to_async(remove_citations_from_text)(parsed_output.text)
+        ai_message = remove_citations_from_text(parsed_output.text)
 
     return ai_message, ai_message_metadata
-
-
-async def _asave_node_history(node, session, user_input, ai_message):
-    """Async version of saving node history."""
-    from asgiref.sync import sync_to_async
-
-    # save_history is a node method - wrap it
-    await sync_to_async(node.save_history)(session, user_input, ai_message)
 
 
 def build_node_agent(node, state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
@@ -196,6 +183,35 @@ def build_node_agent(node, state: PipelineState, session: ExperimentSession, too
     )
 
 
+async def abuild_node_agent(node, state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
+    prompt_context = _get_prompt_context(node, session, state)
+
+    # Support tools in async
+    # tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
+    tools = []
+
+    async def prompt_callable(state: AgentState):
+        prompt_template = PromptTemplate.from_template(node.prompt)
+        # TODO: PromptTemplateContext is not async safe
+        context = prompt_context.get_context(prompt_template.input_variables)
+        try:
+            formatted_prompt = prompt_template.format(**context)
+            prompt = SystemMessage(content=formatted_prompt)
+        except KeyError as e:
+            raise PipelineNodeRunError(str(e)) from e
+
+        history = node.get_history(session, [prompt] + state["messages"])
+        return [prompt] + history + state["messages"]
+
+    return create_react_agent(
+        # TODO: I think this will fail with google builtin tools
+        model=await node.aget_chat_model(),
+        tools=tools,
+        prompt=prompt_callable,
+        state_schema=StateSchema,
+    )
+
+
 def _process_files(session: ExperimentSession, cited_files: set[File], generated_files: set[File]) -> dict:
     """`cited_files` is a list of files that are cited in the response whereas generated files are those generated
     by the LLM
@@ -216,9 +232,13 @@ async def _aprocess_files(session: ExperimentSession, cited_files: set[File], ge
 
     if cited_files:
         # attach_files is a model method - wrap it
-        await sync_to_async(session.chat.attach_files)(attachment_type="file_citation", files=cited_files)
+        await sync_to_async(session.chat.attach_files, thread_sensitive=True)(
+            attachment_type="file_citation", files=cited_files
+        )
     if generated_files:
-        await sync_to_async(session.chat.attach_files)(attachment_type="code_interpreter", files=generated_files)
+        await sync_to_async(session.chat.attach_files, thread_sensitive=True)(
+            attachment_type="code_interpreter", files=generated_files
+        )
 
     return {
         "cited_files": [file.id for file in cited_files],

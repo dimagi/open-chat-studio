@@ -388,12 +388,16 @@ class PipelineNode(BasePipelineNode, ABC):
     def process(
         self, incoming_nodes: list, outgoing_nodes: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState | Command:
+        process_params, state = self._pre_process(config, incoming_nodes, outgoing_nodes, state)
+        output = self._process(**process_params)
+        return self._post_process(output, state)
+
+    def _pre_process(self, config, incoming_nodes, outgoing_nodes, state):
         self._config = config
         self._incoming_nodes = incoming_nodes
         self._outgoing_nodes = outgoing_nodes
         state = PipelineState(state)
         state = self._prepare_state(self.node_id, incoming_nodes, state)
-
         # Sentry context for error tracking
         process_params = {"state": state}
         sentry_context = {
@@ -403,8 +407,19 @@ class PipelineNode(BasePipelineNode, ABC):
             "params": process_params,
         }
         sentry_sdk.set_context("Node", sentry_context)
+        return process_params, state
 
-        output = self._process(**process_params)
+    async def aprocess(
+        self, incoming_nodes: list, outgoing_nodes: list, state: PipelineState, config: RunnableConfig
+    ) -> PipelineState | Command:
+        if not hasattr(self, "_aprocess"):
+            raise NotImplementedError(f"Node {self.name} does not support async")
+
+        process_params, state = self._pre_process(config, incoming_nodes, outgoing_nodes, state)
+        output = await self._aprocess(**process_params)
+        return self._post_process(output, state)
+
+    def _post_process(self, output, state):
         if isinstance(output, Command) and output.goto != END:
             return Command(goto=output.goto, update=self._augment_output(state, cast(PipelineState, output.update)))
         if not isinstance(output, dict):

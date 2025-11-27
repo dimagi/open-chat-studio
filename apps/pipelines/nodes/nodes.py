@@ -47,7 +47,7 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
-from apps.pipelines.nodes.llm_node import execute_sub_agent
+from apps.pipelines.nodes.llm_node import aexecute_sub_agent, execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
@@ -151,6 +151,13 @@ def get_llm_provider_model(llm_provider_model_id: int):
         raise PipelineNodeBuildError(f"LLM provider model with id {llm_provider_model_id} does not exist") from None
 
 
+async def aget_llm_provider_model(llm_provider_model_id: int):
+    try:
+        return await LlmProviderModel.objects.aget(id=llm_provider_model_id)
+    except LlmProviderModel.DoesNotExist:
+        raise PipelineNodeBuildError(f"LLM provider model with id {llm_provider_model_id} does not exist") from None
+
+
 class LLMResponseMixin(BaseModel):
     llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
@@ -202,10 +209,27 @@ class LLMResponseMixin(BaseModel):
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
+    async def aget_llm_service(self) -> LlmService:
+        from apps.service_providers.models import LlmProvider
+
+        try:
+            provider = await LlmProvider.objects.aget(id=self.llm_provider_id)
+            return provider.get_llm_service()
+        except LlmProvider.DoesNotExist:
+            raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
+        except ServiceProviderConfigError as e:
+            raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
+
     def get_chat_model(self):
         model_name = get_llm_provider_model(self.llm_provider_model_id).name
         logger.debug(f"Calling {model_name} with parameters: {self.llm_model_parameters}")
         return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
+
+    async def aget_chat_model(self):
+        model = await aget_llm_provider_model(self.llm_provider_model_id)
+        logger.debug(f"Calling {model.name} with parameters: {self.llm_model_parameters}")
+        service = await self.aget_llm_service()
+        return service.get_chat_model(model.name, **self.llm_model_parameters)
 
 
 class HistoryMixin(LLMResponseMixin):
@@ -284,16 +308,29 @@ class HistoryMixin(LLMResponseMixin):
         )
 
     def save_history(self, session: ExperimentSession, human_message: str, ai_message: str):
-        if self.history_type == PipelineChatHistoryTypes.NONE:
-            return
-
-        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
+        if self._skip_history_saving():
             # Global History is saved outside of the node
-            return
+            return None
 
         history, _ = session.pipeline_chat_history.get_or_create(type=self.history_type, name=self._get_history_name())
         message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=self.node_id)
         return message
+
+    async def asave_history(self, session: ExperimentSession, human_message: str, ai_message: str):
+        if self._skip_history_saving():
+            # Global History is saved outside of the node
+            return None
+
+        history, _ = await session.pipeline_chat_history.aget_or_create(
+            type=self.history_type, name=self._get_history_name()
+        )
+        message = await history.messages.acreate(
+            human_message=human_message, ai_message=ai_message, node_id=self.node_id
+        )
+        return message
+
+    def _skip_history_saving(self):
+        return self.history_type not in (PipelineChatHistoryTypes.NAMED, PipelineChatHistoryTypes.NODE)
 
 
 @deprecated_node(message="Use the 'LLM' node instead.")
@@ -538,6 +575,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     def _process(self, state: PipelineState) -> PipelineState:
         return execute_sub_agent(self, state)
 
+    async def _aprocess(self, state: PipelineState) -> PipelineState:
+        return await aexecute_sub_agent(self, state)
+
 
 class SendEmail(PipelineNode, OutputMessageTagMixin):
     """Send the input to the node to the list of addresses provided"""
@@ -580,6 +620,9 @@ class Passthrough(PipelineNode):
         return PipelineState.from_node_output(
             node_name=self.name, node_id=self.node_id, output=state["last_node_input"]
         )
+
+    async def _aprocess(self, state: PipelineState) -> PipelineState:
+        return self._process(state)
 
 
 class StartNode(Passthrough):

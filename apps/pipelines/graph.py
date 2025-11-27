@@ -210,9 +210,12 @@ class PipelineGraph(pydantic.BaseModel):
                     state_graph.add_node(node.id, router_function)
                 else:
                     outgoing_nodes = [edge.target for edge in self.edges if edge.source == node.id]
+                    func = node_instance.process
+                    if hasattr(node_instance, "_aprocess"):
+                        func = node_instance.aprocess
                     state_graph.add_node(
                         node.id,
-                        partial(node_instance.process, incoming_nodes, outgoing_nodes),
+                        partial(func, incoming_nodes, outgoing_nodes),
                     )
             except ValidationError as ex:
                 raise PipelineNodeBuildError(ex) from ex
