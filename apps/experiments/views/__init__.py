@@ -9,8 +9,6 @@ from .consent import (  # noqa: F401
     EditConsentForm,
 )
 from .experiment import (  # noqa: F401
-    CreateExperiment,
-    CreateExperimentVersion,
     ExperimentSessionsTableView,
     ExperimentVersionsTableView,
     archive_experiment_version,
