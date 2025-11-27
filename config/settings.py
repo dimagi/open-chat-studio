@@ -842,7 +842,7 @@ if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, defau
             "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
         }
     )
-    OAUTH2_PROVIDER["scopes"].update(
+    OAUTH2_PROVIDER["SCOPES"].update(
         {
             "openid": "OpenID Connect scope",
             "profile": "User Profile",
