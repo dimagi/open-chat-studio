@@ -24,6 +24,7 @@ from apps.channels import audio
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import EvalsBot, EventBot, get_bot
+from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import (
     AudioSynthesizeException,
     ChannelException,
@@ -31,7 +32,6 @@ from apps.chat.exceptions import (
     VersionedExperimentSessionsNotAllowedException,
 )
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.chat.tasks import STATUSES_FOR_COMPLETE_CHATS
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (

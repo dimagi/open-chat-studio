@@ -89,7 +89,7 @@ class TestVersion:
         exp_version = experiment.create_new_version()
 
         experiment.name = "Two"
-        experiment.temperature = 1
+        experiment.seed_message = "new seed message"
         experiment.save()
 
         working_version = experiment.version_details
@@ -126,7 +126,7 @@ class TestVersion:
         queryset = Experiment.objects.filter(id=experiment.id)
         # Compare with new version
         new_version = experiment.create_new_version()
-        experiment.prompt_text = "This now changed"
+        experiment.seed_message = "This now changed"
         experiment.save()
         version_field = VersionField(queryset=queryset)
         version_field.previous_field_version = VersionField(queryset=Experiment.objects.filter(id=new_version.id))
@@ -193,14 +193,14 @@ class TestVersion:
         assert all_groups - set(collected_group_names) == set()
 
         # Let's change something
-        new_version.temperature = new_version.temperature + 0.1
+        new_version.seed_message = "new seed message"
 
         new_version._clear_version_cache()
         original_version.compare(new_version.version_details)
-        temerature_group_name = original_version.get_field("temperature").group_name
+        seed_message_group_name = original_version.get_field("seed_message").group_name
         # Find the temperature group and check that it reports a change
         for group in original_version.fields_grouped:
-            if group.name == temerature_group_name:
+            if group.name == seed_message_group_name:
                 assert group.has_changed_fields is True
 
     def test_new_queryset_is_empty(self):
