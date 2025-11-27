@@ -72,6 +72,27 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
             if with_summaries and message.summary:
                 yield message.get_summary_message()
 
+    async def aget_langchain_messages_until_marker(self, marker: str) -> list[BaseMessage]:
+        """Fetch messages from the database until a marker is found. The marker must be one of the
+        PipelineChatHistoryModes values.
+        """
+        from apps.pipelines.models import PipelineChatHistoryModes
+
+        messages = []
+        include_summaries = marker == PipelineChatHistoryModes.SUMMARIZE
+        async for message in self.amessage_iterator(include_summaries):
+            messages.append(message.to_langchain_dict())
+            if message.compression_marker and (not marker or marker == message.compression_marker):
+                break
+
+        return messages_from_dict(list(reversed(messages)))
+
+    async def amessage_iterator(self, with_summaries=True):
+        async for message in self.messages.order_by("-created_at").aiterator(100):
+            yield message
+            if with_summaries and message.summary:
+                yield message.get_summary_message()
+
     def attach_files(self, attachment_type: str, files: list[File]):
         resource, _created = self.attachments.get_or_create(tool_type=attachment_type)
         resource.files.add(*files)

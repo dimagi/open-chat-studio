@@ -200,7 +200,9 @@ async def abuild_node_agent(node, state: PipelineState, session: ExperimentSessi
         except KeyError as e:
             raise PipelineNodeRunError(str(e)) from e
 
-        history = node.get_history(session, [prompt] + state["messages"])
+        # TODO: history is not async safe
+        # history = node.get_history(session, [prompt] + state["messages"])
+        history = await session.chat.aget_langchain_messages_until_marker(marker="")
         return [prompt] + history + state["messages"]
 
     return create_react_agent(
