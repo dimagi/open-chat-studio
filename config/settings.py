@@ -824,7 +824,7 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
 
 # API
 OAUTH2_PROVIDER = {
-    "PKCE_REQUIRED": True,
+    "PKCE_REQUIRED": env.bool("OAUTH_PKCE_REQUIRED", default=True),
     "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.APIScopedValidator",
     "SCOPES": {
         "chatbots:read": "List and Retrieve Chatbot Data",
@@ -835,6 +835,19 @@ OAUTH2_PROVIDER = {
         "participants:write": "Update Participant Data",
     },
 }
+if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
+    OAUTH2_PROVIDER.update(
+        {
+            "OIDC_ENABLED": True,
+            "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
+        }
+    )
+    OAUTH2_PROVIDER["SCOPES"].update(
+        {
+            "openid": "OpenID Connect scope",
+            "profile": "User Profile",
+        }
+    )
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
 OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"
