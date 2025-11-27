@@ -1823,6 +1823,10 @@ class ExperimentSession(BaseTeamModel):
             self.save()
 
     def get_absolute_url(self):
+        """Returns the absolute URL for viewing this session.
+
+        Uses chatbots app URLs since experiments have been migrated to chatbots.
+        """
         return reverse(
             "chatbots:chatbot_session_view",
             args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],

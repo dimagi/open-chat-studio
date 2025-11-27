@@ -1,15 +1,17 @@
 import uuid
+from functools import cached_property
 
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db.models import Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
+from django.utils.html import format_html
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
@@ -17,6 +19,7 @@ from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
+from apps.assistants.sync import OpenAiSyncError, get_diff_with_openai_assistant, get_out_of_sync_files
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat
@@ -27,15 +30,16 @@ from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
+from apps.experiments.forms import ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
-from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView, ExperimentVersionsTableView
+from apps.experiments.views import CreateExperiment, ExperimentSessionsTableView
 from apps.experiments.views.experiment import (
-    CreateExperimentVersion,
     base_single_experiment_view,
     start_session_public,
 )
+from apps.files.models import File
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
@@ -307,9 +311,108 @@ def archive_chatbot(request, team_slug: str, pk: int):
     return HttpResponseClientRedirect(reverse("chatbots:chatbots_home", kwargs={"team_slug": team_slug}))
 
 
-class CreateChatbotVersion(CreateExperimentVersion):
-    permission_required = "experiments.add_experiment"
+class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
+    """View for creating a new version of a chatbot."""
+
+    model = Experiment
+    form_class = ExperimentVersionForm
     template_name = "experiments/create_version_form.html"
+    title = "Create Chatbot Version"
+    button_title = "Create"
+    permission_required = "experiments.add_experiment"
+
+    @cached_property
+    def object(self):
+        return get_object_or_404(Experiment, pk=self.kwargs["experiment_id"], team=self.request.team)
+
+    @cached_property
+    def latest_version(self):
+        return self.object.latest_version
+
+    def get_form_kwargs(self) -> dict:
+        form_kwargs = {}
+        if self.request.method == "POST":
+            form_kwargs["data"] = self.request.POST
+        if not self.latest_version:
+            form_kwargs["initial"] = {"is_default_version": True}
+        return form_kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        form = self.form_class(**self.get_form_kwargs())
+        working_experiment = self.object
+        version = working_experiment.version_details
+        if self.latest_version:
+            version.compare(self.latest_version.version_details)
+
+        context["form"] = form
+        context["version_details"] = version
+        context["has_versions"] = self.latest_version is not None
+        context["experiment"] = working_experiment
+        return context
+
+    def post(self, request, *args, **kwargs):
+        form = self.form_class(**self.get_form_kwargs())
+        if form.is_valid():
+            return self.form_valid(form)
+        return self.render_to_response(self.get_context_data(form=form))
+
+    def form_valid(self, form):
+        from django.core.exceptions import PermissionDenied
+
+        description = form.cleaned_data["version_description"]
+        is_default = form.cleaned_data["is_default_version"]
+        working_version = self.object
+
+        if working_version.is_archived:
+            raise PermissionDenied("Unable to version an archived chatbot.")
+
+        if working_version.create_version_task_id:
+            messages.error(self.request, "Version creation is already in progress.")
+            return HttpResponseRedirect(self.get_success_url())
+
+        error_msg = self._check_pipeline_and_assistant_for_errors()
+
+        if error_msg:
+            messages.error(self.request, error_msg)
+            return self.render_to_response(self.get_context_data())
+
+        task_id = async_create_experiment_version.delay(
+            experiment_id=working_version.id, version_description=description, make_default=is_default
+        )
+        working_version.create_version_task_id = task_id
+        working_version.save(update_fields=["create_version_task_id"])
+        messages.success(self.request, "Creating new version. This might take a few minutes.")
+
+        return HttpResponseRedirect(self.get_success_url())
+
+    def _check_pipeline_and_assistant_for_errors(self) -> str:
+        """Checks if the pipeline or assistant has errors before creating a new version."""
+        experiment = self.object
+
+        try:
+            if self._is_assistant_out_of_sync(experiment):
+                return "Assistant is out of sync with OpenAI. Please update the assistant first."
+        except OpenAiSyncError as e:
+            return str(e)
+
+        if pipeline := experiment.pipeline:
+            errors = pipeline.validate()
+            if errors:
+                return "Unable to create a new version when the pipeline has errors"
+
+    def _is_assistant_out_of_sync(self, experiment: Experiment) -> bool:
+        if not experiment.assistant:
+            return False
+
+        if not experiment.assistant.assistant_id:
+            return True
+
+        if len(get_diff_with_openai_assistant(experiment.assistant)) > 0:
+            return True
+
+        files_missing_local, files_missing_remote = get_out_of_sync_files(experiment.assistant)
+        return bool(files_missing_local or files_missing_remote)
 
     def get_success_url(self):
         url = reverse(
@@ -322,11 +425,18 @@ class CreateChatbotVersion(CreateExperimentVersion):
         return f"{url}#versions"
 
 
-class ChatbotVersionsTableView(ExperimentVersionsTableView):
+class ChatbotVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+    """View for displaying all versions of a chatbot."""
+
     model = Experiment
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"
     permission_required = "experiments.view_experiment"
+
+    def get_queryset(self):
+        experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
+        other_versions = Experiment.objects.get_all().filter(working_version=self.kwargs["experiment_id"]).all()
+        return (experiment_row | other_versions).order_by("-version_number")
 
 
 @login_and_team_required
@@ -650,3 +760,37 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "use_dynamic_filters": True,
             **filter_context,
         }
+
+
+@team_required
+def download_file(request, team_slug: str, session_id: int, pk: int):
+    """Download a file attached to a chatbot session."""
+    resource = get_object_or_404(
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+    )
+    try:
+        file = resource.file.open()
+        return FileResponse(file, as_attachment=True, filename=resource.file.name)
+    except FileNotFoundError:
+        raise Http404() from None
+
+
+@team_required
+def get_image_html(request, team_slug: str, session_id: int, pk: int):
+    """Return HTML for displaying an image attachment in a chatbot session."""
+    resource = get_object_or_404(
+        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+    )
+
+    if not resource.is_image:
+        raise Http404("File is not an image")
+
+    # Generate the image URL
+    image_url = reverse("chatbots:download_file", args=[team_slug, session_id, pk])
+
+    # Return HTML for the image
+    html = format_html(
+        '<img src="{}" alt="{}" class="max-w-md max-h-64 rounded border shadow-sm mt-2">', image_url, resource.name
+    )
+
+    return HttpResponse(html)
