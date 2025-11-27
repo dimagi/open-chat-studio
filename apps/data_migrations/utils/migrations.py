@@ -103,6 +103,7 @@ class run_once(ContextDecorator):
     def __init__(self, name: str, *, atomic=True):
         self.name = name
         self.should_run = False
+        self.atomic = atomic
         self.stack = ExitStack()
 
     def __enter__(self):

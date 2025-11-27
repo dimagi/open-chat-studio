@@ -33,11 +33,7 @@ class Command(IdempotentCommand):
         # Process in batches - keep querying until no more sessions need processing
         while True:
             # Get next batch of sessions that need processing
-            batch_sessions = list(
-                sessions_to_process.select_related("experiment_channel", "participant")
-                .only("id", "experiment_channel__platform", "participant__platform")
-                .order_by("id")[:batch_size]
-            )
+            batch_sessions = list(sessions_to_process[:batch_size])
 
             if not batch_sessions:
                 break
