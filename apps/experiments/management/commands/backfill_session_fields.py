@@ -56,22 +56,29 @@ class Command(IdempotentCommand):
             batch.append(session)
 
             if len(batch) >= batch_size:
+                if not dry_run:
+                    ExperimentSession.objects.bulk_update(
+                        batch,
+                        ["platform", "experiment_versions", "last_activity_at"],
+                        batch_size=batch_size,
+                    )
+                total_updated += len(batch)
+                action = "Would update" if dry_run else "Updated"
+                self.stdout.write(f"{action} {total_updated} sessions...")
+                batch = []
+
+        # Update remaining sessions
+        if batch:
+            if not dry_run:
                 ExperimentSession.objects.bulk_update(
                     batch,
                     ["platform", "experiment_versions", "last_activity_at"],
                     batch_size=batch_size,
                 )
-                total_updated += len(batch)
-                self.stdout.write(f"Updated {total_updated} sessions...")
-                batch = []
-
-        # Update remaining sessions
-        if batch:
-            ExperimentSession.objects.bulk_update(
-                batch,
-                ["platform", "experiment_versions", "last_activity_at"],
-                batch_size=batch_size,
-            )
             total_updated += len(batch)
 
-        self.stdout.write(self.style.SUCCESS(f"Successfully updated {total_updated} sessions"))
+        if dry_run:
+            msg = f"Would update {total_updated} sessions"
+        else:
+            msg = f"Successfully updated {total_updated} sessions"
+        self.stdout.write(self.style.SUCCESS(msg))
