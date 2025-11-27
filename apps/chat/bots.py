@@ -237,8 +237,6 @@ class PipelineBot:
         pipeline=None,
     ) -> ChatMessage:
         """Async version of invoke_pipeline."""
-        from asgiref.sync import sync_to_async
-
         pipeline_to_use = pipeline or self.experiment.pipeline
         output = await self._arun_pipeline(input_state, pipeline_to_use)
 
@@ -248,14 +246,12 @@ class PipelineBot:
         else:
             result = ChatMessage(content=output)
 
-        await sync_to_async(self._process_intents)(output)
+        await self._aprocess_intents(output)
         self.synthetic_voice_id = output.get("synthetic_voice_id", None)
         return result
 
     async def _arun_pipeline(self, input_state, pipeline_to_use):
         """Async version of pipeline execution."""
-        from asgiref.sync import sync_to_async
-
         from apps.experiments.models import AgentTools
         from apps.pipelines.graph import PipelineGraph
 
@@ -272,7 +268,7 @@ class PipelineBot:
         )
 
         # Build runnable (sync)
-        runnable = await sync_to_async(graph.build_runnable)()
+        runnable = graph.build_runnable()
 
         # Async graph invocation - THIS IS THE KEY CHANGE
         raw_output = await runnable.ainvoke(input_state, config=config)
@@ -312,7 +308,7 @@ class PipelineBot:
             self.trace_service.set_output_message_id(ai_message.id)
 
         # add_version_tag is sync
-        await sync_to_async(ai_message.add_version_tag)(
+        await sync_to_async(ai_message.add_version_tag, thread_sensitive=True)(
             version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
         )
 
@@ -322,7 +318,9 @@ class PipelineBot:
 
         if session_tags := output.get("session_tags"):
             for tag, category in session_tags:
-                await sync_to_async(self.session.chat.create_and_add_tag)(tag, self.session.team, tag_category=category)
+                await sync_to_async(self.session.chat.create_and_add_tag, thread_sensitive=True)(
+                    tag, self.session.team, tag_category=category
+                )
 
         # Handle participant data updates
         out_pd = output.get("participant_data", None)
@@ -406,6 +404,12 @@ class PipelineBot:
                 case Intents.END_SESSION:
                     self.session.end()
 
+    async def _aprocess_intents(self, pipeline_output: dict):
+        for intent in pipeline_output.get("intents", []):
+            match intent:
+                case Intents.END_SESSION:
+                    await self.session.aend()
+
     def _save_message_to_history(
         self,
         message: str,
@@ -439,7 +443,9 @@ class PipelineBot:
         if tags:
             for tag_value, category in tags:
                 # create_and_add_tag is a model method - wrap it
-                await sync_to_async(chat_message.create_and_add_tag)(tag_value, self.session.team, category or "")
+                await sync_to_async(chat_message.create_and_add_tag, thread_sensitive=True)(
+                    tag_value, self.session.team, category or ""
+                )
 
         return chat_message
 

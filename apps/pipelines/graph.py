@@ -29,7 +29,8 @@ class Node(pydantic.BaseModel):
 
     @cached_property
     def pipeline_node_instance(self):
-        return self.pipeline_node_class(node_id=self.id, django_node=self.django_node, **self.params)
+        # This skips the pydantic validation
+        return self.pipeline_node_class.model_construct(node_id=self.id, django_node=self.django_node, **self.params)
 
     @property
     def name(self):

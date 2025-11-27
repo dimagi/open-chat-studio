@@ -1850,7 +1850,7 @@ class ExperimentSession(BaseTeamModel):
 
         self.status = new_status
         if commit:
-            self.save()
+            self.save(update_fields=["status"])
 
     def get_absolute_url(self):
         return reverse(
@@ -1868,12 +1868,34 @@ class ExperimentSession(BaseTeamModel):
         Raises:
             ValueError: If propagate is True but commit is not.
         """
-        self.update_status(SessionStatus.PENDING_REVIEW)
+        self.update_status(SessionStatus.PENDING_REVIEW, commit=False)
         if propagate and not commit:
             raise ValueError("Commit must be True when propagate is True")
         self.ended_at = timezone.now()
         if commit:
-            self.save()
+            self.save(update_fields=["status", "ended_at"])
+        if commit and propagate:
+            from apps.events.models import StaticTriggerType
+            from apps.events.tasks import enqueue_static_triggers
+
+            enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
+
+    async def aend(self, commit: bool = True, propagate: bool = True):
+        """
+        Ends this experiment session
+
+        Args:
+            commit: Whether to save the model after setting the ended_at value
+            propagate: Whether to enqueue any static event triggers defined for this experiment_session
+        Raises:
+            ValueError: If propagate is True but commit is not.
+        """
+        self.update_status(SessionStatus.PENDING_REVIEW, commit=False)
+        if propagate and not commit:
+            raise ValueError("Commit must be True when propagate is True")
+        self.ended_at = timezone.now()
+        if commit:
+            await self.asave(update_fields=["status", "ended_at"])
         if commit and propagate:
             from apps.events.models import StaticTriggerType
             from apps.events.tasks import enqueue_static_triggers
