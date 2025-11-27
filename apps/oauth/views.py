@@ -31,11 +31,7 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        requested_team = None
-        if self.requested_team is not None:
-            requested_team = self.requested_team
-
-        context["requested_team"] = requested_team
+        context["requested_team"] = self.requested_team
         return context
 
     def get_form_kwargs(self):
