@@ -89,6 +89,7 @@ THIRD_PARTY_APPS = [
     "health_check.contrib.redis",
     "template_partials",
     "silk",
+    "oauth2_provider",
 ]
 
 PROJECT_APPS = [
@@ -124,6 +125,7 @@ PROJECT_APPS = [
     "apps.mcp_integrations",
     "apps.filters",
     "apps.data_migrations",
+    "apps.oauth",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -407,12 +409,14 @@ SITE_ID = 1
 # DRF config
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.oauth.permissions.OAuth2AccessTokenAuthentication",
         "apps.api.permissions.ApiKeyAuthentication",
         "apps.api.permissions.BearerTokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
         "apps.api.permissions.ReadOnlyAPIKeyPermission",
+        "apps.oauth.permissions.TokenHasOAuthScope",
     ],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
@@ -816,3 +820,23 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
             return "silky" in request.htmx.current_url
 
     return "silky" in request.headers.get("referer", "")
+
+
+# API
+OAUTH2_PROVIDER = {
+    "PKCE_REQUIRED": True,
+    "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.APIScopedValidator",
+    "SCOPES": {
+        "chatbots:read": "List and Retrieve Chatbot Data",
+        "chatbots:interact": "Converse with a Chatbot and trigger bot messages",
+        "sessions:read": "List and Read Sessions",
+        "sessions:write": "Manage Sessions",
+        "files:read": "Download file content",
+        "participants:write": "Update Participant Data",
+    },
+}
+OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
+OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
+OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"
+OAUTH2_PROVIDER_GRANT_MODEL = "oauth.OAuth2Grant"
+OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth.OAuth2RefreshToken"

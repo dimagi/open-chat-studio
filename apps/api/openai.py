@@ -5,9 +5,9 @@ import uuid
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers
-from rest_framework.decorators import api_view
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.api.serializers import ExperimentSessionCreateSerializer, MessageSerializer
 from apps.channels.tasks import handle_api_message
@@ -111,16 +111,20 @@ def chat_completions_schema(versioned: bool):
     )
 
 
-@chat_completions_schema(versioned=False)
-@api_view(["POST"])
-def chat_completions(request, experiment_id: uuid.UUID):
-    return _chat_completions(request, experiment_id)
+class ChatCompletionsView(APIView):
+    required_scopes = ("chatbots:interact",)
+
+    @chat_completions_schema(versioned=False)
+    def post(self, request, experiment_id: uuid.UUID):
+        return _chat_completions(request, experiment_id)
 
 
-@chat_completions_schema(versioned=True)
-@api_view(["POST"])
-def chat_completions_version(request, experiment_id: uuid.UUID, version=None):
-    return _chat_completions(request, experiment_id, version)
+class ChatCompletionsVersionView(APIView):
+    required_scopes = ("chatbots:interact",)
+
+    @chat_completions_schema(versioned=True)
+    def post(self, request, experiment_id: uuid.UUID, version=None):
+        return _chat_completions(request, experiment_id, version)
 
 
 def _chat_completions(request, experiment_id: uuid.UUID, version=None):
