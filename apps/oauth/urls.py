@@ -15,4 +15,5 @@ urlpatterns = [
     path(".well-known/jwks.json", oauth2_views.JwksInfoView.as_view(), name="jwks-info"),
     path("o/userinfo/", oauth2_views.UserInfoView.as_view(), name="user-info"),
     path("o/", include(oauth2_urls.base_urlpatterns)),
+    path("o/", include(oauth2_urls.management_urlpatterns)),
 ]
