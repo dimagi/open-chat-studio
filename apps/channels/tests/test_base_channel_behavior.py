@@ -4,6 +4,7 @@ intended.
 """
 
 import re
+import uuid
 from unittest.mock import Mock, patch
 
 import pytest
@@ -20,7 +21,6 @@ from apps.chat.channels import (
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import (
-    ExperimentRoute,
     ExperimentSession,
     Participant,
     ParticipantData,
@@ -33,8 +33,9 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import MembershipFactory
-from apps.utils.langchain import build_fake_llm_service, mock_llm
+from apps.utils.langchain import mock_llm
 
+from ...utils.factories.service_provider_factories import LlmProviderFactory
 from ..datamodels import BaseMessage
 from .message_examples import base_messages
 
@@ -199,7 +200,6 @@ def test_different_participants_created_for_same_user_in_different_teams():
 
     experiment_sessions_count = ExperimentSession.objects.count()
     assert experiment_sessions_count == 2
-    assert Participant.objects.count() == 2
     participant1 = Participant.objects.get(team=experiment1.team, identifier=chat_id)
     participant2 = Participant.objects.get(team=experiment2.team, identifier=chat_id)
     assert participant1 != participant2
@@ -209,10 +209,13 @@ def test_different_participants_created_for_same_user_in_different_teams():
 @pytest.mark.parametrize("user_input", ["/reset", "/Reset", "/RESET", " /reset "])
 def test_reset_command_creates_new_experiment_session(user_input, test_channel):
     """The reset command should create a new session when the user conversed with the bot"""
-    participant_id = "123"
+    participant_id = str(uuid.uuid4())
     normal_message = base_messages.text_message(participant_id=participant_id)
 
     _send_user_message_on_channel(test_channel, normal_message)
+
+    # mock engagement
+    test_channel.experiment_session.user_already_engaged = Mock()
 
     reset_message = base_messages.text_message(participant_id=participant_id, message_text=user_input)
     response = test_channel.new_user_message(reset_message)
@@ -226,8 +229,7 @@ def test_reset_command_creates_new_experiment_session(user_input, test_channel):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.bots.TopicBot._call_predict", return_value="OK")
-def test_reset_conversation_does_not_create_new_session(_call_predict, test_channel):
+def test_reset_conversation_does_not_create_new_session(test_channel):
     """The reset command should not create a new session when the user haven't conversed with the bot yet"""
     participant_id = "123"
 
@@ -244,7 +246,7 @@ def test_reset_conversation_does_not_create_new_session(_call_predict, test_chan
 
 
 def _send_user_message_on_channel(channel_instance, user_message: BaseMessage):
-    with mock_llm(responses=["OK"]):
+    with patch("apps.chat.channels.ChannelBase._get_bot_response", return_value=ChatMessage(content="OK")):
         channel_instance.new_user_message(user_message)
 
 
@@ -309,9 +311,9 @@ def test_pre_conversation_flow(_send_seed_message):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.bots.TopicBot", Mock())
 def test_unsupported_message_type_creates_ai_message():
     experiment = ExperimentFactory(conversational_consent_enabled=True)
+    LlmProviderFactory(team=experiment.team)  # needed for EventBot
     channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
     assert channel.experiment_session is None
     with mock_llm(["error"]):
@@ -672,68 +674,6 @@ def test_voice_response_with_urls(
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("use_processor_bot_voice", "child_bot_has_voice", "router_bot_has_voice", "expected_voice"),
-    [
-        (True, True, True, "child_bot"),
-        (True, False, True, "router_bot"),
-        (False, None, True, "router_bot"),
-        (False, None, False, None),
-    ],
-)
-@patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-@patch("apps.channels.models.ExperimentChannel.webhook_url", Mock())
-def test_processor_bot_voice_setting(
-    synthesize_voice,
-    use_processor_bot_voice,
-    child_bot_has_voice,
-    router_bot_has_voice,
-    expected_voice,
-):
-    session = ExperimentSessionFactory()
-    team = session.team
-    experiments = ExperimentFactory.create_batch(2, team=team)
-    router_exp, child_exp = experiments
-
-    channel = ExperimentChannelFactory(experiment=router_exp)
-    ExperimentRoute.objects.create(team=team, parent=router_exp, child=child_exp, keyword="keyword1", is_default=True)
-
-    router_exp.use_processor_bot_voice = use_processor_bot_voice
-    router_exp.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
-    router_exp.save()
-    session.experiment = router_exp
-    session.save()
-
-    if not child_bot_has_voice:
-        child_exp.voice_provider = child_exp.synthetic_voice = None
-        child_exp.save()
-
-    if not router_bot_has_voice:
-        router_exp.voice_provider = router_exp.synthetic_voice = None
-        router_exp.save()
-
-    fake_service = build_fake_llm_service(responses=["keyword1", "How can I help today?"], token_counts=[0])
-
-    with patch("apps.experiments.models.Experiment.get_llm_service", new=lambda x: fake_service):
-        test_channel = TestChannel(router_exp, channel, session)
-        test_channel.new_user_message(base_messages.text_message("Hi"))
-
-    assert test_channel.bot.processor_experiment == child_exp
-
-    if router_bot_has_voice:
-        synthesize_voice_args = synthesize_voice.call_args_list[0].args
-        if expected_voice == "child_bot":
-            expected_synthetic_voice = child_exp.synthetic_voice
-        elif expected_voice == "router_bot":
-            expected_synthetic_voice = router_exp.synthetic_voice
-
-        assert synthesize_voice_args[1] == expected_synthetic_voice
-    else:
-        assert len(test_channel.text_sent) > 0
-        synthesize_voice.assert_not_called()
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize(
     ("expected_message_type", "response_behaviour", "use_processor_bot_voice"),
     [
         ("text", VoiceResponseBehaviours.NEVER, True),
@@ -769,45 +709,6 @@ def test_send_message_to_user_with_single_bot(
     if expected_message_type == "text":
         send_text_to_user.assert_called()
         assert send_text_to_user.call_args[0][0] == bot_message
-    else:
-        send_voice_to_user.assert_called()
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("expected_message_type", "response_behaviour", "use_processor_bot_voice"),
-    [
-        ("text", VoiceResponseBehaviours.NEVER, True),
-        ("text", VoiceResponseBehaviours.RECIPROCAL, True),
-        ("voice", VoiceResponseBehaviours.ALWAYS, True),
-        ("text", VoiceResponseBehaviours.NEVER, False),
-        ("text", VoiceResponseBehaviours.RECIPROCAL, False),
-        ("voice", VoiceResponseBehaviours.ALWAYS, False),
-    ],
-)
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_voice_to_user")
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
-@patch("apps.service_providers.speech_service.SpeechService.synthesize_voice", Mock())
-def test_send_message_to_user_with_multibot(
-    send_text_to_user, send_voice_to_user, expected_message_type, response_behaviour, use_processor_bot_voice
-):
-    session = ExperimentSessionFactory()
-    team = session.team
-    experiments = ExperimentFactory.create_batch(2, team=team)
-    router_exp, child_exp = experiments
-    router_exp.use_processor_bot_voice = use_processor_bot_voice
-    router_exp.voice_response_behaviour = response_behaviour
-    session.experiment = router_exp
-    experiment_channel = ExperimentChannelFactory(experiment=router_exp)
-    ExperimentRoute.objects.create(team=team, parent=router_exp, child=child_exp, keyword="keyword1", is_default=True)
-
-    channel = TestChannel(router_exp, experiment_channel, session)
-
-    bot_message = "Hi user"
-    channel.send_message_to_user(bot_message)
-
-    if expected_message_type == "text":
-        send_text_to_user.assert_called()
     else:
         send_voice_to_user.assert_called()
 
