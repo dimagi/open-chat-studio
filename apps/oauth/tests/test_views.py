@@ -158,3 +158,33 @@ def test_get_initial_with_multiple_teams_respects_parameter(
     initial = view_with_oauth2_data.get_initial()
 
     assert initial["team_slug"] == "other-team"
+
+
+@pytest.mark.django_db()
+def test_requested_team_returns_valid_user_team(get_request_with_user, user_with_team, view_with_oauth2_data):
+    """Test that requested_team returns a team when one was requested via URL parameter
+    and the user is a member of that team."""
+    user_team = user_with_team.teams.first()
+    request = get_request_with_user(f"/?team={user_team.slug}", user_with_team)
+    view_with_oauth2_data.request = request
+
+    assert view_with_oauth2_data.requested_team == user_team
+
+
+@pytest.mark.django_db()
+def test_requested_team_returns_none_without_parameter(get_request_with_user, user_with_team, view_with_oauth2_data):
+    """Test that requested_team returns None when no team parameter is provided."""
+    request = get_request_with_user("/", user_with_team)
+    view_with_oauth2_data.request = request
+
+    assert view_with_oauth2_data.requested_team is None
+
+
+@pytest.mark.django_db()
+def test_requested_team_returns_none_user_not_member(get_request_with_user, user_with_team, view_with_oauth2_data):
+    """Test that requested_team returns None when user is not a member of the requested team."""
+    Team.objects.create(name="Other Team", slug="other-team")
+    request = get_request_with_user("/?team=other-team", user_with_team)
+    view_with_oauth2_data.request = request
+
+    assert view_with_oauth2_data.requested_team is None

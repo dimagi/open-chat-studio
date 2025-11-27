@@ -82,10 +82,10 @@ class TestHandleConnectMessageTask:
         assert base_message.message_text == "Hi bot\n\nI need to ask something"
 
     @pytest.mark.django_db()
-    @patch("apps.chat.bots.TopicBot.process_input")
+    @patch("apps.chat.channels.ChannelBase._get_bot_response")
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_bot_generate_and_sends_message(self, process_input, experiment):
-        process_input.return_value = ChatMessage(content="Hi human", message_type=ChatMessageType.AI)
+    def test_bot_generate_and_sends_message(self, _get_bot_response, experiment):
+        _get_bot_response.return_value = ChatMessage(content="Hi human", message_type=ChatMessageType.AI)
         commcare_connect_channel_id, encryption_key, experiment_channel, data = _setup_participant(experiment)
         payload = _build_user_message(encryption_key, commcare_connect_channel_id)
         # The version will be used when chatting to the bot

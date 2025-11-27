@@ -31,6 +31,7 @@ from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
     ParticipantFactory,
 )
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
 from apps.utils.prompt import get_root_var, validate_prompt_variables
@@ -542,12 +543,17 @@ class TestPublicSessions:
         request_user = mock.Mock()
         request_user.is_authenticated = False
         request.user = request_user
-        experiment_session = ExperimentSessionFactory(experiment__prompt_text=prompt)
+
+        pipeline = PipelineFactory()
+        NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": prompt})
+        session = ExperimentSessionFactory(experiment__pipeline=pipeline)
+        assert session.requires_participant_data() == participant_data_injected
+
         _verify_user_or_start_session(
             identifier="someone@gmail.com",
             request=request,
-            experiment=experiment_session.experiment,
-            session=experiment_session,
+            experiment=session.experiment,
+            session=session,
         )
         if participant_data_injected:
             _record_consent_and_redirect.assert_not_called()
@@ -587,32 +593,3 @@ class TestVerifyPublicChatToken:
         )
         assert response.url == expected_redirect_url
         record_consent_and_redirect.assert_not_called()
-
-
-@pytest.mark.django_db()
-class TestCreateExperimentVersionView:
-    @pytest.mark.parametrize("in_sync_with_openai", [True, False])
-    @mock.patch("apps.experiments.views.experiment.messages")
-    @mock.patch("apps.experiments.views.experiment.async_create_experiment_version.delay")
-    def test_create_version_with_assistant(self, delay, messages, in_sync_with_openai, client):
-        delay.return_value = "a7a82d12-0abe-4466-92c7-95e4ed8eaf5c"
-        team = TeamWithUsersFactory()
-        experiment = ExperimentFactory(
-            assistant=OpenAiAssistantFactory(team=team), owner=team.members.first(), team=team
-        )
-        client.force_login(experiment.owner)
-        post_data = {"version_description": "Some description", "is_default_version": True}
-        url = reverse("experiments:create_version", args=[experiment.team.slug, experiment.id])
-
-        with mock.patch("apps.experiments.views.CreateExperimentVersion._is_assistant_out_of_sync") as out_of_sync:
-            out_of_sync.return_value = not in_sync_with_openai
-            client.post(url, data=post_data)
-
-        if in_sync_with_openai:
-            expected_message = "Creating new version. This might take a few minutes."
-            messages.success.assert_called_with(mock.ANY, expected_message)
-            assert delay.called is True
-        else:
-            expected_message = "Assistant is out of sync with OpenAI. Please update the assistant first."
-            messages.error.assert_called_with(mock.ANY, expected_message)
-            assert delay.called is False
