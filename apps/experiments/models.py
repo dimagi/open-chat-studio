@@ -180,6 +180,20 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
         ).first()
         return experiment if experiment else family_member
 
+    async def aget_default_or_working(self, family_member: "Experiment"):
+        """
+        Returns the default version of the family of experiments relating to `family_member` or if there is no default,
+        the working experiment.
+        """
+        if family_member.is_default_version:
+            return family_member
+
+        working_version_id = family_member.working_version_id or family_member.id
+        experiment = await self.filter(
+            working_version_id=working_version_id, is_default_version=True, team_id=family_member.team_id
+        ).afirst()
+        return experiment if experiment else family_member
+
     def get_version_names(self, team, working_version=None) -> list[str]:
         qs = self.get_queryset().filter(team=team)
         if working_version:
@@ -1458,6 +1472,14 @@ class Participant(BaseTeamModel):
         if "name" in data:
             self.name = data["name"]
             self.save(update_fields=["name"])
+
+    async def aupdate_name_from_data(self, data: dict):
+        """
+        Updates participant name field from a data dictionary.
+        """
+        if "name" in data:
+            self.name = data["name"]
+            self.asave(update_fields=["name"])
 
     def __str__(self):
         if self.is_anonymous:

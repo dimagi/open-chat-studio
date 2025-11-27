@@ -45,6 +45,14 @@ def get_bot(session: ExperimentSession, experiment: Experiment, trace_service, d
     raise NotImplementedError("Only pipeline chatbots are supported")
 
 
+async def aget_bot(session: ExperimentSession, experiment: Experiment, trace_service, disable_tools: bool = False):
+    if not experiment:
+        experiment = await Experiment.objects.aget_default_or_working(session.experiment)
+    if experiment.pipeline_id:
+        return PipelineBot(session, experiment, trace_service, disable_reminder_tools=disable_tools)
+    raise NotImplementedError("Only pipeline chatbots are supported")
+
+
 class PipelineBot:
     def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, disable_reminder_tools=False):
         self.team = experiment.team
@@ -205,7 +213,6 @@ class PipelineBot:
         self, user_input: str, save_input_to_history=True, attachments: list[Attachment] | None = None
     ) -> ChatMessage:
         """Async version of process_input."""
-        from asgiref.sync import sync_to_async
 
         input_state = await self._aget_input_state(attachments, user_input)
 
@@ -215,8 +222,8 @@ class PipelineBot:
             "save_input_to_history": save_input_to_history,
         }
 
-        with self.trace_service.span(
-            "Run Pipeline", inputs=kwargs | {"input_state": await sync_to_async(input_state.json_safe)()}
+        async with self.trace_service.aspan(
+            "Run Pipeline", inputs=kwargs | {"input_state": input_state.json_safe()}
         ) as span:
             chat_message = await self.ainvoke_pipeline(**kwargs)
             span.set_outputs({"content": chat_message.content})
@@ -253,7 +260,7 @@ class PipelineBot:
         from apps.pipelines.graph import PipelineGraph
 
         # Build graph (sync - complex construction)
-        graph = await sync_to_async(PipelineGraph.build_from_pipeline)(pipeline_to_use)
+        graph = await PipelineGraph.abuild_from_pipeline(pipeline_to_use)
 
         # Get config
         config = self.trace_service.get_langchain_config(
@@ -271,7 +278,7 @@ class PipelineBot:
         raw_output = await runnable.ainvoke(input_state, config=config)
 
         # Convert output (sync)
-        output = await sync_to_async(PipelineState(**raw_output).json_safe)()
+        output = PipelineState(**raw_output).json_safe()
         return output
 
     async def _asave_outputs(self, input_state, output, save_input_to_history):
@@ -323,7 +330,7 @@ class PipelineBot:
             participant_data = await self._aget_participant_data()
             participant_data.data = out_pd
             await participant_data.asave(update_fields=["data"])
-            await sync_to_async(self.session.participant.update_name_from_data)(out_pd)
+            await self.session.participant.aupdate_name_from_data(out_pd)
 
         # Handle session state updates
         out_session_state = output.get("session_state", None)
@@ -368,9 +375,7 @@ class PipelineBot:
 
         state["input_message_metadata"] = input_message_metadata
 
-        from asgiref.sync import sync_to_async
-
-        serializable_attachments = [await sync_to_async(attachment.model_dump)() for attachment in attachments]
+        serializable_attachments = [attachment.model_dump() for attachment in attachments]
         state["attachments"] = serializable_attachments
         return state
 
@@ -380,7 +385,7 @@ class PipelineBot:
 
         if interrupt := output.get("interrupt"):
             trace_info = TraceInfo(name="interrupt", metadata={"interrupt": interrupt})
-            event_bot = await sync_to_async(EventBot)(
+            event_bot = EventBot(
                 session=self.session,
                 experiment=self.experiment,
                 trace_info=trace_info,

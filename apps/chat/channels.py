@@ -23,7 +23,7 @@ from apps.annotations.models import TagCategories
 from apps.channels import audio
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.bots import EvalsBot, EventBot, get_bot
+from apps.chat.bots import EvalsBot, EventBot, aget_bot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import (
     AudioSynthesizeException,
@@ -764,23 +764,8 @@ class ChannelBase(ABC):
 
     async def _aget_bot_response(self, message: str) -> ChatMessage:
         """Async version of getting bot response."""
-        bot = await self._aget_bot()
+        bot = await aget_bot(self.experiment_session, self.experiment, self.trace_service)
         return await bot.aprocess_input(message, attachments=self.message.attachments)
-
-    async def _aget_bot(self):
-        """Async version of get_bot."""
-        from asgiref.sync import sync_to_async
-
-        if not self.bot:
-            # Bot construction is complex, wrap it
-            self.bot = await sync_to_async(self._create_bot)()
-        return self.bot
-
-    def _create_bot(self):
-        """Sync helper to create bot."""
-        from apps.chat.bots import get_bot
-
-        return get_bot(self.experiment_session, self.experiment, self.trace_service)
 
     async def asend_message_to_user(self, bot_message: str = None, files: list = None):
         """Async version of send_message_to_user."""

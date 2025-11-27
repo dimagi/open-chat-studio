@@ -119,6 +119,15 @@ class PipelineGraph(pydantic.BaseModel):
         edge_data = [Edge(**edge) for edge in pipeline.data["edges"]]
         return cls(nodes=node_data, edges=edge_data)
 
+    @classmethod
+    async def abuild_from_pipeline(cls, pipeline: Pipeline) -> Self:
+        node_data = [
+            Node(id=node.flow_id, label=node.label, type=node.type, params=node.params, django_node=node)
+            async for node in pipeline.node_set.all()
+        ]
+        edge_data = [Edge(**edge) for edge in pipeline.data["edges"]]
+        return cls(nodes=node_data, edges=edge_data)
+
     def build_runnable(self) -> CompiledStateGraph:
         from apps.pipelines.nodes.base import PipelineState
 
