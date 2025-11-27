@@ -1,4 +1,7 @@
+import contextlib
+
 from django.core.management.base import BaseCommand
+from field_audit import disable_audit
 
 from apps.data_migrations.utils.migrations import is_migration_applied, run_once
 
@@ -24,6 +27,7 @@ class IdempotentCommand(BaseCommand):
     # Subclasses must override this
     migration_name: str = ""
     atomic = True
+    disable_audit = False
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -72,7 +76,9 @@ class IdempotentCommand(BaseCommand):
                     )
                     return
 
-                result = self.perform_migration(dry_run=False)
+                audit_context = disable_audit() if self.disable_audit else contextlib.nullcontext()
+                with audit_context:
+                    result = self.perform_migration(dry_run=False)
 
             self.stdout.write(self.style.SUCCESS(f"Migration '{self.migration_name}' completed successfully"))
 
