@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import dataclasses
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -87,8 +87,65 @@ class Tracer(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    @asynccontextmanager
+    async def atrace(
+        self,
+        trace_context: TraceContext,
+        session: ExperimentSession,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> AsyncIterator[TraceContext]:
+        """Context manager for trace lifecycle.
+
+        Sets up tracing context on entry and ensures cleanup on exit.
+        Yields the TraceContext object that can be used to set outputs.
+
+        Args:
+            trace_context: The context object with id, name, and outputs
+            session: The experiment session for this trace
+            inputs: Optional input data for the trace
+            metadata: Optional metadata for the trace
+
+        Yields:
+            TraceContext: The same context object for setting outputs
+
+        Example:
+            ctx = TraceContext(id=trace_id, name=trace_name)
+            with tracer.trace(ctx, session) as ctx:
+                # tracing active
+                ctx.set_outputs({"result": "value"})
+            # cleanup guaranteed, outputs available in ctx.outputs
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     @contextmanager
     def span(
+        self,
+        span_context: TraceContext,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
+    ) -> AsyncIterator[TraceContext]:
+        """Context manager for span lifecycle.
+
+        Sets up span context on entry and ensures cleanup on exit.
+        Yields the TraceContext object that can be used to set outputs.
+
+        Args:
+            span_context: The context object with id, name, and outputs
+            inputs: Input data for the span
+            metadata: Optional metadata for the span
+            level: Span level (DEFAULT, WARNING, ERROR)
+
+        Yields:
+            TraceContext: The same context object for setting outputs
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    @asynccontextmanager
+    async def aspan(
         self,
         span_context: TraceContext,
         inputs: dict[str, Any],

@@ -718,7 +718,7 @@ class ChannelBase(ABC):
                 return ChatMessage(content="Sorry, you are not allowed to chat to this bot")
 
             try:
-                with self.trace_service.trace(
+                async with self.trace_service.atrace(
                     trace_name=self.experiment.name,
                     session=self.experiment_session,
                     inputs={"input": self.message.model_dump()},
@@ -735,7 +735,7 @@ class ChannelBase(ABC):
         from asgiref.sync import sync_to_async
 
         try:
-            if not await sync_to_async(self.is_message_type_supported)():
+            if not self.is_message_type_supported():
                 resp = await sync_to_async(self._handle_unsupported_message)()
                 return ChatMessage(content=resp)
 
@@ -748,14 +748,14 @@ class ChannelBase(ABC):
         """Async version of message handling."""
         from asgiref.sync import sync_to_async
 
-        with self.trace_service.span("Process Message", inputs={"input": self.user_query}) as span:
+        async with self.trace_service.aspan("Process Message", inputs={"input": self.user_query}) as span:
             await sync_to_async(self.submit_input_to_llm)()
             ai_message = await self._aget_bot_response(message=self.user_query)
 
             files = ai_message.get_attached_files() or []
             span.set_outputs({"response": ai_message.content, "attachments": [file.name for file in files]})
 
-            with self.trace_service.span(
+            async with self.trace_service.aspan(
                 "Send message to user", inputs={"bot_message": ai_message.content, "files": [str(f) for f in files]}
             ):
                 await self.asend_message_to_user(bot_message=ai_message.content, files=files)

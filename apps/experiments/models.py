@@ -1533,6 +1533,14 @@ class Participant(BaseTeamModel):
         except ParticipantData.DoesNotExist:
             return {}
 
+    async def aget_data_for_experiment(self, experiment) -> dict:
+        try:
+            participant_data = await self.data_set.aget(experiment=experiment)
+        except ParticipantData.DoesNotExist:
+            return {}
+
+        return participant_data.data or {}
+
     def get_schedules_for_experiment(
         self, experiment, as_dict=False, as_timezone: str | None = None, include_inactive=False
     ):

@@ -4,8 +4,8 @@ import logging
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID
 
@@ -53,7 +53,7 @@ class TracingService:
 
         tracers = []
         if experiment and experiment.id and experiment.team_id:
-            ocs_tracer = OCSTracer(experiment.id, experiment.team_id)
+            ocs_tracer = OCSTracer(experiment)
             tracers.append(ocs_tracer)
 
         if experiment and experiment.trace_provider:
@@ -128,6 +128,46 @@ class TracingService:
         finally:
             self._reset()
 
+    @asynccontextmanager
+    async def atrace(
+        self,
+        trace_name: str,
+        session: ExperimentSession,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> AsyncIterator[TraceContext]:
+        """Context manager for tracing."""
+        self.trace_id = uuid.uuid4()
+        self.trace_name = trace_name
+        self.session = session
+        self._start_time = time.time()
+
+        # Create context object for this trace
+        trace_context = TraceContext(id=self.trace_id, name=trace_name)
+
+        try:
+            async with AsyncExitStack() as stack:
+                # Enter all tracer contexts
+                for tracer in self._tracers:
+                    try:
+                        await stack.enter_async_context(
+                            tracer.atrace(
+                                trace_context=trace_context,
+                                session=session,
+                                inputs=inputs,
+                                metadata=metadata,
+                            )
+                        )
+                    except Exception:
+                        logger.exception("Error initializing tracer %s", tracer.__class__.__name__)
+
+                sentry_sdk.set_context("Traces", self.get_trace_metadata())
+
+                # Yield the context object to user code
+                yield trace_context
+        finally:
+            self._reset()
+
     @contextmanager
     def span(
         self,
@@ -153,6 +193,44 @@ class TracingService:
                     try:
                         stack.enter_context(
                             tracer.span(
+                                span_context=span_context,
+                                inputs=inputs,
+                                metadata=metadata or {},
+                            )
+                        )
+                    except Exception:
+                        logger.exception(f"Error starting span {span_name} in tracer {tracer.__class__.__name__}")
+
+                # Yield the context object to user code
+                yield span_context
+        finally:
+            self.span_stack.pop()
+
+    @asynccontextmanager
+    async def aspan(
+        self,
+        span_name: str,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+    ) -> AsyncIterator[TraceContext]:
+        """Context manager for spanning."""
+        # Create context object that will be passed to tracers and yielded to user
+        span_id = uuid.uuid4()
+        span_context = TraceContext(id=span_id, name=span_name)
+
+        if not self.activated:
+            # Return a dummy context if not activated
+            yield span_context
+            return
+
+        self.span_stack.append(span_context)
+        try:
+            async with AsyncExitStack() as stack:
+                # Enter all tracer span contexts, passing the same context object
+                for tracer in self._active_tracers:
+                    try:
+                        await stack.enter_async_context(
+                            tracer.aspan(
                                 span_context=span_context,
                                 inputs=inputs,
                                 metadata=metadata or {},

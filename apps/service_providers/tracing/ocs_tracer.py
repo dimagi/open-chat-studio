@@ -3,11 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from typing import TYPE_CHECKING, Any
 
-from asgiref.sync import sync_to_async
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 
@@ -27,10 +26,11 @@ class OCSTracer(Tracer):
     Internal OCS tracer that creates Trace objects in the database.
     """
 
-    def __init__(self, experiment_id: int, team_id: int):
+    def __init__(self, experiment):
         super().__init__(OCS_TRACE_PROVIDER, {})
-        self.experiment_id = experiment_id
-        self.team_id = team_id
+        self.experiment = experiment
+        self.experiment_id = experiment.id
+        self.team_id = experiment.team_id
         self.start_time: float = None
         self.trace_record = None
         self.error_detected = False
@@ -55,9 +55,9 @@ class OCSTracer(Tracer):
 
         return Experiment.objects.get(id=experiment_id)
 
-    def _create_trace_sync(self, trace_context, session, experiment_id, experiment_version_number):
+    def _create_trace(self, trace_context, session, experiment_id, experiment_version_number):
         """Sync version of creating trace."""
-        return Trace.objects.create(
+        return Trace.objects.acreate(
             trace_id=trace_context.id,
             experiment_id=experiment_id,
             experiment_version_number=experiment_version_number,
@@ -69,9 +69,20 @@ class OCSTracer(Tracer):
             session_state=session.state,
         )
 
-    def _save_trace_sync(self, trace_record):
-        """Sync version of saving trace."""
-        trace_record.save()
+    async def _acreate_trace(self, trace_context, session, experiment_id, experiment_version_number):
+        """Sync version of creating trace."""
+        participant_data = await session.participant.aget_data_for_experiment(session.experiment)
+        return await Trace.objects.acreate(
+            trace_id=trace_context.id,
+            experiment_id=experiment_id,
+            experiment_version_number=experiment_version_number,
+            team_id=self.team_id,
+            session=session,
+            duration=0,
+            participant=session.participant,
+            participant_data=participant_data,
+            session_state=session.state,
+        )
 
     @contextmanager
     def trace(
@@ -86,89 +97,21 @@ class OCSTracer(Tracer):
         Creates a database Trace record on entry and updates it with
         duration and status on exit.
         """
-        from apps.experiments.models import Experiment
 
         # Set base class state from context
         self.trace_name = trace_context.name
         self.trace_id = trace_context.id
         self.session = session
 
-        # Determine experiment ID (handle versioning)
-        # When in async context, use sync_to_async with thread pool
-        is_async = self._is_async_context()
-
-        try:
-            if is_async:
-                # Use sync_to_async with thread_sensitive=True for database operations
-                # This runs in Django's thread pool with proper database connections
-                async_get_experiment = sync_to_async(self._get_experiment_sync, thread_sensitive=True)
-                # We need to run this in a way that works from a sync context within an async loop
-                # Use a separate thread to avoid "event loop already running" error
-                import threading
-
-                result = [None]
-                error = [None]
-
-                def _run_async():
-                    try:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        result[0] = loop.run_until_complete(async_get_experiment(self.experiment_id))
-                        loop.close()
-                    except Exception as e:
-                        error[0] = e
-
-                thread = threading.Thread(target=_run_async)
-                thread.start()
-                thread.join()
-
-                if error[0]:
-                    raise error[0]
-                experiment = result[0]
-            else:
-                experiment = self._get_experiment_sync(self.experiment_id)
-        except Experiment.DoesNotExist:
-            logger.exception(f"Experiment with id {self.experiment_id} does not exist. Cannot start trace.")
-            yield trace_context
-            return
-
         experiment_id = self.experiment_id
         experiment_version_number = None
-        if experiment.is_a_version:
+        if self.experiment.is_a_version:
             # Trace needs to be associated with the working version of the experiment
-            experiment_id = experiment.working_version_id
-            experiment_version_number = experiment.version_number
+            experiment_id = self.experiment.working_version_id
+            experiment_version_number = self.experiment.version_number
 
         # Create database trace record
-        if is_async:
-            async_create_trace = sync_to_async(self._create_trace_sync, thread_sensitive=True)
-            import threading
-
-            result = [None]
-            error = [None]
-
-            def _run_async():
-                try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    result[0] = loop.run_until_complete(
-                        async_create_trace(trace_context, session, experiment_id, experiment_version_number)
-                    )
-                    loop.close()
-                except Exception as e:
-                    error[0] = e
-
-            thread = threading.Thread(target=_run_async)
-            thread.start()
-            thread.join()
-
-            if error[0]:
-                raise error[0]
-            self.trace_record = result[0]
-        else:
-            self.trace_record = self._create_trace_sync(
-                trace_context, session, experiment_id, experiment_version_number
-            )
+        self.trace_record = self._create_trace_sync(trace_context, session, experiment_id, experiment_version_number)
 
         self.start_time = time.time()
 
@@ -193,32 +136,80 @@ class OCSTracer(Tracer):
 
                     # Note: OCSTracer doesn't store trace outputs in database
                     # but could access them via trace_context.outputs if needed
+                    self.trace_record.save()
+                    logger.debug(
+                        "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
+                        self.experiment_id,
+                        session.id,
+                        duration_ms,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
+                        self.experiment_id,
+                        session.id,
+                        self.trace_record.output_message_id,
+                    )
 
-                    # Use sync_to_async when in async context
-                    if is_async:
-                        async_save_trace = sync_to_async(self._save_trace_sync, thread_sensitive=True)
-                        import threading
+            # Reset state
+            self.trace_record = None
+            self.error_detected = False
+            self.trace_name = None
+            self.trace_id = None
+            self.session = None
 
-                        save_error = [None]
+    @asynccontextmanager
+    async def atrace(
+        self,
+        trace_context: TraceContext,
+        session: ExperimentSession,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> AsyncIterator[TraceContext]:
+        """Context manager for OCS trace lifecycle.
 
-                        def _run_async_save():
-                            try:
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                                loop.run_until_complete(async_save_trace(self.trace_record))
-                                loop.close()
-                            except Exception as e:
-                                save_error[0] = e
+        Creates a database Trace record on entry and updates it with
+        duration and status on exit.
+        """
+        # Set base class state from context
+        self.trace_name = trace_context.name
+        self.trace_id = trace_context.id
+        self.session = session
 
-                        thread = threading.Thread(target=_run_async_save)
-                        thread.start()
-                        thread.join()
+        experiment_id = self.experiment_id
+        experiment_version_number = None
+        if self.experiment.is_a_version:
+            # Trace needs to be associated with the working version of the experiment
+            experiment_id = self.experiment.working_version_id
+            experiment_version_number = self.experiment.version_number
 
-                        if save_error[0]:
-                            raise save_error[0]
+        # Create database trace record
+        self.trace_record = await self._acreate_trace(trace_context, session, experiment_id, experiment_version_number)
+
+        self.start_time = time.time()
+
+        try:
+            yield trace_context
+        except Exception:
+            self.error_detected = True
+            raise
+        finally:
+            # Guaranteed cleanup - update trace duration and status
+            if self.trace_record and self.start_time:
+                try:
+                    end_time = time.time()
+                    duration = end_time - self.start_time
+                    duration_ms = int(duration * 1000)
+
+                    self.trace_record.duration = duration_ms
+                    if self.error_detected:
+                        self.trace_record.status = TraceStatus.ERROR
                     else:
-                        self._save_trace_sync(self.trace_record)
+                        self.trace_record.status = TraceStatus.SUCCESS
 
+                    # Note: OCSTracer doesn't store trace outputs in database
+                    # but could access them via trace_context.outputs if needed
+                    await self.trace_record.asave()
                     logger.debug(
                         "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
                         self.experiment_id,
@@ -264,6 +255,17 @@ class OCSTracer(Tracer):
         finally:
             if error_to_record:
                 self.error_detected = True
+
+    @asynccontextmanager
+    async def aspan(
+        self,
+        span_context: TraceContext,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
+    ) -> AsyncIterator[TraceContext]:
+        with self.span(span_context, inputs, metadata, level) as span:
+            yield span
 
     def get_langchain_callback(self) -> None:
         """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
