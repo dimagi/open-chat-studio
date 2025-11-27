@@ -20,8 +20,13 @@
     </div>
 
     <div>
-        <h4 class="text-lg font-semibold text-gray-900 mb-2">{% translate "Select your team" %}</h4>
-        <p class="text-sm text-gray-600 mb-3">{% translate "This application will only be able to access data from the selected team." %}</p>
+        {% if requested_team %}
+            <h4 class="text-lg font-semibold text-gray-900 mb-2">{% translate "Team" %}</h4>
+            <p class="text-sm text-gray-600 mb-3">{{ requested_team }}</p>
+        {% else %}
+            <h4 class="text-lg font-semibold text-gray-900 mb-2">{% translate "Select your team" %}</h4>
+            <p class="text-sm text-gray-600 mb-3">{% translate "This application will only be able to access data from the selected team." %}</p>
+            {% endif %}
         {% render_form_fields form "team_slug" %}
     </div>
 
