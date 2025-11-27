@@ -23,6 +23,7 @@ class IdempotentCommand(BaseCommand):
 
     # Subclasses must override this
     migration_name: str = ""
+    atomic = True
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -64,7 +65,7 @@ class IdempotentCommand(BaseCommand):
         # Execute migration
         self.stdout.write(f"Starting migration: {self.migration_name}")
         try:
-            with run_once(self.migration_name) as migration_context:
+            with run_once(self.migration_name, atomic=self.atomic) as migration_context:
                 if not migration_context.should_run and not force:
                     self.stdout.write(
                         self.style.WARNING(f"Migration '{self.migration_name}' was already applied during execution")

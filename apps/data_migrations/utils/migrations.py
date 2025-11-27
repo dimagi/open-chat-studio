@@ -1,4 +1,4 @@
-from contextlib import ContextDecorator
+from contextlib import ContextDecorator, ExitStack
 
 from django.core.management import call_command
 from django.db import migrations, transaction
@@ -100,13 +100,15 @@ class run_once(ContextDecorator):
             pass
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, *, atomic=True):
         self.name = name
         self.should_run = False
+        self.stack = ExitStack()
 
     def __enter__(self):
-        self._transaction = transaction.atomic()
-        self._transaction.__enter__()
+        self.stack.__enter__()
+        if self.atomic:
+            self.stack.enter_context(transaction.atomic())
 
         if is_migration_applied(self.name):
             self.should_run = False
@@ -119,7 +121,7 @@ class run_once(ContextDecorator):
         if exc_type is None and self.should_run:
             mark_migration_applied(self.name)
 
-        return self._transaction.__exit__(exc_type, exc_val, exc_tb)
+        return self.stack.__exit__(exc_type, exc_val, exc_tb)
 
 
 def check_migration_in_django_migration(apps, name: str) -> bool:

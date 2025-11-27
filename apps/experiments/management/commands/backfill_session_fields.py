@@ -9,6 +9,7 @@ from apps.trace.models import Trace
 class Command(IdempotentCommand):
     help = "Backfill platform, experiment_versions, and last_activity_at fields for ExperimentSession"
     migration_name = "backfill_session_fields_2025_11_26"
+    atomic = False
 
     def perform_migration(self, dry_run=False):
         batch_size = 1000
