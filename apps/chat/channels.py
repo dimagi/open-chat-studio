@@ -686,6 +686,109 @@ class ChannelBase(ABC):
         chat_message = self.bot.process_input(message, attachments=self.message.attachments)
         return chat_message
 
+    async def _aadd_message(self, message: BaseMessage):
+        """Async version of _add_message."""
+        self.message = message
+
+        if not await self._aparticipant_is_allowed():
+            raise ParticipantNotAllowedException()
+
+        await self._aensure_sessions_exists()
+
+    async def _aparticipant_is_allowed(self):
+        """Async version of participant permission check."""
+        from asgiref.sync import sync_to_async
+
+        is_public = await sync_to_async(lambda: self.experiment.is_public)()
+        if is_public:
+            return True
+
+        return await sync_to_async(self.experiment.is_participant_allowed)(self.participant_identifier)
+
+    async def anew_user_message(self, message: BaseMessage) -> ChatMessage:
+        """Async version of new_user_message."""
+
+        with current_team(self.experiment.team):
+            self._is_user_message = True
+
+            try:
+                await self._aadd_message(message)
+            except ParticipantNotAllowedException:
+                await self.asend_message_to_user("Sorry, you are not allowed to chat to this bot")
+                return ChatMessage(content="Sorry, you are not allowed to chat to this bot")
+
+            try:
+                with self.trace_service.trace(
+                    trace_name=self.experiment.name,
+                    session=self.experiment_session,
+                    inputs={"input": self.message.model_dump()},
+                ) as span:
+                    response = await self._anew_user_message()
+                    span.set_outputs({"response": response.content})
+                    await self._aupdate_session_activity()
+                    return response
+            except GenerationCancelled:
+                return ChatMessage(content="", message_type=ChatMessageType.AI)
+
+    async def _anew_user_message(self) -> ChatMessage:
+        """Async version of processing new user message."""
+        from asgiref.sync import sync_to_async
+
+        try:
+            if not await sync_to_async(self.is_message_type_supported)():
+                resp = await sync_to_async(self._handle_unsupported_message)()
+                return ChatMessage(content=resp)
+
+            return await self._ahandle_supported_message()
+        except Exception:
+            logger.exception("Error processing message")
+            raise
+
+    async def _ahandle_supported_message(self):
+        """Async version of message handling."""
+        from asgiref.sync import sync_to_async
+
+        with self.trace_service.span("Process Message", inputs={"input": self.user_query}) as span:
+            await sync_to_async(self.submit_input_to_llm)()
+            ai_message = await self._aget_bot_response(message=self.user_query)
+
+            files = ai_message.get_attached_files() or []
+            span.set_outputs({"response": ai_message.content, "attachments": [file.name for file in files]})
+
+            with self.trace_service.span(
+                "Send message to user", inputs={"bot_message": ai_message.content, "files": [str(f) for f in files]}
+            ):
+                await self.asend_message_to_user(bot_message=ai_message.content, files=files)
+
+        return ai_message
+
+    async def _aget_bot_response(self, message: str) -> ChatMessage:
+        """Async version of getting bot response."""
+        bot = await self._aget_bot()
+        return await bot.aprocess_input(message, attachments=self.message.attachments)
+
+    async def _aget_bot(self):
+        """Async version of get_bot."""
+        from asgiref.sync import sync_to_async
+
+        if not self.bot:
+            # Bot construction is complex, wrap it
+            self.bot = await sync_to_async(self._create_bot)()
+        return self.bot
+
+    def _create_bot(self):
+        """Sync helper to create bot."""
+        from apps.chat.bots import get_bot
+
+        return get_bot(self.experiment_session, self.experiment, self.trace_service)
+
+    async def asend_message_to_user(self, bot_message: str = None, files: list = None):
+        """Async version of send_message_to_user."""
+        from asgiref.sync import sync_to_async
+
+        # For now, wrap the sync version. Individual channels can override if needed.
+        await sync_to_async(self.send_message_to_user)(bot_message, files)
+
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""
         ChatMessage.objects.create(
@@ -1234,6 +1337,10 @@ class ApiChannel(ChannelBase):
     def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
+
+    async def asend_message_to_user(self, bot_message: str = None, files: list = None):
+        """Async version - no-op for API channel since it doesn't push messages to users."""
+        # The bot cannot send messages to this client, since it wouldn't know where to send it to
 
 
 class SlackChannel(ChannelBase):
