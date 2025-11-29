@@ -29,6 +29,25 @@ class BearerScheme(TokenScheme):
     target_class = "apps.api.permissions.BearerTokenAuthentication"
 
 
+class EmbeddedWidgetScheme(OpenApiAuthenticationExtension):
+    target_class = "apps.api.authentication.EmbeddedWidgetAuthentication"
+    name = "embedKeyAuth"
+    match_subclasses = True
+    priority = -1
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-Embed-Key",
+            "description": (
+                "Embedded widget authentication token. Validates the widget token from the experiment channel "
+                "configuration and authenticates embedded widget requests. Requires chatbot_id (experiment public_id) "
+                "in the request body for /api/chat/start/ or from session data for subsequent requests."
+            ),
+        }
+
+
 class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
     target_class = "apps.oauth.permissions.OAuth2AccessTokenAuthentication"
     name = "OAuth2"
@@ -52,7 +71,9 @@ class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
                 else:
                     scope_type = "write"
 
-                formatted_scopes = [f"{scope}:{scope_type}" for scope in required_scopes]
+                formatted_scopes = [
+                    f"{scope}:{scope_type}" for scope in required_scopes
+                ]
                 return {self.name: formatted_scopes}
             elif isinstance(permission, TokenHasOAuthScope):
                 # Get the required scopes from the view (TokenHasScope.get_scopes)

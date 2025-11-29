@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 from django.core.validators import validate_domain_name
 
 from apps.channels.exceptions import ExperimentChannelException
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment
 
 ALL_DOMAINS = "*"
@@ -33,45 +33,30 @@ def extract_domain_from_headers(request) -> str:
     return ""
 
 
-def validate_embed_key_for_experiment(token: str, origin_domain: str, experiment_id: str) -> ExperimentChannel | None:
-    """
-    Validate embedded widget request for a specific experiment.
-    Used in start_session when we have experiment_id but not team yet.
+def validate_domain(origin_domain: str, allowed_domains: list[str]) -> bool:
+    if ALL_DOMAINS in allowed_domains:
+        return True
 
-    Returns:
-        ExperimentChannel if validation succeeds, None otherwise.
-    """
-    if not token or not origin_domain:
-        return None
+    for domain in allowed_domains:
+        if match_domain_pattern(origin_domain, domain):
+            return True
 
-    try:
-        channel = ExperimentChannel.objects.select_related("experiment", "team").get(
-            experiment__public_id=experiment_id,
-            platform=ChannelPlatform.EMBEDDED_WIDGET,
-            extra_data__widget_token=token,
-            deleted=False,
-        )
-    except ExperimentChannel.DoesNotExist:
-        return None
-
-    allowed_domains = channel.extra_data.get("allowed_domains", [])
-    if not allowed_domains or any(domain == ALL_DOMAINS for domain in allowed_domains):
-        return channel
-
-    for allowed_domain in allowed_domains:
-        if match_domain_pattern(origin_domain, allowed_domain):
-            return channel
-
-    return None
+    return False
 
 
 def validate_platform_availability(experiment: Experiment, platform: ChannelPlatform):
-    existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
+    existing_platforms = {
+        channel.platform_enum for channel in experiment.experimentchannel_set.all()
+    }
     if platform in existing_platforms:
-        raise ExperimentChannelException(f"Channel for platform '{platform.label}' already exists")
+        raise ExperimentChannelException(
+            f"Channel for platform '{platform.label}' already exists"
+        )
 
     global_platforms = ChannelPlatform.team_global_platforms()
-    used_platforms = {platform for platform in existing_platforms if platform not in global_platforms}
+    used_platforms = {
+        platform for platform in existing_platforms if platform not in global_platforms
+    }
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
     if not available_platforms.get(platform):
         raise ExperimentChannelException("Platform already used or not available.")
