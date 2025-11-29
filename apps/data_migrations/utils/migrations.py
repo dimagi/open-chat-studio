@@ -61,6 +61,7 @@ def is_migration_applied(name: str) -> bool:
     return CustomMigration.objects.filter(name=name).exists()
 
 
+@transaction.atomic()
 def mark_migration_applied(name: str) -> CustomMigration:
     """
     Mark a custom migration as applied.
@@ -143,6 +144,7 @@ def check_migration_in_django_migration(apps, name: str) -> bool:
     return CustomMigrationModel.objects.filter(name=name).exists()
 
 
+@transaction.atomic()
 def mark_migration_in_django_migration(apps, name: str) -> None:
     """
     Mark migration as applied from within a Django migration.
