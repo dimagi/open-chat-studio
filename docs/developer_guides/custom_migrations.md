@@ -26,6 +26,11 @@ class Command(IdempotentCommand):
         return updated
 ```
 
+#### Optional fields:
+
+* `atomic`: Set to False to disable atomic migration.
+* `disable_audit`: Set to True to disable model auditing for this migration.
+
 Run with:
 ```bash
 python manage.py my_migration              # Execute

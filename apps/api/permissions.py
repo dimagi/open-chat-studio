@@ -73,7 +73,8 @@ class ReadOnlyAPIKeyPermission(BasePermission):
             return False
 
         api_key = request.auth
-        if getattr(api_key, "read_only", True):
+        # The bearer token can also be an oauth Access Token, which doesn't have read_only attribute
+        if isinstance(api_key, UserAPIKey) and getattr(api_key, "read_only", True):
             return request.method in SAFE_METHODS
 
         return True

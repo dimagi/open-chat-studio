@@ -1,16 +1,18 @@
 from allauth.account.utils import send_email_confirmation
 from allauth.socialaccount.models import SocialAccount
 from allauth_2fa.utils import user_has_valid_totp_device
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import translation
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_http_methods, require_POST
 from django_htmx.http import HttpResponseLocation
 
+from apps.oauth.models import OAuth2AccessToken
 from apps.web.waf import WafRule, waf_allow
 
 from .forms import ApiKeyForm, CustomUserChangeForm, UploadAvatarForm
@@ -50,6 +52,18 @@ def profile(request):
         form = CustomUserChangeForm(instance=request.user)
 
     new_api_key = request.session.pop(SESSION_API_KEY, None)
+
+    oauth_tokens = (
+        OAuth2AccessToken.objects.filter(user=request.user).select_related("application").order_by("-created")
+    )
+
+    available_scopes = settings.OAUTH2_PROVIDER.get("SCOPES", {})
+    for token in oauth_tokens:
+        token.scope_list = []
+        if token.scope:
+            for scope in token.scope.split():
+                token.scope_list.append(available_scopes.get(scope, ""))
+
     return render(
         request,
         "account/profile.html",
@@ -58,6 +72,7 @@ def profile(request):
             "active_tab": "profile",
             "page_title": _("Profile"),
             "api_keys": request.user.api_keys.filter(revoked=False).select_related("team"),
+            "oauth_tokens": oauth_tokens,
             "user_has_valid_totp_device": user_has_valid_totp_device(request.user),
             "new_api_key": new_api_key,
             "social_accounts": SocialAccount.objects.filter(user=request.user),
@@ -107,6 +122,21 @@ def revoke_api_key(request):
         request,
         _("API Key {key} has been revoked. It can no longer be used to access the site.").format(
             key=api_key.prefix,
+        ),
+    )
+    return HttpResponseRedirect(reverse("users:user_profile"))
+
+
+@login_required
+@require_POST
+def revoke_oauth_token(request):
+    token_id = request.POST.get("token_id")
+    token = get_object_or_404(OAuth2AccessToken, id=token_id, user=request.user)
+    token.revoke()
+    messages.success(
+        request,
+        _("OAuth access token for {app} has been revoked.").format(
+            app=token.application.name,
         ),
     )
     return HttpResponseRedirect(reverse("users:user_profile"))

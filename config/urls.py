@@ -23,6 +23,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 
+from apps.oauth.views import TeamScopedAuthorizationView
 from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
 from apps.web.sitemaps import StaticViewSitemap
@@ -56,13 +57,14 @@ team_urlpatterns = [
     path("traces/", include("apps.trace.urls")),
     path("filters/", include("apps.filters.urls")),
 ]
-
 urlpatterns = [
     path("favicon.ico", RedirectView.as_view(url=static_url("images/favicons/favicon-96x96.png"), permanent=True)),
     path("admin/", include("apps.admin.urls")),
     # redirect Django admin login to main login page
     path("django-admin/login/", RedirectView.as_view(pattern_name=settings.LOGIN_URL)),
     path("django-admin/", admin.site.urls),
+    path("o/authorize/", TeamScopedAuthorizationView.as_view(), name="oauth_authorize"),
+    path("", include("apps.oauth.urls")),
     path("i18n/", include("django.conf.urls.i18n")),
     path(
         "sitemap.xml",

@@ -12,7 +12,6 @@ from apps.slack.models import SlackInstallation
 from apps.slack.slack_listeners import new_message
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
-from apps.utils.langchain import mock_llm
 
 SLACK_TEAM_ID = "SLACK_TEAM_ID"
 SLACK_CHANNEL_ID = "SLACK_CHANNEL_ID"
@@ -52,12 +51,11 @@ THREAD_REPLY_EVENT = {
 def test_response_to_bot_mention_in_assigned_channel(bolt_context):
     """Message is processed when there is an experiment channel assigned to this slack channel"""
     bolt_context.client.chat_postMessage = MagicMock()
-    with mock_llm(responses=["Hello"]):
-        new_message(BOT_MENTION_EVENT, bolt_context)
+    new_message(BOT_MENTION_EVENT, bolt_context)
 
     bolt_context.client.chat_postMessage.assert_called_once_with(
         channel=BOT_MENTION_EVENT["channel"],
-        text="Hello",
+        text="new message",  # test bot echo's input
         thread_ts=BOT_MENTION_EVENT["ts"],
     )
     assert ExperimentSession.objects.count() == 1
@@ -90,23 +88,21 @@ def test_ignores_messages_from_unassigned_channel(bolt_context):
 @pytest.mark.usefixtures("experiment_channel")
 def test_responds_to_session_thread(bolt_context):
     bolt_context.client.chat_postMessage = Mock()
-    with mock_llm(responses=["Hello"]):
-        new_message(BOT_MENTION_EVENT, bolt_context)
+    new_message(BOT_MENTION_EVENT, bolt_context)
     bolt_context.client.chat_postMessage.assert_called_with(
         channel=BOT_MENTION_EVENT["channel"],
-        text="Hello",
+        text="new message",
         thread_ts=BOT_MENTION_EVENT["ts"],
     )
 
     assert ExperimentSession.objects.count() == 1
 
     bolt_context.client.chat_postMessage.reset_mock()
-    with mock_llm(responses=["How can I help?"]):
-        new_message(THREAD_REPLY_EVENT, bolt_context)
+    new_message(THREAD_REPLY_EVENT, bolt_context)
 
     bolt_context.client.chat_postMessage.assert_called_with(
         channel=THREAD_REPLY_EVENT["channel"],
-        text="How can I help?",
+        text="thread reply",
         thread_ts=THREAD_REPLY_EVENT["thread_ts"],
     )
     assert ExperimentSession.objects.count() == 1
@@ -128,26 +124,24 @@ def test_ignores_non_session_thread(bolt_context):
 @pytest.mark.usefixtures("experiment_channel")
 def test_response_to_mention_in_session_thread(bolt_context):
     bolt_context.client.chat_postMessage = Mock()
-    with mock_llm(responses=["Hello"]):
-        new_message(BOT_MENTION_EVENT, bolt_context)
+    new_message(BOT_MENTION_EVENT, bolt_context)
 
     bolt_context.client.chat_postMessage.assert_called_with(
         channel=BOT_MENTION_EVENT["channel"],
-        text="Hello",
+        text="new message",
         thread_ts=BOT_MENTION_EVENT["ts"],
     )
     assert ExperimentSession.objects.count() == 1
 
     bolt_context.client.chat_postMessage.reset_mock()
-    with mock_llm(responses=["How can I help?"]):
-        thread_reply_with_mention = THREAD_REPLY_EVENT.copy()
-        thread_reply_with_mention["text"] = f"<@{BOT_USER_ID}> thread reply with bot mention"
+    thread_reply_with_mention = THREAD_REPLY_EVENT.copy()
+    thread_reply_with_mention["text"] = f"<@{BOT_USER_ID}> thread reply with bot mention"
 
-        new_message(thread_reply_with_mention, bolt_context)
+    new_message(thread_reply_with_mention, bolt_context)
 
     bolt_context.client.chat_postMessage.assert_called_with(
         channel=THREAD_REPLY_EVENT["channel"],
-        text="How can I help?",
+        text="thread reply with bot mention",
         thread_ts=THREAD_REPLY_EVENT["thread_ts"],
     )
     assert ExperimentSession.objects.count() == 1
@@ -157,15 +151,14 @@ def test_response_to_mention_in_session_thread(bolt_context):
 def test_response_to_mention_in_non_session_thread(bolt_context):
     bolt_context.client.chat_postMessage = Mock()
 
-    with mock_llm(responses=["Hello"]):
-        thread_reply_with_mention = THREAD_REPLY_EVENT.copy()
-        thread_reply_with_mention["text"] = f"<@{BOT_USER_ID}> can you jump in here"
+    thread_reply_with_mention = THREAD_REPLY_EVENT.copy()
+    thread_reply_with_mention["text"] = f"<@{BOT_USER_ID}> can you jump in here"
 
-        new_message(thread_reply_with_mention, bolt_context)
+    new_message(thread_reply_with_mention, bolt_context)
 
     bolt_context.client.chat_postMessage.assert_called_once_with(
         channel=BOT_MENTION_EVENT["channel"],
-        text="Hello",
+        text="can you jump in here",
         thread_ts=BOT_MENTION_EVENT["ts"],
     )
     assert ExperimentSession.objects.count() == 1
@@ -240,8 +233,7 @@ def test_keyword_routing_matches_first_word(bolt_context):
     health_event = BOT_MENTION_EVENT.copy()
     health_event["text"] = f"<@{BOT_USER_ID}> health what are my options?"
 
-    with mock_llm(responses=["Health info response"]):
-        new_message(health_event, bolt_context)
+    new_message(health_event, bolt_context)
 
     bolt_context.client.chat_postMessage.assert_called_once()
     assert ExperimentSession.objects.count() == 1
@@ -255,8 +247,7 @@ def test_keyword_routing_case_insensitive(keyword_channel, bolt_context):
     case_event = BOT_MENTION_EVENT.copy()
     case_event["text"] = f"<@{BOT_USER_ID}> HEALTH what about coverage?"
 
-    with mock_llm(responses=["Coverage info"]):
-        new_message(case_event, bolt_context)
+    new_message(case_event, bolt_context)
 
     bolt_context.client.chat_postMessage.assert_called_once()
 
@@ -271,8 +262,7 @@ def test_channel_routing_priority(experiment_channel, keyword_channel, default_c
     # Start with the keyword to force a keyword match, then confirm specific-channel wins.
     priority_event["text"] = f"<@{BOT_USER_ID}> HEALTH I need assistance"
 
-    with mock_llm(responses=["response"]):
-        new_message(priority_event, bolt_context)
+    new_message(priority_event, bolt_context)
 
     # Verify session was created with the specific channel
     assert ExperimentSession.objects.filter(experiment_channel=experiment_channel).exists()
@@ -280,8 +270,7 @@ def test_channel_routing_priority(experiment_channel, keyword_channel, default_c
     # Resend the same message to a different channel to test keyword match
     keyword_event = priority_event.copy()
     keyword_event["channel"] = "other_channel"
-    with mock_llm(responses=["response"]):
-        new_message(keyword_event, bolt_context)
+    new_message(keyword_event, bolt_context)
 
     assert ExperimentSession.objects.filter(experiment_channel=keyword_channel).exists()
 
@@ -289,7 +278,6 @@ def test_channel_routing_priority(experiment_channel, keyword_channel, default_c
     default_event = keyword_event.copy()
     default_event["text"] = f"<@{BOT_USER_ID}> I need assistance"
     default_event["channel"] = "other_other_channel"
-    with mock_llm(responses=["response"]):
-        new_message(default_event, bolt_context)
+    new_message(default_event, bolt_context)
 
     assert ExperimentSession.objects.filter(experiment_channel=default_channel).exists()
