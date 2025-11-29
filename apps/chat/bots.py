@@ -201,6 +201,200 @@ class PipelineBot:
             self.session.save(update_fields=["state"])
         return ai_message
 
+    async def aprocess_input(
+        self, user_input: str, save_input_to_history=True, attachments: list[Attachment] | None = None
+    ) -> ChatMessage:
+        """Async version of process_input."""
+        from asgiref.sync import sync_to_async
+
+        input_state = await self._aget_input_state(attachments, user_input)
+
+        kwargs = {
+            "input_state": input_state,
+            "save_run_to_history": True,
+            "save_input_to_history": save_input_to_history,
+        }
+
+        with self.trace_service.span(
+            "Run Pipeline", inputs=kwargs | {"input_state": await sync_to_async(input_state.json_safe)()}
+        ) as span:
+            chat_message = await self.ainvoke_pipeline(**kwargs)
+            span.set_outputs({"content": chat_message.content})
+            return chat_message
+
+    async def ainvoke_pipeline(
+        self,
+        input_state: PipelineState,
+        save_run_to_history=True,
+        save_input_to_history=True,
+        pipeline=None,
+    ) -> ChatMessage:
+        """Async version of invoke_pipeline."""
+        from asgiref.sync import sync_to_async
+
+        pipeline_to_use = pipeline or self.experiment.pipeline
+        output = await self._arun_pipeline(input_state, pipeline_to_use)
+
+        if save_run_to_history and self.session is not None:
+            output = await self._aprocess_interrupts(output)
+            result = await self._asave_outputs(input_state, output, save_input_to_history)
+        else:
+            result = ChatMessage(content=output)
+
+        await sync_to_async(self._process_intents)(output)
+        self.synthetic_voice_id = output.get("synthetic_voice_id", None)
+        return result
+
+    async def _arun_pipeline(self, input_state, pipeline_to_use):
+        """Async version of pipeline execution."""
+        from asgiref.sync import sync_to_async
+
+        from apps.experiments.models import AgentTools
+        from apps.pipelines.graph import PipelineGraph
+
+        # Build graph (sync - complex construction)
+        graph = await sync_to_async(PipelineGraph.build_from_pipeline)(pipeline_to_use)
+
+        # Get config
+        config = self.trace_service.get_langchain_config(
+            configurable={
+                "disabled_tools": AgentTools.reminder_tools() if self.disable_reminder_tools else [],
+            },
+            run_name_map=graph.node_id_to_name_mapping,
+            filter_patterns=graph.filter_patterns,
+        )
+
+        # Build runnable (sync)
+        runnable = await sync_to_async(graph.build_runnable)()
+
+        # Async graph invocation - THIS IS THE KEY CHANGE
+        raw_output = await runnable.ainvoke(input_state, config=config)
+
+        # Convert output (sync)
+        output = await sync_to_async(PipelineState(**raw_output).json_safe)()
+        return output
+
+    async def _asave_outputs(self, input_state, output, save_input_to_history):
+        """Async version of save_outputs."""
+        from asgiref.sync import sync_to_async
+
+        input_metadata = output.get("input_message_metadata", {})
+        output_metadata = output.get("output_message_metadata", {})
+        trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
+
+        if trace_metadata:
+            input_metadata.update(trace_metadata)
+            output_metadata.update(trace_metadata)
+
+        if save_input_to_history:
+            human_message = await self._asave_message_to_history(
+                input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
+            )
+            if self.trace_service:
+                self.trace_service.set_input_message_id(human_message.id)
+
+        output_tags = output.get("output_message_tags")
+        ai_message = await self._asave_message_to_history(
+            output["messages"][-1],
+            ChatMessageType.AI,
+            metadata=output_metadata,
+            tags=output_tags,
+        )
+
+        if self.trace_service:
+            self.trace_service.set_output_message_id(ai_message.id)
+
+        # add_version_tag is sync
+        await sync_to_async(ai_message.add_version_tag)(
+            version_number=self.experiment.version_number, is_a_version=self.experiment.is_a_version
+        )
+
+        if self.trace_service and output_tags:
+            flat_tags = [f"{category}:{tag}" if category else tag for tag, category in output_tags]
+            self.trace_service.add_output_message_tags_to_trace(flat_tags)
+
+        if session_tags := output.get("session_tags"):
+            for tag, category in session_tags:
+                await sync_to_async(self.session.chat.create_and_add_tag)(tag, self.session.team, tag_category=category)
+
+        # Handle participant data updates
+        out_pd = output.get("participant_data", None)
+        if out_pd is not None and out_pd != input_state.get("participant_data"):
+            participant_data = await self._aget_participant_data()
+            participant_data.data = out_pd
+            await participant_data.asave(update_fields=["data"])
+            await sync_to_async(self.session.participant.update_name_from_data)(out_pd)
+
+        # Handle session state updates
+        out_session_state = output.get("session_state", None)
+        if out_session_state is not None and out_session_state != input_state.get("session_state"):
+            self.session.state = out_session_state
+            await self.session.asave(update_fields=["state"])
+
+        return ai_message
+
+    async def _aget_input_state(self, attachments: list[Attachment], user_input: str):
+        """Async version of getting input state."""
+        state = PipelineState(
+            messages=[user_input],
+            experiment_session=self.session,
+            session_state=self.session.state,
+        )
+
+        await self._aupdate_state_with_participant_data(state)
+        await self._aupdates_state_with_attachments(state, attachments)
+        return state
+
+    async def _aupdate_state_with_participant_data(self, state):
+        """Async version of updating state with participant data."""
+        participant_data = await self._aget_participant_data()
+        data = participant_data.data | {}
+        data = self.session.participant.global_data | data
+        state["participant_data"] = data
+        return state
+
+    async def _aupdates_state_with_attachments(self, state: PipelineState, attachments: list[Attachment]):
+        """Async version of updating state with attachments."""
+        attachments = attachments or []
+        incoming_file_ids = []
+
+        for attachment in attachments:
+            file = await File.objects.aget(id=attachment.id, team_id=self.team.id)
+            incoming_file_ids.append(file.id)
+
+        input_message_metadata = {}
+        if incoming_file_ids:
+            input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
+
+        state["input_message_metadata"] = input_message_metadata
+
+        from asgiref.sync import sync_to_async
+
+        serializable_attachments = [await sync_to_async(attachment.model_dump)() for attachment in attachments]
+        state["attachments"] = serializable_attachments
+        return state
+
+    async def _aprocess_interrupts(self, output):
+        """Async version of processing interrupts."""
+        from asgiref.sync import sync_to_async
+
+        if interrupt := output.get("interrupt"):
+            trace_info = TraceInfo(name="interrupt", metadata={"interrupt": interrupt})
+            event_bot = await sync_to_async(EventBot)(
+                session=self.session,
+                experiment=self.experiment,
+                trace_info=trace_info,
+                trace_service=self.trace_service,
+            )
+            output_message = await sync_to_async(event_bot.get_user_message)(interrupt["message"])
+            output["messages"].append(output_message)
+
+            if tag_name := interrupt["tag_name"]:
+                tags = output.setdefault("output_message_tags", [])
+                tags.append((TagCategories.SAFETY_LAYER_RESPONSE, tag_name))
+
+        return output
+
     def _process_intents(self, pipeline_output: dict):
         for intent in pipeline_output.get("intents", []):
             match intent:
@@ -222,6 +416,38 @@ class PipelineBot:
             for tag_value, category in tags:
                 chat_message.create_and_add_tag(tag_value, self.session.team, category or "")
         return chat_message
+
+    async def _asave_message_to_history(
+        self,
+        message: str,
+        type_: ChatMessageType,
+        metadata: dict,
+        tags: list[tuple] = None,
+    ) -> ChatMessage:
+        """Async version of message saving."""
+        from asgiref.sync import sync_to_async
+
+        chat_message = await ChatMessage.objects.acreate(
+            chat=self.session.chat, message_type=type_.value, content=message, metadata=metadata
+        )
+
+        if tags:
+            for tag_value, category in tags:
+                # create_and_add_tag is a model method - wrap it
+                await sync_to_async(chat_message.create_and_add_tag)(tag_value, self.session.team, category or "")
+
+        return chat_message
+
+    async def _aget_participant_data(self):
+        """Async version of getting participant data."""
+        from apps.experiments.models import ParticipantData
+
+        participant_data, _ = await ParticipantData.objects.aget_or_create(
+            participant_id=self.session.participant_id,
+            experiment_id=self.session.experiment_id,
+            team_id=self.session.team_id,
+        )
+        return participant_data
 
     def synthesize_voice(self) -> tuple[SyntheticVoice] | None:
         from apps.experiments.models import SyntheticVoice

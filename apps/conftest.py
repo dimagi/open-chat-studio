@@ -2,6 +2,7 @@ import os
 from unittest.mock import Mock, patch
 
 import pytest
+import pytest_asyncio
 from django.db import connections
 
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
@@ -74,3 +75,34 @@ def _reset_team_context():
         yield
     finally:
         unset_current_team()
+
+
+# Async fixtures for async testing
+@pytest_asyncio.fixture
+async def async_team(db):
+    """Async version of team fixture."""
+    from asgiref.sync import sync_to_async
+
+    return await sync_to_async(TeamFactory.create)()
+
+
+@pytest_asyncio.fixture
+async def async_team_with_users(db):
+    """Async version of team_with_users fixture."""
+    from asgiref.sync import sync_to_async
+
+    return await sync_to_async(TeamWithUsersFactory.create)()
+
+
+@pytest_asyncio.fixture
+async def async_experiment_with_pipeline(async_team_with_users, db):
+    """Async version of experiment fixture with pipeline."""
+    from asgiref.sync import sync_to_async
+
+    from apps.utils.factories.pipelines import PipelineFactory
+
+    # Create pipeline
+    pipeline = await sync_to_async(PipelineFactory.create)(team=async_team_with_users)
+
+    # Create experiment with pipeline
+    return await sync_to_async(ExperimentFactory.create)(team=async_team_with_users, pipeline=pipeline)

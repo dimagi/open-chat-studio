@@ -686,6 +686,109 @@ class ChannelBase(ABC):
         chat_message = self.bot.process_input(message, attachments=self.message.attachments)
         return chat_message
 
+    async def _aadd_message(self, message: BaseMessage):
+        """Async version of _add_message."""
+        self.message = message
+
+        if not await self._aparticipant_is_allowed():
+            raise ParticipantNotAllowedException()
+
+        await self._aensure_sessions_exists()
+
+    async def _aparticipant_is_allowed(self):
+        """Async version of participant permission check."""
+        from asgiref.sync import sync_to_async
+
+        is_public = await sync_to_async(lambda: self.experiment.is_public)()
+        if is_public:
+            return True
+
+        return await sync_to_async(self.experiment.is_participant_allowed)(self.participant_identifier)
+
+    async def anew_user_message(self, message: BaseMessage) -> ChatMessage:
+        """Async version of new_user_message."""
+
+        with current_team(self.experiment.team):
+            self._is_user_message = True
+
+            try:
+                await self._aadd_message(message)
+            except ParticipantNotAllowedException:
+                await self.asend_message_to_user("Sorry, you are not allowed to chat to this bot")
+                return ChatMessage(content="Sorry, you are not allowed to chat to this bot")
+
+            try:
+                with self.trace_service.trace(
+                    trace_name=self.experiment.name,
+                    session=self.experiment_session,
+                    inputs={"input": self.message.model_dump()},
+                ) as span:
+                    response = await self._anew_user_message()
+                    span.set_outputs({"response": response.content})
+                    await self._aupdate_session_activity()
+                    return response
+            except GenerationCancelled:
+                return ChatMessage(content="", message_type=ChatMessageType.AI)
+
+    async def _anew_user_message(self) -> ChatMessage:
+        """Async version of processing new user message."""
+        from asgiref.sync import sync_to_async
+
+        try:
+            if not await sync_to_async(self.is_message_type_supported)():
+                resp = await sync_to_async(self._handle_unsupported_message)()
+                return ChatMessage(content=resp)
+
+            return await self._ahandle_supported_message()
+        except Exception:
+            logger.exception("Error processing message")
+            raise
+
+    async def _ahandle_supported_message(self):
+        """Async version of message handling."""
+        from asgiref.sync import sync_to_async
+
+        with self.trace_service.span("Process Message", inputs={"input": self.user_query}) as span:
+            await sync_to_async(self.submit_input_to_llm)()
+            ai_message = await self._aget_bot_response(message=self.user_query)
+
+            files = ai_message.get_attached_files() or []
+            span.set_outputs({"response": ai_message.content, "attachments": [file.name for file in files]})
+
+            with self.trace_service.span(
+                "Send message to user", inputs={"bot_message": ai_message.content, "files": [str(f) for f in files]}
+            ):
+                await self.asend_message_to_user(bot_message=ai_message.content, files=files)
+
+        return ai_message
+
+    async def _aget_bot_response(self, message: str) -> ChatMessage:
+        """Async version of getting bot response."""
+        bot = await self._aget_bot()
+        return await bot.aprocess_input(message, attachments=self.message.attachments)
+
+    async def _aget_bot(self):
+        """Async version of get_bot."""
+        from asgiref.sync import sync_to_async
+
+        if not self.bot:
+            # Bot construction is complex, wrap it
+            self.bot = await sync_to_async(self._create_bot)()
+        return self.bot
+
+    def _create_bot(self):
+        """Sync helper to create bot."""
+        from apps.chat.bots import get_bot
+
+        return get_bot(self.experiment_session, self.experiment, self.trace_service)
+
+    async def asend_message_to_user(self, bot_message: str = None, files: list = None):
+        """Async version of send_message_to_user."""
+        from asgiref.sync import sync_to_async
+
+        # For now, wrap the sync version. Individual channels can override if needed.
+        await sync_to_async(self.send_message_to_user)(bot_message, files)
+
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""
         ChatMessage.objects.create(
@@ -760,6 +863,56 @@ class ChannelBase(ABC):
             .order_by("-created_at")
             .first()
         )
+
+    async def _aload_latest_session(self):
+        """Loads the latest experiment session on the channel"""
+        from asgiref.sync import sync_to_async
+
+        # get_working_version() is a property that accesses FK
+        working_version = await sync_to_async(lambda: self.experiment.get_working_version())()
+
+        self.experiment_session = await (
+            ExperimentSession.objects.select_related("participant", "experiment", "chat")  # Prefetch related objects
+            .filter(
+                experiment=working_version,
+                participant__identifier=str(self.participant_identifier),
+            )
+            .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+            .order_by("-created_at")
+            .afirst()
+        )
+
+    async def _aget_or_create_participant(self):
+        """Async version of participant retrieval/creation."""
+        return await Participant.objects.aget_or_create(
+            identifier=str(self.participant_identifier),
+            team=self.experiment.team,
+            defaults={"platform": self.experiment_channel.platform},
+        )
+
+    async def _aensure_sessions_exists(self):
+        """Ensures both the experiment and chat sessions exist."""
+        await self._aload_latest_session()
+
+        if not self.experiment_session or self.message.message_text == "/reset":
+            from asgiref.sync import sync_to_async
+
+            # Get working version
+            experiment = await sync_to_async(lambda: self.experiment.get_working_version())()
+
+            # Get or create participant
+            participant, _ = await self._aget_or_create_participant()
+
+            # Create chat session
+            chat = await Chat.objects.acreate(team=self.experiment.team)
+
+            # Create experiment session
+            self.experiment_session = await ExperimentSession.objects.acreate(
+                team=self.experiment.team,
+                experiment=experiment,
+                participant=participant,
+                chat=chat,
+            )
 
     def _reset_session(self):
         """Resets the session by ending the current `experiment_session` (if one exists) and creating a new one"""
@@ -874,6 +1027,27 @@ class ChannelBase(ABC):
                 update_fields.append("experiment_versions")
 
         self.experiment_session.save(update_fields=update_fields)
+
+    async def _aupdate_session_activity(self):
+        """Update the session's last_activity_at and experiment_versions fields."""
+        if not self.experiment_session:
+            return
+
+        from asgiref.sync import sync_to_async
+
+        update_fields = ["last_activity_at"]
+        self.experiment_session.last_activity_at = timezone.now()
+
+        # Add experiment version to the list if it's a versioned experiment
+        is_version = await sync_to_async(lambda: self.experiment.is_a_version)()
+        if is_version:
+            version_number = await sync_to_async(lambda: self.experiment.version_number)()
+            current_versions = self.experiment_session.experiment_versions or []
+            if version_number not in current_versions:
+                self.experiment_session.experiment_versions = current_versions + [version_number]
+                update_fields.append("experiment_versions")
+
+        await self.experiment_session.asave(update_fields=update_fields)
 
 
 class WebChannel(ChannelBase):
@@ -1163,6 +1337,10 @@ class ApiChannel(ChannelBase):
     def send_text_to_user(self, bot_message: str):
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
+
+    async def asend_message_to_user(self, bot_message: str = None, files: list = None):
+        """Async version - no-op for API channel since it doesn't push messages to users."""
+        # The bot cannot send messages to this client, since it wouldn't know where to send it to
 
 
 class SlackChannel(ChannelBase):
