@@ -1,6 +1,6 @@
 from oauth2_provider.oauth2_validators import OAuth2Validator
 
-from apps.teams.utils import get_current_team
+from apps.teams.utils import get_current_team, get_slug_for_team
 
 from .models import OAuth2Grant
 
@@ -16,6 +16,9 @@ class APIScopedValidator(OAuth2Validator):
     3. When validating the code (from a new request context), we load the team from the Grant onto the request
     4. When creating the access token, we read the team from the request and associate it with the token.
     """
+
+    oidc_claim_scope = OAuth2Validator.oidc_claim_scope
+    oidc_claim_scope.update({"is_active": "openid", "team": "openid"})
 
     def _create_authorization_code(self, request, code, expires=None):
         grant = super()._create_authorization_code(request, code, expires)
@@ -47,3 +50,10 @@ class APIScopedValidator(OAuth2Validator):
         refresh_token.team = getattr(request, "team", None) or previous_refresh_token.team
         refresh_token.save()
         return refresh_token
+
+    def get_additional_claims(self, request):
+        claims = {"sub": request.user.email, "name": request.user.get_full_name(), "is_active": request.user.is_active}
+        token = getattr(request, "access_token", None)
+        if token and getattr(token, "team_id", None):
+            claims["team"] = get_slug_for_team(token.team_id)
+        return claims
