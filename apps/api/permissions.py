@@ -6,15 +6,23 @@ from functools import wraps
 
 from django.conf import settings
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication
-from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions
+from rest_framework.permissions import (
+    SAFE_METHODS,
+    BasePermission,
+    DjangoModelPermissions,
+)
 from rest_framework_api_key.permissions import KeyParser
 
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 
+from ..channels.models import ChannelPlatform
+from ..channels.utils import extract_domain_from_headers, validate_domain
+from ..experiments.models import ExperimentSession
 from .models import UserAPIKey
 
 logger = logging.getLogger("ocs.api")
@@ -57,7 +65,78 @@ class BearerTokenAuthentication(BaseKeyAuthentication):
     keyword = "Bearer"
 
     def get_key(self, request):
-        return ConfigurableKeyParser(keyword=self.keyword).get_from_authorization(request)
+        return ConfigurableKeyParser(keyword=self.keyword).get_from_authorization(
+            request
+        )
+
+
+class IsExperimentSessionStartedPermission(BasePermission):
+    """
+    Check if the request has access to the experiment based on public API settings or embedded widget authentication.
+    """
+
+    def has_permission(self, request, view):
+        session = get_object_or_404(
+            ExperimentSession.objects.select_related(
+                "experiment_channel", "experiment", "participant"
+            ),
+            external_id=view.kwargs.get("session_id"),
+        )
+
+        if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
+            return self._check_session_access(request, session)
+        else:
+            return self._check_experiment_access(
+                session.experiment, session.participant.identifier
+            )
+
+    def _check_session_access(self, request, session):
+        """
+        Check if the request has access to the session.
+        Args:
+            request: a Django Request object (required for embedded widgets)
+            session: Session object (should have experiment_channel prefetched)
+
+        Returns:
+            Response object if access is denied, None if access is allowed
+        """
+        embed_key = request.headers.get("X-Embed-Key")
+        if not embed_key:
+            # follow legacy workflow
+            return True
+
+        origin_domain = extract_domain_from_headers(request)
+        if not origin_domain:
+            logging.error("Origin or Referer header required for embedded widgets")
+            return False
+
+        experiment_channel = session.experiment_channel
+        allowed_domains = experiment_channel.extra_data.get("allowed_domains", [])
+        if not validate_domain(origin_domain, allowed_domains):
+            logging.error("Domain not allowed")
+            return False
+
+        return True
+
+    def _check_experiment_access(self, experiment, participant_id):
+        """
+        Check if the request has access to the experiment based on public API settings.
+
+        Returns:
+            Response object if access is denied, None if access is allowed
+        """
+        if experiment.is_public:
+            return True
+
+        if not participant_id:
+            logging.error("Participant is invalid")
+            return False
+
+        if not experiment.is_participant_allowed(participant_id):
+            logging.error("Participant not allowed")
+            return False
+
+        return True
 
 
 class ReadOnlyAPIKeyPermission(BasePermission):
@@ -103,8 +182,12 @@ def verify_hmac(view_func):
     # Based on https://github.com/dimagi/commcare-hq/blob/master/corehq/util/hmac_request.py
     @wraps(view_func)
     def _inner(request, *args, **kwargs):
-        expected_digest = convert_to_bytestring_if_unicode(request.headers.get("X-Mac-Digest"))
-        secret_key_bytes = convert_to_bytestring_if_unicode(settings.COMMCARE_CONNECT_SERVER_SECRET)
+        expected_digest = convert_to_bytestring_if_unicode(
+            request.headers.get("X-Mac-Digest")
+        )
+        secret_key_bytes = convert_to_bytestring_if_unicode(
+            settings.COMMCARE_CONNECT_SERVER_SECRET
+        )
 
         if not (expected_digest and secret_key_bytes):
             logger.exception(

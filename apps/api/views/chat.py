@@ -5,15 +5,25 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, inline_serializer
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    parser_classes,
+    permission_classes,
+)
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from apps.api.auth import handle_embedded_widget_auth
-from apps.api.exceptions import EmbeddedWidgetAuthError
+from apps.api.authentication import EmbeddedWidgetAuthentication
+from apps.api.permissions import IsExperimentSessionStartedPermission
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -23,71 +33,27 @@ from apps.api.serializers import (
     MessageSerializer,
 )
 from apps.channels.datamodels import Attachment
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ExperimentChannel
 from apps.chat.channels import ApiChannel
 from apps.chat.models import Chat, ChatAttachment
-from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
+from apps.experiments.models import (
+    Experiment,
+    ExperimentSession,
+    Participant,
+    ParticipantData,
+)
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.models import File
 
-AUTH_CLASSES = [SessionAuthentication]
+AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
+SESSION_PERMISSION_CLASSES = [IsExperimentSessionStartedPermission]
 
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
 SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["collections"]
 
 logger = logging.getLogger("ocs.api_chat")
-
-
-def check_experiment_access(experiment, participant_id):
-    """
-    Check if the request has access to the experiment based on public API settings.
-
-    Returns:
-        Response object if access denied, None if access allowed
-    """
-    if experiment.is_public:
-        return None
-
-    if not participant_id:
-        return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
-
-    if not experiment.is_participant_allowed(participant_id):
-        return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
-
-    return None
-
-
-def check_session_access(session, request):
-    """
-    Check if the request has access to the session.
-    Now handles both authenticated users and embedded widgets.
-    Args:
-        session: Session object (should have experiment_channel prefetched)
-        request: Request object (required for embedded widgets)
-
-    Note:
-        Callers should use select_related('experiment_channel') when querying
-        sessions to avoid N+1 queries.
-
-    Returns:
-        Response object if access denied, None if access allowed
-    """
-    if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
-        try:
-            experiment_channel = handle_embedded_widget_auth(request, session=session)
-            if experiment_channel != session.experiment_channel:
-                logging.error("Channel mismatch in embedded widget auth")
-                return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
-            return None  # Access allowed
-        except EmbeddedWidgetAuthError:
-            logger.error("Permission denied during embedded widget authentication")
-            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
-        except Exception:
-            logger.exception("Error during embedded widget authentication")
-            return Response({"error": "Embedded widget authentication failed"}, status=status.HTTP_403_FORBIDDEN)
-    return check_experiment_access(session.experiment, session.participant.identifier)
 
 
 def validate_file_upload(file):
@@ -100,7 +66,10 @@ def validate_file_upload(file):
         return False, f"File '{file.name}' exceeds maximum size of {MAX_FILE_SIZE_MB}MB"
     file_ext = pathlib.Path(file.name).suffix.lower()
     if file_ext not in SUPPORTED_FILE_EXTENSIONS:
-        return False, f"File type '{file_ext}' is not supported. Allowed types: {', '.join(SUPPORTED_FILE_EXTENSIONS)}"
+        return (
+            False,
+            f"File type '{file_ext}' is not supported. Allowed types: {', '.join(SUPPORTED_FILE_EXTENSIONS)}",
+        )
     return True, None
 
 
@@ -145,22 +114,25 @@ def validate_file_upload(file):
 )
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([])
+@permission_classes(SESSION_PERMISSION_CLASSES)
 @parser_classes([MultiPartParser])
 def chat_upload_file(request, session_id):
     session = get_object_or_404(
-        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
+        ExperimentSession.objects.select_related(
+            "experiment_channel", "experiment", "participant"
+        ),
         external_id=session_id,
     )
-    access_response = check_session_access(session, request)
-    if access_response:
-        return access_response
 
     if session.is_complete:
-        return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST
+        )
     files = request.FILES.getlist("files")
     if not files:
-        return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST
+        )
 
     for file in files:
         is_valid, error_msg = validate_file_upload(file)
@@ -170,14 +142,17 @@ def chat_upload_file(request, session_id):
     total_size_mb = sum(f.size for f in files) / (1024 * 1024)
     if total_size_mb > MAX_TOTAL_SIZE_MB:
         return Response(
-            {"error": f"Total file size exceeds maximum of {MAX_TOTAL_SIZE_MB}MB"}, status=status.HTTP_400_BAD_REQUEST
+            {"error": f"Total file size exceeds maximum of {MAX_TOTAL_SIZE_MB}MB"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
     expiry_date = timezone.now() + timezone.timedelta(hours=24)
     uploaded_files = []
 
     participant_remote_id = request.POST.get("participant_remote_id", "")
     participant_name = request.POST.get("participant_name", "")
-    uploaded_by = session.participant.identifier if session.participant else participant_remote_id
+    uploaded_by = (
+        session.participant.identifier if session.participant else participant_remote_id
+    )
 
     if not uploaded_by and request.user.is_authenticated:
         uploaded_by = request.user.email
@@ -247,10 +222,6 @@ def chat_start_session(request):
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
-    try:
-        experiment_channel = handle_embedded_widget_auth(request, experiment_id=experiment_id)
-    except EmbeddedWidgetAuthError as e:
-        return Response({"error": e.message}, status=status.HTTP_403_FORBIDDEN)
 
     # Get experiment
     experiment = get_object_or_404(Experiment, public_id=experiment_id)
@@ -262,7 +233,10 @@ def chat_start_session(request):
 
     team = experiment.team
 
-    if not experiment_channel:
+    # Check if authenticated via DRF EmbeddedWidgetAuthentication
+    if isinstance(request.auth, ExperimentChannel):
+        experiment_channel = request.auth
+    else:
         # legacy flow
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(team)
 
@@ -272,7 +246,10 @@ def chat_start_session(request):
         # Enforce this for authenticated users
         # Currently this only happens if the chat widget is being hosted on the same OCS instance as the bot
         if remote_id != participant_id:
-            return Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Remote ID must match your email address"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         remote_id = ""
     else:
         user = None
@@ -287,14 +264,19 @@ def chat_start_session(request):
             defaults={"user": user, "remote_id": remote_id},
         )
     else:
-        participant = Participant.create_anonymous(team, experiment_channel.platform, remote_id)
+        participant = Participant.create_anonymous(
+            team, experiment_channel.platform, remote_id
+        )
 
     if name:
         if participant.name != name:
             participant.name = name
             participant.save(update_fields=["name"])
         participant_data, _ = ParticipantData.objects.get_or_create(
-            participant=participant, experiment=experiment, team=team, defaults={"data": {}}
+            participant=participant,
+            experiment=experiment,
+            team=team,
+            defaults={"data": {}},
         )
         if participant_data.data.get("name") != name:
             participant_data.data["name"] = name
@@ -320,13 +302,17 @@ def chat_start_session(request):
         "participant": participant,
     }
 
-    serialized_response = ChatStartSessionResponse(response_data, context={"request": request})
+    serialized_response = ChatStartSessionResponse(
+        response_data, context={"request": request}
+    )
     return Response(serialized_response.data, status=status.HTTP_201_CREATED)
 
 
 class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
     attachment_ids = serializers.ListField(
-        child=serializers.IntegerField(), required=False, help_text="List of file IDs from prior upload"
+        child=serializers.IntegerField(),
+        required=False,
+        help_text="List of file IDs from prior upload",
     )
 
 
@@ -353,13 +339,16 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
         OpenApiExample(
             name="SendMessageWithAttachments",
             summary="Send a message with file attachments",
-            value={"message": "Please review these documents", "attachment_ids": [123, 124]},
+            value={
+                "message": "Please review these documents",
+                "attachment_ids": [123, 124],
+            },
         ),
     ],
 )
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([])
+@permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_send_message(request, session_id):
     """
     Send a message to a chat session
@@ -372,23 +361,27 @@ def chat_send_message(request, session_id):
     attachment_ids = data.get("attachment_ids", [])
 
     session = get_object_or_404(
-        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
+        ExperimentSession.objects.select_related(
+            "experiment_channel", "experiment", "participant"
+        ),
         external_id=session_id,
     )
 
-    if access_response := check_session_access(session, request):
-        return access_response
-
     # Verify session is active
     if session.is_complete:
-        return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST
+        )
 
     attachment_data = []
     if attachment_ids:
         files = File.objects.filter(id__in=attachment_ids, team=session.team)
 
         if files.count() != len(attachment_ids):
-            return Response({"error": "One or more file IDs are invalid"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "One or more file IDs are invalid"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         files.update(expiry_date=None)
         chat_attachment, created = ChatAttachment.objects.get_or_create(
             chat=session.chat,
@@ -396,7 +389,9 @@ def chat_send_message(request, session_id):
         )
         chat_attachment.files.add(*files)
         for file_obj in files:
-            attachment = Attachment.from_file(file_obj, type="ocs_attachments", session_id=session.id)
+            attachment = Attachment.from_file(
+                file_obj, type="ocs_attachments", session_id=session.id
+            )
             attachment_data.append(attachment.model_dump())
 
     # Queue the response generation as a background task
@@ -408,7 +403,9 @@ def chat_send_message(request, session_id):
         attachments=attachment_data if attachment_data else None,
     ).task_id
 
-    response_data = ChatSendMessageResponse({"task_id": task_id, "status": "processing"}).data
+    response_data = ChatSendMessageResponse(
+        {"task_id": task_id, "status": "processing"}
+    ).data
     return Response(response_data, status=status.HTTP_202_ACCEPTED)
 
 
@@ -421,7 +418,9 @@ def chat_send_message(request, session_id):
             "ChatTaskPoll",
             {
                 "message": MessageSerializer(required=False),
-                "status": serializers.ChoiceField(required=False, choices=("processing", "complete")),
+                "status": serializers.ChoiceField(
+                    required=False, choices=("processing", "complete")
+                ),
             },
         ),
         500: inline_serializer(
@@ -450,15 +449,15 @@ def chat_send_message(request, session_id):
 )
 @api_view(["GET"])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([])
+@permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_poll_task_response(request, session_id, task_id):
     session = get_object_or_404(
-        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
+        ExperimentSession.objects.select_related(
+            "experiment_channel", "experiment", "participant"
+        ),
         external_id=session_id,
     )
 
-    if access_response := check_session_access(session, request):
-        return access_response
     task_details = get_message_task_response(session.experiment, task_id)
     if not task_details["complete"]:
         data = {"message": None, "status": "processing"}
@@ -475,7 +474,9 @@ def chat_poll_task_response(request, session_id, task_id):
         }
         return Response(data, status=status.HTTP_200_OK)
 
-    return Response({"error": "Unknown error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response(
+        {"error": "Unknown error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
 
 
 @extend_schema(
@@ -508,37 +509,46 @@ def chat_poll_task_response(request, session_id, task_id):
 )
 @api_view(["GET"])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([])
+@permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_poll_response(request, session_id):
     """
     Poll for new messages in a chat session
     """
     session = get_object_or_404(
-        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
+        ExperimentSession.objects.select_related(
+            "experiment_channel", "experiment", "participant"
+        ),
         external_id=session_id,
     )
 
-    if access_response := check_session_access(session, request):
-        return access_response
     since_param = request.query_params.get("since")
     limit = int(request.query_params.get("limit", 50))
     messages_query = session.chat.messages.order_by("created_at")
 
     if since_param:
         try:
-            since_datetime = timezone.datetime.fromisoformat(since_param.replace("Z", "+00:00"))
+            since_datetime = timezone.datetime.fromisoformat(
+                since_param.replace("Z", "+00:00")
+            )
             messages_query = messages_query.filter(created_at__gt=since_datetime)
         except ValueError:
             return Response(
-                {"error": "Invalid 'since' parameter format. Use ISO format."}, status=status.HTTP_400_BAD_REQUEST
+                {"error": "Invalid 'since' parameter format. Use ISO format."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
     # Get messages with limit
-    messages = list(messages_query[: limit + 1])  # Get one extra to check if there are more
+    messages = list(
+        messages_query[: limit + 1]
+    )  # Get one extra to check if there are more
     has_more = len(messages) > limit
     if has_more:
         messages = messages[:limit]
 
     session_status = "ended" if session.is_complete else "active"
-    response_data = {"messages": messages, "has_more": has_more, "session_status": session_status}
+    response_data = {
+        "messages": messages,
+        "has_more": has_more,
+        "session_status": session_status,
+    }
     return Response(ChatPollResponse(response_data).data, status=status.HTTP_200_OK)
