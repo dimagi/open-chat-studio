@@ -1,4 +1,7 @@
+import contextlib
+
 from django.core.management.base import BaseCommand
+from field_audit import disable_audit
 
 from apps.data_migrations.utils.migrations import is_migration_applied, run_once
 
@@ -9,6 +12,8 @@ class IdempotentCommand(BaseCommand):
 
     Subclasses must define:
         - migration_name: Unique identifier for this migration
+        - atomic: Set to False to disable atomic migration
+        - disable_audit: Set to True to disable model auditing for this migration
         - perform_migration(): Method containing the actual migration logic
 
     Example:
@@ -23,6 +28,8 @@ class IdempotentCommand(BaseCommand):
 
     # Subclasses must override this
     migration_name: str = ""
+    atomic = True
+    disable_audit = False
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -64,14 +71,16 @@ class IdempotentCommand(BaseCommand):
         # Execute migration
         self.stdout.write(f"Starting migration: {self.migration_name}")
         try:
-            with run_once(self.migration_name) as migration_context:
+            with run_once(self.migration_name, atomic=self.atomic) as migration_context:
                 if not migration_context.should_run and not force:
                     self.stdout.write(
                         self.style.WARNING(f"Migration '{self.migration_name}' was already applied during execution")
                     )
                     return
 
-                result = self.perform_migration(dry_run=False)
+                audit_context = disable_audit() if self.disable_audit else contextlib.nullcontext()
+                with audit_context:
+                    result = self.perform_migration(dry_run=False)
 
             self.stdout.write(self.style.SUCCESS(f"Migration '{self.migration_name}' completed successfully"))
 
