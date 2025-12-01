@@ -53,7 +53,7 @@ class SummarizeConversationAction(EventActionHandlerBase):
         llm = session.experiment.get_chat_model()
         chain = (prompt | llm).with_config({"run_name": "generate_summary"})
         new_lines = get_buffer_string(messages)
-        summary = chain.invoke({"summary": current_summary or "", "new_lines": new_lines}).text()
+        summary = chain.invoke({"summary": current_summary or "", "new_lines": new_lines}).text
 
         return summary
 
