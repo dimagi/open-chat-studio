@@ -106,35 +106,30 @@
             <div class="card bg-base-100 shadow-sm mb-4">
               <div class="card-body py-4">
                 <h3 class="card-title text-base">{{ agg.evaluator.name }}</h3>
-                <div class="overflow-x-auto">
-                  <table class="table table-sm">
-                    <thead>
-                      <tr>
-                        <th>Field</th>
-                        <th class="text-right">Mean</th>
-                        <th class="text-right">Median</th>
-                        <th class="text-right">Min</th>
-                        <th class="text-right">Max</th>
-                        <th class="text-right">Std Dev</th>
-                        <th class="text-right">Count</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for field_name, stats in agg.aggregates.items %}
-                        {% if stats.type == "numeric" %}
-                          <tr>
-                            <td class="font-medium">{{ field_name }}</td>
-                            <td class="text-right">{{ stats.mean|default:"-" }}</td>
-                            <td class="text-right">{{ stats.median|default:"-" }}</td>
-                            <td class="text-right">{{ stats.min|default:"-" }}</td>
-                            <td class="text-right">{{ stats.max|default:"-" }}</td>
-                            <td class="text-right">{{ stats.std_dev|default:"-" }}</td>
-                            <td class="text-right">{{ stats.count|default:"-" }}</td>
-                          </tr>
-                        {% endif %}
-                      {% endfor %}
-                    </tbody>
-                  </table>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
+                  {% for field_name, stats in agg.aggregates.items %}
+                    <div class="border border-base-300 rounded-lg p-3">
+                      <div class="flex justify-between items-center mb-2">
+                        <span class="font-medium">{{ field_name }}</span>
+                        <span class="text-xs text-base-content/60">n={{ stats.count }}</span>
+                      </div>
+                      {% if stats.type == "numeric" %}
+                        <div class="grid grid-cols-2 gap-1 text-sm">
+                          <div>mean: <span class="font-mono">{{ stats.mean }}</span></div>
+                          <div>median: <span class="font-mono">{{ stats.median }}</span></div>
+                          <div>min: <span class="font-mono">{{ stats.min }}</span></div>
+                          <div>max: <span class="font-mono">{{ stats.max }}</span></div>
+                        </div>
+                      {% elif stats.type == "categorical" %}
+                        <div class="text-sm mb-1">mode: <span class="font-medium">{{ stats.mode }}</span></div>
+                        <div class="flex flex-wrap gap-1">
+                          {% for value, pct in stats.distribution.items %}
+                            <span class="badge badge-sm badge-outline">{{ value }}: {{ pct }}%</span>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
                 </div>
               </div>
             </div>
