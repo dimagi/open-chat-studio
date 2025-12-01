@@ -1,12 +1,16 @@
+from __future__ import annotations
+
 from urllib.parse import urlparse
 
+from django.core.cache import cache
 from django.core.validators import validate_domain_name
 
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, ExperimentSession
 
 ALL_DOMAINS = "*"
+WIDGET_SESSION_CACHE_TTL = 300
 
 
 def match_domain_pattern(origin_domain: str, allowed_pattern: str) -> bool:
@@ -66,3 +70,39 @@ def validate_domain_or_wildcard(value):
     """Validate domain name, allowing wildcard subdomains (*.example.com)"""
     domain_part = value[2:] if value.startswith("*.") else value
     validate_domain_name(domain_part)
+
+
+def _get_experiment_session_cache_key(session_id: str) -> str:
+    """Generate cache key for widget session."""
+    return f"WIDGET_SESSION:{session_id}"
+
+
+def delete_experiment_session_cached(session_id: str) -> None:
+    """Invalidate widget session cache."""
+    if session_id:
+        cache.delete(_get_experiment_session_cache_key(session_id))
+
+
+def get_experiment_session_cached(session_id: str) -> ExperimentSession | None:
+    """
+    Get widget session from cache or database.
+
+    Returns cached session if available, otherwise fetches from database
+    and caches the result.
+    """
+    if not session_id:
+        return None
+
+    cache_key = _get_experiment_session_cache_key(session_id)
+
+    if session := cache.get(cache_key):
+        return session
+
+    try:
+        session = ExperimentSession.objects.select_related(
+            "experiment_channel", "experiment", "participant"
+        ).get(external_id=session_id)
+        cache.set(cache_key, session, WIDGET_SESSION_CACHE_TTL)
+        return session
+    except ExperimentSession.DoesNotExist:
+        return None

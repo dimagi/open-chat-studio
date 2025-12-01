@@ -19,6 +19,7 @@ from rest_framework.decorators import (
     parser_classes,
     permission_classes,
 )
+from rest_framework.exceptions import NotFound
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
@@ -34,11 +35,11 @@ from apps.api.serializers import (
 )
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
+from apps.channels.utils import get_experiment_session_cached
 from apps.chat.channels import ApiChannel
 from apps.chat.models import Chat, ChatAttachment
 from apps.experiments.models import (
     Experiment,
-    ExperimentSession,
     Participant,
     ParticipantData,
 )
@@ -117,12 +118,9 @@ def validate_file_upload(file):
 @permission_classes(SESSION_PERMISSION_CLASSES)
 @parser_classes([MultiPartParser])
 def chat_upload_file(request, session_id):
-    session = get_object_or_404(
-        ExperimentSession.objects.select_related(
-            "experiment_channel", "experiment", "participant"
-        ),
-        external_id=session_id,
-    )
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        return NotFound()
 
     if session.is_complete:
         return Response(
@@ -360,12 +358,9 @@ def chat_send_message(request, session_id):
     message_text = data["message"]
     attachment_ids = data.get("attachment_ids", [])
 
-    session = get_object_or_404(
-        ExperimentSession.objects.select_related(
-            "experiment_channel", "experiment", "participant"
-        ),
-        external_id=session_id,
-    )
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        return NotFound()
 
     # Verify session is active
     if session.is_complete:
@@ -451,12 +446,9 @@ def chat_send_message(request, session_id):
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_poll_task_response(request, session_id, task_id):
-    session = get_object_or_404(
-        ExperimentSession.objects.select_related(
-            "experiment_channel", "experiment", "participant"
-        ),
-        external_id=session_id,
-    )
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        return NotFound()
 
     task_details = get_message_task_response(session.experiment, task_id)
     if not task_details["complete"]:
@@ -514,12 +506,9 @@ def chat_poll_response(request, session_id):
     """
     Poll for new messages in a chat session
     """
-    session = get_object_or_404(
-        ExperimentSession.objects.select_related(
-            "experiment_channel", "experiment", "participant"
-        ),
-        external_id=session_id,
-    )
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        return NotFound()
 
     since_param = request.query_params.get("since")
     limit = int(request.query_params.get("limit", 50))

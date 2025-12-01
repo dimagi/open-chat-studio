@@ -6,7 +6,6 @@ from functools import wraps
 
 from django.conf import settings
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication
@@ -21,8 +20,11 @@ from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 
 from ..channels.models import ChannelPlatform
-from ..channels.utils import extract_domain_from_headers, validate_domain
-from ..experiments.models import ExperimentSession
+from ..channels.utils import (
+    extract_domain_from_headers,
+    validate_domain,
+    get_experiment_session_cached,
+)
 from .models import UserAPIKey
 
 logger = logging.getLogger("ocs.api")
@@ -76,12 +78,10 @@ class IsExperimentSessionStartedPermission(BasePermission):
     """
 
     def has_permission(self, request, view):
-        session = get_object_or_404(
-            ExperimentSession.objects.select_related(
-                "experiment_channel", "experiment", "participant"
-            ),
-            external_id=view.kwargs.get("session_id"),
-        )
+        session = get_experiment_session_cached(view.kwargs.get("session_id"))
+        if not session:
+            logging.error("Experiment Session does not exist")
+            return False
 
         if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
             return self._check_session_access(request, session)

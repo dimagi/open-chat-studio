@@ -3,7 +3,7 @@ from rest_framework import authentication
 from rest_framework.exceptions import AuthenticationFailed, ParseError
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.experiments.models import ExperimentSession
+from apps.channels.utils import get_experiment_session_cached
 
 
 class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
@@ -76,13 +76,9 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
             return auth_data.get("experiment_id")
 
         if session_id := request.parser_context["kwargs"].get("session_id"):
-            # Fix test cases when the request.session don't define the experiment_id
-            try:
-                session = ExperimentSession.objects.select_related("experiment").get(
-                    external_id=session_id
-                )
+            if session := get_experiment_session_cached(session_id):
                 return session.experiment.public_id
-            except ExperimentSession.DoesNotExist:
+            else:
                 raise AuthenticationFailed("Session does not exist")
 
         return None
