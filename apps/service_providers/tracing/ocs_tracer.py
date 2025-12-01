@@ -31,6 +31,7 @@ class OCSTracer(Tracer):
         self.experiment = experiment
         self.experiment_id = experiment.id
         self.team_id = experiment.team_id
+        self.team_slug = experiment.team.slug
         self.start_time: float = None
         self.trace_record = None
         self.error_detected = False
@@ -290,7 +291,7 @@ class OCSTracer(Tracer):
 
         return {
             "trace_id": self.trace_record.id,
-            "trace_url": self.trace_record.get_absolute_url(),
+            "trace_url": self.trace_record.get_absolute_url(self.team_slug),
             "trace_provider": self.type,
         }
 

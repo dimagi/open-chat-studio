@@ -1147,6 +1147,9 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def is_participant_allowed(self, identifier: str):
         return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
 
+    async def ais_participant_allowed(self, identifier: str):
+        return identifier in self.participant_allowlist or await self.team.members.filter(email=identifier).aexists()
+
     def _get_version_details(self) -> VersionDetails:
         """
         Returns a `Version` instance representing the experiment version.
@@ -1442,6 +1445,18 @@ class Participant(BaseTeamModel):
     def create_anonymous(cls, team: Team, platform: str, remote_id: str = "") -> "Participant":
         public_id = str(uuid.uuid4())
         return cls.objects.create(
+            team=team,
+            platform=platform,
+            identifier=f"anon:{public_id}",
+            public_id=public_id,
+            name="Anonymous",
+            remote_id=remote_id,
+        )
+
+    @classmethod
+    async def acreate_anonymous(cls, team: Team, platform: str, remote_id: str = "") -> "Participant":
+        public_id = str(uuid.uuid4())
+        return await cls.objects.acreate(
             team=team,
             platform=platform,
             identifier=f"anon:{public_id}",

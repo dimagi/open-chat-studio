@@ -21,6 +21,9 @@ chat_patterns = [
     path("<uuid:session_id>/message/", views.chat_send_message, name="send-message"),
     path("<uuid:session_id>/poll/", views.chat_poll_response, name="poll-response"),
     path("<uuid:session_id>/<str:task_id>/poll/", views.chat_poll_task_response, name="task-poll-response"),
+    # async
+    path("a/start/", views.achat_start_session, name="start-session-async"),
+    path("a/<uuid:session_id>/message/", views.achat_send_message, name="send-message-async"),
 ]
 
 urlpatterns = [

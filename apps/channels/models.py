@@ -150,6 +150,10 @@ class ExperimentChannelObjectManager(AuditingManager):
         channel, _ = self.get_or_create(team=team, platform=ChannelPlatform.API, name=f"{team.slug}-api-channel")
         return channel
 
+    async def aget_team_api_channel(self, team):
+        channel, _ = await self.aget_or_create(team=team, platform=ChannelPlatform.API, name=f"{team.slug}-api-channel")
+        return channel
+
     def get_team_web_channel(self, team):
         channel, _ = self.get_or_create(team=team, platform=ChannelPlatform.WEB, name=f"{team.slug}-web-channel")
         return channel

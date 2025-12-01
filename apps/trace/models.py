@@ -50,8 +50,9 @@ class Trace(models.Model):
     def __str__(self):
         return f"Trace {self.experiment} {self.session} {self.duration}ms"
 
-    def get_absolute_url(self):
-        return reverse("trace:trace_detail", args=[get_slug_for_team(self.team_id), self.id])
+    def get_absolute_url(self, team_slug=None):
+        team_slug = team_slug or get_slug_for_team(self.team_id)
+        return reverse("trace:trace_detail", args=[team_slug, self.id])
 
     def duration_seconds(self) -> float:
         return round(self.duration / 1000, 2)

@@ -65,6 +65,40 @@ def validate_embed_key_for_experiment(token: str, origin_domain: str, experiment
     return None
 
 
+async def avalidate_embed_key_for_experiment(
+    token: str, origin_domain: str, experiment_id: str
+) -> ExperimentChannel | None:
+    """
+    Validate embedded widget request for a specific experiment.
+    Used in start_session when we have experiment_id but not team yet.
+
+    Returns:
+        ExperimentChannel if validation succeeds, None otherwise.
+    """
+    if not token or not origin_domain:
+        return None
+
+    try:
+        channel = await ExperimentChannel.objects.select_related("experiment", "team").aget(
+            experiment__public_id=experiment_id,
+            platform=ChannelPlatform.EMBEDDED_WIDGET,
+            extra_data__widget_token=token,
+            deleted=False,
+        )
+    except ExperimentChannel.DoesNotExist:
+        return None
+
+    allowed_domains = channel.extra_data.get("allowed_domains", [])
+    if not allowed_domains or any(domain == ALL_DOMAINS for domain in allowed_domains):
+        return channel
+
+    for allowed_domain in allowed_domains:
+        if match_domain_pattern(origin_domain, allowed_domain):
+            return channel
+
+    return None
+
+
 def validate_platform_availability(experiment: Experiment, platform: ChannelPlatform):
     existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
     if platform in existing_platforms:
