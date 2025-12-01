@@ -36,7 +36,7 @@
     "daisyui": "^5.3.2",
     "eslint": "^9.36.0",
     "eslint-plugin-react": "^7.37.4",
-    "globals": "^16.4.0",
+    "globals": "^16.5.0",
     "mini-css-extract-plugin": "^2.9.1",
     "postcss": "^8.5.3",
     "postcss-import": "^16.1.1",
