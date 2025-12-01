@@ -128,18 +128,24 @@ def aggregate_field(values: list) -> dict:
     if not values:
         return {}
 
-    # Determine type from first non-None value
-    sample = next((v for v in values if v is not None), None)
-    if sample is None:
+    # Filter out None values
+    filtered = [v for v in values if v is not None]
+    if not filtered:
         return {}
 
+    sample = filtered[0]
     aggregators = get_aggregators_for_value(sample)
     if not aggregators:
-        return {"count": len(values)}
+        return {"count": len(filtered)}
 
-    result = {"type": aggregators[0].field_type, "count": len(values)}
+    # Filter to only values matching the determined type
+    filtered = [v for v in filtered if aggregators[0].accepts(v)]
+    if not filtered:
+        return {}
+
+    result = {"type": aggregators[0].field_type, "count": len(filtered)}
     for agg in aggregators:
-        computed = agg.compute(values)
+        computed = agg.compute(filtered)
         if computed is not None:
             result[agg.name] = computed
 
