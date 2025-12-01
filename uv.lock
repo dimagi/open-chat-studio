@@ -859,14 +859,14 @@ wheels = [
 
 [[package]]
 name = "django-otp"
-version = "1.3.0"
+version = "1.6.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/af/14/1b09f13c4e85d2de3b119035511166ff948a9eba7329fc558422fabdbb60/django_otp-1.3.0.tar.gz", hash = "sha256:8f4156a3c14ce2aaa31379385eadf388925cd50fc4b5d20a3b944f454c98ff7c", size = 69013, upload-time = "2023-11-08T17:32:05.961Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8c/83/ec6bf6b2b142e394c3dcbf7e9641ad5976c8b36947fba060dc71017a904d/django_otp-1.6.3.tar.gz", hash = "sha256:93f0011bc4cb6ef278733d75de351f3e2de6fd13ece56cf27b63e1da42322d24", size = 74641, upload-time = "2025-10-25T15:36:16.272Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/24/bf/f16d9fe1f2c827df203313de6c43b13ac39e4d09526f26b5ef7e25916fe8/django_otp-1.3.0-py3-none-any.whl", hash = "sha256:5277731bc05b6cdbf96aa84ac46018e30ed5fb248086053b0146f925de059060", size = 76246, upload-time = "2023-11-08T17:32:07.874Z" },
+    { url = "https://files.pythonhosted.org/packages/77/23/22d8b4e9280351d6236fac1fa30b5f1fc8fff70c4b615ba9d78f20468b5f/django_otp-1.6.3-py3-none-any.whl", hash = "sha256:f7ff9e6980c4aa9e6b9f7a7477de0a65583891a78e5b8c6cae0ec7cc0f78ce55", size = 68346, upload-time = "2025-10-25T15:36:14.748Z" },
 ]
 
 [[package]]
