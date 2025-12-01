@@ -80,7 +80,7 @@ class IsExperimentSessionStartedPermission(BasePermission):
     def has_permission(self, request, view):
         session = get_experiment_session_cached(view.kwargs.get("session_id"))
         if not session:
-            logging.error("Experiment Session does not exist")
+            logger.error("Experiment Session does not exist")
             return False
 
         if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
@@ -98,7 +98,7 @@ class IsExperimentSessionStartedPermission(BasePermission):
             session: Session object (should have experiment_channel prefetched)
 
         Returns:
-            Response object if access is denied, None if access is allowed
+            bool: True if access is allowed, False otherwise
         """
         embed_key = request.headers.get("X-Embed-Key")
         if not embed_key:
@@ -107,13 +107,13 @@ class IsExperimentSessionStartedPermission(BasePermission):
 
         origin_domain = extract_domain_from_headers(request)
         if not origin_domain:
-            logging.error("Origin or Referer header required for embedded widgets")
+            logger.error("Origin or Referer header required for embedded widgets")
             return False
 
         experiment_channel = session.experiment_channel
         allowed_domains = experiment_channel.extra_data.get("allowed_domains", [])
         if not validate_domain(origin_domain, allowed_domains):
-            logging.error("Domain not allowed")
+            logger.error("Domain not allowed")
             return False
 
         return True
