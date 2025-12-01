@@ -1,10 +1,15 @@
 import operator
 from typing import Annotated
 
-from langchain.agents import AgentState, create_agent
-from langchain_core.messages import SystemMessage
+from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware, AgentState, ModelRequest, dynamic_prompt
+from langchain_core.messages import RemoveMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
+from langgraph.graph.message import (
+    REMOVE_ALL_MESSAGES,
+)
+from langgraph.runtime import Runtime
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.documents.models import Collection
@@ -83,12 +88,28 @@ def _process_agent_output(node, session, message):
     return ai_message, ai_message_metadata
 
 
-def build_node_agent(node, state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
-    prompt_context = _get_prompt_context(node, session, state)
+class HistoryCompressionMiddleware(AgentMiddleware):
+    def __init__(self, session, node):
+        self.session = session
+        self.node = node
+
+    def before_model(self, state: AgentState, runtime: Runtime) -> dict[str, any] | None:  # noqa: ARG002
+        return {
+            "messages": [
+                RemoveMessage(id=REMOVE_ALL_MESSAGES),
+                *self.node.get_history(self.session, state["messages"]),
+                *state["messages"],
+            ]
+        }
+
+
+def build_node_agent(node, pipeline_state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
+    prompt_context = _get_prompt_context(node, session, pipeline_state)
 
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
 
-    def prompt_callable(state: AgentState):
+    @dynamic_prompt
+    def prompt_middleware(request: ModelRequest):
         prompt_template = PromptTemplate.from_template(node.prompt)
         context = prompt_context.get_context(prompt_template.input_variables)
         try:
@@ -97,14 +118,16 @@ def build_node_agent(node, state: PipelineState, session: ExperimentSession, too
         except KeyError as e:
             raise PipelineNodeRunError(str(e)) from e
 
-        history = node.get_history(session, [prompt] + state["messages"])
-        return [prompt] + history + state["messages"]
+        return prompt
 
     return create_agent(
         # TODO: I think this will fail with google builtin tools
         model=node.get_chat_model(),
         tools=tools,
-        prompt=prompt_callable,
+        middleware=[
+            prompt_middleware,
+            HistoryCompressionMiddleware(session=session, node=node),
+        ],
         state_schema=StateSchema,
     )
 
