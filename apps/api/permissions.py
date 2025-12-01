@@ -9,22 +9,14 @@ from django.http import HttpResponse
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication
-from rest_framework.permissions import (
-    SAFE_METHODS,
-    BasePermission,
-    DjangoModelPermissions,
-)
+from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions
 from rest_framework_api_key.permissions import KeyParser
 
+from apps.channels.models import ChannelPlatform
+from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 
-from ..channels.models import ChannelPlatform
-from ..channels.utils import (
-    extract_domain_from_headers,
-    validate_domain,
-    get_experiment_session_cached,
-)
 from .models import UserAPIKey
 
 logger = logging.getLogger("ocs.api")
@@ -67,9 +59,7 @@ class BearerTokenAuthentication(BaseKeyAuthentication):
     keyword = "Bearer"
 
     def get_key(self, request):
-        return ConfigurableKeyParser(keyword=self.keyword).get_from_authorization(
-            request
-        )
+        return ConfigurableKeyParser(keyword=self.keyword).get_from_authorization(request)
 
 
 class IsExperimentSessionStartedPermission(BasePermission):
@@ -86,9 +76,7 @@ class IsExperimentSessionStartedPermission(BasePermission):
         if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
             return self._check_session_access(request, session)
         else:
-            return self._check_experiment_access(
-                session.experiment, session.participant.identifier
-            )
+            return self._check_experiment_access(session.experiment, session.participant.identifier)
 
     def _check_session_access(self, request, session):
         """
@@ -182,12 +170,8 @@ def verify_hmac(view_func):
     # Based on https://github.com/dimagi/commcare-hq/blob/master/corehq/util/hmac_request.py
     @wraps(view_func)
     def _inner(request, *args, **kwargs):
-        expected_digest = convert_to_bytestring_if_unicode(
-            request.headers.get("X-Mac-Digest")
-        )
-        secret_key_bytes = convert_to_bytestring_if_unicode(
-            settings.COMMCARE_CONNECT_SERVER_SECRET
-        )
+        expected_digest = convert_to_bytestring_if_unicode(request.headers.get("X-Mac-Digest"))
+        secret_key_bytes = convert_to_bytestring_if_unicode(settings.COMMCARE_CONNECT_SERVER_SECRET)
 
         if not (expected_digest and secret_key_bytes):
             logger.exception(
