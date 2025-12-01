@@ -63,7 +63,6 @@ dependencies = [
     "tiktoken",
     "turn-python>=1.0.0",
     "twilio",
-    "whitenoise[brotli]",
     "phonenumberslite",
     "emoji",
     "python-magic",
@@ -83,6 +82,7 @@ dependencies = [
     "django-watchfiles>=1.4.0",
     "django-silk>=5.4.3",
     "django-oauth-toolkit>=3.1.0,<4.0.0",
+    "blacknoise>=1.2.0",
 ]
 
 [project.urls]
