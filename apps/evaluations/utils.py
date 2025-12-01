@@ -1,6 +1,7 @@
 import inspect
 import json
 import re
+from collections import Counter, defaultdict
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import F
@@ -377,3 +378,89 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
         )
 
     return create_model(model_name, **pydantic_fields)
+
+
+def build_trend_data(runs: list) -> dict:
+    """Build trend data for displaying charts from evaluation runs.
+
+    Args:
+        runs: List of EvaluationRun objects with prefetched aggregates__evaluator
+
+    Returns:
+        {
+            "evaluator_name": {
+                "field_name": {
+                    "type": "numeric" | "categorical",
+                    "points": [{"run_id": int, "date": str, "value": any, ...}],
+                    "categories": ["cat1", "cat2"],  # for categorical only
+                    "mean": float,  # for numeric only
+                }
+            }
+        }
+    """
+    if not runs:
+        return {}
+
+    trend = defaultdict(
+        lambda: defaultdict(
+            lambda: {
+                "type": None,
+                "points": [],
+                "categories": set(),
+            }
+        )
+    )
+
+    for run in runs:
+        for agg in run.aggregates.all():
+            evaluator_name = agg.evaluator.name
+
+            for field_name, stats in agg.aggregates.items():
+                if not isinstance(stats, dict) or "type" not in stats:
+                    continue
+
+                field = trend[evaluator_name][field_name]
+                field["type"] = stats["type"]
+
+                # Build point data
+                point = {
+                    "run_id": run.id,
+                    "date": run.created_at.strftime("%b %d"),
+                }
+
+                if stats["type"] == "numeric":
+                    point["value"] = stats.get("mean")
+                else:
+                    point["value"] = stats.get("mode")
+                    point["distribution"] = stats.get("distribution", {})
+                    # Collect categories
+                    if stats.get("distribution"):
+                        field["categories"].update(stats["distribution"].keys())
+
+                field["points"].append(point)
+
+    # Post-process: convert to regular dicts, sort categories, calculate means
+    result = {}
+    for evaluator_name, fields in trend.items():
+        result[evaluator_name] = {}
+        for field_name, field_data in fields.items():
+            processed = {
+                "type": field_data["type"],
+                "points": field_data["points"],
+            }
+
+            if field_data["type"] == "categorical":
+                processed["categories"] = sorted(field_data["categories"])
+                # Calculate overall mode across all runs
+                all_modes = [p["value"] for p in field_data["points"] if p["value"] is not None]
+                if all_modes:
+                    processed["mode"] = Counter(all_modes).most_common(1)[0][0]
+            else:
+                # Calculate mean for numeric fields
+                values = [p["value"] for p in field_data["points"] if p["value"] is not None]
+                if values:
+                    processed["mean"] = round(sum(values) / len(values), 2)
+
+            result[evaluator_name][field_name] = processed
+
+    return result
