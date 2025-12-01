@@ -1,7 +1,9 @@
 import hashlib
 import uuid
 
+from django.conf import settings
 from django.db.models import Model
+from django.utils.crypto import get_random_string
 from django.utils.text import slugify
 
 
@@ -71,10 +73,14 @@ def next_slug_iterator(display_name):
     base_slug = slugify(display_name)
     yield base_slug
 
-    suffix = 2
+    size = 2
     while True:
+        if settings.IS_TESTING:
+            suffix = get_random_string(size, allowed_chars="abcdefghijklmnopqrstuvwxyz0123456790")
+        else:
+            suffix = str(size)
         yield get_next_slug(base_slug, suffix)
-        suffix += 1
+        size += 1
 
 
 def get_next_slug(base_value, suffix, max_length=100):
