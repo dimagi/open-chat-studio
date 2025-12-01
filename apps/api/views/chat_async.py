@@ -1,9 +1,11 @@
+import json
 import logging
 
 from asgiref.sync import sync_to_async
 from django.db.models import prefetch_related_objects
 from django.http import JsonResponse
 from django.shortcuts import aget_object_or_404
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import serializers, status
 from rest_framework.response import Response
 
@@ -75,9 +77,14 @@ async def check_session_access(session, request):
     return await check_experiment_access(session.experiment, session.participant.identifier)
 
 
+@csrf_exempt
 async def achat_start_session(request):
     """Start a new chat session - supports both authenticated users and embedded widgets"""
-    serializer = ChatStartSessionRequest(data=request.POST)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    serializer = ChatStartSessionRequest(data=data)
     serializer.is_valid(raise_exception=True)
 
     data = serializer.validated_data
@@ -173,11 +180,16 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
     )
 
 
+@csrf_exempt
 async def achat_send_message(request, session_id):
     """
     Send a message to a chat session
     """
-    serializer = ChatSendMessageRequestWithAttachments(data=request.POST)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    serializer = ChatSendMessageRequestWithAttachments(data=data)
     serializer.is_valid(raise_exception=True)
 
     data = serializer.validated_data
