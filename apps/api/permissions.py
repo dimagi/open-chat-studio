@@ -123,17 +123,17 @@ class IsExperimentSessionStartedPermission(BasePermission):
         Check if the request has access to the experiment based on public API settings.
 
         Returns:
-            Response object if access is denied, None if access is allowed
+            bool: True if access is allowed, False otherwise
         """
         if experiment.is_public:
             return True
 
         if not participant_id:
-            logging.error("Participant is invalid")
+            logger.error("Participant is invalid")
             return False
 
         if not experiment.is_participant_allowed(participant_id):
-            logging.error("Participant not allowed")
+            logger.error("Participant not allowed")
             return False
 
         return True
