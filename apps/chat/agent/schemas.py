@@ -2,8 +2,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated
 
+from langchain.tools import InjectedState
 from langchain_core.tools import InjectedToolCallId
-from langgraph.prebuilt import InjectedState
 from pydantic import BaseModel, Field
 
 from apps.events.models import TimePeriod
