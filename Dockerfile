@@ -94,4 +94,4 @@ USER django
 
 ENV PORT=8000
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 0 config.wsgi:application"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 4 --worker-class uvicorn.workers.UvicornWorker --worker-connections 1000 config.asgi:application"]
