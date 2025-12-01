@@ -5,7 +5,7 @@ from typing import Any
 from unittest import mock
 from unittest.mock import patch
 
-from langchain.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
+from langchain_classic.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
 from langchain_community.chat_models import FakeListChatModel
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManagerForLLMRun
 from langchain_core.language_models import BaseLanguageModel

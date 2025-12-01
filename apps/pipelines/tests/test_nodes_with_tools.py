@@ -2,7 +2,7 @@ from unittest import mock
 from unittest.mock import Mock, patch
 
 import pytest
-from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
+from langchain_classic.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.messages import AIMessage, ToolCall
 from langchain_core.runnables import ensure_config
 from langchain_core.tools import Tool

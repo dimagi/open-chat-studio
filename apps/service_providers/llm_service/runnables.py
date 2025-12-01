@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Literal
 
 import openai
 from django.db import transaction
-from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
-from langchain.agents.output_parsers import tools as lc_tools_parser
+from langchain_classic.agents.openai_assistant.base import OpenAIAssistantFinish
+from langchain_classic.agents.output_parsers import tools as lc_tools_parser
 from langchain_core.agents import AgentFinish
 from langchain_core.load import Serializable
 from langchain_core.messages.tool import ToolMessage, tool_call
