@@ -53,7 +53,10 @@ class APIScopedValidator(OAuth2Validator):
 
     def get_additional_claims(self, request):
         claims = {"sub": request.user.email, "name": request.user.get_full_name(), "is_active": request.user.is_active}
-        token = getattr(request, "access_token", None)
-        if token and getattr(token, "team_id", None):
-            claims["team"] = get_slug_for_team(token.team_id)
+        if team := getattr(request, "team", None):
+            claims["team"] = team.slug
+        else:
+            token = getattr(request, "access_token", None)
+            if token and getattr(token, "team_id", None):
+                claims["team"] = get_slug_for_team(token.team_id)
         return claims
