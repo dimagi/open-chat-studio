@@ -232,7 +232,9 @@ async def achat_send_message(request, session_id):
     # Queue the response generation as a background task
     experiment_version = await Experiment.objects.aget_default_or_working(session.experiment)
 
-    await sync_to_async(prefetch_related_objects, thread_sensitive=True)([experiment_version], "team", "pipeline")
+    await sync_to_async(prefetch_related_objects, thread_sensitive=True)(
+        [experiment_version], "team", "pipeline", "trace_provider"
+    )
 
     response = await ahandle_api_message(
         request.user,
