@@ -160,12 +160,10 @@ async def ahandle_api_message(
     user, experiment_version, experiment_channel, message_text: str, participant_id: str, session=None
 ) -> ChatMessage:
     """Asynchronously handles the message coming from the API."""
-    from asgiref.sync import sync_to_async
-
     message = BaseMessage(participant_id=participant_id, message_text=message_text)
 
     # ApiChannel init is sync, wrap it
-    channel = await sync_to_async(ApiChannel)(
+    channel = ApiChannel(
         experiment_version,
         experiment_channel,
         experiment_session=session,

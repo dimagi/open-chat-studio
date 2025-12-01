@@ -80,10 +80,12 @@ async def check_session_access(session, request):
 @csrf_exempt
 async def achat_start_session(request):
     """Start a new chat session - supports both authenticated users and embedded widgets"""
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    data = request.POST
+    if not data:
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
     serializer = ChatStartSessionRequest(data=data)
     serializer.is_valid(raise_exception=True)
 
@@ -185,10 +187,12 @@ async def achat_send_message(request, session_id):
     """
     Send a message to a chat session
     """
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    data = request.POST
+    if not data:
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
     serializer = ChatSendMessageRequestWithAttachments(data=data)
     serializer.is_valid(raise_exception=True)
 

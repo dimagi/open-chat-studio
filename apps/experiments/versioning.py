@@ -338,6 +338,11 @@ class VersionsMixin:
             return self
         return self.working_version
 
+    async def aget_working_version(self):
+        if self.is_working_version:
+            return self
+        return await self.__class__.objects.aget(id=self.working_version_id)
+
     def get_working_version_id(self) -> int:
         return self.working_version_id if self.working_version_id else self.id
 

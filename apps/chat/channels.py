@@ -699,11 +699,13 @@ class ChannelBase(ABC):
         """Async version of participant permission check."""
         from asgiref.sync import sync_to_async
 
-        is_public = await sync_to_async(lambda: self.experiment.is_public)()
+        is_public = self.experiment.is_public
         if is_public:
             return True
 
-        return await sync_to_async(self.experiment.is_participant_allowed)(self.participant_identifier)
+        return await sync_to_async(self.experiment.is_participant_allowed, thread_sensitive=True)(
+            self.participant_identifier
+        )
 
     async def anew_user_message(self, message: BaseMessage) -> ChatMessage:
         """Async version of new_user_message."""
@@ -851,10 +853,7 @@ class ChannelBase(ABC):
 
     async def _aload_latest_session(self):
         """Loads the latest experiment session on the channel"""
-        from asgiref.sync import sync_to_async
-
-        # get_working_version() is a property that accesses FK
-        working_version = await sync_to_async(lambda: self.experiment.get_working_version())()
+        working_version = await self.experiment.aget_working_version()
 
         self.experiment_session = await (
             ExperimentSession.objects.select_related("participant", "experiment", "chat")  # Prefetch related objects
@@ -880,10 +879,8 @@ class ChannelBase(ABC):
         await self._aload_latest_session()
 
         if not self.experiment_session or self.message.message_text == "/reset":
-            from asgiref.sync import sync_to_async
-
             # Get working version
-            experiment = await sync_to_async(lambda: self.experiment.get_working_version())()
+            experiment = await self.experiment.aget_working_version()
 
             # Get or create participant
             participant, _ = await self._aget_or_create_participant()
@@ -1018,15 +1015,13 @@ class ChannelBase(ABC):
         if not self.experiment_session:
             return
 
-        from asgiref.sync import sync_to_async
-
         update_fields = ["last_activity_at"]
         self.experiment_session.last_activity_at = timezone.now()
 
         # Add experiment version to the list if it's a versioned experiment
-        is_version = await sync_to_async(lambda: self.experiment.is_a_version)()
+        is_version = self.experiment.is_a_version
         if is_version:
-            version_number = await sync_to_async(lambda: self.experiment.version_number)()
+            version_number = self.experiment.version_number
             current_versions = self.experiment_session.experiment_versions or []
             if version_number not in current_versions:
                 self.experiment_session.experiment_versions = current_versions + [version_number]
