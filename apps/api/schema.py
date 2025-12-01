@@ -41,8 +41,8 @@ class EmbeddedWidgetScheme(OpenApiAuthenticationExtension):
             "in": "header",
             "name": "X-Embed-Key",
             "description": (
-                "Embedded widget authentication token. Validates the widget token from the experiment channel "
-                "configuration and authenticates embedded widget requests. Requires chatbot_id (experiment public_id) "
+                "Embedded widget authentication token. Validates the widget token for the channel "
+                "configuration and authenticates embedded widget requests. Requires chatbot_id "
                 "in the request body for /api/chat/start/ or from session data for subsequent requests."
             ),
         }
