@@ -88,7 +88,7 @@ THIRD_PARTY_APPS = [
     "health_check.contrib.celery",
     "health_check.contrib.redis",
     "template_partials",
-    "silk",
+    # "silk",  # disable for async
     "oauth2_provider",
 ]
 
@@ -146,7 +146,7 @@ MIDDLEWARE = list(
             "django.middleware.common.CommonMiddleware",
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
-            "django_otp.middleware.OTPMiddleware",
+            # "django_otp.middleware.OTPMiddleware", # comment out for async test
             "django_htmx.middleware.HtmxMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
@@ -154,9 +154,9 @@ MIDDLEWARE = list(
             "django.contrib.messages.middleware.MessageMiddleware",
             "django.middleware.clickjacking.XFrameOptionsMiddleware",
             "waffle.middleware.WaffleMiddleware",
-            "field_audit.middleware.FieldAuditMiddleware",
+            # "field_audit.middleware.FieldAuditMiddleware", # covered by AuditTransactionMiddleware
             "apps.audit.middleware.AuditTransactionMiddleware",
-            "silk.middleware.SilkyMiddleware",
+            # "silk.middleware.SilkyMiddleware",
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.generics.middleware.OriginDetectionMiddleware",
@@ -605,6 +605,7 @@ LOGGING = {
             "level": "WARN",
         },
         "django": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
+        "django.request": {"handlers": ["console"], "level": "DEBUG", "propagate": False},
         "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},

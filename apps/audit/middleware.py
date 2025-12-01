@@ -2,6 +2,7 @@ import uuid
 
 from asgiref.sync import iscoroutinefunction, markcoroutinefunction
 from django.conf import settings
+from field_audit.field_audit import request as audit_request
 
 from apps.audit.transaction import audit_transaction
 
@@ -24,6 +25,14 @@ class AuditTransactionMiddleware:
         transaction_id = get_audit_transaction_id(request)
         with audit_transaction(transaction_id):
             return await self.get_response(request)
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        audit_request.set(request)
+        return None
+
+    async def aprocess_view(self, request, view_func, view_args, view_kwargs):
+        audit_request.set(request)
+        return None
 
 
 def get_audit_transaction_id(request):
