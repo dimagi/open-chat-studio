@@ -168,10 +168,13 @@ def mark_evaluation_complete(results, evaluation_run_id):
         results: List of results from the group tasks (unused but required by chord)
         evaluation_run_id: ID of the evaluation run to mark complete
     """
+    from apps.evaluations.aggregation import compute_aggregates_for_run
+
     try:
         evaluation_run = EvaluationRun.objects.get(id=evaluation_run_id)
         if evaluation_run.status == EvaluationRunStatus.PROCESSING:
             evaluation_run.mark_complete()
+            compute_aggregates_for_run(evaluation_run)
     except Exception as e:
         logger.exception(f"Error marking evaluation run {evaluation_run_id} complete: {e}")
 

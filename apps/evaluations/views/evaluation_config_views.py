@@ -156,6 +156,8 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
                 "evaluations:evaluation_results_table",
                 args=[team_slug, kwargs["evaluation_pk"], kwargs["evaluation_run_pk"]],
             )
+            if evaluation_run.status == EvaluationRunStatus.COMPLETED:
+                context["aggregates"] = evaluation_run.aggregates.select_related("evaluator").all()
 
         return context
 
