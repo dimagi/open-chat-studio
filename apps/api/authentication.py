@@ -49,7 +49,7 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
                 deleted=False,
             )
         except ExperimentChannel.DoesNotExist as e:
-            raise AuthenticationFailed("Embedded widget does not exist") from e
+            raise AuthenticationFailed("Invalid widget embed key") from e
 
         origin_domain = extract_domain_from_headers(request)
         if not origin_domain:
