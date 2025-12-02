@@ -6,17 +6,18 @@ from rest_framework.viewsets import GenericViewSet
 from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSerializer
 from apps.experiments.models import Experiment
+from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 
 @extend_schema_view(
     list=extend_schema(
         operation_id="experiment_list",
-        summary="List Experiments",
+        summary="List Chatbots",
         tags=["Experiments"],
     ),
     retrieve=extend_schema(
         operation_id="experiment_retrieve",
-        summary="Retrieve Experiment",
+        summary="Retrieve Chatbot",
         tags=["Experiments"],
         parameters=[
             OpenApiParameter(
@@ -29,7 +30,8 @@ from apps.experiments.models import Experiment
     ),
 )
 class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [DjangoModelPermissionsWithView]
+    permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
+    required_scopes = ["chatbots"]
     serializer_class = ExperimentSerializer
     lookup_field = "public_id"
     lookup_url_kwarg = "id"

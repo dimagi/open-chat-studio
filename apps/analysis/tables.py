@@ -7,7 +7,7 @@ from .models import TranscriptAnalysis
 
 class TranscriptAnalysisTable(tables.Table):
     name = columns.Column(linkify=True)
-    experiment = columns.Column(verbose_name="Experiment Name", accessor="experiment.name")
+    experiment = columns.Column(verbose_name="Experiment Name", accessor="experiment__name")
     status = columns.Column()
     created_at = columns.DateTimeColumn(verbose_name="Created")
     actions = columns.TemplateColumn(

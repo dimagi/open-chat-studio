@@ -458,18 +458,11 @@ class TestExperimentSession:
                 )
 
         session = ExperimentSession.objects.all().annotate_with_versions_list().first()
-        assert session.experiment_versions == expected_display_val
+        assert session.versions_list == expected_display_val
 
     @pytest.mark.parametrize("participant_data_injected", [True, False])
     def test_requires_participant_data(self, participant_data_injected):
         prompt = "data: {participant_data}" if participant_data_injected else "data"
-        # Case 1 - Experiment only
-        session = ExperimentSessionFactory(experiment__prompt_text=prompt)
-        assert session.requires_participant_data() == participant_data_injected
-
-        # Case 2 - Assistant
-        session = ExperimentSessionFactory(experiment__assistant=OpenAiAssistantFactory(instructions=prompt))
-        assert session.requires_participant_data() == participant_data_injected
 
         def _test_pipline(node_type, params):
             pipeline = PipelineFactory()
@@ -543,9 +536,9 @@ class TestSourceMaterialVersioning:
 @pytest.mark.django_db()
 class TestExperimentRouteVersioning:
     def _setup_route(self):
-        parent_exp = ExperimentFactory()
+        parent_exp = ExperimentFactory(pipeline=None, prompt_text="You are a helpful assistant")
         team = parent_exp.team
-        child_exp = ExperimentFactory(team=team)
+        child_exp = ExperimentFactory(team=team, pipeline=None, prompt_text="You are a helpful assistant")
         exp_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_exp, keyword="testing")
         return child_exp, exp_route
 
@@ -554,7 +547,8 @@ class TestExperimentRouteVersioning:
         When the child doesn't have a version then we expect a new version to be created for the new route version.
         """
         child_exp, exp_route = self._setup_route()
-        route_version = exp_route.create_new_version(new_parent=ExperimentFactory(team=exp_route.team))
+        new_parent = ExperimentFactory(team=exp_route.team, pipeline=None, prompt_text="You are a helpful assistant")
+        route_version = exp_route.create_new_version(new_parent=new_parent)
 
         assert route_version.child == child_exp.latest_version
 
@@ -571,7 +565,8 @@ class TestExperimentRouteVersioning:
         child_exp.prompt_text = "New prompt"
 
         # This should create a new version of the child as well
-        route_version = exp_route.create_new_version(new_parent=ExperimentFactory(team=exp_route.team))
+        new_parent = ExperimentFactory(team=exp_route.team, pipeline=None, prompt_text="You are a helpful assistant")
+        route_version = exp_route.create_new_version(new_parent=new_parent)
         assert child_exp.latest_version != first_child_version
         assert route_version.child == child_exp.latest_version
 
@@ -582,7 +577,8 @@ class TestExperimentRouteVersioning:
         child_exp, exp_route = self._setup_route()
         # First create a version of the child
         child_version = child_exp.create_new_version()
-        route_version = exp_route.create_new_version(new_parent=ExperimentFactory(team=exp_route.team))
+        new_parent = ExperimentFactory(team=exp_route.team, pipeline=None, prompt_text="You are a helpful assistant")
+        route_version = exp_route.create_new_version(new_parent=new_parent)
         assert route_version.child == child_version
 
 

@@ -259,12 +259,12 @@ class EvaluationSessionsSelectionTable(tables.Table):
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_message_created_at", verbose_name="Last Message", orderable=True)
-    versions = columns.Column(verbose_name="Versions", accessor="experiment_versions", orderable=False)
+    versions = columns.Column(verbose_name="Versions", accessor="versions_list", orderable=False)
     message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
     session = actions.ActionsColumn(
         actions=[
             chip_action(
-                label_factory=lambda record, _: record.external_id,
+                label="View Session",
                 url_factory=_chip_session_url_factory,
                 open_url_in_new_tab=True,
             ),
@@ -277,7 +277,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
         fields = []
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
-            "data-redirect-url": None,
+            "data-redirect-target": "_blank",
         }
         attrs = {"class": "table w-full"}
         orderable = False

@@ -89,6 +89,7 @@ THIRD_PARTY_APPS = [
     "health_check.contrib.redis",
     "template_partials",
     "silk",
+    "oauth2_provider",
 ]
 
 PROJECT_APPS = [
@@ -123,6 +124,8 @@ PROJECT_APPS = [
     "apps.trace",
     "apps.mcp_integrations",
     "apps.filters",
+    "apps.data_migrations",
+    "apps.oauth",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -226,6 +229,7 @@ else:
             "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
             "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
             "CONN_HEALTH_CHECKS": True,
+            "DISABLE_SERVER_SIDE_CURSORS": env.bool("DJANGO_DISABLE_SERVER_SIDE_CURSORS", default=False),
         }
     }
 
@@ -405,12 +409,14 @@ SITE_ID = 1
 # DRF config
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.oauth.permissions.OAuth2AccessTokenAuthentication",
         "apps.api.permissions.ApiKeyAuthentication",
         "apps.api.permissions.BearerTokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
         "apps.api.permissions.ReadOnlyAPIKeyPermission",
+        "apps.oauth.permissions.TokenHasOAuthScope",
     ],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
@@ -814,3 +820,36 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
             return "silky" in request.htmx.current_url
 
     return "silky" in request.headers.get("referer", "")
+
+
+# API
+OAUTH2_PROVIDER = {
+    "PKCE_REQUIRED": env.bool("OAUTH_PKCE_REQUIRED", default=True),
+    "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.APIScopedValidator",
+    "SCOPES": {
+        "chatbots:read": "List and Retrieve Chatbot Data",
+        "chatbots:interact": "Converse with a Chatbot and trigger bot messages",
+        "sessions:read": "List and Read Sessions",
+        "sessions:write": "Manage Sessions",
+        "files:read": "Download file content",
+        "participants:write": "Update Participant Data",
+    },
+}
+if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
+    OAUTH2_PROVIDER.update(
+        {
+            "OIDC_ENABLED": True,
+            "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
+        }
+    )
+    OAUTH2_PROVIDER["SCOPES"].update(
+        {
+            "openid": "OpenID Connect scope",
+            "profile": "User Profile",
+        }
+    )
+OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
+OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
+OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"
+OAUTH2_PROVIDER_GRANT_MODEL = "oauth.OAuth2Grant"
+OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth.OAuth2RefreshToken"

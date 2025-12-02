@@ -212,7 +212,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         - The last human message was sent at a time earlier than the trigger time
         - There have been fewer trigger attempts than the total number defined by the trigger
         """
-        from apps.chat.tasks import STATUSES_FOR_COMPLETE_CHATS
+        from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 
         time_window_to_ignore = timezone.now() - timedelta(seconds=self.delay)
 

@@ -19,7 +19,7 @@ jobs:
       matrix:
         node-version: [18.x]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v6
         with:
@@ -33,7 +33,7 @@ jobs:
         run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
         shell: bash
       - name: Install dependencies
-        run: npm install
+        run: npm ci
         working-directory: ./components/chat_widget
       - name: Test
         run: npm run test

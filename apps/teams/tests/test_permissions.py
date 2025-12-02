@@ -36,6 +36,7 @@ IGNORE_APPS = {
     "celery_progress",
     "contenttypes",
     "corsheaders",
+    "data_migrations",
     "db",  # heath_check.db
     "django_celery_beat",
     "django_cleanup",
@@ -78,6 +79,7 @@ IGNORE_APPS = {
     "waffle",
     "web",
     "silk",
+    "oauth2_provider",
 }
 
 IGNORE_MODELS = {"teams": {"flag"}}

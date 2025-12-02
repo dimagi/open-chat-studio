@@ -170,23 +170,55 @@ class ChoiceColumnFilter(ColumnFilter):
 
 class StringColumnFilter(ColumnFilter):
     type: str = TYPE_STRING
+    columns: list[str] = Field(default_factory=list)
+
+    def _apply_with_lookup(self, queryset, lookup, value):
+        """Apply filter with optional OR logic across multiple columns.
+        queryset: The queryset to filter
+        lookup: The Django lookup to use (e.g., 'icontains', 'istartswith'), or None for exact match
+        value: The value to filter by
+        """
+        from django.db.models import Q
+
+        # Build Q object for OR logic
+        q = Q()
+
+        for col in self.columns:
+            filter_key = f"{col}__{lookup}" if lookup else col
+            q |= Q(**{filter_key: value})
+
+        return queryset.filter(q)
 
     def apply_equals(self, queryset, value, timezone=None) -> QuerySet:
-        return queryset.filter(**{f"{self.column}": value})
+        return self._apply_with_lookup(queryset, None, value)
 
     def apply_contains(self, queryset, value, timezone=None) -> QuerySet:
-        return queryset.filter(**{f"{self.column}__icontains": value})
+        return self._apply_with_lookup(queryset, "icontains", value)
 
     def apply_does_not_contain(self, queryset, value, timezone=None) -> QuerySet:
-        return queryset.exclude(**{f"{self.column}__icontains": value})
+        from django.db.models import Q
+
+        # For exclusion: exclude if it matches ANY column
+        q = Q()
+        for col in self.columns:
+            q |= Q(**{f"{col}__icontains": value})
+
+        return queryset.exclude(q)
 
     def apply_starts_with(self, queryset, value, timezone=None) -> QuerySet:
-        return queryset.filter(**{f"{self.column}__istartswith": value})
+        return self._apply_with_lookup(queryset, "istartswith", value)
 
     def apply_ends_with(self, queryset, value, timezone=None) -> QuerySet:
-        return queryset.filter(**{f"{self.column}__iendswith": value})
+        return self._apply_with_lookup(queryset, "iendswith", value)
 
     def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
         if values := self.values_list(value):
-            return queryset.filter(**{f"{self.column}__in": values})
+            from django.db.models import Q
+
+            # OR logic across multiple columns
+            q = Q()
+            for col in self.columns:
+                q |= Q(**{f"{col}__in": values})
+            return queryset.filter(q)
+
         return queryset

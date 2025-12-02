@@ -17,14 +17,6 @@
       "type": "integer",
       "ui:widget": "none"
     },
-    "llm_temperature": {
-      "default": 0.7,
-      "maximum": 2.0,
-      "minimum": 0.0,
-      "title": "Temperature",
-      "type": "number",
-      "ui:widget": "range"
-    },
     "llm_model_parameters": {
       "additionalProperties": true,
       "title": "Llm Model Parameters",
@@ -109,12 +101,14 @@
       "ui:widget": "select",
       "type": "integer"
     },
-    "collection_index_id": {
-      "default": null,
-      "title": "Collection Index",
+    "collection_index_ids": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Collection Indexes",
+      "type": "array",
       "ui:optionsSource": "collection_index",
-      "ui:widget": "select",
-      "type": "integer"
+      "ui:widget": "searchable_multiselect"
     },
     "max_results": {
       "default": 20,

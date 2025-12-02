@@ -602,6 +602,7 @@ class AgentTools(models.TextChoices):
     ATTACH_MEDIA = "attach-media", gettext("Attach Media")
     END_SESSION = "end-session", gettext("End Session")
     SEARCH_INDEX = "file-search", gettext("File Search")
+    SEARCH_INDEX_BY_ID = "file-search-by-index", gettext("File Search by index ID")
     SET_SESSION_STATE = "set-session-state", gettext("Set Session State")
     GET_SESSION_STATE = "get-session-state", gettext("Get Session State")
     CALCULATOR = "calculator", gettext("Calculator")
@@ -613,7 +614,7 @@ class AgentTools(models.TextChoices):
     @staticmethod
     def user_tool_choices(include_end_session: bool = True) -> list[tuple]:
         """Returns the set of tools that a user should be able to attach to the bot"""
-        excluded_tools = [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX]
+        excluded_tools = [AgentTools.ATTACH_MEDIA, AgentTools.SEARCH_INDEX, AgentTools.SEARCH_INDEX_BY_ID]
         if not include_end_session:
             excluded_tools.append(AgentTools.END_SESSION)
         return [(tool.value, tool.label) for tool in AgentTools if tool not in excluded_tools]
@@ -863,9 +864,12 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return Chip(label=label, url=url)
 
     def get_chat_model(self):
+        from apps.service_providers.llm_service.default_models import get_model_parameters
+
         service = self.get_llm_service()
         provider_model_name = self.get_llm_provider_model_name()
-        return service.get_chat_model(provider_model_name, self.temperature)
+        params = get_model_parameters(provider_model_name, temperature=self.temperature)
+        return service.get_chat_model(provider_model_name, **params)
 
     def get_llm_service(self):
         if self.assistant:
@@ -1694,7 +1698,7 @@ class ExperimentSessionQuerySet(models.QuerySet):
             .values("versions")[:1],
             output_field=CharField(),
         )
-        return self.annotate(experiment_versions=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
+        return self.annotate(versions_list=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
 
 
 class ExperimentSessionObjectManager(models.Manager):
@@ -1732,6 +1736,14 @@ class ExperimentSession(BaseTeamModel):
         blank=True,
     )
     state = SanitizedJSONField(default=dict)
+    platform = models.CharField(max_length=128, blank=True, null=True)  # noqa: DJ001
+    experiment_versions = ArrayField(
+        models.PositiveIntegerField(),
+        null=True,
+        blank=True,
+        help_text="Array of unique experiment version numbers seen by this session",
+    )
+    last_activity_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last user interaction")
 
     class Meta:
         ordering = ["-created_at"]
@@ -1812,7 +1824,7 @@ class ExperimentSession(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse(
-            "experiments:experiment_session_view",
+            "chatbots:chatbot_session_view",
             args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
         )
 

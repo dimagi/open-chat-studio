@@ -13,7 +13,14 @@ from apps.channels.datamodels import Attachment
 from apps.experiments.models import AgentTools
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.nodes.base import Intents, PipelineState, merge_dict_values_as_lists
-from apps.pipelines.nodes.nodes import EndNode, Passthrough, RouterNode, StartNode, StaticRouterNode
+from apps.pipelines.nodes.nodes import (
+    EndNode,
+    LLMResponseWithPrompt,
+    Passthrough,
+    RouterNode,
+    StartNode,
+    StaticRouterNode,
+)
 from apps.pipelines.tests.utils import (
     assistant_node,
     boolean_node,
@@ -1266,5 +1273,19 @@ def test_end_session_tool(get_llm_service, provider, provider_model, pipeline, e
     runnable = create_runnable(pipeline, nodes, edges)
 
     output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
-    print(output)
     assert output["intents"] == [Intents.END_SESSION]
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+def test_llm_model_parameters_with_none_value(provider, provider_model):
+    """There was a bug where llm_model_parameters being `None` caused validation to fail, because it didn't default
+    to a dictionary correctly
+    """
+    data = llm_response_with_prompt_node(
+        provider_id=str(provider.id),
+        provider_model_id=str(provider_model.id),
+        llm_model_parameters=None,
+    )
+    params = data["params"] | {"django_node": 1, "node_id": "1"}
+    validated = LLMResponseWithPrompt.model_validate(params)
+    assert validated.llm_model_parameters == {"temperature": 0.7}

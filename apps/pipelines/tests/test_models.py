@@ -80,16 +80,25 @@ class TestVersioningNodes:
         node_type = LLMResponseWithPrompt.__name__
         collection = CollectionFactory(is_index=is_index)
         pipeline = PipelineFactory()
-        param_name = "collection_index_id" if is_index else "collection_id"
-        node = NodeFactory(type=node_type, pipeline=pipeline, params={param_name: str(collection.id)})
+        if is_index:
+            param_name = "collection_index_ids"
+            param_value = [collection.id]
+        else:
+            param_name = "collection_id"
+            param_value = str(collection.id)
+        node = NodeFactory(type=node_type, pipeline=pipeline, params={param_name: param_value})
 
         # Versioning it should version the collection as well
         pipeline.create_new_version()
 
         # Versioning it without changes to the collection should not version the collection
         pipeline.create_new_version()
-        assert node.versions.first().params[param_name] == str(collection.versions.first().id)
-        assert node.versions.last().params[param_name] == str(collection.versions.first().id)
+        if is_index:
+            assert node.versions.first().params[param_name] == [collection.versions.first().id]
+            assert node.versions.last().params[param_name] == [collection.versions.first().id]
+        else:
+            assert node.versions.first().params[param_name] == str(collection.versions.first().id)
+            assert node.versions.last().params[param_name] == str(collection.versions.first().id)
 
     def test_version_llm_with_prompt_node_with_source_material(self):
         node_type = LLMResponseWithPrompt.__name__
@@ -123,7 +132,7 @@ class TestVersioningNodes:
             pipeline=pipeline,
             params={
                 "collection_id": str(collection.id),
-                "collection_index_id": str(collection_index.id),
+                "collection_index_ids": [str(collection_index.id)],
                 "source_material_id": str(source_material.id),
             },
         )
@@ -136,7 +145,7 @@ class TestVersioningNodes:
 
         node_version = pipeline_version.node_set.get(type=node_type)
         assert node_version.params["collection_id"] == str(collection_version.id)
-        assert node_version.params["collection_index_id"] == str(collection_index_version.id)
+        assert node_version.params["collection_index_ids"] == [collection_index_version.id]
         assert node_version.params["source_material_id"] == str(source_material_version.id)
 
         # Second versioning without changes - should reuse existing dependency versions
@@ -144,7 +153,7 @@ class TestVersioningNodes:
 
         node_version_2 = pipeline_version_2.node_set.get(type=node_type)
         assert node_version_2.params["collection_id"] == str(collection_version.id)
-        assert node_version_2.params["collection_index_id"] == str(collection_index_version.id)
+        assert node_version_2.params["collection_index_ids"] == [collection_index_version.id]
         assert node_version_2.params["source_material_id"] == str(source_material_version.id)
 
 
@@ -184,7 +193,7 @@ class TestArchivingNodes:
             pipeline=pipeline,
             params={
                 "collection_id": str(collection.id),
-                "collection_index_id": str(collection_index.id),
+                "collection_index_ids": [str(collection_index.id)],
             },
         )
         pipeline.create_new_version()

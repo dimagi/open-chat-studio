@@ -1,19 +1,16 @@
 from unittest.mock import Mock
 
-import pytest
 from django.test import TestCase
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.channels import _start_experiment_session
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.chat.tasks import _get_latest_sessions_for_participants
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
 from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider
 from apps.service_providers.tests.mock_tracer import MockTracer
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import Team
 from apps.users.models import CustomUser
-from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.langchain import mock_llm
 
 
@@ -89,31 +86,3 @@ class TasksTest(TestCase):
                 message_type=ChatMessageType.AI,
                 content="Hello. How can I assist you today?",
             )
-
-
-@pytest.mark.django_db()
-def test_get_latest_sessions_for_participants():
-    p1_session1 = ExperimentSessionFactory()
-    participant_1 = p1_session1.participant
-    experiment = p1_session1.experiment
-    ExperimentSessionFactory(experiment=experiment, participant=participant_1)
-    part1_exp1_session3 = ExperimentSessionFactory(experiment=experiment, participant=participant_1)
-
-    p2_session1 = ExperimentSessionFactory(experiment=experiment)
-    participant_2 = p2_session1.participant
-    part2_exp1_session2 = ExperimentSessionFactory(experiment=experiment, participant=participant_2)
-
-    part2_exp2_session1 = ExperimentSessionFactory(participant=participant_2)
-    assert part2_exp2_session1.team != part2_exp1_session2.team
-
-    chat_ids = [participant_1.identifier, participant_2.identifier]
-    sessions = _get_latest_sessions_for_participants(chat_ids, experiment_public_id=str(experiment.public_id))
-    # Let's make sure the experiment was correctly filtered
-    assert len(set([s.experiment for s in sessions])) == 1
-    assert sessions[0].experiment == experiment
-
-    # Let's make sure only the latest sessions of each participant is returned
-    assert len(sessions) == 2
-    session_ids = [s.id for s in sessions]
-    assert part1_exp1_session3.id in session_ids
-    assert part2_exp1_session2.id in session_ids

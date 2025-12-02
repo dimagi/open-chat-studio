@@ -148,7 +148,7 @@ class LlmService(pydantic.BaseModel):
     def get_assistant(self, assistant_id: str, as_agent=False):
         raise NotImplementedError
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         raise NotImplementedError
 
     def transcribe_audio(self, audio: BytesIO) -> str:
@@ -167,15 +167,15 @@ class LlmService(pydantic.BaseModel):
         self, llm_output, session: ExperimentSession, include_citations: bool = True
     ) -> LlmChatResponse:
         if isinstance(llm_output, dict):
-            llm_outputs = llm_output.get("output", "")
+            output_content = llm_output.get("output", "")
         elif isinstance(llm_output, str):
-            llm_outputs = llm_output
+            output_content = llm_output
         elif isinstance(llm_output, list):
             # Normalize list outputs: support list[dict] and list[str]
             if all(isinstance(o, dict) for o in llm_output):
-                llm_outputs = llm_output
+                output_content = llm_output
             elif all(isinstance(o, str) for o in llm_output):
-                llm_outputs = "\n".join(llm_output)
+                output_content = "\n".join(llm_output)
             else:
                 raise TypeError("Unexpected mixed or unsupported list element types in llm_output")
         else:
@@ -184,28 +184,30 @@ class LlmService(pydantic.BaseModel):
         final_text = ""
         cited_file_ids_remote = []
         cited_file_ids = []
-        cited_files = []
         generated_files: list[File] = []
-        if isinstance(llm_outputs, list):
-            for output in llm_outputs:
+        if isinstance(output_content, str):
+            final_text = output_content
+        elif isinstance(output_content, list):
+            for output in output_content:
                 # Populate text
                 final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
-                annotations = output.get("annotations", [])
+                annotation_entries = output.get("annotations", [])
                 if include_citations:
-                    external_ids = self.get_cited_file_ids(annotations)
+                    external_ids = self.get_cited_file_ids(annotation_entries)
                     cited_file_ids_remote.extend(external_ids)
 
-                generated_files.extend(self.get_generated_files(annotations, session.team_id))
+                generated_files.extend(self.get_generated_files(annotation_entries, session.team_id))
 
                 # Replace generated file links with actual file download links
                 for generated_file in generated_files:
                     final_text = self.replace_file_links(text=final_text, file=generated_file, session=session)
         else:
-            final_text = llm_outputs
-            # This path is followed when OCS citations are injected into the output
-            cited_file_ids.extend(extract_file_ids_from_ocs_citations(llm_outputs))
+            raise TypeError(f"Unexpected llm_output type: {type(llm_output).__name__}")
 
+        cited_file_ids.extend(extract_file_ids_from_ocs_citations(final_text))
+
+        cited_files = []
         if include_citations:
             cited_files = File.objects.filter(
                 Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=session.team_id
@@ -252,12 +254,13 @@ class OpenAIGenericService(LlmService):
     openai_api_key: str
     openai_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
-        model = ChatOpenAI(
-            model=llm_model,
-            temperature=1 if llm_model.startswith(("o3", "o4", "gpt-5")) else temperature,
-            **self._get_model_kwargs(**kwargs),
-        )
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        model_kwargs = self._get_model_kwargs(**kwargs)
+        if "temperature" in model_kwargs and llm_model.startswith(("o3", "o4", "gpt-5", "o1")):
+            # Remove the temperature parameter for custom reasoning models
+            model_kwargs.pop("temperature")
+
+        model = ChatOpenAI(model=llm_model, **model_kwargs, use_responses_api=True)
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
@@ -393,13 +396,13 @@ class AzureLlmService(LlmService):
     openai_api_base: str
     openai_api_version: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
             openai_api_key=self.openai_api_key,
             deployment_name=llm_model,
-            temperature=temperature,
+            **kwargs,
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
@@ -413,12 +416,11 @@ class AnthropicLlmService(LlmService):
     anthropic_api_key: str
     anthropic_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return ChatAnthropic(
             anthropic_api_key=self.anthropic_api_key,
             anthropic_api_url=self.anthropic_api_base,
             model=llm_model,
-            temperature=temperature,
             **self._get_model_kwargs(**kwargs),
         )
 
@@ -460,12 +462,9 @@ class DeepSeekLlmService(LlmService):
     deepseek_api_key: str
     deepseek_api_base: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         return ChatOpenAI(
-            model=llm_model,
-            temperature=temperature,
-            openai_api_key=self.deepseek_api_key,
-            openai_api_base=self.deepseek_api_base,
+            model=llm_model, openai_api_key=self.deepseek_api_key, openai_api_base=self.deepseek_api_base, **kwargs
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
@@ -478,12 +477,8 @@ class DeepSeekLlmService(LlmService):
 class GoogleLlmService(LlmService):
     google_api_key: str
 
-    def get_chat_model(self, llm_model: str, temperature: float, **kwargs) -> BaseChatModel:
-        return ChatGoogleGenerativeAI(
-            model=llm_model,
-            google_api_key=self.google_api_key,
-            temperature=temperature,
-        )
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))

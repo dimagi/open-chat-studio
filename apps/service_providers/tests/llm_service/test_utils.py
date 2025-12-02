@@ -8,7 +8,6 @@ from apps.service_providers.llm_service.utils import (
     populate_reference_section_from_citations,
     remove_citations_from_text,
 )
-from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 
 
@@ -36,7 +35,6 @@ def test_extract_file_ids_from_ocs_citations(input_text, expected_file_ids):
     assert result == expected_file_ids
 
 
-@pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("text", "file_setups", "expected_output"),
     [
@@ -97,20 +95,26 @@ def test_extract_file_ids_from_ocs_citations(input_text, expected_file_ids):
     ],
 )
 def test_populate_reference_section_from_citations(text, file_setups, expected_output):
-    # Create experiment session
-    session = ExperimentSessionFactory()
-
     # Create file objects based on setups
     cited_files = []
     for file_setup in file_setups:
-        file = FileFactory(id=file_setup["id"], name=file_setup["name"], team=session.team)
-        # Mock the download_link method to return a predictable URL
-        file.download_link = Mock(return_value=f"http://example.com/download/{file_setup['id']}")
+        file = FileFactory.build(id=file_setup["id"], name=file_setup["name"])
+        # Mock the get_citation_url method to return a predictable URL
+        file.get_citation_url = Mock(return_value=f"http://example.com/download/{file_setup['id']}")
         cited_files.append(file)
 
     # Test the function
-    result = populate_reference_section_from_citations(text, cited_files, session)
+    result = populate_reference_section_from_citations(text, cited_files, Mock())
     assert result == expected_output
+
+
+def test_populate_reference_section_with_custom_citation():
+    text = "Here is a fact <CIT 123 />."
+    file = FileFactory.build(
+        id=123, name="file name", metadata={"citation_url": "http://custom_link", "citation_text": "custom text"}
+    )
+    result = populate_reference_section_from_citations(text, [file], Mock())
+    assert result == "Here is a fact [^1].\n\n[^1]: [custom text](http://custom_link)"
 
 
 @pytest.mark.parametrize(

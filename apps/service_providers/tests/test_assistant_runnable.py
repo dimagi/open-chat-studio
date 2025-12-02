@@ -1,5 +1,5 @@
 from contextlib import nullcontext as does_not_raise
-from typing import Literal
+from typing import Any, Literal
 from unittest import mock
 from unittest.mock import Mock, patch
 
@@ -16,14 +16,14 @@ from openai.types.file_object import FileObject
 from apps.assistants.models import ToolResources
 from apps.channels.datamodels import Attachment
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
-from apps.experiments.models import AgentTools
+from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import (
+    AgentAssistantChat,
     AssistantChat,
     GenerationCancelled,
     GenerationError,
-    create_experiment_runnable,
 )
 from apps.service_providers.tracing import TracingService
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -742,3 +742,24 @@ def test_assistant_empty_messages_list(
 
     # Verify that an empty output was returned
     assert result.output == ""
+
+
+def create_experiment_runnable(
+    experiment: Experiment, session: ExperimentSession, trace_service: Any, disable_tools: bool = False
+):
+    """Create an experiment runnable based on the experiment configuration."""
+
+    if assistant := experiment.assistant:
+        history_manager = ExperimentHistoryManager.for_assistant(
+            session=session, experiment=experiment, trace_service=trace_service
+        )
+        assistant_adapter = AssistantAdapter.for_experiment(experiment, session)
+        if assistant.tools_enabled and not disable_tools:
+            runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)
+        else:
+            runnable = AssistantChat(adapter=assistant_adapter, history_manager=history_manager)
+        # This is a temporary hack until we return an object with metadata about the run
+        runnable.experiment = experiment
+        return runnable
+
+    raise NotImplementedError("Only assistant runnables are supported")

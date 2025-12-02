@@ -1,4 +1,5 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo} from "react";
+import Select from 'react-select';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
@@ -28,6 +29,8 @@ export function getWidget(name: string, params: PropertySchema) {
       return SelectWidget
     case "multiselect":
       return MultiSelectWidget
+    case "searchable_multiselect":
+      return SearchableMultiSelectWidget
     case "llm_provider_model":
       return LlmWidget
     case "history":
@@ -208,7 +211,9 @@ function SelectWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <div className="flex flex-row gap-2">
       <select
-        className="select w-full"
+        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+        // Should be resolved in future versions of browsers.
+        className="select appearance-none w-full"
         name={props.name}
         onChange={onUpdate}
         value={props.paramValue}
@@ -281,6 +286,61 @@ function MultiSelectWidget(props: WidgetParams) {
       ))}
     </InputField>
   )
+}
+
+function SearchableMultiSelectWidget(props: WidgetParams) {
+  const options = getSelectOptions(props.schema);
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  // Determine the type from schema for proper type conversion
+  const itemType = props.schema.items?.type || 'string';
+
+  // Type conversion function based on schema
+  const convertValue = (value: any) => {
+    switch (itemType) {
+      case 'integer':
+      case 'number':
+        return Number(value);
+      case 'boolean':
+        return Boolean(value);
+      case 'string':
+      default:
+        return String(value);
+    }
+  };
+
+  // Convert paramValue (array) to react-select format
+  const selectedValues = Array.isArray(props.paramValue) ? props.paramValue : [];
+  const selectedOptions = options.filter(option => {
+    // Check both string and converted values for matching
+    const convertedValue = convertValue(option.value);
+    return selectedValues.includes(option.value) || selectedValues.some(v => v === convertedValue);
+  });
+
+  const handleChange = (selectedOptions: any) => {
+    const values = selectedOptions ? selectedOptions.map((option: Option) => convertValue(option.value)) : [];
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        next.data.params[props.name] = values;
+      })
+    );
+  };
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <Select
+        isMulti
+        options={options}
+        value={selectedOptions}
+        onChange={handleChange}
+        isDisabled={props.readOnly}
+        className="react-select-container"
+        classNamePrefix="react-select"
+        placeholder={`Select ${props.label.toLowerCase()}...`}
+        isClearable={true}
+      />
+    </InputField>
+  );
 }
 
 export function CodeWidget(props: WidgetParams) {
@@ -766,7 +826,8 @@ export function LlmWidget(props: WidgetParams) {
       String(model.value) === String(selectedModelId)
     )?.label.split(": ")[1] || "";
 
-    const llmModelParamsSchemaName = modelParams[selectedModelName];
+    // Default tot BasicParameters if no specific schema found
+    const llmModelParamsSchemaName = modelParams[selectedModelName] || "BasicParameters";
     return modelParamSchemas[llmModelParamsSchemaName];
   }
 
@@ -822,7 +883,9 @@ export function LlmWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <select
-        className="select w-full"
+        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+        // Should be resolved in future versions of browsers.
+        className="select appearance-none w-full"
         name={props.name}
         onChange={updateParamValue}
         value={value}
@@ -943,7 +1006,9 @@ export function HistoryTypeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History" help_text={props.helpText}>
           <select
-            className={`select join-item ${historyType == 'named' ? '' : 'w-full'}`}
+            // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+            // Should be resolved in future versions of browsers.
+            className={`select appearance-none join-item ${historyType == 'named' ? '' : 'w-full'}`}
             name={props.name}
             onChange={props.updateParamValue}
             value={historyType}
@@ -1053,7 +1118,9 @@ export function HistoryModeWidget(props: WidgetParams) {
       <div className="flex join">
         <InputField label="History Mode" help_text = "">
           <select
-            className="select join-item w-full"
+            // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+            // Should be resolved in future versions of browsers.
+            className="select appearance-none join-item w-full"
             name="history_mode"
             onChange={(e) => {
               setHistoryMode(e.target.value);
@@ -1355,7 +1422,9 @@ export function VoiceWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <select
-        className="select w-full"
+        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+        // Should be resolved in future versions of browsers.
+        className="select appearance-none w-full"
         name={props.name}
         onChange={updateParamValue}
         value={syntheticVoiceId}
