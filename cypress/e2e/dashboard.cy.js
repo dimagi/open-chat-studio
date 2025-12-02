@@ -19,11 +19,13 @@ describe('Dashboard Application', () => {
 
     it('has date range filter', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.get('select[name*="date"], input[type="date"], .date-range-picker').then(($dateFilter) => {
-        if ($dateFilter.length > 0) {
-          cy.log('Date range filter is available')
-        }
-      })
+      cy.get('select[name="date_range"]').should('exist')
+    })
+    it('has date filter custom range', () => {
+      cy.visit(`/a/${teamSlug}/dashboard/`)
+      cy.get('select[name="date_range"]').select('custom')
+      cy.get('input[name="start_date"]').should('be.visible')
+      cy.get('input[name="end_date"]').should('be.visible')
     })
   })
 
