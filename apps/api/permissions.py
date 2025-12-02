@@ -91,6 +91,7 @@ class IsExperimentSessionStartedPermission(BasePermission):
         embed_key = request.headers.get("X-Embed-Key")
         if not embed_key:
             # follow legacy workflow
+            logger.warning("Header X-Embed-Key not sent")
             return True
 
         origin_domain = extract_domain_from_headers(request)
