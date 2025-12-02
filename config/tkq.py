@@ -2,6 +2,8 @@
 Taskiq configuration for Django integration.
 
 This module sets up the taskiq broker and handles Django database connection management.
+
+taskiq worker config.tkq:broker --tasks-pattern **/tasks_async.py
 """
 
 import os

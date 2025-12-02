@@ -156,23 +156,6 @@ def handle_api_message(
     return channel.new_user_message(message)
 
 
-async def ahandle_api_message(
-    user, experiment_version, experiment_channel, message_text: str, participant_id: str, session=None
-) -> ChatMessage:
-    """Asynchronously handles the message coming from the API."""
-    message = BaseMessage(participant_id=participant_id, message_text=message_text)
-
-    # ApiChannel init is sync, wrap it
-    channel = ApiChannel(
-        experiment_version,
-        experiment_channel,
-        experiment_session=session,
-        user=user,
-    )
-
-    return await channel.anew_user_message(message)
-
-
 def handle_evaluation_message(
     experiment_version, experiment_channel, message_text: str, session: ExperimentSession, participant_data: dict
 ) -> ChatMessage:

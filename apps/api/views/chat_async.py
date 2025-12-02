@@ -2,7 +2,6 @@ import json
 import logging
 
 from asgiref.sync import sync_to_async
-from django.db.models import prefetch_related_objects
 from django.http import JsonResponse
 from django.shortcuts import aget_object_or_404
 from django.views.decorators.csrf import csrf_exempt
@@ -18,7 +17,7 @@ from apps.api.serializers import (
 )
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.tasks import ahandle_api_message
+from apps.channels.tasks_async import handle_api_message_async
 from apps.chat.channels import ApiChannel
 from apps.chat.models import Chat, ChatAttachment
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
@@ -232,17 +231,27 @@ async def achat_send_message(request, session_id):
     # Queue the response generation as a background task
     experiment_version = await Experiment.objects.aget_default_or_working(session.experiment)
 
-    await sync_to_async(prefetch_related_objects, thread_sensitive=True)(
-        [experiment_version], "team", "pipeline", "trace_provider"
-    )
+    # await sync_to_async(prefetch_related_objects, thread_sensitive=True)(
+    #     [experiment_version], "team", "pipeline", "trace_provider"
+    # )
+    #
+    # response = await ahandle_api_message(
+    #     request.user,
+    #     experiment_version,
+    #     session.experiment_channel,
+    #     message_text,
+    #     participant_id=session.participant.identifier,
+    #     session=session,
+    # )
 
-    response = await ahandle_api_message(
-        request.user,
-        experiment_version,
-        session.experiment_channel,
+    result = handle_api_message_async.kiq(
+        request.user.id,
+        experiment_version.id,
+        session.experiment_channel.id,
         message_text,
         participant_id=session.participant.identifier,
-        session=session,
+        session=session.id,
     )
 
-    return JsonResponse({"message": response.content}, status=status.HTTP_200_OK)
+    task_result = await result.wait_result(timeout=30)
+    return JsonResponse({"message": task_result.return_value}, status=status.HTTP_200_OK)
