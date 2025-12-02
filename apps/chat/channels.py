@@ -697,15 +697,11 @@ class ChannelBase(ABC):
 
     async def _aparticipant_is_allowed(self):
         """Async version of participant permission check."""
-        from asgiref.sync import sync_to_async
-
         is_public = self.experiment.is_public
         if is_public:
             return True
 
-        return await sync_to_async(self.experiment.is_participant_allowed, thread_sensitive=True)(
-            self.participant_identifier
-        )
+        return await self.experiment.ais_participant_allowed(self.participant_identifier)
 
     async def anew_user_message(self, message: BaseMessage) -> ChatMessage:
         """Async version of new_user_message."""
@@ -748,10 +744,8 @@ class ChannelBase(ABC):
 
     async def _ahandle_supported_message(self):
         """Async version of message handling."""
-        from asgiref.sync import sync_to_async
-
         async with self.trace_service.aspan("Process Message", inputs={"input": self.user_query}) as span:
-            await sync_to_async(self.submit_input_to_llm)()
+            self.submit_input_to_llm()
             ai_message = await self._aget_bot_response(message=self.user_query)
 
             files = ai_message.get_attached_files() or []
