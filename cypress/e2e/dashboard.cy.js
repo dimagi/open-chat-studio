@@ -30,34 +30,63 @@ describe('Dashboard Application', () => {
   })
 
   describe('Dashboard Charts', () => {
-    it('displays session analytics chart', () => {
-      cy.visit(`/a/${teamSlug}/dashboard/`)
-      // Look for chart container (common class names for chart libraries)
-      cy.get('canvas, svg, .chart, .recharts-wrapper, .highcharts-container', { timeout: 10000 }).then(
-        ($chart) => {
-          if ($chart.length > 0) {
-            cy.log('Charts are rendered on dashboard')
-          }
-        }
-      )
-    })
+  it('overview statistics cards display', () => {
+    cy.visit(`/a/${teamSlug}/dashboard/`)
+
+    cy.get('.stat-card')
+      .should('have.length.greaterThan', 0)
+      .and('be.visible')
+
+    cy.get('.stat-card').should('have.length', 4)
+
+    cy.contains('.stat-label', 'Active Chatbots').should('exist')
+    cy.contains('.stat-label', 'Active Participants').should('exist')
+    cy.contains('.stat-label', 'Completed Sessions').should('exist')
+    cy.contains('.stat-label', 'Total Messages').should('exist')
+  })
 
     it('message volume chart loads', () => {
-      cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.contains(/Message|Volume|Traffic/i).then(($section) => {
-        if ($section.length > 0) {
-          cy.log('Message volume section found')
-        }
+        cy.visit(`/a/${teamSlug}/dashboard/`)
+
+        cy.contains(/Message|Volume|Traffic/i)
+          .should('exist')
+          .and('be.visible')
+
+        cy.get('#messageVolumeChart')
+              .should('exist')
+              .and('be.visible')
       })
-    })
 
     it('bot performance metrics display', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
-      cy.contains(/Performance|Bot|Metrics/i).then(($section) => {
-        if ($section.length > 0) {
-          cy.log('Performance metrics section found')
-        }
-      })
+
+      // Assert the table exists
+      cy.get('#botPerformanceTable')
+        .should('exist')
+        .and('be.visible')
+
+      // Verify table has headers
+      cy.get('#botPerformanceTable thead th')
+        .should('have.length.greaterThan', 0)
+
+      // Verify table has at least one row of data
+      cy.get('#botPerformanceTable tbody tr')
+        .should('have.length.greaterThan', 0)
+
+      // Verify the first row contains actual data (chatbot name link)
+      cy.get('#botPerformanceTable tbody tr')
+        .first()
+        .find('a.btn')
+        .should('exist')
+        .and('have.attr', 'href')
+
+      // Verify numeric columns contain data
+      cy.get('#botPerformanceTable tbody tr')
+        .first()
+        .find('td')
+        .eq(1) // Participants column
+        .invoke('text')
+        .should('match', /\d+/)
     })
   })
 
@@ -152,7 +181,7 @@ describe('Dashboard Application', () => {
       cy.visit(`/a/${teamSlug}/dashboard/`)
       cy.contains('button', 'Reset', { timeout: 10000 })
         .should('be.visible')
-        .click({ force: true })
+        .click()
     })
 
     it('data loads without errors', () => {
