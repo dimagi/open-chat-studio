@@ -1,10 +1,10 @@
 import operator
+from string import Formatter
 from typing import Annotated
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware, AgentState, ModelRequest, dynamic_prompt
 from langchain_core.messages import RemoveMessage, SystemMessage
-from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
 from langgraph.graph.message import (
     REMOVE_ALL_MESSAGES,
@@ -110,8 +110,9 @@ def build_node_agent(node, pipeline_state: PipelineState, session: ExperimentSes
 
     @dynamic_prompt
     def prompt_middleware(request: ModelRequest):
-        prompt_template = PromptTemplate.from_template(node.prompt)
-        context = prompt_context.get_context(prompt_template.input_variables)
+        prompt_template = node.prompt
+        input_variables = {v for _, v, _, _ in Formatter().parse(prompt_template) if v is not None}
+        context = prompt_context.get_context(input_variables)
         try:
             formatted_prompt = prompt_template.format(**context)
             prompt = SystemMessage(content=formatted_prompt)
