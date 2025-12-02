@@ -51,10 +51,6 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
         except ExperimentChannel.DoesNotExist as e:
             raise AuthenticationFailed("Embedded widget does not exist") from e
 
-        request.session["auth_data"] = {
-            "experiment_id": str(experiment_id),
-        }
-
         return (AnonymousUser(), experiment_channel)
 
     def _get_experiment_id(self, request):
@@ -67,9 +63,6 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
         # For POST /api/chat/start/ - experiment_id is in request body as chatbot_id
         if hasattr(request, "data") and "chatbot_id" in request.data:
             return request.data.get("chatbot_id")
-
-        if auth_data := request.session.get("auth_data"):
-            return auth_data.get("experiment_id")
 
         if session_id := request.parser_context["kwargs"].get("session_id"):
             if session := get_experiment_session_cached(session_id):
