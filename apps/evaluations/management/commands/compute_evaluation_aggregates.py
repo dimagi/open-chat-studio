@@ -14,8 +14,7 @@ class Command(IdempotentCommand):
             type=EvaluationRunType.FULL,
         ).exclude(aggregates__isnull=False)
 
-        runs = list(queryset.order_by("created_at"))
-        total = len(runs)
+        total = queryset.count()
 
         if total == 0:
             self.stdout.write("No runs to process")
@@ -30,7 +29,7 @@ class Command(IdempotentCommand):
         processed = 0
         aggregates_created = 0
 
-        for run in runs:
+        for run in queryset.order_by("created_at").iterator(chunk_size=100):
             aggregates = compute_aggregates_for_run(run)
             aggregates_created += len(aggregates)
             processed += 1
