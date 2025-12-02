@@ -96,6 +96,9 @@ class HistoryCompressionMiddleware(AgentMiddleware):
     def before_model(self, state: AgentState, runtime: Runtime) -> dict[str, any] | None:  # noqa: ARG002
         return {
             "messages": [
+                # Since this response will get merged with the existing state messages, we cannot simply append the
+                # history to the user's message. We need to replace the full message history in the state.
+                # See https://github.com/langchain-ai/langchain/blob/c63f23d2339b2604edc9ae1d9f7faf7d6cc7dc78/libs/langchain_v1/langchain/agents/middleware/summarization.py#L286-L292
                 RemoveMessage(id=REMOVE_ALL_MESSAGES),
                 *self.node.get_history(self.session, state["messages"]),
                 *state["messages"],
