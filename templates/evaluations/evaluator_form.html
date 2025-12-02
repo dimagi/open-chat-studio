@@ -176,7 +176,7 @@
                           <span>{% translate "Type" %}</span>
                         </label>
                         <select x-model="pair.type"
-                                @change="updateKeyValuePairs(fieldName)"
+                                @change="onTypeChange(fieldName, pair)"
                                 class="select select-bordered w-full select-sm">
                           <option value="string">{% translate "Text" %}</option>
                           <option value="int">{% translate "Integer" %}</option>
@@ -332,6 +332,17 @@
                           </button>
                         </div>
                       </details>
+
+                      <!-- Aggregations Toggle -->
+                      <div class="form-control mt-2">
+                        <label class="label cursor-pointer justify-start gap-2">
+                          <input type="checkbox"
+                                 x-model="pair.use_in_aggregations"
+                                 @change="updateKeyValuePairs(fieldName)"
+                                 class="checkbox checkbox-sm checkbox-primary">
+                          <span class="label-text">{% translate "Use in aggregations" %}</span>
+                        </label>
+                      </div>
 
                       <!-- Remove Button -->
                       <button type="button"
@@ -578,7 +589,8 @@
               min_length: null,
               max_length: null,
               pattern: null,
-              choices: []
+              choices: [],
+              use_in_aggregations: false,
             }];
           }
           return this.keyValuePairs[fieldName];
@@ -597,7 +609,8 @@
             min_length: null,
             max_length: null,
             pattern: null,
-            choices: []
+            choices: [],
+            use_in_aggregations: false,
           });
         },
 
@@ -606,6 +619,16 @@
             this.keyValuePairs[fieldName].splice(index, 1);
             this.updateKeyValuePairs(fieldName);
           }
+        },
+
+        getDefaultAggregationSetting(type) {
+          // string defaults to false, others (int, float, choice) default to true
+          return type !== 'string';
+        },
+
+        onTypeChange(fieldName, pair) {
+          pair.use_in_aggregations = this.getDefaultAggregationSetting(pair.type);
+          this.updateKeyValuePairs(fieldName);
         },
 
         updateKeyValuePairs(fieldName) {
@@ -672,6 +695,8 @@
                   }
                 }
 
+                fieldDef.use_in_aggregations = pair.use_in_aggregations !== false;
+
                 obj[pair.name.trim()] = fieldDef;
               }
             });
@@ -695,16 +720,19 @@
                         geValue = value.ge !== undefined ? parseFloat(value.ge) : null;
                         leValue = value.le !== undefined ? parseFloat(value.le) : null;
                     }
+                    const fieldType = value.type || 'string';
+                    const defaultAgg = fieldType !== 'string';  // string defaults to false
                     return {
                       name: name,
-                      type: value.type || 'string',
+                      type: fieldType,
                       description: value.description || '',
                       ge: geValue,
                       le: leValue,
                       min_length: value.min_length !== undefined ? value.min_length : null,
                       max_length: value.max_length !== undefined ? value.max_length : null,
                       pattern: value.pattern || null,
-                      choices: value.choices || []
+                      choices: value.choices || [],
+                      use_in_aggregations: value.use_in_aggregations !== undefined ? value.use_in_aggregations : defaultAgg
                     };
                   });
                 }

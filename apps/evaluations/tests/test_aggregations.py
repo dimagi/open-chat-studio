@@ -118,3 +118,29 @@ class TestBuildTrendData:
 
     def test_empty_runs_returns_empty(self):
         assert build_trend_data([]) == {}
+
+    def test_respects_use_in_aggregations_setting(self):
+        run = EvaluationRunFactory(status=EvaluationRunStatus.COMPLETED)
+        evaluator = EvaluatorFactory(
+            team=run.team,
+            name="Test Evaluator",
+            params={
+                "output_schema": {
+                    "score": {"type": "float", "description": "Score", "use_in_aggregations": True},
+                    "internal": {"type": "float", "description": "Internal", "use_in_aggregations": False},
+                }
+            },
+        )
+
+        run.aggregates.create(
+            evaluator=evaluator,
+            aggregates={
+                "score": {"type": "numeric", "mean": 0.85, "count": 10},
+                "internal": {"type": "numeric", "mean": 0.5, "count": 10},
+            },
+        )
+
+        trend_data = build_trend_data([run])
+
+        assert "score" in trend_data["Test Evaluator"]
+        assert "internal" not in trend_data["Test Evaluator"]

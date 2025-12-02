@@ -380,6 +380,38 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
     return create_model(model_name, **pydantic_fields)
 
 
+def get_use_in_aggregations(field_def: dict) -> bool:
+    """Get the use_in_aggregations setting for a field, with type-based defaults.
+
+    Defaults: string=False, others (int, float, choice)=True
+    """
+    if "use_in_aggregations" in field_def:
+        return field_def["use_in_aggregations"]
+    return field_def.get("type") != "string"
+
+
+def filter_aggregates_for_display(aggregates) -> list[dict]:
+    """Filter aggregate fields based on use_in_aggregations setting.
+
+    Returns a list of dicts with evaluator info and filtered aggregates.
+    """
+    result = []
+    for agg in aggregates:
+        output_schema = agg.evaluator.params.get("output_schema", {})
+        filtered = {
+            field_name: stats
+            for field_name, stats in agg.aggregates.items()
+            if get_use_in_aggregations(output_schema.get(field_name, {}))
+        }
+        result.append(
+            {
+                "evaluator": agg.evaluator,
+                "aggregates": filtered,
+            }
+        )
+    return result
+
+
 def build_trend_data(runs: list) -> dict:
     """Build trend data for displaying charts from evaluation runs.
 
@@ -414,9 +446,13 @@ def build_trend_data(runs: list) -> dict:
     for run in runs:
         for agg in run.aggregates.all():
             evaluator_name = agg.evaluator.name
+            output_schema = agg.evaluator.params.get("output_schema", {})
 
             for field_name, stats in agg.aggregates.items():
                 if not isinstance(stats, dict) or "type" not in stats:
+                    continue
+
+                if not get_use_in_aggregations(output_schema.get(field_name, {})):
                     continue
 
                 field = trend[evaluator_name][field_name]

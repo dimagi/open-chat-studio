@@ -20,7 +20,7 @@ from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.tasks import upload_evaluation_run_results_task
-from apps.evaluations.utils import build_trend_data, get_evaluators_with_schema
+from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
 from apps.experiments.models import Experiment
 from apps.generics import actions
 from apps.teams.decorators import login_and_team_required
@@ -209,7 +209,8 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
                 args=[team_slug, kwargs["evaluation_pk"], kwargs["evaluation_run_pk"]],
             )
             if evaluation_run.status == EvaluationRunStatus.COMPLETED:
-                context["aggregates"] = evaluation_run.aggregates.select_related("evaluator").all()
+                aggregates = evaluation_run.aggregates.select_related("evaluator").all()
+                context["aggregates"] = filter_aggregates_for_display(aggregates)
 
         return context
 
