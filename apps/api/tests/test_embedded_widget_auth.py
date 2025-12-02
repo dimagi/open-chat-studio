@@ -15,7 +15,6 @@ from apps.utils.factories.experiment import ExperimentSessionFactory
 def api_client():
     """Return an API client with session support enabled."""
     client = APIClient()
-    client.session.save()
     return client
 
 
@@ -108,9 +107,6 @@ def test_start_session_without_embed_key_missing_experiment_id(api_client, embed
 def test_send_message_with_valid_embed_key_and_domain(api_client, embedded_session):
     """Test sending message with valid X-Embed-Key and allowed domain."""
     # First, authenticate and store experiment_id in session
-    api_client.session["auth_data"] = {"experiment_id": str(embedded_session.experiment.public_id)}
-    api_client.session.save()
-
     url = reverse("api:chat:send-message", kwargs={"session_id": embedded_session.external_id})
     data = {"message": "Hello bot"}
 
@@ -133,9 +129,6 @@ def test_send_message_with_valid_embed_key_and_domain(api_client, embedded_sessi
 @pytest.mark.django_db()
 def test_send_message_with_wildcard_domain(api_client, embedded_session):
     """Test sending message with subdomain matching wildcard pattern."""
-    api_client.session["auth_data"] = {"experiment_id": str(embedded_session.experiment.public_id)}
-    api_client.session.save()
-
     url = reverse("api:chat:send-message", kwargs={"session_id": embedded_session.external_id})
     data = {"message": "Hello bot"}
 
@@ -155,9 +148,6 @@ def test_send_message_with_wildcard_domain(api_client, embedded_session):
 @pytest.mark.django_db()
 def test_send_message_with_invalid_embed_key(api_client, embedded_session):
     """Test that invalid embed key is rejected by authentication."""
-    api_client.session["auth_data"] = {"experiment_id": str(embedded_session.experiment.public_id)}
-    api_client.session.save()
-
     url = reverse("api:chat:send-message", kwargs={"session_id": embedded_session.external_id})
     data = {"message": "Hello bot"}
 
@@ -176,9 +166,6 @@ def test_send_message_with_invalid_embed_key(api_client, embedded_session):
 @pytest.mark.django_db()
 def test_send_message_with_unauthorized_domain(api_client, embedded_session):
     """Test that unauthorized domain is rejected by permission check."""
-    api_client.session["auth_data"] = {"experiment_id": str(embedded_session.experiment.public_id)}
-    api_client.session.save()
-
     url = reverse("api:chat:send-message", kwargs={"session_id": embedded_session.external_id})
     data = {"message": "Hello bot"}
 
@@ -197,9 +184,6 @@ def test_send_message_with_unauthorized_domain(api_client, embedded_session):
 @pytest.mark.django_db()
 def test_send_message_without_origin_header(api_client, embedded_session):
     """Test that missing Origin/Referer header is rejected by permission check."""
-    api_client.session["auth_data"] = {"experiment_id": str(embedded_session.experiment.public_id)}
-    api_client.session.save()
-
     url = reverse("api:chat:send-message", kwargs={"session_id": embedded_session.external_id})
     data = {"message": "Hello bot"}
 
@@ -217,9 +201,6 @@ def test_send_message_without_origin_header(api_client, embedded_session):
 @pytest.mark.django_db()
 def test_poll_response_with_valid_embed_key_and_domain(api_client, embedded_session):
     """Test polling messages with valid X-Embed-Key and allowed domain."""
-    api_client.session["auth_data"] = {"experiment_id": str(embedded_session.experiment.public_id)}
-    api_client.session.save()
-
     url = reverse("api:chat:poll-response", kwargs={"session_id": embedded_session.external_id})
 
     response = api_client.get(
@@ -235,7 +216,7 @@ def test_poll_response_with_valid_embed_key_and_domain(api_client, embedded_sess
 
 
 @pytest.mark.django_db()
-def test_legacy_flow_without_embed_key(api_client, experiment):
+def test_start_session_legacy_flow_without_embed_key(api_client, experiment):
     """Test that the legacy flow still works without X-Embed-Key header."""
     url = reverse("api:chat:start-session")
     data = {
@@ -249,50 +230,3 @@ def test_legacy_flow_without_embed_key(api_client, experiment):
     assert response.status_code == 201
     response_json = response.json()
     assert "session_id" in response_json
-
-
-# Tests for authentication behavior
-
-
-@pytest.mark.django_db()
-def test_authentication_returns_experiment_channel(api_client, embedded_widget_channel):
-    """Test that EmbeddedWidgetAuthentication returns ExperimentChannel as request.auth."""
-    url = reverse("api:chat:start-session")
-    data = {
-        "chatbot_id": embedded_widget_channel.experiment.public_id,
-        "session_data": {"source": "widget"},
-    }
-
-    response = api_client.post(
-        url,
-        data=data,
-        format="json",
-        HTTP_X_EMBED_KEY="test_widget_token_123456789012",
-    )
-
-    assert response.status_code == 201
-    # Verify session was created with the correct channel
-    response_json = response.json()
-    assert response_json["chatbot"]["id"] == str(embedded_widget_channel.experiment.public_id)
-
-
-@pytest.mark.django_db()
-def test_authentication_stores_experiment_id_in_session(api_client, embedded_widget_channel):
-    """Test that authentication stores experiment_id in session for subsequent requests."""
-    url = reverse("api:chat:start-session")
-    data = {
-        "chatbot_id": embedded_widget_channel.experiment.public_id,
-        "session_data": {"source": "widget"},
-    }
-
-    response = api_client.post(
-        url,
-        data=data,
-        format="json",
-        HTTP_X_EMBED_KEY="test_widget_token_123456789012",
-    )
-
-    assert response.status_code == 201
-    # Verify session data was stored
-    assert "auth_data" in api_client.session
-    assert api_client.session["auth_data"]["experiment_id"] == str(embedded_widget_channel.experiment.public_id)
