@@ -83,6 +83,10 @@ dependencies = [
     "django-silk>=5.4.3",
     "django-oauth-toolkit>=3.1.0,<4.0.0",
     "blacknoise>=1.2.0",
+    "taskiq[redis]>=0.12.0",
+    "taskiq-redis>=1.0.9",
+    "taskiq-dependencies>=1.5.7",
+    "redis>=5.0.3",
 ]
 
 [project.urls]
