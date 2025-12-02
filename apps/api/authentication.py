@@ -38,15 +38,11 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
         # Get experiment ID from request data or path
         experiment_id = self._get_experiment_id(request)
         if not experiment_id:
-            raise ParseError(
-                "Experiment ID required for embedded widget authentication"
-            )
+            raise ParseError("Experiment ID required for embedded widget authentication")
 
         # Validate the embed key
         try:
-            experiment_channel = ExperimentChannel.objects.select_related(
-                "experiment", "team"
-            ).get(
+            experiment_channel = ExperimentChannel.objects.select_related("experiment", "team").get(
                 experiment__public_id=experiment_id,
                 platform=ChannelPlatform.EMBEDDED_WIDGET,
                 extra_data__widget_token=embed_key,

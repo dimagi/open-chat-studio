@@ -41,26 +41,16 @@ def validate_domain(origin_domain: str, allowed_domains: list[str]) -> bool:
     if ALL_DOMAINS in allowed_domains:
         return True
 
-    for domain in allowed_domains:
-        if match_domain_pattern(origin_domain, domain):
-            return True
-
-    return False
+    return any(match_domain_pattern(origin_domain, domain) for domain in allowed_domains)
 
 
 def validate_platform_availability(experiment: Experiment, platform: ChannelPlatform):
-    existing_platforms = {
-        channel.platform_enum for channel in experiment.experimentchannel_set.all()
-    }
+    existing_platforms = {channel.platform_enum for channel in experiment.experimentchannel_set.all()}
     if platform in existing_platforms:
-        raise ExperimentChannelException(
-            f"Channel for platform '{platform.label}' already exists"
-        )
+        raise ExperimentChannelException(f"Channel for platform '{platform.label}' already exists")
 
     global_platforms = ChannelPlatform.team_global_platforms()
-    used_platforms = {
-        platform for platform in existing_platforms if platform not in global_platforms
-    }
+    used_platforms = {platform for platform in existing_platforms if platform not in global_platforms}
     available_platforms = ChannelPlatform.for_dropdown(used_platforms, experiment.team)
     if not available_platforms.get(platform):
         raise ExperimentChannelException("Platform already used or not available.")
@@ -99,9 +89,9 @@ def get_experiment_session_cached(session_id: str) -> ExperimentSession | None:
         return session
 
     try:
-        session = ExperimentSession.objects.select_related(
-            "experiment_channel", "experiment", "participant"
-        ).get(external_id=session_id)
+        session = ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant").get(
+            external_id=session_id
+        )
         cache.set(cache_key, session, WIDGET_SESSION_CACHE_TTL)
         return session
     except ExperimentSession.DoesNotExist:
