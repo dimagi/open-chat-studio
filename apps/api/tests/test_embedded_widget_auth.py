@@ -54,6 +54,7 @@ def test_start_session_with_valid_embed_key(api_client, embedded_widget_channel)
         data=data,
         format="json",
         HTTP_X_EMBED_KEY="test_widget_token_123456789012",
+        HTTP_ORIGIN="https://example.com",
     )
 
     assert response.status_code == 201
