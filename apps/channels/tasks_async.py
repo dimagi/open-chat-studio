@@ -36,7 +36,7 @@ async def handle_api_message_async(
     message = await ahandle_api_message(
         user, experiment_version, experiment_channel, message_text, participant_id, session
     )
-    return message.content
+    return {"message": message.content}
 
 
 async def ahandle_api_message(

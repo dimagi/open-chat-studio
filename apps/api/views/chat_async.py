@@ -22,6 +22,7 @@ from apps.chat.channels import ApiChannel
 from apps.chat.models import Chat, ChatAttachment
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
+from config.tkq import broker
 
 logger = logging.getLogger("ocs.api_chat")
 
@@ -255,5 +256,29 @@ async def achat_send_message(request, session_id):
         session_id=session.id,
     )
 
-    task_result = await result.wait_result(timeout=30)
-    return JsonResponse({"message": task_result.return_value}, status=status.HTTP_200_OK)
+    return JsonResponse({"task_id": result.task_id, "status": "processing"}, status=status.HTTP_200_OK)
+
+
+async def achat_poll_task_response(request, session_id, task_id):
+    session = await aget_object_or_404(
+        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
+        external_id=session_id,
+    )
+
+    if access_response := await check_session_access(session, request):
+        return access_response
+
+    if not await broker.result_backend.is_result_ready(task_id):
+        data = {"message": None, "status": "processing"}
+        return JsonResponse(data, status=status.HTTP_200_OK)
+
+    result = await broker.result_backend.get_result(task_id)
+    if result.is_err:
+        data = {"error": result.error, "status": "error"}
+        return JsonResponse(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    else:
+        data = {
+            "message": result.return_value["message"],
+            "status": "complete",
+        }
+        return JsonResponse(data, status=status.HTTP_200_OK)
