@@ -14,7 +14,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from apps.api.authentication import EmbeddedWidgetAuthentication
-from apps.api.permissions import IsExperimentSessionStartedPermission
+from apps.api.permissions import LegacySessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -34,7 +34,7 @@ from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.models import File
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
-SESSION_PERMISSION_CLASSES = [IsExperimentSessionStartedPermission]
+SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, LegacySessionAccessPermission]
 
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
@@ -185,7 +185,7 @@ def chat_upload_file(request, session_id):
 )
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([])
+@permission_classes([WidgetDomainPermission])
 def chat_start_session(request):
     """Start a new chat session - supports both authenticated users and embedded widgets"""
     serializer = ChatStartSessionRequest(data=request.data)

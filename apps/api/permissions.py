@@ -12,7 +12,7 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions
 from rest_framework_api_key.permissions import KeyParser
 
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ExperimentChannel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
@@ -62,70 +62,40 @@ class BearerTokenAuthentication(BaseKeyAuthentication):
         return ConfigurableKeyParser(keyword=self.keyword).get_from_authorization(request)
 
 
-class IsExperimentSessionStartedPermission(BasePermission):
-    """
-    Check if the request has access to the experiment based on public API settings or embedded widget authentication.
-    """
-
+class WidgetDomainPermission(BasePermission):
     def has_permission(self, request, view):
-        session = get_experiment_session_cached(view.kwargs.get("session_id"))
-        if not session:
-            logger.error("Experiment Session does not exist")
-            return False
-
-        if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
-            return self._check_session_access(request, session)
-        else:
-            return self._check_experiment_access(session.experiment, session.participant.identifier)
-
-    def _check_session_access(self, request, session):
-        """
-        Check if the request has access to the session.
-        Args:
-            request: a Django Request object (required for embedded widgets)
-            session: Session object (should have experiment_channel prefetched)
-
-        Returns:
-            bool: True if access is allowed, False otherwise
-        """
-        embed_key = request.headers.get("X-Embed-Key")
-        if not embed_key:
-            # follow legacy workflow
-            logger.warning("Header X-Embed-Key not sent")
+        if not isinstance(request.auth, ExperimentChannel):
+            # not authed with widget token
             return True
 
         origin_domain = extract_domain_from_headers(request)
         if not origin_domain:
-            logger.error("Origin or Referer header required for embedded widgets")
             return False
 
-        experiment_channel = session.experiment_channel
+        experiment_channel = request.auth
         allowed_domains = experiment_channel.extra_data.get("allowed_domains", [])
-        if not validate_domain(origin_domain, allowed_domains):
-            logger.error("Domain not allowed")
+        return validate_domain(origin_domain, allowed_domains)
+
+
+class LegacySessionAccessPermission(BasePermission):
+    def has_permission(self, request, view):
+        if isinstance(request.auth, ExperimentChannel):
+            # skip for requests authed with widget auth
+            return True
+
+        session = get_experiment_session_cached(view.kwargs.get("session_id"))
+        if not session:
             return False
 
-        return True
-
-    def _check_experiment_access(self, experiment, participant_id):
-        """
-        Check if the request has access to the experiment based on public API settings.
-
-        Returns:
-            bool: True if access is allowed, False otherwise
-        """
+        experiment = session.experiment
         if experiment.is_public:
             return True
 
+        participant_id = session.participant.identifier
         if not participant_id:
-            logger.error("Participant is invalid")
             return False
 
-        if not experiment.is_participant_allowed(participant_id):
-            logger.error("Participant not allowed")
-            return False
-
-        return True
+        return experiment.is_participant_allowed(participant_id)
 
 
 class ReadOnlyAPIKeyPermission(BasePermission):

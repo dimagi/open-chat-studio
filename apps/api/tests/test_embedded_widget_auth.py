@@ -81,7 +81,7 @@ def test_start_session_with_invalid_embed_key(api_client, embedded_widget_channe
 
     # Should fail authentication
     assert response.status_code == 403
-    assert "Embedded widget does not exist" in response.json()["detail"]
+    assert "Invalid widget embed key" in response.json()["detail"]
 
 
 @pytest.mark.django_db()

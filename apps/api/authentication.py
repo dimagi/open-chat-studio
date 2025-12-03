@@ -3,7 +3,7 @@ from rest_framework import authentication
 from rest_framework.exceptions import AuthenticationFailed, ParseError
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
+from apps.channels.utils import get_experiment_session_cached
 
 
 class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
@@ -50,14 +50,6 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
             )
         except ExperimentChannel.DoesNotExist as e:
             raise AuthenticationFailed("Invalid widget embed key") from e
-
-        origin_domain = extract_domain_from_headers(request)
-        if not origin_domain:
-            raise AuthenticationFailed("Origin or Referer header required for embedded widgets")
-
-        allowed_domains = experiment_channel.extra_data.get("allowed_domains", [])
-        if not validate_domain(origin_domain, allowed_domains):
-            raise AuthenticationFailed("Domain not allowed")
 
         return (AnonymousUser(), experiment_channel)
 
