@@ -3,13 +3,6 @@
 
 {% block form %}
     {{ form.non_field_errors }}
-    {% if form.non_field_errors %}
-      <div class="alert bg-red-100 text-red-800 mb-4">
-        {% for error in form.non_field_errors %}
-          <p>{{ error }}</p>
-        {% endfor %}
-      </div>
-    {% endif %}
     {% render_form_fields form "name" "client_id" %}
 
     {% render_form_fields form "client_secret" %}
