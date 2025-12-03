@@ -22,15 +22,17 @@ class RegisterApplicationForm(forms.ModelForm):
     name = forms.CharField(required=True, max_length=255)
 
     algorithm = forms.ChoiceField(
-        choices=[("", "No algorithm"), ("RS256", "RS256")],
+        choices=[("RS256", "RS256")],
         required=False,
-        help_text="Algorithm for signing tokens. Leave empty for no signing or select RS256 for RSA signing.",
+        help_text="Algorithm for signing JWT tokens.",
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["authorization_grant_type"].disabled = True
+        self.fields["algorithm"].disabled = True
         self.fields["redirect_uris"].required = True
+
         if self.instance.pk:
             self.fields["client_secret"].required = False
             self.fields[
@@ -41,6 +43,7 @@ class RegisterApplicationForm(forms.ModelForm):
         # Force these fields to specific values
         instance = super().save(commit=False)
         instance.authorization_grant_type = OAuth2Application.GRANT_AUTHORIZATION_CODE
+        instance.algorithm = OAuth2Application.RS256_ALGORITHM
         instance.client_type = OAuth2Application.CLIENT_CONFIDENTIAL
         instance.hash_client_secret = True
         instance.skip_authorization = False

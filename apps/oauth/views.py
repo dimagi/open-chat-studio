@@ -113,7 +113,10 @@ class CreateApplication(LoginRequiredMixin, CreateView):
     }
 
     def get_initial(self):
-        return {"authorization_grant_type": OAuth2Application.GRANT_AUTHORIZATION_CODE}
+        return {
+            "authorization_grant_type": OAuth2Application.GRANT_AUTHORIZATION_CODE,
+            "algorithm": OAuth2Application.RS256_ALGORITHM,
+        }
 
     def form_valid(self, form):
         form.instance.user = self.request.user
