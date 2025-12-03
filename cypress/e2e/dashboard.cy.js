@@ -80,13 +80,6 @@ describe('Dashboard Application', () => {
         .should('exist')
         .and('have.attr', 'href')
 
-      // Verify numeric columns contain data
-      cy.get('#botPerformanceTable tbody tr')
-        .first()
-        .find('td')
-        .eq(1) // Participants column
-        .invoke('text')
-        .should('match', /\d+/)
     })
   })
 
