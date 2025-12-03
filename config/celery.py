@@ -28,19 +28,12 @@ worker_max_tasks_per_child = 100  # Restart worker periodically
 task_acks_late = True
 
 
-@signals.task_postrun.connect
 def close_db_connection(sender, **kwargs):
     if getattr(sender.request, "is_eager", False):
         return
 
-    # Copied from https://github.com/celery/celery/blob/main/celery/fixups/django.py
-    # Can be removed when upgrading Celery > 5.5.3
-    for conn in db.connections.all():
-        try:
-            conn.close()
-        except db.InterfaceError:
-            pass
-        except db.DatabaseError as exc:
-            str_exc = str(exc)
-            if "closed" not in str_exc and "not connected" not in str_exc:
-                raise
+    db.connections.close_all()
+
+
+signals.task_prerun.connect(close_db_connection)
+signals.task_postrun.connect(close_db_connection)
