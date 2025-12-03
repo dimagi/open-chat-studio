@@ -1,0 +1,23 @@
+{% extends "generic/object_form.html" %}
+{% load form_tags %}
+
+{% block form %}
+    {{ form.non_field_errors }}
+    {% if form.non_field_errors %}
+      <div class="alert bg-red-100 text-red-800 mb-4">
+        {% for error in form.non_field_errors %}
+          <p>{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% render_form_fields form "name" "client_id" %}
+
+    {% render_form_fields form "client_secret" %}
+    {% if not form.instance.id %}
+        <div class="alert bg-yellow-100 text-yellow-800">
+            <strong>Important:</strong> Copy your client secret now. You won't be able to see it again.
+            {% include "generic/copy_chip.html" with copy_element_id="id_client_secret" copy_value=form.fields.client_secret.value show_value=False %}
+        </div>
+    {% endif %}
+    {% render_form_fields form "authorization_grant_type" "redirect_uris" "post_logout_redirect_uris" "allowed_origins" "algorithm" %}
+{% endblock form %}

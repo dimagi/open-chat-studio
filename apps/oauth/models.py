@@ -6,6 +6,7 @@ Related thread: https://github.com/django-oauth/django-oauth-toolkit/issues/634
 """
 
 from django.db import models
+from django.urls import reverse
 from oauth2_provider.models import (
     AbstractAccessToken,
     AbstractApplication,
@@ -21,6 +22,9 @@ from apps.teams.models import Team
 class OAuth2Application(AbstractApplication):
     # Custom application model can be extended here if needed
     objects = ApplicationManager()
+
+    def get_absolute_url(self):
+        return reverse("oauth2_provider:application_edit", args=[self.pk])
 
 
 class OAuth2AccessToken(AbstractAccessToken):
