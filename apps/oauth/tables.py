@@ -10,12 +10,12 @@ from apps.oauth.models import OAuth2Application
 
 def _update_url_factory(url_name, request, record, value):
     """Factory for update URL."""
-    return reverse("oauth2_provider:application_edit", args=[record.pk])
+    return reverse(url_name, args=[record.pk])
 
 
 def _delete_url_factory(url_name, request, record, value):
     """Factory for delete URL."""
-    return reverse("oauth2_provider:application_delete", args=[record.pk])
+    return reverse(url_name, args=[record.pk])
 
 
 class OAuth2ApplicationTable(tables.Table):
