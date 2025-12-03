@@ -34,10 +34,8 @@ describe('Dashboard Application', () => {
     cy.visit(`/a/${teamSlug}/dashboard/`)
 
     cy.get('.stat-card')
-      .should('have.length.greaterThan', 0)
+      .should('have.length', 4)
       .and('be.visible')
-
-    cy.get('.stat-card').should('have.length', 4)
 
     cy.contains('.stat-label', 'Active Chatbots').should('exist')
     cy.contains('.stat-label', 'Active Participants').should('exist')
