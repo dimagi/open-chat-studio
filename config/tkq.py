@@ -3,14 +3,16 @@ Taskiq configuration for Django integration.
 
 This module sets up the taskiq broker and handles Django database connection management.
 
-taskiq worker config.tkq:broker --tasks-pattern **/tasks_async.py
+taskiq worker config.tkq:broker --tasks-pattern '**/tasks_async.py' --fs-discover
 """
 
 import os
 from pathlib import Path
+from typing import Any
 
 import django
 import environ
+from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,54 +27,46 @@ django.setup()
 
 from django.db import connections  # noqa E402
 
-broker = ListQueueBroker(
-    url=env("REDIS_URL"),
-).with_result_backend(
-    RedisAsyncResultBackend(
-        redis_url=env("REDIS_URL"),
+
+class EnvContextManager:
+    def __init__(self, **kwargs):
+        self.env_vars = kwargs
+
+    def __enter__(self):
+        self.old_values = {key: os.environ.get(key) for key in self.env_vars if os.environ.get(key)}
+        os.environ.update(self.env_vars)
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        os.environ.update(self.old_values)
+
+
+class DjangoMiddleware(TaskiqMiddleware):
+    def startup(self) -> None:
+        self._close_connections()
+
+    def shutdown(self) -> None:
+        self._close_connections()
+
+    def pre_execute(self, message: "TaskiqMessage") -> TaskiqMessage:
+        self._close_connections()
+        return message
+
+    def post_save(self, message: "TaskiqMessage", result: "TaskiqResult[Any]") -> None:
+        self._close_connections()
+
+    def _close_connections(self):
+        with EnvContextManager(DJANGO_ALLOW_ASYNC_UNSAFE="1"):
+            connections.close_all()
+
+
+broker = (
+    ListQueueBroker(
+        url=env("REDIS_URL"),
     )
+    .with_result_backend(
+        RedisAsyncResultBackend(
+            redis_url=env("REDIS_URL"),
+        )
+    )
+    .with_middlewares(DjangoMiddleware())
 )
-
-# Critical: Database connection management for Django + Taskiq
-# Django connections are thread-local and don't work well with async workers
-# We need to properly close connections before and after task execution
-
-
-@broker.on_event("worker_startup")
-async def worker_startup(state):
-    """
-    Called when a worker starts up.
-    Ensures Django is properly initialized.
-    """
-    print("Worker starting up...")
-    connections.close_all()
-    print("Worker startup complete")
-
-
-@broker.on_event("worker_shutdown")
-async def worker_shutdown(state):
-    """
-    Called when a worker shuts down.
-    Ensures all database connections are closed.
-    """
-    print("Worker shutting down...")
-    connections.close_all()
-    print("Worker shutdown complete")
-
-
-@broker.task_preprocessor
-async def close_old_connections(context):
-    """
-    Close database connections before each task execution.
-    This prevents stale connections and thread-safety issues.
-    """
-    connections.close_all()
-
-
-@broker.task_postprocessor
-async def close_connections_after_task(context):
-    """
-    Close database connections after each task execution.
-    This is critical for proper connection management in async environments.
-    """
-    connections.close_all()

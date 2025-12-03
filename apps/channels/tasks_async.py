@@ -22,14 +22,14 @@ async def handle_api_message_async(
     participant_id: str,
     session_id: int,
 ):
-    user = CustomUser.objects.aget(id=user_id)
-    experiment_version = Experiment.objects.aget(id=experiment_version_id)
-    experiment_channel = ExperimentChannel.objects.select_related("team", "pipeline", "trace_provider").aget(
-        id=experiment_channel_id
+    user = await CustomUser.objects.aget(id=user_id) if user_id else None
+    experiment_version = await Experiment.objects.select_related("team", "pipeline", "trace_provider").aget(
+        id=experiment_version_id
     )
+    experiment_channel = await ExperimentChannel.objects.aget(id=experiment_channel_id)
     session = None
     if session_id:
-        session = ExperimentSession.objects.select_related(
+        session = await ExperimentSession.objects.select_related(
             "experiment_channel", "experiment", "participant", "experiment__team"
         ).aget(id=session_id)
 

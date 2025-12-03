@@ -85,6 +85,8 @@ async def achat_start_session(request):
             data = json.loads(request.body)
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    print(data)
     serializer = ChatStartSessionRequest(data=data)
     serializer.is_valid(raise_exception=True)
 
@@ -244,13 +246,13 @@ async def achat_send_message(request, session_id):
     #     session=session,
     # )
 
-    result = handle_api_message_async.kiq(
+    result = await handle_api_message_async.kiq(
         request.user.id,
         experiment_version.id,
         session.experiment_channel.id,
         message_text,
         participant_id=session.participant.identifier,
-        session=session.id,
+        session_id=session.id,
     )
 
     task_result = await result.wait_result(timeout=30)
