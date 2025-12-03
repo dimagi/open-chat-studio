@@ -37,15 +37,6 @@ class RegisterApplicationForm(forms.ModelForm):
                 "client_secret"
             ].help_text = "Leave blank to keep the existing secret. Enter a new value to change it."
 
-    def clean_client_secret(self):
-        """Handle optional client_secret for updates."""
-        client_secret = self.cleaned_data.get("client_secret")
-        # If updating and client_secret is empty, don't change it
-        if self.instance.pk and not client_secret:
-            # Return the existing value so it doesn't get cleared
-            return self.instance.client_secret
-        return client_secret
-
     def save(self, commit=True):
         # Force these fields to specific values
         instance = super().save(commit=False)
