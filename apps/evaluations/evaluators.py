@@ -1,5 +1,4 @@
 from langchain_core.language_models import BaseChatModel
-from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 from pydantic.config import ConfigDict
 from pydantic_core import ValidationError
@@ -89,7 +88,6 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             retry_if_exception_type=(ValueError,),
         )
 
-        prompt = PromptTemplate.from_template(self.prompt)
         try:
             input = EvaluationMessageContent.model_validate(message.input)
         except ValidationError:
@@ -100,7 +98,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         except ValidationError:
             output = {}
 
-        formatted_prompt = prompt.format(
+        formatted_prompt = self.prompt.format(
             input=SafeAccessWrapper(input),
             output=SafeAccessWrapper(output),
             context=SafeAccessWrapper(message.context),

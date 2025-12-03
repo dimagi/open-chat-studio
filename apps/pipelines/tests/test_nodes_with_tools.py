@@ -2,7 +2,7 @@ from unittest import mock
 from unittest.mock import Mock, patch
 
 import pytest
-from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
+from langchain_classic.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.messages import AIMessage, ToolCall
 from langchain_core.runnables import ensure_config
 from langchain_core.tools import Tool
@@ -162,10 +162,13 @@ def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_mod
 @mock.patch("apps.pipelines.nodes.llm_node._get_configured_tools")
 def test_tool_artifact_response(get_configured_tools, get_llm_service, provider, provider_model):
     artifact = ToolArtifact(content=b"test artifact", name="test_artifact.txt", content_type="text/plain")
+    func = Mock(return_value=("test tool output", artifact))
+    # Langchain introspects the function signature, so we need to disable type checking here
+    func.__no_type_check__ = True
     tool = Tool(
         name=AgentTools.UPDATE_PARTICIPANT_DATA,
         description="Tool for testing",
-        func=Mock(return_value=("test tool output", artifact)),
+        func=func,
         response_format="content_and_artifact",
     )
 

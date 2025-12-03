@@ -1,7 +1,7 @@
 import contextlib
 import logging
 
-from langchain.memory.prompt import SUMMARY_PROMPT
+from langchain_classic.memory.prompt import SUMMARY_PROMPT
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, get_buffer_string, trim_messages
 from langchain_core.prompts import (
@@ -89,7 +89,7 @@ class BasicConversation:
     def predict(self, input: str) -> tuple[str, int, int]:
         response = self.chain.invoke({"input": input, "history": self.messages})
         usage = response.usage_metadata or {}
-        return response.text(), usage.get("input_tokens", 0), usage.get("output_tokens", 0)
+        return response.text, usage.get("input_tokens", 0), usage.get("output_tokens", 0)
 
 
 def compress_chat_history(
@@ -396,7 +396,7 @@ def _get_new_summary(llm, pruned_memory, summary, model_token_limit, first_call=
             raise ChatException("Unable to compress history")
 
     chain = (SUMMARY_PROMPT | llm).with_config({"run_name": "compress_chat_history"})
-    summary = chain.invoke(context).text()
+    summary = chain.invoke(context).text
 
     if next_batch:
         return _get_new_summary(llm, next_batch, summary, model_token_limit, False)
@@ -421,7 +421,7 @@ def _reduce_summary_size(llm, summary, summary_token_limit) -> tuple:
             raise ChatException("Too many attempts trying to reduce summary size.")
 
         chain = (SUMMARY_COMPRESSION_PROMPT | llm).with_config({"run_name": "compress_chat_history"})
-        summary = chain.invoke({"summary": summary}).text()
+        summary = chain.invoke({"summary": summary}).text
         summary_tokens = llm.get_num_tokens_from_messages([HumanMessage(content=summary)])
         attempts += 1
 

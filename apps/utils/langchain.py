@@ -5,7 +5,7 @@ from typing import Any
 from unittest import mock
 from unittest.mock import patch
 
-from langchain.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
+from langchain_classic.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
 from langchain_community.chat_models import FakeListChatModel
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManagerForLLMRun
 from langchain_core.language_models import BaseLanguageModel
@@ -170,7 +170,7 @@ class FakeLlmEcho(FakeLlmSimpleTokenCount):
     def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
         """Returns "{system_message} {user_message}" """
         self.calls.append(mock.call(messages, *args, **kwargs))
-        user_message = messages[-1].text()
+        user_message = messages[-1].text
 
         try:
             system_message = next(message.content for message in messages if message.type == "system")
