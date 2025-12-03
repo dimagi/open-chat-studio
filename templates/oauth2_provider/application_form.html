@@ -11,7 +11,7 @@
           {% blocktranslate %}
             <strong>Important:</strong> Copy your client secret now. You won't be able to see it again.
           {% endblocktranslate %}
-          {% include "generic/copy_chip.html" with copy_element_id="id_client_secret" copy_value=form.fields.client_secret.value show_value=False %}
+          {% include "generic/copy_chip.html" with copy_element_id="id_client_secret" copy_value=form.fields.client_secret.value show_value=False extra_styles="btn-ghost" %}
         </div>
     {% endif %}
     {% render_form_fields form "authorization_grant_type" "redirect_uris" "post_logout_redirect_uris" "allowed_origins" "algorithm" %}
