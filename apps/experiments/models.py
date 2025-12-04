@@ -1515,14 +1515,18 @@ class Participant(BaseTeamModel):
         last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
         joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
         return (
-            Experiment.objects.get_all()
+            self.get_experiments_queryset(include_archived=True)
             .annotate(
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
             )
-            .filter(Q(sessions__participant=self) | Q(id__in=Subquery(self.data_set.values("experiment"))))
             .distinct()
         )
+
+    def get_experiments_queryset(self, include_archived=False):
+        """Get the experiments that the participant has interacted with"""
+        query = Experiment.objects.get_all() if include_archived else Experiment.objects.all()
+        return query.filter(Q(sessions__participant=self) | Q(id__in=Subquery(self.data_set.values("experiment"))))
 
     def get_data_for_experiment(self, experiment) -> dict:
         try:

@@ -121,14 +121,13 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
         participant = get_object_or_404(Participant, pk=self.kwargs["participant_id"])
         context["active_tab"] = "participants"
         context["participant"] = participant
-        participant_experiments = participant.get_experiments_for_display()
 
         if experiment_id := self.kwargs.get("experiment_id"):
-            experiment = participant_experiments.get(id=experiment_id)
+            experiment = participant.get_experiments_queryset(include_archived=True).filter(id=experiment_id).first()
         else:
-            experiment = participant_experiments.first()
+            experiment = participant.get_experiments_queryset().first()
 
-        context["experiments"] = participant_experiments
+        context["experiments"] = participant.get_experiments_for_display()
         context["selected_experiment"] = experiment
         sessions = participant.experimentsession_set.filter(experiment=experiment).all()
         context["session_table"] = ExperimentSessionsTable(
