@@ -111,10 +111,10 @@ class TestBuildTrendData:
         trend_data = build_trend_data([run])
 
         assert "Quality Check" in trend_data
-        assert trend_data["Quality Check"]["score"]["type"] == "numeric"
-        assert trend_data["Quality Check"]["score"]["points"][0]["value"] == 0.85
-        assert trend_data["Quality Check"]["rating"]["type"] == "categorical"
-        assert trend_data["Quality Check"]["rating"]["categories"] == ["bad", "good"]
+        assert trend_data["Quality Check"]["score (numeric)"]["type"] == "numeric"
+        assert trend_data["Quality Check"]["score (numeric)"]["points"][0]["value"] == 0.85
+        assert trend_data["Quality Check"]["rating (categorical)"]["type"] == "categorical"
+        assert trend_data["Quality Check"]["rating (categorical)"]["categories"] == ["bad", "good"]
 
     def test_empty_runs_returns_empty(self):
         assert build_trend_data([]) == {}
@@ -142,5 +142,103 @@ class TestBuildTrendData:
 
         trend_data = build_trend_data([run])
 
-        assert "score" in trend_data["Test Evaluator"]
-        assert "internal" not in trend_data["Test Evaluator"]
+        assert "score (numeric)" in trend_data["Test Evaluator"]
+        assert "internal (numeric)" not in trend_data["Test Evaluator"]
+
+    def test_handles_field_type_change_categorical_to_numeric(self):
+        """Test that changing a field from categorical to numeric creates separate trend entries.
+
+        Previously this caused a TypeError because mixed values were summed together.
+        Now each type gets its own trend entry keyed by (field_name, type).
+        """
+        evaluator = EvaluatorFactory(name="Quality Check")
+        team = evaluator.team
+
+        # First run: field "rating" was categorical (e.g., "good"/"bad")
+        run1 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        for rating in ["good", "good", "bad", "good"]:
+            EvaluationResultFactory(
+                run=run1,
+                evaluator=evaluator,
+                team=team,
+                output={"result": {"rating": rating}},
+            )
+        compute_aggregates_for_run(run1)
+
+        # Second run: field "rating" is now numeric (e.g., 1-5 scale)
+        run2 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        for rating in [4, 5, 4, 3, 5]:
+            EvaluationResultFactory(
+                run=run2,
+                evaluator=evaluator,
+                team=team,
+                output={"result": {"rating": rating}},
+            )
+        compute_aggregates_for_run(run2)
+
+        trend_data = build_trend_data([run1, run2])
+
+        # Should have separate entries for each type
+        assert "rating (categorical)" in trend_data["Quality Check"]
+        assert "rating (numeric)" in trend_data["Quality Check"]
+
+        # Categorical entry should only have categorical data
+        categorical_data = trend_data["Quality Check"]["rating (categorical)"]
+        assert categorical_data["type"] == "categorical"
+        assert len(categorical_data["points"]) == 1
+        assert categorical_data["points"][0]["value"] == "good"
+
+        # Numeric entry should only have numeric data
+        numeric_data = trend_data["Quality Check"]["rating (numeric)"]
+        assert numeric_data["type"] == "numeric"
+        assert len(numeric_data["points"]) == 1
+        assert numeric_data["points"][0]["value"] == 4.2
+
+    def test_handles_field_type_change_numeric_to_categorical(self):
+        """Test that changing a field from numeric to categorical creates separate trend entries.
+
+        Previously this caused data corruption with mixed types in points.
+        Now each type gets its own trend entry keyed by (field_name, type).
+        """
+        evaluator = EvaluatorFactory(name="Quality Check")
+        team = evaluator.team
+
+        # First run: field "rating" was numeric (e.g., 1-5 scale)
+        run1 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        for rating in [4, 5, 4, 3, 5]:
+            EvaluationResultFactory(
+                run=run1,
+                evaluator=evaluator,
+                team=team,
+                output={"result": {"rating": rating}},
+            )
+        compute_aggregates_for_run(run1)
+
+        # Second run: field "rating" is now categorical (e.g., "good"/"bad")
+        run2 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        for rating in ["good", "good", "bad", "good"]:
+            EvaluationResultFactory(
+                run=run2,
+                evaluator=evaluator,
+                team=team,
+                output={"result": {"rating": rating}},
+            )
+        compute_aggregates_for_run(run2)
+
+        trend_data = build_trend_data([run1, run2])
+
+        # Should have separate entries for each type
+        assert "rating (numeric)" in trend_data["Quality Check"]
+        assert "rating (categorical)" in trend_data["Quality Check"]
+
+        # Numeric entry should only have numeric data
+        numeric_data = trend_data["Quality Check"]["rating (numeric)"]
+        assert numeric_data["type"] == "numeric"
+        assert len(numeric_data["points"]) == 1
+        assert numeric_data["points"][0]["value"] == 4.2
+
+        # Categorical entry should only have categorical data
+        categorical_data = trend_data["Quality Check"]["rating (categorical)"]
+        assert categorical_data["type"] == "categorical"
+        assert len(categorical_data["points"]) == 1
+        assert categorical_data["points"][0]["value"] == "good"

@@ -421,7 +421,7 @@ def build_trend_data(runs: list) -> dict:
     Returns:
         {
             "evaluator_name": {
-                "field_name": {
+                "field_name (type)": {
                     "type": "numeric" | "categorical",
                     "points": [{"run_id": int, "date": str, "value": any, ...}],
                     "categories": ["cat1", "cat2"],  # for categorical only
@@ -429,6 +429,11 @@ def build_trend_data(runs: list) -> dict:
                 }
             }
         }
+
+    Note:
+        Fields are keyed by (field_name, type) to handle cases where a field's
+        type changes between runs (e.g., from numeric to categorical). This
+        ensures each type gets its own trend line/chart.
     """
     if not runs:
         return {}
@@ -455,8 +460,10 @@ def build_trend_data(runs: list) -> dict:
                 if not get_use_in_aggregations(output_schema.get(field_name, {})):
                     continue
 
-                field = trend[evaluator_name][field_name]
-                field["type"] = stats["type"]
+                field_type = stats["type"]
+                field_key = (field_name, field_type)
+                field = trend[evaluator_name][field_key]
+                field["type"] = field_type
 
                 # Build point data
                 point = {
@@ -464,7 +471,7 @@ def build_trend_data(runs: list) -> dict:
                     "date": run.created_at.strftime("%b %d"),
                 }
 
-                if stats["type"] == "numeric":
+                if field_type == "numeric":
                     point["value"] = stats.get("mean")
                 else:
                     point["value"] = stats.get("mode")
@@ -479,7 +486,7 @@ def build_trend_data(runs: list) -> dict:
     result = {}
     for evaluator_name, fields in trend.items():
         result[evaluator_name] = {}
-        for field_name, field_data in fields.items():
+        for (field_name, field_type), field_data in fields.items():
             processed = {
                 "type": field_data["type"],
                 "points": field_data["points"],
@@ -497,6 +504,8 @@ def build_trend_data(runs: list) -> dict:
                 if values:
                     processed["mean"] = round(sum(values) / len(values), 2)
 
-            result[evaluator_name][field_name] = processed
+            # Use "field_name (type)" as key to distinguish different types
+            display_key = f"{field_name} ({field_type})"
+            result[evaluator_name][display_key] = processed
 
     return result
