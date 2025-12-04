@@ -26,6 +26,7 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
+          POSTGRES_DB: open_chat_studio
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres_password
         options: >-
@@ -78,6 +79,7 @@ jobs:
           uv run python cypress/create_test_user.py
         env:
           DEBUG: 'true'
+          POSTGRES_DB: open_chat_studio
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
           SECRET_KEY: secret-test-key
@@ -89,6 +91,7 @@ jobs:
           npx wait-on http://127.0.0.1:8000 --timeout 60000
         env:
           DEBUG: 'true'
+          POSTGRES_DB: open_chat_studio
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
           SECRET_KEY: secret-test-key
