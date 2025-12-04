@@ -401,3 +401,15 @@ class EvaluationResult(BaseTeamModel):
             return self.output["message"]["context"]
         except KeyError:
             return {}
+
+
+class EvaluationRunAggregate(BaseModel):
+    """Stores aggregated results for an evaluation run, per evaluator."""
+
+    run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="aggregates")
+    evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
+    aggregates = models.JSONField(default=dict)
+    computed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("run", "evaluator")

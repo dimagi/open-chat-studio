@@ -13,6 +13,7 @@ class BaseFieldDefinition(BaseModel):
     """Base class for field definitions with common functionality."""
 
     description: str
+    use_in_aggregations: bool = True
 
     @property
     def python_type(self) -> type:
@@ -21,7 +22,7 @@ class BaseFieldDefinition(BaseModel):
 
     @property
     def pydantic_fields(self) -> dict:
-        return self.model_dump(exclude={"type"}, exclude_none=True)
+        return self.model_dump(exclude={"type", "use_in_aggregations"}, exclude_none=True)
 
 
 class StringFieldDefinition(BaseFieldDefinition):

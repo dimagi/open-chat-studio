@@ -1,0 +1,61 @@
+<div class="flex justify-end mb-4">
+  <div class="btn-group">
+    {% for value, label in date_range_choices %}
+      <button class="btn btn-sm {% if current_range == value %}btn-active{% endif %}"
+              hx-get="{{ trends_url }}?range={{ value }}"
+              hx-target="#trends-container"
+              hx-swap="innerHTML"
+              hx-indicator="#trends-loading">
+        {{ label }}
+      </button>
+    {% endfor %}
+  </div>
+</div>
+
+{% if trend_data %}
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for evaluator_name, fields in trend_data.items %}
+      {% for field_name, field_data in fields.items %}
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <h3 class="font-medium text-sm">{{ field_name }}</h3>
+                <p class="text-xs text-base-content/60">{{ evaluator_name }}</p>
+              </div>
+              {% if field_data.points %}
+                <div class="text-right">
+                  {% if field_data.type == "numeric" and field_data.mean %}
+                    <span class="text-sm">mean: {{ field_data.mean }}</span>
+                  {% elif field_data.type == "categorical" and field_data.mode %}
+                    <span class="text-sm">mode: {{ field_data.mode }}</span>
+                  {% endif %}
+                </div>
+              {% endif %}
+            </div>
+            {% if field_data.points|length > 1 %}
+              <div class="h-16">
+                <canvas id="chart-{{ evaluator_name|slugify }}-{{ field_name|slugify }}"></canvas>
+              </div>
+            {% else %}
+              <p class="text-sm text-base-content/60">Not enough data points</p>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    {% endfor %}
+  </div>
+
+  {{ trend_data_json|json_script:"trend-data" }}
+  <script>
+    (function() {
+      requestAnimationFrame(() => {
+        const trendData = JSON.parse(document.getElementById('trend-data').textContent);
+        const baseUrl = "{% url 'evaluations:evaluation_results_home' request.team.slug config.id 0 %}".replace('/0/', '/{runId}/');
+        SiteJS.evaluationTrends.renderTrendCharts(trendData, baseUrl);
+      });
+    })();
+  </script>
+{% else %}
+  <p class="text-base-content/60">No completed runs yet. Run an evaluation to see trends.</p>
+{% endif %}

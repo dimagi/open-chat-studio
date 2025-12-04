@@ -99,6 +99,43 @@
     {% if group_job_id %}
       {% include "evaluations/components/progress.html" %}
     {% elif evaluation_run.status == "completed" %}
+      {% if aggregates %}
+        <div class="mb-6">
+          <h2 class="text-lg font-semibold mb-4">Aggregates</h2>
+          {% for agg in aggregates %}
+            <div class="card bg-base-100 shadow-sm mb-4">
+              <div class="card-body py-4">
+                <h3 class="card-title text-base">{{ agg.evaluator.name }}</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
+                  {% for field_name, stats in agg.aggregates.items %}
+                    <div class="border border-base-300 rounded-lg p-3">
+                      <div class="flex justify-between items-center mb-2">
+                        <span class="font-medium">{{ field_name }}</span>
+                        <span class="text-xs text-base-content/60">n={{ stats.count }}</span>
+                      </div>
+                      {% if stats.type == "numeric" %}
+                        <div class="grid grid-cols-2 gap-1 text-sm">
+                          <div>mean: <span class="font-mono">{{ stats.mean }}</span></div>
+                          <div>median: <span class="font-mono">{{ stats.median }}</span></div>
+                          <div>min: <span class="font-mono">{{ stats.min }}</span></div>
+                          <div>max: <span class="font-mono">{{ stats.max }}</span></div>
+                        </div>
+                      {% elif stats.type == "categorical" %}
+                        <div class="text-sm mb-1">mode: <span class="font-medium">{{ stats.mode }}</span></div>
+                        <div class="flex flex-wrap gap-1">
+                          {% for value, pct in stats.distribution.items %}
+                            <span class="badge badge-sm badge-outline">{{ value }}: {{ pct }}%</span>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
       <div class="mb-6">
         <h2 class="text-lg font-semibold mb-4">Results {% if evaluation_run.type == "preview" %}(Preview){% endif %}</h2>
         <div id="results-table" hx-get="{{ table_url }}" hx-trigger="load"></div>

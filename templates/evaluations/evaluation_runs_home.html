@@ -1,0 +1,57 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+
+{% block page_js %}
+  {{ block.super }}
+  <script src="{% static 'js/evaluationTrends-bundle.js' %}"></script>
+{% endblock page_js %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'evaluations:home' request.team.slug %}">Evaluations</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{{ config.name }} Runs</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+  <div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold">{{ title }}</h1>
+      <div class="flex gap-2">
+        <a href="{% url 'evaluations:create_evaluation_preview' request.team.slug config.id %}"
+           class="btn btn-outline">
+          <i class="fa-solid fa-eye"></i>
+          Preview
+        </a>
+        <a href="{% url 'evaluations:create_evaluation_run' request.team.slug config.id %}"
+           class="btn btn-primary">
+          <i class="fa-solid fa-play"></i>
+          Run Evaluation
+        </a>
+      </div>
+    </div>
+
+    <div class="mb-8">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-semibold">Trends</h2>
+        <span id="trends-loading" class="htmx-indicator">
+          <span class="loading loading-spinner loading-sm"></span>
+        </span>
+      </div>
+      <div id="trends-container"
+           hx-get="{{ trends_url }}"
+           hx-trigger="load">
+        <div class="flex items-center gap-2 text-base-content/60">
+          <span class="loading loading-spinner loading-md"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-6">
+      <h2 class="text-lg font-semibold mb-4">Runs</h2>
+      <div id="runs-table" hx-get="{{ table_url }}" hx-trigger="load"></div>
+    </div>
+  </div>
+{% endblock app %}
