@@ -1,6 +1,8 @@
 from django import forms
 from oauth2_provider.forms import AllowForm
 
+from apps.oauth.models import OAuth2Application
+
 
 class AuthorizationForm(AllowForm):
     team_slug = forms.ChoiceField(label="Team", required=True)
@@ -14,3 +16,53 @@ class AuthorizationForm(AllowForm):
         if team_requested:
             self.fields["team_slug"].widget = forms.HiddenInput()
             self.fields["team_slug"].disabled = True
+
+
+class RegisterApplicationForm(forms.ModelForm):
+    name = forms.CharField(required=True, max_length=255)
+
+    algorithm = forms.ChoiceField(
+        choices=[("RS256", "RS256")],
+        required=False,
+        help_text="Algorithm for signing JWT tokens.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["authorization_grant_type"].disabled = True
+        self.fields["algorithm"].disabled = True
+        self.fields["redirect_uris"].required = True
+
+        if self.instance.pk:
+            self.fields["client_secret"].widget = forms.HiddenInput()
+
+    def save(self, commit=True):
+        # Force these fields to specific values
+        instance = super().save(commit=False)
+        instance.authorization_grant_type = OAuth2Application.GRANT_AUTHORIZATION_CODE
+        instance.algorithm = OAuth2Application.RS256_ALGORITHM
+        instance.client_type = OAuth2Application.CLIENT_CONFIDENTIAL
+        instance.hash_client_secret = True
+        instance.skip_authorization = False
+        if commit:
+            instance.save()
+        return instance
+
+    class Meta:
+        model = OAuth2Application
+        fields = [
+            "name",
+            "client_id",
+            "client_secret",
+            "redirect_uris",
+            "post_logout_redirect_uris",
+            "allowed_origins",
+            "algorithm",
+            "authorization_grant_type",
+        ]
+        help_texts = {
+            "redirect_uris": "Enter one URI per line. These are the allowed redirect URIs after authorization.",
+            "post_logout_redirect_uris": "Enter one URI per line. Optional URIs for post-logout redirects.",
+            "allowed_origins": "Enter one origin per line. Optional CORS allowed origins.",
+            "algorithm": "Algorithm for signing tokens.",
+        }

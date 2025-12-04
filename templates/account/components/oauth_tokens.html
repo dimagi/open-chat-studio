@@ -1,6 +1,11 @@
 {% load i18n %}
 <section class="app-card">
-  <h2 class="pg-subtitle">{% translate "OAuth Access Tokens" %}</h2>
+  <div class="flex w-full justify-between">
+    <h2 class="pg-subtitle">{% translate "OAuth Access Tokens" %}</h2>
+    <a href="{% url 'oauth2_provider:application_home' %}" class="btn btn-outline btn-sm">
+      {% translate "Manage OAuth Applications" %}
+    </a>
+  </div>
   {% for token in oauth_tokens %}
     {% if forloop.first %}
       <div class="table-responsive">
@@ -18,7 +23,7 @@
           <tbody>
     {% endif %}
     <tr>
-      <td>{{ token.application.name }}</td>
+      <td>{% include "generic/chip.html" with chip=token.application.as_chip %}</td>
       <td>
         {% if token.team %}
           <a href="{% url "web_team:home" token.team.slug %}" class="link">{{ token.team.name }}</a>

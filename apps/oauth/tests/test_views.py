@@ -2,7 +2,8 @@ import pytest
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory
 
-from apps.oauth.views import TeamScopedAuthorizationView
+from apps.oauth.models import OAuth2Application
+from apps.oauth.views import ApplicationTableView, EditApplication, TeamScopedAuthorizationView
 from apps.teams.helpers import create_default_team_for_user
 from apps.teams.models import Team
 from apps.utils.factories.team import MembershipFactory
@@ -10,7 +11,7 @@ from apps.utils.factories.user import UserFactory
 
 
 @pytest.fixture()
-def factory():
+def request_factory():
     """Factory for creating HTTP requests."""
     return RequestFactory()
 
@@ -38,11 +39,11 @@ def view_with_oauth2_data():
 
 
 @pytest.fixture()
-def get_request_with_user(factory):
+def get_request_with_user(request_factory):
     """Factory fixture to create GET requests with user attached."""
 
     def _create_request(url="/", user=None):
-        request = factory.get(url)
+        request = request_factory.get(url)
         request.user = user
         request.method = "GET"
         # Add session middleware
@@ -55,11 +56,11 @@ def get_request_with_user(factory):
 
 
 @pytest.fixture()
-def post_request_with_user(factory):
+def post_request_with_user(request_factory):
     """Factory fixture to create POST requests with user attached."""
 
     def _create_request(url="/", user=None):
-        request = factory.post(url)
+        request = request_factory.post(url)
         request.user = user
         request.method = "POST"
         # Add session middleware
@@ -72,14 +73,14 @@ def post_request_with_user(factory):
 
 
 @pytest.fixture()
-def request_with_session(factory):
+def request_with_session(request_factory):
     """Factory fixture to create requests with session middleware attached."""
 
     def _create_request(url="/", user=None, method="GET"):
         if method == "GET":
-            request = factory.get(url)
+            request = request_factory.get(url)
         else:
-            request = factory.post(url)
+            request = request_factory.post(url)
 
         # Add session middleware
         middleware = SessionMiddleware(lambda x: None)
@@ -91,6 +92,32 @@ def request_with_session(factory):
         return request
 
     return _create_request
+
+
+@pytest.fixture()
+def oauth_applications_for_multiple_users(db, user_with_team):
+    """Create OAuth applications for multiple users."""
+    other_user = UserFactory()
+
+    app_for_current_user = OAuth2Application.objects.create(
+        name="Current User App",
+        user=user_with_team,
+        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+        authorization_grant_type=OAuth2Application.GRANT_AUTHORIZATION_CODE,
+    )
+    app_for_other_user = OAuth2Application.objects.create(
+        name="Other User App",
+        user=other_user,
+        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+        authorization_grant_type=OAuth2Application.GRANT_AUTHORIZATION_CODE,
+    )
+
+    return {
+        "current_user": user_with_team,
+        "other_user": other_user,
+        "current_user_app": app_for_current_user,
+        "other_user_app": app_for_other_user,
+    }
 
 
 @pytest.mark.django_db()
@@ -188,3 +215,47 @@ def test_requested_team_returns_none_user_not_member(get_request_with_user, user
     view_with_oauth2_data.request = request
 
     assert view_with_oauth2_data.requested_team is None
+
+
+@pytest.mark.django_db()
+def test_edit_application_queryset_scoped_to_user(request_factory, oauth_applications_for_multiple_users):
+    """Test that EditApplication queryset is scoped to the logged-in user."""
+    current_user = oauth_applications_for_multiple_users["current_user"]
+    current_user_app = oauth_applications_for_multiple_users["current_user_app"]
+    other_user_app = oauth_applications_for_multiple_users["other_user_app"]
+
+    # Create request with current user
+    request = request_factory.get("/oauth/applications/edit/")
+    request.user = current_user
+
+    # Create view instance and check queryset
+    view = EditApplication()
+    view.request = request
+    queryset = view.get_queryset()
+
+    # Verify only current user's application is in queryset
+    assert current_user_app in queryset
+    assert other_user_app not in queryset
+    assert queryset.count() == 1
+
+
+@pytest.mark.django_db()
+def test_application_table_view_queryset_scoped_to_user(request_factory, oauth_applications_for_multiple_users):
+    """Test that ApplicationTableView queryset is scoped to the logged-in user."""
+    current_user = oauth_applications_for_multiple_users["current_user"]
+    current_user_app = oauth_applications_for_multiple_users["current_user_app"]
+    other_user_app = oauth_applications_for_multiple_users["other_user_app"]
+
+    # Create request with current user
+    request = request_factory.get("/oauth/applications/")
+    request.user = current_user
+
+    # Create view instance and check queryset
+    view = ApplicationTableView()
+    view.request = request
+    queryset = view.get_queryset()
+
+    # Verify only current user's application is in queryset
+    assert current_user_app in queryset
+    assert other_user_app not in queryset
+    assert queryset.count() == 1
