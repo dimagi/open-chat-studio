@@ -111,12 +111,35 @@ open-chat-studio-widget {
   @apply w-full ml-0!;
 }
 
+/* Fix oversized wrapper when loading class is added */
+.ts-wrapper.loading {
+  height: auto !important;
+  min-height: 2.75rem !important;
+  max-height: 2.75rem !important;
+}
+
+.ts-wrapper.loading .ts-control {
+  height: auto !important;
+  min-height: 2.75rem !important;
+  max-height: 2.75rem !important;
+}
+
+/* Constrain the loading spinner itself */
+.ts-wrapper.loading::after,
+.ts-wrapper.loading .ts-control::after {
+  width: 1rem !important;
+  height: 1rem !important;
+  max-width: 1rem !important;
+  max-height: 1rem !important;
+}
+
 .ts-control {
   @apply
     rounded-lg
     bg-white
     py-2
     px-3;
+  position: relative;
 
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
     background-position: right 0.5rem center;
@@ -168,7 +191,7 @@ open-chat-studio-widget {
   @apply  bg-zinc-600 text-gray-100;
 }
 
-input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button {
   display: none;
 }
