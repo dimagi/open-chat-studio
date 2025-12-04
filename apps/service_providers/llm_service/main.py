@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 import pydantic
 from django.db.models import Q
-from langchain.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain_anthropic import ChatAnthropic
+from langchain_classic.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager, dispatch_custom_event
 from langchain_core.language_models import BaseChatModel
 from langchain_core.load import dumpd

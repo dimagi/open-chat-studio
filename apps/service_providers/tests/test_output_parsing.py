@@ -1,4 +1,4 @@
-from langchain.agents.output_parsers.tools import ToolAgentAction
+from langchain_classic.agents.output_parsers.tools import ToolAgentAction
 from langchain_core.agents import AgentStep
 from langchain_core.messages import AIMessage, FunctionMessage
 

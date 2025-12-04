@@ -12,6 +12,8 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions
 from rest_framework_api_key.permissions import KeyParser
 
+from apps.channels.models import ExperimentChannel
+from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 
@@ -60,6 +62,42 @@ class BearerTokenAuthentication(BaseKeyAuthentication):
         return ConfigurableKeyParser(keyword=self.keyword).get_from_authorization(request)
 
 
+class WidgetDomainPermission(BasePermission):
+    def has_permission(self, request, view):
+        if not isinstance(request.auth, ExperimentChannel):
+            # not authed with widget token
+            return True
+
+        origin_domain = extract_domain_from_headers(request)
+        if not origin_domain:
+            return False
+
+        experiment_channel = request.auth
+        allowed_domains = experiment_channel.extra_data.get("allowed_domains", [])
+        return validate_domain(origin_domain, allowed_domains)
+
+
+class LegacySessionAccessPermission(BasePermission):
+    def has_permission(self, request, view):
+        if isinstance(request.auth, ExperimentChannel):
+            # skip for requests authed with widget auth
+            return True
+
+        session = get_experiment_session_cached(view.kwargs.get("session_id"))
+        if not session:
+            return False
+
+        experiment = session.experiment
+        if experiment.is_public:
+            return True
+
+        participant_id = session.participant.identifier
+        if not participant_id:
+            return False
+
+        return experiment.is_participant_allowed(participant_id)
+
+
 class ReadOnlyAPIKeyPermission(BasePermission):
     """
     Allows only safe methods (GET, HEAD, OPTIONS) for read-only API keys.
@@ -73,7 +111,8 @@ class ReadOnlyAPIKeyPermission(BasePermission):
             return False
 
         api_key = request.auth
-        if getattr(api_key, "read_only", True):
+        # The bearer token can also be an oauth Access Token, which doesn't have read_only attribute
+        if isinstance(api_key, UserAPIKey) and getattr(api_key, "read_only", True):
             return request.method in SAFE_METHODS
 
         return True

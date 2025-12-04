@@ -42,9 +42,9 @@ def make_mock_file(name, content_type, size, file_data=b"filedata"):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.bots.TopicBot.process_input")
-def test_handle_user_message(process_input, slack_channel, slack_service):
-    process_input.return_value = ChatMessage(content="Hi", message_type=ChatMessageType.AI)
+@patch("apps.chat.channels.ChannelBase._get_bot_response")
+def test_handle_user_message(_get_bot_response, slack_channel, slack_service):
+    _get_bot_response.return_value = ChatMessage(content="Hi", message_type=ChatMessageType.AI)
     session = SlackChannel.start_new_session(
         slack_channel.experiment,
         slack_channel,

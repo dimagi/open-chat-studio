@@ -1,6 +1,7 @@
 import csv
 import json
 import logging
+from datetime import timedelta
 from functools import cached_property
 from io import StringIO
 
@@ -9,6 +10,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
@@ -18,7 +20,7 @@ from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.tasks import upload_evaluation_run_results_task
-from apps.evaluations.utils import get_evaluators_with_schema
+from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
 from apps.experiments.models import Experiment
 from apps.generics import actions
 from apps.teams.decorators import login_and_team_required
@@ -105,14 +107,64 @@ class EditEvaluation(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMi
 
 class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationrun"
-    template_name = "generic/object_home.html"
+    template_name = "evaluations/evaluation_runs_home.html"
+    extra_context = {
+        "active_tab": "evaluations",
+        "title": "Evaluation Runs",
+        "allow_new": False,
+    }
 
     def get_context_data(self, team_slug: str, **kwargs):
+        config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
+
         return {
-            "active_tab": "evaluations",
-            "title": "Evaluation Runs",
-            "allow_new": False,
+            **super().get_context_data(**kwargs),
+            "config": config,
             "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
+            "trends_url": reverse("evaluations:evaluation_trends", args=[team_slug, kwargs["evaluation_pk"]]),
+        }
+
+
+class EvaluationTrendsView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+    permission_required = "evaluations.view_evaluationrun"
+    template_name = "evaluations/components/trend_charts.html"
+
+    DATE_RANGE_CHOICES = [
+        ("7", "Last 7 days"),
+        ("30", "Last 30 days"),
+        ("90", "Last 90 days"),
+        ("all", "All time"),
+    ]
+
+    def get_context_data(self, team_slug: str, **kwargs):
+        config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
+
+        date_range = self.request.GET.get("range", "30")
+
+        queryset = EvaluationRun.objects.filter(
+            config=config,
+            status=EvaluationRunStatus.COMPLETED,
+            type=EvaluationRunType.FULL,
+        )
+
+        if date_range != "all":
+            try:
+                days = int(date_range)
+                cutoff_date = timezone.now() - timedelta(days=days)
+                queryset = queryset.filter(created_at__gte=cutoff_date)
+            except ValueError:
+                pass  # Invalid range, show all
+
+        completed_runs = list(queryset.prefetch_related("aggregates__evaluator").order_by("created_at"))
+        trend_data = build_trend_data(completed_runs)
+
+        return {
+            "config": config,
+            "trend_data": trend_data,
+            "trend_data_json": trend_data,
+            "date_range_choices": self.DATE_RANGE_CHOICES,
+            "current_range": date_range,
+            "trends_url": reverse("evaluations:evaluation_trends", args=[team_slug, kwargs["evaluation_pk"]]),
         }
 
 
@@ -156,6 +208,9 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
                 "evaluations:evaluation_results_table",
                 args=[team_slug, kwargs["evaluation_pk"], kwargs["evaluation_run_pk"]],
             )
+            if evaluation_run.status == EvaluationRunStatus.COMPLETED:
+                aggregates = evaluation_run.aggregates.select_related("evaluator").all()
+                context["aggregates"] = filter_aggregates_for_display(aggregates)
 
         return context
 

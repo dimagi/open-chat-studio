@@ -1,12 +1,16 @@
+from __future__ import annotations
+
 from urllib.parse import urlparse
 
+from django.core.cache import cache
 from django.core.validators import validate_domain_name
 
 from apps.channels.exceptions import ExperimentChannelException
-from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.experiments.models import Experiment
+from apps.channels.models import ChannelPlatform
+from apps.experiments.models import Experiment, ExperimentSession
 
 ALL_DOMAINS = "*"
+WIDGET_SESSION_CACHE_TTL = 300
 
 
 def match_domain_pattern(origin_domain: str, allowed_pattern: str) -> bool:
@@ -33,36 +37,11 @@ def extract_domain_from_headers(request) -> str:
     return ""
 
 
-def validate_embed_key_for_experiment(token: str, origin_domain: str, experiment_id: str) -> ExperimentChannel | None:
-    """
-    Validate embedded widget request for a specific experiment.
-    Used in start_session when we have experiment_id but not team yet.
+def validate_domain(origin_domain: str, allowed_domains: list[str]) -> bool:
+    if ALL_DOMAINS in allowed_domains:
+        return True
 
-    Returns:
-        ExperimentChannel if validation succeeds, None otherwise.
-    """
-    if not token or not origin_domain:
-        return None
-
-    try:
-        channel = ExperimentChannel.objects.select_related("experiment", "team").get(
-            experiment__public_id=experiment_id,
-            platform=ChannelPlatform.EMBEDDED_WIDGET,
-            extra_data__widget_token=token,
-            deleted=False,
-        )
-    except ExperimentChannel.DoesNotExist:
-        return None
-
-    allowed_domains = channel.extra_data.get("allowed_domains", [])
-    if not allowed_domains or any(domain == ALL_DOMAINS for domain in allowed_domains):
-        return channel
-
-    for allowed_domain in allowed_domains:
-        if match_domain_pattern(origin_domain, allowed_domain):
-            return channel
-
-    return None
+    return any(match_domain_pattern(origin_domain, domain) for domain in allowed_domains)
 
 
 def validate_platform_availability(experiment: Experiment, platform: ChannelPlatform):
@@ -81,3 +60,39 @@ def validate_domain_or_wildcard(value):
     """Validate domain name, allowing wildcard subdomains (*.example.com)"""
     domain_part = value[2:] if value.startswith("*.") else value
     validate_domain_name(domain_part)
+
+
+def _get_experiment_session_cache_key(session_id: str) -> str:
+    """Generate cache key for widget session."""
+    return f"WIDGET_SESSION:{session_id}"
+
+
+def delete_experiment_session_cached(session_id: str) -> None:
+    """Invalidate widget session cache."""
+    if session_id:
+        cache.delete(_get_experiment_session_cache_key(session_id))
+
+
+def get_experiment_session_cached(session_id: str) -> ExperimentSession | None:
+    """
+    Get widget session from cache or database.
+
+    Returns cached session if available, otherwise fetches from database
+    and caches the result.
+    """
+    if not session_id:
+        return None
+
+    cache_key = _get_experiment_session_cache_key(session_id)
+
+    if session := cache.get(cache_key):
+        return session
+
+    try:
+        session = ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant").get(
+            external_id=session_id
+        )
+        cache.set(cache_key, session, WIDGET_SESSION_CACHE_TTL)
+        return session
+    except ExperimentSession.DoesNotExist:
+        return None

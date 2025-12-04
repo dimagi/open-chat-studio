@@ -2,10 +2,12 @@ from unittest import mock
 from unittest.mock import Mock, patch
 
 import pytest
-from langchain.agents.openai_assistant.base import OpenAIAssistantFinish
+from langchain_classic.agents.openai_assistant.base import OpenAIAssistantFinish
 from langchain_core.messages import AIMessage, ToolCall
 from langchain_core.runnables import ensure_config
+from langchain_core.tools import Tool
 
+from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.experiments.models import AgentTools
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.llm_node import _get_configured_tools
@@ -122,9 +124,6 @@ def test_tool_filtering(disabled_tools, provider, provider_model):
 @django_db_with_data(available_apps=("apps.service_providers",))
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_model):
-    def _tool_call(name, args):
-        return AIMessage(tool_calls=[ToolCall(name=name, args=args, id="123")], content="")
-
     service = build_fake_llm_service(
         responses=[
             _tool_call(AgentTools.UPDATE_PARTICIPANT_DATA, {"key": "test", "value": "123"}),
@@ -156,3 +155,60 @@ def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_mod
     output = graph.invoke(state)
     assert output["messages"][-1] == "123"
     assert output["participant_data"] == {"test": ["123", "next"], "other": "xyz"}
+
+
+@django_db_with_data(available_apps=("apps.service_providers",))
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@mock.patch("apps.pipelines.nodes.llm_node._get_configured_tools")
+def test_tool_artifact_response(get_configured_tools, get_llm_service, provider, provider_model):
+    artifact = ToolArtifact(content=b"test artifact", name="test_artifact.txt", content_type="text/plain")
+    func = Mock(return_value=("test tool output", artifact))
+    # Langchain introspects the function signature, so we need to disable type checking here
+    func.__no_type_check__ = True
+    tool = Tool(
+        name=AgentTools.UPDATE_PARTICIPANT_DATA,
+        description="Tool for testing",
+        func=func,
+        response_format="content_and_artifact",
+    )
+
+    service = build_fake_llm_service(
+        responses=[
+            _tool_call(AgentTools.UPDATE_PARTICIPANT_DATA, {"arg1": "test arg"}),
+            "ai response after tool",
+        ],
+        token_counts=[0],
+    )
+    get_configured_tools.return_value = [tool]
+
+    get_llm_service.return_value = service
+    nodes = [
+        start_node(),
+        llm_response_with_prompt_node(
+            str(provider.id),
+            str(provider_model.id),
+            prompt="Be helpful. {participant_data}",
+            name="llm1",
+            tools=[AgentTools.UPDATE_PARTICIPANT_DATA],
+        ),
+        end_node(),
+    ]
+    pipeline = PipelineFactory()
+    session = ExperimentSessionFactory()
+    graph = create_runnable(pipeline, nodes)
+    state = PipelineState(
+        messages=["Repeat exactly: 123"],
+        experiment_session=session,
+        participant_data={"test": "abc", "other": "xyz"},
+    )
+    output = graph.invoke(state)
+    assert output["messages"][-1] == "ai response after tool"
+    assert tool.func.call_args == (("test arg",), {})
+    assert len(service.llm.get_call_messages()) == 2
+    last_message = service.llm.get_call_messages()[-1][-1]
+    assert last_message.content == "test tool output"
+    assert last_message.artifact == artifact
+
+
+def _tool_call(name, args):
+    return AIMessage(tool_calls=[ToolCall(name=name, args=args, id="123")], content="")

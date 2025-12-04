@@ -11,6 +11,7 @@ from apps.annotations.models import TagCategories
 from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSessionSerializer
 from apps.experiments.models import ExperimentSession
+from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 update_state_serializer = inline_serializer(
     name="update_state_serializer",
@@ -31,7 +32,7 @@ update_state_response_serializer = inline_serializer(
 @extend_schema_view(
     list=extend_schema(
         operation_id="session_list",
-        summary="List Experiment Sessions",
+        summary="List Chatbot Sessions",
         tags=["Experiment Sessions"],
         parameters=[
             OpenApiParameter(
@@ -56,7 +57,7 @@ update_state_response_serializer = inline_serializer(
     ),
     retrieve=extend_schema(
         operation_id="session_retrieve",
-        summary="Retrieve Experiment Session",
+        summary="Retrieve Chatbot Session",
         tags=["Experiment Sessions"],
         responses=ExperimentSessionSerializer(include_messages=True),
         parameters=[
@@ -76,13 +77,13 @@ update_state_response_serializer = inline_serializer(
     ),
     create=extend_schema(
         operation_id="session_create",
-        summary="Create Experiment Session",
+        summary="Create Chatbot Session",
         tags=["Experiment Sessions"],
         request=ExperimentSessionCreateSerializer,
     ),
     end_experiment_session=extend_schema(
         operation_id="session_end",
-        summary="End Experiment Session",
+        summary="End Chatbot Session",
         tags=["Experiment Sessions"],
         parameters=[
             OpenApiParameter(
@@ -97,7 +98,7 @@ update_state_response_serializer = inline_serializer(
     ),
     update_state=extend_schema(
         operation_id="session_update_state",
-        summary="Update Experiment Session State",
+        summary="Update Chatbot Session State",
         tags=["Experiment Sessions"],
         parameters=[
             OpenApiParameter(
@@ -112,13 +113,14 @@ update_state_response_serializer = inline_serializer(
     ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [DjangoModelPermissionsWithView]
+    permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
     serializer_class = ExperimentSessionSerializer
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
     lookup_field = "external_id"
     lookup_url_kwarg = "id"
+    required_scopes = ["sessions"]
 
     def get_serializer(self, *args, **kwargs):
         action = self.action

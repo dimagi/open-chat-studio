@@ -341,7 +341,7 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status"])
 
     def get_table_data(self, include_ids: bool = False):
-        results = self.results.select_related("message", "evaluator", "session").all()
+        results = self.results.select_related("message", "evaluator", "session").order_by("created_at").all()
         table_by_message = defaultdict(dict)
         for result in results:
             context_columns = {
@@ -401,3 +401,15 @@ class EvaluationResult(BaseTeamModel):
             return self.output["message"]["context"]
         except KeyError:
             return {}
+
+
+class EvaluationRunAggregate(BaseModel):
+    """Stores aggregated results for an evaluation run, per evaluator."""
+
+    run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="aggregates")
+    evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
+    aggregates = models.JSONField(default=dict)
+    computed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("run", "evaluator")

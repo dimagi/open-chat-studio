@@ -56,7 +56,7 @@ class TestTranslateMessagesWithLLM(TestCase):
         """Test successful translation of messages"""
 
         mock_llm_response = Mock()
-        mock_llm_response.text.return_value = json.dumps(
+        mock_llm_response.text = json.dumps(
             [{"id": "1", "translation": "Hola, ¿cómo estás?"}, {"id": "2", "translation": "¡Estoy bien, gracias!"}]
         )
 
@@ -85,7 +85,7 @@ class TestTranslateMessagesWithLLM(TestCase):
         self.mock_message1.translations = {"spa": "Hola, ¿cómo estás?"}
 
         mock_llm_response = Mock()
-        mock_llm_response.text.return_value = json.dumps([{"id": "2", "translation": "¡Estoy bien, gracias!"}])
+        mock_llm_response.text = json.dumps([{"id": "2", "translation": "¡Estoy bien, gracias!"}])
         mock_llm = Mock()
         mock_llm.invoke.return_value = mock_llm_response
         mock_llm_service = Mock()

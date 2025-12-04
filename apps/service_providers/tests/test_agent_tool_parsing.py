@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from langchain.agents.output_parsers.tools import ToolAgentAction
+from langchain_classic.agents.output_parsers.tools import ToolAgentAction
 from langchain_core.agents import AgentFinish
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage, AIMessageChunk

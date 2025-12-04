@@ -33,6 +33,11 @@ urlpatterns = [
         name="evaluation_runs_table",
     ),
     path(
+        "<int:evaluation_pk>/evaluation_trends",
+        evaluation_config_views.EvaluationTrendsView.as_view(),
+        name="evaluation_trends",
+    ),
+    path(
         "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/results",
         evaluation_config_views.EvaluationResultHome.as_view(),
         name="evaluation_results_home",

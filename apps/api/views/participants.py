@@ -1,10 +1,9 @@
-from django.contrib.auth.decorators import permission_required
 from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiExample, extend_schema
-from rest_framework.decorators import api_view
 from rest_framework.exceptions import NotFound
+from rest_framework.views import APIView
 
 from apps.api.serializers import ParticipantDataUpdateRequest
 from apps.api.tasks import setup_connect_channels_for_bots
@@ -13,72 +12,76 @@ from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, Participant, ParticipantData
 
 
-@extend_schema(
-    operation_id="update_participant_data",
-    summary="Update Participant Data",
-    tags=["Participants"],
-    request=ParticipantDataUpdateRequest(),
-    responses={200: {}},
-    examples=[
-        OpenApiExample(
-            name="CreateParticipantData",
-            summary="Create participant data for multiple experiments",
-            value={
-                "identifier": "part1",
-                "platform": "api",
-                "data": [
-                    {"experiment": "exp1", "data": {"name": "John"}},
-                    {
-                        "experiment": "exp2",
-                        "data": {"name": "Doe"},
-                        "schedules": [
-                            {
-                                "id": "sched1",
-                                "name": "Schedule 1",
-                                "date": "2022-01-01T00:00:00Z",
-                                "prompt": "Prompt 1",
-                            },
-                        ],
-                    },
-                ],
-            },
-        ),
-        OpenApiExample(
-            name="UpdateParticipantSchedules",
-            summary="Update and delete participant schedules",
-            value={
-                "identifier": "part1",
-                "platform": "api",
-                "data": [
-                    {
-                        "experiment": "exp1",
-                        "schedules": [
-                            {
-                                "id": "sched1",
-                                "name": "Schedule 1 updated",
-                                "date": "2022-01-01T00:00:00Z",
-                                "prompt": "Prompt updated",
-                            },
-                            {"id": "sched2", "delete": True},
-                        ],
-                    },
-                ],
-            },
-        ),
-    ],
-)
-@api_view(["POST"])
-@permission_required("experiments.change_participantdata")
-def update_participant_data(request):
-    return _update_participant_data(request)
+class UpdateParticipantDataView(APIView):
+    required_scopes = ("participants:write",)
+    permission_required = "experiments.change_participantdata"
+
+    @extend_schema(
+        operation_id="update_participant_data",
+        summary="Update Participant Data",
+        tags=["Participants"],
+        request=ParticipantDataUpdateRequest(),
+        responses={200: {}},
+        examples=[
+            OpenApiExample(
+                name="CreateParticipantData",
+                summary="Create participant data for multiple experiments",
+                value={
+                    "identifier": "part1",
+                    "platform": "api",
+                    "data": [
+                        {"experiment": "exp1", "data": {"name": "John"}},
+                        {
+                            "experiment": "exp2",
+                            "data": {"name": "Doe"},
+                            "schedules": [
+                                {
+                                    "id": "sched1",
+                                    "name": "Schedule 1",
+                                    "date": "2022-01-01T00:00:00Z",
+                                    "prompt": "Prompt 1",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ),
+            OpenApiExample(
+                name="UpdateParticipantSchedules",
+                summary="Update and delete participant schedules",
+                value={
+                    "identifier": "part1",
+                    "platform": "api",
+                    "data": [
+                        {
+                            "experiment": "exp1",
+                            "schedules": [
+                                {
+                                    "id": "sched1",
+                                    "name": "Schedule 1 updated",
+                                    "date": "2022-01-01T00:00:00Z",
+                                    "prompt": "Prompt updated",
+                                },
+                                {"id": "sched2", "delete": True},
+                            ],
+                        },
+                    ],
+                },
+            ),
+        ],
+    )
+    def post(self, request):
+        return _update_participant_data(request)
 
 
 @extend_schema(exclude=True)
-@api_view(["POST"])
-@permission_required("experiments.change_participantdata")
-def update_participant_data_old(request):
-    # This endpoint is kept for backwards compatibility of the path with a trailing "/"
-    return _update_participant_data(request)
+class UpdateParticipantDataOldView(APIView):
+    required_scopes = ("participants:write",)
+    permission_required = "experiments.change_participantdata"
+
+    def post(self, request):
+        # This endpoint is kept for backwards compatibility of the path with a trailing "/"
+        return _update_participant_data(request)
 
 
 def _update_participant_data(request):

@@ -25,6 +25,7 @@ paths:
       - Chat
       security:
       - cookieAuth: []
+      - embedKeyAuth: []
       responses:
         '200':
           content:
@@ -72,6 +73,7 @@ paths:
         required: true
       security:
       - cookieAuth: []
+      - embedKeyAuth: []
       responses:
         '202':
           content:
@@ -107,6 +109,7 @@ paths:
       - Chat
       security:
       - cookieAuth: []
+      - embedKeyAuth: []
       responses:
         '200':
           content:
@@ -135,6 +138,7 @@ paths:
         required: true
       security:
       - cookieAuth: []
+      - embedKeyAuth: []
       responses:
         '201':
           content:
@@ -168,6 +172,7 @@ paths:
         required: true
       security:
       - cookieAuth: []
+      - embedKeyAuth: []
       responses:
         '201':
           content:
@@ -188,7 +193,7 @@ paths:
   /api/experiments/:
     get:
       operationId: experiment_list
-      summary: List Experiments
+      summary: List Chatbots
       parameters:
       - name: cursor
         required: false
@@ -205,6 +210,8 @@ paths:
       tags:
       - Experiments
       security:
+      - OAuth2:
+        - chatbots:read
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -217,7 +224,7 @@ paths:
   /api/experiments/{id}/:
     get:
       operationId: experiment_retrieve
-      summary: Retrieve Experiment
+      summary: Retrieve Chatbot
       parameters:
       - in: path
         name: id
@@ -228,6 +235,8 @@ paths:
       tags:
       - Experiments
       security:
+      - OAuth2:
+        - chatbots:read
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -250,6 +259,8 @@ paths:
       tags:
       - Files
       security:
+      - OAuth2:
+        - files:read
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -308,6 +319,8 @@ paths:
               $ref: '#/components/schemas/CreateChatCompletionRequest'
         required: true
       security:
+      - OAuth2:
+        - chatbots:interact
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -375,6 +388,8 @@ paths:
               $ref: '#/components/schemas/CreateChatCompletionRequest'
         required: true
       security:
+      - OAuth2:
+        - chatbots:interact
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -429,6 +444,8 @@ paths:
                 summary: Update and delete participant schedules
         required: true
       security:
+      - OAuth2:
+        - participants:write
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -437,7 +454,7 @@ paths:
   /api/sessions/:
     get:
       operationId: session_list
-      summary: List Experiment Sessions
+      summary: List Chatbot Sessions
       parameters:
       - name: cursor
         required: false
@@ -476,6 +493,8 @@ paths:
       tags:
       - Experiment Sessions
       security:
+      - OAuth2:
+        - sessions:read
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -487,7 +506,7 @@ paths:
           description: ''
     post:
       operationId: session_create
-      summary: Create Experiment Session
+      summary: Create Chatbot Session
       tags:
       - Experiment Sessions
       requestBody:
@@ -497,6 +516,8 @@ paths:
               $ref: '#/components/schemas/ExperimentSessionCreate'
         required: true
       security:
+      - OAuth2:
+        - sessions:write
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -513,7 +534,7 @@ paths:
 
         Retrieve the details of an session. This includes the messages exchanged during the session ordered
         by the creation date.
-      summary: Retrieve Experiment Session
+      summary: Retrieve Chatbot Session
       parameters:
       - in: path
         name: id
@@ -524,6 +545,8 @@ paths:
       tags:
       - Experiment Sessions
       security:
+      - OAuth2:
+        - sessions:read
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -536,7 +559,7 @@ paths:
   /api/sessions/{id}/end_experiment_session/:
     post:
       operationId: session_end
-      summary: End Experiment Session
+      summary: End Chatbot Session
       parameters:
       - in: path
         name: id
@@ -547,6 +570,8 @@ paths:
       tags:
       - Experiment Sessions
       security:
+      - OAuth2:
+        - sessions:write
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -555,7 +580,7 @@ paths:
   /api/sessions/{id}/update_state/:
     patch:
       operationId: session_update_state
-      summary: Update Experiment Session State
+      summary: Update Chatbot Session State
       parameters:
       - in: path
         name: id
@@ -571,6 +596,8 @@ paths:
             schema:
               $ref: '#/components/schemas/Patchedupdate_state_serializer'
       security:
+      - OAuth2:
+        - sessions:write
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -620,6 +647,8 @@ paths:
                 summary: User has not given consent
         required: true
       security:
+      - OAuth2:
+        - chatbots:interact
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -672,6 +701,8 @@ paths:
               $ref: '#/components/schemas/ApiMessage'
         required: true
       security:
+      - OAuth2:
+        - chatbots:interact
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -711,6 +742,8 @@ paths:
               $ref: '#/components/schemas/ApiMessage'
         required: true
       security:
+      - OAuth2:
+        - chatbots:interact
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -1403,6 +1436,19 @@ components:
       - state
       - success
   securitySchemes:
+    OAuth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: /o/authorize/
+          tokenUrl: /o/token/
+          scopes:
+            chatbots:read: List and Retrieve Chatbot Data
+            chatbots:interact: Converse with a Chatbot and trigger bot messages
+            sessions:read: List and Read Sessions
+            sessions:write: Manage Sessions
+            files:read: Download file content
+            participants:write: Update Participant Data
     apiKeyAuth:
       type: apiKey
       in: header
@@ -1411,6 +1457,12 @@ components:
       type: apiKey
       in: cookie
       name: sessionid
+    embedKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Embed-Key
+      description: Embedded widget authentication token. Validates the widget token
+        for the channel configuration and authenticates embedded widget requests.
     tokenAuth:
       type: http
       scheme: bearer

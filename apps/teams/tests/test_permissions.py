@@ -79,6 +79,7 @@ IGNORE_APPS = {
     "waffle",
     "web",
     "silk",
+    "oauth2_provider",
 }
 
 IGNORE_MODELS = {"teams": {"flag"}}

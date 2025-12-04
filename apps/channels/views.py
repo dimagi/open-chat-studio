@@ -17,8 +17,8 @@ from django_htmx.http import HttpResponseClientRedirect
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
-from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.api.permissions import verify_hmac
 from apps.channels import tasks
@@ -115,16 +115,20 @@ def new_api_message_schema(versioned: bool):
     )
 
 
-@new_api_message_schema(versioned=False)
-@api_view(["POST"])
-def new_api_message(request, experiment_id: uuid):
-    return _new_api_message(request, experiment_id)
+class NewApiMessageView(APIView):
+    required_scopes = ("chatbots:interact",)
+
+    @new_api_message_schema(versioned=False)
+    def post(self, request, experiment_id: uuid):
+        return _new_api_message(request, experiment_id)
 
 
-@new_api_message_schema(versioned=True)
-@api_view(["POST"])
-def new_api_message_versioned(request, experiment_id: uuid, version=None):
-    return _new_api_message(request, experiment_id, version)
+class NewApiMessageVersionedView(APIView):
+    required_scopes = ("chatbots:interact",)
+
+    @new_api_message_schema(versioned=True)
+    def post(self, request, experiment_id: uuid, version=None):
+        return _new_api_message(request, experiment_id, version)
 
 
 def _new_api_message(request, experiment_id: uuid, version=None):
