@@ -25,6 +25,7 @@ paths:
       - Chat
       security:
       - cookieAuth: []
+      - embedKeyAuth: []
       responses:
         '200':
           content:
@@ -72,6 +73,7 @@ paths:
         required: true
       security:
       - cookieAuth: []
+      - embedKeyAuth: []
       responses:
         '202':
           content:
@@ -107,6 +109,7 @@ paths:
       - Chat
       security:
       - cookieAuth: []
+      - embedKeyAuth: []
       responses:
         '200':
           content:
@@ -135,6 +138,7 @@ paths:
         required: true
       security:
       - cookieAuth: []
+      - embedKeyAuth: []
       responses:
         '201':
           content:
@@ -168,6 +172,7 @@ paths:
         required: true
       security:
       - cookieAuth: []
+      - embedKeyAuth: []
       responses:
         '201':
           content:
@@ -1452,6 +1457,12 @@ components:
       type: apiKey
       in: cookie
       name: sessionid
+    embedKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Embed-Key
+      description: Embedded widget authentication token. Validates the widget token
+        for the channel configuration and authenticates embedded widget requests.
     tokenAuth:
       type: http
       scheme: bearer

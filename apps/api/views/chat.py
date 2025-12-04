@@ -9,11 +9,12 @@ from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schem
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
+from rest_framework.exceptions import NotFound
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from apps.api.auth import handle_embedded_widget_auth
-from apps.api.exceptions import EmbeddedWidgetAuthError
+from apps.api.authentication import EmbeddedWidgetAuthentication
+from apps.api.permissions import LegacySessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -23,71 +24,23 @@ from apps.api.serializers import (
     MessageSerializer,
 )
 from apps.channels.datamodels import Attachment
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ExperimentChannel
+from apps.channels.utils import get_experiment_session_cached
 from apps.chat.channels import ApiChannel
 from apps.chat.models import Chat, ChatAttachment
-from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
+from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.models import File
 
-AUTH_CLASSES = [SessionAuthentication]
+AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
+SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, LegacySessionAccessPermission]
 
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
 SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["collections"]
 
 logger = logging.getLogger("ocs.api_chat")
-
-
-def check_experiment_access(experiment, participant_id):
-    """
-    Check if the request has access to the experiment based on public API settings.
-
-    Returns:
-        Response object if access denied, None if access allowed
-    """
-    if experiment.is_public:
-        return None
-
-    if not participant_id:
-        return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
-
-    if not experiment.is_participant_allowed(participant_id):
-        return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
-
-    return None
-
-
-def check_session_access(session, request):
-    """
-    Check if the request has access to the session.
-    Now handles both authenticated users and embedded widgets.
-    Args:
-        session: Session object (should have experiment_channel prefetched)
-        request: Request object (required for embedded widgets)
-
-    Note:
-        Callers should use select_related('experiment_channel') when querying
-        sessions to avoid N+1 queries.
-
-    Returns:
-        Response object if access denied, None if access allowed
-    """
-    if session.experiment_channel.platform == ChannelPlatform.EMBEDDED_WIDGET:
-        try:
-            experiment_channel = handle_embedded_widget_auth(request, session=session)
-            if experiment_channel != session.experiment_channel:
-                logging.error("Channel mismatch in embedded widget auth")
-                return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
-            return None  # Access allowed
-        except EmbeddedWidgetAuthError:
-            logger.error("Permission denied during embedded widget authentication")
-            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
-        except Exception:
-            logger.exception("Error during embedded widget authentication")
-            return Response({"error": "Embedded widget authentication failed"}, status=status.HTTP_403_FORBIDDEN)
-    return check_experiment_access(session.experiment, session.participant.identifier)
 
 
 def validate_file_upload(file):
@@ -145,16 +98,12 @@ def validate_file_upload(file):
 )
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([])
+@permission_classes(SESSION_PERMISSION_CLASSES)
 @parser_classes([MultiPartParser])
 def chat_upload_file(request, session_id):
-    session = get_object_or_404(
-        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
-        external_id=session_id,
-    )
-    access_response = check_session_access(session, request)
-    if access_response:
-        return access_response
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        return NotFound()
 
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
@@ -236,7 +185,7 @@ def chat_upload_file(request, session_id):
 )
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([])
+@permission_classes([WidgetDomainPermission])
 def chat_start_session(request):
     """Start a new chat session - supports both authenticated users and embedded widgets"""
     serializer = ChatStartSessionRequest(data=request.data)
@@ -247,10 +196,6 @@ def chat_start_session(request):
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
-    try:
-        experiment_channel = handle_embedded_widget_auth(request, experiment_id=experiment_id)
-    except EmbeddedWidgetAuthError as e:
-        return Response({"error": e.message}, status=status.HTTP_403_FORBIDDEN)
 
     # Get experiment
     experiment = get_object_or_404(Experiment, public_id=experiment_id)
@@ -262,7 +207,10 @@ def chat_start_session(request):
 
     team = experiment.team
 
-    if not experiment_channel:
+    # Check if authenticated via DRF EmbeddedWidgetAuthentication
+    if isinstance(request.auth, ExperimentChannel):
+        experiment_channel = request.auth
+    else:
         # legacy flow
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(team)
 
@@ -359,7 +307,7 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
 )
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([])
+@permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_send_message(request, session_id):
     """
     Send a message to a chat session
@@ -371,13 +319,9 @@ def chat_send_message(request, session_id):
     message_text = data["message"]
     attachment_ids = data.get("attachment_ids", [])
 
-    session = get_object_or_404(
-        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
-        external_id=session_id,
-    )
-
-    if access_response := check_session_access(session, request):
-        return access_response
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        return NotFound()
 
     # Verify session is active
     if session.is_complete:
@@ -450,15 +394,12 @@ def chat_send_message(request, session_id):
 )
 @api_view(["GET"])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([])
+@permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_poll_task_response(request, session_id, task_id):
-    session = get_object_or_404(
-        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
-        external_id=session_id,
-    )
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        return NotFound()
 
-    if access_response := check_session_access(session, request):
-        return access_response
     task_details = get_message_task_response(session.experiment, task_id)
     if not task_details["complete"]:
         data = {"message": None, "status": "processing"}
@@ -508,18 +449,15 @@ def chat_poll_task_response(request, session_id, task_id):
 )
 @api_view(["GET"])
 @authentication_classes(AUTH_CLASSES)
-@permission_classes([])
+@permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_poll_response(request, session_id):
     """
     Poll for new messages in a chat session
     """
-    session = get_object_or_404(
-        ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant"),
-        external_id=session_id,
-    )
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        return NotFound()
 
-    if access_response := check_session_access(session, request):
-        return access_response
     since_param = request.query_params.get("since")
     limit = int(request.query_params.get("limit", 50))
     messages_query = session.chat.messages.order_by("created_at")
