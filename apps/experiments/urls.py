@@ -1,3 +1,4 @@
+from django.shortcuts import redirect
 from django.urls import include, path
 
 from apps.experiments.views.experiment_routes import CreateExperimentRoute, DeleteExperimentRoute, EditExperimentRoute
@@ -37,8 +38,8 @@ urlpatterns = [
         views.prompt_builder_load_source_material,
         name="prompt_builder_load_source_material",
     ),
-    # experiments
-    path("new/", views.CreateExperiment.as_view(), name="new"),
+    # experiments - redirect to chatbots
+    path("new/", lambda request, team_slug: redirect("chatbots:new", team_slug=team_slug), name="new"),
     path("e/<int:experiment_id>/trends/data", views.trends_data, name="trends_data"),
     path("e/<int:experiment_id>/sessions-table/", views.ExperimentSessionsTableView.as_view(), name="sessions-list"),
     path("e/<int:experiment_id>/versions/", views.ExperimentVersionsTableView.as_view(), name="versions-list"),
@@ -57,7 +58,13 @@ urlpatterns = [
         views.update_version_description,
         name="update_version_description",
     ),
-    path("e/<int:experiment_id>/versions/create", views.CreateExperimentVersion.as_view(), name="create_version"),
+    path(
+        "e/<int:experiment_id>/versions/create",
+        lambda request, team_slug, experiment_id: redirect(
+            "chatbots:create_version", team_slug=team_slug, experiment_id=experiment_id
+        ),
+        name="create_version",
+    ),
     path(
         "e/<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
         views.start_authed_web_session,

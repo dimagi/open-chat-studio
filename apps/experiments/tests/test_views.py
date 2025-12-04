@@ -12,6 +12,7 @@ from django.urls import reverse
 
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat
+from apps.experiments.forms import ExperimentForm
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
@@ -19,10 +20,7 @@ from apps.experiments.models import (
     ParticipantData,
     VoiceResponseBehaviours,
 )
-from apps.experiments.views.experiment import (
-    ExperimentForm,
-    _verify_user_or_start_session,
-)
+from apps.experiments.views.experiment import _verify_user_or_start_session
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
