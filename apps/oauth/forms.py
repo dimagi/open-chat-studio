@@ -64,5 +64,5 @@ class RegisterApplicationForm(forms.ModelForm):
             "redirect_uris": "Enter one URI per line. These are the allowed redirect URIs after authorization.",
             "post_logout_redirect_uris": "Enter one URI per line. Optional URIs for post-logout redirects.",
             "allowed_origins": "Enter one origin per line. Optional CORS allowed origins.",
-            "algorithm": "Algorithm for signing tokens. Leave empty for no signing or select RS256 for RSA signing.",
+            "algorithm": "Algorithm for signing tokens.",
         }
