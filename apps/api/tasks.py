@@ -67,7 +67,7 @@ def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: 
                 logger.exception(
                     "Failed to create channel for participant '%s' and experiments '{}'", connect_id, failed_ids
                 )
-            raise self.retry(e, countdown=60) from None
+            raise self.retry(exc=e, countdown=60) from None
 
 
 def create_connect_channel_for_participant(channel, connect_client, connect_id, participant_data):
