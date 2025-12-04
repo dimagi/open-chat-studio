@@ -34,10 +34,7 @@ class RegisterApplicationForm(forms.ModelForm):
         self.fields["redirect_uris"].required = True
 
         if self.instance.pk:
-            self.fields["client_secret"].required = False
-            self.fields[
-                "client_secret"
-            ].help_text = "Leave blank to keep the existing secret. Enter a new value to change it."
+            self.fields["client_secret"].widget = forms.HiddenInput()
 
     def save(self, commit=True):
         # Force these fields to specific values
