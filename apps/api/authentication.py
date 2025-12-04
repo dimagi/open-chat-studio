@@ -12,7 +12,7 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
 
     This authentication method validates:
     1. The presence of X-Embed-Key header
-    1. The experiment channel configuration and allowed domains
+    2. The experiment channel configuration
 
     The authenticated request will have:
     - request.auth: The ExperimentChannel object
