@@ -97,7 +97,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
             case LlmProviderTypes.google:
                 return forms.GoogleGeminiConfigForm
             case LlmProviderTypes.google_vertex_ai:
-                return forms.GoogleGeminiConfigForm  # TODO: Change?
+                return forms.GoogleVertexAIConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict) -> llm_service.LlmService:

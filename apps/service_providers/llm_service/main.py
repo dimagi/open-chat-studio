@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import re
 from io import BytesIO
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import pydantic
 from django.db.models import Q
+from google.oauth2 import service_account
 from langchain_anthropic import ChatAnthropic
 from langchain_classic.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager, dispatch_custom_event
@@ -505,13 +507,17 @@ class GoogleLlmService(LlmService):
 
 
 class GoogleVertexAILlmService(LlmService):
-    google_api_key: str
+    credentials_json: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        return ChatVertexAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
+        credentials = service_account.Credentials.from_service_account_info(json.loads(self.credentials_json))
+        # We can pass in credentials. See https://github.com/langchain-ai/langchain-google/blob/f4532804c79fed5c58e8fb264422da2c92f3937f/libs/vertexai/langchain_google_vertexai/_base.py#L109-L115
+        return ChatVertexAI(model=llm_model, credentials=credentials, **kwargs)
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
+        # return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
+        # TODO
+        pass
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []

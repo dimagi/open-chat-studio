@@ -138,6 +138,10 @@ class GoogleGeminiConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     google_api_key = forms.CharField(label=_("API Key"))
 
 
+class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    credentials_json = forms.CharField(label=_("Credentials JSON"), widget=forms.Textarea)
+
+
 class DeepSeekConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["deepseek_api_key"]
 
