@@ -17,6 +17,7 @@ from langchain_core.load import dumpd
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, ensure_config
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_vertexai import ChatVertexAI
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import NOT_GIVEN, OpenAI
 from openai._base_client import SyncAPIClient
@@ -501,3 +502,16 @@ class GoogleLlmService(LlmService):
         from apps.service_providers.llm_service.index_managers import GoogleLocalIndexManager
 
         return GoogleLocalIndexManager(api_key=self.google_api_key, embedding_model_name=embedding_model_name)
+
+
+class GoogleVertexAILlmService(LlmService):
+    google_api_key: str
+
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        return ChatVertexAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
+
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+        return []

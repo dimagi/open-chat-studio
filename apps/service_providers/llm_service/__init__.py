@@ -3,6 +3,7 @@ from .main import (
     AzureLlmService,
     DeepSeekLlmService,
     GoogleLlmService,
+    GoogleVertexAILlmService,
     LlmService,
     OpenAIGenericService,
     OpenAILlmService,
@@ -16,4 +17,5 @@ __all__ = [
     "OpenAIGenericService",
     "DeepSeekLlmService",
     "GoogleLlmService",
+    "GoogleVertexAILlmService",
 ]
