@@ -1496,9 +1496,6 @@ class Participant(BaseTeamModel):
         )
 
     def get_absolute_url(self):
-        experiment = self.get_experiments_for_display().first()
-        if experiment:
-            return self.get_link_to_experiment_data(experiment)
         return reverse("participants:single-participant-home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_link_to_experiment_data(self, experiment: Experiment) -> str:
