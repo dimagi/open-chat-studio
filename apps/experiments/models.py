@@ -1528,14 +1528,14 @@ class Participant(BaseTeamModel):
         query = Experiment.objects.get_all() if include_archived else Experiment.objects.all()
         return query.filter(Q(sessions__participant=self) | Q(id__in=Subquery(self.data_set.values("experiment"))))
 
-    def get_data_for_experiment(self, experiment) -> dict:
+    def get_data_for_experiment(self, experiment_id) -> dict:
         try:
-            return self.data_set.get(experiment=experiment).data or {}
+            return self.data_set.get(experiment_id=experiment_id).data or {}
         except ParticipantData.DoesNotExist:
             return {}
 
     def get_schedules_for_experiment(
-        self, experiment, as_dict=False, as_timezone: str | None = None, include_inactive=False
+        self, experiment_id, as_dict=False, as_timezone: str | None = None, include_inactive=False
     ):
         """
         Returns all scheduled messages for the associated participant for this session's experiment as well as
@@ -1547,10 +1547,10 @@ class Participant(BaseTeamModel):
         """
         from apps.events.models import ScheduledMessage
 
-        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=experiment).values("child")
+        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent_id=experiment_id).values("child")
         messages = (
             ScheduledMessage.objects.filter(
-                Q(experiment=experiment) | Q(experiment__in=models.Subquery(child_experiments)),
+                Q(experiment_id=experiment_id) | Q(experiment__in=models.Subquery(child_experiments)),
                 participant=self,
                 team=self.team,
             )

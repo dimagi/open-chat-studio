@@ -121,23 +121,27 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
         participant = get_object_or_404(Participant, pk=self.kwargs["participant_id"])
         context["active_tab"] = "participants"
         context["participant"] = participant
-
-        if experiment_id := self.kwargs.get("experiment_id"):
-            experiment = participant.get_experiments_queryset(include_archived=True).filter(id=experiment_id).first()
-        else:
-            experiment = participant.get_experiments_queryset().first()
+        experiment_id = self.kwargs.get("experiment_id")
+        context["selected_experiment_id"] = experiment_id
 
         context["experiments"] = participant.get_experiments_for_display()
-        context["selected_experiment"] = experiment
-        sessions = participant.experimentsession_set.filter(experiment=experiment).all()
+        sessions = []
+        if experiment_id:
+            sessions = (
+                participant.experimentsession_set.filter(experiment_id=experiment_id)
+                .annotate_with_last_message_created_at()
+                .all()
+            )
         context["session_table"] = ExperimentSessionsTable(
-            sessions.annotate_with_last_message_created_at(),
+            sessions,
             extra_columns=[("participant", None)],  # remove participant column
         )
-        data = participant.get_data_for_experiment(experiment)
+        data = participant.get_data_for_experiment(experiment_id)
         context["participant_data"] = json.dumps(data, indent=4)
-        context["participant_schedules"] = participant.get_schedules_for_experiment(
-            experiment, as_dict=True, include_inactive=True
+        context["participant_schedules"] = (
+            participant.get_schedules_for_experiment(experiment_id, as_dict=True, include_inactive=True)
+            if experiment_id
+            else []
         )
         return context
 
