@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import re
 from functools import cached_property
@@ -509,7 +508,7 @@ class GoogleLlmService(LlmService):
 
 
 class GoogleVertexAILlmService(LlmService):
-    credentials_json: str
+    credentials_json: dict
     api_transport: Literal["grpc", "rest"] = "grpc"
 
     def get_chat_model(self, llm_model: str, **kwargs) -> ChatVertexAI:
@@ -525,4 +524,4 @@ class GoogleVertexAILlmService(LlmService):
 
     @cached_property
     def credentials(self):
-        return service_account.Credentials.from_service_account_info(json.loads(self.credentials_json))
+        return service_account.Credentials.from_service_account_info(self.credentials_json)
