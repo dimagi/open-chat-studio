@@ -128,10 +128,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-1.5-pro", 2097152),
     ],
     "google_vertex_ai": [
-        Model("gemini-3-pro-preview", 1048576, is_default=True),
-        Model("gemini-2.5-pro", 1048576, is_default=True),
+        Model("gemini-3-pro-preview", 1048576),
+        Model("gemini-2.5-pro", 1048576, is_translation_default=True),
         Model("gemini-2.5-flash", 1048576, is_default=True),
-        Model("gemini-2.5-flash-lite", 1048576, is_default=True),
+        Model("gemini-2.5-flash-lite", 1048576),
     ],
 }
 
