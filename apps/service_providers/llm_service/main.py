@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
@@ -524,4 +525,7 @@ class GoogleVertexAILlmService(LlmService):
 
     @cached_property
     def credentials(self):
-        return service_account.Credentials.from_service_account_info(self.credentials_json)
+        try:
+            return service_account.Credentials.from_service_account_info(self.credentials_json)
+        except (KeyError, ValueError) as e:
+            raise ServiceProviderConfigError(self._type, f"Invalid service account credentials: {e}") from e
