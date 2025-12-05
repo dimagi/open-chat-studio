@@ -3,6 +3,7 @@ import logging
 
 import tiktoken
 from anthropic import Anthropic
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import get_buffer_string
 from langchain_core.outputs import LLMResult
 
@@ -106,3 +107,15 @@ class GeminiTokenCounter(TokenCounter):
     def get_tokens_from_text(self, text: str) -> int:
         # not implemented for now until we're on the new python-genai library
         return 0
+
+
+@dataclasses.dataclass
+class GoogleVertexAITokenCounter(TokenCounter):
+    chat_model: BaseChatModel
+
+    def get_tokens_from_response(self, response: LLMResult) -> None | tuple[int, int]:
+        # TODO
+        return None
+
+    def get_tokens_from_text(self, text) -> int:
+        return self.chat_model.get_num_tokens(text)

@@ -4,6 +4,7 @@ import contextlib
 import json
 import logging
 import re
+from functools import cached_property
 from io import BytesIO
 from time import sleep
 from typing import TYPE_CHECKING, Any
@@ -33,6 +34,7 @@ from apps.service_providers.llm_service.parsers import parse_output_for_anthropi
 from apps.service_providers.llm_service.token_counters import (
     AnthropicTokenCounter,
     GeminiTokenCounter,
+    GoogleVertexAITokenCounter,
     OpenAITokenCounter,
 )
 from apps.service_providers.llm_service.utils import (
@@ -509,15 +511,17 @@ class GoogleLlmService(LlmService):
 class GoogleVertexAILlmService(LlmService):
     credentials_json: str
 
-    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        credentials = service_account.Credentials.from_service_account_info(json.loads(self.credentials_json))
-        # We can pass in credentials. See https://github.com/langchain-ai/langchain-google/blob/f4532804c79fed5c58e8fb264422da2c92f3937f/libs/vertexai/langchain_google_vertexai/_base.py#L109-L115
-        return ChatVertexAI(model=llm_model, credentials=credentials, **kwargs)
+    def get_chat_model(self, llm_model: str, **kwargs) -> ChatVertexAI:
+        return ChatVertexAI(model=llm_model, credentials=self.credentials, **kwargs)
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        # return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
-        # TODO
-        pass
+        chat_model = self.get_chat_model(llm_model=model)
+        token_counter = GoogleVertexAITokenCounter(chat_model)
+        return TokenCountingCallbackHandler(token_counter)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
         return []
+
+    @cached_property
+    def credentials(self):
+        return service_account.Credentials.from_service_account_info(json.loads(self.credentials_json))
