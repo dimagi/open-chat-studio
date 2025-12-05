@@ -18,7 +18,7 @@ class TestParticipantDataProxy:
         proxy = ParticipantDataProxy({}, session)
 
         assert proxy.session == session
-        assert proxy.experiment == experiment
+        assert proxy.experiment_id == experiment.id
         assert proxy._participant_data == {}
         assert proxy._scheduled_messages is None
 
@@ -29,7 +29,7 @@ class TestParticipantDataProxy:
         proxy = ParticipantDataProxy.from_state(pipeline_state)
 
         assert proxy.session == session
-        assert proxy.experiment == session.experiment
+        assert proxy.experiment_id == session.experiment.id
         assert proxy._participant_data == {"test": 1}
 
     def test_from_state_with_missing_session(self):
@@ -38,7 +38,7 @@ class TestParticipantDataProxy:
         proxy = ParticipantDataProxy.from_state(pipeline_state)
 
         assert proxy.session is None
-        assert proxy.experiment is None
+        assert proxy.experiment_id is None
 
     def test_get_returns_merged_data(self):
         """Test that get() merges participant global data with participant data"""
@@ -88,7 +88,7 @@ class TestParticipantDataProxy:
             result = proxy.get_schedules()
 
             # Method should be called with the experiment and timezone params
-            mock_get_schedules.assert_called_once_with(experiment, as_dict=True, as_timezone=proxy.get_timezone())
+            mock_get_schedules.assert_called_once_with(experiment.id, as_dict=True, as_timezone=proxy.get_timezone())
             assert result == mock_schedules
 
             # Subsequent calls should use cached result

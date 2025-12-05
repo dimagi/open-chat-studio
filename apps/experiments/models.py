@@ -1496,9 +1496,6 @@ class Participant(BaseTeamModel):
         )
 
     def get_absolute_url(self):
-        experiment = self.get_experiments_for_display().first()
-        if experiment:
-            return self.get_link_to_experiment_data(experiment)
         return reverse("participants:single-participant-home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_link_to_experiment_data(self, experiment: Experiment) -> str:
@@ -1518,23 +1515,27 @@ class Participant(BaseTeamModel):
         last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
         joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
         return (
-            Experiment.objects.get_all()
+            self.get_experiments_queryset(include_archived=True)
             .annotate(
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
             )
-            .filter(Q(sessions__participant=self) | Q(id__in=Subquery(self.data_set.values("experiment"))))
             .distinct()
         )
 
-    def get_data_for_experiment(self, experiment) -> dict:
+    def get_experiments_queryset(self, include_archived=False):
+        """Get the experiments that the participant has interacted with"""
+        query = Experiment.objects.get_all() if include_archived else Experiment.objects.all()
+        return query.filter(Q(sessions__participant=self) | Q(id__in=Subquery(self.data_set.values("experiment"))))
+
+    def get_data_for_experiment(self, experiment_id) -> dict:
         try:
-            return self.data_set.get(experiment=experiment).data or {}
+            return self.data_set.get(experiment_id=experiment_id).data or {}
         except ParticipantData.DoesNotExist:
             return {}
 
     def get_schedules_for_experiment(
-        self, experiment, as_dict=False, as_timezone: str | None = None, include_inactive=False
+        self, experiment_id, as_dict=False, as_timezone: str | None = None, include_inactive=False
     ):
         """
         Returns all scheduled messages for the associated participant for this session's experiment as well as
@@ -1546,10 +1547,10 @@ class Participant(BaseTeamModel):
         """
         from apps.events.models import ScheduledMessage
 
-        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent=experiment).values("child")
+        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent_id=experiment_id).values("child")
         messages = (
             ScheduledMessage.objects.filter(
-                Q(experiment=experiment) | Q(experiment__in=models.Subquery(child_experiments)),
+                Q(experiment_id=experiment_id) | Q(experiment__in=models.Subquery(child_experiments)),
                 participant=self,
                 team=self.team,
             )
