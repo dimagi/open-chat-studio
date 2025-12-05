@@ -152,7 +152,7 @@ class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
             "Advanced parameter to select the transport protocol for the API calls. "
             "Refer to the Google documentation for details."
         ),
-        initial="gprc",
+        initial="grpc",
     )
     credentials_json = forms.JSONField(
         # expect credentials to be ~13 lines of JSON
@@ -171,6 +171,7 @@ class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         if not initial_value:
             return initial_value
         if field == "credentials_json" and isinstance(initial_value, dict):
+            initial_value = initial_value.copy()
             for key in initial_value:
                 if key != "private_key_id":
                     initial_value[key] = "***"
