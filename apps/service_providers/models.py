@@ -61,6 +61,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
     deepseek = "deepseek", _("DeepSeek"), {"deepseek_api_base": "https://api.deepseek.com/v1/"}
     google = "google", _("Google Gemini")
+    google_vertex_ai = "google_vertex_ai", _("Google Vertex AI")
 
     def __str__(self):
         return str(self.value)
@@ -95,6 +96,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.DeepSeekConfigForm
             case LlmProviderTypes.google:
                 return forms.GoogleGeminiConfigForm
+            case LlmProviderTypes.google_vertex_ai:
+                return forms.GoogleVertexAIConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict) -> llm_service.LlmService:
@@ -113,6 +116,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                     return llm_service.DeepSeekLlmService(**config)
                 case LlmProviderTypes.google:
                     return llm_service.GoogleLlmService(**config)
+                case LlmProviderTypes.google_vertex_ai:
+                    return llm_service.GoogleVertexAILlmService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self.slug, str(e)) from e
         raise ServiceProviderConfigError(self.slug, "No chat model configured")

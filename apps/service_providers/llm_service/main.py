@@ -3,12 +3,14 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
+from functools import cached_property
 from io import BytesIO
 from time import sleep
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import pydantic
 from django.db.models import Q
+from google.oauth2 import service_account
 from langchain_anthropic import ChatAnthropic
 from langchain_classic.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager, dispatch_custom_event
@@ -17,6 +19,7 @@ from langchain_core.load import dumpd
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, ensure_config
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_vertexai import ChatVertexAI
 from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import NOT_GIVEN, OpenAI
 from openai._base_client import SyncAPIClient
@@ -24,12 +27,14 @@ from pydantic import BaseModel
 
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 from apps.service_providers.llm_service.token_counters import (
     AnthropicTokenCounter,
     GeminiTokenCounter,
+    GoogleVertexAITokenCounter,
     OpenAITokenCounter,
 )
 from apps.service_providers.llm_service.utils import (
@@ -501,3 +506,26 @@ class GoogleLlmService(LlmService):
         from apps.service_providers.llm_service.index_managers import GoogleLocalIndexManager
 
         return GoogleLocalIndexManager(api_key=self.google_api_key, embedding_model_name=embedding_model_name)
+
+
+class GoogleVertexAILlmService(LlmService):
+    credentials_json: dict
+    api_transport: Literal["grpc", "rest"] = "grpc"
+
+    def get_chat_model(self, llm_model: str, **kwargs) -> ChatVertexAI:
+        return ChatVertexAI(model=llm_model, credentials=self.credentials, api_transport=self.api_transport, **kwargs)
+
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        chat_model = self.get_chat_model(llm_model=model)
+        token_counter = GoogleVertexAITokenCounter(chat_model)
+        return TokenCountingCallbackHandler(token_counter)
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
+        return []
+
+    @cached_property
+    def credentials(self):
+        try:
+            return service_account.Credentials.from_service_account_info(self.credentials_json)
+        except (KeyError, ValueError) as e:
+            raise ServiceProviderConfigError(self._type, f"Invalid service account credentials: {e}") from e
