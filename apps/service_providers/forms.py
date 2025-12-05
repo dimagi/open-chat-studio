@@ -140,6 +140,7 @@ class GoogleGeminiConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     credentials_json = forms.CharField(label=_("Credentials JSON"), widget=forms.Textarea)
+    api_transport = forms.ChoiceField(label=_("API Transport"), choices=["grpc", "rest"])
 
 
 class DeepSeekConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

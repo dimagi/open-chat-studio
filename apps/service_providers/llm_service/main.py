@@ -7,7 +7,7 @@ import re
 from functools import cached_property
 from io import BytesIO
 from time import sleep
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import pydantic
 from django.db.models import Q
@@ -510,9 +510,10 @@ class GoogleLlmService(LlmService):
 
 class GoogleVertexAILlmService(LlmService):
     credentials_json: str
+    api_transport: Literal["grpc", "rest"] = "grpc"
 
     def get_chat_model(self, llm_model: str, **kwargs) -> ChatVertexAI:
-        return ChatVertexAI(model=llm_model, credentials=self.credentials, **kwargs)
+        return ChatVertexAI(model=llm_model, credentials=self.credentials, api_transport=self.api_transport, **kwargs)
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         chat_model = self.get_chat_model(llm_model=model)
