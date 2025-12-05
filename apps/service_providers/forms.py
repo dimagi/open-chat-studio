@@ -174,7 +174,7 @@ class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
             for key in initial_value:
                 if key != "private_key_id":
                     initial_value[key] = "***"
-        return initial_value
+        return super().obfusticate_field(field, str(initial_value))
 
 
 class DeepSeekConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
