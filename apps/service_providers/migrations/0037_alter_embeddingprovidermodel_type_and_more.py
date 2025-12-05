@@ -2,6 +2,8 @@
 
 from django.db import migrations, models
 
+from apps.service_providers.migration_utils import llm_model_migration
+
 
 class Migration(migrations.Migration):
 
@@ -25,4 +27,5 @@ class Migration(migrations.Migration):
             name='type',
             field=models.CharField(choices=[('openai', 'OpenAI'), ('azure', 'Azure OpenAI'), ('anthropic', 'Anthropic'), ('groq', 'Groq'), ('perplexity', 'Perplexity'), ('deepseek', 'DeepSeek'), ('google', 'Google Gemini'), ('google_vertex_ai', 'Google Vertex AI')], max_length=255),
         ),
+        llm_model_migration(),
     ]
