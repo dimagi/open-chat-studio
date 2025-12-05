@@ -519,7 +519,7 @@ class GoogleVertexAILlmService(LlmService):
         token_counter = GoogleVertexAITokenCounter(chat_model)
         return TokenCountingCallbackHandler(token_counter)
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
 
     @cached_property
