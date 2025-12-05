@@ -69,7 +69,7 @@ class TypeSelectForm:
         if missing_secondary:
             raise TypeSelectFormError(f"Missing secondary forms for choices: {missing_secondary}")
 
-        type_field.widget.attrs = {"x-model": "type"}
+        type_field.widget.attrs.update({"x-model": "type"})
 
         for key, form in self.secondary.items():
             apply_alpine_attrs(form, key)
@@ -84,9 +84,9 @@ def apply_alpine_attrs(form, key):
     """
     for field in form.fields.values():
         if field.required:
-            field.widget.attrs = _format_attrs(BIND_REQUIRED_DISABLED_ATTRS, key)
+            field.widget.attrs.update(_format_attrs(BIND_REQUIRED_DISABLED_ATTRS, key))
         else:
-            field.widget.attrs = _format_attrs(BIND_DISABLED_ATTRS, key)
+            field.widget.attrs.update(_format_attrs(BIND_DISABLED_ATTRS, key))
 
 
 def _format_attrs(attrs, key):
