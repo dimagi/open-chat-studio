@@ -113,9 +113,5 @@ class GeminiTokenCounter(TokenCounter):
 class GoogleVertexAITokenCounter(TokenCounter):
     chat_model: BaseChatModel
 
-    def get_tokens_from_response(self, response: LLMResult) -> None | tuple[int, int]:
-        # TODO
-        return None
-
     def get_tokens_from_text(self, text) -> int:
         return self.chat_model.get_num_tokens(text)
