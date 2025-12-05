@@ -9,7 +9,10 @@ def render_help_with_link(help_content: str, docs_link: str, link_text="Learn mo
 
     Args:
         help_content (str): The help text.
-        docs_link (str, optional): The relative URL to the documentation (relative to the documentation base URL).
+        docs_link (str): This can be one of three things:
+            - a slug for a pre-configured docs link in the `DOCUMENTATION_LINKS` setting
+            - a relative URL to the documentation (relative to the documentation base URL)
+            - an absolute URL
         link_text (str, optional): The text to be displayed in the link.
         line_break (bool, optional): Whether to enclose the link in a paragraph or not.
     """
@@ -25,7 +28,6 @@ def render_help_with_link(help_content: str, docs_link: str, link_text="Learn mo
         link_template = f"<p>{link_template}</p>"
     return format_html(
         f"""{{help_content}}{link_template}""",
-        docs_base_url=settings.DOCUMENTATION_BASE_URL,
         docs_link=docs_link,
         help_content=help_content,
         link_text=link_text,
