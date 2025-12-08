@@ -145,7 +145,8 @@ class DjangoSafeBackgroundExecutor(BackgroundExecutor):
             __name__=__name__,
             __cancel_on_exit__=__cancel_on_exit__,
             __reraise_on_exit__=__reraise_on_exit__,
-            __next_tick__=__next_tick__**kwargs,
+            __next_tick__=__next_tick__,
+            **kwargs,
         )
 
 
