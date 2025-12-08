@@ -510,10 +510,17 @@ class GoogleLlmService(LlmService):
 
 class GoogleVertexAILlmService(LlmService):
     credentials_json: dict
+    location: str = "global"
     api_transport: Literal["grpc", "rest"] = "grpc"
 
     def get_chat_model(self, llm_model: str, **kwargs) -> ChatVertexAI:
-        return ChatVertexAI(model=llm_model, credentials=self.credentials, api_transport=self.api_transport, **kwargs)
+        return ChatVertexAI(
+            model=llm_model,
+            credentials=self.credentials,
+            location=self.location,
+            api_transport=self.api_transport,
+            **kwargs
+        )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         chat_model = self.get_chat_model(llm_model=model)
