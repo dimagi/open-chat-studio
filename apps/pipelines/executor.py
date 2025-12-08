@@ -67,7 +67,7 @@ class DjangoLangGraphRunner:
         self.executor = None
         self.stack = ExitStack()
         self.executor = DjangoSafeBackgroundExecutor({"configurable": {"max_concurrency": self.max_workers}})
-        self.stack.enter_context(self.executor)
+        self.submit = self.stack.enter_context(self.executor)
 
     def invoke(self, app, input_data: dict, config: dict | None = None) -> Any:
         """
@@ -84,7 +84,7 @@ class DjangoLangGraphRunner:
         if self.executor is None:
             raise RuntimeError("Runner has been shut down")
 
-        run_config = {CONFIG_KEY_RUNNER_SUBMIT: self.executor.submit}
+        run_config = {CONFIG_KEY_RUNNER_SUBMIT: lambda: self.submit}
         if config:
             run_config.update(config)
 
@@ -105,7 +105,7 @@ class DjangoLangGraphRunner:
         if self.executor is None:
             raise RuntimeError("Runner has been shut down")
 
-        run_config = {CONFIG_KEY_RUNNER_SUBMIT: self.executor.submit}
+        run_config = {CONFIG_KEY_RUNNER_SUBMIT: lambda: self.submit}
         if config:
             run_config.update(config)
 
