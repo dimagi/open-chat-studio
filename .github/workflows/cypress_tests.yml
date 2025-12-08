@@ -104,7 +104,7 @@ jobs:
           wait-on: 'http://127.0.0.1:8000'
           wait-on-timeout: 60
           browser: chrome
-          config-file: cypress.config.js
+          config-file: cypress.config.ts
         env:
           CYPRESS_BASE_URL: 'http://127.0.0.1:8000'
       
