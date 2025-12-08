@@ -458,7 +458,7 @@ def _convert_unsupported_message_types_into_supported_types(messages: list[BaseM
                     new_content.append({"type": "text", "text": summary_text})
                 else:
                     new_content.append(content)
-            msg = msg.model_copy(update={"content": new_content})
+            new_msg = msg.model_copy(update={"content": new_content})
 
-        filtered_messages.append(msg)
+        filtered_messages.append(new_msg)
     return filtered_messages
