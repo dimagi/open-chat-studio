@@ -443,20 +443,22 @@ def _convert_unsupported_message_types_into_supported_types(messages: list[BaseM
         if isinstance(msg.content, list):
             new_content = []
             for content in msg.content:
-                if content.get("type") == "function_call":
+                if isinstance(content, dict) and content.get("type") == "function_call":
                     new_content.append(
                         {
                             "type": "function",
                             "function": {"arguments": content.get("arguments", {}), "name": content.get("name", "")},
                         }
                     )
-                elif content.get("type") == "reasoning":
+                elif isinstance(content, dict) and content.get("type") == "reasoning":
                     summaries = content.get("summary", [])
-                    summary_text = "\n".join([summary["text"] for summary in summaries])
+                    summary_text = "\n".join(
+                        [summary.get("text", "") for summary in summaries if isinstance(summary, dict)]
+                    )
                     new_content.append({"type": "text", "text": summary_text})
                 else:
                     new_content.append(content)
-            msg.content = new_content
+            msg = msg.model_copy(update={"content": new_content})
 
         filtered_messages.append(msg)
     return filtered_messages
