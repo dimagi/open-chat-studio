@@ -168,10 +168,8 @@ def _django_db_cleanup_wrapper(func: Callable) -> Callable:
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        from django.db import close_old_connections, connection
-
         # Close any stale connections from previous tasks
-        close_old_connections()
+        close_db_connections()
 
         try:
             # Execute the actual task
@@ -183,13 +181,15 @@ def _django_db_cleanup_wrapper(func: Callable) -> Callable:
         finally:
             # Clean up connections after task completion
             # This is critical to prevent connection leaks
-            try:
-                # Close the connection for this thread
-                connection.close()
-            except Exception as cleanup_error:
-                logger.warning(f"Error closing connection: {cleanup_error}")
-
-            # Close any other stale connections
-            close_old_connections()
+            close_db_connections()
 
     return wrapper
+
+
+def close_db_connections():
+    from django.db import connections
+
+    try:
+        connections.close_all()
+    except Exception as cleanup_error:
+        logger.warning(f"Error closing connection: {cleanup_error}")
