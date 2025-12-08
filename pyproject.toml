@@ -37,10 +37,10 @@ dependencies = [
     "ffmpeg", # Audio transcription
     "httpx",
     "jinja2",
-    "langchain>=1.0.0",
+    "langchain>=1.1.0",
     "langchain-core>=0.3.23",
     "langchain-anthropic",
-    "langchain-openai>0.3.28",
+    "langchain-openai>1.0.0",
     "langchain_google_genai",
     "langchain-community>=0.3",
     "langfuse>=2.59.7",
