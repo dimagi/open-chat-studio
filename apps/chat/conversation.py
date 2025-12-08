@@ -217,6 +217,8 @@ def _compress_chat_history(
         total_messages = [input_messages[0], total_messages[0]] + total_messages[1:] + input_messages[1:]
     else:
         total_messages.extend(input_messages)
+
+    total_messages = _convert_unsupported_message_types_into_supported_types(total_messages)
     current_token_count = llm.get_num_tokens_from_messages(total_messages)
     if history_mode in [PipelineChatHistoryModes.SUMMARIZE, PipelineChatHistoryModes.TRUNCATE_TOKENS, None]:
         if current_token_count <= max_token_limit and len(total_messages) <= MAX_UNCOMPRESSED_MESSAGES:
@@ -426,3 +428,35 @@ def _reduce_summary_size(llm, summary, summary_token_limit) -> tuple:
         attempts += 1
 
     return summary, summary_tokens
+
+
+def _convert_unsupported_message_types_into_supported_types(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """
+    Converts unsupported message content types (like function_call, reasoning) into types supported by the
+    get_num_tokens_from_messages method.
+    See https://forum.langchain.com/t/trim-messages-throwing-unrecognized-content-block-type/2306/2
+
+    This is a temporary workaround until LangChain natively supports these types, if ever.
+    """
+    filtered_messages = []
+    for msg in messages:
+        if isinstance(msg.content, list):
+            new_content = []
+            for content in msg.content:
+                if content.get("type") == "function_call":
+                    new_content.append(
+                        {
+                            "type": "function",
+                            "function": {"arguments": content.get("arguments", {}), "name": content.get("name", "")},
+                        }
+                    )
+                elif content.get("type") == "reasoning":
+                    summaries = content.get("summary", [])
+                    summary_text = "\n".join([summary["text"] for summary in summaries])
+                    new_content.append({"type": "text", "text": summary_text})
+                else:
+                    new_content.append(content)
+            msg.content = new_content
+
+        filtered_messages.append(msg)
+    return filtered_messages
