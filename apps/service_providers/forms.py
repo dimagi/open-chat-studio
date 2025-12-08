@@ -3,7 +3,9 @@ from django.core.validators import URLValidator
 from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
+from apps.generics.help import render_help_with_link
 from apps.service_providers.models import LlmProviderModel
+from apps.utils.json import PrettyJSONEncoder
 
 
 class ProviderTypeConfigForm(forms.Form):
@@ -41,9 +43,12 @@ class ObfuscatingMixin:
         if self.initial_raw:
             initial = self.initial_raw.copy()
             for field in self.obfuscate_fields:
-                initial[field] = obfuscate_value(initial.get(field, ""))
+                initial[field] = self.obfusticate_field(field, initial.get(field, ""))
             kwargs["initial"] = initial
         super().__init__(*args, **kwargs)
+
+    def obfusticate_field(self, field, initial_value):
+        return obfuscate_value(initial_value)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -136,6 +141,41 @@ class GoogleGeminiConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["google_api_key"]
 
     google_api_key = forms.CharField(label=_("API Key"))
+
+
+class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["credentials_json"]
+    api_transport = forms.ChoiceField(
+        label=_("API Transport"),
+        choices=[("grpc", "gRPC"), ("rest", "REST")],
+        help_text=_(
+            "Advanced parameter to select the transport protocol for the API calls. "
+            "Refer to the Google documentation for details."
+        ),
+        initial="grpc",
+    )
+    credentials_json = forms.JSONField(
+        # expect credentials to be ~13 lines of JSON
+        label=_("Service Account Key (JSON)"),
+        encoder=PrettyJSONEncoder,
+        widget=forms.Textarea(attrs={"rows": "13"}),
+        help_text=render_help_with_link(
+            _("For more details see "),
+            "https://docs.cloud.google.com/iam/docs/service-account-creds#key-types",
+            link_text="Google documentation",
+            line_break=False,
+        ),
+    )
+
+    def obfusticate_field(self, field, initial_value):
+        if not initial_value:
+            return initial_value
+        if field == "credentials_json" and isinstance(initial_value, dict):
+            initial_value = initial_value.copy()
+            for key in initial_value:
+                if key != "private_key_id":
+                    initial_value[key] = "***"
+        return super().obfusticate_field(field, str(initial_value))
 
 
 class DeepSeekConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
