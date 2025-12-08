@@ -3,7 +3,7 @@ from string import Formatter
 from typing import Annotated
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import AgentMiddleware, AgentState, ModelRequest, dynamic_prompt
+from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain_core.messages import RemoveMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph.message import (
@@ -89,9 +89,10 @@ def _process_agent_output(node, session, message):
 
 
 class HistoryCompressionMiddleware(AgentMiddleware):
-    def __init__(self, session, node):
+    def __init__(self, session: ExperimentSession, node, system_message: SystemMessage):
         self.session = session
         self.node = node
+        self.system_message = system_message
 
     def before_model(self, state: AgentState, runtime: Runtime) -> dict[str, any] | None:  # noqa: ARG002
         return {
@@ -100,7 +101,7 @@ class HistoryCompressionMiddleware(AgentMiddleware):
                 # history to the user's message. We need to replace the full message history in the state.
                 # See https://github.com/langchain-ai/langchain/blob/c63f23d2339b2604edc9ae1d9f7faf7d6cc7dc78/libs/langchain_v1/langchain/agents/middleware/summarization.py#L286-L292
                 RemoveMessage(id=REMOVE_ALL_MESSAGES),
-                *self.node.get_history(self.session, state["messages"]),
+                *self.node.get_history(self.session, [self.system_message] + state["messages"]),
                 *state["messages"],
             ]
         }
@@ -108,32 +109,30 @@ class HistoryCompressionMiddleware(AgentMiddleware):
 
 def build_node_agent(node, pipeline_state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
     prompt_context = _get_prompt_context(node, session, pipeline_state)
-
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
-
-    @dynamic_prompt
-    def prompt_middleware(request: ModelRequest):
-        prompt_template = node.prompt
-        input_variables = {v for _, v, _, _ in Formatter().parse(prompt_template) if v is not None}
-        context = prompt_context.get_context(input_variables)
-        try:
-            formatted_prompt = prompt_template.format(**context)
-            prompt = SystemMessage(content=formatted_prompt)
-        except KeyError as e:
-            raise PipelineNodeRunError(str(e)) from e
-
-        return prompt
+    system_message = _get_system_message(node, prompt_context=prompt_context)
 
     return create_agent(
         # TODO: I think this will fail with google builtin tools
         model=node.get_chat_model(),
         tools=tools,
+        system_prompt=system_message,
         middleware=[
-            prompt_middleware,
-            HistoryCompressionMiddleware(session=session, node=node),
+            HistoryCompressionMiddleware(session=session, node=node, system_message=system_message),
         ],
         state_schema=StateSchema,
     )
+
+
+def _get_system_message(node, prompt_context: PromptTemplateContext) -> SystemMessage:
+    system_message_template = node.prompt
+    input_variables = {v for _, v, _, _ in Formatter().parse(system_message_template) if v is not None}
+    context = prompt_context.get_context(input_variables)
+    try:
+        system_message = system_message_template.format(**context)
+        return SystemMessage(content=system_message)
+    except KeyError as e:
+        raise PipelineNodeRunError(str(e)) from e
 
 
 def _process_files(session: ExperimentSession, cited_files: set[File], generated_files: set[File]) -> dict:
