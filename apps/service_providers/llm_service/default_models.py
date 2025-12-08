@@ -79,6 +79,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-3.5-turbo", k(16)),
         Model("gpt-3.5-turbo-1106", k(16)),
         Model("gpt-5", k(400), parameters=GPT5Parameters),
+        Model("gpt-5.1", k(400), parameters=GPT5Parameters),
         Model("gpt-5-mini", k(400), parameters=GPT5Parameters),
         Model("gpt-5-nano", k(400), parameters=GPT5Parameters),
         Model("gpt-5-pro", k(400), parameters=GPT5ProParameters),
