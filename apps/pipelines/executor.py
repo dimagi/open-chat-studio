@@ -1,13 +1,18 @@
-import concurrent
+"""
+This module contains modified thread executor classes which are used to patch langgraph.
+
+This approach is used instead of using the `CONFIG_KEY_RUNNER_SUBMIT` configuration parameter to ensure
+that all threaded operations are patched, not only Pregel tasks.
+"""
+
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Generator, Iterable, Iterator
 from concurrent.futures import Executor, Future
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from functools import wraps
 from typing import Any
 
-from langgraph.constants import CONFIG_KEY_RUNNER_SUBMIT
-from langgraph.pregel._executor import BackgroundExecutor, P, T
+from langchain_core.runnables.config import ContextThreadPoolExecutor, P, T
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +36,13 @@ class CurrentThreadExecutor(Executor):
 
 
 @contextmanager
-def patch_executor():
+def patch_executor(executor: type[Executor]) -> Generator[None, Any, None]:
     """Monkeypatch the langchain executor to run tasks in the current thread.
     This is used for pipeline tests where the DB transaction is not committed."""
     from langchain_core.runnables import config
 
     original = config.ContextThreadPoolExecutor
-    config.ContextThreadPoolExecutor = CurrentThreadExecutor
+    config.ContextThreadPoolExecutor = executor
     try:
         yield
     finally:
@@ -51,23 +56,18 @@ class DjangoLangGraphRunner:
     This is the recommended way to use Django-safe execution with LangGraph.
 
     Example:
-        with DjangoLangGraphRunner(max_workers=4) as runner:
-            result = runner.invoke(app, input_data)
+        runner = DjangoLangGraphRunner(executor_class)
+        result = runner.invoke(app, input_data)
     """
 
-    def __init__(self, max_workers: int | None = None):
+    def __init__(self, executor: type[Executor]):
         """
         Initialize the runner.
 
         Args:
-            max_workers: Maximum number of workers
-            use_processes: If True, use process pool instead of thread pool
+            executor: Executor class to patch langgraph
         """
-        self.max_workers = max_workers
-        self.executor = None
-        self.stack = ExitStack()
-        self.executor = DjangoSafeBackgroundExecutor({"configurable": {"max_concurrency": self.max_workers}})
-        self.submit = self.stack.enter_context(self.executor)
+        self.executor = executor
 
     def invoke(self, app, input_data: dict, config: dict | None = None) -> Any:
         """
@@ -84,11 +84,8 @@ class DjangoLangGraphRunner:
         if self.executor is None:
             raise RuntimeError("Runner has been shut down")
 
-        run_config = {CONFIG_KEY_RUNNER_SUBMIT: lambda: self.submit}
-        if config:
-            run_config.update(config)
-
-        return app.invoke(input_data, config=run_config)
+        with patch_executor(self.executor):
+            return app.invoke(input_data, config=config)
 
     def stream(self, app, input_data: dict, config: dict | None = None):
         """
@@ -105,49 +102,25 @@ class DjangoLangGraphRunner:
         if self.executor is None:
             raise RuntimeError("Runner has been shut down")
 
-        run_config = {CONFIG_KEY_RUNNER_SUBMIT: lambda: self.submit}
-        if config:
-            run_config.update(config)
-
-        yield from app.stream(input_data, config=run_config)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stack.__exit__(exc_type, exc_val, exc_tb)
+        with patch_executor(self.executor):
+            yield from app.stream(input_data, config=config)
 
 
-class DjangoSafeBackgroundExecutor(BackgroundExecutor):
-    """
-    A wrapper around BackgroundExecutor that ensures all submitted tasks
-    properly manage Django database connections.
+class DjangoSafeContextThreadPoolExecutor(ContextThreadPoolExecutor):
+    """Thread pool executor that wraps the target function with Django database connection handling."""
 
-    This executor automatically wraps all submitted functions with Django
-    connection cleanup logic.
-    """
-
-    def submit(  # type: ignore[valid-type]
+    def submit(  # type: ignore[override]
         self,
-        fn: Callable[P, T],
+        func: Callable[P, T],
         *args: P.args,
-        __name__: str | None = None,  # currently not used in sync version
-        __cancel_on_exit__: bool = False,  # for sync, can cancel only if not started
-        __reraise_on_exit__: bool = True,
-        __next_tick__: bool = False,
         **kwargs: P.kwargs,
-    ) -> concurrent.futures.Future[T]:
-        # Wrap the function with Django connection cleanup
+    ) -> Future[T]:
+        wrapped_fn = _django_db_cleanup_wrapper(func)
+        return super().submit(wrapped_fn, *args, **kwargs)
+
+    def map(self, fn: Callable[..., T], *iterables: Iterable[Any], **kwargs: Any) -> Iterator[T]:
         wrapped_fn = _django_db_cleanup_wrapper(fn)
-        return super().submit(
-            wrapped_fn,
-            *args,
-            __name__=__name__,
-            __cancel_on_exit__=__cancel_on_exit__,
-            __reraise_on_exit__=__reraise_on_exit__,
-            __next_tick__=__next_tick__,
-            **kwargs,
-        )
+        return super().map(wrapped_fn, *iterables, **kwargs)
 
 
 def _django_db_cleanup_wrapper(func: Callable) -> Callable:
