@@ -122,7 +122,7 @@ def get_history_compression_middleware(node, session, system_message) -> History
     used to summarize the conversation history.
 
     Accounting for the system message:
-    Since the system message is also takes up tokens in the context window, we need to
+    Since the system message is also taking up tokens in the context window, we need to
     subtract its token count from the total token limit when calculating the thresholds.
     """
     from apps.pipelines.nodes.nodes import get_llm_provider_model
