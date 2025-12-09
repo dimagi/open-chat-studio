@@ -81,9 +81,6 @@ class DjangoLangGraphRunner:
         Returns:
             Result from the graph execution
         """
-        if self.executor is None:
-            raise RuntimeError("Runner has been shut down")
-
         with patch_executor(self.executor):
             return app.invoke(input_data, config=config)
 
@@ -99,9 +96,6 @@ class DjangoLangGraphRunner:
         Yields:
             Stream of results from the graph execution
         """
-        if self.executor is None:
-            raise RuntimeError("Runner has been shut down")
-
         with patch_executor(self.executor):
             yield from app.stream(input_data, config=config)
 
@@ -148,9 +142,6 @@ def _django_db_cleanup_wrapper(func: Callable) -> Callable:
             # Execute the actual task
             result = func(*args, **kwargs)
             return result
-        except Exception as e:
-            logger.error(f"Error in Django-wrapped task: {e}")
-            raise
         finally:
             # Clean up connections after task completion
             # This is critical to prevent connection leaks
