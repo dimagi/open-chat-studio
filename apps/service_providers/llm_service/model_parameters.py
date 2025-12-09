@@ -19,6 +19,13 @@ class GPT5ReasoningEffortParameter(TextChoices):
     HIGH = "high", "High"
 
 
+class GPT51ReasoningEffortParameter(TextChoices):
+    NONE = "none", "None"
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+
+
 class OpenAIVerbosityParameter(TextChoices):
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
@@ -50,6 +57,20 @@ class GPT5Parameters(LLMModelParamBase):
         title="Reasoning Effort",
         default=GPT5ReasoningEffortParameter.MEDIUM,
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT5ReasoningEffortParameter.labels),
+    )
+
+    verbosity: OpenAIVerbosityParameter = Field(
+        title="Verbosity",
+        default=OpenAIVerbosityParameter.MEDIUM,
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
+    )
+
+
+class GPT51Parameters(LLMModelParamBase):
+    effort: GPT51ReasoningEffortParameter = Field(
+        title="Reasoning Effort",
+        default=GPT51ReasoningEffortParameter.NONE,
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT51ReasoningEffortParameter.labels),
     )
 
     verbosity: OpenAIVerbosityParameter = Field(
