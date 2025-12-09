@@ -222,6 +222,8 @@ def get_history_compression_middleware(node, session, system_message) -> History
             if node.user_max_token_limit is not None
             else get_llm_provider_model(node.llm_provider_model_id).max_token_limit
         )
+        # There must be at least 100 tokens to work with after accounting for system message. This number was chosen
+        # somewhat arbitrarily to ensure there's enough room.
         token_limit = max(specified_token_limit - system_message_tokens, 100)
 
         trigger = ("tokens", token_limit)

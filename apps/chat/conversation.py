@@ -80,9 +80,11 @@ class BasicConversation:
     def load_memory_from_messages(self, messages: list[BaseMessage]):
         self.messages = messages
 
+    # TODO: Remove
     def load_memory_from_chat(self, chat: Chat, max_token_limit: int):
         self.load_memory_from_messages(self._get_optimized_history(chat, max_token_limit))
 
+    # TODO: Remove
     def _get_optimized_history(self, chat: Chat, max_token_limit: int) -> list[BaseMessage]:
         return compress_chat_history(chat, self.llm, max_token_limit, input_messages=[])
 
@@ -92,6 +94,7 @@ class BasicConversation:
         return response.text, usage.get("input_tokens", 0), usage.get("output_tokens", 0)
 
 
+# TODO: Remove
 def compress_chat_history(
     chat: Chat,
     llm: BaseChatModel,
@@ -142,6 +145,7 @@ def compress_chat_history(
         return history_messages
 
 
+# TODO: Remove
 def compress_pipeline_chat_history(
     pipeline_chat_history: PipelineChatHistory,
     llm: BaseChatModel,
