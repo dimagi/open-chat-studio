@@ -154,6 +154,17 @@ class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         ),
         initial="grpc",
     )
+    location = forms.CharField(
+        label=_("Google Cloud Platform Location"),
+        help_text=render_help_with_link(
+            _("Model availability may vary by region, see "),
+            "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations",
+            link_text="Google documentation",
+            line_break=False,
+        ),
+        initial="global",
+    )
+
     credentials_json = forms.JSONField(
         # expect credentials to be ~13 lines of JSON
         label=_("Service Account Key (JSON)"),
