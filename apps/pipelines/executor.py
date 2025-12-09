@@ -140,8 +140,7 @@ def _django_db_cleanup_wrapper(func: Callable) -> Callable:
 
         try:
             # Execute the actual task
-            result = func(*args, **kwargs)
-            return result
+            return func(*args, **kwargs)
         finally:
             # Clean up connections after task completion
             # This is critical to prevent connection leaks
