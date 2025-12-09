@@ -26,7 +26,6 @@ from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
 from apps.pipelines.exceptions import (
@@ -249,47 +248,44 @@ class HistoryMixin(LLMResponseMixin):
             return self.history_name
         return self.node_id
 
-    def get_history(self, session: ExperimentSession, input_messages: list) -> list[BaseMessage]:
-        if self.history_type == PipelineChatHistoryTypes.NONE:
-            return []
+    def history_is_disabled(self) -> bool:
+        return self.history_type == PipelineChatHistoryTypes.NONE
 
-        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
-            return compress_chat_history(
-                chat=session.chat,
-                llm=self.get_chat_model(),
-                max_token_limit=(
-                    self.user_max_token_limit
-                    if self.user_max_token_limit is not None
-                    else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
-                ),
-                input_messages=input_messages,
-                history_mode=self.history_mode,
-            )
+    def use_session_history(self) -> bool:
+        return self.history_type == PipelineChatHistoryTypes.GLOBAL
 
-        try:
-            history: PipelineChatHistory = session.pipeline_chat_history.get(
-                type=self.history_type, name=self._get_history_name()
-            )
-        except PipelineChatHistory.DoesNotExist:
-            return []
-        return compress_pipeline_chat_history(
-            pipeline_chat_history=history,
-            llm=self.get_chat_model(),
-            max_token_limit=(
-                self.user_max_token_limit
-                if self.user_max_token_limit is not None
-                else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
-            ),
-            input_messages=input_messages,
-            keep_history_len=self.max_history_length,
-            history_mode=self.history_mode,
-        )
+    def get_history_mode(self) -> PipelineChatHistoryModes:
+        return self.history_mode or PipelineChatHistoryModes.SUMMARIZE
+
+    def get_history(self, session: ExperimentSession) -> list[BaseMessage]:
+        """
+        Returns the chat history messages for the node based on its history configuration.
+
+        Global - Returns the chat history of the session up to the summary marker.
+        Node/Named - Returns the chat history for this node from the pipeline chat history.
+        None/Else - Returns an empty list.
+        """
+
+        if self.use_session_history():
+            return session.chat.get_langchain_messages_until_marker(marker=self.get_history_mode())
+
+        if self.history_type in [PipelineChatHistoryTypes.NODE, PipelineChatHistoryTypes.NAMED]:
+            try:
+                history: PipelineChatHistory = session.pipeline_chat_history.get(
+                    type=self.history_type, name=self._get_history_name()
+                )
+            except PipelineChatHistory.DoesNotExist:
+                return []
+
+            return history.get_langchain_messages_until_marker(self.get_history_mode())
+
+        return []
 
     def save_history(self, session: ExperimentSession, human_message: str, ai_message: str):
-        if self.history_type == PipelineChatHistoryTypes.NONE:
+        if self.history_is_disabled():
             return
 
-        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
+        if self.use_session_history():
             # Global History is saved outside of the node
             return
 
@@ -733,8 +729,9 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
         context.update(template_context.get_context(prompt.input_variables))
 
-        if self.history_type != PipelineChatHistoryTypes.NONE and session:
+        if not self.history_is_disabled() and session:
             input_messages = prompt.format_messages(**context)
+            # TODO: This should also use Langchain's SummarizationMiddleware for compression
             context["history"] = self.get_history(session, input_messages)
 
         llm = self.get_chat_model()
