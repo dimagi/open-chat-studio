@@ -252,21 +252,22 @@ class ChatUser(HttpUser):
 
         # Send message and wait for response
         logger.info(f"Sending message {self.messages_sent + 1}/{self.max_messages}: {message_text[:50]}...")
-        task_id = self.send_message(message_text)
+        with self.environment.events.request.measure("TASK", "send_message_task"):
+            task_id = self.send_message(message_text)
 
-        if task_id:
-            # Poll for response
-            if self.poll_task_response(task_id):
-                self.messages_sent += 1
-                logger.info(f"Message {self.messages_sent}/{self.max_messages} completed")
+            if task_id:
+                # Poll for response
+                if self.poll_task_response(task_id):
+                    self.messages_sent += 1
+                    logger.info(f"Message {self.messages_sent}/{self.max_messages} completed")
+                else:
+                    logger.error("Failed to get response, ending conversation")
+                    self.messages_sent = 0
+                    self.session_id = None
             else:
-                logger.error("Failed to get response, ending conversation")
+                logger.error("Failed to send message, ending conversation")
                 self.messages_sent = 0
                 self.session_id = None
-        else:
-            logger.error("Failed to send message, ending conversation")
-            self.messages_sent = 0
-            self.session_id = None
 
 
 class QuickChatUser(ChatUser):

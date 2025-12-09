@@ -11,6 +11,7 @@ from apps.service_providers.llm_service.model_parameters import (
     ClaudeHaikuLatestParameters,
     ClaudeOpus4_20250514Parameters,
     GPT5Parameters,
+    GPT51Parameters,
     GPT5ProParameters,
     OpenAIReasoningParameters,
 )
@@ -79,6 +80,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-3.5-turbo", k(16)),
         Model("gpt-3.5-turbo-1106", k(16)),
         Model("gpt-5", k(400), parameters=GPT5Parameters),
+        Model("gpt-5.1", k(400), parameters=GPT51Parameters),
         Model("gpt-5-mini", k(400), parameters=GPT5Parameters),
         Model("gpt-5-nano", k(400), parameters=GPT5Parameters),
         Model("gpt-5-pro", k(400), parameters=GPT5ProParameters),
@@ -126,6 +128,12 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-1.5-flash", 1048576),
         Model("gemini-1.5-flash-8b", 1048576),
         Model("gemini-1.5-pro", 2097152),
+    ],
+    "google_vertex_ai": [
+        Model("gemini-3-pro-preview", 1048576),
+        Model("gemini-2.5-pro", 1048576, is_translation_default=True),
+        Model("gemini-2.5-flash", 1048576, is_default=True),
+        Model("gemini-2.5-flash-lite", 1048576),
     ],
 }
 

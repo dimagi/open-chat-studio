@@ -93,12 +93,7 @@ class PromptTemplateContext:
             return ""
 
         collections = Collection.objects.filter(id__in=self.collection_index_ids).values_list("id", "name", "summary")
-        return "\n".join(
-            [
-                f"Collection Index (id={id}, name={name}): {summary}"
-                for id, name, summary in collections
-            ]
-        )
+        return "\n".join([f"Collection Index (id={id}, name={name}): {summary}" for id, name, summary in collections])
 
     def get_participant_data(self):
         data = self.participant_data_proxy.get() or {}
@@ -191,7 +186,7 @@ class ParticipantDataProxy:
 
     def __init__(self, pipeline_state: dict, experiment_session):
         self.session = experiment_session
-        self.experiment = self.session.experiment if self.session else None
+        self.experiment_id = self.session.experiment_id if self.session else None
         self._participant_data = pipeline_state.setdefault("participant_data", {})
         self._scheduled_messages = None
 
@@ -255,7 +250,7 @@ class ParticipantDataProxy:
         """
         if self._scheduled_messages is None:
             self._scheduled_messages = self.session.participant.get_schedules_for_experiment(
-                self.experiment, as_dict=True, as_timezone=self.get_timezone()
+                self.experiment_id, as_dict=True, as_timezone=self.get_timezone()
             )
         return self._scheduled_messages
 

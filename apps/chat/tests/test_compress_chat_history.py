@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from apps.chat.conversation import (
     SUMMARY_TOO_LARGE_ERROR_MESSAGE,
@@ -21,11 +21,13 @@ from apps.utils.langchain import FakeLlm
 
 class FakeLlmSimpleTokenCount(FakeLlm):
     max_token_limit: int | None = None
+    token_count_calls: list = []
 
     def get_num_tokens(self, text: str) -> int:
         return len(text.split())
 
     def get_num_tokens_from_messages(self, messages: list) -> int:
+        self.token_count_calls.append(messages)
         return BaseLanguageModel.get_num_tokens_from_messages(self, messages)
 
     def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
@@ -388,3 +390,31 @@ def test_max_history_length_compression(chat):
 
     assert len(result) == 5
     assert [message.content for message in result] == [f"Hello {i}" for i in range(3, 8)]
+
+
+def test_convert_unsupported_message_types_into_supported_types(chat):
+    ChatMessage.objects.create(chat=chat, content="Hello", message_type=ChatMessageType.HUMAN)
+
+    llm = FakeLlmSimpleTokenCount(responses=[])
+    function_call_message = AIMessage(
+        content=[
+            {
+                "type": "function_call",
+                "name": "do_something",
+                "arguments": '{"datetime_due":"2025-12-08T13:07:14+02:00"}',
+            }
+        ]
+    )
+    reasoning_message = AIMessage(
+        content=[{"type": "reasoning", "summary": [{"type": "summary_text", "text": "This is a summary"}]}]
+    )
+    human_message = HumanMessage(content=[{"type": "text", "text": "This is a test"}])
+    compress_chat_history(chat, llm, 20, input_messages=[human_message, function_call_message, reasoning_message])
+    # We expect the only AI message (a function call one) to be filtered out
+    assert llm.token_count_calls[0][-2].content == [
+        {
+            "type": "function",
+            "function": {"arguments": '{"datetime_due":"2025-12-08T13:07:14+02:00"}', "name": "do_something"},
+        }
+    ]
+    assert llm.token_count_calls[0][-1].content == [{"type": "text", "text": "This is a summary"}]

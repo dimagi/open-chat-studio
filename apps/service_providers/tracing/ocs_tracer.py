@@ -82,7 +82,7 @@ class OCSTracer(Tracer):
             session=session,
             duration=0,
             participant=session.participant,
-            participant_data=session.participant.get_data_for_experiment(session.experiment),
+            participant_data=session.participant.get_data_for_experiment(session.experiment_id),
             session_state=session.state,
         )
 

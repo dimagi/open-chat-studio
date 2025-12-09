@@ -124,7 +124,7 @@ def render_session_details(
                 for trigger in experiment.event_triggers
             ],
             "participant_schedules": session.participant.get_schedules_for_experiment(
-                experiment, as_dict=True, include_inactive=True
+                experiment.id, as_dict=True, include_inactive=True
             ),
             "participant_id": session.participant_id,
         },

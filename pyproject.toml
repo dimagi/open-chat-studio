@@ -37,10 +37,10 @@ dependencies = [
     "ffmpeg", # Audio transcription
     "httpx",
     "jinja2",
-    "langchain>=1.0.0",
+    "langchain>=1.1.0",
     "langchain-core>=0.3.23",
     "langchain-anthropic",
-    "langchain-openai>0.3.28",
+    "langchain-openai>1.0.0",
     "langchain_google_genai",
     "langchain-community>=0.3",
     "langfuse>=2.59.7",
@@ -58,7 +58,7 @@ dependencies = [
     "RestrictedPython",
     "sentry-sdk",
     "slack-bolt",
-    "taskbadger",
+    "taskbadger>1.6.1",
     "tenacity",
     "tiktoken",
     "turn-python>=1.0.0",
@@ -84,6 +84,7 @@ dependencies = [
     "django-silk>=5.4.3",
     "django-oauth-toolkit>=3.1.0,<4.0.0",
     "langchain-classic>=1.0.0",
+    "langchain-google-vertexai",
 ]
 
 [project.urls]

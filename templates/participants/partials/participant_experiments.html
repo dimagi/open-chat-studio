@@ -23,11 +23,11 @@
         <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ experiment.joined_on|default:"" }}</td>
         <td class="px-3 py-4 text-sm text-gray-500">{{ experiment.last_message|default:"" }}</td>
         <td>
-          <i class="fa-solid {% if selected_experiment == experiment %}fa-chevron-down{% else %}fa-chevron-up{% endif %}"></i>
+          <i class="fa-solid {% if selected_experiment_id == experiment.id %}fa-chevron-down{% else %}fa-chevron-up{% endif %}"></i>
         </td>
       </tr>
-      {% if selected_experiment == experiment %}
-        {% include "participants/partials/experiment_data.html" with experiment=selected_experiment %}
+      {% if selected_experiment_id == experiment.id %}
+        {% include "participants/partials/experiment_data.html" with experiment=experiment %}
       {% endif %}
     {% endfor %}
   </tbody>

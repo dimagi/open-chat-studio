@@ -152,7 +152,7 @@ class TestExperimentSession:
             action=None,
         )
 
-        assert len(participant.get_schedules_for_experiment(experiment)) == 2
+        assert len(participant.get_schedules_for_experiment(experiment.id)) == 2
 
         def _make_string(message, is_system):
             return (
@@ -161,7 +161,7 @@ class TestExperimentSession:
                 f"{' (System)' if is_system else ''}"
             )
 
-        scheduled_messages_str = participant.get_schedules_for_experiment(experiment)
+        scheduled_messages_str = participant.get_schedules_for_experiment(experiment.id)
         assert scheduled_messages_str[0] == _make_string(message1, True)
         assert scheduled_messages_str[1] == _make_string(message2, False)
 
@@ -186,7 +186,7 @@ class TestExperimentSession:
             _make_expected_dict(message1.external_id),
             _make_expected_dict(message2.external_id),
         ]
-        assert participant.get_schedules_for_experiment(experiment, as_dict=True) == expected_dict_version
+        assert participant.get_schedules_for_experiment(experiment.id, as_dict=True) == expected_dict_version
 
     @pytest.mark.parametrize(
         ("repetitions", "total_triggers", "expected_triggers_remaining"),
@@ -213,7 +213,7 @@ class TestExperimentSession:
             custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions),
         )
 
-        schedules = participant.get_schedules_for_experiment(experiment, as_dict=True)
+        schedules = participant.get_schedules_for_experiment(experiment.id, as_dict=True)
 
         assert len(schedules) == 1
         schedule = schedules[0]
@@ -291,7 +291,7 @@ class TestExperimentSession:
             custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions, time_period=time_period),
         )
 
-        schedules = participant.get_schedules_for_experiment(experiment, as_dict=False)
+        schedules = participant.get_schedules_for_experiment(experiment.id, as_dict=False)
 
         assert len(schedules) == 1
         schedule = schedules[0]
@@ -310,8 +310,8 @@ class TestExperimentSession:
         ScheduledMessageFactory(experiment=session2.experiment, team=team, participant=participant, action=event_action)
         ExperimentRoute.objects.create(team=team, parent=session.experiment, child=session2.experiment, keyword="test")
 
-        assert len(participant.get_schedules_for_experiment(session2.experiment)) == 1
-        assert len(participant.get_schedules_for_experiment(session.experiment)) == 2
+        assert len(participant.get_schedules_for_experiment(session2.experiment_id)) == 1
+        assert len(participant.get_schedules_for_experiment(session.experiment_id)) == 2
 
     @pytest.mark.parametrize("use_custom_experiment", [False, True])
     @patch.object(ExperimentSession, "ad_hoc_bot_message")
