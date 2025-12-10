@@ -62,7 +62,7 @@ class BaseHistoryMiddleware(SummarizationMiddleware):
 
         # The first message is always a RemoveMessage if a summary was created
         summary_message = messages[1]
-        self.node.store_compression_marker(
+        self.node.store_compression_checkpoint(
             compression_marker=summary_message.content, checkpoint_message_id=checkpoint_message_id
         )
 

@@ -298,7 +298,7 @@ class HistoryMixin(LLMResponseMixin):
 
             return history.get_langchain_messages_until_marker(self.get_history_mode())
 
-    def store_compression_marker(self, summary: str, checkpoint_message_id: int):
+    def store_compression_checkpoint(self, summary: str, checkpoint_message_id: int):
         """Persist the correct compression marker for this node's history mode.
 
         When `summary` is the literal `COMPRESSION_MARKER`, we record the node's current
