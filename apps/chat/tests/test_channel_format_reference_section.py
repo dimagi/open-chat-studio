@@ -181,3 +181,18 @@ And no citations at all."""
 
         assert formatted_text == text
         assert uncited_files == []
+
+    def test_files_with_custom_citation_text(self, mock_channel, team):
+        """Test that files with custom citation text get properly recognized"""
+        file = FileFactory.build(id=1, name="report.pdf", team=team, metadata={"citation_text": "custom text"})
+        mock_channel._can_send_files = {"report.pdf": True}
+
+        text = """Here's a fact [^1].
+
+[^1]: [custom text](http://example.com/report.pdf)"""
+
+        formatted_text, uncited_files = mock_channel._format_reference_section(text, files=[file])
+
+        assert "[1]: custom text" in formatted_text
+        assert "http://example.com/report.pdf" not in formatted_text
+        assert uncited_files == []
