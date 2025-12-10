@@ -4,15 +4,14 @@ import logging
 from typing import TYPE_CHECKING
 
 from langchain.agents.middleware.summarization import SummarizationMiddleware
-from langchain_core.messages import BaseMessage, RemoveMessage
-from langchain_core.messages.utils import count_tokens_approximately
+from langchain_core.messages import BaseMessage, HumanMessage, RemoveMessage
 from langgraph.graph.message import (
     REMOVE_ALL_MESSAGES,
 )
 
 from apps.chat.conversation import COMPRESSION_MARKER
 from apps.chat.models import ChatMessage
-from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatMessages
+from apps.pipelines.models import PipelineChatMessages
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.nodes import PipelineNode
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.bots.summarization")
 
 
-class HistoryCompressionMiddleware(SummarizationMiddleware):
+class BaseHistoryMiddleware(SummarizationMiddleware):
     """
     Middleware to summarize chat history based on node configuration.
 
@@ -49,31 +48,11 @@ class HistoryCompressionMiddleware(SummarizationMiddleware):
         result = super().before_model(state, runtime)
         if result is not None:
             # A result means that a summary was created
-            self._persist_summary(result["messages"])
+            self.persist_summary(result["messages"])
 
         return result
 
-    def _create_summary(self, messages_to_summarize: list) -> str:
-        """
-        Create summary based on node's history mode
-        TRUNCATE_TOKENS and MAX_HISTORY_LENGTH mode does not create summaries, it only removes old messages until under
-        token or message limit.
-        """
-        if self.node.history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
-            return COMPRESSION_MARKER
-        elif self.node.history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
-            # We don't bother creating a summary
-            return ""
-        return super()._create_summary(messages_to_summarize)
-
-    def _build_new_messages(self, summary: str) -> list:
-        if self.node.history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
-            # Don't include a summary message
-            return []
-
-        return super()._build_new_messages(summary)
-
-    def _persist_summary(self, messages: list[BaseMessage]):
+    def persist_summary(self, messages: list[BaseMessage]):
         history_mode = self.node.get_history_mode()
 
         checkpoint_message_id = self._find_latest_message_db_id(messages)
@@ -89,18 +68,22 @@ class HistoryCompressionMiddleware(SummarizationMiddleware):
         summary = summary_message.content
 
         if self.node.use_session_history:
-            if summary == COMPRESSION_MARKER:
-                metadata = {"compression_marker": history_mode}
-            else:
-                metadata = {"summary": summary}
             message = ChatMessage.objects.get(id=checkpoint_message_id)
-            message.metadata.update(metadata)
-            message.save(update_fields=["metadata"])
+            if summary == COMPRESSION_MARKER:
+                message.metadata.update({"compression_marker": history_mode})
+                message.save(update_fields=["metadata"])
+                print(f"Updating message {message.id} with compression marker: {summary}")
+            else:
+                print(f"Updating message {message.id} with summary: {summary}")
+                message.summary = summary
+                message.save(update_fields=["summary"])
+
         else:
             # Use pipeline history
             updates = {"compression_marker": history_mode}
             if summary != COMPRESSION_MARKER:
                 updates["summary"] = summary
+            print(f"Updating message {checkpoint_message_id} with summary: {summary}")
             PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
 
     def _find_latest_message_db_id(self, messages: list) -> str | None:
@@ -114,45 +97,47 @@ class HistoryCompressionMiddleware(SummarizationMiddleware):
                 return messages[i].additional_kwargs["id"]
 
 
-def get_history_compression_middleware(node, session, system_message) -> HistoryCompressionMiddleware | None:
-    """
-    Return the history compression middleware configured for this node.
+class SummarizeHistoryMiddleware(BaseHistoryMiddleware):
+    """Summarizes overflowing history into a compact checkpoint."""
 
-    If ``history_type`` is ``NONE`` no middleware is attached; all other modes require
-    compression. The ``history_mode`` determines the ``trigger`` and ``keep`` thresholds
-    used to summarize the conversation history.
-
-    Accounting for the system message:
-    Since the system message is also taking up tokens in the context window, we need to
-    subtract its token count from the total token limit when calculating the thresholds.
-    """
-    from apps.pipelines.nodes.nodes import get_llm_provider_model
-
-    # TODO: Use the token counter from the LLM service
-    system_message_tokens = count_tokens_approximately([system_message])
-
-    if node.history_is_disabled:
-        return None
-
-    if node.history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
-        trigger = ("messages", 2)  # make this a low number to always trigger
-        keep = ("messages", node.max_history_length)
-    else:
-        specified_token_limit = (
-            node.user_max_token_limit
-            if node.user_max_token_limit is not None
-            else get_llm_provider_model(node.llm_provider_model_id).max_token_limit
-        )
-        # There must be at least 100 tokens to work with after accounting for system message. This number was chosen
-        # somewhat arbitrarily to ensure there's enough room.
-        token_limit = max(specified_token_limit - system_message_tokens, 100)
-
+    def __init__(self, *args, token_limit: int, **kwargs):
         trigger = ("tokens", token_limit)
-        if node.history_mode == PipelineChatHistoryModes.SUMMARIZE:
-            keep = ("messages", 20)
-        else:
-            keep = ("tokens", token_limit)
+        keep = ("messages", 10)
+        super().__init__(*args, trigger=trigger, keep=keep, **kwargs)
 
-    return HistoryCompressionMiddleware(
-        session=session, node=node, trigger=trigger, keep=keep, system_message=system_message
-    )
+
+class TruncateTokensHistoryMiddleware(BaseHistoryMiddleware):
+    """Drops oldest messages whenever the token budget is exceeded."""
+
+    def __init__(self, *args, token_limit: int, **kwargs):
+        keep = ("tokens", token_limit)
+        trigger = ("tokens", token_limit)
+        super().__init__(*args, trigger=trigger, keep=keep, **kwargs)
+
+    def _create_summary(self, messages_to_summarize: list) -> str:
+        # Instead of creating a summary, we'll persist a compression marker. See _build_new_messages
+        return ""
+
+    def _build_new_messages(self, summary: str) -> list[HumanMessage]:
+        return [HumanMessage(content=COMPRESSION_MARKER)]
+
+
+class MaxHistoryLengthHistoryMiddleware(BaseHistoryMiddleware):
+    """Reduces history to a fixed number of recent messages without adding summaries."""
+
+    def __init__(self, *args, max_history_length: int, **kwargs):
+        trigger = ("messages", 2)  # keep trigger low so pruning always runs
+        keep = ("messages", max_history_length)
+        super().__init__(*args, trigger=trigger, keep=keep, **kwargs)
+
+    def _create_summary(self, messages_to_summarize: list) -> str:
+        # Returning an empty string ensures the parent middleware no-ops on summary creation
+        return ""
+
+    def _build_new_messages(self, summary: str) -> list:
+        # No summary message should be injected for message-count-based pruning
+        return []
+
+    def persist_summary(self, messages: list[BaseMessage]):
+        # No summary to persist for message-count-based pruning
+        pass

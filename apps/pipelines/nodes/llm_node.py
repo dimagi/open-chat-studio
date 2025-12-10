@@ -11,7 +11,6 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.helpers import get_system_message
-from apps.pipelines.nodes.history_middleware import get_history_compression_middleware
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
@@ -89,7 +88,7 @@ def build_node_agent(node, pipeline_state: PipelineState, session: ExperimentSes
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
     middleware = []
-    if history_middleware := get_history_compression_middleware(node, session=session, system_message=system_message):
+    if history_middleware := node.build_history_middleware(session=session, system_message=system_message):
         middleware.append(history_middleware)
 
     return create_agent(

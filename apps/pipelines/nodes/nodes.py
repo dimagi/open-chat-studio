@@ -13,6 +13,7 @@ from django.db.models import TextChoices
 from jinja2.sandbox import SandboxedEnvironment
 from langchain.agents import create_agent
 from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_openai.chat_models.base import OpenAIRefusalError
@@ -48,7 +49,12 @@ from apps.pipelines.nodes.base import (
     deprecated_node,
 )
 from apps.pipelines.nodes.helpers import get_system_message
-from apps.pipelines.nodes.history_middleware import get_history_compression_middleware
+from apps.pipelines.nodes.history_middleware import (
+    BaseHistoryMiddleware,
+    MaxHistoryLengthHistoryMiddleware,
+    SummarizeHistoryMiddleware,
+    TruncateTokensHistoryMiddleware,
+)
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -284,6 +290,38 @@ class HistoryMixin(LLMResponseMixin):
                 return []
 
             return history.get_langchain_messages_until_marker(self.get_history_mode())
+
+    def build_history_middleware(
+        self, session: ExperimentSession, system_message: BaseMessage
+    ) -> BaseHistoryMiddleware | None:
+        """Construct the history compression middleware configured for this node."""
+        if self.history_is_disabled:
+            return None
+
+        history_mode = self.get_history_mode()
+
+        compressor_kwargs = {
+            "session": session,
+            "node": self,
+        }
+        if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
+            return MaxHistoryLengthHistoryMiddleware(max_history_length=self.max_history_length, **compressor_kwargs)
+
+        specified_token_limit = (
+            self.user_max_token_limit
+            if self.user_max_token_limit is not None
+            else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
+        )
+
+        # Reserve space for the system message so trigger/keep thresholds reflect usable context
+        system_message_tokens = count_tokens_approximately([system_message])
+        token_limit = max(specified_token_limit - system_message_tokens, 100)
+
+        if history_mode == PipelineChatHistoryModes.SUMMARIZE:
+            return SummarizeHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
+
+        if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
+            return TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
 
     def save_history(self, session: ExperimentSession, human_message: str, ai_message: str):
         if self.history_is_disabled:
@@ -730,9 +768,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         # Build the agent
         middleware = []
-        if history_middleware := get_history_compression_middleware(
-            self, session=session, system_message=system_message
-        ):
+        if history_middleware := self.build_history_middleware(session=session, system_message=system_message):
             middleware.append(history_middleware)
 
         agent = create_agent(
