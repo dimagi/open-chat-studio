@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.bots.summarization")
 
 
-class BaseHistoryMiddleware(SummarizationMiddleware):
+class BaseNodeHistoryMiddleware(SummarizationMiddleware):
     """
     Middleware to summarize chat history based on node configuration.
 
@@ -77,7 +77,7 @@ class BaseHistoryMiddleware(SummarizationMiddleware):
                 return messages[i].additional_kwargs["id"]
 
 
-class SummarizeHistoryMiddleware(BaseHistoryMiddleware):
+class SummarizeHistoryMiddleware(BaseNodeHistoryMiddleware):
     """Summarizes overflowing history into a compact checkpoint."""
 
     def __init__(self, *args, token_limit: int, **kwargs):
@@ -86,12 +86,11 @@ class SummarizeHistoryMiddleware(BaseHistoryMiddleware):
         super().__init__(*args, trigger=trigger, keep=keep, **kwargs)
 
 
-class TruncateTokensHistoryMiddleware(BaseHistoryMiddleware):
+class TruncateTokensHistoryMiddleware(BaseNodeHistoryMiddleware):
     """Drops oldest messages whenever the token budget is exceeded."""
 
     def __init__(self, *args, token_limit: int, **kwargs):
-        keep = ("tokens", token_limit)
-        trigger = ("tokens", token_limit)
+        keep = trigger = ("tokens", token_limit)
         super().__init__(*args, trigger=trigger, keep=keep, **kwargs)
 
     def _create_summary(self, messages_to_summarize: list) -> str:
@@ -102,7 +101,7 @@ class TruncateTokensHistoryMiddleware(BaseHistoryMiddleware):
         return [HumanMessage(content=COMPRESSION_MARKER)]
 
 
-class MaxHistoryLengthHistoryMiddleware(BaseHistoryMiddleware):
+class MaxHistoryLengthHistoryMiddleware(BaseNodeHistoryMiddleware):
     """Reduces history to a fixed number of recent messages without adding summaries."""
 
     def __init__(self, *args, max_history_length: int, **kwargs):

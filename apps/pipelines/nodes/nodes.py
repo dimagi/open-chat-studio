@@ -57,7 +57,7 @@ from apps.pipelines.nodes.base import (
 )
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.history_middleware import (
-    BaseHistoryMiddleware,
+    BaseNodeHistoryMiddleware,
     MaxHistoryLengthHistoryMiddleware,
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
@@ -324,7 +324,7 @@ class HistoryMixin(LLMResponseMixin):
 
     def build_history_middleware(
         self, session: ExperimentSession, system_message: BaseMessage
-    ) -> BaseHistoryMiddleware | None:
+    ) -> BaseNodeHistoryMiddleware | None:
         """Construct the history compression middleware configured for this node."""
         if self.history_is_disabled:
             return None
