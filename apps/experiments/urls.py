@@ -1,5 +1,5 @@
-from django.shortcuts import redirect
 from django.urls import include, path
+from django.views.generic import RedirectView
 
 from apps.experiments.views.experiment_routes import CreateExperimentRoute, DeleteExperimentRoute, EditExperimentRoute
 from apps.generics.urls import make_crud_urls
@@ -39,7 +39,7 @@ urlpatterns = [
         name="prompt_builder_load_source_material",
     ),
     # experiments - redirect to chatbots
-    path("new/", lambda request, team_slug: redirect("chatbots:new", team_slug=team_slug), name="new"),
+    path("new/", RedirectView.as_view(pattern_name="chatbots:new"), name="new"),
     path("e/<int:experiment_id>/trends/data", views.trends_data, name="trends_data"),
     path("e/<int:experiment_id>/sessions-table/", views.ExperimentSessionsTableView.as_view(), name="sessions-list"),
     path("e/<int:experiment_id>/versions/", views.ExperimentVersionsTableView.as_view(), name="versions-list"),
@@ -60,9 +60,7 @@ urlpatterns = [
     ),
     path(
         "e/<int:experiment_id>/versions/create",
-        lambda request, team_slug, experiment_id: redirect(
-            "chatbots:create_version", team_slug=team_slug, experiment_id=experiment_id
-        ),
+        RedirectView.as_view(pattern_name="chatbots:create_version")
         name="create_version",
     ),
     path(
