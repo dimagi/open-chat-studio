@@ -251,9 +251,11 @@ class HistoryMixin(LLMResponseMixin):
             return self.history_name
         return self.node_id
 
+    @property
     def history_is_disabled(self) -> bool:
         return self.history_type == PipelineChatHistoryTypes.NONE
 
+    @property
     def use_session_history(self) -> bool:
         return self.history_type == PipelineChatHistoryTypes.GLOBAL
 
@@ -268,11 +270,12 @@ class HistoryMixin(LLMResponseMixin):
         Node/Named - Returns the chat history for this node from the pipeline chat history.
         None/Else - Returns an empty list.
         """
+        if self.history_is_disabled:
+            return []
 
-        if self.use_session_history():
+        if self.use_session_history:
             return session.chat.get_langchain_messages_until_marker(marker=self.get_history_mode())
-
-        if self.history_type in [PipelineChatHistoryTypes.NODE, PipelineChatHistoryTypes.NAMED]:
+        else:
             try:
                 history: PipelineChatHistory = session.pipeline_chat_history.get(
                     type=self.history_type, name=self._get_history_name()
@@ -282,13 +285,11 @@ class HistoryMixin(LLMResponseMixin):
 
             return history.get_langchain_messages_until_marker(self.get_history_mode())
 
-        return []
-
     def save_history(self, session: ExperimentSession, human_message: str, ai_message: str):
-        if self.history_is_disabled():
+        if self.history_is_disabled:
             return
 
-        if self.use_session_history():
+        if self.use_session_history:
             # Global History is saved outside of the node
             return
 

@@ -48,6 +48,7 @@ class HistoryCompressionMiddleware(SummarizationMiddleware):
     def before_model(self, state, runtime):
         result = super().before_model(state, runtime)
         if result is not None:
+            # A result means that a summary was created
             self._persist_summary(result["messages"])
 
         return result
@@ -87,7 +88,7 @@ class HistoryCompressionMiddleware(SummarizationMiddleware):
         summary_message = messages[1]
         summary = summary_message.content
 
-        if self.node.use_session_history():
+        if self.node.use_session_history:
             if summary == COMPRESSION_MARKER:
                 metadata = {"compression_marker": history_mode}
             else:
@@ -130,7 +131,7 @@ def get_history_compression_middleware(node, session, system_message) -> History
     # TODO: Use the token counter from the LLM service
     system_message_tokens = count_tokens_approximately([system_message])
 
-    if node.history_is_disabled():
+    if node.history_is_disabled:
         return None
 
     if node.history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
