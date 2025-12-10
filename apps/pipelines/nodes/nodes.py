@@ -299,12 +299,11 @@ class HistoryMixin(LLMResponseMixin):
             return history.get_langchain_messages_until_marker(self.get_history_mode())
 
     def store_compression_marker(self, summary: str, checkpoint_message_id: int):
-        """
-        Store the compression marker to the database. Depending on the history mode configuration, the marker is either
-        a summary of the conversation, or the COMPRESSION_MARKER - serving as an indicator that the conversation has
-        been compressed up to this point. The actual value that is stored for the COMPRESSION_MARKER case is the
-        current history mode. This is used to indicate to future history retrievals where to stop when loading history
-        for a specific mode.
+        """Persist the correct compression marker for this node's history mode.
+
+        When `summary` is the literal `COMPRESSION_MARKER`, we record the node's current
+        `history_mode` so future fetches know where to stop replaying messages. Otherwise, the
+        provided `summary` captures the conversation state up to `checkpoint_message_id`.
         """
         history_mode = self.get_history_mode()
         if self.node.use_session_history:
