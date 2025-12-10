@@ -10,8 +10,6 @@ from langgraph.graph.message import (
 )
 
 from apps.chat.conversation import COMPRESSION_MARKER
-from apps.chat.models import ChatMessage
-from apps.pipelines.models import PipelineChatMessages
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.nodes import PipelineNode
@@ -65,23 +63,9 @@ class BaseHistoryMiddleware(SummarizationMiddleware):
 
         # The first message is always a RemoveMessage if a summary was created
         summary_message = messages[1]
-        summary = summary_message.content
-
-        if self.node.use_session_history:
-            message = ChatMessage.objects.get(id=checkpoint_message_id)
-            if summary == COMPRESSION_MARKER:
-                message.metadata.update({"compression_marker": history_mode})
-                message.save(update_fields=["metadata"])
-            else:
-                message.summary = summary
-                message.save(update_fields=["summary"])
-
-        else:
-            # Use pipeline history
-            updates = {"compression_marker": history_mode}
-            if summary != COMPRESSION_MARKER:
-                updates["summary"] = summary
-            PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
+        self.node.store_compression_marker(
+            compression_marker=summary_message.content, checkpoint_message_id=checkpoint_message_id
+        )
 
     def _find_latest_message_db_id(self, messages: list) -> str | None:
         """

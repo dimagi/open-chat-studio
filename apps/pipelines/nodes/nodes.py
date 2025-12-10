@@ -28,6 +28,8 @@ from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
+from apps.chat.conversation import COMPRESSION_MARKER
+from apps.chat.models import ChatMessage
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
 from apps.pipelines.exceptions import (
@@ -37,7 +39,12 @@ from apps.pipelines.exceptions import (
     PipelineNodeRunError,
     WaitForNextInput,
 )
-from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
+from apps.pipelines.models import (
+    PipelineChatHistory,
+    PipelineChatHistoryModes,
+    PipelineChatHistoryTypes,
+    PipelineChatMessages,
+)
 from apps.pipelines.nodes.base import (
     NodeSchema,
     OptionsSource,
@@ -290,6 +297,31 @@ class HistoryMixin(LLMResponseMixin):
                 return []
 
             return history.get_langchain_messages_until_marker(self.get_history_mode())
+
+    def store_compression_marker(self, summary: str, checkpoint_message_id: int):
+        """
+        Store the compression marker to the database. Depending on the history mode configuration, the marker is either
+        a summary of the conversation, or the COMPRESSION_MARKER - serving as an indicator that the conversation has
+        been compressed up to this point. The actual value that is stored for the COMPRESSION_MARKER case is the
+        current history mode. This is used to indicate to future history retrievals where to stop when loading history
+        for a specific mode.
+        """
+        history_mode = self.get_history_mode()
+        if self.node.use_session_history:
+            message = ChatMessage.objects.get(id=checkpoint_message_id)
+            if summary == COMPRESSION_MARKER:
+                message.metadata.update({"compression_marker": history_mode})
+                message.save(update_fields=["metadata"])
+            else:
+                message.summary = summary
+                message.save(update_fields=["summary"])
+
+        else:
+            # Use pipeline history
+            updates = {"compression_marker": history_mode}
+            if summary != COMPRESSION_MARKER:
+                updates["summary"] = summary
+            PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
 
     def build_history_middleware(
         self, session: ExperimentSession, system_message: BaseMessage
