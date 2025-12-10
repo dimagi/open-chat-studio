@@ -72,9 +72,7 @@ class BaseHistoryMiddleware(SummarizationMiddleware):
             if summary == COMPRESSION_MARKER:
                 message.metadata.update({"compression_marker": history_mode})
                 message.save(update_fields=["metadata"])
-                print(f"Updating message {message.id} with compression marker: {summary}")
             else:
-                print(f"Updating message {message.id} with summary: {summary}")
                 message.summary = summary
                 message.save(update_fields=["summary"])
 
@@ -83,7 +81,6 @@ class BaseHistoryMiddleware(SummarizationMiddleware):
             updates = {"compression_marker": history_mode}
             if summary != COMPRESSION_MARKER:
                 updates["summary"] = summary
-            print(f"Updating message {checkpoint_message_id} with summary: {summary}")
             PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
 
     def _find_latest_message_db_id(self, messages: list) -> str | None:
