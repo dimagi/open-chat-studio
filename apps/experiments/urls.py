@@ -60,7 +60,7 @@ urlpatterns = [
     ),
     path(
         "e/<int:experiment_id>/versions/create",
-        RedirectView.as_view(pattern_name="chatbots:create_version")
+        RedirectView.as_view(pattern_name="chatbots:create_version"),
         name="create_version",
     ),
     path(
