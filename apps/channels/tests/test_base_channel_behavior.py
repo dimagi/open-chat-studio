@@ -19,7 +19,7 @@ from apps.chat.channels import (
     strip_urls_and_emojis,
 )
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import (
     ExperimentSession,
     Participant,
@@ -654,10 +654,11 @@ def test_voice_response_with_urls(
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Give me a URL"
-    get_llm_response.return_value = ChatMessage(
+    get_llm_response.return_value = ChatMessage.objects.create(
         content=(
             "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
-        )
+        ),
+        chat=Chat.objects.create(team=test_channel.experiment.team),
     )
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS

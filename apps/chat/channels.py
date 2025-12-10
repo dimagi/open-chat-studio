@@ -140,6 +140,8 @@ class ChannelBase(ABC):
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
         self.trace_service = TracingService.create_for_experiment(self.experiment)
+        self._user_message_is_voice = False
+        self._bot_message_is_voice = False
 
     @property
     def participant_id(self) -> int | None:
@@ -420,7 +422,7 @@ class ChannelBase(ABC):
         (Status==PENDING_PRE_SURVEY) user indicated that they took the survey -> sett status to ACTIVE
         """
         # We manually add the message to the history here, since this doesn't follow the normal flow
-        self._add_message_to_history(self.user_query, ChatMessageType.HUMAN)
+        self._add_message_to_history(self.user_query, ChatMessageType.HUMAN, self._user_message_is_voice)
 
         if self.experiment_session.status == SessionStatus.SETUP:
             return self._chat_initiated()
@@ -452,6 +454,8 @@ class ChannelBase(ABC):
             bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
             span.set_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
+            if self._bot_message_is_voice:
+                bot_response.create_and_add_tag(TagCategories.VOICE.value, self.experiment.team, TagCategories.VOICE)
             return bot_response.content
 
     def _chat_initiated(self):
@@ -495,6 +499,7 @@ class ChannelBase(ABC):
 
     def _extract_user_query(self) -> str:
         if self.message.content_type == MESSAGE_TYPES.VOICE:
+            self._user_message_is_voice = True
             return self._get_voice_transcript()
         return self.message.message_text
 
@@ -641,6 +646,9 @@ class ChannelBase(ABC):
             ):
                 self.send_message_to_user(bot_message=ai_message.content, files=files)
 
+        if self._bot_message_is_voice:
+            ai_message.create_and_add_tag(TagCategories.VOICE.value, self.experiment.team, TagCategories.VOICE)
+
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
         return ai_message
@@ -651,6 +659,7 @@ class ChannelBase(ABC):
         return response
 
     def _reply_voice_message(self, text: str):
+        self._bot_message_is_voice = True
         voice_provider = self.experiment.voice_provider
         synthetic_voice = self.experiment.synthetic_voice
         voice = self.bot.synthesize_voice()
@@ -683,16 +692,21 @@ class ChannelBase(ABC):
         return "Unable to transcribe audio"
 
     def _get_bot_response(self, message: str) -> ChatMessage:
-        chat_message = self.bot.process_input(message, attachments=self.message.attachments)
+        chat_message = self.bot.process_input(
+            message, attachments=self.message.attachments, user_sent_voice=self._user_message_is_voice
+        )
         return chat_message
 
-    def _add_message_to_history(self, message: str, message_type: ChatMessageType):
+    def _add_message_to_history(self, message: str, message_type: ChatMessageType, is_voice=False):
         """Use this to update the chat history when not using the normal bot flow"""
-        ChatMessage.objects.create(
+        chat_message = ChatMessage.objects.create(
             chat=self.experiment_session.chat,
             message_type=message_type,
             content=message,
         )
+        if is_voice:
+            chat_message.create_and_add_tag(TagCategories.VOICE, self.experiment.team, TagCategories.VOICE)
+        return chat_message
 
     def _ensure_sessions_exists(self):
         """

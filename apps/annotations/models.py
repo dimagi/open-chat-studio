@@ -25,6 +25,7 @@ class TagCategories(models.TextChoices):
     EXPERIMENT_VERSION = "experiment_version", _("Experiment Version")
     RESPONSE_RATING = "response_rating", _("Response Rating")
     ERROR = "error", _("Error")
+    VOICE = "voice", _("Voice")
 
 
 @audit_fields(
@@ -98,6 +99,7 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         abstract = True
 
     tags = TaggableManager(through=CustomTaggedItem)
+    _skipped_category_tags = [TagCategories.VOICE]  # Tag categories with special treatment
 
     def add_tags(self, tags: list[str], team: Team, added_by: CustomUser = None):
         tag_objs = Tag.objects.filter(team=team, name__in=tags)
@@ -124,6 +126,12 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
 
     def all_tag_names(self):
         return [tag["name"] for tag in self.prefetched_tags_json]
+
+    def has_voice_tag(self):
+        return any([tag for tag in self.prefetched_tags_json if tag["category"] == TagCategories.VOICE])
+
+    def non_skipped_tags(self):
+        return [tag for tag in self.prefetched_tags_json if tag["category"] not in self._skipped_category_tags]
 
     @cached_property
     def prefetched_tags_json(self):
