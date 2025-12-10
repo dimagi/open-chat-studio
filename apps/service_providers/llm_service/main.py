@@ -11,16 +11,12 @@ from typing import TYPE_CHECKING, Any, Literal
 import pydantic
 from django.db.models import Q
 from google.oauth2 import service_account
-from langchain_anthropic import ChatAnthropic
 from langchain_classic.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager, dispatch_custom_event
 from langchain_core.language_models import BaseChatModel
 from langchain_core.load import dumpd
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, ensure_config
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_google_vertexai import ChatVertexAI
-from langchain_openai.chat_models import AzureChatOpenAI, ChatOpenAI
 from openai import NOT_GIVEN, OpenAI
 from openai._base_client import SyncAPIClient
 from pydantic import BaseModel
@@ -260,6 +256,8 @@ class OpenAIGenericService(LlmService):
     openai_api_base: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        from langchain_openai.chat_models import ChatOpenAI
+
         model_kwargs = self._get_model_kwargs(**kwargs)
         if "temperature" in model_kwargs and llm_model.startswith(("o3", "o4", "gpt-5", "o1")):
             # Remove the temperature parameter for custom reasoning models
@@ -402,6 +400,8 @@ class AzureLlmService(LlmService):
     openai_api_version: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        from langchain_openai.chat_models import AzureChatOpenAI
+
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
@@ -422,6 +422,8 @@ class AnthropicLlmService(LlmService):
     anthropic_api_base: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        from langchain_anthropic import ChatAnthropic
+
         return ChatAnthropic(
             anthropic_api_key=self.anthropic_api_key,
             anthropic_api_url=self.anthropic_api_base,
@@ -468,6 +470,8 @@ class DeepSeekLlmService(LlmService):
     deepseek_api_base: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        from langchain_openai.chat_models import ChatOpenAI
+
         return ChatOpenAI(
             model=llm_model, openai_api_key=self.deepseek_api_key, openai_api_base=self.deepseek_api_base, **kwargs
         )
@@ -483,6 +487,8 @@ class GoogleLlmService(LlmService):
     google_api_key: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
         return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
@@ -513,13 +519,15 @@ class GoogleVertexAILlmService(LlmService):
     location: str = "global"
     api_transport: Literal["grpc", "rest"] = "grpc"
 
-    def get_chat_model(self, llm_model: str, **kwargs) -> ChatVertexAI:
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        from langchain_google_vertexai import ChatVertexAI
+
         return ChatVertexAI(
             model=llm_model,
             credentials=self.credentials,
             location=self.location,
             api_transport=self.api_transport,
-            **kwargs
+            **kwargs,
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
