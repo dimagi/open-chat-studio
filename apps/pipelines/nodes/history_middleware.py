@@ -51,13 +51,12 @@ class BaseHistoryMiddleware(SummarizationMiddleware):
         return result
 
     def persist_summary(self, messages: list[BaseMessage]):
-        history_mode = self.node.get_history_mode()
-
         checkpoint_message_id = self._find_latest_message_db_id(messages)
         if not checkpoint_message_id:
             # This should not happen, so we log it as an exception to surface it if it does
             logger.exception(
-                "Unable to persist summary", extra={"node_id": self.node.node_id, "history_mode": history_mode}
+                "Unable to persist summary",
+                extra={"node_id": self.node.node_id, "history_mode": self.node.get_history_mode()},
             )
             return
 
