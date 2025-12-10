@@ -394,6 +394,20 @@ def update_message(request, team_slug, message_id):
 
     message.save()
 
+    dataset = message.evaluationdataset_set.first()
+    if dataset:
+        # Get the full table view to render properly with request context
+        dataset_id = dataset.id
+        table_view = DatasetMessagesTableView()
+        table_view.request = request
+        table_view.kwargs = {"dataset_id": dataset_id}
+
+        queryset = table_view.get_queryset()
+        table = table_view.table_class(queryset, request=request)
+
+        # Render the full table - HTMX will extract just the updated row via hx-select
+        return render(request, "table/single_table.html", {"table": table})
+
     return HttpResponse("", status=200)
 
 
