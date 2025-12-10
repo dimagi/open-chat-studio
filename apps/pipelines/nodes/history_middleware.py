@@ -102,7 +102,7 @@ class SummarizeHistoryMiddleware(BaseHistoryMiddleware):
 
     def __init__(self, *args, token_limit: int, **kwargs):
         trigger = ("tokens", token_limit)
-        keep = ("messages", 10)
+        keep = ("messages", 20)
         super().__init__(*args, trigger=trigger, keep=keep, **kwargs)
 
 
