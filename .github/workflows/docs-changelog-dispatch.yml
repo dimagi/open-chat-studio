@@ -6,11 +6,11 @@ on:
     branches:
       - main
     paths:
-      - components
-      - config
-      - assets
-      - apps
-      - templates
+      - 'components/**'
+      - 'config/**'
+      - 'assets/**'
+      - 'apps/**'
+      - 'templates/**'
 
 permissions:
   contents: read
