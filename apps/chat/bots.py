@@ -13,6 +13,7 @@ from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.files.models import File
+from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
@@ -135,7 +136,8 @@ class PipelineBot:
             filter_patterns=graph.filter_patterns,
         )
         runnable = graph.build_runnable()
-        raw_output = runnable.invoke(input_state, config=config)
+        runner = DjangoLangGraphRunner(DjangoSafeContextThreadPoolExecutor)
+        raw_output = runner.invoke(runnable, input_state, config)
         output = PipelineState(**raw_output).json_safe()
         return output
 
@@ -260,15 +262,14 @@ class PipelineTestBot:
         self.user_id = user_id
 
     def process_input(self, input: str) -> PipelineState:
-        from apps.pipelines.executor import patch_executor
         from apps.pipelines.graph import PipelineGraph
         from apps.pipelines.nodes.helpers import temporary_session
 
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
             input = PipelineState(messages=[input], experiment_session=session)
-            with patch_executor():
-                output = runnable.invoke(input, config={"max_concurrency": 1})
+            runner = DjangoLangGraphRunner(CurrentThreadExecutor)
+            output = runner.invoke(runnable, input)
             output = PipelineState(**output).json_safe()
         return output
 
