@@ -65,8 +65,8 @@ DEFAULT_ERROR_RESPONSE_TEXT = "Sorry, something went wrong while processing your
 # The regex from https://stackoverflow.com/a/6041965 is used, but tweaked to remove capturing groups
 URL_REGEX = r"(?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])"
 
-# Matches [^2]: [file_name](https://example.com)
-MARKDOWN_REF_PATTERN = r"^\[(?P<ref>.+?)\]:\s*\[(?P<file_name>[^\]]+)\]\((?P<download_link>.*)\)"
+# Matches [^2]: [citation_text](https://example.com)
+MARKDOWN_REF_PATTERN = r"^\[(?P<ref>.+?)\]:\s*\[(?P<citation_text>[^\]]+)\]\((?P<citation_url>.*)\)"
 
 
 def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
@@ -591,13 +591,13 @@ class ChannelBase(ABC):
         if not files:
             return text, []
 
-        files_by_name = {file.name: file for file in files}
+        files_by_citation_text = {file.citation_text: file for file in files}
 
         def format_citation_match(match):
             ref_id = match.groupdict()["ref"]
-            file_name = match.groupdict()["file_name"]
-            download_link = match.groupdict()["download_link"]
-            file = files_by_name.get(file_name)
+            citation_text = match.groupdict()["citation_text"]
+            citation_url = match.groupdict()["citation_url"]
+            file = files_by_citation_text.get(citation_text)
 
             if not file:
                 return match.group(0)
@@ -605,9 +605,9 @@ class ChannelBase(ABC):
             cited_files.add(file)
 
             if self._can_send_file(file):
-                return f"[{ref_id}]: {file.name}"
+                return f"[{ref_id}]: {file.citation_text}"
             else:
-                return f"[{ref_id}]: {file.name} ({download_link})"
+                return f"[{ref_id}]: {file.citation_text} ({citation_url})"
 
         markdown_ref_pattern = re.compile(MARKDOWN_REF_PATTERN, re.MULTILINE)
         text = markdown_ref_pattern.sub(format_citation_match, text)
