@@ -25,6 +25,7 @@ from apps.experiments.models import Experiment
 from apps.generics import actions
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.time import seconds_to_human
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +204,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         # Calculate duration if finished
         if evaluation_run.finished_at:
             duration = evaluation_run.finished_at - evaluation_run.created_at
-            context["run_duration"] = duration
+            context["run_duration"] = seconds_to_human(duration.total_seconds())
 
         # Show progress if running, otherwise show results table
         if evaluation_run.status in [EvaluationRunStatus.PROCESSING]:
