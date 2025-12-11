@@ -351,6 +351,6 @@ class DatasetMessagesTable(tables.Table):
             "session_state",
             "actions",
         )
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        row_attrs = {**settings.DJANGO_TABLES2_ROW_ATTRS, "id": lambda record: f"message-row-{record.id}"}
         orderable = False
         empty_text = "No messages in this dataset yet."
