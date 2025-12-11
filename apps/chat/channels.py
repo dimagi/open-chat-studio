@@ -705,7 +705,7 @@ class ChannelBase(ABC):
             content=message,
         )
         if is_voice:
-            chat_message.create_and_add_tag(TagCategories.VOICE, self.experiment.team, TagCategories.VOICE)
+            chat_message.create_and_add_tag(TagCategories.VOICE.value, self.experiment.team, TagCategories.VOICE)
         return chat_message
 
     def _ensure_sessions_exists(self):
