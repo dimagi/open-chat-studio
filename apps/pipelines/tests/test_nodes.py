@@ -157,7 +157,7 @@ class TestHistoryMixin:
             mock_message = Mock(metadata={}, save=Mock())
             mock_chat_message_class.objects.get.return_value = mock_message
 
-            node.store_compression_checkpoint(summary=COMPRESSION_MARKER, checkpoint_message_id=7)
+            node.store_compression_checkpoint(compression_marker=COMPRESSION_MARKER, checkpoint_message_id=7)
 
             assert mock_message.metadata["compression_marker"] == PipelineChatHistoryModes.TRUNCATE_TOKENS
             mock_message.save.assert_called_once_with(update_fields=["metadata"])
@@ -172,7 +172,7 @@ class TestHistoryMixin:
             queryset_mock = Mock()
             mock_pipeline_chat_message_class.objects.filter.return_value = queryset_mock
 
-            node.store_compression_checkpoint(summary=COMPRESSION_MARKER, checkpoint_message_id=7)
+            node.store_compression_checkpoint(compression_marker=COMPRESSION_MARKER, checkpoint_message_id=7)
             queryset_mock.update.assert_called_once_with(compression_marker=PipelineChatHistoryModes.TRUNCATE_TOKENS)
 
     def test_store_compression_checkpoint_updates_summary_global(self, history_node_factory):
@@ -185,7 +185,7 @@ class TestHistoryMixin:
             mock_message = Mock(metadata={}, save=Mock())
             mock_chat_message_class.objects.get.return_value = mock_message
 
-            node.store_compression_checkpoint(summary="a summary", checkpoint_message_id=7)
+            node.store_compression_checkpoint(compression_marker="a summary", checkpoint_message_id=7)
 
             assert mock_message.summary == "a summary"
 
@@ -199,7 +199,7 @@ class TestHistoryMixin:
             queryset_mock = Mock()
             mock_pipeline_chat_message_class.objects.filter.return_value = queryset_mock
 
-            node.store_compression_checkpoint(summary="a summary", checkpoint_message_id=7)
+            node.store_compression_checkpoint(compression_marker="a summary", checkpoint_message_id=7)
             queryset_mock.update.assert_called_once_with(
                 compression_marker=PipelineChatHistoryModes.TRUNCATE_TOKENS,
                 summary="a summary",

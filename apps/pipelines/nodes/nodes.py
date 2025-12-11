@@ -298,7 +298,7 @@ class HistoryMixin(LLMResponseMixin):
 
             return history.get_langchain_messages_until_marker(self.get_history_mode())
 
-    def store_compression_checkpoint(self, summary: str, checkpoint_message_id: int):
+    def store_compression_checkpoint(self, compression_marker: str, checkpoint_message_id: int):
         """Persist the correct compression marker for this node's history mode.
 
         When `summary` is the literal `COMPRESSION_MARKER`, we record the node's current
@@ -308,18 +308,18 @@ class HistoryMixin(LLMResponseMixin):
         history_mode = self.get_history_mode()
         if self.use_session_history:
             message = ChatMessage.objects.get(id=checkpoint_message_id)
-            if summary == COMPRESSION_MARKER:
+            if compression_marker == COMPRESSION_MARKER:
                 message.metadata.update({"compression_marker": history_mode})
                 message.save(update_fields=["metadata"])
             else:
-                message.summary = summary
+                message.summary = compression_marker
                 message.save(update_fields=["summary"])
 
         else:
             # Use pipeline history
             updates = {"compression_marker": history_mode}
-            if summary != COMPRESSION_MARKER:
-                updates["summary"] = summary
+            if compression_marker != COMPRESSION_MARKER:
+                updates["summary"] = compression_marker
             PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
 
     def build_history_middleware(
