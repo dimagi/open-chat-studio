@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from typing import Literal
 from unittest import mock
 from unittest.mock import Mock, patch
 
@@ -7,6 +8,7 @@ from django.core import mail
 from django.test import override_settings
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolCall, ToolCallChunk
 from langchain_openai.chat_models.base import OpenAIRefusalError
+from pydantic import Field, create_model
 
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
@@ -250,9 +252,16 @@ def test_conditional_node(pipeline, experiment_session):
 
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline, experiment_session):
+@mock.patch("apps.pipelines.nodes.nodes.create_agent")
+def test_router_node_prompt(create_agent_mock, get_llm_service, provider, provider_model, experiment_session):
     service = build_fake_llm_echo_service()
     get_llm_service.return_value = service
+
+    # Create a mock agent that returns structured output
+    mock_agent = mock.Mock()
+    RouterOutput = create_model("RouterOutput", route=(Literal["A"], Field(description="Selected routing destination")))
+    mock_agent.invoke.return_value = {"structured_response": RouterOutput(route="A")}
+    create_agent_mock.return_value = mock_agent
 
     node = RouterNode(
         node_id="test",
@@ -275,9 +284,12 @@ def test_router_node_prompt(get_llm_service, provider, provider_model, pipeline,
         ),
     )
 
-    assert len(service.llm.get_call_messages()[0]) == 2
+    # Verify that create_agent was called with the correct system prompt containing participant data
+    assert create_agent_mock.called
+    call_kwargs = create_agent_mock.call_args[1]
+    system_prompt = call_kwargs["system_prompt"]
     expected_pd = {"name": experiment_session.participant.name} | participant_data
-    assert str(expected_pd) in service.llm.get_call_messages()[0][0].content
+    assert str(expected_pd) in system_prompt.content
 
 
 @django_db_with_data(available_apps=("apps.service_providers",))
@@ -1023,7 +1035,10 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
 
     service = build_fake_llm_service(
         responses=[
+            # "a" is not a valid keyword
             _tool_call("a"),
+            # This second response is the LLM fixing the fact that the first response did not match any keyword
+            _tool_call("A"),
             _tool_call("A"),
             _tool_call("b"),
             _tool_call("c"),
@@ -1035,10 +1050,10 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
     get_llm_service.return_value = service
     start = start_node()
     router = router_node(str(provider.id), str(provider_model.id), keywords=["A", "b", "c", "d"])
-    template_a = render_template_node("A {{ input }}")
-    template_b = render_template_node("B {{ input }}")
-    template_c = render_template_node("C {{ input }}")
-    template_d = render_template_node("D {{ input }}")
+    template_a = render_template_node("Template A: {{ input }}")
+    template_b = render_template_node("Template B: {{ input }}")
+    template_c = render_template_node("Template C: {{ input }}")
+    template_d = render_template_node("Template D: {{ input }}")
     end = end_node()
     nodes = [start, router, template_a, template_b, template_c, template_d, end]
     edges = [
@@ -1091,17 +1106,17 @@ def test_router_node(get_llm_service, provider, provider_model, pipeline, experi
     runnable = create_runnable(pipeline, nodes, edges)
 
     output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "A a"
+    assert output["messages"][-1] == "Template A: a"
     output = runnable.invoke(PipelineState(messages=["A"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "A A"
+    assert output["messages"][-1] == "Template A: A"
     output = runnable.invoke(PipelineState(messages=["b"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "B b"
+    assert output["messages"][-1] == "Template B: b"
     output = runnable.invoke(PipelineState(messages=["c"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "C c"
+    assert output["messages"][-1] == "Template C: c"
     output = runnable.invoke(PipelineState(messages=["d"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "D d"
+    assert output["messages"][-1] == "Template D: d"
     output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
-    assert output["messages"][-1] == "A z"
+    assert output["messages"][-1] == "Template A: z"
 
 
 @pytest.mark.django_db()

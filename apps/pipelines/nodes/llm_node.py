@@ -1,22 +1,16 @@
 import operator
-from string import Formatter
 from typing import Annotated
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import AgentMiddleware, AgentState, ModelRequest, dynamic_prompt
-from langchain_core.messages import RemoveMessage, SystemMessage
+from langchain.agents.middleware import AgentState
 from langchain_core.tools import BaseTool
-from langgraph.graph.message import (
-    REMOVE_ALL_MESSAGES,
-)
-from langgraph.runtime import Runtime
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
-from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
@@ -88,50 +82,21 @@ def _process_agent_output(node, session, message):
     return ai_message, ai_message_metadata
 
 
-class HistoryCompressionMiddleware(AgentMiddleware):
-    def __init__(self, session, node):
-        self.session = session
-        self.node = node
-
-    def before_model(self, state: AgentState, runtime: Runtime) -> dict[str, any] | None:  # noqa: ARG002
-        return {
-            "messages": [
-                # Since this response will get merged with the existing state messages, we cannot simply append the
-                # history to the user's message. We need to replace the full message history in the state.
-                # See https://github.com/langchain-ai/langchain/blob/c63f23d2339b2604edc9ae1d9f7faf7d6cc7dc78/libs/langchain_v1/langchain/agents/middleware/summarization.py#L286-L292
-                RemoveMessage(id=REMOVE_ALL_MESSAGES),
-                *self.node.get_history(self.session, state["messages"]),
-                *state["messages"],
-            ]
-        }
-
-
 def build_node_agent(node, pipeline_state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
     prompt_context = _get_prompt_context(node, session, pipeline_state)
-
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
+    system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
-    @dynamic_prompt
-    def prompt_middleware(request: ModelRequest):
-        prompt_template = node.prompt
-        input_variables = {v for _, v, _, _ in Formatter().parse(prompt_template) if v is not None}
-        context = prompt_context.get_context(input_variables)
-        try:
-            formatted_prompt = prompt_template.format(**context)
-            prompt = SystemMessage(content=formatted_prompt)
-        except KeyError as e:
-            raise PipelineNodeRunError(str(e)) from e
-
-        return prompt
+    middleware = []
+    if history_middleware := node.build_history_middleware(session=session, system_message=system_message):
+        middleware.append(history_middleware)
 
     return create_agent(
         # TODO: I think this will fail with google builtin tools
         model=node.get_chat_model(),
         tools=tools,
-        middleware=[
-            prompt_middleware,
-            HistoryCompressionMiddleware(session=session, node=node),
-        ],
+        system_prompt=system_message,
+        middleware=middleware,
         state_schema=StateSchema,
     )
 
