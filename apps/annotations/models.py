@@ -1,6 +1,7 @@
 import json
 import logging
 from functools import cached_property
+from typing import ClassVar
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -99,7 +100,7 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         abstract = True
 
     tags = TaggableManager(through=CustomTaggedItem)
-    _skipped_category_tags = [TagCategories.VOICE]  # Tag categories with special treatment
+    _skipped_category_tags: ClassVar[list] = [TagCategories.VOICE]  # Tag categories with special treatment
 
     def add_tags(self, tags: list[str], team: Team, added_by: CustomUser = None):
         tag_objs = Tag.objects.filter(team=team, name__in=tags)

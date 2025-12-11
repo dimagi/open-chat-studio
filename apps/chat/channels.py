@@ -192,6 +192,8 @@ class ChannelBase(ABC):
     @message.setter
     def message(self, value: BaseMessage):
         self._message = value
+        self._user_message_is_voice = False
+        self._bot_message_is_voice = False
         self.reset_bot()
         self.reset_user_query()
 
@@ -697,7 +699,7 @@ class ChannelBase(ABC):
         )
         return chat_message
 
-    def _add_message_to_history(self, message: str, message_type: ChatMessageType, is_voice=False):
+    def _add_message_to_history(self, message: str, message_type: ChatMessageType, is_voice: bool = False):
         """Use this to update the chat history when not using the normal bot flow"""
         chat_message = ChatMessage.objects.create(
             chat=self.experiment_session.chat,
