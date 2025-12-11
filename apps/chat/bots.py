@@ -54,11 +54,17 @@ class PipelineBot:
         self.trace_service = trace_service
         self.disable_reminder_tools = disable_reminder_tools
         self.synthetic_voice_id = None
+        self._user_sent_voice = False
 
     def process_input(
-        self, user_input: str, save_input_to_history=True, attachments: list[Attachment] | None = None
+        self,
+        user_input: str,
+        save_input_to_history=True,
+        attachments: list[Attachment] | None = None,
+        user_sent_voice=False,
     ) -> ChatMessage:
         input_state = self._get_input_state(attachments, user_input)
+        self._user_sent_voice = user_sent_voice
 
         kwargs = {
             "input_state": input_state,
@@ -165,8 +171,11 @@ class PipelineBot:
             output_metadata.update(trace_metadata)
 
         if save_input_to_history:
+            input_tags = []
+            if self._user_sent_voice:
+                input_tags.append([TagCategories.VOICE.value, TagCategories.VOICE])
             human_message = self._save_message_to_history(
-                input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
+                input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata, tags=input_tags
             )
             if self.trace_service:
                 self.trace_service.set_input_message_id(human_message.id)
