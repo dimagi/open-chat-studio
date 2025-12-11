@@ -306,7 +306,7 @@ class HistoryMixin(LLMResponseMixin):
         provided `summary` captures the conversation state up to `checkpoint_message_id`.
         """
         history_mode = self.get_history_mode()
-        if self.node.use_session_history:
+        if self.use_session_history:
             message = ChatMessage.objects.get(id=checkpoint_message_id)
             if summary == COMPRESSION_MARKER:
                 message.metadata.update({"compression_marker": history_mode})
