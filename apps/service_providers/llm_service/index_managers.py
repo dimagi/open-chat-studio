@@ -6,8 +6,6 @@ from collections.abc import Iterator
 import openai
 from django.conf import settings
 from django.db import DatabaseError
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pgvector.django import CosineDistance
 
@@ -367,6 +365,8 @@ class OpenAILocalIndexManager(LocalIndexManager):
     """
 
     def get_embedding_vector(self, content: str) -> Vector:
+        from langchain_openai import OpenAIEmbeddings
+
         embeddings = OpenAIEmbeddings(
             api_key=self._api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
         )
@@ -375,6 +375,8 @@ class OpenAILocalIndexManager(LocalIndexManager):
 
 class GoogleLocalIndexManager(LocalIndexManager):
     def get_embedding_vector(self, content: str) -> Vector:
+        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
         embeddings = GoogleGenerativeAIEmbeddings(
             google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"
         )

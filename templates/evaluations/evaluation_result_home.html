@@ -62,6 +62,13 @@
               <span class="badge badge-error">{{ evaluation_run.get_status_display }}</span>
             {% endif %}
           </p>
+          <p><strong>Created:</strong> {{ evaluation_run.created_at|date:"Y-m-d H:i:s" }}</p>
+          {% if evaluation_run.finished_at %}
+            <p><strong>Finished:</strong> {{ evaluation_run.finished_at|date:"Y-m-d H:i:s" }}</p>
+          {% endif %}
+          {% if run_duration %}
+            <p><strong>Duration:</strong> {{ run_duration }}</p>
+          {% endif %}
           <p><strong>Configuration:</strong>
             <a href="{% url 'evaluations:edit' request.team.slug evaluation_run.config.id %}" class="link">
               {{ evaluation_run.config.name }}

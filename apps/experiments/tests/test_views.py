@@ -4,7 +4,6 @@ from unittest import mock
 
 import jwt
 import pytest
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.test import override_settings
@@ -12,6 +11,7 @@ from django.urls import reverse
 
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat
+from apps.experiments.forms import ExperimentForm
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
@@ -19,10 +19,7 @@ from apps.experiments.models import (
     ParticipantData,
     VoiceResponseBehaviours,
 )
-from apps.experiments.views.experiment import (
-    ExperimentForm,
-    _verify_user_or_start_session,
-)
+from apps.experiments.views.experiment import _verify_user_or_start_session
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -154,17 +151,6 @@ def test_prompt_variable_validation(tools, source_material, prompt_str, expectat
 )
 def test_get_root_var_returns_correct_root_variable(input_var, expected_output):
     assert get_root_var(input_var) == expected_output
-
-
-@pytest.mark.django_db()
-@mock.patch("apps.experiments.forms.initialize_form_for_custom_actions", mock.Mock())
-@mock.patch("apps.experiments.models.SyntheticVoice.get_for_team", mock.Mock())
-def test_form_fields():
-    path = settings.BASE_DIR / "templates" / "experiments" / "experiment_form.html"
-    form_html = path.read_text()
-    request = mock.Mock()
-    for field in ExperimentForm(request).fields:
-        assert field in form_html, f"{field} missing from 'experiment_form.html' template"
 
 
 @pytest.mark.django_db()

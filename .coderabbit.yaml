@@ -12,6 +12,7 @@ reviews:
     - path: "**/*.py"
       instructions: |
         Do not review for Python compatibility below 3.13
+        Flag heavy AI/ML imports at module level (langchain_*, openai, anthropic, google, boto3, pandas, numpy). These should be lazy-loaded inside methods to keep Django startup fast.
     - path: "**/migrations/*.py"
       instructions: |
         * Ensure that Django migrations are backwards compatible with the previous code to prevent errors during rollout.
