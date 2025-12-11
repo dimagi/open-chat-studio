@@ -200,6 +200,11 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
             "allow_new": False,
         }
 
+        # Calculate duration if finished
+        if evaluation_run.finished_at:
+            duration = evaluation_run.finished_at - evaluation_run.created_at
+            context["run_duration"] = duration
+
         # Show progress if running, otherwise show results table
         if evaluation_run.status in [EvaluationRunStatus.PROCESSING]:
             context["group_job_id"] = evaluation_run.job_id
