@@ -53,9 +53,8 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
     def persist_summary(self, messages: list[BaseMessage]):
         checkpoint_message_id = self._find_latest_message_db_id(messages)
         if not checkpoint_message_id:
-            # This should not happen, so we log it as an exception to surface it if it does
             logger.exception(
-                "Unable to persist summary",
+                "Unable to persist summary: no checkpoint message ID found",
                 extra={"node_id": self.node.node_id, "history_mode": self.node.get_history_mode()},
             )
             return

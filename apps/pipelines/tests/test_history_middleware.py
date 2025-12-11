@@ -198,3 +198,5 @@ class TestSummarizeHistoryMiddleware:
         # Rest should be human/ai messages
         for msg in result["messages"][2:]:
             assert isinstance(msg, HumanMessage | AIMessage)
+
+        mock_node.store_compression_checkpoint.assert_called_once()

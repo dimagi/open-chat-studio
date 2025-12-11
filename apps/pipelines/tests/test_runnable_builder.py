@@ -253,7 +253,7 @@ def test_conditional_node(pipeline, experiment_session):
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.nodes.create_agent")
-def test_router_node_prompt(create_agent_mock, get_llm_service, provider, provider_model, pipeline, experiment_session):
+def test_router_node_prompt(create_agent_mock, get_llm_service, provider, provider_model, experiment_session):
     service = build_fake_llm_echo_service()
     get_llm_service.return_value = service
 
