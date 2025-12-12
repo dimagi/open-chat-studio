@@ -151,6 +151,9 @@ def handle_evaluation_message(
 def handle_commcare_connect_message(self, experiment_id: int, participant_data_id: int, messages: list[Message]):
     participant_data = ParticipantData.objects.prefetch_related("participant").get(id=participant_data_id)
     experiment_channel = get_experiment_channel(ChannelPlatform.COMMCARE_CONNECT, experiment_id=experiment_id)
+    if not experiment_channel:
+        log.info(f"No experiment channel found for experiment_id: {experiment_id}")
+        return
 
     messages.sort(key=lambda x: x["timestamp"])
 
