@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from functools import cached_property
 
@@ -6,7 +7,13 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
+from django.http import (
+    Http404,
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBadRequest,
+    JsonResponse,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
@@ -22,6 +29,7 @@ from rest_framework.views import APIView
 
 from apps.api.permissions import verify_hmac
 from apps.channels import tasks
+from apps.channels.datamodels import TwilioMessage
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -33,8 +41,11 @@ from apps.channels.serializers import (
 from apps.channels.utils import validate_platform_availability
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.experiments.views.utils import get_channels_context
+from apps.service_providers.models import MessagingProviderType
 from apps.teams.decorators import login_and_team_required
 from apps.web.waf import WafRule, waf_allow
+
+log = logging.getLogger("ocs.channels")
 
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
@@ -44,6 +55,12 @@ def new_telegram_message(request, channel_external_id: uuid):
     if token != settings.TELEGRAM_SECRET_TOKEN:
         return HttpResponseBadRequest("Invalid request.")
 
+    channel_exists = tasks.get_experiment_channel_base_query(
+        ChannelPlatform.TELEGRAM, external_id=channel_external_id
+    ).exists()
+    if not channel_exists:
+        raise Http404()
+
     data = json.loads(request.body)
     tasks.handle_telegram_message.delay(message_data=data, channel_external_id=channel_external_id)
     return HttpResponse()
@@ -52,12 +69,33 @@ def new_telegram_message(request, channel_external_id: uuid):
 @csrf_exempt
 @require_POST
 def new_twilio_message(request):
-    message_data = json.dumps(request.POST.dict())
-    tasks.handle_twilio_message.delay(
-        message_data=message_data,
-        request_uri=request.build_absolute_uri(),
-        signature=request.headers.get("X-Twilio-Signature"),
+    message_data = request.POST.dict()
+
+    if "Body" not in message_data:
+        log.info(f"Received a Twilio status update, not a message: {message_data}")
+        return HttpResponse()
+
+    try:
+        message = TwilioMessage.parse(message_data)
+        _, channel_id_key = tasks.get_twilio_channel_class_and_key(message)
+    except (KeyError, ValueError):
+        return HttpResponseBadRequest("Invalid payload.")
+
+    experiment_channel = tasks.get_experiment_channel(
+        message.platform,
+        extra_data__contains={channel_id_key: message.to},
+        messaging_provider__type=MessagingProviderType.twilio,
     )
+    if not experiment_channel:
+        log.info(f"No channel found for {channel_id_key}: {message.to}")
+        raise Http404()
+
+    if not tasks.validate_twillio_request(
+        experiment_channel, message_data, request.build_absolute_uri(), request.headers.get("X-Twilio-Signature")
+    ):
+        return HttpResponseBadRequest("Invalid signature.")
+
+    tasks.handle_twilio_message.delay(message_data=message_data)
     return HttpResponse()
 
 
@@ -65,6 +103,13 @@ def new_twilio_message(request):
 @csrf_exempt
 @require_POST
 def new_sureadhere_message(request, sureadhere_tenant_id: int):
+    channel_exists = tasks.get_experiment_channel_base_query(
+        ChannelPlatform.SUREADHERE,
+        extra_data__sureadhere_tenant_id=sureadhere_tenant_id,
+    ).exists()
+    if not channel_exists:
+        raise Http404()
+
     message_data = json.loads(request.body)
     tasks.handle_sureadhere_message.delay(sureadhere_tenant_id=sureadhere_tenant_id, message_data=message_data)
     return HttpResponse()
@@ -72,6 +117,14 @@ def new_sureadhere_message(request, sureadhere_tenant_id: int):
 
 @csrf_exempt
 def new_turn_message(request, experiment_id: uuid):
+    channel_exists = tasks.get_experiment_channel_base_query(
+        ChannelPlatform.WHATSAPP,
+        experiment__public_id=experiment_id,
+        messaging_provider__type=MessagingProviderType.turnio,
+    ).exists()
+    if not channel_exists:
+        raise Http404()
+
     message_data = json.loads(request.body.decode("utf-8"))
     if "messages" not in message_data:
         # Normal inbound messages should have a "messages" key, so ignore everything else
@@ -194,20 +247,22 @@ def new_connect_message(request: HttpRequest):
         participant_data = ParticipantData.objects.get(
             system_metadata__commcare_connect_channel_id=connect_channel_id,
         )
-
-        channel = ExperimentChannel.objects.get(
-            platform=ChannelPlatform.COMMCARE_CONNECT, experiment__id=participant_data.experiment_id
-        )
     except ParticipantData.DoesNotExist:
         return JsonResponse({"detail": "No participant data found"}, status=404)
-    except ExperimentChannel.DoesNotExist:
+
+    channel_exists = tasks.get_experiment_channel_base_query(
+        ChannelPlatform.COMMCARE_CONNECT, experiment__id=participant_data.experiment_id
+    ).exists()
+    if not channel_exists:
         return JsonResponse({"detail": "No experiment channel found"}, status=404)
 
     if not participant_data.has_consented():
         return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
     tasks.handle_commcare_connect_message.delay(
-        experiment_channel_id=channel.id, participant_data_id=participant_data.id, messages=serializer.data["messages"]
+        experiment_id=participant_data.experiment_id,
+        participant_data_id=participant_data.id,
+        messages=serializer.data["messages"],
     )
     return HttpResponse()
 

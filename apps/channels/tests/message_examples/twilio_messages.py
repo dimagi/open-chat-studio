@@ -1,39 +1,32 @@
-import json
-
-
 def _text_message(to: str, from_: str):
-    return json.dumps(
-        {
-            "SmsMessageSid": "DDDDDDDDDDDDDdd",
-            "NumMedia": "0",
-            "ProfileName": "Chris Smit",
-            "SmsSid": "CCCCCCCCCCCCCCCCCCCCCCCCCC",
-            "WaId": "27456897512",
-            "SmsStatus": "received",
-            "Body": "Dobroye utro",
-            "To": to,
-            "NumSegments": "1",
-            "ReferralNumMedia": "0",
-            "MessageSid": "BBBBBBBBBB",
-            "AccountSid": "AAAAAAAAAAAAA",
-            "From": from_,
-            "ApiVersion": "2010-04-01",
-        }
-    )
+    return {
+        "SmsMessageSid": "DDDDDDDDDDDDDdd",
+        "NumMedia": "0",
+        "ProfileName": "Chris Smit",
+        "SmsSid": "CCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "WaId": "27456897512",
+        "SmsStatus": "received",
+        "Body": "Dobroye utro",
+        "To": to,
+        "NumSegments": "1",
+        "ReferralNumMedia": "0",
+        "MessageSid": "BBBBBBBBBB",
+        "AccountSid": "AAAAAAAAAAAAA",
+        "From": from_,
+        "ApiVersion": "2010-04-01",
+    }
 
 
-def _image_message(message: str):
-    message_dict = json.loads(message)
-    message_dict["MediaContentType0"] = "image/png"
-    message_dict["MediaUrl0"] = "http://example.com/media"
-    return json.dumps(message_dict)
+def _image_message(message: dict):
+    message["MediaContentType0"] = "image/png"
+    message["MediaUrl0"] = "http://example.com/media"
+    return message
 
 
-def _audio_message(message: str):
-    message_dict = json.loads(message)
-    message_dict["MediaContentType0"] = "audio/ogg"
-    message_dict["MediaUrl0"] = "http://example.com/media"
-    return json.dumps(message_dict)
+def _audio_message(message: dict):
+    message["MediaContentType0"] = "audio/ogg"
+    message["MediaUrl0"] = "http://example.com/media"
+    return message
 
 
 class Whatsapp:

@@ -1,4 +1,3 @@
-import json
 import logging
 import uuid
 
@@ -29,9 +28,7 @@ log = logging.getLogger("ocs.channels")
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
-    experiment_channel = (
-        ExperimentChannel.objects.filter(external_id=channel_external_id).select_related("experiment", "team").first()
-    )
+    experiment_channel = get_experiment_channel(ChannelPlatform.TELEGRAM, external_id=channel_external_id)
     if not experiment_channel:
         log.info(f"No experiment channel found for external_id: {channel_external_id}")
         return
@@ -50,35 +47,19 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def handle_twilio_message(self, message_data: str, request_uri: str, signature: str):
-    raw_data = json.loads(message_data)
-    if "Body" not in raw_data:
-        log.info(f"Received a Twilio status update, not a message: {raw_data}")
-        return
-    message = TwilioMessage.parse(raw_data)
+def handle_twilio_message(self, message_data: dict):
+    message = TwilioMessage.parse(message_data)
 
-    channel_id_key = ""
-    ChannelClass = None
-    match message.platform:
-        case ChannelPlatform.WHATSAPP:
-            channel_id_key = "number"
-            ChannelClass = WhatsappChannel
-        case ChannelPlatform.FACEBOOK:
-            channel_id_key = "page_id"
-            ChannelClass = FacebookMessengerChannel
+    ChannelClass, channel_id_key = get_twilio_channel_class_and_key(message)
 
-    experiment_channel = (
-        ExperimentChannel.objects.filter(
-            extra_data__contains={channel_id_key: message.to}, messaging_provider__type=MessagingProviderType.twilio
-        )
-        .select_related("experiment", "team")
-        .first()
+    experiment_channel = get_experiment_channel(
+        message.platform,
+        extra_data__contains={channel_id_key: message.to},
+        messaging_provider__type=MessagingProviderType.twilio,
     )
     if not experiment_channel:
         log.info(f"No experiment channel found for {channel_id_key}: {message.to}")
         return
-
-    validate_twillio_request(experiment_channel, raw_data, request_uri, signature)
 
     message_handler = ChannelClass(experiment_channel.experiment.default_version, experiment_channel=experiment_channel)
     update_taskbadger_data(self, message_handler, message)
@@ -86,7 +67,16 @@ def handle_twilio_message(self, message_data: str, request_uri: str, signature: 
     message_handler.new_user_message(message)
 
 
-def validate_twillio_request(experiment_channel, raw_data, request_uri, signature):
+def get_twilio_channel_class_and_key(message):
+    match message.platform:
+        case ChannelPlatform.WHATSAPP:
+            return WhatsappChannel, "number"
+        case ChannelPlatform.FACEBOOK:
+            return FacebookMessengerChannel, "page_id"
+    raise ValueError(f"Unsupported Twilio platform: {message.platform}")
+
+
+def validate_twillio_request(experiment_channel, raw_data, request_uri, signature) -> bool:
     """For now this just logs an error if the signature validation fails.
     In the future we will want to raise an error.
 
@@ -94,25 +84,19 @@ def validate_twillio_request(experiment_channel, raw_data, request_uri, signatur
     """
     try:
         auth_token = experiment_channel.messaging_provider.get_messaging_service().auth_token
-        request_valid = RequestValidator(auth_token).validate(request_uri, raw_data, signature)
+        return RequestValidator(auth_token).validate(request_uri, raw_data, signature)
     except Exception:
         log.exception("Twilio signature validation failed")
-    else:
-        if not request_valid:
-            log.error("Twilio signature validation failed")
+        return False
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dict):
     message = SureAdhereMessage.parse(message_data)
-    experiment_channel = (
-        ExperimentChannel.objects.filter(
-            extra_data__sureadhere_tenant_id=sureadhere_tenant_id,
-            platform=ChannelPlatform.SUREADHERE,
-            messaging_provider__type=MessagingProviderType.sureadhere,
-        )
-        .select_related("experiment", "team")
-        .first()
+    experiment_channel = get_experiment_channel(
+        ChannelPlatform.SUREADHERE,
+        extra_data__sureadhere_tenant_id=sureadhere_tenant_id,
+        messaging_provider__type=MessagingProviderType.sureadhere,
     )
     if not experiment_channel:
         log.info(f"No experiment channel found for SureAdhere tenant ID: {sureadhere_tenant_id}")
@@ -125,14 +109,10 @@ def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dic
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     message = TurnWhatsappMessage.parse(message_data)
-    experiment_channel = (
-        ExperimentChannel.objects.filter(
-            experiment__public_id=experiment_id,
-            platform=ChannelPlatform.WHATSAPP,
-            messaging_provider__type=MessagingProviderType.turnio,
-        )
-        .select_related("experiment", "team")
-        .first()
+    experiment_channel = get_experiment_channel(
+        ChannelPlatform.WHATSAPP,
+        experiment__public_id=experiment_id,
+        messaging_provider__type=MessagingProviderType.turnio,
     )
     if not experiment_channel:
         log.info(f"No experiment channel found for experiment_id: {experiment_id}")
@@ -168,13 +148,13 @@ def handle_evaluation_message(
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def handle_commcare_connect_message(
-    self, experiment_channel_id: int, participant_data_id: int, messages: list[Message]
-):
+def handle_commcare_connect_message(self, experiment_id: int, participant_data_id: int, messages: list[Message]):
     participant_data = ParticipantData.objects.prefetch_related("participant").get(id=participant_data_id)
-    experiment_channel = ExperimentChannel.objects.prefetch_related("experiment").get(id=experiment_channel_id)
+    experiment_channel = get_experiment_channel(ChannelPlatform.COMMCARE_CONNECT, experiment_id=experiment_id)
+    if not experiment_channel:
+        log.info(f"No experiment channel found for experiment_id: {experiment_id}")
+        return
 
-    # Ensure the messages are in the correct order according to timestamp
     messages.sort(key=lambda x: x["timestamp"])
 
     connect_client = CommCareConnectClient()
@@ -190,3 +170,15 @@ def handle_commcare_connect_message(
 
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)
+
+
+def get_experiment_channel(platform, **query_kwargs):
+    query = get_experiment_channel_base_query(platform, **query_kwargs)
+    return query.select_related("experiment", "team").first()
+
+
+def get_experiment_channel_base_query(platform, **query_kwargs):
+    return ExperimentChannel.objects.filter(
+        platform=platform,
+        **query_kwargs,
+    ).filter(experiment__is_archived=False)

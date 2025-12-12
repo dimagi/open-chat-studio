@@ -90,7 +90,8 @@ def get_experiment_session_cached(session_id: str) -> ExperimentSession | None:
 
     try:
         session = ExperimentSession.objects.select_related("experiment_channel", "experiment", "participant").get(
-            external_id=session_id
+            external_id=session_id,
+            experiment__is_archived=False,
         )
         cache.set(cache_key, session, WIDGET_SESSION_CACHE_TTL)
         return session

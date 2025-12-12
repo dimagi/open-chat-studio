@@ -77,7 +77,7 @@ class TestHandleConnectMessageTask:
             encryption_key, commcare_connect_channel_id, message_spec={2: "I need to ask something", 1: "Hi bot"}
         )
 
-        handle_commcare_connect_message(experiment_channel.id, data.id, payload["messages"])
+        handle_commcare_connect_message(experiment.id, data.id, payload["messages"])
         base_message = channel_instance.new_user_message.call_args[0][0]
         assert base_message.message_text == "Hi bot\n\nI need to ask something"
 
@@ -93,7 +93,7 @@ class TestHandleConnectMessageTask:
 
         with patch("apps.chat.channels.CommCareConnectClient") as ConnectClientMock:
             client_mock = ConnectClientMock.return_value
-            handle_commcare_connect_message(experiment_channel.id, data.id, payload["messages"])
+            handle_commcare_connect_message(experiment.id, data.id, payload["messages"])
             assert client_mock.send_message_to_user.call_count == 1
             call_kwargs = client_mock.send_message_to_user.call_args[1]
             assert call_kwargs["channel_id"] == commcare_connect_channel_id

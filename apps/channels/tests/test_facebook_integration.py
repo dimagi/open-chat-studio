@@ -79,7 +79,7 @@ class TestTwilio:
             get_llm_response_mock.return_value = ChatMessage(content="Hi")
             get_voice_transcript_mock.return_value = "Hi"
 
-            handle_twilio_message(message_data=incoming_message, request_uri="", signature="")
+            handle_twilio_message(message_data=incoming_message)
 
             if message_type == "text":
                 send_text_message.assert_called()
