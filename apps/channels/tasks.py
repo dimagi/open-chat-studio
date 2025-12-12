@@ -152,11 +152,9 @@ def handle_evaluation_message(
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def handle_commcare_connect_message(
-    self, experiment_channel_id: int, participant_data_id: int, messages: list[Message]
-):
+def handle_commcare_connect_message(self, experiment_id: int, participant_data_id: int, messages: list[Message]):
     participant_data = ParticipantData.objects.prefetch_related("participant").get(id=participant_data_id)
-    experiment_channel = get_experiment_channel(ChannelPlatform.COMMCARE_CONNECT, id=experiment_channel_id)
+    experiment_channel = get_experiment_channel(ChannelPlatform.COMMCARE_CONNECT, experiment_id=experiment_id)
 
     messages.sort(key=lambda x: x["timestamp"])
 
