@@ -7,7 +7,13 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse
+from django.http import (
+    Http404,
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBadRequest,
+    JsonResponse,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
@@ -69,8 +75,12 @@ def new_twilio_message(request):
         log.info(f"Received a Twilio status update, not a message: {message_data}")
         return HttpResponse()
 
-    message = TwilioMessage.parse(message_data)
-    _, channel_id_key = tasks.get_twilio_channel_class_and_key(message)
+    try:
+        message = TwilioMessage.parse(message_data)
+        _, channel_id_key = tasks.get_twilio_channel_class_and_key(message)
+    except (KeyError, ValueError):
+        return HttpResponseBadRequest("Invalid payload.")
+
     experiment_channel = tasks.get_experiment_channel(
         message.platform,
         extra_data__contains={channel_id_key: message.to},

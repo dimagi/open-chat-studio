@@ -68,16 +68,12 @@ def handle_twilio_message(self, message_data: dict):
 
 
 def get_twilio_channel_class_and_key(message):
-    channel_id_key = ""
-    ChannelClass = None
     match message.platform:
         case ChannelPlatform.WHATSAPP:
-            channel_id_key = "number"
-            ChannelClass = WhatsappChannel
+            return WhatsappChannel, "number"
         case ChannelPlatform.FACEBOOK:
-            channel_id_key = "page_id"
-            ChannelClass = FacebookMessengerChannel
-    return ChannelClass, channel_id_key
+            return FacebookMessengerChannel, "page_id"
+    raise ValueError(f"Unsupported Twilio platform: {message.platform}")
 
 
 def validate_twillio_request(experiment_channel, raw_data, request_uri, signature) -> bool:
