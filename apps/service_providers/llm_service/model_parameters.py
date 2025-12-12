@@ -26,6 +26,14 @@ class GPT51ReasoningEffortParameter(TextChoices):
     HIGH = "high", "High"
 
 
+class GPT52ReasoningEffortParameter(TextChoices):
+    NONE = "none", "None"
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    XHIGH = "xhigh", "XHigh"
+
+
 class OpenAIVerbosityParameter(TextChoices):
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
@@ -78,6 +86,56 @@ class GPT51Parameters(LLMModelParamBase):
         default=OpenAIVerbosityParameter.MEDIUM,
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
     )
+
+
+class GPT52Parameters(LLMModelParamBase):
+    effort: GPT52ReasoningEffortParameter = Field(
+        title="Reasoning Effort",
+        default=GPT52ReasoningEffortParameter.MEDIUM,
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT52ReasoningEffortParameter.labels),
+    )
+
+    verbosity: OpenAIVerbosityParameter = Field(
+        title="Verbosity",
+        default=OpenAIVerbosityParameter.MEDIUM,
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
+    )
+
+    temperature: float = Field(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        title="Temperature",
+        description="Only supported when reasoning effort is set to 'none'",
+        json_schema_extra=UiSchema(widget=Widgets.range),
+    )
+
+    top_p: float = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        title="Top P",
+        description="Only supported when reasoning effort is set to 'none'",
+        json_schema_extra=UiSchema(widget=Widgets.range),
+    )
+
+    @field_validator("temperature", mode="before")
+    def validate_temperature(cls, value: float, info):
+        if value is not None and info.data.get("effort") != "none":
+            raise PydanticCustomError(
+                "invalid_model_parameters",
+                "Temperature can only be set when reasoning effort is 'none'",
+            )
+        return value
+
+    @field_validator("top_p", mode="before")
+    def validate_top_p(cls, value: float, info):
+        if value is not None and info.data.get("effort") != "none":
+            raise PydanticCustomError(
+                "invalid_model_parameters",
+                "Top P can only be set when reasoning effort is 'none'",
+            )
+        return value
 
 
 class GPT5ProParameters(LLMModelParamBase):
