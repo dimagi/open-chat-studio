@@ -2,6 +2,7 @@ import logging
 
 from django import forms
 
+from apps.channels.models import ExperimentChannel
 from apps.experiments.models import Experiment, Participant
 
 logger = logging.getLogger("ocs.participants")
@@ -79,3 +80,57 @@ class ParticipantExportForm(forms.Form):
         super().__init__(*args, **kwargs)
         if team:
             self.fields["experiment"].queryset = Experiment.objects.filter(team=team, working_version__isnull=True)
+
+
+class TriggerBotForm(forms.Form):
+    prompt_text = forms.CharField(
+        label="Prompt Text",
+        widget=forms.Textarea(attrs={"rows": 4}),
+        help_text="The prompt to send to the bot",
+        required=True,
+    )
+    experiment = forms.ModelChoiceField(
+        label="Select Chatbot",
+        queryset=Experiment.objects.none(),
+        required=True,
+        help_text="Select the chatbot to trigger",
+    )
+    start_new_session = forms.BooleanField(
+        label="Start a new session",
+        required=False,
+        initial=False,
+        help_text="End any previous sessions and start a new one",
+    )
+    session_data = forms.CharField(
+        label="Session Data (JSON)",
+        widget=forms.Textarea(attrs={"rows": 4}),
+        required=False,
+        help_text="Optional JSON data to add to the session state",
+    )
+
+    def __init__(self, *args, **kwargs):
+        team = kwargs.pop("team", None)
+        participant = kwargs.pop("participant", None)
+        super().__init__(*args, **kwargs)
+        if team and participant:
+            # Filter experiments to those that have a channel matching the participant's platform
+            experiment_ids = ExperimentChannel.objects.filter(
+                team=team, platform=participant.platform
+            ).values_list("experiment_id", flat=True)
+            self.fields["experiment"].queryset = Experiment.objects.filter(
+                team=team, working_version__isnull=True, id__in=experiment_ids
+            )
+
+    def clean_session_data(self):
+        import json
+
+        session_data = self.cleaned_data.get("session_data", "")
+        if session_data:
+            try:
+                data = json.loads(session_data)
+                if not isinstance(data, dict):
+                    raise forms.ValidationError("Session data must be a valid JSON object")
+                return data
+            except json.JSONDecodeError as e:
+                raise forms.ValidationError(f"Invalid JSON: {e}") from None
+        return {}

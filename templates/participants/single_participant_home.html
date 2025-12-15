@@ -20,10 +20,17 @@
 
 {% block app %}
   <div class="app-card">
-    <div class="flex">
-      <div class="flex-1">
-        <h1 class="pg-title">Participant details</h1>
+    <div class="grid grid-cols-6">
+      <div class="col-span-5">
+        <div class="flex">
+          <h1 class="pg-title">Participant details</h1>
+        </div>
       </div>
+      {% if actions %}
+        <div class="justify-self-end join">
+          {% include "generic/crud_actions_column.html" with as_group=False %}
+        </div>
+      {% endif %}
     </div>
     <div class="max-w-5xl mt-4 border rounded-2xl">
       {% include "participants/partials/participant_summary.html" %}
