@@ -56,7 +56,7 @@ def api_key(team_with_users):
 )
 @patch("apps.chat.channels.ApiChannel._get_bot_response")
 def test_chat_completion(mock_experiment_response, experiment, api_key, live_server):
-    mock_experiment_response.return_value = ChatMessage(content="So, this ain't the end, I saw you again today")
+    mock_experiment_response.return_value = ChatMessage(content="So, this ain't the end, I saw you again today"), None
 
     base_url = f"{live_server.url}/api/openai/{experiment.public_id}"
 

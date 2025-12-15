@@ -453,7 +453,9 @@ class ChannelBase(ABC):
 
     def _send_seed_message(self) -> str:
         with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}) as span:
-            bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
+            bot_response, _ = self.bot.process_input(
+                user_input=self.experiment.seed_message, save_input_to_history=False
+            )
             span.set_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
             if self._bot_message_is_voice:
@@ -638,7 +640,7 @@ class ChannelBase(ABC):
     def _handle_supported_message(self):
         with self.trace_service.span("Process Message", inputs={"input": self.user_query}) as span:
             self.submit_input_to_llm()
-            ai_message = self._get_bot_response(message=self.user_query)
+            ai_message, human_message = self._get_bot_response(message=self.user_query)
 
             files = ai_message.get_attached_files() or []
             span.set_outputs({"response": ai_message.content, "attachments": [file.name for file in files]})
@@ -650,6 +652,9 @@ class ChannelBase(ABC):
 
         if self._bot_message_is_voice:
             ai_message.create_and_add_tag(TagCategories.VOICE.value, self.experiment.team, TagCategories.VOICE)
+
+        if human_message and self._user_message_is_voice:
+            human_message.create_and_add_tag(TagCategories.VOICE.value, self.experiment.team, TagCategories.VOICE)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
@@ -693,22 +698,17 @@ class ChannelBase(ABC):
                 return speech_service.transcribe_audio(audio)
         return "Unable to transcribe audio"
 
-    def _get_bot_response(self, message: str) -> ChatMessage:
-        chat_message = self.bot.process_input(
-            message, attachments=self.message.attachments, user_sent_voice=self._user_message_is_voice
-        )
-        return chat_message
+    def _get_bot_response(self, message: str) -> tuple[ChatMessage, ChatMessage | None]:
+        chat_messages = self.bot.process_input(message, attachments=self.message.attachments)
+        return chat_messages
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""
-        chat_message = ChatMessage.objects.create(
+        ChatMessage.objects.create(
             chat=self.experiment_session.chat,
             message_type=message_type,
             content=message,
         )
-        if message_type == ChatMessageType.HUMAN and self._user_message_is_voice:
-            chat_message.create_and_add_tag(TagCategories.VOICE.value, self.experiment.team, TagCategories.VOICE)
-        return chat_message
 
     def _ensure_sessions_exists(self):
         """

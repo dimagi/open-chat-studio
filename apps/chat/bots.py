@@ -54,17 +54,11 @@ class PipelineBot:
         self.trace_service = trace_service
         self.disable_reminder_tools = disable_reminder_tools
         self.synthetic_voice_id = None
-        self._user_sent_voice = False
 
     def process_input(
-        self,
-        user_input: str,
-        save_input_to_history=True,
-        attachments: list[Attachment] | None = None,
-        user_sent_voice=False,
-    ) -> ChatMessage:
+        self, user_input: str, save_input_to_history=True, attachments: list[Attachment] | None = None
+    ) -> tuple[ChatMessage, ChatMessage | None]:
         input_state = self._get_input_state(attachments, user_input)
-        self._user_sent_voice = user_sent_voice
 
         kwargs = {
             "input_state": input_state,
@@ -72,9 +66,9 @@ class PipelineBot:
             "save_input_to_history": save_input_to_history,
         }
         with self.trace_service.span("Run Pipeline", inputs=kwargs | {"input_state": input_state.json_safe()}) as span:
-            chat_message = self.invoke_pipeline(**kwargs)
-            span.set_outputs({"content": chat_message.content})
-            return chat_message
+            ai_message, human_message = self.invoke_pipeline(**kwargs)
+            span.set_outputs({"content": ai_message.content})
+            return ai_message, human_message
 
     def invoke_pipeline(
         self,
@@ -82,18 +76,19 @@ class PipelineBot:
         save_run_to_history=True,
         save_input_to_history=True,
         pipeline=None,
-    ) -> ChatMessage:
+    ) -> tuple[ChatMessage, ChatMessage | None]:
         pipeline_to_use = pipeline or self.experiment.pipeline
         output = self._run_pipeline(input_state, pipeline_to_use)
 
         if save_run_to_history and self.session is not None:
             output = self._process_interrupts(output)
-            result = self._save_outputs(input_state, output, save_input_to_history)
+            ai_message, human_message = self._save_outputs(input_state, output, save_input_to_history)
         else:
-            result = ChatMessage(content=output)
+            ai_message = ChatMessage(content=output)
+            human_message = None
         self._process_intents(output)
         self.synthetic_voice_id = output.get("synthetic_voice_id", None)
-        return result
+        return ai_message, human_message
 
     def _get_input_state(self, attachments: list[Attachment], user_input: str):
         state = PipelineState(
@@ -171,14 +166,13 @@ class PipelineBot:
             output_metadata.update(trace_metadata)
 
         if save_input_to_history:
-            input_tags = []
-            if self._user_sent_voice:
-                input_tags.append([TagCategories.VOICE.value, TagCategories.VOICE])
             human_message = self._save_message_to_history(
-                input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata, tags=input_tags
+                input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
             )
             if self.trace_service:
                 self.trace_service.set_input_message_id(human_message.id)
+        else:
+            human_message = None
 
         output_tags = output.get("output_message_tags")
         ai_message = self._save_message_to_history(
@@ -210,7 +204,7 @@ class PipelineBot:
         if out_session_state is not None and out_session_state != input_state.get("session_state"):
             self.session.state = out_session_state
             self.session.save(update_fields=["state"])
-        return ai_message
+        return ai_message, human_message
 
     def _process_intents(self, pipeline_output: dict):
         for intent in pipeline_output.get("intents", []):

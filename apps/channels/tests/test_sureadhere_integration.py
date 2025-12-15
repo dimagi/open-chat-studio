@@ -49,7 +49,7 @@ class TestSureAdhere:
         message_type,
         sureadhere_channel,
     ):
-        get_llm_response_mock.return_value = ChatMessage(content="Hi")
+        get_llm_response_mock.return_value = ChatMessage(content="Hi"), None
         handle_sureadhere_message(
             sureadhere_tenant_id=sureadhere_channel.extra_data["sureadhere_tenant_id"], message_data=incoming_message
         )

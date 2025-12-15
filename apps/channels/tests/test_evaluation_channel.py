@@ -85,7 +85,7 @@ def test_evaluation_channel_processes_message(get_bot_response_mock, experiment,
     """Test that EvaluationChannel can process messages"""
     session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
 
-    get_bot_response_mock.return_value = ChatMessage(content="Bot response")
+    get_bot_response_mock.return_value = ChatMessage(content="Bot response"), None
 
     user = experiment.team.members.first()
     channel = EvaluationChannel(
@@ -106,7 +106,7 @@ def test_evaluation_channel_processes_message(get_bot_response_mock, experiment,
 @pytest.mark.django_db()
 @patch("apps.chat.channels.EvaluationChannel._get_bot_response")
 def test_handle_evaluation_message(get_bot_response_mock, experiment, evaluation_channel):
-    get_bot_response_mock.return_value = ChatMessage(content="Bot response")
+    get_bot_response_mock.return_value = ChatMessage(content="Bot response"), None
     session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
 
     result = handle_evaluation_message(

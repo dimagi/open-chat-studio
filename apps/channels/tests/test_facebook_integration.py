@@ -79,7 +79,7 @@ class TestTwilio:
         ):
             experiment = ExperimentFactory(conversational_consent_enabled=True)
             chat = Chat.objects.create(team=experiment.team)
-            get_llm_response_mock.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
+            get_llm_response_mock.return_value = ChatMessage.objects.create(content="Hi", chat=chat), None
             get_voice_transcript_mock.return_value = "Hi"
 
             handle_twilio_message(message_data=incoming_message, request_uri="", signature="")

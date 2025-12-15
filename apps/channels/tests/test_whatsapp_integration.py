@@ -86,7 +86,7 @@ class TestTwilio:
         ):
             experiment = ExperimentFactory(conversational_consent_enabled=True)
             chat = Chat.objects.create(team=experiment.team)
-            get_llm_response_mock.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
+            get_llm_response_mock.return_value = ChatMessage.objects.create(content="Hi", chat=chat), None
             get_voice_transcript_mock.return_value = "Hi"
 
             handle_twilio_message(message_data=incoming_message, request_uri="", signature="")
@@ -167,7 +167,7 @@ class TestTurnio:
         synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
         experiment = ExperimentFactory(conversational_consent_enabled=True)
         chat = Chat.objects.create(team=experiment.team)
-        _get_bot_response.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
+        _get_bot_response.return_value = ChatMessage.objects.create(content="Hi", chat=chat), None
         get_voice_transcript_mock.return_value = "Hi"
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         if message_type == "text":

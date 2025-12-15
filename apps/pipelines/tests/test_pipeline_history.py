@@ -215,9 +215,9 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
     )
 
     user_input = "The User Input"
-    output_1 = bot.process_input(user_input)
+    output_1, _ = bot.process_input(user_input)
     user_input_2 = "Saying more stuff"
-    output_2 = bot.process_input(user_input_2)
+    output_2, _ = bot.process_input(user_input_2)
 
     user_input_3 = "Tell me something interesting"
     bot.process_input(user_input_3)

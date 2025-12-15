@@ -247,7 +247,7 @@ def test_reset_conversation_does_not_create_new_session(test_channel):
 
 
 def _send_user_message_on_channel(channel_instance, user_message: BaseMessage):
-    with patch("apps.chat.channels.ChannelBase._get_bot_response", return_value=ChatMessage(content="OK")):
+    with patch("apps.chat.channels.ChannelBase._get_bot_response", return_value=[ChatMessage(content="OK"), None]):
         channel_instance.new_user_message(user_message)
 
 
@@ -367,7 +367,7 @@ def test_voice_response_behaviour(
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = ChatMessage(content="Hello user. No")
+    get_llm_response.return_value = ChatMessage(content="Hello user. No"), None
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = voice_behaviour
     experiment.save()
@@ -455,7 +455,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = ChatMessage(content="Hello user. No")
+    get_llm_response.return_value = ChatMessage(content="Hello user. No"), None
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     # Let's remove the synthetic voice and see what happens
@@ -655,12 +655,15 @@ def test_voice_response_with_urls(
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Give me a URL"
-    get_llm_response.return_value = ChatMessage.objects.create(
-        content=(
-            "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
+    get_llm_response.return_value = [
+        ChatMessage.objects.create(
+            content=(
+                "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
+            ),
+            chat=Chat.objects.create(team=test_channel.experiment.team),
         ),
-        chat=Chat.objects.create(team=test_channel.experiment.team),
-    )
+        None,
+    ]
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     experiment.save()
