@@ -341,7 +341,15 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status"])
 
     def get_table_data(self, include_ids: bool = False):
-        results = self.results.select_related("message", "evaluator", "session").order_by("created_at").all()
+        from django.db.models import Window
+        from django.db.models.functions import RowNumber
+
+        results = (
+            self.results.select_related("message", "evaluator", "session")
+            .annotate(row_number=Window(expression=RowNumber(), order_by="created_at"))
+            .order_by("created_at")
+            .all()
+        )
         table_by_message = defaultdict(dict)
         for result in results:
             context_columns = {
@@ -355,6 +363,7 @@ class EvaluationRun(BaseTeamModel):
 
             table_by_message[result.message.id].update(
                 {
+                    "row_number": result.row_number,
                     "Dataset Input": result.input_message,
                     "Dataset Output": result.output_message,
                     "Generated Response": result.output.get("generated_response", ""),
