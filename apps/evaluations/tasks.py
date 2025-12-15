@@ -33,7 +33,7 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File
 from apps.teams.utils import current_team
 
-EVAL_SESSIONS_TTL_DAYS = 7
+EVAL_SESSIONS_TTL_DAYS = 30
 
 logger = logging.getLogger("ocs.evaluations")
 
