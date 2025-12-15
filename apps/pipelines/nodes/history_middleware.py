@@ -62,7 +62,7 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
         # The first message is always a RemoveMessage if a summary was created
 
         self.node.store_compression_checkpoint(
-            compression_marker=self._get_summary_content(messages), checkpoint_message_id=checkpoint_message_id
+            compression_marker=self._get_compression_marker(messages), checkpoint_message_id=checkpoint_message_id
         )
 
     def _find_latest_message_db_id(self, messages: list) -> str | None:
@@ -75,7 +75,7 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
             if "id" in messages[i].additional_kwargs:
                 return messages[i].additional_kwargs["id"]
 
-    def _get_summary_content(self, messages: list[BaseMessage]) -> str:
+    def _get_compression_marker(self, messages: list[BaseMessage]) -> str:
         return messages[1].content
 
 
@@ -103,7 +103,7 @@ class TruncateTokensHistoryMiddleware(BaseNodeHistoryMiddleware):
         # No summary message should be injected into the state
         return []
 
-    def _get_summary_content(self, messages: list[BaseMessage]) -> str:
+    def _get_compression_marker(self, messages: list[BaseMessage]) -> str:
         """
         Returns a constant compression marker to indicate that messages were truncated.
         """
