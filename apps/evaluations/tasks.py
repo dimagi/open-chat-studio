@@ -33,6 +33,8 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File
 from apps.teams.utils import current_team
 
+EVAL_SESSIONS_TTL_DAYS = 30
+
 logger = logging.getLogger("ocs.evaluations")
 
 
@@ -239,7 +241,7 @@ def cleanup_old_evaluation_data():
     are older than one week.
 
     """
-    one_week_ago = timezone.now() - timedelta(days=7)
+    one_week_ago = timezone.now() - timedelta(days=EVAL_SESSIONS_TTL_DAYS)
     old_evaluation_sessions = ExperimentSession.objects.filter(
         experiment_channel__platform=ChannelPlatform.EVALUATIONS, created_at__lt=one_week_ago
     )

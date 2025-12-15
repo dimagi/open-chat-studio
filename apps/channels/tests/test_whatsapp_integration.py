@@ -1,7 +1,5 @@
-import json
 from io import BytesIO
 from unittest.mock import Mock, patch
-from uuid import uuid4
 
 import pytest
 from django.test import override_settings
@@ -12,10 +10,12 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES, WhatsappChannel
 from apps.chat.models import Chat, ChatMessage
+from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
+from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 from .message_examples import turnio_messages, twilio_messages
 
@@ -46,7 +46,7 @@ class TestTwilio:
         [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "voice")],
     )
     def test_parse_messages(self, message, message_type):
-        whatsapp_message = TwilioMessage.parse(json.loads(message))
+        whatsapp_message = TwilioMessage.parse(message)
         assert whatsapp_message.platform == ChannelPlatform.WHATSAPP
         assert whatsapp_message.participant_id == "+27456897512"
         if message_type == "text":
@@ -89,7 +89,7 @@ class TestTwilio:
             get_llm_response_mock.return_value = ChatMessage.objects.create(content="Hi", chat=chat), None
             get_voice_transcript_mock.return_value = "Hi"
 
-            handle_twilio_message(message_data=incoming_message, request_uri="", signature="")
+            handle_twilio_message(message_data=incoming_message)
 
             if message_type == "text":
                 send_text_message.assert_called()
@@ -192,7 +192,9 @@ class TestTurnio:
     @pytest.mark.parametrize("message", [turnio_messages.outbound_message(), turnio_messages.status_message()])
     @patch("apps.channels.tasks.handle_turn_message")
     def test_outbound_and_status_messages_ignored(self, handle_turn_message_task, message, client):
-        url = reverse("channels:new_turn_message", kwargs={"experiment_id": str(uuid4())})
+        messaging_provider = MessagingProviderFactory(type=MessagingProviderType.turnio)
+        channel = ExperimentChannelFactory(platform=ChannelPlatform.WHATSAPP, messaging_provider=messaging_provider)
+        url = reverse("channels:new_turn_message", kwargs={"experiment_id": channel.experiment.public_id})
         response = client.post(url, data=message, content_type="application/json")
         assert response.status_code == 200
         handle_turn_message_task.assert_not_called()

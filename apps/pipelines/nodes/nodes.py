@@ -11,8 +11,10 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
 from jinja2.sandbox import SandboxedEnvironment
-from langchain_core.messages import BaseMessage
-from langchain_core.prompts import MessagesPlaceholder, PromptTemplate
+from langchain.agents import create_agent
+from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages.utils import count_tokens_approximately
+from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -26,7 +28,8 @@ from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.chat.conversation import compress_chat_history, compress_pipeline_chat_history
+from apps.chat.conversation import COMPRESSION_MARKER
+from apps.chat.models import ChatMessage
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
 from apps.pipelines.exceptions import (
@@ -36,7 +39,12 @@ from apps.pipelines.exceptions import (
     PipelineNodeRunError,
     WaitForNextInput,
 )
-from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryModes, PipelineChatHistoryTypes
+from apps.pipelines.models import (
+    PipelineChatHistory,
+    PipelineChatHistoryModes,
+    PipelineChatHistoryTypes,
+    PipelineChatMessages,
+)
 from apps.pipelines.nodes.base import (
     NodeSchema,
     OptionsSource,
@@ -46,6 +54,13 @@ from apps.pipelines.nodes.base import (
     UiSchema,
     Widgets,
     deprecated_node,
+)
+from apps.pipelines.nodes.helpers import get_system_message
+from apps.pipelines.nodes.history_middleware import (
+    BaseNodeHistoryMiddleware,
+    MaxHistoryLengthHistoryMiddleware,
+    SummarizeHistoryMiddleware,
+    TruncateTokensHistoryMiddleware,
 )
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -63,7 +78,7 @@ from apps.service_providers.llm_service.runnables import (
 )
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
-from apps.utils.prompt import OcsPromptTemplate, PromptVars, validate_prompt_variables
+from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
 logger = logging.getLogger("ocs.pipelines.nodes")
@@ -249,47 +264,101 @@ class HistoryMixin(LLMResponseMixin):
             return self.history_name
         return self.node_id
 
-    def get_history(self, session: ExperimentSession, input_messages: list) -> list[BaseMessage]:
-        if self.history_type == PipelineChatHistoryTypes.NONE:
+    @property
+    def history_is_disabled(self) -> bool:
+        return self.history_type == PipelineChatHistoryTypes.NONE
+
+    @property
+    def use_session_history(self) -> bool:
+        return self.history_type == PipelineChatHistoryTypes.GLOBAL
+
+    def get_history_mode(self) -> PipelineChatHistoryModes:
+        return self.history_mode or PipelineChatHistoryModes.SUMMARIZE
+
+    def get_history(self, session: ExperimentSession) -> list[BaseMessage]:
+        """
+        Returns the chat history messages for the node based on its history configuration.
+
+        Global - Returns the chat history of the session up to the summary marker.
+        Node/Named - Returns the chat history for this node from the pipeline chat history.
+        None/Else - Returns an empty list.
+        """
+        if self.history_is_disabled:
             return []
 
-        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
-            return compress_chat_history(
-                chat=session.chat,
-                llm=self.get_chat_model(),
-                max_token_limit=(
-                    self.user_max_token_limit
-                    if self.user_max_token_limit is not None
-                    else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
-                ),
-                input_messages=input_messages,
-                history_mode=self.history_mode,
-            )
+        if self.use_session_history:
+            return session.chat.get_langchain_messages_until_marker(marker=self.get_history_mode())
+        else:
+            try:
+                history: PipelineChatHistory = session.pipeline_chat_history.get(
+                    type=self.history_type, name=self._get_history_name()
+                )
+            except PipelineChatHistory.DoesNotExist:
+                return []
 
-        try:
-            history: PipelineChatHistory = session.pipeline_chat_history.get(
-                type=self.history_type, name=self._get_history_name()
-            )
-        except PipelineChatHistory.DoesNotExist:
-            return []
-        return compress_pipeline_chat_history(
-            pipeline_chat_history=history,
-            llm=self.get_chat_model(),
-            max_token_limit=(
-                self.user_max_token_limit
-                if self.user_max_token_limit is not None
-                else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
-            ),
-            input_messages=input_messages,
-            keep_history_len=self.max_history_length,
-            history_mode=self.history_mode,
+            return history.get_langchain_messages_until_marker(self.get_history_mode())
+
+    def store_compression_checkpoint(self, compression_marker: str, checkpoint_message_id: int):
+        """Persist the correct compression marker for this node's history mode.
+
+        When `summary` is the literal `COMPRESSION_MARKER`, we record the node's current
+        `history_mode` so future fetches know where to stop replaying messages. Otherwise, the
+        provided `summary` captures the conversation state up to `checkpoint_message_id`.
+        """
+        history_mode = self.get_history_mode()
+        if self.use_session_history:
+            message = ChatMessage.objects.get(id=checkpoint_message_id)
+            if compression_marker == COMPRESSION_MARKER:
+                message.metadata.update({"compression_marker": history_mode})
+                message.save(update_fields=["metadata"])
+            else:
+                message.summary = compression_marker
+                message.save(update_fields=["summary"])
+
+        else:
+            # Use pipeline history
+            updates = {"compression_marker": history_mode}
+            if compression_marker != COMPRESSION_MARKER:
+                updates["summary"] = compression_marker
+            PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
+
+    def build_history_middleware(
+        self, session: ExperimentSession, system_message: BaseMessage
+    ) -> BaseNodeHistoryMiddleware | None:
+        """Construct the history compression middleware configured for this node."""
+        if self.history_is_disabled:
+            return None
+
+        history_mode = self.get_history_mode()
+
+        compressor_kwargs = {
+            "session": session,
+            "node": self,
+        }
+        if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
+            return MaxHistoryLengthHistoryMiddleware(max_history_length=self.max_history_length, **compressor_kwargs)
+
+        specified_token_limit = (
+            self.user_max_token_limit
+            if self.user_max_token_limit is not None
+            else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
         )
 
+        # Reserve space for the system message so trigger/keep thresholds reflect usable context
+        system_message_tokens = count_tokens_approximately([system_message])
+        token_limit = max(specified_token_limit - system_message_tokens, 100)
+
+        if history_mode == PipelineChatHistoryModes.SUMMARIZE:
+            return SummarizeHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
+
+        if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
+            return TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
+
     def save_history(self, session: ExperimentSession, human_message: str, ai_message: str):
-        if self.history_type == PipelineChatHistoryTypes.NONE:
+        if self.history_is_disabled:
             return
 
-        if self.history_type == PipelineChatHistoryTypes.GLOBAL:
+        if self.use_session_history:
             # Global History is saved outside of the node
             return
 
@@ -715,35 +784,37 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
     def _process_conditional(self, state: PipelineState):
         default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
-        prompt = OcsPromptTemplate.from_messages(
-            [
-                ("system", f"{self.prompt}\nThe default routing destination is: {default_keyword}"),
-                MessagesPlaceholder("history", optional=True),
-                ("human", "{input}"),
-            ]
-        )
         session: ExperimentSession = state["experiment_session"]
         node_input = state["last_node_input"]
-        context = {"input": node_input}
         extra_prompt_context = {
             "temp_state": state.get("temp_state", {}),
             "session_state": session.state or {},
         }
         participant_data = state.get("participant_data") or {}
         template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
-        context.update(template_context.get_context(prompt.input_variables))
+        system_message = get_system_message(
+            prompt_template=f"{self.prompt}\nThe default routing destination is: {default_keyword}",
+            prompt_context=template_context,
+        )
 
-        if self.history_type != PipelineChatHistoryTypes.NONE and session:
-            input_messages = prompt.format_messages(**context)
-            context["history"] = self.get_history(session, input_messages)
+        # Build the agent
+        middleware = []
+        if history_middleware := self.build_history_middleware(session=session, system_message=system_message):
+            middleware.append(history_middleware)
 
-        llm = self.get_chat_model()
-        router_schema = self._create_router_schema()
-        chain = prompt | llm.with_structured_output(router_schema)
+        agent = create_agent(
+            model=self.get_chat_model(),
+            system_prompt=system_message,
+            middleware=middleware,
+            response_format=self._create_router_schema(),
+        )
+
         is_default_keyword = False
         try:
-            result = chain.invoke(context, config=self._config)
-            keyword = getattr(result, "route", None)
+            context = {"messages": [HumanMessage(content=node_input)]}
+            result = agent.invoke(context, config=self._config)
+            structured_response = result["structured_response"]
+            keyword = structured_response.route
         except PydanticValidationError:
             keyword = None
         except OpenAIRefusalError:
