@@ -281,7 +281,6 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                             label="Session",
                             url_factory=session_url_factory,
                             enabled_condition=session_enabled_condition,
-                            title="Evals sessions older than 30 days are removed.",
                         ),
                     ],
                     align="right",
