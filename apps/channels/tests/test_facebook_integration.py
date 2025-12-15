@@ -12,8 +12,8 @@ from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat, ChatMessage
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ExperimentFactory
 
-from ...utils.factories.experiment import ExperimentFactory
 from .message_examples import twilio_messages
 
 

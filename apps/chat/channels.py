@@ -424,7 +424,7 @@ class ChannelBase(ABC):
         (Status==PENDING_PRE_SURVEY) user indicated that they took the survey -> sett status to ACTIVE
         """
         # We manually add the message to the history here, since this doesn't follow the normal flow
-        self._add_message_to_history(self.user_query, ChatMessageType.HUMAN, self._user_message_is_voice)
+        self._add_message_to_history(self.user_query, ChatMessageType.HUMAN)
 
         if self.experiment_session.status == SessionStatus.SETUP:
             return self._chat_initiated()
@@ -699,14 +699,14 @@ class ChannelBase(ABC):
         )
         return chat_message
 
-    def _add_message_to_history(self, message: str, message_type: ChatMessageType, is_voice: bool = False):
+    def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""
         chat_message = ChatMessage.objects.create(
             chat=self.experiment_session.chat,
             message_type=message_type,
             content=message,
         )
-        if is_voice:
+        if message_type == ChatMessageType.HUMAN and self._user_message_is_voice:
             chat_message.create_and_add_tag(TagCategories.VOICE.value, self.experiment.team, TagCategories.VOICE)
         return chat_message
 
