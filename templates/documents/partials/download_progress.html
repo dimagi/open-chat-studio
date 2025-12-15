@@ -1,0 +1,130 @@
+{% load static %}
+
+<div class="w-full">
+  <div class="flex flex-col gap-3 p-4 bg-base-200 rounded-lg">
+    <div class="flex items-center gap-2">
+      <span class="loading loading-spinner loading-sm"></span>
+      <h3 class="font-semibold">Creating ZIP file...</h3>
+    </div>
+
+    <div class="progress-wrapper">
+      <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
+      </div>
+    </div>
+    <div id="progress-bar-message" class="text-sm text-center text-base-content/70">
+      Waiting for progress to start...
+    </div>
+  </div>
+
+  <div id="download-complete-section" class="hidden mt-4">
+    <div class="alert alert-success">
+      <i class="fa-solid fa-check-circle"></i>
+      <div class="flex-1">
+        <h3 class="font-bold">ZIP file ready!</h3>
+        <div class="text-sm">Your download is ready. This file will be available for 24 hours.</div>
+      </div>
+    </div>
+
+    <div class="flex gap-2 mt-4">
+      <a id="download-link"
+         href="#"
+         class="btn btn-primary btn-sm"
+         download>
+        <i class="fa-solid fa-download"></i> Download ZIP
+      </a>
+
+      <button
+        class="btn btn-outline btn-sm"
+        onclick="location.reload()">
+        <i class="fa-solid fa-rotate-right"></i> Done
+      </button>
+    </div>
+  </div>
+
+  <div id="download-error-section" class="hidden mt-4">
+    <div class="alert alert-error">
+      <i class="fa-solid fa-exclamation-triangle"></i>
+      <div class="flex-1">
+        <h3 class="font-bold">Error creating ZIP file</h3>
+        <div class="text-sm" id="error-message">An error occurred while creating the ZIP file.</div>
+      </div>
+    </div>
+
+    <div class="mt-4">
+      <button
+        class="btn btn-outline btn-sm"
+        onclick="location.reload()">
+        <i class="fa-solid fa-rotate-right"></i> Try Again
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function initProgressTracking() {
+    const progressUrl = "{% url 'celery_progress:task_status' task_id %}";
+
+    CeleryProgressBar.initProgressBar(progressUrl, {
+      pollInterval: 500,
+      onSuccess: (progressBarElement, progressBarMessageElement, result) => {
+        // Hide progress UI
+        progressBarElement.parentElement.classList.add('hidden');
+        progressBarMessageElement.classList.add('hidden');
+        const spinner = document.querySelector('.loading-spinner');
+        if (spinner) spinner.classList.add('hidden');
+
+        // Get file ID (handle both direct number and object wrapper)
+        const fileId = (typeof result === 'object' && result.result) ? result.result : result;
+
+        if (fileId) {
+          // Show download button
+          document.getElementById('download-link').href = "{% url 'files:base' team.slug 0 %}".replace('0', fileId);
+          document.getElementById('download-complete-section').classList.remove('hidden');
+        } else {
+          // Show error
+          document.getElementById('error-message').textContent = 'No file was created. Please try again.';
+          document.getElementById('download-error-section').classList.remove('hidden');
+        }
+      },
+      onError: (progressBarElement, progressBarMessageElement, error) => {
+        // Hide progress UI
+        progressBarElement.parentElement.classList.add('hidden');
+        progressBarMessageElement.classList.add('hidden');
+        const spinner = document.querySelector('.loading-spinner');
+        if (spinner) spinner.classList.add('hidden');
+
+        // Show error
+        const errorMessage = (error && error.message) ? error.message : 'An error occurred while creating the ZIP file.';
+        document.getElementById('error-message').textContent = errorMessage;
+        document.getElementById('download-error-section').classList.remove('hidden');
+      },
+      onProgress: (progressBarElement, progressBarMessageElement, progress) => {
+        progressBarElement.style.width = progress.percent + "%";
+
+        let description = progress.description ||
+                         (progress.current && progress.total ? `Processing file ${progress.current} of ${progress.total}` : 'Starting...');
+
+        if (progress.current === 0) {
+          description = progress.pending ? 'Waiting for ZIP creation to start...' : 'ZIP creation started...';
+        }
+
+        progressBarMessageElement.textContent = description;
+      }
+    });
+  }
+
+  // Load celery_progress.js if not already loaded, then initialize
+  if (typeof CeleryProgressBar === 'undefined') {
+    const script = document.createElement('script');
+    script.src = "{% static 'celery_progress/celery_progress.js' %}";
+    script.onload = initProgressTracking;
+    script.onerror = () => {
+      document.getElementById('error-message').textContent = 'Failed to load progress tracking. Please refresh the page.';
+      document.getElementById('download-error-section').classList.remove('hidden');
+      document.querySelector('.progress-wrapper').classList.add('hidden');
+    };
+    document.head.appendChild(script);
+  } else {
+    initProgressTracking();
+  }
+</script>
