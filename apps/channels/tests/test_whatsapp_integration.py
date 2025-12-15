@@ -1,4 +1,3 @@
-import json
 from io import BytesIO
 from unittest.mock import Mock, patch
 
@@ -47,7 +46,7 @@ class TestTwilio:
         [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "voice")],
     )
     def test_parse_messages(self, message, message_type):
-        whatsapp_message = TwilioMessage.parse(json.loads(message))
+        whatsapp_message = TwilioMessage.parse(message)
         assert whatsapp_message.platform == ChannelPlatform.WHATSAPP
         assert whatsapp_message.participant_id == "+27456897512"
         if message_type == "text":
