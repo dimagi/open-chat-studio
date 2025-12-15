@@ -72,6 +72,7 @@
           </div>
           <i class="htmx-indicator fa fa-spinner fa-pulse hidden"></i>
         </div>
+        <div id="collection-actions-wrapper">
           <div class="join">
             {% if not read_only %}
               {% if collection.has_failed_index_uploads %}
@@ -82,10 +83,24 @@
                   </button>
                 </form>
               {% endif %}
+
+              {% if manually_uploaded_files_count > 0 %}
+                <form hx-post="{% url 'documents:download_collection_files' team.slug collection.id %}"
+                      hx-target="#collection-actions-wrapper"
+                      hx-swap="innerHTML"
+                      class="join-item">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="fa-solid fa-download"></i> Download All Files ({{ manually_uploaded_files_count }})
+                  </button>
+                </form>
+              {% endif %}
+
               <button class="join-item btn btn-sm btn-primary" {% if collection_files_count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
                 <i class="fa-regular fa-file"></i> Add Files
               </button>
-          {% if collection.is_index %}
+
+              {% if collection.is_index %}
                 <div class="dropdown">
                   <div tabindex="0" role="button" class="join-item btn btn-sm btn-primary"
                     {% if collection_files_count == max_files_per_collection %} disabled {% endif %}
@@ -103,9 +118,10 @@
                     {% endfor %}
                   </ul>
                 </div>
-          {% endif %}
+              {% endif %}
             {% endif %}
           </div>
+        </div>
       </div>
 
       <div id="document_source_modal"></div>
