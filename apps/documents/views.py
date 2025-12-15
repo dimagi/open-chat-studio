@@ -85,9 +85,13 @@ def single_collection_home(request, team_slug: str, pk: int):
 
     document_sources = DocumentSource.objects.working_versions_queryset().filter(collection=collection)
     collection_files_count = CollectionFile.objects.filter(collection=collection).count()
+    manually_uploaded_files_count = CollectionFile.objects.filter(
+        collection=collection, document_source__isnull=True
+    ).count()
     context = {
         "collection": collection,
         "collection_files_count": collection_files_count,
+        "manually_uploaded_files_count": manually_uploaded_files_count,
         "document_sources": document_sources,
         "collections_supported_file_types": settings.SUPPORTED_FILE_TYPES["collections"],
         "file_search_supported_file_types": settings.SUPPORTED_FILE_TYPES["file_search"],
