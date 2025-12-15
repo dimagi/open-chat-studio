@@ -1,12 +1,19 @@
 import contextlib
 import logging
+import zipfile
+from datetime import timedelta
+from io import BytesIO
 from itertools import groupby
 
 import openai
 from celery.app import shared_task
+from celery_progress.backend import ProgressRecorder
+from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import QuerySet
+from django.utils import timezone
+from django.utils.text import slugify
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.models import OpenAiAssistant
@@ -18,6 +25,7 @@ from apps.documents.models import (
     FileStatus,
 )
 from apps.documents.utils import bulk_delete_collection_files
+from apps.files.models import File
 from apps.service_providers.models import LlmProvider
 from apps.utils.celery import TaskbadgerTaskWrapper
 
@@ -269,3 +277,82 @@ def delete_document_source_task(self, document_source_id: int):
 
     if not document_source.has_versions:
         document_source.delete()
+
+
+@shared_task(
+    bind=True,
+    base=TaskbadgerTask,
+    acks_late=True,
+    ignore_result=False,
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 3, "countdown": 60},
+)
+def create_collection_zip_task(self, collection_id: int, team_id: int):
+    """
+    Create a ZIP file containing all manually uploaded files from a collection.
+    """
+    progress_recorder = ProgressRecorder(self)
+
+    try:
+        collection = Collection.objects.get(id=collection_id)
+    except Collection.DoesNotExist:
+        logger.error(f"Collection {collection_id} not found")
+        return None
+
+    # Get all manually uploaded files (excluding document source files)
+    collection_files = CollectionFile.objects.filter(
+        collection=collection, document_source__isnull=True
+    ).select_related("file")
+
+    total_files = collection_files.count()
+
+    if total_files == 0:
+        logger.warning(f"No manually uploaded files found in collection {collection_id}")
+        return None
+
+    zip_buffer = BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        # Track filenames to handle duplicates
+        used_filenames = {}
+
+        for idx, collection_file in enumerate(collection_files, start=1):
+            file = collection_file.file
+            filename = file.name
+
+            # Handle duplicate filenames
+            if filename in used_filenames:
+                used_filenames[filename] += 1
+                name_parts = filename.rsplit(".", 1)
+                if len(name_parts) == 2:
+                    filename = f"{name_parts[0]}_{used_filenames[filename]}.{name_parts[1]}"
+                else:
+                    filename = f"{filename}_{used_filenames[filename]}"
+            else:
+                used_filenames[filename] = 0
+
+            try:
+                with file.file.open("rb") as f:
+                    zip_file.writestr(filename, f.read())
+            except Exception as e:
+                logger.error(f"Error adding file {file.id} to ZIP: {str(e)}")
+
+            progress_recorder.set_progress(idx, total_files, description=f"Adding {filename}")
+
+    zip_buffer.seek(0)
+    timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
+    zip_filename = f"{slugify(collection.name)}_files_{timestamp}.zip"
+
+    expiry_date = timezone.now() + timedelta(hours=24)
+
+    zip_file_obj = File.objects.create(
+        team_id=team_id,
+        name=zip_filename,
+        file=ContentFile(zip_buffer.getvalue(), name=zip_filename),
+        content_type="application/zip",
+        expiry_date=expiry_date,
+    )
+
+    logger.info(f"Created ZIP file {zip_file_obj.id} for collection {collection_id}")
+
+    return zip_file_obj.id
