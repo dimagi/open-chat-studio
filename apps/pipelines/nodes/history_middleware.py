@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from langchain.agents.middleware.summarization import SummarizationMiddleware
-from langchain_core.messages import BaseMessage, HumanMessage, RemoveMessage
+from langchain_core.messages import BaseMessage, RemoveMessage
 from langgraph.graph.message import (
     REMOVE_ALL_MESSAGES,
 )
@@ -60,9 +60,9 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
             return
 
         # The first message is always a RemoveMessage if a summary was created
-        summary_message = messages[1]
+
         self.node.store_compression_checkpoint(
-            compression_marker=summary_message.content, checkpoint_message_id=checkpoint_message_id
+            compression_marker=self._get_summary_content(messages), checkpoint_message_id=checkpoint_message_id
         )
 
     def _find_latest_message_db_id(self, messages: list) -> str | None:
@@ -74,6 +74,9 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
         for i in range(len(messages) - 2, -1, -1):
             if "id" in messages[i].additional_kwargs:
                 return messages[i].additional_kwargs["id"]
+
+    def _get_summary_content(self, messages: list[BaseMessage]) -> str:
+        return messages[1].content
 
 
 class SummarizeHistoryMiddleware(BaseNodeHistoryMiddleware):
@@ -96,8 +99,15 @@ class TruncateTokensHistoryMiddleware(BaseNodeHistoryMiddleware):
         # Instead of creating a summary, we'll persist a compression marker. See _build_new_messages
         return ""
 
-    def _build_new_messages(self, summary: str) -> list[HumanMessage]:
-        return [HumanMessage(content=COMPRESSION_MARKER)]
+    def _build_new_messages(self, summary: str) -> list:
+        # No summary message should be injected into the state
+        return []
+
+    def _get_summary_content(self, messages: list[BaseMessage]) -> str:
+        """
+        Returns a constant compression marker to indicate that messages were truncated.
+        """
+        return COMPRESSION_MARKER
 
 
 class MaxHistoryLengthHistoryMiddleware(BaseNodeHistoryMiddleware):

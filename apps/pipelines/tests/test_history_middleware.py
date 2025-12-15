@@ -118,7 +118,10 @@ class TestTruncateTokensHistoryMiddleware:
     def test_before_model_with_compression_marker(
         self, mock_cutoff_index, mock_should_summarize, experiment_session, mock_node
     ):
-        """Test that before_model returns RemoveMessage and COMPRESSION_MARKER for the summary."""
+        """
+        Test that before_model returns RemoveMessage and no summary message, but uses the compression marker
+        (COMPRESSION_MARKER) when storing the checkpoint.
+        """
         mock_cutoff_index.return_value = 8
         mock_should_summarize.return_value = True
         token_limit = 100
@@ -144,12 +147,10 @@ class TestTruncateTokensHistoryMiddleware:
         # First message should be RemoveMessage
         assert result is not None, "Expected a result from before_model"
         assert isinstance(result["messages"][0], RemoveMessage)
-        # Second message should have COMPRESSION_MARKER as content
-        assert result["messages"][1].content == COMPRESSION_MARKER
-
         # Rest should be human/ai messages
         for msg in result["messages"][2:]:
             assert isinstance(msg, HumanMessage | AIMessage)
+            assert msg.content != COMPRESSION_MARKER, "Unexpected compression marker in messages"
 
         mock_node.store_compression_checkpoint.assert_called_with(
             compression_marker=COMPRESSION_MARKER, checkpoint_message_id=9
