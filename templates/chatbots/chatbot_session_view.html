@@ -41,6 +41,7 @@
             <dialog id="end_session_modal" class="modal" x-data="{fire_event: true}">
               <div class="modal-box">
                 <h3 class="font-bold text-lg">{% translate "End Session?" %}</h3>
+                <p class="text-md mt-2">Are you sure?</p>
                   {% if has_conversation_end_events %}
                     <label class="label cursor-pointer justify-start gap-2 mt-4">
                       <input type="checkbox" x-model="fire_event" class="checkbox checkbox-sm checkbox-primary">
