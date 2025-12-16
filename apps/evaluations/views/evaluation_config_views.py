@@ -285,8 +285,6 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                     ],
                     align="right",
                 )
-            case "row_number":
-                return columns.Column(verbose_name="", orderable=False)
         return columns.Column(verbose_name=header)
 
 
