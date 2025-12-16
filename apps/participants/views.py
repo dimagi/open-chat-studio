@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
+from apps.api.tasks import trigger_bot_message_task
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.filters.models import FilterSet
 from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm, TriggerBotForm
@@ -144,26 +145,8 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
             else []
         )
 
-        # Add trigger bot action
-        trigger_bot_form = TriggerBotForm(team=self.request.team, participant=participant)
-        context["actions"] = [
-            actions.ModalAction(
-                "participants:trigger_bot",
-                label="Trigger Bot",
-                icon_class="fa-solid fa-robot",
-                title="Trigger bot to send a message to this participant",
-                required_permissions=["experiments.view_participant", "experiments.change_participant"],
-                modal_template="participants/components/trigger_bot_modal.html",
-                modal_context={
-                    "form": trigger_bot_form,
-                    "modal_title": "Trigger Bot Message",
-                    "action_url": reverse(
-                        "participants:trigger_bot",
-                        args=[self.request.team.slug, participant.id],
-                    ),
-                },
-            ),
-        ]
+        context["participant"] = participant
+        context["trigger_bot_form"] = TriggerBotForm(team=self.request.team, participant=participant)
         return context
 
 
@@ -334,37 +317,25 @@ def trigger_bot(request, team_slug: str, participant_id: int):
     participant = get_object_or_404(Participant, id=participant_id, team=request.team)
     form = TriggerBotForm(request.POST, team=request.team, participant=participant)
 
-    if form.is_valid():
-        from apps.api.tasks import trigger_bot_message_task
-
-        experiment = form.cleaned_data["experiment"]
-        prompt_text = form.cleaned_data["prompt_text"]
-        start_new_session = form.cleaned_data["start_new_session"]
-        session_data = form.cleaned_data.get("session_data", {})
-
-        # Prepare data for the task
-        data = {
-            "identifier": participant.identifier,
-            "platform": participant.platform,
-            "experiment": str(experiment.public_id),
-            "prompt_text": prompt_text,
-            "start_new_session": start_new_session,
-            "session_data": session_data,
-        }
-
-        # Trigger the bot message task
-        trigger_bot_message_task.delay(data)
-
-        messages.success(request, f"Bot message triggered for {participant}")
+    if not form.is_valid():
+        messages.success(request, "Unable to trigger bot message. Please try again.")
         return HttpResponse(headers={"HX-Refresh": "true"})
-    else:
-        # Return form with errors
-        return render(
-            request,
-            "participants/components/trigger_bot_modal.html",
-            {
-                "form": form,
-                "participant": participant,
-                "modal_id": "trigger_bot_modal",
-            },
-        )
+
+    experiment = form.cleaned_data["experiment"]
+    prompt_text = form.cleaned_data["prompt_text"]
+    start_new_session = form.cleaned_data["start_new_session"]
+    session_data = form.cleaned_data.get("session_data", {})
+
+    data = {
+        "identifier": participant.identifier,
+        "platform": participant.platform,
+        "experiment": str(experiment.public_id),
+        "prompt_text": prompt_text,
+        "start_new_session": start_new_session,
+        "session_data": session_data,
+    }
+
+    trigger_bot_message_task.delay(data)
+
+    messages.success(request, f"Bot message triggered for {participant}")
+    return HttpResponse(headers={"HX-Refresh": "true"})

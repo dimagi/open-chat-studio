@@ -1,6 +1,7 @@
 import logging
 
 from django import forms
+from django.db.models import OuterRef, Subquery
 
 from apps.channels.models import ExperimentChannel
 from apps.experiments.models import Experiment, Participant
@@ -114,11 +115,12 @@ class TriggerBotForm(forms.Form):
         super().__init__(*args, **kwargs)
         if team and participant:
             # Filter experiments to those that have a channel matching the participant's platform
+            # This excludes the web channel, since we can't trigger bots on web participants
             experiment_ids = ExperimentChannel.objects.filter(
-                team=team, platform=participant.platform
+                team=team, platform=participant.platform, experiment_id=OuterRef("pk")
             ).values_list("experiment_id", flat=True)
             self.fields["experiment"].queryset = Experiment.objects.filter(
-                team=team, working_version__isnull=True, id__in=experiment_ids
+                team=team, is_version=False, id__in=Subquery(experiment_ids)
             )
 
     def clean_session_data(self):
