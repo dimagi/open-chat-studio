@@ -517,6 +517,21 @@ def chatbot_session_details_view(request, team_slug: str, experiment_id: uuid.UU
     )
 
 
+@require_POST
+@login_and_team_required
+@permission_required("experiments.change_experimentsession", raise_exception=True)
+def end_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    experiment_session = get_object_or_404(
+        ExperimentSession,
+        experiment__public_id=experiment_id,
+        external_id=session_id,
+        team=request.team,
+    )
+    experiment_session.end(propagate=request.POST["fire_end_event"] == "true")
+    messages.success(request, "Session ended")
+    return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
+
+
 @login_and_team_required
 def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_number: int, session_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)

@@ -7,6 +7,7 @@ from django.template.response import TemplateResponse
 from django.utils.translation import gettext
 
 from apps.annotations.models import CustomTaggedItem, Tag
+from apps.events.models import StaticTrigger, StaticTriggerType
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.models import ExperimentSession
 from apps.files.forms import get_file_formset
@@ -127,6 +128,9 @@ def render_session_details(
                 experiment.id, as_dict=True, include_inactive=True
             ),
             "participant_id": session.participant_id,
+            "has_conversation_end_events": StaticTrigger.objects.filter(
+                experiment=experiment, type=StaticTriggerType.CONVERSATION_END, is_active=True
+            ).exists(),
         },
     )
 
