@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Literal
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Window
+from django.db.models.functions import RowNumber
 from django.urls import reverse
 from django.utils import timezone
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -341,9 +343,6 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status"])
 
     def get_table_data(self, include_ids: bool = False):
-        from django.db.models import Window
-        from django.db.models.functions import RowNumber
-
         results = (
             self.results.select_related("message", "evaluator", "session")
             .annotate(row_number=Window(expression=RowNumber(), order_by="created_at"))
