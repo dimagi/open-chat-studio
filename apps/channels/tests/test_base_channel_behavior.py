@@ -699,8 +699,8 @@ def test_voice_tag_created_on_message(
     assert query_messages.count() == 2
     bot_message = session.chat.messages.get(message_type=ChatMessageType.AI)
     user_message = session.chat.messages.get(message_type=ChatMessageType.HUMAN)
-    assert any([tag for tag in user_message.tags.all() if tag.category == TagCategories.VOICE])
-    assert any([tag for tag in bot_message.tags.all() if tag.category == TagCategories.VOICE])
+    assert any([tag for tag in user_message.tags.all() if tag.category == TagCategories.MEDIA_TYPE])
+    assert any([tag for tag in bot_message.tags.all() if tag.category == TagCategories.MEDIA_TYPE])
 
 
 @pytest.mark.django_db()

@@ -459,7 +459,7 @@ class ChannelBase(ABC):
             span.set_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
             if self._bot_message_is_voice:
-                bot_response.create_and_add_tag(TagCategories.VOICE.value, self.experiment.team, TagCategories.VOICE)
+                bot_response.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
             return bot_response.content
 
     def _chat_initiated(self):
@@ -651,10 +651,10 @@ class ChannelBase(ABC):
                 self.send_message_to_user(bot_message=ai_message.content, files=files)
 
         if self._bot_message_is_voice:
-            ai_message.create_and_add_tag(TagCategories.VOICE.value, self.experiment.team, TagCategories.VOICE)
+            ai_message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
 
         if human_message and self._user_message_is_voice:
-            human_message.create_and_add_tag(TagCategories.VOICE.value, self.experiment.team, TagCategories.VOICE)
+            human_message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages

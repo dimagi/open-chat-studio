@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
                 ('experiment_version', 'Experiment Version'),
                 ('response_rating', 'Response Rating'),
                 ('error', 'Error'),
-                ('voice', 'Voice')
+                ('media_type', 'Media Type')
             ], default=''),
         ),
     ]
