@@ -323,7 +323,10 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
         "chatbots:chatbot_end_session",
         args=[team.slug, session.experiment.public_id, session.external_id],
     )
-    response = client.post(url, {"fire_end_event": "true" if fire_end_event else "false"})
+    post_data = {}
+    if fire_end_event:
+        post_data["fire_end_event"] = "on"
+    response = client.post(url, post_data)
 
     assert response.status_code == 302
     session.refresh_from_db()
