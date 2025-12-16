@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags json_tags static waffle_tags %}
+{% load form_tags i18n json_tags static waffle_tags %}
 
 {% block breadcrumbs %}
   {% if request.user.is_authenticated %}
@@ -15,13 +15,13 @@
 
 {% block app %}
   <div class="app-card">
-    <div class="flex">
+    <div class="flex flex-wrap gap-2">
       <div class="flex-1">
         <h1 class="pg-title">Chatbot Review</h1>
       </div>
       {% if request.user.is_authenticated %}
         {% url 'chatbots:chatbot_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
-        <div class="justify-self-end">
+        <div class="flex flex-wrap items-center justify-end gap-2">
           <div class="join">
             <a class="btn join-item"
                href="{{ paginate_url }}?dir=prev">
@@ -32,6 +32,37 @@
               Newer <i class="fa-solid fa-forward-step"></i>
             </a>
           </div>
+          {% if perms.experiments.change_experimentsession and not experiment_session.ended_at %}
+            <button type="button" 
+                    class="btn btn-sm btn-error"
+                    onclick="document.getElementById('end_session_modal').showModal()">
+              {% translate "End Session" %}
+            </button>
+            <dialog id="end_session_modal" class="modal">
+              <div class="modal-box">
+                <h3 class="font-bold text-lg">{% translate "End Session?" %}</h3>
+                <p class="text-md mt-2">{% translate "Are you sure?" %}</p>
+                <form id="end_session_form" method="post" action="{% url 'chatbots:chatbot_end_session' team.slug experiment.public_id experiment_session.external_id %}">
+                  {% csrf_token %}
+                  {% if has_conversation_end_events %}
+                    <label class="label cursor-pointer justify-start gap-2 mt-4">
+                      <input type="checkbox" checked name="fire_end_event" class="checkbox checkbox-sm checkbox-primary">
+                      <span class="label-text">{% translate "Trigger conversation end event(s)" %}</span>
+                    </label>
+                  {% endif %}
+                </form>
+                <div class="modal-action">
+                  <form method="dialog">
+                    <button class="btn">{% translate "Cancel" %}</button>
+                  </form>
+                  <button form="end_session_form" type="submit" class="btn btn-error">{% translate "End Session" %}</button>
+                </div>
+              </div>
+              <form method="dialog" class="modal-backdrop">
+                <button>{% translate "close" %}</button>
+              </form>
+            </dialog>
+          {% endif %}
         </div>
       {% endif %}
     </div>
