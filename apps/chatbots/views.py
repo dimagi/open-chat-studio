@@ -527,7 +527,7 @@ def end_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
         external_id=session_id,
         team=request.team,
     )
-    propagate_event = request.POST.get("fire_end_event", "true") == "true"
+    propagate_event = request.POST.get("fire_end_event") == "on"
     experiment_session.end(propagate=propagate_event)
     messages.success(request, "Session ended")
     return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
