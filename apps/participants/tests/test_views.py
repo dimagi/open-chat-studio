@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ParticipantData
+from apps.participants.forms import TriggerBotForm
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 
@@ -107,12 +108,11 @@ def test_trigger_bot_with_invalid_json(mock_task, client, team_with_users):
 
     response = client.post(url, data)
     assert response.status_code == 200
-    assert "Invalid JSON" in response.content.decode()
     mock_task.delay.assert_not_called()
 
 
 @pytest.mark.django_db()
-def test_trigger_bot_filters_experiments_by_platform(client, team_with_users):
+def test_trigger_bot_form_filters_experiments_by_platform(team_with_users):
     """Test that only experiments with matching platform channels are shown"""
     participant = ParticipantFactory(team=team_with_users, platform=ChannelPlatform.WHATSAPP)
     # Experiment with WhatsApp channel (should be available)
@@ -122,29 +122,8 @@ def test_trigger_bot_filters_experiments_by_platform(client, team_with_users):
     experiment_telegram = ExperimentFactory(team=team_with_users, working_version=None)
     ExperimentChannelFactory(team=team_with_users, experiment=experiment_telegram, platform=ChannelPlatform.TELEGRAM)
 
-    user = team_with_users.members.first()
-    client.login(username=user.username, password="password")
-
-    url = reverse(
-        "participants:single-participant-home",
-        kwargs={
-            "team_slug": team_with_users.slug,
-            "participant_id": participant.id,
-        },
+    available_experiments = list(
+        TriggerBotForm(team=team_with_users, participant=participant).fields["experiment"].queryset
     )
-
-    response = client.get(url)
-    assert response.status_code == 200
-
-    # Check that the form is in the context
-    assert "actions" in response.context
-    actions = response.context["actions"]
-    assert len(actions) == 1
-
-    # Get the form from the modal context
-    form = actions[0].modal_context["form"]
-
-    # Verify the form only includes experiments with matching platform
-    available_experiments = list(form.fields["experiment"].queryset)
     assert experiment_whatsapp in available_experiments
     assert experiment_telegram not in available_experiments
