@@ -41,7 +41,7 @@
             <dialog id="end_session_modal" class="modal">
               <div class="modal-box">
                 <h3 class="font-bold text-lg">{% translate "End Session?" %}</h3>
-                <p class="text-md mt-2">Are you sure?</p>
+                <p class="text-md mt-2">{% translate "Are you sure?" %}</p>
                 <form id="end_session_form" method="post" action="{% url 'chatbots:chatbot_end_session' team.slug experiment.public_id experiment_session.external_id %}">
                   {% csrf_token %}
                   {% if has_conversation_end_events %}
