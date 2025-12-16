@@ -20,6 +20,7 @@ from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
+from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
 @pytest.mark.django_db()
@@ -311,27 +312,16 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
     user = team.members.first()
     client.force_login(user)
 
-    experiment = Experiment.objects.create(
-        name="Test Experiment",
-        description="Test description",
-        owner=user,
-        team=team,
-    )
-    participant = Participant.objects.create(
-        team=team,
-        platform="web",
-        identifier="participant@example.com",
-    )
-    session = ExperimentSession.objects.create(
-        experiment=experiment,
-        participant=participant,
+    session = ExperimentSessionFactory(
+        participant__identifier="participant@example.com",
+        participant__platform="web",
         team=team,
         status=SessionStatus.ACTIVE,
     )
 
     url = reverse(
         "chatbots:chatbot_end_session",
-        args=[team.slug, experiment.public_id, session.external_id],
+        args=[team.slug, session.experiment.public_id, session.external_id],
     )
     response = client.post(url, {"fire_end_event": "true" if fire_end_event else "false"})
 
