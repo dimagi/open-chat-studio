@@ -104,9 +104,9 @@ class TriggerBotForm(forms.Form):
     )
     session_data = forms.CharField(
         label="Session Data (JSON)",
-        widget=forms.Textarea(attrs={"rows": 4}),
+        widget=forms.HiddenInput(),
         required=False,
-        help_text="Optional JSON data to add to the session state",
+        initial="{}",
     )
 
     def __init__(self, *args, **kwargs):
