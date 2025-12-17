@@ -101,7 +101,7 @@ class GPT52Parameters(LLMModelParamBase):
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
     )
 
-    temperature: float = Field(
+    temperature: float | None = Field(
         default=None,
         ge=0.0,
         le=2.0,
@@ -110,7 +110,7 @@ class GPT52Parameters(LLMModelParamBase):
         json_schema_extra=UiSchema(widget=Widgets.range),
     )
 
-    top_p: float = Field(
+    top_p: float | None = Field(
         default=None,
         ge=0.0,
         le=1.0,
@@ -126,6 +126,11 @@ class GPT52Parameters(LLMModelParamBase):
                 "invalid_model_parameters",
                 "Temperature can only be set when reasoning effort is 'none'",
             )
+        elif value is None and info.data.get("effort") == "none":
+            raise PydanticCustomError(
+                "invalid_model_parameters",
+                "Temperature must be set when reasoning effort is 'none'",
+            )
         return value
 
     @field_validator("top_p", mode="before")
@@ -134,6 +139,11 @@ class GPT52Parameters(LLMModelParamBase):
             raise PydanticCustomError(
                 "invalid_model_parameters",
                 "Top P can only be set when reasoning effort is 'none'",
+            )
+        elif value is None and info.data.get("effort") == "none":
+            raise PydanticCustomError(
+                "invalid_model_parameters",
+                "Top P must be set when reasoning effort is 'none'",
             )
         return value
 
