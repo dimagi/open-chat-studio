@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags static %}
+{% load form_tags i18n static %}
 
 {% block page_js %}
   <script src="{% static 'js/editors-bundle.js' %}"></script>
@@ -55,8 +55,10 @@
           {% csrf_token %}
           {{ trigger_bot_form.non_field_errors }}
           {% render_form_fields trigger_bot_form %}
-          <div class="json-editor w-full h-32 resize-y overflow-auto" 
-              data-target-field="#id_session_data"></div>
+          <label class="label font-bold text-xs">
+            <span>{% translate "Session Data (JSON)" %}</span>
+          </label>
+          <div class="json-editor w-full h-32 resize-y overflow-auto" data-target-field="#id_session_data"></div>
 
           <div class="prose prose-sm prose-light">
               <p>This will trigger the selected chatbot to send a message to the participant using the prompt text provided.</p>

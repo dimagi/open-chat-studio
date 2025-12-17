@@ -1,11 +1,9 @@
-import json
 import logging
 
 from django import forms
-from django.db.models import OuterRef, Subquery
 
-from apps.channels.models import ExperimentChannel
 from apps.experiments.models import Experiment, Participant
+from apps.utils.json import PrettyJSONEncoder
 
 logger = logging.getLogger("ocs.participants")
 
@@ -103,11 +101,12 @@ class TriggerBotForm(forms.Form):
         initial=False,
         help_text="End any previous sessions and start a new one",
     )
-    session_data = forms.CharField(
+    session_data = forms.JSONField(
         label="Session Data (JSON)",
         widget=forms.HiddenInput(),
         required=False,
-        initial="{}",
+        encoder=PrettyJSONEncoder,
+        initial={},
     )
 
     def __init__(self, *args, **kwargs):
@@ -121,17 +120,5 @@ class TriggerBotForm(forms.Form):
                 team=team,
                 is_version=False,
                 experimentchannel__platform=participant.platform,
-                experimentchannel__deleted=False
+                experimentchannel__deleted=False,
             )
-
-    def clean_session_data(self):
-        session_data = self.cleaned_data.get("session_data", "")
-        if session_data:
-            try:
-                data = json.loads(session_data)
-                if not isinstance(data, dict):
-                    raise forms.ValidationError("Session data must be a valid JSON object")
-                return data
-            except json.JSONDecodeError as e:
-                raise forms.ValidationError(f"Invalid JSON: {e}") from None
-        return {}

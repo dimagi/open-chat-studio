@@ -62,7 +62,7 @@ def single_participant_home_context(context: dict, participant_id: int, experime
         )
 
     context["participant"] = participant
-    if participant.platform != ChannelPlatform.WEB:
+    if participant.platform != ChannelPlatform.team_global_platforms():
         context["trigger_bot_form"] = TriggerBotForm(participant=participant)
     return context
 
@@ -348,6 +348,4 @@ def trigger_bot(request, team_slug: str, participant_id: int):
     trigger_bot_message_task.delay(data)
 
     messages.success(request, f"Bot message triggered for {participant}")
-    empty_form = TriggerBotForm(participant=participant)
-    context = {"trigger_bot_form": empty_form, "participant": participant}
     return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
