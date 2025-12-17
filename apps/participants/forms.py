@@ -117,11 +117,11 @@ class TriggerBotForm(forms.Form):
         if team and participant:
             # Filter experiments to those that have a channel matching the participant's platform
             # This excludes the web channel, since we can't trigger bots on web participants
-            experiment_ids = ExperimentChannel.objects.filter(
-                team=team, platform=participant.platform, experiment_id=OuterRef("pk")
-            ).values_list("experiment_id", flat=True)
             self.fields["experiment"].queryset = Experiment.objects.filter(
-                team=team, is_version=False, id__in=Subquery(experiment_ids)
+                team=team,
+                is_version=False,
+                experimentchannel__platform=participant.platform,
+                experimentchannel__deleted=False
             )
 
     def clean_session_data(self):
