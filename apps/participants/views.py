@@ -12,6 +12,7 @@ from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.api.tasks import trigger_bot_message_task
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.filters.models import FilterSet
 from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm, TriggerBotForm
@@ -61,7 +62,8 @@ def single_participant_home_context(context: dict, participant_id: int, experime
         )
 
     context["participant"] = participant
-    context["trigger_bot_form"] = TriggerBotForm(participant=participant)
+    if participant.platform != ChannelPlatform.WEB:
+        context["trigger_bot_form"] = TriggerBotForm(participant=participant)
     return context
 
 
