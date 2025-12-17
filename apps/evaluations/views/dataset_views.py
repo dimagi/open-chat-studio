@@ -49,6 +49,7 @@ from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
@@ -396,17 +397,7 @@ def update_message(request, team_slug, message_id):
 
     dataset = message.evaluationdataset_set.first()
     if dataset:
-        # Get the full table view to render properly with request context
-        dataset_id = dataset.id
-        table_view = DatasetMessagesTableView()
-        table_view.request = request
-        table_view.kwargs = {"dataset_id": dataset_id}
-
-        queryset = table_view.get_queryset()
-        table = table_view.table_class(queryset, request=request)
-
-        # Render the full table - HTMX will extract just the updated row via hx-select
-        return render(request, "table/single_table.html", {"table": table})
+        return render_table_row(request, DatasetMessagesTable, message)
 
     return HttpResponse("", status=200)
 
