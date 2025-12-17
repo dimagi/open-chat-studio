@@ -5,7 +5,7 @@
   <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
     window.addEventListener('load', () => {
-      SiteJS.editors.initJsonEditors();
+        SiteJS.editors.initJsonEditors();
     });
   </script>
 {% endblock page_js %}
@@ -41,14 +41,14 @@
     </div>
   </div>
 
-  <dialog id="trigger_message_dialog" class="modal">
+  <dialog id="trigger_message_dialog" {% if trigger_bot_form.errors %}open{% endif %} class="modal">
     <div class="modal-box">
-      <h3 class="text-lg font-bold">Trigger Bot Message</h3>
-      <form id="trigger_bot_form_id"
+        <h3 class="text-lg font-bold">Trigger Bot Message</h3>
+        <form id="trigger_bot_form_id"
             method="post"
             class="my-2"
-            hx-post="{% url 'participants:trigger_bot' request.team.slug participant.id %}"
-            hx-swap="outerHTML">
+            action="{% url 'participants:trigger_bot' request.team.slug participant.id %}"
+            >
         {% csrf_token %}
         {{ trigger_bot_form.non_field_errors }}
         {% render_form_fields trigger_bot_form %}
@@ -56,18 +56,18 @@
             data-target-field="#id_session_data"></div>
 
         <div class="prose prose-sm prose-light">
-          <p>This will trigger the selected chatbot to send a message to the participant using the prompt text provided.</p>
-          <p>If "Start a new session" is checked, any active session will be ended.</p>
+            <p>This will trigger the selected chatbot to send a message to the participant using the prompt text provided.</p>
+            <p>If "Start a new session" is checked, any active session will be ended.</p>
         </div>
-      </form>
-      <div class="modal-action">
+        </form>
+        <div class="modal-action">
         <button type="submit" form="trigger_bot_form_id" class="btn btn-primary">
-          Trigger Bot
+            Trigger Bot
         </button>
         <form method="dialog">
-          <button class="btn">Close</button>
+            <button class="btn">Close</button>
         </form>
-      </div>
+        </div>
     </div>
-  </dialog>
+</dialog>
 {% endblock app %}

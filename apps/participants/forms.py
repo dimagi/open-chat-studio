@@ -1,3 +1,4 @@
+import json
 import logging
 
 from django import forms
@@ -110,8 +111,8 @@ class TriggerBotForm(forms.Form):
     )
 
     def __init__(self, *args, **kwargs):
-        team = kwargs.pop("team", None)
         participant = kwargs.pop("participant", None)
+        team = participant.team
         super().__init__(*args, **kwargs)
         if team and participant:
             # Filter experiments to those that have a channel matching the participant's platform
@@ -124,8 +125,6 @@ class TriggerBotForm(forms.Form):
             )
 
     def clean_session_data(self):
-        import json
-
         session_data = self.cleaned_data.get("session_data", "")
         if session_data:
             try:

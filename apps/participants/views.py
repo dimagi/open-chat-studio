@@ -35,6 +35,36 @@ IMPORT_PERMISSIONS = [
 ]
 
 
+def single_participant_home_context(context: dict, participant_id: int, experiment_id: int | None = None) -> dict:
+    """A helper function to build context for a single participant's home view."""
+    participant = get_object_or_404(Participant, pk=participant_id)
+    context["active_tab"] = "participants"
+    context["participant"] = participant
+    context["experiments"] = participant.get_experiments_for_display()
+    sessions = []
+
+    if experiment_id:
+        sessions = (
+            participant.experimentsession_set.filter(experiment_id=experiment_id)
+            .annotate_with_last_message_created_at()
+            .all()
+        )
+        context["session_table"] = ExperimentSessionsTable(
+            sessions,
+            extra_columns=[("participant", None)],  # remove participant column
+        )
+        context["selected_experiment_id"] = experiment_id
+        data = participant.get_data_for_experiment(experiment_id)
+        context["participant_data"] = json.dumps(data, indent=4)
+        context["participant_schedules"] = participant.get_schedules_for_experiment(
+            experiment_id, as_dict=True, include_inactive=True
+        )
+
+    context["participant"] = participant
+    context["trigger_bot_form"] = TriggerBotForm(participant=participant)
+    return context
+
+
 class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
     template_name = "generic/object_home.html"
     permission_required = "experiments.view_participant"
@@ -118,36 +148,12 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
     template_name = "participants/single_participant_home.html"
 
     def get_context_data(self, *args, **kwargs):
-        context = super().get_context_data(*args, **kwargs)
-        participant = get_object_or_404(Participant, pk=self.kwargs["participant_id"])
-        context["active_tab"] = "participants"
-        context["participant"] = participant
+        initial_context = super().get_context_data(*args, **kwargs)
+        participant_id = self.kwargs["participant_id"]
         experiment_id = self.kwargs.get("experiment_id")
-        context["selected_experiment_id"] = experiment_id
-
-        context["experiments"] = participant.get_experiments_for_display()
-        sessions = []
-        if experiment_id:
-            sessions = (
-                participant.experimentsession_set.filter(experiment_id=experiment_id)
-                .annotate_with_last_message_created_at()
-                .all()
-            )
-        context["session_table"] = ExperimentSessionsTable(
-            sessions,
-            extra_columns=[("participant", None)],  # remove participant column
+        return single_participant_home_context(
+            initial_context, participant_id=participant_id, experiment_id=experiment_id
         )
-        data = participant.get_data_for_experiment(experiment_id)
-        context["participant_data"] = json.dumps(data, indent=4)
-        context["participant_schedules"] = (
-            participant.get_schedules_for_experiment(experiment_id, as_dict=True, include_inactive=True)
-            if experiment_id
-            else []
-        )
-
-        context["participant"] = participant
-        context["trigger_bot_form"] = TriggerBotForm(team=self.request.team, participant=participant)
-        return context
 
 
 class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -315,11 +321,13 @@ def trigger_bot(request, team_slug: str, participant_id: int):
     Trigger a bot to send a message to a participant
     """
     participant = get_object_or_404(Participant, id=participant_id, team=request.team)
-    form = TriggerBotForm(request.POST, team=request.team, participant=participant)
+    form = TriggerBotForm(request.POST, participant=participant)
 
     if not form.is_valid():
-        messages.success(request, "Unable to trigger bot message. Please try again.")
-        return HttpResponse(headers={"HX-Refresh": "true"})
+        messages.error(request, "Please check the form for errors")
+        context = single_participant_home_context({}, participant_id=participant_id)
+        context["trigger_bot_form"] = form
+        return render(request, "participants/single_participant_home.html", context=context)
 
     experiment = form.cleaned_data["experiment"]
     prompt_text = form.cleaned_data["prompt_text"]
@@ -338,4 +346,6 @@ def trigger_bot(request, team_slug: str, participant_id: int):
     trigger_bot_message_task.delay(data)
 
     messages.success(request, f"Bot message triggered for {participant}")
-    return HttpResponse(headers={"HX-Refresh": "true"})
+    empty_form = TriggerBotForm(participant=participant)
+    context = {"trigger_bot_form": empty_form, "participant": participant}
+    return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
