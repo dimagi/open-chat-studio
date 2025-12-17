@@ -156,7 +156,7 @@ class PipelineStartAction(EventActionHandlerBase):
                 experiment=session.experiment_version,
                 trace_service=trace_service,
             )
-            output = bot.invoke_pipeline(
+            output, _ = bot.invoke_pipeline(
                 input_state=state,
                 pipeline=pipeline,
                 save_run_to_history=False,

@@ -8,9 +8,10 @@ from apps.channels.datamodels import TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
-from apps.chat.models import ChatMessage
+from apps.chat.models import Chat, ChatMessage
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ExperimentFactory
 
 from .message_examples import twilio_messages
 
@@ -75,7 +76,9 @@ class TestTwilio:
             patch("apps.service_providers.messaging_service.TwilioService.s3_client"),
             patch("apps.service_providers.messaging_service.TwilioService.client"),
         ):
-            get_llm_response_mock.return_value = ChatMessage(content="Hi")
+            experiment = ExperimentFactory(conversational_consent_enabled=True)
+            chat = Chat.objects.create(team=experiment.team)
+            get_llm_response_mock.return_value = ChatMessage.objects.create(content="Hi", chat=chat), None
             get_voice_transcript_mock.return_value = "Hi"
 
             handle_twilio_message(message_data=incoming_message)

@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 from django.test import override_settings
 
+from apps.annotations.models import TagCategories
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
     DEFAULT_ERROR_RESPONSE_TEXT,
@@ -19,7 +20,7 @@ from apps.chat.channels import (
     strip_urls_and_emojis,
 )
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import (
     ExperimentSession,
     Participant,
@@ -246,7 +247,7 @@ def test_reset_conversation_does_not_create_new_session(test_channel):
 
 
 def _send_user_message_on_channel(channel_instance, user_message: BaseMessage):
-    with patch("apps.chat.channels.ChannelBase._get_bot_response", return_value=ChatMessage(content="OK")):
+    with patch("apps.chat.channels.ChannelBase._get_bot_response", return_value=[ChatMessage(content="OK"), None]):
         channel_instance.new_user_message(user_message)
 
 
@@ -366,7 +367,7 @@ def test_voice_response_behaviour(
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = ChatMessage(content="Hello user. No")
+    get_llm_response.return_value = ChatMessage(content="Hello user. No"), None
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = voice_behaviour
     experiment.save()
@@ -454,7 +455,7 @@ def test_reply_with_text_when_synthetic_voice_not_specified(
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = ChatMessage(content="Hello user. No")
+    get_llm_response.return_value = ChatMessage(content="Hello user. No"), None
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     # Let's remove the synthetic voice and see what happens
@@ -654,11 +655,15 @@ def test_voice_response_with_urls(
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Give me a URL"
-    get_llm_response.return_value = ChatMessage(
-        content=(
-            "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
-        )
-    )
+    get_llm_response.return_value = [
+        ChatMessage.objects.create(
+            content=(
+                "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
+            ),
+            chat=Chat.objects.create(team=test_channel.experiment.team),
+        ),
+        None,
+    ]
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     experiment.save()
@@ -670,6 +675,32 @@ def test_voice_response_with_urls(
     text_message = send_text_to_user.mock_calls[0].args[0]
     assert "http://example.co.za?key1=1&key2=2" in text_message
     assert "https://some.com" in text_message
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
+@patch("apps.service_providers.models.VoiceProvider.get_speech_service")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_voice_to_user")
+def test_voice_tag_created_on_message(
+    send_voice_to_user, send_text_to_user, get_speech_service, get_voice_transcript, test_channel
+):
+    get_voice_transcript.return_value = "I'm groot"
+
+    experiment = test_channel.experiment
+    experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
+    experiment.save()
+
+    session = ExperimentSessionFactory()
+    test_channel.experiment_session = session
+    test_channel.new_user_message(base_messages.audio_message())
+    query_messages = session.chat.messages.all()
+
+    assert query_messages.count() == 2
+    bot_message = session.chat.messages.get(message_type=ChatMessageType.AI)
+    user_message = session.chat.messages.get(message_type=ChatMessageType.HUMAN)
+    assert any([tag for tag in user_message.tags.all() if tag.category == TagCategories.MEDIA_TYPE])
+    assert any([tag for tag in bot_message.tags.all() if tag.category == TagCategories.MEDIA_TYPE])
 
 
 @pytest.mark.django_db()

@@ -140,6 +140,8 @@ class ChannelBase(ABC):
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
         self.trace_service = TracingService.create_for_experiment(self.experiment)
+        self._user_message_is_voice = False
+        self._bot_message_is_voice = False
 
     @property
     def participant_id(self) -> int | None:
@@ -190,6 +192,8 @@ class ChannelBase(ABC):
     @message.setter
     def message(self, value: BaseMessage):
         self._message = value
+        self._user_message_is_voice = False
+        self._bot_message_is_voice = False
         self.reset_bot()
         self.reset_user_query()
 
@@ -449,9 +453,13 @@ class ChannelBase(ABC):
 
     def _send_seed_message(self) -> str:
         with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}) as span:
-            bot_response = self.bot.process_input(user_input=self.experiment.seed_message, save_input_to_history=False)
+            bot_response, _ = self.bot.process_input(
+                user_input=self.experiment.seed_message, save_input_to_history=False
+            )
             span.set_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
+            if self._bot_message_is_voice:
+                bot_response.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
             return bot_response.content
 
     def _chat_initiated(self):
@@ -495,6 +503,7 @@ class ChannelBase(ABC):
 
     def _extract_user_query(self) -> str:
         if self.message.content_type == MESSAGE_TYPES.VOICE:
+            self._user_message_is_voice = True
             return self._get_voice_transcript()
         return self.message.message_text
 
@@ -631,7 +640,7 @@ class ChannelBase(ABC):
     def _handle_supported_message(self):
         with self.trace_service.span("Process Message", inputs={"input": self.user_query}) as span:
             self.submit_input_to_llm()
-            ai_message = self._get_bot_response(message=self.user_query)
+            ai_message, human_message = self._get_bot_response(message=self.user_query)
 
             files = ai_message.get_attached_files() or []
             span.set_outputs({"response": ai_message.content, "attachments": [file.name for file in files]})
@@ -640,6 +649,12 @@ class ChannelBase(ABC):
                 "Send message to user", inputs={"bot_message": ai_message.content, "files": [str(f) for f in files]}
             ):
                 self.send_message_to_user(bot_message=ai_message.content, files=files)
+
+        if self._bot_message_is_voice:
+            ai_message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
+
+        if human_message and self._user_message_is_voice:
+            human_message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
@@ -651,6 +666,7 @@ class ChannelBase(ABC):
         return response
 
     def _reply_voice_message(self, text: str):
+        self._bot_message_is_voice = True
         voice_provider = self.experiment.voice_provider
         synthetic_voice = self.experiment.synthetic_voice
         voice = self.bot.synthesize_voice()
@@ -682,9 +698,9 @@ class ChannelBase(ABC):
                 return speech_service.transcribe_audio(audio)
         return "Unable to transcribe audio"
 
-    def _get_bot_response(self, message: str) -> ChatMessage:
-        chat_message = self.bot.process_input(message, attachments=self.message.attachments)
-        return chat_message
+    def _get_bot_response(self, message: str) -> tuple[ChatMessage, ChatMessage | None]:
+        chat_messages = self.bot.process_input(message, attachments=self.message.attachments)
+        return chat_messages
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType):
         """Use this to update the chat history when not using the normal bot flow"""

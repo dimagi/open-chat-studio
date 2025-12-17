@@ -85,7 +85,7 @@ class TestHandleConnectMessageTask:
     @patch("apps.chat.channels.ChannelBase._get_bot_response")
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_bot_generate_and_sends_message(self, _get_bot_response, experiment):
-        _get_bot_response.return_value = ChatMessage(content="Hi human", message_type=ChatMessageType.AI)
+        _get_bot_response.return_value = ChatMessage(content="Hi human", message_type=ChatMessageType.AI), None
         commcare_connect_channel_id, encryption_key, experiment_channel, data = _setup_participant(experiment)
         payload = _build_user_message(encryption_key, commcare_connect_channel_id)
         # The version will be used when chatting to the bot

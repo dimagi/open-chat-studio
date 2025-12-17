@@ -9,11 +9,11 @@ from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES, WhatsappChannel
-from apps.chat.models import ChatMessage
+from apps.chat.models import Chat, ChatMessage
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
@@ -84,7 +84,9 @@ class TestTwilio:
             patch("apps.service_providers.messaging_service.TwilioService.s3_client"),
             patch("apps.service_providers.messaging_service.TwilioService.client"),
         ):
-            get_llm_response_mock.return_value = ChatMessage(content="Hi")
+            experiment = ExperimentFactory(conversational_consent_enabled=True)
+            chat = Chat.objects.create(team=experiment.team)
+            get_llm_response_mock.return_value = ChatMessage.objects.create(content="Hi", chat=chat), None
             get_voice_transcript_mock.return_value = "Hi"
 
             handle_twilio_message(message_data=incoming_message)
@@ -163,7 +165,9 @@ class TestTurnio:
     ):
         """Test that the turnio integration can use the WhatsappChannel implementation"""
         synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
-        _get_bot_response.return_value = ChatMessage(content="Hi")
+        experiment = ExperimentFactory(conversational_consent_enabled=True)
+        chat = Chat.objects.create(team=experiment.team)
+        _get_bot_response.return_value = ChatMessage.objects.create(content="Hi", chat=chat), None
         get_voice_transcript_mock.return_value = "Hi"
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         if message_type == "text":

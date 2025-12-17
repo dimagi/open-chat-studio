@@ -57,7 +57,7 @@ def test_output_message_tagging(pipeline: Pipeline, session: ExperimentSession):
     pipeline_state = PipelineState(messages=["Hi"], output_message_tags=output_message_tags)
 
     bot = PipelineBot(session=session, experiment=session.experiment, trace_service=TracingService.empty())
-    result = bot.invoke_pipeline(input_state=pipeline_state, pipeline=pipeline)
+    result, _ = bot.invoke_pipeline(input_state=pipeline_state, pipeline=pipeline)
 
     tags = list(result.tags.all())
     version_tag = (f"v{session.experiment.version_number}-unreleased", TagCategories.EXPERIMENT_VERSION.value)

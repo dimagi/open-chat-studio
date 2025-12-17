@@ -1,6 +1,7 @@
 import json
 import logging
 from functools import cached_property
+from typing import ClassVar
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
@@ -25,6 +26,7 @@ class TagCategories(models.TextChoices):
     EXPERIMENT_VERSION = "experiment_version", _("Experiment Version")
     RESPONSE_RATING = "response_rating", _("Response Rating")
     ERROR = "error", _("Error")
+    MEDIA_TYPE = "media_type", _("Media Type")
 
 
 @audit_fields(
@@ -98,6 +100,7 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         abstract = True
 
     tags = TaggableManager(through=CustomTaggedItem)
+    _skipped_category_tags: ClassVar[list] = [TagCategories.MEDIA_TYPE.value]  # Tag categories with special treatment
 
     def add_tags(self, tags: list[str], team: Team, added_by: CustomUser = None):
         tag_objs = Tag.objects.filter(team=team, name__in=tags)
@@ -124,6 +127,18 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
 
     def all_tag_names(self):
         return [tag["name"] for tag in self.prefetched_tags_json]
+
+    def has_voice_tag(self):
+        return any(
+            [
+                tag
+                for tag in self.prefetched_tags_json
+                if tag["category"] == TagCategories.MEDIA_TYPE.value and tag["name"] == "voice"
+            ]
+        )
+
+    def non_skipped_tags(self):
+        return [tag for tag in self.prefetched_tags_json if tag["category"] not in self._skipped_category_tags]
 
     @cached_property
     def prefetched_tags_json(self):
