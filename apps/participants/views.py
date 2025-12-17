@@ -316,7 +316,7 @@ class DeleteParticipant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
 
 
 @login_and_team_required
-@permission_required(["experiments.view_participant", "experiments.change_participant"])
+@permission_required(["experiments.change_participant"])
 @require_POST
 def trigger_bot(request, team_slug: str, participant_id: int):
     """

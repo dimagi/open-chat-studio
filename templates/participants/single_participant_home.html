@@ -27,7 +27,7 @@
           <h1 class="pg-title">Participant details</h1>
         </div>
       </div>
-      {% if trigger_bot_form %}
+      {% if trigger_bot_form and perms.experiments.change_participant %}
         <div class="col-span-1 flex justify-end items-start">
           <button class="btn btn-sm btn-primary" onclick="trigger_message_dialog.showModal()">Trigger Bot Message</button>
         </div>
@@ -43,7 +43,7 @@
     </div>
   </div>
 
-  {% if trigger_bot_form %}
+  {% if trigger_bot_form and perms.experiments.change_participant %}
     <dialog id="trigger_message_dialog" {% if trigger_bot_form.errors %}open{% endif %} class="modal">
       <div class="modal-box">
           <h3 class="text-lg font-bold">Trigger Bot Message</h3>
