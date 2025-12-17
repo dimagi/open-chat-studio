@@ -69,6 +69,9 @@
           {% if run_duration %}
             <p><strong>Duration:</strong> {{ run_duration }}</p>
           {% endif %}
+          {% if total_results %}
+            <p><strong>Total Results:</strong> {{ total_results }}</p>
+          {% endif %}
           <p><strong>Configuration:</strong>
             <a href="{% url 'evaluations:edit' request.team.slug evaluation_run.config.id %}" class="link">
               {{ evaluation_run.config.name }}
