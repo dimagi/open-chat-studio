@@ -67,8 +67,7 @@ def test_trigger_bot(mock_task, client, team_with_users):
     }
 
     response = client.post(url, data)
-    assert response.status_code == 200
-    assert response.headers.get("HX-Refresh") == "true"
+    assert response.status_code == 302
 
     # Verify the task was called with correct data
     mock_task.delay.assert_called_once()
@@ -122,8 +121,6 @@ def test_trigger_bot_form_filters_experiments_by_platform(team_with_users):
     experiment_telegram = ExperimentFactory(team=team_with_users, working_version=None)
     ExperimentChannelFactory(team=team_with_users, experiment=experiment_telegram, platform=ChannelPlatform.TELEGRAM)
 
-    available_experiments = list(
-        TriggerBotForm(team=team_with_users, participant=participant).fields["experiment"].queryset
-    )
+    available_experiments = list(TriggerBotForm(participant=participant).fields["experiment"].queryset)
     assert experiment_whatsapp in available_experiments
     assert experiment_telegram not in available_experiments
