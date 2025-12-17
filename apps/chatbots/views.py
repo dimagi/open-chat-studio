@@ -222,10 +222,10 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         last_activity_subquery = (
-            Trace.objects.filter(experiment=OuterRef("pk"))
-            .exclude(session__experiment_channel__platform=ChannelPlatform.EVALUATIONS)
-            .order_by("-timestamp")
-            .values("timestamp")[:1]
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .order_by("-last_activity_at")
+            .values("last_activity_at")[:1]
         )
 
         # Add expensive annotations only to paginated data
@@ -491,7 +491,7 @@ class ChatbotSessionsTableView(ExperimentSessionsTableView):
     def get_table_data(self):
         """Add message_count annotation to the paginated data."""
         queryset = super().get_table_data()
-        return queryset.annotate_with_message_count().annotate_with_last_message_created_at()
+        return queryset.annotate_with_message_count()
 
     def get_table(self, **kwargs):
         """

@@ -127,11 +127,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
         context["experiments"] = participant.get_experiments_for_display()
         sessions = []
         if experiment_id:
-            sessions = (
-                participant.experimentsession_set.filter(experiment_id=experiment_id)
-                .annotate_with_last_message_created_at()
-                .all()
-            )
+            sessions = participant.experimentsession_set.filter(experiment_id=experiment_id).all()
         context["session_table"] = ExperimentSessionsTable(
             sessions,
             extra_columns=[("participant", None)],  # remove participant column

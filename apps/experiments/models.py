@@ -10,8 +10,6 @@ from uuid import uuid4
 
 import markdown
 from django.conf import settings
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.postgres.aggregates import StringAgg
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
@@ -38,7 +36,6 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
-from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
@@ -1662,13 +1659,6 @@ class SessionStatus(models.TextChoices):
 
 
 class ExperimentSessionQuerySet(models.QuerySet):
-    def annotate_with_last_message_created_at(self):
-        """Annotate queryset with the created_at timestamp of the last message in each session."""
-        last_message_subquery = Subquery(
-            ChatMessage.objects.filter(chat_id=OuterRef("chat_id")).order_by("-created_at").values("created_at")[:1]
-        )
-        return self.annotate(last_message_created_at=last_message_subquery)
-
     def annotate_with_first_message_created_at(self):
         """Annotate queryset with the created_at timestamp of the first message in each session."""
         first_message_subquery = Subquery(
@@ -1686,20 +1676,21 @@ class ExperimentSessionQuerySet(models.QuerySet):
         return self.annotate(message_count=message_count_subquery)
 
     def annotate_with_versions_list(self):
-        """Annotate queryset with a comma-separated list of experiment versions used in each session."""
-        message_ct = ContentType.objects.get_for_model(ChatMessage)
-        version_tags_subquery = Subquery(
-            CustomTaggedItem.objects.filter(
-                content_type=message_ct,
-                object_id__in=ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id"),
-                tag__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
+        """Annotate queryset with a comma-separated list of experiment versions (e.g., 'v1, v2, v3')."""
+        from django.db.models.expressions import RawSQL
+
+        # Transform [1, 2, 3] -> ['v1', 'v2', 'v3']
+        return self.annotate(
+            versions_list=Coalesce(
+                RawSQL(
+                    "array_to_string(ARRAY(SELECT 'v' || n FROM unnest(experiment_versions) AS n ORDER BY n), ', ')",
+                    [],
+                    output_field=CharField(),
+                ),
+                Value(""),
+                output_field=CharField(),
             )
-            .values("content_type_id")
-            .annotate(versions=StringAgg("tag__name", delimiter=", ", distinct=True, ordering="tag__name"))
-            .values("versions")[:1],
-            output_field=CharField(),
         )
-        return self.annotate(versions_list=Coalesce(version_tags_subquery, Value(""), output_field=CharField()))
 
 
 class ExperimentSessionObjectManager(models.Manager):
@@ -1708,7 +1699,7 @@ class ExperimentSessionObjectManager(models.Manager):
 
     def with_last_message_created_at(self):
         """Convenience method for backwards compatibility."""
-        return self.get_queryset().annotate_with_last_message_created_at()
+        return self.get_queryset()
 
 
 class ExperimentSession(BaseTeamModel):

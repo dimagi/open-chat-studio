@@ -148,7 +148,6 @@ class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
                 ),
             )
         )
-        # annotate_with_last_message_created_at is done by ExperimentSessionFilter
         return queryset.annotate_with_versions_list()
 
 
