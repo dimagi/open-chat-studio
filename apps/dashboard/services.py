@@ -77,7 +77,7 @@ class DashboardService:
             .filter(_has_msgs=True)
         )
         messages = ChatMessage.objects.filter(chat__team=self.team, **base_filters).exclude(
-            chat__experiment_session__experiment_channel__platform=ChannelPlatform.EVALUATIONS
+            chat__experiment_session__platform=ChannelPlatform.EVALUATIONS
         )
         participants = Participant.objects.filter(team=self.team).exclude(platform=ChannelPlatform.EVALUATIONS)
 
