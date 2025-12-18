@@ -171,8 +171,20 @@ class TestDefaultParser:
             ({"some_key": "some_value"}, ""),
             (["Hello", "world", "test"], "Hello\nworld\ntest"),
             (
-                [{"text": "First part", "type": "text"}, {"text": "second part", "type": "text"}],
+                [
+                    {"text": "First part", "type": "text", "annotations": []},
+                    {"text": "second part", "type": "text", "annotations": []},
+                ],
                 "First part\nsecond part",
+            ),
+            # Duplicated text entries should be concatenated without duplication
+            (["Hello", "Hello", "world"], "Hello\nworld"),
+            (
+                [
+                    {"text": "Hello world", "type": "text", "annotations": []},
+                    {"text": "Hello world", "type": "text", "annotations": []},
+                ],
+                "Hello world",
             ),
         ],
     )

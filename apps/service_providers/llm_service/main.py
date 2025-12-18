@@ -167,6 +167,11 @@ class LlmService(pydantic.BaseModel):
     def _default_parser(
         self, llm_output, session: ExperimentSession, include_citations: bool = True
     ) -> LlmChatResponse:
+        """
+        Default parser for LLM outputs. Supports various formats including strings, dicts, and lists. This parser
+        also extracts cited and generated files from annotations if present and handles deduplication of text entries
+        (in rare cases).
+        """
         if isinstance(llm_output, dict):
             output_content = llm_output.get("output", "")
         elif isinstance(llm_output, str):
@@ -176,7 +181,9 @@ class LlmService(pydantic.BaseModel):
             if all(isinstance(o, dict) for o in llm_output):
                 output_content = llm_output
             elif all(isinstance(o, str) for o in llm_output):
-                output_content = "\n".join(llm_output)
+                # Use dict.fromkeys to dedupe while preserving order
+                deduped_output = list(dict.fromkeys(llm_output).keys())
+                output_content = "\n".join(deduped_output)
             else:
                 raise TypeError("Unexpected mixed or unsupported list element types in llm_output")
         else:
@@ -189,9 +196,9 @@ class LlmService(pydantic.BaseModel):
         if isinstance(output_content, str):
             final_text = output_content
         elif isinstance(output_content, list):
+            deduped_texts = list(dict.fromkeys(out.get("text", "") for out in output_content).keys())
+            final_text = "\n".join(deduped_texts).strip()
             for output in output_content:
-                final_text = "\n".join([final_text, output.get("text", "")]).strip()
-
                 annotation_entries = output.get("annotations", [])
                 if include_citations:
                     external_ids = self.get_cited_file_ids(annotation_entries)
