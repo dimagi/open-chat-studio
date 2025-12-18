@@ -2,7 +2,7 @@
 
 <div class="w-full">
   <div class="flex flex-col gap-3 p-4 bg-base-200 rounded-lg">
-    <div class="flex items-center gap-2">
+    <div id="progress-header" class="flex items-center gap-2">
       <span class="loading loading-spinner loading-sm"></span>
       <h3 class="font-semibold">Creating ZIP file...</h3>
     </div>
@@ -67,10 +67,9 @@
       pollInterval: 500,
       onSuccess: (progressBarElement, progressBarMessageElement, result) => {
         // Hide progress UI
+        document.getElementById('progress-header').classList.add('hidden');
         progressBarElement.parentElement.classList.add('hidden');
         progressBarMessageElement.classList.add('hidden');
-        const spinner = document.querySelector('.loading-spinner');
-        if (spinner) spinner.classList.add('hidden');
 
         // Get file ID (handle both direct number and object wrapper)
         const fileId = (typeof result === 'object' && result.result) ? result.result : result;
@@ -87,10 +86,9 @@
       },
       onError: (progressBarElement, progressBarMessageElement, error) => {
         // Hide progress UI
+        document.getElementById('progress-header').classList.add('hidden');
         progressBarElement.parentElement.classList.add('hidden');
         progressBarMessageElement.classList.add('hidden');
-        const spinner = document.querySelector('.loading-spinner');
-        if (spinner) spinner.classList.add('hidden');
 
         // Show error
         const errorMessage = (error && error.message) ? error.message : 'An error occurred while creating the ZIP file.';
