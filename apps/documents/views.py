@@ -85,9 +85,7 @@ def single_collection_home(request, team_slug: str, pk: int):
 
     document_sources = DocumentSource.objects.working_versions_queryset().filter(collection=collection)
     collection_files_count = CollectionFile.objects.filter(collection=collection).count()
-    manually_uploaded_files_count = CollectionFile.objects.filter(
-        collection=collection, document_source__isnull=True
-    ).count()
+    manually_uploaded_files_count = CollectionFile.objects.filter(collection=collection).is_manually_uploaded().count()
     context = {
         "collection": collection,
         "collection_files_count": collection_files_count,
