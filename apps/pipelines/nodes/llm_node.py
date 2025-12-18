@@ -3,15 +3,17 @@ from typing import Annotated
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
+from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
-from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
     format_multimodal_input,
@@ -26,7 +28,7 @@ class StateSchema(AgentState):
     session_state: Annotated[dict, operator.or_]
 
 
-def execute_sub_agent(node, state: PipelineState):
+def execute_sub_agent(node: PipelineNode, state: PipelineState):
     user_input = state["last_node_input"]
     session: ExperimentSession | None = state.get("experiment_session")
     tool_callbacks = ToolCallbacks()
@@ -66,9 +68,11 @@ def execute_sub_agent(node, state: PipelineState):
     )
 
 
-def _process_agent_output(node, session, message):
+def _process_agent_output(node: PipelineNode, session: ExperimentSession, message: AIMessage):
     output_parser = node.get_llm_service().get_output_parser()
-    parsed_output = output_parser(message.content, session=session, include_citations=node.generate_citations)
+    parsed_output: LlmChatResponse = output_parser(
+        message.content, session=session, include_citations=node.generate_citations
+    )
     ai_message_metadata = _process_files(
         session, cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
     )
