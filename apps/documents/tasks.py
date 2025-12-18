@@ -25,7 +25,7 @@ from apps.documents.models import (
     FileStatus,
 )
 from apps.documents.utils import bulk_delete_collection_files
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.service_providers.models import LlmProvider
 from apps.utils.celery import TaskbadgerTaskWrapper
 
@@ -351,6 +351,7 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
         file=ContentFile(zip_buffer.getvalue(), name=zip_filename),
         content_type="application/zip",
         expiry_date=expiry_date,
+        purpose=FilePurpose.DATA_EXPORT,
     )
 
     logger.info(f"Created ZIP file {zip_file_obj.id} for collection {collection_id}")
