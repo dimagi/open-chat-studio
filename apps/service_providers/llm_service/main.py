@@ -190,7 +190,6 @@ class LlmService(pydantic.BaseModel):
             final_text = output_content
         elif isinstance(output_content, list):
             for output in output_content:
-                # Populate text
                 final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
                 annotation_entries = output.get("annotations", [])

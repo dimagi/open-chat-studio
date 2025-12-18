@@ -1,8 +1,12 @@
+from unittest.mock import Mock
+
+import pytest
 from langchain_classic.agents.output_parsers.tools import ToolAgentAction
 from langchain_core.agents import AgentStep
 from langchain_core.messages import AIMessage, FunctionMessage
 
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
+from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 
 
@@ -156,3 +160,47 @@ class TestParseOutputForAnthropic:
         ]
         expected = LlmChatResponse(text="Text with incomplete citations [Complete](https://example.com/complete)")
         assert parse_output_for_anthropic(output, session=None) == expected
+
+
+class TestDefaultParser:
+    @pytest.mark.parametrize(
+        ("llm_output", "expected_text"),
+        [
+            ("Hello, world!", "Hello, world!"),
+            ({"output": "Response from dict"}, "Response from dict"),
+            ({"some_key": "some_value"}, ""),
+            (["Hello", "world", "test"], "Hello\nworld\ntest"),
+            (
+                [{"text": "First part", "type": "text"}, {"text": "second part", "type": "text"}],
+                "First part\nsecond part",
+            ),
+        ],
+    )
+    def test_llm_output_parsing(self, llm_output, expected_text):
+        """Test various LLM output formats are parsed correctly"""
+        session = Mock(team_id=1)
+
+        parser = LlmService()
+        result = parser._default_parser(llm_output, session, include_citations=False)
+
+        assert result.text == expected_text
+        assert result.generated_files == set()
+        assert result.cited_files == set()
+
+    def test_llm_output_mixed_list_types_raises_error(self):
+        """Test that mixed list types (strings and dicts) raises TypeError"""
+        output = ["string", {"text": "dict"}]
+        session = Mock(team_id=1)
+        parser = LlmService()
+
+        with pytest.raises(TypeError, match="Unexpected mixed or unsupported list element types"):
+            parser._default_parser(output, session, include_citations=False)
+
+    def test_llm_output_unsupported_type_raises_error(self):
+        """Test that unsupported types raise TypeError"""
+        output = 12345  # Invalid type
+        session = Mock(team_id=1)
+        parser = LlmService()
+
+        with pytest.raises(TypeError, match="Unexpected llm_output type"):
+            parser._default_parser(output, session, include_citations=False)
