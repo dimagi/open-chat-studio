@@ -71,6 +71,16 @@ logger = logging.getLogger("ocs.pipelines.nodes")
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
+CODE_NODE_DOCS = f"{settings.DOCUMENTATION_BASE_URL}{settings.DOCUMENTATION_LINKS['node_code']}"
+DEFAULT_FUNCTION = f"""# You must define a main function, which takes the node input as a string.
+# Return a string to pass to the next node.
+
+# Learn more about Python nodes at {CODE_NODE_DOCS}
+
+def main(input: str, **kwargs) -> str:
+    return input
+"""
+
 
 class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     """Renders a Jinja template"""
@@ -737,17 +747,6 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             if assistant.tools_enabled:
                 logging.info("Tools have been disabled")
             return AssistantChat(adapter=adapter, history_manager=history_manager)
-
-
-CODE_NODE_DOCS = f"{settings.DOCUMENTATION_BASE_URL}{settings.DOCUMENTATION_LINKS['node_code']}"
-DEFAULT_FUNCTION = f"""# You must define a main function, which takes the node input as a string.
-# Return a string to pass to the next node.
-
-# Learn more about Python nodes at {CODE_NODE_DOCS}
-
-def main(input: str, **kwargs) -> str:
-    return input
-"""
 
 
 class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMixin):
