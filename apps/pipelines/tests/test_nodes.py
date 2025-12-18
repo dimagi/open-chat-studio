@@ -7,15 +7,17 @@ from pydantic_core import ValidationError
 
 from apps.chat.conversation import COMPRESSION_MARKER
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
-from apps.pipelines.nodes.nodes import (
-    HistoryMixin,
-    MaxHistoryLengthHistoryMiddleware,
-    OptionalInt,
+from apps.pipelines.nodes.history_middleware import MaxHistoryLengthHistoryMiddleware
+from apps.pipelines.nodes.mixins import (
     PipelineChatHistory,
-    SendEmail,
-    StructuredDataSchemaValidatorMixin,
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
+)
+from apps.pipelines.nodes.nodes import (
+    HistoryMixin,
+    OptionalInt,
+    SendEmail,
+    StructuredDataSchemaValidatorMixin,
 )
 
 
