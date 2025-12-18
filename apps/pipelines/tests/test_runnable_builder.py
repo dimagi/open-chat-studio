@@ -122,7 +122,6 @@ class TestEmailPipeline:
         assert mail.outbox[0].to == ["test@example.com"]
 
 
-
 class TestLLMResponse:
     """Tests for LLM response nodes"""
 
@@ -224,7 +223,6 @@ class TestLLMResponse:
         assert validated.llm_model_parameters == {"temperature": 0.7}
 
 
-
 class TestTemplateRendering:
     """Tests for template rendering nodes"""
 
@@ -238,7 +236,6 @@ class TestTemplateRendering:
 
         result = create_runnable(pipeline, nodes).invoke(PipelineState(messages=["Cycling"]))
         assert result["messages"][-1] == "Cycling is cool"
-
 
 
 class TestConditionalNode:
@@ -303,8 +300,6 @@ class TestConditionalNode:
         }
 
 
-
-
 class TestRouterNode:
     """Tests for router nodes (LLM-based routing)"""
 
@@ -317,7 +312,9 @@ class TestRouterNode:
 
         # Create a mock agent that returns structured output
         mock_agent = mock.Mock()
-        RouterOutput = create_model("RouterOutput", route=(Literal["A"], Field(description="Selected routing destination")))
+        RouterOutput = create_model(
+            "RouterOutput", route=(Literal["A"], Field(description="Selected routing destination"))
+        )
         mock_agent.invoke.return_value = {"structured_response": RouterOutput(route="A")}
         create_agent_mock.return_value = mock_agent
 
@@ -478,7 +475,9 @@ class TestRouterNode:
 
     @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-    def test_router_node_openai_refusal_uses_default_keyword(self, get_llm_service, provider, provider_model, experiment_session):
+    def test_router_node_openai_refusal_uses_default_keyword(
+        self, get_llm_service, provider, provider_model, experiment_session
+    ):
         refusing_llm = RefusingFakeLlmEcho(include_system_message=True)
         service = FakeLlmService(llm=refusing_llm, token_counter=FakeTokenCounter(token_counts=[0]))
         get_llm_service.return_value = service
@@ -505,8 +504,6 @@ class TestRouterNode:
         assert is_default_keyword
 
 
-
-
 class TestStaticRouterNode:
     """Tests for static router nodes (state-based routing without LLM)"""
 
@@ -524,7 +521,9 @@ def main(input, **kwargs):
 """
         start = start_node()
         code = code_node(code_set)
-        router = state_key_router_node("route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.temp_state)
+        router = state_key_router_node(
+            "route_to", ["first", "second"], data_source=StaticRouterNode.DataSource.temp_state
+        )
         template_a = render_template_node("A {{ input }}")
         template_b = render_template_node("B {{ input }}")
         end = end_node()
@@ -701,8 +700,6 @@ def main(input, **kwargs):
         assert output["messages"][-1] == "A Hi"
 
 
-
-
 class TestCodeNode:
     """Tests for code execution nodes"""
 
@@ -735,14 +732,14 @@ def main(input, **kwargs):
         assert output["messages"][-1] == "test.py,blog.md"
 
 
-
-
 class TestDataExtraction:
     """Tests for data extraction nodes"""
 
     @contextmanager
     def extract_structured_data_pipeline(self, provider, provider_model, pipeline, llm=None):
-        tool_response = AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": "John"}, id="123")], content="Hi")
+        tool_response = AIMessage(
+            tool_calls=[ToolCall(name="CustomModel", args={"name": "John"}, id="123")], content="Hi"
+        )
         service = build_fake_llm_service(responses=[tool_response], token_counts=[0], fake_llm=llm)
 
         with (
@@ -753,7 +750,9 @@ class TestDataExtraction:
         ):
             nodes = [
                 start_node(),
-                extract_structured_data_node(str(provider.id), str(provider_model.id), '{"name": "the name of the user"}'),
+                extract_structured_data_node(
+                    str(provider.id), str(provider_model.id), '{"name": "the name of the user"}'
+                ),
                 end_node(),
             ]
             runnable = create_runnable(pipeline, nodes)
@@ -900,12 +899,12 @@ class TestDataExtraction:
             ]
             runnable = create_runnable(pipeline, nodes)
             state = PipelineState(
-                messages=["ai: hi user\nhuman: hi there"], experiment_session=session, participant_data=initial_data or {}
+                messages=["ai: hi user\nhuman: hi there"],
+                experiment_session=session,
+                participant_data=initial_data or {},
             )
             result = runnable.invoke(state)
             return result["participant_data"]
-
-
 
 
 class TestAssistantNode:
@@ -1002,8 +1001,8 @@ class TestAssistantNode:
             runnable.invoke(state)
 
     @pytest.mark.django_db()
-    @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
-    def test_assistant_node_empty_metadata_handling(self, get_assistant_runnable, pipeline):
+    @patch("apps.service_providers.models.LlmProvider.get_llm_service")
+    def test_assistant_node_empty_metadata_handling(self, get_llm_service, pipeline):
         history_manager_mock = Mock()
         history_manager_mock.input_message_metadata = None
         history_manager_mock.output_message_metadata = None
@@ -1027,8 +1026,6 @@ class TestAssistantNode:
         assert output_state["input_message_metadata"] == {}
         assert output_state["output_message_metadata"] == {}
         assert output_state["messages"][-1] == "How are you doing?"
-
-
 
 
 class TestPipelineValidation:
@@ -1221,8 +1218,6 @@ class TestPipelineValidation:
         assert output["messages"][-1] == "T: not hello"
 
 
-
-
 class TestPipelineStateHelpers:
     """Tests for PipelineState helper methods and utilities"""
 
@@ -1325,6 +1320,3 @@ class TestPipelineStateHelpers:
 class RefusingFakeLlmEcho(FakeLlmEcho):
     def invoke(self, *args, **kwargs):
         raise OpenAIRefusalError("Refused by OpenAI")
-
-
-
