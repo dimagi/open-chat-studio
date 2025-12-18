@@ -110,18 +110,6 @@
     });
   }
 
-  // Load celery_progress.js if not already loaded, then initialize
-  if (typeof CeleryProgressBar === 'undefined') {
-    const script = document.createElement('script');
-    script.src = "{% static 'celery_progress/celery_progress.js' %}";
-    script.onload = initProgressTracking;
-    script.onerror = () => {
-      document.getElementById('error-message').textContent = 'Failed to load progress tracking. Please refresh the page.';
-      document.getElementById('download-error-section').classList.remove('hidden');
-      document.querySelector('.progress-wrapper').classList.add('hidden');
-    };
-    document.head.appendChild(script);
-  } else {
-    initProgressTracking();
-  }
+  // Initialize progress tracking
+  initProgressTracking();
 </script>
