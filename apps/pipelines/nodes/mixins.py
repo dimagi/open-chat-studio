@@ -287,6 +287,11 @@ class RouterMixin(BaseModel):
         json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
+    def ensure_keywords_are_lower_case(self, value) -> list[str]:
+        if isinstance(value, list):
+            return [str(v).lower() for v in value]
+        return []
+
     @field_validator("keywords")
     def ensure_keywords_are_lowercase(cls, value):
         if isinstance(value, list):
