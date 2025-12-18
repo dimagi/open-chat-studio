@@ -35,9 +35,17 @@ class FileStatus(models.TextChoices):
     FAILED = "failed", _("Failed")
 
 
-class CollectionFileManager(models.Manager):
+class CollectionFileQuerySet(models.QuerySet):
     def is_manually_uploaded(self):
         return self.filter(document_source__isnull=True)
+
+
+class CollectionFileManager(models.Manager):
+    def get_queryset(self):
+        return CollectionFileQuerySet(self.model, using=self._db)
+
+    def is_manually_uploaded(self):
+        return self.get_queryset().is_manually_uploaded()
 
 
 class CollectionFile(models.Model):
