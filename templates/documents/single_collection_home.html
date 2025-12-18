@@ -90,9 +90,15 @@
                       hx-swap="innerHTML"
                       class="join-item">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-sm btn-primary">
-                    <i class="fa-solid fa-download"></i> Download All Files ({{ manually_uploaded_files_count }})
+                  <button type="submit"
+                          class="btn btn-sm btn-primary"
+                          aria-describedby="download-files-desc"
+                          title="Download files which were uploaded manually. This excludes files from Document Sources.">
+                    <i class="fa-solid fa-download"></i> Download Files ({{ manually_uploaded_files_count }})
                   </button>
+                  <span id="download-files-desc" class="sr-only">
+                    Download files which were uploaded manually. This excludes files from Document Sources.
+                  </span>
                 </form>
               {% endif %}
 
