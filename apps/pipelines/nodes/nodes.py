@@ -601,7 +601,7 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
 
         result_lower = result.lower()
         for keyword in self.keywords:
-            if keyword.lower() == result_lower:
+            if keyword == result_lower:
                 return keyword, False
         return self.keywords[self.default_keyword_index], True
 

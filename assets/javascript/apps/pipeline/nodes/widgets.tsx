@@ -654,6 +654,7 @@ export function KeywordsWidget(props: WidgetParams) {
   }
 
   const updateKeyword = (index: number, value: string) => {
+    value = value.toLowerCase();
     setNode(props.nodeId, (old) => {
         const updatedList = [...(old.data.params["keywords"] || [])];
         updatedList[index] = value;

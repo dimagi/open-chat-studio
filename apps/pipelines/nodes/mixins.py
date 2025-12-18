@@ -288,6 +288,12 @@ class RouterMixin(BaseModel):
     )
 
     @field_validator("keywords")
+    def ensure_keywords_are_lowercase(cls, value):
+        if isinstance(value, list):
+            return [entry.lower() for entry in value]
+        return []
+
+    @field_validator("keywords")
     def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
         if not all(entry for entry in value):
             raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")

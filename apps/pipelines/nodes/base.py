@@ -438,6 +438,8 @@ class PipelineRouterNode(BasePipelineNode):
             state = self._prepare_state(self.node_id, incoming_edges, state)
 
             conditional_branch, is_default_keyword = self._process_conditional(state)
+            # Force the LLM conditional branch to be lower case for matching
+            conditional_branch = conditional_branch.lower()
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch, is_default_keyword)
             # edge map won't contain the conditional branch if that handle isn't connected to another node
