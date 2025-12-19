@@ -27,6 +27,7 @@ from django.db.models import (
     When,
     functions,
 )
+from django.db.models.expressions import RawSQL
 from django.db.models.functions import Coalesce
 from django.template.loader import get_template
 from django.urls import reverse
@@ -1677,8 +1678,6 @@ class ExperimentSessionQuerySet(models.QuerySet):
 
     def annotate_with_versions_list(self):
         """Annotate queryset with a comma-separated list of experiment versions (e.g., 'v1, v2, v3')."""
-        from django.db.models.expressions import RawSQL
-
         # Transform [1, 2, 3] -> ['v1', 'v2', 'v3']
         return self.annotate(
             versions_list=Coalesce(
