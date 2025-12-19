@@ -24,6 +24,7 @@ class FilePurpose(models.TextChoices):
     ASSISTANT = "assistant", "Assistant"
     COLLECTION = "collection", "Collection"
     EVALUATION_DATASET = "evaluation_dataset", "Evaluation Dataset"
+    DATA_EXPORT = "data_export", "Data Export"
 
 
 class FileObjectManager(VersionsObjectManagerMixin, models.Manager):

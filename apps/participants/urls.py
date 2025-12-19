@@ -36,6 +36,7 @@ urlpatterns = [
     path("participants/import/", views.import_participants, name="import"),
     path("participants/export/", views.export_participants, name="export"),
     path("participants/<int:pk>/delete/", views.DeleteParticipant.as_view(), name="participant_delete"),
+    path("<int:participant_id>/trigger_bot/", views.trigger_bot, name="trigger_bot"),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Participant", "participant", edit=False, delete=False, new=False))

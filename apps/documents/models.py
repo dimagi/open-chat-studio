@@ -35,6 +35,19 @@ class FileStatus(models.TextChoices):
     FAILED = "failed", _("Failed")
 
 
+class CollectionFileQuerySet(models.QuerySet):
+    def is_manually_uploaded(self):
+        return self.filter(document_source__isnull=True)
+
+
+class CollectionFileManager(models.Manager):
+    def get_queryset(self):
+        return CollectionFileQuerySet(self.model, using=self._db)
+
+    def is_manually_uploaded(self):
+        return self.get_queryset().is_manually_uploaded()
+
+
 class CollectionFile(models.Model):
     file = models.ForeignKey("files.File", on_delete=models.CASCADE)
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
@@ -42,6 +55,8 @@ class CollectionFile(models.Model):
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
     metadata = SchemaField(schema=CollectionFileMetadata, null=True)
     external_id = models.CharField(max_length=255, blank=True, help_text="ID of file in document source")
+
+    objects = CollectionFileManager()
 
     def __str__(self) -> str:
         return f"{self.file.name} in {self.collection.name}"

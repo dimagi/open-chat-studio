@@ -174,6 +174,7 @@ def chip_action(
     label_factory: Callable[[Any, Any], str] = None,
     required_permissions: list = None,
     display_condition: callable = None,
+    enabled_condition: callable = None,
     url_factory: Callable[[Any, Any, Any, Any], str] = None,
     icon_class: str = None,
     button_style: str = "",
@@ -205,6 +206,7 @@ def chip_action(
         button_style=button_style,
         required_permissions=required_permissions,
         display_condition=display_condition,
+        enabled_condition=enabled_condition,
         open_url_in_new_tab=open_url_in_new_tab,
     )
 

@@ -368,7 +368,7 @@ class EvaluationRun(BaseTeamModel):
             )
             if result.output.get("error"):
                 table_by_message[result.message.id]["error"] = result.output.get("error")
-        return table_by_message.values()
+        return [{"#": index, **row} for index, row in enumerate(table_by_message.values())]
 
 
 class EvaluationResult(BaseTeamModel):
