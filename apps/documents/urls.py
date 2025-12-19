@@ -10,6 +10,7 @@ urlpatterns = [
     path("collections/<int:pk>/query_view", views.QueryView.as_view(), name="query_collection_view"),
     path("collections/<int:pk>/query", views.query_collection, name="collection_query"),
     path("collections/<int:pk>/add_files", views.add_collection_files, name="add_collection_files"),
+    path("collections/<int:pk>/download", views.download_collection_files, name="download_collection_files"),
     path(
         "collections/<int:pk>/files/<int:file_id>/delete",
         views.delete_collection_file_view,
