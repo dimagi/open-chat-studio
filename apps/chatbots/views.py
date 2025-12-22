@@ -223,7 +223,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
         last_activity_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .exclude(platform=ChannelPlatform.EVALUATIONS)
             .order_by("-last_activity_at")
             .values("last_activity_at")[:1]
         )
