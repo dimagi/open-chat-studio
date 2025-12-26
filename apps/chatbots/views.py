@@ -199,7 +199,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
         session_count_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
@@ -207,7 +207,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
         participant_count_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
             .values("count")
@@ -215,7 +215,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
         interaction_count_subquery = (
             Trace.objects.filter(experiment=OuterRef("pk"))
-            .exclude(session__experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .exclude(session__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
@@ -223,7 +223,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
 
         last_activity_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            .exclude(platform=ChannelPlatform.EVALUATIONS)
             .order_by("-last_activity_at")
             .values("last_activity_at")[:1]
         )
