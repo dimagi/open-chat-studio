@@ -288,7 +288,6 @@ class TestDistinctComplexFiltering:
             participant=participant,
             team=team,
             experiment_channel=channel,
-            platform=channel.platform,
         )
 
         # Add messages

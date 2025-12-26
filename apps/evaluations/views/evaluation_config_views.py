@@ -214,6 +214,8 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
                 "evaluations:evaluation_results_table",
                 args=[team_slug, kwargs["evaluation_pk"], kwargs["evaluation_run_pk"]],
             )
+            # Add total results count
+            context["total_results"] = evaluation_run.results.count()
             if evaluation_run.status == EvaluationRunStatus.COMPLETED:
                 aggregates = evaluation_run.aggregates.select_related("evaluator").all()
                 context["aggregates"] = filter_aggregates_for_display(aggregates)
@@ -259,11 +261,15 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
     def get_column(self, key):
         def session_url_factory(_, __, record, value):
             if not value or not self.evaluation_run.generation_experiment_id:
-                return ""
+                return "#"  # Return placeholder URL to ensure button is rendered
             return reverse(
                 "chatbots:chatbot_session_view",
                 args=[self.kwargs["team_slug"], self.evaluation_run.generation_experiment.public_id, value],
             )
+
+        def session_enabled_condition(_, record):
+            # Check if session value exists (not empty string)
+            return bool(record.get("session"))
 
         header = key.replace("_", " ").title()
         match key:
@@ -271,7 +277,11 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                 return actions.ActionsColumn(
                     verbose_name=header,
                     actions=[
-                        actions.chip_action(label="Session", url_factory=session_url_factory),
+                        actions.chip_action(
+                            label="Session",
+                            url_factory=session_url_factory,
+                            enabled_condition=session_enabled_condition,
+                        ),
                     ],
                     align="right",
                 )

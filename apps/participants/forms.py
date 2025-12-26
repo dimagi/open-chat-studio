@@ -3,6 +3,7 @@ import logging
 from django import forms
 
 from apps.experiments.models import Experiment, Participant
+from apps.utils.json import PrettyJSONEncoder
 
 logger = logging.getLogger("ocs.participants")
 
@@ -79,3 +80,45 @@ class ParticipantExportForm(forms.Form):
         super().__init__(*args, **kwargs)
         if team:
             self.fields["experiment"].queryset = Experiment.objects.filter(team=team, working_version__isnull=True)
+
+
+class TriggerBotForm(forms.Form):
+    prompt_text = forms.CharField(
+        label="Prompt Text",
+        widget=forms.Textarea(attrs={"rows": 4}),
+        help_text="The prompt to send to the bot",
+        required=True,
+    )
+    experiment = forms.ModelChoiceField(
+        label="Select Chatbot",
+        queryset=Experiment.objects.none(),
+        required=True,
+        help_text="Select the chatbot to trigger",
+    )
+    start_new_session = forms.BooleanField(
+        label="Start a new session",
+        required=False,
+        initial=False,
+        help_text="End any previous sessions and start a new one",
+    )
+    session_data = forms.JSONField(
+        label="Session Data (JSON)",
+        widget=forms.HiddenInput(),
+        required=False,
+        encoder=PrettyJSONEncoder,
+        initial={},
+    )
+
+    def __init__(self, *args, **kwargs):
+        participant = kwargs.pop("participant", None)
+        team = participant.team
+        super().__init__(*args, **kwargs)
+        if team and participant:
+            # Filter experiments to those that have a channel matching the participant's platform
+            # This excludes the web channel, since we can't trigger bots on web participants
+            self.fields["experiment"].queryset = Experiment.objects.filter(
+                team=team,
+                is_version=False,
+                experimentchannel__platform=participant.platform,
+                experimentchannel__deleted=False,
+            )

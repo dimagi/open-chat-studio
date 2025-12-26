@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from django.contrib.auth.models import Permission
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -14,9 +16,11 @@ from apps.chatbots.views import (
     chatbot_session_pagination_view,
     home,
 )
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.events.models import StaticTriggerType
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
+from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
 @pytest.mark.django_db()
@@ -298,3 +302,37 @@ def test_chatbot_sessions_table_view(team_with_users):
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
     assert response.status_code == 200
     assert isinstance(response.context_data["table"], ChatbotSessionsTable)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("fire_end_event", [True, False])
+@patch("apps.events.tasks.enqueue_static_triggers")
+def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    session = ExperimentSessionFactory(
+        participant__identifier="participant@example.com",
+        participant__platform="web",
+        team=team,
+        status=SessionStatus.ACTIVE,
+    )
+
+    url = reverse(
+        "chatbots:chatbot_end_session",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    post_data = {}
+    if fire_end_event:
+        post_data["fire_end_event"] = "on"
+    response = client.post(url, post_data)
+
+    assert response.status_code == 302
+    session.refresh_from_db()
+    assert session.status == SessionStatus.PENDING_REVIEW
+    assert session.ended_at is not None
+    if fire_end_event:
+        enqueue_static_triggers_task.delay.assert_called_once_with(session.id, StaticTriggerType.CONVERSATION_END)
+    else:
+        enqueue_static_triggers_task.delay.assert_not_called()

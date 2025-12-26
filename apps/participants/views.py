@@ -11,9 +11,11 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
+from apps.api.tasks import trigger_bot_message_task
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.filters.models import FilterSet
-from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm
+from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm, TriggerBotForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -32,6 +34,33 @@ IMPORT_PERMISSIONS = [
     "experiments.add_participantdata",
     "experiments.change_participantdata",
 ]
+
+
+def single_participant_home_context(context: dict, participant_id: int, experiment_id: int | None = None) -> dict:
+    """A helper function to build context for a single participant's home view."""
+    participant = get_object_or_404(Participant, pk=participant_id)
+    context["active_tab"] = "participants"
+    context["participant"] = participant
+    context["experiments"] = participant.get_experiments_for_display()
+    sessions = []
+
+    if experiment_id:
+        sessions = participant.experimentsession_set.filter(experiment_id=experiment_id).all()
+        context["session_table"] = ExperimentSessionsTable(
+            sessions,
+            extra_columns=[("participant", None)],  # remove participant column
+        )
+        context["selected_experiment_id"] = experiment_id
+        data = participant.get_data_for_experiment(experiment_id)
+        context["participant_data"] = json.dumps(data, indent=4)
+        context["participant_schedules"] = participant.get_schedules_for_experiment(
+            experiment_id, as_dict=True, include_inactive=True
+        )
+
+    context["participant"] = participant
+    if participant.platform not in ChannelPlatform.team_global_platforms():
+        context["trigger_bot_form"] = TriggerBotForm(participant=participant)
+    return context
 
 
 class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -117,29 +146,12 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
     template_name = "participants/single_participant_home.html"
 
     def get_context_data(self, *args, **kwargs):
-        context = super().get_context_data(*args, **kwargs)
-        participant = get_object_or_404(Participant, pk=self.kwargs["participant_id"])
-        context["active_tab"] = "participants"
-        context["participant"] = participant
+        initial_context = super().get_context_data(*args, **kwargs)
+        participant_id = self.kwargs["participant_id"]
         experiment_id = self.kwargs.get("experiment_id")
-        context["selected_experiment_id"] = experiment_id
-
-        context["experiments"] = participant.get_experiments_for_display()
-        sessions = []
-        if experiment_id:
-            sessions = participant.experimentsession_set.filter(experiment_id=experiment_id).all()
-        context["session_table"] = ExperimentSessionsTable(
-            sessions,
-            extra_columns=[("participant", None)],  # remove participant column
+        return single_participant_home_context(
+            initial_context, participant_id=participant_id, experiment_id=experiment_id
         )
-        data = participant.get_data_for_experiment(experiment_id)
-        context["participant_data"] = json.dumps(data, indent=4)
-        context["participant_schedules"] = (
-            participant.get_schedules_for_experiment(experiment_id, as_dict=True, include_inactive=True)
-            if experiment_id
-            else []
-        )
-        return context
 
 
 class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -297,3 +309,39 @@ class DeleteParticipant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         participant.delete()
         messages.success(request, "Participant deleted")
         return HttpResponse()
+
+
+@login_and_team_required
+@permission_required(["experiments.change_participant"])
+@require_POST
+def trigger_bot(request, team_slug: str, participant_id: int):
+    """
+    Trigger a bot to send a message to a participant
+    """
+    participant = get_object_or_404(Participant, id=participant_id, team=request.team)
+    form = TriggerBotForm(request.POST, participant=participant)
+
+    if not form.is_valid():
+        messages.error(request, "Please check the form for errors")
+        context = single_participant_home_context({}, participant_id=participant_id)
+        context["trigger_bot_form"] = form
+        return render(request, "participants/single_participant_home.html", context=context)
+
+    experiment = form.cleaned_data["experiment"]
+    prompt_text = form.cleaned_data["prompt_text"]
+    start_new_session = form.cleaned_data["start_new_session"]
+    session_data = form.cleaned_data.get("session_data", {})
+
+    data = {
+        "identifier": participant.identifier,
+        "platform": participant.platform,
+        "experiment": str(experiment.public_id),
+        "prompt_text": prompt_text,
+        "start_new_session": start_new_session,
+        "session_data": session_data,
+    }
+
+    trigger_bot_message_task.delay(data)
+
+    messages.success(request, f"Bot message triggered for {participant}")
+    return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)

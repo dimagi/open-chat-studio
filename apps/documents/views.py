@@ -85,9 +85,11 @@ def single_collection_home(request, team_slug: str, pk: int):
 
     document_sources = DocumentSource.objects.working_versions_queryset().filter(collection=collection)
     collection_files_count = CollectionFile.objects.filter(collection=collection).count()
+    manually_uploaded_files_count = CollectionFile.objects.filter(collection=collection).is_manually_uploaded().count()
     context = {
         "collection": collection,
         "collection_files_count": collection_files_count,
+        "manually_uploaded_files_count": manually_uploaded_files_count,
         "document_sources": document_sources,
         "collections_supported_file_types": settings.SUPPORTED_FILE_TYPES["collections"],
         "file_search_supported_file_types": settings.SUPPORTED_FILE_TYPES["file_search"],
@@ -411,6 +413,34 @@ def get_collection_file_status(request, team_slug: str, collection_id: int, pk: 
             "team": request.team,
         },
     )
+
+
+@require_POST
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def download_collection_files(request, team_slug: str, pk: int):
+    """
+    Start a background task to create a ZIP of all manually uploaded files.
+    Returns HTML snippet with task_id for progress tracking.
+    """
+    collection = get_object_or_404(Collection, id=pk, team__slug=team_slug)
+    manually_uploaded_count = CollectionFile.objects.filter(collection=collection, document_source__isnull=True).count()
+
+    if manually_uploaded_count == 0:
+        messages.error(request, "No manually uploaded files to download.")
+        return HttpResponse(status=204)  # No content, will trigger htmx to do nothing
+
+    # Start the task
+    task = tasks.create_collection_zip_task.delay(collection.id, request.team.id)
+
+    context = {
+        "task_id": task.task_id,
+        "collection": collection,
+        "team": request.team,
+        "manually_uploaded_files_count": manually_uploaded_count,
+    }
+
+    return render(request, "documents/partials/download_progress.html", context)
 
 
 class CollectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):

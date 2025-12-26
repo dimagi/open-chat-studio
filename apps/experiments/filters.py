@@ -176,7 +176,7 @@ class ExperimentSessionFilter(MultiColumnFilter):
 
     def prepare_queryset(self, queryset):
         """Prepare the queryset by annotating with first message timestamp."""
-        return queryset.annotate_with_first_message_created_at()  # ok
+        return queryset.annotate_with_first_message_created_at()
 
 
 class ChatMessageFilter(MultiColumnFilter):
