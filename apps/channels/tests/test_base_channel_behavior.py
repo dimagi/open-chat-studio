@@ -89,6 +89,27 @@ def test_incoming_message_adds_channel_info(test_channel):
 
 
 @pytest.mark.django_db()
+def test_incoming_message_adds_version_on_session(test_channel):
+    """When a `message` is sent, the experiment version should be added saved on `experiment_session`"""
+    chat_id = "123123"
+    experiment = ExperimentFactory()
+
+    # Creating the v1 and send msg on experiment
+    exp_v1 = experiment.create_new_version(is_copy=False)
+    test_channel.experiment = exp_v1
+    message = base_messages.text_message(participant_id=chat_id)
+    _send_user_message_on_channel(test_channel, message)
+    assert test_channel.experiment_session.experiment_versions == [1]
+
+    # Creating the v2 and send msg on experiment
+    exp_v2 = experiment.create_new_version()
+    test_channel.experiment = exp_v2
+    message = base_messages.text_message(participant_id=chat_id)
+    _send_user_message_on_channel(test_channel, message)
+    assert test_channel.experiment_session.experiment_versions == [1, 2]
+
+
+@pytest.mark.django_db()
 def test_channel_added_for_experiment_session(test_channel):
     """Ensure that the experiment session gets a link to the experimentt channel that this is using"""
     chat_id = "123123"

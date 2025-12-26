@@ -260,7 +260,7 @@ def get_base_session_queryset(request):
     # Build the query with basic filtering only
     query_set = ExperimentSession.objects.filter(team=request.team).filter(has_messages)
 
-    # Apply session filter (this will add first_message_created_at and last_message_created_at)
+    # Apply session filter (this will add first_message_created_at)
     session_filter = ExperimentSessionFilter()
     query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
 

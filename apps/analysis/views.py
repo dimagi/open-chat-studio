@@ -100,7 +100,7 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
         return context
 
     def get_table(self):
-        queryset = self.object.sessions.all().annotate_with_last_message_created_at()
+        queryset = self.object.sessions.all()
         table = ExperimentSessionsTable(data=queryset)
         return RequestConfig(self.request).configure(table)
 

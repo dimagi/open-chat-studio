@@ -125,3 +125,4 @@ class ExperimentSessionFactory(factory.django.DjangoModelFactory):
     experiment_channel = factory.SubFactory(
         "apps.utils.factories.channels.ExperimentChannelFactory", team=factory.SelfAttribute("..team")
     )
+    platform = factory.LazyAttribute(lambda obj: obj.experiment_channel.platform)

@@ -1,4 +1,3 @@
-import operator
 from collections.abc import Sequence
 from typing import ClassVar
 
@@ -108,28 +107,22 @@ class VersionsFilter(ChoiceColumnFilter):
         single_experiment = kwargs.get("single_experiment")
         self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)
 
-    def _get_messages_queryset(self, tags, operator):
-        combined_query = Q()
-        for tag in tags:
-            queryset = ChatMessage.objects.filter(
-                chat=OuterRef("chat"),
-                tags__name=tag,
-                tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION,
-            ).values("id")
-            combined_query = operator(combined_query, Q(Exists(queryset)))
-        return combined_query
+    def _get_version_numbers(self, version_names):
+        """Convert version names to numbers removing the 'v' prefix from 'v1'."""
+        return [int(name.replace("v", "")) for name in version_names]
 
     def apply_any_of(self, queryset, value, timezone=None):
-        combined_query = self._get_messages_queryset(value, operator.or_)
-        return queryset.filter(combined_query)
+        version_numbers = self._get_version_numbers(value)
+        qs = queryset.filter(experiment_versions__overlap=version_numbers)
+        return qs
 
     def apply_excludes(self, queryset, value, timezone=None):
-        combined_query = self._get_messages_queryset(value, operator.or_)
-        return queryset.exclude(combined_query)
+        version_numbers = self._get_version_numbers(value)
+        return queryset.exclude(experiment_versions__overlap=version_numbers)
 
     def apply_all_of(self, queryset, value, timezone=None):
-        combined_query = self._get_messages_queryset(value, operator.and_)
-        return queryset.filter(combined_query)
+        version_numbers = self._get_version_numbers(value)
+        return queryset.filter(experiment_versions__contains=version_numbers)
 
 
 class MessageVersionsFilter(VersionsFilter):
@@ -150,7 +143,7 @@ class MessageVersionsFilter(VersionsFilter):
 class ChannelsFilter(ChoiceColumnFilter):
     query_param: str = "channels"
     label: str = "Channels"
-    column: str = "experiment_channel__platform"
+    column: str = "platform"
 
     def prepare(self, team, **_):
         self.options = ChannelPlatform.for_filter(team)
@@ -170,7 +163,7 @@ class ExperimentSessionFilter(MultiColumnFilter):
 
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
-        TimestampFilter(label="Last Message", column="last_message_created_at", query_param="last_message"),
+        TimestampFilter(label="Last Message", column="last_activity_at", query_param="last_message"),
         TimestampFilter(label="First Message", column="first_message_created_at", query_param="first_message"),
         TimestampFilter(label="Message Date", column="chat__messages__created_at", query_param="message_date"),
         ChatMessageTagsFilter(),
@@ -182,8 +175,8 @@ class ExperimentSessionFilter(MultiColumnFilter):
     ]
 
     def prepare_queryset(self, queryset):
-        """Prepare the queryset by annotating with first and last message timestamps."""
-        return queryset.annotate_with_last_message_created_at().annotate_with_first_message_created_at()
+        """Prepare the queryset by annotating with first message timestamp."""
+        return queryset.annotate_with_first_message_created_at()
 
 
 class ChatMessageFilter(MultiColumnFilter):
