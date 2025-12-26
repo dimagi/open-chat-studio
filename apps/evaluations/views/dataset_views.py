@@ -49,6 +49,7 @@ from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
@@ -393,6 +394,10 @@ def update_message(request, team_slug, message_id):
     message.metadata["experiment_id"] = None
 
     message.save()
+
+    dataset = message.evaluationdataset_set.first()
+    if dataset:
+        return render_table_row(request, DatasetMessagesTable, message)
 
     return HttpResponse("", status=200)
 
