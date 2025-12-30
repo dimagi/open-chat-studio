@@ -17,6 +17,7 @@ from django.utils import timezone
 from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
+from django_htmx.http import reswap, retarget
 from django_tables2 import LazyPaginator, SingleTableView
 
 from apps.chat.models import ChatMessage
@@ -49,6 +50,7 @@ from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
@@ -260,7 +262,7 @@ def get_base_session_queryset(request):
     # Build the query with basic filtering only
     query_set = ExperimentSession.objects.filter(team=request.team).filter(has_messages)
 
-    # Apply session filter (this will add first_message_created_at and last_message_created_at)
+    # Apply session filter (this will add first_message_created_at)
     session_filter = ExperimentSessionFilter()
     query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
 
@@ -363,13 +365,11 @@ def edit_message_modal(request, team_slug, message_id):
 def update_message(request, team_slug, message_id):
     """Handle form submission to update message"""
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
-
     form_data = _get_message_form_data(request)
     errors, data = _get_message_data_and_errors(form_data)
 
     if errors:
         update_url = reverse("evaluations:update_message", args=[team_slug, message_id])
-
         return render(
             request,
             "evaluations/edit_message_modal_content.html",
@@ -382,18 +382,23 @@ def update_message(request, team_slug, message_id):
             status=200,
         )
 
+    # Update the message
     for attr, val in data.items():
         setattr(message, attr, val)
-
-    # Clear chat message references since this is now manually edited
     message.input_chat_message = None
     message.expected_output_chat_message = None
     message.metadata = message.metadata or {}
     message.metadata["session_id"] = None
     message.metadata["experiment_id"] = None
-
     message.save()
 
+    dataset = message.evaluationdataset_set.first()
+    if dataset:
+        response = render_table_row(request, DatasetMessagesTable, message)
+        # Change target to the table row for successful updates
+        response = retarget(response, f"#record-{message_id}")
+        response = reswap(response, "outerHTML")
+        return response
     return HttpResponse("", status=200)
 
 

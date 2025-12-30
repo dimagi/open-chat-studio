@@ -21,10 +21,11 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import WebChannel
+from apps.chat.channels import ChannelBase, WebChannel
 from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
+from apps.chatbots.tasks import send_bot_message
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.filters import (
     ExperimentSessionFilter,
@@ -101,32 +102,26 @@ def chatbots_settings(request, team_slug, experiment_id):
         form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
         if form.is_valid():
             form.save()
-            context.update(
-                {
-                    "edit_mode": False,
-                    "form": form,
-                    "updated": True,
-                }
-            )
+            context.update({
+                "edit_mode": False,
+                "form": form,
+                "updated": True,
+            })
 
         else:
-            context.update(
-                {
-                    "edit_mode": True,
-                    "form": form,
-                    "updated": False,
-                    "team_participant_identifiers": team_participant_identifiers,
-                }
-            )
-    else:
-        form = ChatbotSettingsForm(request=request, instance=experiment)
-        context.update(
-            {
+            context.update({
                 "edit_mode": True,
                 "form": form,
+                "updated": False,
                 "team_participant_identifiers": team_participant_identifiers,
-            }
-        )
+            })
+    else:
+        form = ChatbotSettingsForm(request=request, instance=experiment)
+        context.update({
+            "edit_mode": True,
+            "form": form,
+            "team_participant_identifiers": team_participant_identifiers,
+        })
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
@@ -179,7 +174,8 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
         queryset = (
-            self.model.objects.get_all()
+            self.model.objects
+            .get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
             .select_related("team")
         )
@@ -198,34 +194,38 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
             )
 
         session_count_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            ExperimentSession.objects
+            .filter(experiment_id=OuterRef("pk"))
+            .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
         )
 
         participant_count_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            ExperimentSession.objects
+            .filter(experiment_id=OuterRef("pk"))
+            .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
             .values("count")
         )
 
         interaction_count_subquery = (
-            Trace.objects.filter(experiment=OuterRef("pk"))
-            .exclude(session__experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+            Trace.objects
+            .filter(experiment=OuterRef("pk"))
+            .exclude(session__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
         )
 
         last_activity_subquery = (
-            Trace.objects.filter(experiment=OuterRef("pk"))
-            .exclude(session__experiment_channel__platform=ChannelPlatform.EVALUATIONS)
-            .order_by("-timestamp")
-            .values("timestamp")[:1]
+            ExperimentSession.objects
+            .filter(experiment_id=OuterRef("pk"))
+            .exclude(platform=ChannelPlatform.EVALUATIONS)
+            .order_by("-last_activity_at")
+            .values("last_activity_at")[:1]
         )
 
         # Add expensive annotations only to paginated data
@@ -491,7 +491,7 @@ class ChatbotSessionsTableView(ExperimentSessionsTableView):
     def get_table_data(self):
         """Add message_count annotation to the paginated data."""
         queryset = super().get_table_data()
-        return queryset.annotate_with_message_count().annotate_with_last_message_created_at()
+        return queryset.annotate_with_message_count()
 
     def get_table(self, **kwargs):
         """
@@ -531,6 +531,44 @@ def end_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
     experiment_session.end(propagate=propagate_event)
     messages.success(request, "Session ended")
     return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("experiments.change_experimentsession", raise_exception=True)
+def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    old_session = get_object_or_404(
+        ExperimentSession,
+        experiment__public_id=experiment_id,
+        external_id=session_id,
+        team=request.team,
+    )
+    experiment_channel = old_session.experiment_channel
+    if experiment_channel.platform == ChannelPlatform.WEB:
+        # It doesn't make sense to create new web sessions
+        messages.error(request, "Cannot create a new session from a web session.")
+        return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
+
+    propagate_event = request.POST.get("fire_end_event") == "on"
+    old_session.end(propagate=propagate_event)
+
+    experiment = old_session.experiment
+    participant = old_session.participant
+
+    # Create new session using the same channel as the old session
+    channel_cls = ChannelBase.get_channel_class_for_platform(experiment_channel.platform)
+    new_session = channel_cls.start_new_session(
+        working_experiment=experiment,
+        participant_identifier=participant.identifier,
+        participant_user=participant.user,
+        session_status=SessionStatus.ACTIVE,
+        experiment_channel=experiment_channel,
+    )
+
+    send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
+
+    messages.success(request, "New session created")
+    return redirect("chatbots:chatbot_session_view", team_slug, experiment.public_id, new_session.external_id)
 
 
 @login_and_team_required

@@ -918,6 +918,7 @@ class WebChannel(ChannelBase):
         timezone: str | None = None,
         version: int = Experiment.DEFAULT_VERSION_NUMBER,
         metadata: dict | None = None,
+        **kwargs,
     ):
         experiment_channel = ExperimentChannel.objects.get_team_web_channel(working_experiment.team)
         session = super().start_new_session(

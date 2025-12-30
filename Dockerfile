@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/root/.cache \
       --group prod \
       --compile-bytecode
 
-FROM node:22 AS build-node
+FROM node:24 AS build-node
 RUN nodejs -v && npm -v
 WORKDIR /code
 

@@ -62,15 +62,12 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     "allauth",  # allauth account/registration management
     "allauth.account",
+    "allauth.mfa",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.microsoft",
     "django_htmx",
     "django_browser_reload",
-    "django_otp",
-    "django_otp.plugins.otp_totp",
-    "django_otp.plugins.otp_static",
     "django_watchfiles",
-    "allauth_2fa",
     "rest_framework",
     "drf_spectacular",
     "rest_framework_api_key",
@@ -146,7 +143,6 @@ MIDDLEWARE = list(
             "django.middleware.common.CommonMiddleware",
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
-            "django_otp.middleware.OTPMiddleware",
             "django_htmx.middleware.HtmxMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
@@ -277,13 +273,11 @@ if SIGNUP_ENABLED:
     ACCOUNT_ADAPTER = "apps.teams.adapter.AcceptInvitationAdapter"
 else:
     ACCOUNT_ADAPTER = "apps.teams.adapter.NoNewUsersAccountAdapter"
-ACCOUNT_AUTHENTICATION_METHOD = "email"
-ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*"]
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 ACCOUNT_CONFIRM_EMAIL_ON_GET = False
 ACCOUNT_UNIQUE_EMAIL = True
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE = False
 ACCOUNT_SESSION_REMEMBER = True
 ACCOUNT_LOGOUT_ON_GET = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
@@ -301,11 +295,14 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
+# Multi-Factor Authentication
+MFA_ADAPTER = "apps.users.adapter.MfaAdapter"
+MFA_RECOVERY_CODE_COUNT = 10
+MFA_TOTP_ISSUER = "Open Chat Studio"
+
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
 ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="optional")
-
-ALLAUTH_2FA_ALWAYS_REVEAL_BACKUP_TOKENS = False
 
 AUTHENTICATION_BACKENDS = (
     # check permissions exist (DEBUG only)
@@ -670,6 +667,7 @@ DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.ope
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 
 # Django Field Audit
+FIELD_AUDIT_ENABLED = not IS_TESTING
 FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
 FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
     "account_reset_password_from_key",

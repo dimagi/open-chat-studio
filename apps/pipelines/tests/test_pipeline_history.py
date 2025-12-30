@@ -34,7 +34,7 @@ def experiment_session():
     return ExperimentSessionFactory()
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_session):
     llm = FakeLlmEcho()
@@ -105,7 +105,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     ] == expected_call_messages
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, experiment_session):
     llm = FakeLlmEcho()
@@ -181,13 +181,7 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
     ] == expected_call_messages
 
 
-@django_db_with_data(
-    available_apps=(
-        "apps.service_providers",
-        "apps.users",
-        "apps.oauth",
-    )
-)
+@django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_global_history(get_llm_service, provider, pipeline, experiment_session):
     llm = FakeLlmEcho()

@@ -14,8 +14,7 @@ dependencies = [
     "celery",
     "celery-progress",
     "celery[redis]",
-    "django-allauth",
-    "django-allauth-2fa",
+    "django-allauth[mfa]>=0.56.0",
     "django-anymail",
     "django-cleanup",
     "django-cryptography-django5",
@@ -95,9 +94,12 @@ Issues = "https://github.com/dimagi/open-chat-studio/issues"
 Changelog = "https://docs.openchatstudio.com/changelog/"
 
 [tool.pytest.ini_options]
-addopts = "--ds=config.settings --reuse-db --strict-markers --tb=short"
+addopts = "--ds=config.settings --reuse-db --strict-markers --tb=short -m \"not integration\""
 python_files = "tests.py test_*.py *_tests.py"
 norecursedirs = ".* build dist venv node_modules compose assets static"
+markers = [
+    "integration: marks tests as integration tests (deselected by default)",
+]
 
 [tool.ruff]
 exclude = [
@@ -118,12 +120,14 @@ ignore = ["PT019", "SIM102", "SIM108", "SIM117"]
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+preview = true
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+preview = true
 
 [tool.ruff.lint.extend-per-file-ignores]
 "settings_production.py" = ["F405"]
