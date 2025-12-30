@@ -4,6 +4,7 @@ from urllib.parse import quote
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Q
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import classproperty
 from langchain_core.messages import BaseMessage, messages_from_dict
@@ -11,8 +12,10 @@ from langchain_core.messages import BaseMessage, messages_from_dict
 from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCommentsMixin
 from apps.files.models import File
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
+from apps.web.meta import absolute_url
 
 
 class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
@@ -51,7 +54,7 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     def get_langchain_messages(self) -> list[BaseMessage]:
         return messages_from_dict([m.to_langchain_dict() for m in self.messages.all()])
 
-    def get_langchain_messages_until_marker(self, marker: str) -> list[BaseMessage]:
+    def get_langchain_messages_until_marker(self, marker: str, exclude_message_id=None) -> list[BaseMessage]:
         """Fetch messages from the database until a marker is found. The marker must be one of the
         PipelineChatHistoryModes values.
         """
@@ -59,15 +62,19 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
 
         messages = []
         include_summaries = marker == PipelineChatHistoryModes.SUMMARIZE
-        for message in self.message_iterator(include_summaries):
+        for message in self.message_iterator(include_summaries, exclude_message_id=exclude_message_id):
             messages.append(message.to_langchain_dict())
             if message.compression_marker and (not marker or marker == message.compression_marker):
                 break
 
         return messages_from_dict(list(reversed(messages)))
 
-    def message_iterator(self, with_summaries=True):
-        for message in self.messages.order_by("-created_at").iterator(100):
+    def message_iterator(self, with_summaries=True, exclude_message_id=None):
+        queryset = self.messages.order_by("-created_at")
+        if exclude_message_id:
+            queryset = queryset.exclude(id=exclude_message_id)
+
+        for message in queryset.iterator(100):
             yield message
             if with_summaries and message.summary:
                 yield message.get_summary_message()
@@ -216,6 +223,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
                 "content": content,
                 "additional_kwargs": {
                     "id": self.id,
+                    "message_url": self.get_absolute_url(),
                 },
             },
         }
@@ -278,6 +286,19 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         """Returns the name of the safety layer tag, if there is one"""
         if tag := self.tags.filter(category=TagCategories.SAFETY_LAYER_RESPONSE).first():
             return tag.name
+
+    def get_absolute_url(self):
+        if not self.chat_id or not self.chat.team_id or not hasattr(self.chat, "experiment_session"):
+            return None
+        uri = reverse(
+            "chatbots:chatbot_session_view",
+            kwargs={
+                "team_slug": get_slug_for_team(self.chat.team_id),
+                "experiment_id": self.chat.experiment_session.experiment.public_id,
+                "session_id": self.chat.experiment_session.external_id,
+            },
+        )
+        return absolute_url(uri + f"?message_id={self.id}", is_secure=True)
 
 
 class ChatAttachment(BaseModel):
