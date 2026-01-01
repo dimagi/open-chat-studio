@@ -71,7 +71,7 @@
     "open-chat-studio-widget": "^0.4.7",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-error-boundary": "^5.0.0",
+    "react-error-boundary": "^6.0.1",
     "react-hotkeys-hook": "^5.2.1",
     "react-select": "^5.10.2",
     "reactflow": "^11.11.4",
