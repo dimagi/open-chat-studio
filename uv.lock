@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -716,7 +716,7 @@ wheels = [
 
 [[package]]
 name = "django-allauth"
-version = "0.58.2"
+version = "0.57.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
@@ -725,11 +725,11 @@ dependencies = [
     { name = "requests" },
     { name = "requests-oauthlib" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/40/ea/69a690a726513a5a49c0df1b705aecbd50262fadf747405ab182ca5599c0/django-allauth-0.58.2.tar.gz", hash = "sha256:b2ad19223e561ef333a54d6c03d52144b0148ce79822eaf708424a0d829f24c8", size = 872381, upload-time = "2023-11-06T08:38:59.565Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9f/65/254ae01e3f369306989aab401ba1ba6868d14826dc85523a8b11ac5870fe/django-allauth-0.57.2.tar.gz", hash = "sha256:51c400f61bfb15bd08e22543a65d551c8f563254064620c37c49766b1ba7e1ae", size = 858996, upload-time = "2024-02-09T09:15:16.069Z" }
 
 [[package]]
 name = "django-allauth-2fa"
-version = "0.11.1"
+version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
@@ -737,9 +737,9 @@ dependencies = [
     { name = "django-otp" },
     { name = "qrcode" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/13/65/51b823ba7e844ceef7ac9f82e6130418fa0e616c38fe8041c012881139a4/django_allauth_2fa-0.11.1.tar.gz", hash = "sha256:02ffdf1025836f072c2f6ec0964494589cf1d52362f663f9ff6d9ca61a7b6962", size = 9680, upload-time = "2023-07-13T11:09:30.523Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/73/82cce2a852e9c9f28760138b78e6ac4b1b68c8c3bbe0848603b25c086b63/django_allauth_2fa-0.12.0.tar.gz", hash = "sha256:4b0c4cfea9c30be7c0971421b9b1f4961a19a69af72b7b5c0c7a3dbbc2537253", size = 10913, upload-time = "2025-01-16T06:49:31.978Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9d/3f/7befd3d8fe169971cddb79eaf74e4bc6215cfef152bc772418d1cd800f6e/django_allauth_2fa-0.11.1-py3-none-any.whl", hash = "sha256:2f2d61dd488f66ad45e59780b061f5abe96caea9c3466e3ee4ea50ea1faebef6", size = 14256, upload-time = "2023-07-13T11:09:28.873Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/87/5032c23d25d4ea4dcc89eaf388e831c0c1f27c38a25997e0b5739f9b3a6c/django_allauth_2fa-0.12.0-py3-none-any.whl", hash = "sha256:ba53f47fd777d13c48842a7b779ab5ad24ad8c50f05aba98c64810263a50382d", size = 16199, upload-time = "2025-01-16T06:49:29.37Z" },
 ]
 
 [[package]]
