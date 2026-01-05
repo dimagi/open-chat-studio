@@ -17,6 +17,7 @@ from django.utils import timezone
 from django.utils.html import escape
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
+from django_htmx.http import reswap, retarget
 from django_tables2 import LazyPaginator, SingleTableView
 
 from apps.chat.models import ChatMessage
@@ -364,14 +365,12 @@ def edit_message_modal(request, team_slug, message_id):
 def update_message(request, team_slug, message_id):
     """Handle form submission to update message"""
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
-
     form_data = _get_message_form_data(request)
     errors, data = _get_message_data_and_errors(form_data)
 
     if errors:
         update_url = reverse("evaluations:update_message", args=[team_slug, message_id])
-
-        return render(
+        response = render(
             request,
             "evaluations/edit_message_modal_content.html",
             {
@@ -382,17 +381,17 @@ def update_message(request, team_slug, message_id):
             },
             status=200,
         )
+        response = retarget(response, "#editMessageModal")
+        response = reswap(response, "innerHTML")
+        return response
 
     for attr, val in data.items():
         setattr(message, attr, val)
-
-    # Clear chat message references since this is now manually edited
     message.input_chat_message = None
     message.expected_output_chat_message = None
     message.metadata = message.metadata or {}
     message.metadata["session_id"] = None
     message.metadata["experiment_id"] = None
-
     message.save()
 
     dataset = message.evaluationdataset_set.first()
