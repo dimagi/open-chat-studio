@@ -109,6 +109,7 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
             experiment_channel=evaluation_channel,
             chat=chat,
             state=message.session_state,
+            platform=evaluation_channel.platform,
         )
 
         # Populate history on the chat with the history from the EvaluationMessage

@@ -83,11 +83,15 @@ class TestExperimentSessionFilters:
             chat=session1.chat, content="Message with v1", message_type=ChatMessageType.HUMAN
         )
         msg1.add_tag(v1_tag, team=session1.team, added_by=None)
+        session1.experiment_versions = [1]
+        session1.save()
 
         msg2 = ChatMessage.objects.create(
             chat=session2.chat, content="Message with v1 and v2", message_type=ChatMessageType.HUMAN
         )
         msg2.add_tags([v1_tag, v2_tag], team=session1.team, added_by=None)
+        session2.experiment_versions = [1, 2]
+        session2.save()
 
         return [session1, session2], [v1_tag, v2_tag]
 
@@ -116,6 +120,8 @@ class TestExperimentSessionFilters:
                 message_type=ChatMessageType.HUMAN,
                 created_at=timezone.now() + timedelta(hours=2),
             )
+            session1.last_activity_at = timezone.now() - timedelta(hours=2)
+            session1.save()
 
         with travel("2025-01-02 10:00:00", tick=False):
             session2 = ExperimentSessionFactory(experiment=session1.experiment)
@@ -128,6 +134,9 @@ class TestExperimentSessionFilters:
                 message_type=ChatMessageType.HUMAN,
                 created_at=timezone.now() + timedelta(hours=1),
             )
+            session2.last_activity_at = timezone.now() - timedelta(hours=1)
+            session2.save()
+
         # Test ON first message
         sessions_queryset = session1.experiment.sessions.all()
         params = {"filter_0_column": "first_message", "filter_0_operator": Operators.ON, "filter_0_value": "2025-01-01"}

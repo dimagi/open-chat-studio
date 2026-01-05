@@ -77,7 +77,7 @@ class DashboardService:
             .filter(_has_msgs=True)
         )
         messages = ChatMessage.objects.filter(chat__team=self.team, **base_filters).exclude(
-            chat__experiment_session__experiment_channel__platform=ChannelPlatform.EVALUATIONS
+            chat__experiment_session__platform=ChannelPlatform.EVALUATIONS
         )
         participants = Participant.objects.filter(team=self.team).exclude(platform=ChannelPlatform.EVALUATIONS)
 
@@ -103,8 +103,8 @@ class DashboardService:
                         )
                     )
                 )
-            sessions = sessions.filter(experiment_channel__platform__in=platform_names)
-            messages = messages.filter(chat__experiment_session__experiment_channel__platform__in=platform_names)
+            sessions = sessions.filter(platform__in=platform_names)
+            messages = messages.filter(chat__experiment_session__platform__in=platform_names)
             participants = participants.filter(platform__in=platform_names)
 
         if participant_ids:
@@ -426,7 +426,7 @@ class DashboardService:
                     filter=Q(experimentsession__chat__messages__message_type=ChatMessageType.HUMAN) & date_filter,
                 ),
                 total_sessions=Count("experimentsession", filter=date_filter, distinct=True),
-                last_activity=Max("experimentsession__chat__messages__created_at"),
+                last_activity=Max("experimentsession__last_activity_at"),
             )
             .filter(total_messages__gt=0)
             .order_by("-total_messages")
@@ -474,11 +474,11 @@ class DashboardService:
         sessions_stats = (
             querysets["sessions"]
             .order_by()
-            .values("experiment_channel__platform")
+            .values("platform")
             .annotate(sessions_count=Count("id", distinct=True), participants_count=Count("participant", distinct=True))
         )
 
-        session_stats_map = {item["experiment_channel__platform"]: item for item in sessions_stats}
+        session_stats_map = {item["platform"]: item for item in sessions_stats}
 
         platform_data = []
 

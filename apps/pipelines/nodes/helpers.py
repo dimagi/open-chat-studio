@@ -32,6 +32,7 @@ def temporary_session(team: Team, user_id: int):
             chat=chat,
             experiment_channel=channel,
             participant=participant,
+            platform=channel.platform,
         )
         yield experiment_session
         transaction.set_rollback(True)
