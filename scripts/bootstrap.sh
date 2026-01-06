@@ -170,13 +170,13 @@ check_node() {
         NODE_VERSION=$(node --version)
         info "Node.js is installed ($NODE_VERSION)"
 
-        # Check if version is 18 or higher
+        # Check if version is 24 or higher
         NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d'.' -f1 | sed 's/v//')
-        if [ "$NODE_MAJOR" -lt 18 ]; then
-            warn "Node.js version $NODE_VERSION is installed, but version 18+ is recommended"
+        if [ "$NODE_MAJOR" -lt 24 ]; then
+            warn "Node.js version $NODE_VERSION is installed, but version 24+ is recommended"
         fi
     else
-        error "Node.js is not installed. Please install Node.js 18+ before running this script."
+        error "Node.js is not installed. Please install Node.js 24+ before running this script."
         error "Visit: https://nodejs.org/ or use a version manager like nvm"
         [ "$CHECK_ONLY" != true ] && exit 1
     fi
