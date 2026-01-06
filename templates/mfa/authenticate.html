@@ -1,0 +1,22 @@
+{% extends "account/base.html" %}
+{% load form_tags i18n %}
+
+{% block content %}
+  <section>
+    <h2 class="pg-subtitle">{% translate "Two-Factor Authentication" %}</h2>
+    <p>
+      {% blocktranslate %}
+      Your account is protected by two-factor authentication.
+      Please enter an authenticator code or recovery code:
+      {% endblocktranslate %}
+    </p>
+    <form method="post" action="{% url 'mfa_authenticate' %}">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% render_text_input form.code %}
+      <button type="submit" class="btn btn-primary mt-3">
+        {% translate "Verify" %}
+      </button>
+    </form>
+  </section>
+{% endblock content %}

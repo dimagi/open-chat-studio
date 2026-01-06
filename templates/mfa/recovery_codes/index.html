@@ -1,0 +1,27 @@
+{% extends "account/base.html" %}
+{% load i18n %}
+
+{% block content %}
+  <section class="app-card">
+    <h2 class="pg-subtitle">{% translate "Recovery Codes" %}</h2>
+
+    <div class="alert alert-info mb-4">
+      {% translate "Store these recovery codes in a safe place. Each code can only be used once." %}
+    </div>
+
+    <ul class="font-mono text-lg space-y-2 mb-4">
+      {% for code in unused_codes %}
+        <li>{{ code }}</li>
+      {% endfor %}
+    </ul>
+
+    <div class="space-x-2">
+      <a href="{% url 'mfa_download_recovery_codes' %}" class="btn btn-outline">
+        {% translate "Download codes" %}
+      </a>
+      <a href="{% url 'mfa_index' %}" class="btn btn-primary">
+        {% translate "Done" %}
+      </a>
+    </div>
+  </section>
+{% endblock content %}
