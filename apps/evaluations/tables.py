@@ -339,6 +339,14 @@ class DatasetMessagesTable(tables.Table):
         ]
     )
 
+    def get_row_attrs(self, record):
+        attrs = {
+            **settings.DJANGO_TABLES2_ROW_ATTRS,
+            "x-data": f'{{"get isSelected() {{ return selectedMessageRow === {record.id} }}}}',
+            ":class": "{ 'bg-sky-100/40 dark:bg-sky-950/40': isSelected }",
+        }
+        return attrs
+
     class Meta:
         model = EvaluationMessage
         fields = (

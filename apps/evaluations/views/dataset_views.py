@@ -281,7 +281,7 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     model = EvaluationMessage
     table_class = DatasetMessagesTable
     table_pagination = {"per_page": 10}
-    template_name = "table/single_table.html"
+    template_name = "evaluations/dataset_messages_table.html"
     permission_required = "evaluations.view_evaluationdataset"
 
     def get_queryset(self):

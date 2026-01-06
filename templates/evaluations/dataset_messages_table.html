@@ -1,0 +1,25 @@
+{% load static %}
+{% load render_table from django_tables2 %}
+
+<div x-data="{ selectedMessageRow: {{ request.GET.message_id|default:'null' }} }">
+    {% render_table table "table/tailwind_js_pagination.html" %}
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const params = new URLSearchParams(window.location.search);
+        const messageId = params.get('message_id');
+
+        if (messageId) {
+            setTimeout(() => {
+                const selectedRow = document.querySelector(`tr[x-data*="selectedMessageRow === ${messageId}"]`);
+                if (selectedRow) {
+                    selectedRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 100);
+        }
+    });
+</script>
+
+{% block modal %}
+{% endblock modal %}
