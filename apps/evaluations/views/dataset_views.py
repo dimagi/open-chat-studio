@@ -370,7 +370,7 @@ def update_message(request, team_slug, message_id):
 
     if errors:
         update_url = reverse("evaluations:update_message", args=[team_slug, message_id])
-        response = render(
+        return render(
             request,
             "evaluations/edit_message_modal_content.html",
             {
@@ -381,10 +381,8 @@ def update_message(request, team_slug, message_id):
             },
             status=200,
         )
-        response = retarget(response, "#editMessageModal")
-        response = reswap(response, "innerHTML")
-        return response
 
+    # Update the message
     for attr, val in data.items():
         setattr(message, attr, val)
     message.input_chat_message = None
@@ -396,8 +394,11 @@ def update_message(request, team_slug, message_id):
 
     dataset = message.evaluationdataset_set.first()
     if dataset:
-        return render_table_row(request, DatasetMessagesTable, message)
-
+        response = render_table_row(request, DatasetMessagesTable, message)
+        # Change target to the table row for successful updates
+        response = retarget(response, f"#record-{message_id}")
+        response = reswap(response, "outerHTML")
+        return response
     return HttpResponse("", status=200)
 
 

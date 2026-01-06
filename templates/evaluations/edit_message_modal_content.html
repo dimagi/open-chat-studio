@@ -8,10 +8,8 @@
   <!-- Form content -->
   <form
     hx-post="{{ update_url }}"
-    hx-target="#record-{{ message.id }}"
-    hx-select="#record-{{ message.id }}"
-    hx-swap="outerHTML"
-    hx-on::after-request="if(event.detail.successful) document.getElementById('editMessageModal').close()"
+    hx-target="#editMessageModal"
+    hx-swap="innerHTML"
     class="space-y-6"
   >
     {% csrf_token %}
