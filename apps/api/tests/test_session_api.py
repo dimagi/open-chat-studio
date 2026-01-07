@@ -671,3 +671,57 @@ def test_add_tags_non_string_values(session):
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "'tags' must be a list of non-empty strings" in response.json()["error"]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
+def test_delete_session_tags_does_not_remove_system_tags(auth_method, session):
+    """Ensure API cannot delete system tags even if they share names with user tags."""
+    user = session.team.members.first()
+    team = session.team
+
+    # Create user tag
+    user_tag = Tag.objects.create(
+        name="important",
+        slug="important-user",
+        team=team,
+        is_system_tag=False,
+        category="",
+        created_by=user,
+    )
+
+    # Create system tag with same name but different category
+    system_tag = Tag.objects.create(
+        name="important",
+        slug="important-system",
+        team=team,
+        is_system_tag=True,
+        category=TagCategories.BOT_RESPONSE,
+    )
+
+    # Add both tags to session
+    session.chat.add_tag(user_tag, team, user)
+    session.chat.add_tag(system_tag, team, user)
+
+    # Verify both tags are present
+    assert session.chat.tags.count() == 2
+
+    client = ApiTestClient(user, team, auth_method=auth_method)
+
+    # Try to delete via API using the shared name
+    url = f"/api/sessions/{session.external_id}/tags/"
+    data = {"tags": ["important"]}
+    response = client.delete(url, data=data, format="json")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    # User tag should be removed, system tag should remain
+    session.refresh_from_db()
+    remaining_tags = list(session.chat.tags.all())
+    assert len(remaining_tags) == 1
+    assert remaining_tags[0].id == system_tag.id
+    assert remaining_tags[0].is_system_tag is True
+
+    # Verify response shows the system tag
+    response_data = response.json()
+    assert response_data["tags"] == ["important"]

@@ -266,10 +266,18 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                 )
                 session.chat.add_tag(tag, request.team, added_by=request.user)
         elif request.method == "DELETE":
-            # Remove tags
-            tags_to_remove = Tag.objects.filter(name__in=tag_names, team=request.team)
-            for tag in tags_to_remove:
-                session.chat.tags.remove(tag)
+            # Remove tags (only user tags, not system tags)
+            from django.contrib.contenttypes.models import ContentType
+
+            from apps.annotations.models import CustomTaggedItem
+
+            tags_to_remove = Tag.objects.filter(name__in=tag_names, team=request.team, is_system_tag=False)
+
+            # Remove tagged items explicitly to avoid any potential issues with taggit's remove()
+            content_type = ContentType.objects.get_for_model(session.chat)
+            CustomTaggedItem.objects.filter(
+                content_type=content_type, object_id=session.chat.id, tag__in=tags_to_remove
+            ).delete()
 
         # Return updated tag list
         updated_tags = list(session.chat.tags.values_list("name", flat=True))
