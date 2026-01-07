@@ -248,6 +248,8 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                 tag, _ = Tag.objects.get_or_create(
                     name=tag_name,
                     team=request.team,
+                    is_system_tag=False,
+                    category="",
                     defaults={"created_by": request.user},
                 )
                 session.chat.add_tag(tag, request.team, added_by=request.user)
