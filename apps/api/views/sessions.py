@@ -125,28 +125,6 @@ tags_response_serializer = inline_serializer(
         request=update_state_serializer,
         responses={200: update_state_response_serializer},
     ),
-    tags=extend_schema(
-        operation_id="session_tags",
-        summary="Manage Session Tags",
-        tags=["Experiment Sessions"],
-        parameters=[
-            OpenApiParameter(
-                name="id",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.PATH,
-                description="ID of the session",
-            ),
-        ],
-        request=tags_request_serializer,
-        responses={200: tags_response_serializer},
-        description=textwrap.dedent(
-            """
-            Add or remove tags from a session.
-            - POST: Add tags to the session (creates tags if they don't exist)
-            - DELETE: Remove tags from the session
-            """
-        ),
-    ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
     permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
@@ -221,6 +199,40 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
         return Response({"success": True, "state": session.state}, status=status.HTTP_200_OK)
 
+    @extend_schema(
+        methods=["POST"],
+        operation_id="session_add_tags",
+        summary="Add Tags to Session",
+        tags=["Experiment Sessions"],
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                description="ID of the session",
+            ),
+        ],
+        request=tags_request_serializer,
+        responses={200: tags_response_serializer},
+        description="Add tags to a session. Tags are automatically created if they don't exist.",
+    )
+    @extend_schema(
+        methods=["DELETE"],
+        operation_id="session_remove_tags",
+        summary="Remove Tags from Session",
+        tags=["Experiment Sessions"],
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                description="ID of the session",
+            ),
+        ],
+        request=tags_request_serializer,
+        responses={200: tags_response_serializer},
+        description="Remove tags from a session.",
+    )
     @action(detail=True, methods=["post", "delete"])
     def tags(self, request, id):
         tag_names = request.data.get("tags")
