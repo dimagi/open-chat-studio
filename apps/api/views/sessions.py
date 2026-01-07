@@ -7,7 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from apps.annotations.models import TagCategories
+from apps.annotations.models import Tag, TagCategories
 from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSessionSerializer
 from apps.experiments.models import ExperimentSession
@@ -25,6 +25,20 @@ update_state_response_serializer = inline_serializer(
     fields={
         "success": serializers.BooleanField(),
         "state": serializers.JSONField(),
+    },
+)
+
+tags_request_serializer = inline_serializer(
+    name="tags_request_serializer",
+    fields={
+        "tags": serializers.ListField(child=serializers.CharField()),
+    },
+)
+
+tags_response_serializer = inline_serializer(
+    name="tags_response_serializer",
+    fields={
+        "tags": serializers.ListField(child=serializers.CharField()),
     },
 )
 
@@ -111,6 +125,28 @@ update_state_response_serializer = inline_serializer(
         request=update_state_serializer,
         responses={200: update_state_response_serializer},
     ),
+    tags=extend_schema(
+        operation_id="session_tags",
+        summary="Manage Session Tags",
+        tags=["Experiment Sessions"],
+        parameters=[
+            OpenApiParameter(
+                name="id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                description="ID of the session",
+            ),
+        ],
+        request=tags_request_serializer,
+        responses={200: tags_response_serializer},
+        description=textwrap.dedent(
+            """
+            Add or remove tags from a session.
+            - POST: Add tags to the session (creates tags if they don't exist)
+            - DELETE: Remove tags from the session
+            """
+        ),
+    ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
     permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
@@ -184,3 +220,36 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         session.save()
 
         return Response({"success": True, "state": session.state}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post", "delete"])
+    def tags(self, request, id):
+        tag_names = request.data.get("tags")
+        if not tag_names:
+            return Response({"error": "Missing 'tags' in request"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not isinstance(tag_names, list):
+            return Response({"error": "'tags' must be a list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            session = ExperimentSession.objects.get(external_id=id, team=request.team)
+        except ExperimentSession.DoesNotExist:
+            return Response({"error": f"Session not found: {id}"}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.method == "POST":
+            # Add tags - create if they don't exist
+            for tag_name in tag_names:
+                tag, _ = Tag.objects.get_or_create(
+                    name=tag_name,
+                    team=request.team,
+                    defaults={"created_by": request.user},
+                )
+                session.chat.add_tag(tag, request.team, added_by=request.user)
+        elif request.method == "DELETE":
+            # Remove tags
+            tags_to_remove = Tag.objects.filter(name__in=tag_names, team=request.team)
+            for tag in tags_to_remove:
+                session.chat.tags.remove(tag)
+
+        # Return updated tag list
+        updated_tags = list(session.chat.tags.values_list("name", flat=True))
+        return Response({"tags": updated_tags}, status=status.HTTP_200_OK)
