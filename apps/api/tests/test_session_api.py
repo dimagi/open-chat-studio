@@ -629,3 +629,45 @@ def test_tags_endpoint_team_isolation(experiment):
     response = client1.post(url, data=data, format="json")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db()
+def test_add_tags_empty_string(session):
+    """Test error when tags list contains empty strings"""
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team)
+
+    url = f"/api/sessions/{session.external_id}/tags/"
+    data = {"tags": ["", "valid"]}
+    response = client.post(url, data=data, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "'tags' must be a list of non-empty strings" in response.json()["error"]
+
+
+@pytest.mark.django_db()
+def test_add_tags_whitespace_only(session):
+    """Test error when tags list contains whitespace-only strings"""
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team)
+
+    url = f"/api/sessions/{session.external_id}/tags/"
+    data = {"tags": ["  ", "valid"]}
+    response = client.post(url, data=data, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "'tags' must be a list of non-empty strings" in response.json()["error"]
+
+
+@pytest.mark.django_db()
+def test_add_tags_non_string_values(session):
+    """Test error when tags list contains non-string values"""
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team)
+
+    url = f"/api/sessions/{session.external_id}/tags/"
+    data = {"tags": [123, "valid"]}
+    response = client.post(url, data=data, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "'tags' must be a list of non-empty strings" in response.json()["error"]

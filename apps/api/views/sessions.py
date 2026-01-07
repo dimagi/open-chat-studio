@@ -230,6 +230,13 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         if not isinstance(tag_names, list):
             return Response({"error": "'tags' must be a list"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Validate each tag is a non-empty string
+        for tag_name in tag_names:
+            if not isinstance(tag_name, str) or not tag_name.strip():
+                return Response(
+                    {"error": "'tags' must be a list of non-empty strings"}, status=status.HTTP_400_BAD_REQUEST
+                )
+
         try:
             session = ExperimentSession.objects.get(external_id=id, team=request.team)
         except ExperimentSession.DoesNotExist:
