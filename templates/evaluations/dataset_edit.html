@@ -284,8 +284,10 @@
         if (event.detail.xhr.status === 200 && event.detail.target.id === 'editMessageModal') {
           // Check if the response contains validation errors
           const modalBox = event.detail.target.querySelector('.modal-box');
-          const hasErrors = modalBox && modalBox.hasAttribute('data-has-errors');
-
+          if (!modalBox) {
+            return;
+          }
+          const hasErrors = modalBox.hasAttribute('data-has-errors');
           if (hasErrors) {
             // Don't close modal or refresh table if there are validation errors
             return;
@@ -293,7 +295,11 @@
 
           document.getElementById('editMessageModal').close();
           htmx.trigger(document.body, 'refreshTable');
-      }});
+        }
+        if (event.detail.xhr.status === 200 && event.detail.target.id.startsWith('record-')) {
+          document.getElementById('editMessageModal')?.close();
+        }
+      });
     });
   </script>
 {% endblock page_js %}
