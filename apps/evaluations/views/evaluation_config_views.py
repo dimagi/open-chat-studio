@@ -11,6 +11,7 @@ from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
@@ -295,7 +296,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                             enabled_condition=session_enabled_condition,
                         ),
                         actions.chip_action(
-                            label='<i class="fa-solid fa-external-link"></i>',
+                            label=mark_safe('<i class="fa-solid fa-external-link"></i>'),
                             url_factory=dataset_url_factory,
                             enabled_condition=dataset_enabled_condition,
                             open_url_in_new_tab=True,
