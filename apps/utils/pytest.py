@@ -22,9 +22,8 @@ def django_db_transactional():
 
     This is just an alias for django_db_with_data() but kept separate for clarity.
 
-    An alternative would be to use the pytest.mark.django_db(transaction=True, available_apps=(...) decorator
-    (without `serialized_rollback=True`) but determining the list of apps required is not always
-    clear, and they are only needed in order to create the content types and permissions. Instead, we rely on
+    An alternative would be to use the pytest.mark.django_db(transaction=True) decorator
+    (without `serialized_rollback=True`), but we rely on
     the serialized_rollback=True to load the serialized DB state which includes the content types and permissions.
     """
     return django_db_with_data()
