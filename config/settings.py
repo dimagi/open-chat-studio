@@ -64,13 +64,10 @@ THIRD_PARTY_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.microsoft",
+    "allauth.mfa",
     "django_htmx",
     "django_browser_reload",
-    "django_otp",
-    "django_otp.plugins.otp_totp",
-    "django_otp.plugins.otp_static",
     "django_watchfiles",
-    "allauth_2fa",
     "rest_framework",
     "drf_spectacular",
     "rest_framework_api_key",
@@ -146,7 +143,6 @@ MIDDLEWARE = list(
             "django.middleware.common.CommonMiddleware",
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
-            "django_otp.middleware.OTPMiddleware",
             "django_htmx.middleware.HtmxMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
@@ -301,11 +297,14 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
+# Multi-Factor Authentication
+MFA_ADAPTER = "apps.users.adapter.MfaAdapter"
+MFA_RECOVERY_CODE_COUNT = 10
+MFA_TOTP_ISSUER = "Open Chat Studio"
+
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
 ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="optional")
-
-ALLAUTH_2FA_ALWAYS_REVEAL_BACKUP_TOKENS = False
 
 AUTHENTICATION_BACKENDS = (
     # check permissions exist (DEBUG only)
