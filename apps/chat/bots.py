@@ -78,11 +78,29 @@ class PipelineBot:
         pipeline=None,
     ) -> tuple[ChatMessage, ChatMessage | None]:
         pipeline_to_use = pipeline or self.experiment.pipeline
+
+        human_message = None
+        if save_run_to_history and save_input_to_history and self.session is not None:
+            initial_input_metadata = input_state.get("input_message_metadata", {})
+            human_message = self._save_message_to_history(
+                input_state["messages"][-1], ChatMessageType.HUMAN, metadata=initial_input_metadata
+            )
+            input_state["input_message_id"] = human_message.id
+            input_state["input_message_url"] = human_message.get_absolute_url()
+
+            if self.trace_service:
+                self.trace_service.set_input_message_id(human_message.id)
+
         output = self._run_pipeline(input_state, pipeline_to_use)
 
         if save_run_to_history and self.session is not None:
             output = self._process_interrupts(output)
-            ai_message, human_message = self._save_outputs(input_state, output, save_input_to_history)
+            ai_message, human_message = self._save_outputs(
+                input_state,
+                output,
+                save_input_to_history,
+                existing_human_message=human_message,
+            )
         else:
             ai_message = ChatMessage(content=output)
             human_message = None
@@ -157,7 +175,13 @@ class PipelineBot:
                 tags.append((TagCategories.SAFETY_LAYER_RESPONSE, tag_name))
         return output
 
-    def _save_outputs(self, input_state, output, save_input_to_history):
+    def _save_outputs(
+        self,
+        input_state,
+        output,
+        save_input_to_history,
+        existing_human_message=None,
+    ):
         input_metadata = output.get("input_message_metadata", {})
         output_metadata = output.get("output_message_metadata", {})
         trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
@@ -166,11 +190,17 @@ class PipelineBot:
             output_metadata.update(trace_metadata)
 
         if save_input_to_history:
-            human_message = self._save_message_to_history(
-                input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
-            )
-            if self.trace_service:
-                self.trace_service.set_input_message_id(human_message.id)
+            if existing_human_message:
+                if input_metadata != existing_human_message.metadata:
+                    existing_human_message.metadata = input_metadata
+                    existing_human_message.save(update_fields=["metadata"])
+                human_message = existing_human_message
+            else:
+                human_message = self._save_message_to_history(
+                    input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
+                )
+                if self.trace_service:
+                    self.trace_service.set_input_message_id(human_message.id)
         else:
             human_message = None
 

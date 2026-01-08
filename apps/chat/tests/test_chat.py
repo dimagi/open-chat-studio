@@ -46,6 +46,7 @@ def test_chat_message_to_langchain_dict():
             "content": "Hello",
             "additional_kwargs": {
                 "id": message.id,
+                "message_url": None,
             },
         },
     }
@@ -64,6 +65,7 @@ def test_chat_message_summary_to_langchain_dict():
             "content": "Summary",
             "additional_kwargs": {
                 "id": message.id,
+                "message_url": None,
             },
         },
     }
