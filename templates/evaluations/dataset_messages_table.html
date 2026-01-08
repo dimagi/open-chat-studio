@@ -1,25 +1,27 @@
 {% load static %}
 {% load render_table from django_tables2 %}
 
-<div x-data="{ selectedMessageRow: {{ request.GET.message_id|default:'null' }} }">
-    {% render_table table "table/tailwind_js_pagination.html" %}
-</div>
+{% render_table table "evaluations/dataset_messages_table_render.html" %}
 
+{% if highlight_message_id %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const params = new URLSearchParams(window.location.search);
-        const messageId = params.get('message_id');
-
-        if (messageId) {
-            setTimeout(() => {
-                const selectedRow = document.querySelector(`tr[x-data*="selectedMessageRow === ${messageId}"]`);
-                if (selectedRow) {
-                    selectedRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }, 100);
+    function scrollToMessage() {
+        const element = document.getElementById("message-{{ highlight_message_id }}");
+        if (element) {
+            element.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+            });
         }
-    });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', scrollToMessage);
+    } else {
+        scrollToMessage();
+    }
 </script>
+{% endif %}
 
 {% block modal %}
 {% endblock modal %}
