@@ -1,13 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ruff check:*)",
-      "Bash(ruff format:*)",
       "Bash(python manage.py check:*)",
+      "Bash(python manage.py migrate:*)",
+      "Bash(python manage.py makemigrations:*)",
       "Bash(pytest:*)",
+      "Bash(uv run pytest:*)",
       "Bash(inv ruff:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(ruff:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(uv pip list:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(rg:*)"
     ]
   },
   "enableAllProjectMcpServers": false,
