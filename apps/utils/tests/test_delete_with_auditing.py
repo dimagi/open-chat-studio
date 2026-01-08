@@ -7,6 +7,7 @@ from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamFactory
+from apps.utils.tests.models import MODEL_NAMES, Bot, Collection, Tool
 
 
 @pytest.mark.django_db()
@@ -22,8 +23,6 @@ from apps.utils.factories.team import TeamFactory
 )
 def test_delete_with_auditing(obj_name, delete_events, update_events, expected_stats):
     with enable_audit():
-        from apps.utils.tests.models import MODEL_NAMES, Bot, Collection, Tool
-
         source_model = {
             "b": Bot,
             "t": Tool,

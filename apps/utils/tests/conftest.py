@@ -1,6 +1,7 @@
 import pytest
 from field_audit import enable_audit
 
+from apps.utils.tests.models import Bot, Collection, Param, Tool
 from apps.utils.tests.utils import setup_test_app, tear_down_test_app
 
 app_label = "utils_tests"
@@ -33,8 +34,6 @@ def _model_setup():
     t3
     """
     with enable_audit():
-        from apps.utils.tests.models import Bot, Collection, Param, Tool
-
         c1 = Collection.objects.create(name="c1")
         c2 = Collection.objects.create(name="c2")
 

@@ -8,6 +8,7 @@ from apps.teams.backends import SUPER_ADMIN_GROUP
 from apps.teams.helpers import create_default_team_for_user
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
+from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
 
 
@@ -75,8 +76,6 @@ def test_group_owner_assignment_on_team_creation(client):
 def test_delete_team(client):
     with enable_audit():
         # Create team within the enable_audit context so creation events are captured
-        from apps.utils.factories.team import TeamWithUsersFactory
-
         team_with_users = TeamWithUsersFactory.create()
 
         client.force_login(team_with_users.members.first())
