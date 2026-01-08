@@ -30,7 +30,7 @@ def experiment_session(experiment):
     return ExperimentSessionFactory(experiment=experiment)
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_parallel_branch_pipeline(pipeline, experiment_session):
     """
     Illustrate and validate what happens with parallel branches.
@@ -62,7 +62,7 @@ def test_parallel_branch_pipeline(pipeline, experiment_session):
     assert output == expected_output
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_parallel_branch_with_merge(pipeline, experiment_session):
     """
     Illustrate and validate what happens with parallel branches with an aggregator node.
@@ -102,7 +102,7 @@ def test_parallel_branch_with_merge(pipeline, experiment_session):
     assert output == expected_output
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_parallel_branch_with_dangling_node(pipeline, experiment_session):
     """Node A does not connect to the end node, but it is still executed.
 
@@ -170,7 +170,7 @@ def main(input, **kwargs):
         assert json_safe["interrupt"] == {"message": "Unsafe input: unsafe", "tag_name": "unsafe_input"}
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_code_node_wait_for_inputs(pipeline, experiment_session):
     """In this test the branches are of unequal length, so the code node will get called twice,
     once when A and C are done, and once when B is done.
@@ -223,7 +223,7 @@ def main(input, **kwargs):
     ]
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_code_node_wait_for_inputs_manually(pipeline, experiment_session):
     """Similar to the previous test but uses `wait_for_next_input`.
 
@@ -255,7 +255,7 @@ def main(input, **kwargs):
     assert output_state.get_node_output_by_name("end") == "B: A: Hi,C: Hi"
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_dangling_node_abort_terminates_early(pipeline, experiment_session):
     """Test that an abort from a dangling node does actually abort the pipeline.
 
@@ -278,7 +278,7 @@ def test_dangling_node_abort_terminates_early(pipeline, experiment_session):
     assert "B" not in output_state["outputs"]
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 @pytest.mark.parametrize("safety_check", ["safe", "unsafe"])
 def test_safety_router_abort(pipeline, experiment_session, safety_check):
     """
@@ -302,7 +302,7 @@ def test_safety_router_abort(pipeline, experiment_session, safety_check):
         assert "__interrupt__" in output_state
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_dangling_node_abort_after(pipeline, experiment_session):
     """Test that an abort from a dangling node that is run after the last node still aborts.
 
