@@ -62,6 +62,7 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     "allauth",  # allauth account/registration management
     "allauth.account",
+    "allauth.mfa",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.microsoft",
     "django_htmx",
