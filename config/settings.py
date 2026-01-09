@@ -670,6 +670,7 @@ DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.ope
 API_KEY_CUSTOM_HEADER = "HTTP_X_API_KEY"
 
 # Django Field Audit
+FIELD_AUDIT_ENABLED = not IS_TESTING
 FIELD_AUDIT_AUDITORS = ["apps.audit.auditors.AuditContextProvider"]
 FIELD_AUDIT_TEAM_EXEMPT_VIEWS = [
     "account_reset_password_from_key",
