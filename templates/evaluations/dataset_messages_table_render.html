@@ -5,7 +5,8 @@
 <tbody {{ table.attrs.tbody.as_html }}>
     {% for record in table.page.object_list|default:table.data %}
         <tr class="{% if table.highlight_message_id == record.record.id %}bg-yellow-100 dark:bg-yellow-900/20{% endif %}"
-            {% if table.highlight_message_id == record.record.id %}id="message-{{ record.record.id }}"{% endif %}>
+            {% if table.highlight_message_id == record.record.id %}id="message-{{ record.record.id }}"{% endif %}
+            data-message-id="{{ record.record.id }}">
             {% for column, cell in record.items %}
                 {% if column.visible %}
                     <td {{ column.attrs.td.as_html }}>{{ cell }}</td>

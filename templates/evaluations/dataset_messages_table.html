@@ -6,9 +6,10 @@
 {% if highlight_message_id %}
 <script>
     function scrollToMessage() {
-        const element = document.getElementById("message-{{ highlight_message_id }}");
-        if (element) {
-            element.scrollIntoView({
+        const messageId = "{{ highlight_message_id }}";
+        const selectedRow = document.querySelector(`tr[data-message-id="${messageId}"]`);
+        if (selectedRow) {
+            selectedRow.scrollIntoView({
                 behavior: 'smooth',
                 block: 'center',
             });
