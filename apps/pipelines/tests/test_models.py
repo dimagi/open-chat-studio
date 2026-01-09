@@ -253,7 +253,7 @@ class TestPipeline:
         if participant_exists:
             assert Participant.objects.filter(user=requesting_user).exists()
 
-    @django_db_with_data(available_apps=("apps.service_providers", "apps.users"))
+    @django_db_with_data()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_simple_invoke_with_pipeline(self, get_llm_service):
         """Test simple invoke with a pipeline that has an LLM node"""

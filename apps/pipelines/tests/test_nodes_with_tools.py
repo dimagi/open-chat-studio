@@ -121,7 +121,7 @@ def test_tool_filtering(disabled_tools, provider, provider_model):
     assert not set(disabled_tools) & tool_names
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_model):
     service = build_fake_llm_service(
@@ -157,7 +157,7 @@ def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_mod
     assert output["participant_data"] == {"test": ["123", "next"], "other": "xyz"}
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 @mock.patch("apps.pipelines.nodes.llm_node._get_configured_tools")
 def test_tool_artifact_response(get_configured_tools, get_llm_service, provider, provider_model):
