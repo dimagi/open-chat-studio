@@ -4,6 +4,7 @@ import unicodedata
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, Q
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
@@ -48,14 +49,13 @@ class CreateTag(CreateView, PermissionRequiredMixin):
         return reverse("annotations:tag_home", args=[self.request.team.slug])
 
     def form_valid(self, form):
-        from django.db import IntegrityError
-
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
         form.instance.name = unicodedata.normalize("NFC", form.instance.name)
 
         try:
-            return super().form_valid(form)
+            with transaction.atomic():
+                return super().form_valid(form)
         except IntegrityError:
             form.add_error("name", "A tag with this name already exists for this team, system status, and category.")
         return self.form_invalid(form)
