@@ -1,0 +1,23 @@
+{% extends "mfa/mfa_base.html" %}
+{% load form_tags i18n %}
+
+{% block app %}
+  <section class="app-card">
+    <h2 class="pg-subtitle">{% translate "Disable Two-Factor Authentication" %}</h2>
+
+    <p class="mb-3">
+      {% translate "Please enter a valid authentication token to disable two-factor authentication:" %}
+    </p>
+
+    <form method="post" action="{% url 'mfa_deactivate_totp' %}">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {% render_form_fields form %}
+      <div class="mt-2">
+        <button type="submit" class="btn btn-primary">
+          {% translate "Disable Two-Factor" %}
+        </button>
+      </div>
+    </form>
+  </section>
+{% endblock app %}

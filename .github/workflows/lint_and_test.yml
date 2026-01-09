@@ -102,7 +102,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - uses: astral-sh/setup-uv@v7
       - name: Check lockfile
-        run: uv lock --check --offline
+        run: uv lock --check
 
   python-tests:
     runs-on: ubuntu-latest

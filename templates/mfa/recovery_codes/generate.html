@@ -1,0 +1,29 @@
+{% extends "mfa/mfa_base.html" %}
+{% load i18n %}
+
+{% block app %}
+  <section class="app-card">
+    <h2 class="pg-subtitle">{% translate "Generate Recovery Codes" %}</h2>
+
+    {% if unused_code_count > 0 %}
+      <div class="alert alert-warning mb-4">
+        {% blocktranslate count counter=unused_code_count %}
+        You still have {{ counter }} unused recovery code.
+        Generating new codes will invalidate all existing codes.
+        {% plural %}
+        You still have {{ counter }} unused recovery codes.
+        Generating new codes will invalidate all existing codes.
+        {% endblocktranslate %}
+      </div>
+    {% endif %}
+
+    <p>{% translate "Recovery codes can be used to access your account if you lose access to your authenticator app." %}</p>
+
+    <form method="post" action="{% url 'mfa_generate_recovery_codes' %}" class="mt-3">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">
+        {% translate "Generate recovery codes" %}
+      </button>
+    </form>
+  </section>
+{% endblock app %}

@@ -1,0 +1,25 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags i18n %}
+
+{% block head_title %}{% translate "Confirm Access" %}{% endblock %}
+
+{% block app %}
+  <div class="flex justify-center my-8 ">
+    <div class="w-96 px-4 py-4 bg-white dark:bg-neutral-800">
+      <h1 class="pg-title">{% translate "Confirm Access" %}</h1>
+
+      <p>{% blocktranslate %}To safeguard the security of your account, please enter your
+        password:{% endblocktranslate %}</p>
+
+      <form class="reauthenticate mt-6 space-y-6" method="post" action="{% url 'account_reauthenticate' %}">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% render_form_fields form %}
+        {% if redirect_field_value %}
+          <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}"/>
+        {% endif %}
+        <button type="submit" class="btn btn-primary btn-block">{% translate "Confirm" %}</button>
+      </form>
+    </div>
+  </div>
+{% endblock app %}

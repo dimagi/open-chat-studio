@@ -1,0 +1,50 @@
+{% extends "mfa/mfa_base.html" %}
+{% load i18n %}
+
+{% block app %}
+  <div class="space-y-6">
+    <section class="app-card">
+      <h2 class="pg-subtitle">{% translate "Authenticator App" %}</h2>
+
+      {% if authenticators.totp %}
+        <p class="mb-3">{% translate "Authentication using an authenticator app is active." %}</p>
+        <a href="{% url 'mfa_deactivate_totp' %}" class="btn btn-outline">
+          {% translate "Deactivate" %}
+        </a>
+      {% else %}
+        <p class="mb-3">{% translate "An authenticator app is not active." %}</p>
+        <a href="{% url 'mfa_activate_totp' %}" class="btn btn-primary">
+          {% translate "Activate" %}
+        </a>
+      {% endif %}
+    </section>
+
+    <section class="app-card">
+      <h2 class="pg-subtitle">{% translate "Recovery Codes" %}</h2>
+
+      {% if authenticators.recovery_codes %}
+        <p class="mb-3">
+        {% blocktranslate with total_count=authenticators.recovery_codes.generate_codes|length count unused_count=authenticators.recovery_codes.get_unused_codes|length %}
+          There is {{ unused_count }} out of {{ total_count }} recovery codes available.
+        {% plural %}
+          There are {{ unused_count }} out of {{ total_count }} recovery codes available.
+        {% endblocktranslate %}
+        </p>
+
+        <div class="space-x-2">
+          <a href="{% url 'mfa_view_recovery_codes' %}" class="btn btn-outline">
+            {% translate "View codes" %}
+          </a>
+          <a href="{% url 'mfa_generate_recovery_codes' %}" class="btn btn-outline">
+            {% translate "Generate new codes" %}
+          </a>
+        </div>
+      {% else %}
+        <p class="mb-3">{% translate "No recovery codes set up." %}</p>
+        <a href="{% url 'mfa_generate_recovery_codes' %}" class="btn btn-primary">
+          {% translate "Generate recovery codes" %}
+        </a>
+      {% endif %}
+    </section>
+  </div>
+{% endblock app %}
