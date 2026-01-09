@@ -2866,7 +2866,7 @@ requires-dist = [
     { name = "celery", extras = ["redis"] },
     { name = "celery-progress" },
     { name = "django" },
-    { name = "django-allauth", extras = ["mfa"] },
+    { name = "django-allauth", extras = ["mfa"], specifier = ">=0.56.0" },
     { name = "django-anymail" },
     { name = "django-browser-reload", specifier = ">=1.21.0" },
     { name = "django-celery-beat" },
