@@ -1,4 +1,5 @@
 import pytest
+from field_audit import enable_audit
 
 from apps.utils.tests.utils import setup_test_app, tear_down_test_app
 
@@ -31,21 +32,23 @@ def _model_setup():
         -> b3
     t3
     """
+    # inline import to avoid importing before app initialization
     from apps.utils.tests.models import Bot, Collection, Param, Tool
 
-    c1 = Collection.objects.create(name="c1")
-    c2 = Collection.objects.create(name="c2")
+    with enable_audit():
+        c1 = Collection.objects.create(name="c1")
+        c2 = Collection.objects.create(name="c2")
 
-    tool1 = Tool.objects.create(name="t1", collection=c1)
-    Param.objects.create(name="p1", tool=tool1)
-    Param.objects.create(name="p2", tool=tool1)
+        tool1 = Tool.objects.create(name="t1", collection=c1)
+        Param.objects.create(name="p1", tool=tool1)
+        Param.objects.create(name="p2", tool=tool1)
 
-    tool2 = Tool.objects.create(name="t2", collection=c2)
-    Tool.objects.create(name="t3")
+        tool2 = Tool.objects.create(name="t2", collection=c2)
+        Tool.objects.create(name="t3")
 
-    bot1 = Bot.objects.create(name="b1", collection=c1)
-    bot2 = Bot.objects.create(name="b2", collection=c1)
-    Bot.objects.create(name="b3", collection=c2)
+        bot1 = Bot.objects.create(name="b1", collection=c1)
+        bot2 = Bot.objects.create(name="b2", collection=c1)
+        Bot.objects.create(name="b3", collection=c2)
 
-    bot1.tools.set([tool1, tool2])
-    bot2.tools.set([tool1])
+        bot1.tools.set([tool1, tool2])
+        bot2.tools.set([tool1])

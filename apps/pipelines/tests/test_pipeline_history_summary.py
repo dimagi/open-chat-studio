@@ -29,7 +29,7 @@ def pipeline_chat_history(experiment_session):
     return PipelineChatHistoryFactory(session=experiment_session)
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_no_summary_returns_all_messages(experiment_session):
     history = experiment_session.pipeline_chat_history.create(type=PipelineChatHistoryTypes.NAMED, name="name")
     message1 = history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
@@ -44,7 +44,7 @@ def test_no_summary_returns_all_messages(experiment_session):
     assert expected_messages == summary_messages
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_get_messages_returns_until_marker(experiment_session):
     history = experiment_session.pipeline_chat_history.create(type=PipelineChatHistoryTypes.NAMED, name="name")
     history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
@@ -75,7 +75,7 @@ def test_get_messages_returns_until_marker(experiment_session):
     ]
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_compress_history_no_need_for_compression(pipeline_chat_history):
     for i in range(15):
         # (3 tokens for human messages + 3 tokens for ai messages) * 15 messages)
@@ -95,7 +95,7 @@ def test_compress_history_no_need_for_compression(pipeline_chat_history):
     assert not any(isinstance(message, SystemMessage) for message in messages)
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 @mock.patch("apps.chat.conversation._get_new_summary")
 def test_create_summary_token_limit_reached(mock_get_new_summary, pipeline_chat_history):
     summary_message = "Summary"  # 2 tokens
