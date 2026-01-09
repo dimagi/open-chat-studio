@@ -15,7 +15,6 @@ dependencies = [
     "celery-progress",
     "celery[redis]",
     "django-allauth",
-    "django-allauth-2fa",
     "django-anymail",
     "django-cleanup",
     "django-cryptography-django5",

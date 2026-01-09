@@ -13,7 +13,7 @@
     <form method="post" action="{% url 'mfa_authenticate' %}">
       {% csrf_token %}
       {{ form.non_field_errors }}
-      {% render_text_input form.code %}
+      {% render_form_fields form %}
       <button type="submit" class="btn btn-primary mt-3">
         {% translate "Verify" %}
       </button>

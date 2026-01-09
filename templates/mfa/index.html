@@ -1,7 +1,7 @@
-{% extends "account/base.html" %}
+{% extends "mfa/mfa_base.html" %}
 {% load i18n %}
 
-{% block content %}
+{% block app %}
   <div class="space-y-6">
     <section class="app-card">
       <h2 class="pg-subtitle">{% translate "Authenticator App" %}</h2>
@@ -23,15 +23,13 @@
       <h2 class="pg-subtitle">{% translate "Recovery Codes" %}</h2>
 
       {% if authenticators.recovery_codes %}
-        {% with unused_codes=authenticators.recovery_codes.wrap.get_unused_codes %}
-          <p class="mb-3">
-            {% blocktranslate count counter=unused_codes|length %}
-            There is {{ counter }} recovery code available.
-            {% plural %}
-            There are {{ counter }} recovery codes available.
-            {% endblocktranslate %}
-          </p>
-        {% endwith %}
+        <p class="mb-3">
+        {% blocktranslate with total_count=authenticators.recovery_codes.generate_codes|length count unused_count=authenticators.recovery_codes.get_unused_codes|length %}
+          There is {{ unused_count }} out of {{ total_count }} recovery codes available.
+        {% plural %}
+          There are {{ unused_count }} out of {{ total_count }} recovery codes available.
+        {% endblocktranslate %}
+        </p>
 
         <div class="space-x-2">
           <a href="{% url 'mfa_view_recovery_codes' %}" class="btn btn-outline">
@@ -49,4 +47,4 @@
       {% endif %}
     </section>
   </div>
-{% endblock content %}
+{% endblock app %}

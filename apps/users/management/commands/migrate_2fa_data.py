@@ -144,7 +144,7 @@ class Command(BaseCommand):
 
                 # Create recovery codes authenticator
                 recovery_authenticator = Authenticator(
-                    user=user, type=Authenticator.Type.RECOVERY_CODES, data={"unused_codes": unused_codes}
+                    user=user, type=Authenticator.Type.RECOVERY_CODES, data={"migrated_codes": unused_codes}
                 )
                 authenticators_to_create.append(recovery_authenticator)
 

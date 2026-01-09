@@ -1,7 +1,7 @@
-{% extends "account/base.html" %}
+{% extends "mfa/mfa_base.html" %}
 {% load form_tags i18n %}
 
-{% block content %}
+{% block app %}
   <section class="app-card">
     <h2 class="pg-title">{% translate "Setup Two-Factor Authentication" %}</h2>
 
@@ -27,7 +27,7 @@
     <form method="post" action="{% url 'mfa_activate_totp' %}" class="mt-3">
       {% csrf_token %}
       {{ form.non_field_errors }}
-      {% render_text_input form.code %}
+      {% render_form_fields form %}
       <div class="mt-2">
         <button type="submit" class="btn btn-primary">
           {% translate "Activate" %}
@@ -35,4 +35,4 @@
       </div>
     </form>
   </section>
-{% endblock content %}
+{% endblock app %}

@@ -1,7 +1,7 @@
-{% extends "account/base.html" %}
+{% extends "mfa/mfa_base.html" %}
 {% load i18n %}
 
-{% block content %}
+{% block app %}
   <section class="app-card">
     <h2 class="pg-subtitle">{% translate "Recovery Codes" %}</h2>
 
@@ -24,4 +24,4 @@
       </a>
     </div>
   </section>
-{% endblock content %}
+{% endblock app %}
