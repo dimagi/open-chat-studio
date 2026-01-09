@@ -41,10 +41,8 @@ class Command(BaseCommand):
                 SELECT
                     d.id,
                     d.user_id,
-                    d.key,
-                    u.email
+                    d.key
                 FROM otp_totp_totpdevice d
-                JOIN users_customuser u ON u.id = d.user_id
                 WHERE d.confirmed = true
             """)
             columns = [col[0] for col in cursor.description]
@@ -64,7 +62,7 @@ class Command(BaseCommand):
             )
             return [row[0] for row in cursor.fetchall()]
 
-    def handle(self, *args, **options):
+    def handle(self, **options):
         dry_run = options["dry_run"]
 
         if dry_run:
@@ -91,29 +89,24 @@ class Command(BaseCommand):
         self.stdout.write(f"Found {len(totp_devices)} TOTP devices to migrate")
 
         migrated_count = 0
-        skipped_count = 0
         authenticators_to_create = []
 
         # Import User model
         from apps.users.models import CustomUser
 
-        for device in totp_devices:
-            user_id = device["user_id"]
-            user_email = device["email"]
+        # De-duplicate to at most one confirmed device per user (choose first)
+        devices_by_user_id = {}
+        for d in totp_devices:
+            devices_by_user_id.setdefault(d["user_id"], d)
 
+        for user_id, device in devices_by_user_id.items():
             try:
                 user = CustomUser.objects.get(id=user_id)
             except CustomUser.DoesNotExist:
-                self.stdout.write(self.style.ERROR(f"User {user_email} not found, skipping"))
+                self.stdout.write(self.style.ERROR(f"User id={user_id} not found, skipping"))
                 continue
 
-            # Check if user already has MFA configured (skip if already migrated)
-            if Authenticator.objects.filter(user=user, type=Authenticator.Type.TOTP).exists():
-                self.stdout.write(
-                    self.style.WARNING(f"Skipping user {user_email} - already has allauth.mfa configured")
-                )
-                skipped_count += 1
-                continue
+            existing_types = set(Authenticator.objects.filter(user=user).values_list("type", flat=True))
 
             # Convert hex key to base32
             try:
@@ -123,34 +116,30 @@ class Command(BaseCommand):
                 # Convert to base32
                 base32_secret = base64.b32encode(key_bytes).decode("utf-8")
             except (ValueError, binascii.Error) as e:
-                self.stdout.write(self.style.ERROR(f"Failed to convert TOTP key for user {user_email}: {e}"))
+                self.stdout.write(self.style.ERROR(f"Failed to convert TOTP key for user id={user_id}: {e}"))
                 continue
 
-            # Encrypt the secret
-            encrypted_secret = adapter.encrypt(base32_secret)
-
-            # Create TOTP authenticator
-            totp_authenticator = Authenticator(
-                user=user, type=Authenticator.Type.TOTP, data={"secret": encrypted_secret}
-            )
-            authenticators_to_create.append(totp_authenticator)
+            if Authenticator.Type.TOTP not in existing_types:
+                encrypted_secret = adapter.encrypt(base32_secret)
+                authenticators_to_create.append(
+                    Authenticator(user=user, type=Authenticator.Type.TOTP, data={"secret": encrypted_secret})
+                )
 
             # Get recovery codes from StaticDevice using raw SQL
             static_tokens = self._get_static_tokens(user_id)
 
             if static_tokens:
-                # Encrypt unused recovery codes
-                unused_codes = [adapter.encrypt(token) for token in static_tokens]
+                if Authenticator.Type.RECOVERY_CODES not in existing_types:
+                    unused_codes = [adapter.encrypt(token) for token in static_tokens]
+                    authenticators_to_create.append(
+                        Authenticator(
+                            user=user,
+                            type=Authenticator.Type.RECOVERY_CODES,
+                            data={"migrated_codes": unused_codes},
+                        )
+                    )
 
-                # Create recovery codes authenticator
-                recovery_authenticator = Authenticator(
-                    user=user, type=Authenticator.Type.RECOVERY_CODES, data={"migrated_codes": unused_codes}
-                )
-                authenticators_to_create.append(recovery_authenticator)
-
-                self.stdout.write(f"  Migrating {len(unused_codes)} recovery codes for {user_email}")
-
-            self.stdout.write(self.style.SUCCESS(f"Prepared migration for user: {user_email}"))
+            self.stdout.write(self.style.SUCCESS(f"Prepared migration for user id={user_id}"))
             migrated_count += 1
 
         # Bulk create all authenticators
@@ -170,9 +159,6 @@ class Command(BaseCommand):
                     f"({len(authenticators_to_create)} authenticators)"
                 )
             )
-
-        if skipped_count > 0:
-            self.stdout.write(f"Skipped {skipped_count} users (already migrated)")
 
         self.stdout.write(
             self.style.SUCCESS("\nMigration complete!\n2FA functionality has been restored for migrated users.")
