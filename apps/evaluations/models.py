@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
@@ -350,24 +350,28 @@ class EvaluationRun(BaseTeamModel):
                 for key, value in result.message_context.items()
                 if key != "current_datetime"
             }
-            if include_ids is True:
-                table_by_message[result.message.id].update({"id": result.message.id})
+            # Build row data in order
+            row_data = OrderedDict()
+            row_data["session"] = result.session.external_id if result.session_id else ""
+            row_data["message_id"] = result.message.id
+            row_data["Dataset Input"] = result.input_message
+            row_data["Dataset Output"] = result.output_message
+            row_data["Generated Response"] = result.output.get("generated_response", "")
 
-            table_by_message[result.message.id].update(
-                {
-                    "Dataset Input": result.input_message,
-                    "Dataset Output": result.output_message,
-                    "Generated Response": result.output.get("generated_response", ""),
-                    **{
-                        f"{key} ({result.evaluator.name})": value
-                        for key, value in result.output.get("result", {}).items()
-                    },
-                    **context_columns,
-                    "session": result.session.external_id if result.session_id else "",
-                }
+            row_data.update(
+                {f"{key} ({result.evaluator.name})": value for key, value in result.output.get("result", {}).items()}
             )
+
+            row_data.update(context_columns)
+
             if result.output.get("error"):
-                table_by_message[result.message.id]["error"] = result.output.get("error")
+                row_data["error"] = result.output.get("error")
+
+            if include_ids is True:
+                row_data["id"] = result.message.id
+
+            table_by_message[result.message.id] = row_data
+
         return [{"#": index, **row} for index, row in enumerate(table_by_message.values())]
 
 

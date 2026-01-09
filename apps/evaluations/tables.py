@@ -339,6 +339,10 @@ class DatasetMessagesTable(tables.Table):
         ]
     )
 
+    def __init__(self, *args, highlight_message_id=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.highlight_message_id = highlight_message_id
+
     class Meta:
         model = EvaluationMessage
         fields = (
@@ -351,6 +355,5 @@ class DatasetMessagesTable(tables.Table):
             "session_state",
             "actions",
         )
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No messages in this dataset yet."

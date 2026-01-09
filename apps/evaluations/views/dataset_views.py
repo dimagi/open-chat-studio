@@ -283,7 +283,7 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     model = EvaluationMessage
     table_class = DatasetMessagesTable
     table_pagination = {"per_page": 10}
-    template_name = "table/single_table.html"
+    template_name = "evaluations/dataset_messages_table.html"
     permission_required = "evaluations.view_evaluationdataset"
 
     def get_queryset(self):
@@ -294,6 +294,23 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
         return EvaluationMessage.objects.filter(
             evaluationdataset__id=dataset_id, evaluationdataset__team=self.request.team
         ).order_by("id")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        try:
+            context["highlight_message_id"] = int(self.request.GET.get("message_id"))
+        except (ValueError, TypeError):
+            context["highlight_message_id"] = None
+        return context
+
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        try:
+            highlight_id = int(self.request.GET.get("message_id"))
+            kwargs["highlight_message_id"] = highlight_id
+        except (ValueError, TypeError):
+            kwargs["highlight_message_id"] = None
+        return kwargs
 
 
 @login_and_team_required
