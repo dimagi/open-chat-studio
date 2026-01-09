@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import time_machine
+from django.db import transaction
 from django.db.utils import IntegrityError
 from django.utils import timezone
 from time_machine import travel
@@ -640,7 +641,7 @@ class TestExperimentModel:
         working_exp = ExperimentFactory()
         team = working_exp.team
         ExperimentFactory(is_default_version=True, working_version=working_exp, team=team)
-        with pytest.raises(IntegrityError, match=r'.*"unique_default_version_per_experiment".*'):
+        with transaction.atomic(), pytest.raises(IntegrityError, match=r'.*"unique_default_version_per_experiment".*'):
             ExperimentFactory(is_default_version=True, working_version=working_exp, team=team, version_number=2)
         ExperimentFactory(is_default_version=False, working_version=working_exp, team=team, version_number=3)
 
