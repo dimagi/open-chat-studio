@@ -727,6 +727,11 @@ dependencies = [
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9f/65/254ae01e3f369306989aab401ba1ba6868d14826dc85523a8b11ac5870fe/django-allauth-0.57.2.tar.gz", hash = "sha256:51c400f61bfb15bd08e22543a65d551c8f563254064620c37c49766b1ba7e1ae", size = 858996, upload-time = "2024-02-09T09:15:16.069Z" }
 
+[package.optional-dependencies]
+mfa = [
+    { name = "qrcode" },
+]
+
 [[package]]
 name = "django-anymail"
 version = "13.1"
@@ -2753,7 +2758,7 @@ dependencies = [
     { name = "celery", extra = ["redis"] },
     { name = "celery-progress" },
     { name = "django" },
-    { name = "django-allauth" },
+    { name = "django-allauth", extra = ["mfa"] },
     { name = "django-anymail" },
     { name = "django-browser-reload" },
     { name = "django-celery-beat" },
@@ -2861,7 +2866,7 @@ requires-dist = [
     { name = "celery", extras = ["redis"] },
     { name = "celery-progress" },
     { name = "django" },
-    { name = "django-allauth" },
+    { name = "django-allauth", extras = ["mfa"] },
     { name = "django-anymail" },
     { name = "django-browser-reload", specifier = ">=1.21.0" },
     { name = "django-celery-beat" },
@@ -3853,6 +3858,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/fb/8e/da1c6c58f751b70f8ceb1eb25bc25d524e8f14fe16edcce3f4e3ba08629c/pyyaml_env_tag-0.1.tar.gz", hash = "sha256:70092675bda14fdec33b31ba77e7543de9ddc88f2e5b99160396572d11525bdb", size = 5631, upload-time = "2020-11-12T02:38:26.239Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5a/66/bbb1dd374f5c870f59c5bb1db0e18cbe7fa739415a24cbd95b2d1f5ae0c4/pyyaml_env_tag-0.1-py3-none-any.whl", hash = "sha256:af31106dec8a4d68c60207c1886031cbf839b68aa7abccdb19868200532c2069", size = 3911, upload-time = "2020-11-12T02:38:24.638Z" },
+]
+
+[[package]]
+name = "qrcode"
+version = "8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8f/b2/7fc2931bfae0af02d5f53b174e9cf701adbb35f39d69c2af63d4a39f81a9/qrcode-8.2.tar.gz", hash = "sha256:35c3f2a4172b33136ab9f6b3ef1c00260dd2f66f858f24d88418a015f446506c", size = 43317, upload-time = "2025-05-01T15:44:24.726Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/b8/d2d6d731733f51684bbf76bf34dab3b70a9148e8f2cef2bb544fccec681a/qrcode-8.2-py3-none-any.whl", hash = "sha256:16e64e0716c14960108e85d853062c9e8bba5ca8252c0b4d0231b9df4060ff4f", size = 45986, upload-time = "2025-05-01T15:44:22.781Z" },
 ]
 
 [[package]]
