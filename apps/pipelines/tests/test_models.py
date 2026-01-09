@@ -242,16 +242,16 @@ class TestPipeline:
             temporary_instance_models.append(Participant)
 
         for model in temporary_instance_models:
-            assert model.objects.count() == 0
+            assert model.objects.filter(team=team).count() == 0
 
         bot = PipelineTestBot(pipeline=pipeline, user_id=requesting_user.id)
         bot.process_input("test")
 
         for model in temporary_instance_models:
-            assert model.objects.count() == 0
+            assert model.objects.filter(team=team).count() == 0
 
         if participant_exists:
-            assert Participant.objects.filter(user=requesting_user).exists()
+            assert Participant.objects.filter(team=team, user=requesting_user).exists()
 
     @django_db_with_data()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
