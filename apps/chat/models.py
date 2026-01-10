@@ -199,6 +199,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def role(self):
         return ChatMessageType(self.message_type).role
 
+    @property
+    def team(self):
+        return self.chat.team
+
     def save(self, *args, **kwargs):
         if self.is_summary:
             raise ValueError("Cannot save a summary message")

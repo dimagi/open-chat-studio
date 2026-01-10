@@ -7,6 +7,7 @@ from django.db.models import Model
 class SearchableModel:
     model_cls: type[Model]
     field_name: str
+    require_uuid: bool = True
 
     def search(self, value):
         results = self.model_cls.objects.filter(**{self.field_name: value})[:2]
@@ -20,11 +21,18 @@ class SearchableModel:
         return f"{app_label}.view_{model_name}"
 
 
-def get_searchable_models():
+def get_searchable_models(model_name: None):
+    from apps.chat.models import ChatMessage
     from apps.experiments.models import Experiment, ExperimentSession, Participant
 
-    return [
+    searchable_models = [
         SearchableModel(Experiment, "public_id"),
         SearchableModel(ExperimentSession, "external_id"),
         SearchableModel(Participant, "public_id"),
+        SearchableModel(ChatMessage, "id", False),
     ]
+
+    if model_name:
+        return [item for item in searchable_models if item.model_cls.__name__ == model_name]
+
+    return searchable_models
