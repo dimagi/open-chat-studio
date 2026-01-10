@@ -15,7 +15,6 @@ from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
-from apps.web.meta import absolute_url
 
 
 class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
@@ -288,17 +287,25 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             return tag.name
 
     def get_absolute_url(self):
-        if not self.chat_id or not self.chat.team_id or not hasattr(self.chat, "experiment_session"):
+        if not self.chat_id or not self.chat.team_id:
             return None
-        uri = reverse(
-            "chatbots:chatbot_session_view",
-            kwargs={
-                "team_slug": get_slug_for_team(self.chat.team_id),
-                "experiment_id": self.chat.experiment_session.experiment.public_id,
-                "session_id": self.chat.experiment_session.external_id,
-            },
-        )
-        return absolute_url(uri + f"?message_id={self.id}", is_secure=True)
+
+        experiment_session = getattr(self.chat, "experiment_session", None)
+        if not experiment_session:
+            return None
+
+        try:
+            uri = reverse(
+                "chatbots:chatbot_session_view",
+                kwargs={
+                    "team_slug": get_slug_for_team(self.chat.team_id),
+                    "experiment_id": experiment_session.experiment.public_id,
+                    "session_id": experiment_session.external_id,
+                },
+            )
+            return uri + f"?message_id={self.id}"
+        except (ValueError, AttributeError):
+            return None
 
 
 class ChatAttachment(BaseModel):
