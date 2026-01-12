@@ -249,6 +249,11 @@ AUTH_USER_MODEL = "users.CustomUser"
 LOGIN_URL = "sso:login"
 LOGIN_REDIRECT_URL = "/"
 
+# Migration modules - override allauth.account to fix field_audit compatibility
+MIGRATION_MODULES = {
+    "account": "apps.account.migrations",
+}
+
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
 
@@ -273,13 +278,11 @@ if SIGNUP_ENABLED:
     ACCOUNT_ADAPTER = "apps.teams.adapter.AcceptInvitationAdapter"
 else:
     ACCOUNT_ADAPTER = "apps.teams.adapter.NoNewUsersAccountAdapter"
-ACCOUNT_AUTHENTICATION_METHOD = "email"
-ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*"]
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 ACCOUNT_CONFIRM_EMAIL_ON_GET = False
 ACCOUNT_UNIQUE_EMAIL = True
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE = False
 ACCOUNT_SESSION_REMEMBER = True
 ACCOUNT_LOGOUT_ON_GET = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
