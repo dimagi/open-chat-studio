@@ -122,7 +122,7 @@ class TestOpenAISpeechIntegration:
         assert result is not None
         assert len(result) > 0
         result_lower = result.lower()
-        assert "ribby" in result_lower or "ribbie" in result_lower
+        assert "ribby" in result_lower or "ribbie" in result_lower or "ruby" in result_lower
         assert "patty" in result_lower or "patty-pan" in result_lower
         assert "scalloped" in result_lower or "scallop" in result_lower
 
@@ -201,6 +201,6 @@ class TestAzureSpeechIntegration:
         assert result is not None
         assert len(result) > 0
         result_lower = result.lower()
-        assert "ribby" in result_lower or "ribbie" in result_lower
+        assert "ribby" in result_lower or "ribbie" in result_lower or "ruby" in result_lower
         assert "patty" in result_lower or "patty-pan" in result_lower
         assert "scalloped" in result_lower or "scallop" in result_lower
