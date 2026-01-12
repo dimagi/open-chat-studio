@@ -104,16 +104,27 @@ class TestOpenAISpeechIntegration:
         assert len(audio_segment) > 0
 
     def test_transcribe_audio_with_real_api(self, openai_credentials):
-        """Test transcription with real OpenAI API - placeholder for future implementation"""
+        """Test transcription with real OpenAI API"""
         service = OpenAISpeechService(
             openai_api_key=openai_credentials["api_key"],
             openai_api_base=openai_credentials["api_base"],
             openai_organization=openai_credentials["organization"],
         )
 
-        # TODO: Add real transcription test with valid audio file
-        # For now, just verify the service is configured correctly
-        assert service.supports_transcription is True
+        # Load test audio file
+        test_audio_path = os.path.join(settings.BASE_DIR, "apps/service_providers/tests/data/speech_sample1.mp3")
+        with open(test_audio_path, "rb") as audio_file:
+            result = service.transcribe_audio(audio_file)
+
+        # Expected: "Oh, I do feel so ill all over me, my dear Ribby;
+        # I have swallowed a large tin patty-pan with a sharp scalloped edge!"
+        # Verify transcription contains key phrases (allowing for minor variations)
+        assert result is not None
+        assert len(result) > 0
+        result_lower = result.lower()
+        assert "ribby" in result_lower or "ribbie" in result_lower
+        assert "patty" in result_lower or "patty-pan" in result_lower
+        assert "scalloped" in result_lower or "scallop" in result_lower
 
 
 @pytest.mark.django_db()
@@ -173,12 +184,23 @@ class TestAzureSpeechIntegration:
         assert len(result.audio.getvalue()) > 0
 
     def test_transcribe_audio_with_real_api(self, azure_credentials):
-        """Test transcription with real Azure API - placeholder for future implementation"""
+        """Test transcription with real Azure API"""
         service = AzureSpeechService(
             azure_subscription_key=azure_credentials["subscription_key"],
             azure_region=azure_credentials["region"],
         )
 
-        # TODO: Add real transcription test with valid audio file
-        # For now, just verify the service is configured correctly
-        assert service.supports_transcription is True
+        # Load test audio file
+        test_audio_path = os.path.join(settings.BASE_DIR, "apps/service_providers/tests/data/speech_sample1.mp3")
+        with open(test_audio_path, "rb") as audio_file:
+            result = service.transcribe_audio(audio_file)
+
+        # Expected: "Oh, I do feel so ill all over me, my dear Ribby;
+        # I have swallowed a large tin patty-pan with a sharp scalloped edge!"
+        # Verify transcription contains key phrases (allowing for minor variations)
+        assert result is not None
+        assert len(result) > 0
+        result_lower = result.lower()
+        assert "ribby" in result_lower or "ribbie" in result_lower
+        assert "patty" in result_lower or "patty-pan" in result_lower
+        assert "scalloped" in result_lower or "scallop" in result_lower

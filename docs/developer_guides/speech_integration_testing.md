@@ -97,7 +97,7 @@ python manage.py test_speech_live --service openai --env-file .env.prod
 
 ### OpenAI Tests
 - ✓ Speech synthesis with real API
-- ✓ Transcription (error handling)
+- ✓ Transcription with real audio file
 - ✓ Verify correct model name (`gpt-4o-mini-transcribe`)
 
 ### AWS Tests
@@ -106,8 +106,15 @@ python manage.py test_speech_live --service openai --env-file .env.prod
 
 ### Azure Tests
 - ✓ Speech synthesis with Cognitive Services
-- ✓ Transcription (error handling)
+- ✓ Transcription with real audio file
 - ✓ WAV format output
+
+## Test Data
+
+The integration tests use real audio samples located in `apps/service_providers/tests/data/`:
+
+- **speech_sample1.mp3**: ~10 second audio clip for transcription testing
+  - Expected transcription: "Oh, I do feel so ill all over me, my dear Ribby; I have swallowed a large tin patty-pan with a sharp scalloped edge!"
 
 ## Notes
 
