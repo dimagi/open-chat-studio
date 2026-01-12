@@ -179,7 +179,9 @@ class OpenAISpeechService(SpeechService):
         """
         Calls OpenAI to convert the text to speech using the synthetic_voice
         """
-        response = self._client.audio.speech.create(model="tts-1", voice=synthetic_voice.name, input=text)
+        response = self._client.audio.speech.create(
+            model="gpt-4o-mini-transcribe", voice=synthetic_voice.name, input=text
+        )
         audio_data = response.read()
 
         audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
@@ -188,7 +190,7 @@ class OpenAISpeechService(SpeechService):
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
         transcript = self._client.audio.transcriptions.create(
-            model="whisper-1",
+            model="gpt-4o-mini-transcribe",
             file=audio,
         )
         return transcript.text
@@ -216,7 +218,7 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
 
         files = {"reference_audio": sample_audio.file}
         data = {
-            "model": "tts-1",
+            "model": "gpt-4o-mini-transcribe",
             "text": text,
             "speed": "1.0",
             "response_format": "mp3",
@@ -234,7 +236,7 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
         transcript = self._client.audio.transcriptions.create(
-            model="whisper-1",
+            model="gpt-4o-mini-transcribe",
             file=audio,
         )
         return transcript.text
