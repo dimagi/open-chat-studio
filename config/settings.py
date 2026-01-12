@@ -249,11 +249,6 @@ AUTH_USER_MODEL = "users.CustomUser"
 LOGIN_URL = "sso:login"
 LOGIN_REDIRECT_URL = "/"
 
-# Migration modules - override allauth.account to fix field_audit compatibility
-MIGRATION_MODULES = {
-    "account": "apps.account.migrations",
-}
-
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
 
