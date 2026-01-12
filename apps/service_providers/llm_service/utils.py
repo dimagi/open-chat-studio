@@ -1,3 +1,4 @@
+import logging
 import re
 from io import BytesIO
 
@@ -7,6 +8,17 @@ from langchain_core.messages import HumanMessage
 
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
+
+logger = logging.getLogger("ocs.llm_service")
+
+# MIME types that should be converted to text using MarkItDown before sending to LLM APIs
+# These formats are not natively supported by OpenAI/Anthropic document APIs
+MARKITDOWN_CONVERTIBLE_MIME_TYPES = {
+    # Word documents
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+    # Excel spreadsheets
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # .xlsx
+}
 
 
 def detangle_file_ids(file_ids: list[str]) -> list[str]:
@@ -143,6 +155,17 @@ def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
                     "mime_type": mime_type,
                 }
             )
+        elif mime_type in MARKITDOWN_CONVERTIBLE_MIME_TYPES:
+            # Convert DOCX/XLSX to text using MarkItDown since these formats
+            # are not natively supported by OpenAI/Anthropic document APIs
+            text_content = _convert_attachment_to_text(att)
+            if text_content:
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": f"<document filename=\"{att.name}\">\n{text_content}\n</document>",
+                    }
+                )
         else:
             parts.append(
                 {
@@ -154,3 +177,19 @@ def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
                 }
             )
     return HumanMessage(content=parts)
+
+
+def _convert_attachment_to_text(attachment) -> str | None:
+    """Convert an attachment to text using MarkItDown.
+
+    Args:
+        attachment: The attachment object to convert
+
+    Returns:
+        The text content of the attachment, or None if conversion failed
+    """
+    try:
+        return attachment.read_text()
+    except Exception as e:
+        logger.warning(f"Failed to convert attachment {attachment.name} to text: {e}")
+        return None
