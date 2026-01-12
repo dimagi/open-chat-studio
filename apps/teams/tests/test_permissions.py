@@ -26,7 +26,7 @@ IGNORE_APPS = {
     "account",
     "admin",
     "allauth",
-    "allauth_2fa",
+    "mfa",  # allauth.mfa app label
     "api",
     "analysis",  # TODO: delete once the app is completely removed
     "audit",
@@ -42,7 +42,6 @@ IGNORE_APPS = {
     "django_cleanup",
     "django_htmx",
     "django_browser_reload",
-    "django_otp",
     "django_tables2",
     "django_watchfiles",
     "documents",  # ignore for now - may be added later
@@ -57,8 +56,6 @@ IGNORE_APPS = {
     "humanize",
     "messages",
     "microsoft",  # allauth
-    "otp_static",
-    "otp_totp",
     "redis",  # heath_check.redis
     "rest_framework",
     "rest_framework_api_key",
