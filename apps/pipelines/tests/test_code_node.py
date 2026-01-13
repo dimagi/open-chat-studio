@@ -42,7 +42,7 @@ def main(input, **kwargs):
 """
 
 
-# @django_db_with_data(available_apps=("apps.service_providers",))
+# @django_db_with_data()
 @pytest.mark.parametrize(
     ("code", "user_input", "output"),
     [
@@ -161,7 +161,7 @@ def main(input, **kwargs):
     assert node_output.update["participant_data"]["fun_facts"]["personality"] == output
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_participant_data_across_multiple_nodes(pipeline, experiment_session):
     code_set = """
 def main(input, **kwargs):
@@ -184,7 +184,7 @@ def main(input, **kwargs):
     assert node_output["messages"][-1] == "value"
 
 
-@django_db_with_data(available_apps=("apps.service_providers",))
+@django_db_with_data()
 def test_temp_state_across_multiple_nodes(pipeline, experiment_session):
     output = "['fun loving', 'likes puppies']"
     code_set = f"""
@@ -208,7 +208,7 @@ def main(input, **kwargs):
     assert node_output["messages"][-1] == output
 
 
-@django_db_with_data(available_apps=("apps.service_providers", "apps.experiments", "apps.teams"))
+@django_db_with_data()
 def test_temp_state_get_outputs(pipeline, experiment_session):
     # Temp state contains the outputs of the previous nodes
 

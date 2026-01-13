@@ -74,8 +74,7 @@ urlpatterns = [
     ),
     path("a/<slug:team_slug>/", include(team_urlpatterns)),
     path("", include("apps.sso.urls")),  # must be before allauth urls since it uses the same paths
-    path("accounts/", include("allauth_2fa.urls")),
-    path("accounts/", include("allauth.urls")),
+    path("accounts/", include("allauth.urls")),  # MFA URLs included automatically
     path("users/", include("apps.users.urls")),
     path("teams/", include("apps.teams.urls")),
     path("", include("apps.web.urls")),

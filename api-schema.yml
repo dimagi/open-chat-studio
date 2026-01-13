@@ -577,6 +577,64 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/sessions/{id}/tags/:
+    post:
+      operationId: session_add_tags
+      description: Add tags to a session. Tags are automatically created if they don't
+        exist.
+      summary: Add Tags to Session
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: ID of the session
+        required: true
+      tags:
+      - Experiment Sessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tags_request_serializer'
+        required: true
+      security:
+      - OAuth2:
+        - sessions:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tags_response_serializer'
+          description: ''
+    delete:
+      operationId: session_remove_tags
+      description: Remove tags from a session.
+      summary: Remove Tags from Session
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: ID of the session
+        required: true
+      tags:
+      - Experiment Sessions
+      security:
+      - OAuth2:
+        - sessions:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tags_response_serializer'
+          description: ''
   /api/sessions/{id}/update_state/:
     patch:
       operationId: session_update_state
@@ -1424,6 +1482,24 @@ components:
       - id
       - name
       - size
+    tags_request_serializer:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+      - tags
+    tags_response_serializer:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+      - tags
     update_state_response:
       type: object
       properties:

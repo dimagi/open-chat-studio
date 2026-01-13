@@ -88,7 +88,7 @@ class TestEmailPipeline:
     """Tests for email-related pipeline functionality"""
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_full_email_sending_pipeline(self, get_llm_service, provider, provider_model, pipeline):
         service = build_fake_llm_service(responses=['{"summary": "Ice is cold"}'], token_counts=[0])
@@ -112,7 +112,7 @@ class TestEmailPipeline:
         assert mail.outbox[0].to == ["test@example.com"]
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_send_email(self, pipeline):
         nodes = [start_node(), email_node(), end_node()]
         create_runnable(pipeline, nodes).invoke(PipelineState(messages=["A cool message"]))
@@ -125,7 +125,7 @@ class TestEmailPipeline:
 class TestLLMResponse:
     """Tests for LLM response nodes"""
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_llm_response(self, get_llm_service, provider, provider_model, pipeline):
         service = build_fake_llm_service(responses=["123"], token_counts=[0])
@@ -140,7 +140,7 @@ class TestLLMResponse:
             == "123"
         )
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_llm_with_prompt_response(
         self, get_llm_service, provider, provider_model, pipeline, source_material, experiment_session
@@ -182,7 +182,7 @@ class TestLLMResponse:
         )
         assert output == expected_output
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_end_session_tool(self, get_llm_service, provider, provider_model, pipeline, experiment_session):
         def _tool_call():
@@ -208,7 +208,7 @@ class TestLLMResponse:
         output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
         assert output["intents"] == [Intents.END_SESSION]
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_llm_model_parameters_with_none_value(self, provider, provider_model):
         """There was a bug where llm_model_parameters being `None` caused validation to fail, because it didn't default
         to a dictionary correctly
@@ -226,7 +226,7 @@ class TestLLMResponse:
 class TestTemplateRendering:
     """Tests for template rendering nodes"""
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_render_template(self, pipeline):
         nodes = [
             start_node(),
@@ -241,7 +241,7 @@ class TestTemplateRendering:
 class TestConditionalNode:
     """Tests for conditional/boolean nodes"""
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_conditional_node(self, pipeline, experiment_session):
         start = start_node()
         boolean = boolean_node(name="boolean")
@@ -346,7 +346,7 @@ class TestRouterNode:
         expected_pd = {"name": experiment_session.participant.name} | participant_data
         assert str(expected_pd) in system_prompt.content
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_router_node(self, get_llm_service, provider, provider_model, pipeline, experiment_session):
         def _tool_call(route):
@@ -508,7 +508,7 @@ class TestRouterNode:
 class TestStaticRouterNode:
     """Tests for static router nodes (state-based routing without LLM)"""
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_static_router_temp_state(self, pipeline, experiment_session):
         # The static router will switch based on a state key, and pass its input through
 
@@ -558,7 +558,7 @@ def main(input, **kwargs):
         output = runnable.invoke(PipelineState(messages=["Go to Third"], experiment_session=experiment_session))
         assert output["messages"][-1] == "A Go to Third"
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_static_router_case_sensitive(self, pipeline, experiment_session):
         start = start_node()
         router = state_key_router_node(
@@ -652,7 +652,7 @@ def main(input, **kwargs):
         _check_routing_and_tags("first", "first")
         _check_routing_and_tags("second", "second")
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     @pytest.mark.parametrize(
         "data_source", [StaticRouterNode.DataSource.participant_data, StaticRouterNode.DataSource.session_state]
     )
@@ -704,7 +704,7 @@ def main(input, **kwargs):
 class TestCodeNode:
     """Tests for code execution nodes"""
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_attachments_in_code_node(self, pipeline, experiment_session):
         code_set = """
 def main(input, **kwargs):
@@ -759,7 +759,7 @@ class TestDataExtraction:
             runnable = create_runnable(pipeline, nodes)
             yield runnable
 
-    @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
+    @django_db_with_data()
     def test_extract_structured_data_no_chunking(self, provider, provider_model, pipeline):
         session = ExperimentSessionFactory()
 
@@ -770,7 +770,7 @@ class TestDataExtraction:
             )
             assert graph.invoke(state)["messages"][-1] == '{"name": "John"}'
 
-    @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
+    @django_db_with_data()
     def test_extract_structured_data_with_chunking(self, provider, provider_model, pipeline):
         session = ExperimentSessionFactory()
         llm = FakeLlmSimpleTokenCount(
@@ -829,7 +829,7 @@ class TestDataExtraction:
         # Expected node output
         assert extracted_data == '{"name": "james"}'
 
-    @django_db_with_data(available_apps=("apps.service_providers", "apps.experiments"))
+    @django_db_with_data()
     def test_extract_participant_data(self, provider, pipeline):
         """Test the pipeline to extract and update participant data. First we run it when no data is linked to the
         participant to make sure it creates data. Then we run it again a few times to test that it updates the data
@@ -980,7 +980,7 @@ class TestAssistantNode:
         args, kwargs = runnable_mock.invoke.call_args
         assert kwargs["attachments"] == [attachments[1]]
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
     def test_assistant_node_raises(self, get_assistant_runnable):
         runnable_mock = runnable_mock = self.assistant_node_runnable_mock(
@@ -1032,31 +1032,31 @@ class TestAssistantNode:
 class TestPipelineValidation:
     """Tests for pipeline structure validation"""
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_start_node_missing(self, pipeline):
         nodes = [passthrough_node(), end_node()]
         with pytest.raises(PipelineBuildError, match="There should be exactly 1 Start node"):
             create_runnable(pipeline, nodes)
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_end_node_missing(self, pipeline):
         nodes = [start_node()]
         with pytest.raises(PipelineBuildError, match="There should be exactly 1 End node"):
             create_runnable(pipeline, nodes)
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_multiple_start_nodes(self, pipeline):
         nodes = [start_node(), start_node(), end_node()]
         with pytest.raises(PipelineBuildError, match="There should be exactly 1 Start node"):
             create_runnable(pipeline, nodes)
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_multiple_end_nodes(self, pipeline):
         nodes = [start_node(), end_node(), end_node()]
         with pytest.raises(PipelineBuildError, match="There should be exactly 1 End node"):
             create_runnable(pipeline, nodes)
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_single_node_unreachable(self, pipeline):
         # The last passthrough node is not reachable, as it doesn't have any incoming or outgoing edges
         nodes = [start_node(), passthrough_node(), end_node(), passthrough_node()]
@@ -1071,7 +1071,7 @@ class TestPipelineValidation:
         # Should not raise a `ValueError`
         create_runnable(pipeline, nodes, edges)
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_subgraph_unreachable_should_build(self, pipeline):
         # The last passthrough nodes are not reachable
         start = start_node()
@@ -1104,7 +1104,7 @@ class TestPipelineValidation:
             ["__start__", start["id"], passthrough["id"], end["id"], "__end__"]
         )
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_split_graphs_should_not_build(self, pipeline):
         # The last passthrough nodes are not reachable
         start = start_node()
@@ -1135,7 +1135,7 @@ class TestPipelineValidation:
         ):
             create_runnable(pipeline, nodes, edges)
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_cyclical_graph(self, pipeline):
         # Ensure that cyclical graphs throw an error
         start = start_node()
@@ -1169,7 +1169,7 @@ class TestPipelineValidation:
         with pytest.raises(PipelineBuildError, match="A cycle was detected"):
             create_runnable(pipeline, nodes, edges)
 
-    @django_db_with_data(available_apps=("apps.service_providers",))
+    @django_db_with_data()
     def test_multiple_valid_inputs(self, pipeline):
         """This tests the case where a node has multiple valid inputs to make sure it selects the correct one.
 

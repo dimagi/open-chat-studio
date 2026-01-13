@@ -14,8 +14,7 @@ dependencies = [
     "celery",
     "celery-progress",
     "celery[redis]",
-    "django-allauth",
-    "django-allauth-2fa",
+    "django-allauth[mfa]>=0.56.0",
     "django-anymail",
     "django-cleanup",
     "django-cryptography-django5",
@@ -110,7 +109,7 @@ exclude = [
 
 line-length = 120
 indent-width = 4
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM"]

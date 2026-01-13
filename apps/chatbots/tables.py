@@ -91,7 +91,7 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
         accessor="message_count",
         orderable=True,
     )
-    last_message = TimeAgoColumn(accessor="last_message_created_at", verbose_name="Last activity", orderable=True)
+    last_message = TimeAgoColumn(accessor="last_activity_at", verbose_name="Last activity", orderable=True)
 
     actions = actions.ActionsColumn(
         actions=[
