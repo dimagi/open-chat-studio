@@ -54,22 +54,6 @@ python manage.py test_speech_live --service all --save-audio /tmp/test_audio
 python manage.py test_speech_live --service openai --env-file .env.prod
 ```
 
-## CI/CD Integration
-
-To run integration tests in CI, set environment variables:
-
-```yaml
-# GitHub Actions example
-- name: Run integration tests
-  env:
-    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    AWS_REGION: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
-  run: pytest -m integration -v
-```
-
 ## Troubleshooting
 
 ### Tests Skip with "Credentials not set"
