@@ -225,7 +225,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
 
 class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationrun"
-    template_name = "table/single_table.html"
+    template_name = "evaluations/evaluation_results_table.html"
 
     def get_queryset(self):
         return self.evaluation_run
@@ -238,7 +238,24 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
         )
 
     def get_table_data(self):
-        return self.evaluation_run.get_table_data()
+        return self.evaluation_run.get_table_data(include_ids=True)
+
+    def get_highlight_result_id(self):
+        """Extract and validate the result_id query parameter for highlighting."""
+        try:
+            return int(self.request.GET.get("result_id"))
+        except (ValueError, TypeError):
+            return None
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["highlight_result_id"] = self.get_highlight_result_id()
+        return context
+
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        kwargs["highlight_result_id"] = self.get_highlight_result_id()
+        return kwargs
 
     def get_table_class(self):
         """

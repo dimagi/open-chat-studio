@@ -1,0 +1,23 @@
+{% load render_table from django_tables2 %}
+{% render_table table "evaluations/evaluation_results_table_render.html" %}
+
+{% if highlight_result_id %}
+<script>
+  function scrollToResult() {
+    const resultId = "{{ highlight_result_id }}";
+    const selectedRow = document.querySelector(`tr[data-result-id="${resultId}"]`);
+    if (selectedRow) {
+      selectedRow.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scrollToResult);
+  } else {
+    scrollToResult();
+  }
+</script>
+{% endif %}
