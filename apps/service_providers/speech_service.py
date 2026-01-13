@@ -3,7 +3,7 @@ import tempfile
 from contextlib import closing
 from dataclasses import dataclass
 from io import BytesIO
-from typing import ClassVar
+from typing import IO, ClassVar
 
 import azure.cognitiveservices.speech as speechsdk
 import boto3
@@ -47,14 +47,14 @@ class SpeechService(pydantic.BaseModel):
             log.exception(e)
             raise AudioSynthesizeException(f"Unable to synthesize audio with {self._type}: {e}") from e
 
-    def transcribe_audio(self, audio: BytesIO) -> str:
+    def transcribe_audio(self, audio: IO[bytes]) -> str:
         try:
             return self._transcribe_audio(audio)
         except Exception as e:
             log.exception(e)
             raise AudioTranscriptionException(f"Unable to transcribe audio. Error: {e}") from e
 
-    def _transcribe_audio(self, audio: BytesIO) -> str:
+    def _transcribe_audio(self, audio: IO[bytes]) -> str:
         raise NotImplementedError
 
     def _synthesize_voice(self, text, synthetic_voice) -> SynthesizedAudio:
@@ -137,7 +137,7 @@ class AzureSpeechService(SpeechService):
                 raise AudioSynthesizeException(msg)
             raise AudioSynthesizeException(f"Unexpected result: {result}")
 
-    def _transcribe_audio(self, audio: BytesIO) -> str:
+    def _transcribe_audio(self, audio: IO[bytes]) -> str:
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
         speech_config.speech_recognition_language = "en-US"
 
@@ -186,7 +186,7 @@ class OpenAISpeechService(SpeechService):
         duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
         return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
 
-    def _transcribe_audio(self, audio: BytesIO) -> str:
+    def _transcribe_audio(self, audio: IO[bytes]) -> str:
         transcript = self._client.audio.transcriptions.create(
             model="gpt-4o-mini-transcribe",
             file=audio,
@@ -232,7 +232,7 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
             msg = f"Error synthesizing voice with OpenAI Voice Engine. Response status: {response.status_code}."
             raise AudioSynthesizeException(msg)
 
-    def _transcribe_audio(self, audio: BytesIO) -> str:
+    def _transcribe_audio(self, audio: IO[bytes]) -> str:
         transcript = self._client.audio.transcriptions.create(
             model="gpt-4o-mini-transcribe",
             file=audio,
