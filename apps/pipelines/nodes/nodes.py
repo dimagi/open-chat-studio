@@ -9,6 +9,7 @@ from django.core.validators import validate_email
 from django.db.models import TextChoices
 from jinja2.sandbox import SandboxedEnvironment
 from langchain.agents import create_agent
+from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import PromptTemplate
 from langchain_openai.chat_models.base import OpenAIRefusalError
@@ -549,6 +550,10 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         except OpenAIRefusalError:
             keyword = default_keyword
             is_default_keyword = True
+        except StructuredOutputValidationError:
+            logger.exception("Structured output validation error in RouterNode")
+            keyword = None
+
         if not keyword:
             keyword = default_keyword
             is_default_keyword = True

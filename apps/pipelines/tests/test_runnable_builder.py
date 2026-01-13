@@ -6,9 +6,11 @@ from unittest.mock import Mock, patch
 import pytest
 from django.core import mail
 from django.test import override_settings
+from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolCall, ToolCallChunk
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from pydantic import Field, create_model
+from pydantic import ValidationError as PydanticValidationError
 
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
@@ -57,6 +59,26 @@ from apps.utils.langchain import (
     build_fake_llm_service,
 )
 from apps.utils.pytest import django_db_with_data
+
+
+# Helper class used by router node tests
+class RefusingFakeLlmEcho(FakeLlmEcho):
+    def invoke(self, *args, **kwargs):
+        raise OpenAIRefusalError("Refused by OpenAI")
+
+
+class PydanticValidationErrorLlmEcho(FakeLlmEcho):
+    def invoke(self, *args, **kwargs):
+        raise PydanticValidationError("Refused by OpenAI", [])
+
+
+class StructuredOutputValidationErrorLlmEcho(FakeLlmEcho):
+    def invoke(self, *args, **kwargs):
+        raise StructuredOutputValidationError(
+            tool_name="test_tool",
+            source=Exception("Unable to parse json"),
+            ai_message=AIMessage(content=""),
+        )
 
 
 @pytest.fixture()
@@ -476,10 +498,13 @@ class TestRouterNode:
 
     @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-    def test_router_node_openai_refusal_uses_default_keyword(
-        self, get_llm_service, provider, provider_model, experiment_session
+    @pytest.mark.parametrize(
+        "LLMClass", [RefusingFakeLlmEcho, PydanticValidationErrorLlmEcho, StructuredOutputValidationErrorLlmEcho]
+    )
+    def test_router_node_uses_default_keyword_on_error(
+        self, get_llm_service, LLMClass, provider, provider_model, experiment_session
     ):
-        refusing_llm = RefusingFakeLlmEcho(include_system_message=True)
+        refusing_llm = LLMClass(include_system_message=True)
         service = FakeLlmService(llm=refusing_llm, token_counter=FakeTokenCounter(token_counts=[0]))
         get_llm_service.return_value = service
         node = RouterNode(
@@ -1315,9 +1340,3 @@ class TestPipelineStateHelpers:
         assert state.get_node_path("branch_b") == ["start", "router", "branch_b"]
         assert state.get_node_path("end") == ["start", "router", "branch_a", "end"]
         assert state.get_node_path("nonexistent_node") == ["nonexistent_node"]
-
-
-# Helper class used by router node tests
-class RefusingFakeLlmEcho(FakeLlmEcho):
-    def invoke(self, *args, **kwargs):
-        raise OpenAIRefusalError("Refused by OpenAI")
