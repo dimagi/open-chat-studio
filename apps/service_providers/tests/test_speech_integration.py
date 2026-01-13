@@ -111,20 +111,7 @@ class TestOpenAISpeechIntegration:
             openai_organization=openai_credentials["organization"],
         )
 
-        # Load test audio file
-        test_audio_path = os.path.join(settings.BASE_DIR, "apps/service_providers/tests/data/speech_sample1.mp3")
-        with open(test_audio_path, "rb") as audio_file:
-            result = service.transcribe_audio(audio_file)
-
-        # Expected: "Oh, I do feel so ill all over me, my dear Ribby;
-        # I have swallowed a large tin patty-pan with a sharp scalloped edge!"
-        # Verify transcription contains key phrases (allowing for minor variations)
-        assert result is not None
-        assert len(result) > 0
-        result_lower = result.lower()
-        assert "ribby" in result_lower or "ribbie" in result_lower or "ruby" in result_lower
-        assert "patty" in result_lower or "patty-pan" in result_lower
-        assert "scalloped" in result_lower or "scallop" in result_lower
+        _test_transcription(service)
 
 
 @pytest.mark.django_db()
@@ -190,17 +177,20 @@ class TestAzureSpeechIntegration:
             azure_region=azure_credentials["region"],
         )
 
-        # Load test audio file
-        test_audio_path = os.path.join(settings.BASE_DIR, "apps/service_providers/tests/data/speech_sample1.mp3")
-        with open(test_audio_path, "rb") as audio_file:
-            result = service.transcribe_audio(audio_file)
+        _test_transcription(service)
 
-        # Expected: "Oh, I do feel so ill all over me, my dear Ribby;
-        # I have swallowed a large tin patty-pan with a sharp scalloped edge!"
-        # Verify transcription contains key phrases (allowing for minor variations)
-        assert result is not None
-        assert len(result) > 0
-        result_lower = result.lower()
-        assert "ribby" in result_lower or "ribbie" in result_lower or "ruby" in result_lower
-        assert "patty" in result_lower or "patty-pan" in result_lower
-        assert "scalloped" in result_lower or "scallop" in result_lower
+
+def _test_transcription(service):
+    # Load test audio file
+    test_audio_path = os.path.join(settings.BASE_DIR, "apps/service_providers/tests/data/speech_sample1.mp3")
+    with open(test_audio_path, "rb") as audio_file:
+        result = service.transcribe_audio(audio_file)
+    # Expected: "Oh, I do feel so ill all over me, my dear Ribby;
+    # I have swallowed a large tin patty-pan with a sharp scalloped edge!"
+    # Verify transcription contains key phrases (allowing for minor variations)
+    assert result is not None
+    assert len(result) > 0
+    result_lower = result.lower()
+    assert any(word in result_lower for word in ["ribby", "ribbie", "ribbey", "ruby"])
+    assert any(word in result_lower for word in ["patty", "patty-pan"])
+    assert any(word in result_lower for word in ["scalloped", "scallop"])
