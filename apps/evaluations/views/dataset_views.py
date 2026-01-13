@@ -295,21 +295,21 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
             evaluationdataset__id=dataset_id, evaluationdataset__team=self.request.team
         ).order_by("id")
 
+    def get_highlight_message_id(self):
+        """Extract and validate the message_id query parameter for highlighting."""
+        try:
+            return int(self.request.GET.get("message_id"))
+        except (ValueError, TypeError):
+            return None
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        try:
-            context["highlight_message_id"] = int(self.request.GET.get("message_id"))
-        except (ValueError, TypeError):
-            context["highlight_message_id"] = None
+        context["highlight_message_id"] = self.get_highlight_message_id()
         return context
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
-        try:
-            highlight_id = int(self.request.GET.get("message_id"))
-            kwargs["highlight_message_id"] = highlight_id
-        except (ValueError, TypeError):
-            kwargs["highlight_message_id"] = None
+        kwargs["highlight_message_id"] = self.get_highlight_message_id()
         return kwargs
 
 
