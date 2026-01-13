@@ -1,9 +1,11 @@
 {% load django_tables2 %}
 <div class="flex items-center gap-2">
   <span>{{ record.id }}</span>
-  <a href="{% url 'evaluations:evaluation_results_table' team_slug evaluation_pk evaluation_run_pk %}?result_id={{ record.id }}"
+  <a href="{% url 'evaluations:evaluation_results_home' team_slug evaluation_pk evaluation_run_pk %}?result_id={{ record.id }}"
      class="text-primary hover:text-primary-focus"
      title="Link to this result"
+     target="_blank"
+     rel="noopener noreferrer"
      onclick="event.stopPropagation();">
     <i class="fa-solid fa-external-link"></i>
   </a>

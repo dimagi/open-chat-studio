@@ -210,10 +210,14 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         if evaluation_run.status in [EvaluationRunStatus.PROCESSING]:
             context["group_job_id"] = evaluation_run.job_id
         else:
-            context["table_url"] = reverse(
+            table_url = reverse(
                 "evaluations:evaluation_results_table",
                 args=[team_slug, kwargs["evaluation_pk"], kwargs["evaluation_run_pk"]],
             )
+            result_id = self.request.GET.get("result_id")
+            if result_id:
+                table_url = f"{table_url}?result_id={result_id}"
+            context["table_url"] = table_url
             # Add total results count
             context["total_results"] = evaluation_run.results.count()
             if evaluation_run.status == EvaluationRunStatus.COMPLETED:
@@ -272,6 +276,12 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                 if key in attrs:
                     continue
                 attrs[key] = self.get_column(key)
+
+        def __init__(self, *args, highlight_result_id=None, **kwargs):
+            super(self.__class__, self).__init__(*args, **kwargs)
+            self.highlight_result_id = highlight_result_id
+
+        attrs["__init__"] = __init__
 
         return type("EvaluationResultTableTable", (tables.Table,), attrs)
 
