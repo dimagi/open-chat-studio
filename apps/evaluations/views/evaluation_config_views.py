@@ -290,6 +290,17 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
 
         header = key.replace("_", " ").title()
         match key:
+            case "id":
+                return columns.TemplateColumn(
+                    template_name="evaluations/evaluation_result_id_column.html",
+                    verbose_name=header,
+                    orderable=False,
+                    extra_context={
+                        "team_slug": self.kwargs["team_slug"],
+                        "evaluation_pk": self.kwargs["evaluation_pk"],
+                        "evaluation_run_pk": self.kwargs["evaluation_run_pk"],
+                    },
+                )
             case "session":
                 return actions.ActionsColumn(
                     verbose_name=header,
