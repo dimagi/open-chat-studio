@@ -544,7 +544,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             context = {"messages": [HumanMessage(content=node_input)]}
             result = agent.invoke(context, config=self._config)
             structured_response = result["structured_response"]
-            keyword = structured_response.route
+            keyword = structured_response.route.lower()  # ensure case-insensitive matching
         except PydanticValidationError:
             keyword = None
         except OpenAIRefusalError:
