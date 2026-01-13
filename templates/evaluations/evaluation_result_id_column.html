@@ -10,9 +10,9 @@
      onclick="event.stopPropagation();">
     <i class="fa-solid fa-external-link"></i>
   </a>
-  <div class="btn btn-sm btn-ghost btn-xs" onclick="SiteJS.app.copyToClipboard(this, 'copy-result-{{ record.id }}')"
-       title="Copy link to clipboard">
+  <button type="button" class="btn btn-ghost btn-xs" onclick="SiteJS.app.copyToClipboard(this, 'copy-result-{{ record.id }}')"
+        title="Copy link to clipboard">
     <input id="copy-result-{{ record.id }}" type="hidden" value="{{ request.scheme }}://{{ request.get_host }}{{ result_path }}?result_id={{ record.id }}"/>
     <i class="fa-regular fa-copy"></i>
-  </div>
+  </button>
 </div>
