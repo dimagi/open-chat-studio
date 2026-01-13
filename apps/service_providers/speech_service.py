@@ -142,7 +142,8 @@ class AzureSpeechService(SpeechService):
         speech_config.speech_recognition_language = "en-US"
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-            temp_file.write(audio.getbuffer())
+            audio.seek(0)
+            temp_file.write(audio.read())
             temp_file.seek(0)
 
             audio_config = speechsdk.audio.AudioConfig(filename=temp_file.name)
