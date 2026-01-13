@@ -13,7 +13,7 @@ from apps.service_providers.speech_service import (
 from apps.utils.factories.experiment import SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 
-pytestmark = pytest.mark.speech_integration
+pytestmark = pytest.mark.integration
 
 # Load environment variables using django-environ
 env = environ.Env()
