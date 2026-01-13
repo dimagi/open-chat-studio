@@ -300,7 +300,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
 
         header = key.replace("_", " ").title()
         match key:
-            case "id":
+            case "#":
                 return columns.TemplateColumn(
                     template_name="evaluations/evaluation_result_id_column.html",
                     verbose_name=header,
@@ -311,6 +311,9 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                         "evaluation_run_pk": self.kwargs["evaluation_run_pk"],
                     },
                 )
+            case "id":
+                # Hide the id column but keep it in the data
+                return columns.Column(verbose_name=header, visible=False)
             case "session":
                 return actions.ActionsColumn(
                     verbose_name=header,

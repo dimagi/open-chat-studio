@@ -1,6 +1,6 @@
 {% load django_tables2 %}
 <div class="flex items-center gap-2">
-  <span>{{ record.id }}</span>
+  <span>{{ value }}</span>
   <a href="{% url 'evaluations:evaluation_results_home' team_slug evaluation_pk evaluation_run_pk %}?result_id={{ record.id }}"
      class="text-primary hover:text-primary-focus"
      title="Link to this result"
