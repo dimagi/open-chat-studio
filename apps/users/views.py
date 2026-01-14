@@ -1,4 +1,4 @@
-from allauth.account.utils import send_email_confirmation
+from allauth.account.models import EmailAddress
 from allauth.mfa.models import Authenticator
 from allauth.mfa.utils import is_mfa_enabled
 from allauth.socialaccount.models import SocialAccount
@@ -39,7 +39,7 @@ def profile(request):
                 # don't change it but instead send a confirmation email
                 # email will be changed by signal when confirmed
                 new_email = user.email
-                send_email_confirmation(request, user, signup=False, email=new_email)
+                EmailAddress.objects.add_email(request, user, new_email, confirm=True)
                 user.email = user_before_update.email
                 # recreate the form to avoid populating the previous email in the returned page
                 form = CustomUserChangeForm(instance=user)
