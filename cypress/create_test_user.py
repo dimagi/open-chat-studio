@@ -38,7 +38,7 @@ def create_test_user():
     except Exception as e:
         print(f"⚠ Could not create default groups: {e}")
 
-    user, created = User.objects.get_or_create(email=email, defaults={"username": email})
+    user, created = User.objects.get_or_create(username=email, defaults={"email": email})
 
     if created:
         user.set_password(password)
