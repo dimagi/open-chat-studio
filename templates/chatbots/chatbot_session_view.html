@@ -34,10 +34,46 @@
           </div>
           {% if perms.experiments.change_experimentsession and not experiment_session.ended_at %}
             <button type="button" 
+                    class="btn btn-sm btn-primary"
+                    onclick="document.getElementById('new_session_modal').showModal()">
+              {% translate "New Session" %}
+            </button>
+
+            <dialog id="new_session_modal" class="modal">
+              <div class="modal-box">
+                <h3 class="font-bold text-lg">{% translate "Start New Session?" %}</h3>
+                <p class="text-md mt-2">{% translate "This will end the current session and create a new one." %}</p>
+                <form id="new_session_form" method="post" action="{% url 'chatbots:chatbot_new_session' team.slug experiment.public_id experiment_session.external_id %}">
+                  {% csrf_token %}
+                  {% if has_conversation_end_events %}
+                    <label class="label cursor-pointer justify-start gap-2 mt-4">
+                      <input type="checkbox" checked name="fire_end_event" class="checkbox checkbox-sm checkbox-primary">
+                      <span class="label-text">{% translate "Trigger conversation end event(s)" %}</span>
+                    </label>
+                  {% endif %}
+                  <fieldset class="fieldset">
+                      <legend class="fieldset-legend">{% translate "Seed Message Prompt" %}</legend>
+                      <textarea required rows="6" name="prompt" class="textarea textarea-bordered" placeholder="{% translate 'Enter a prompt to send to the bot' %}">{{ experiment.default_version.seed_message }}</textarea>
+                  </fieldset>
+                </form>
+                <div class="modal-action">
+                  <form method="dialog">
+                    <button class="btn">{% translate "Cancel" %}</button>
+                  </form>
+                  <button form="new_session_form" type="submit" class="btn btn-primary">{% translate "Start New Session" %}</button>
+                </div>
+              </div>
+              <form method="dialog" class="modal-backdrop">
+                <button>{% translate "close" %}</button>
+              </form>
+            </dialog>
+
+            <button type="button" 
                     class="btn btn-sm btn-error"
                     onclick="document.getElementById('end_session_modal').showModal()">
               {% translate "End Session" %}
             </button>
+
             <dialog id="end_session_modal" class="modal">
               <div class="modal-box">
                 <h3 class="font-bold text-lg">{% translate "End Session?" %}</h3>
@@ -61,6 +97,7 @@
               <form method="dialog" class="modal-backdrop">
                 <button>{% translate "close" %}</button>
               </form>
+
             </dialog>
           {% endif %}
         </div>
