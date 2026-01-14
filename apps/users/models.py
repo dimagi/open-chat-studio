@@ -22,8 +22,14 @@ class CustomUser(AbstractUser):
     """
 
     objects = AuditedUserObjectManager()
+    migration_objects = UserManager()
     avatar = models.FileField(upload_to="profile-pictures/", blank=True, storage=get_public_media_storage)
     language = models.CharField(max_length=10, blank=True, null=True)  # noqa DJ001
+
+    class Meta:
+        # Set the base manager to the default UserManager to avoid issues with the auditing queryset in
+        # migrations etc e.g. 3rd party apps that do data migrations won't include the audit_action keyword.
+        base_manager_name = "migration_objects"
 
     def __str__(self):
         return f"{self.get_full_name()} <{self.email or self.username}>"

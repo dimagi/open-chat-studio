@@ -10,11 +10,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Remove audited user manager from migration state to work around account.0006_emailaddress_lower migration
-        # which does a data migration using the user model but does not pass the `audit_action` keyword.
         migrations.AlterModelManagers(
             name="customuser",
             managers=[
+                ("objects", apps.users.models.AuditedUserObjectManager()),
             ],
         ),
     ]
