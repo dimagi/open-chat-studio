@@ -11,7 +11,7 @@ def _convert_keywords_to_lower(apps, schema_editor):
             node.params["keywords"] = [kw.lower() for kw in node.params["keywords"]]
             nodes_to_update.append(node)
         
-        if idx == 100:
+        if len(nodes_to_update) >= 100:
             Node.objects.bulk_update(nodes_to_update, ['params'])
             nodes_to_update = []
 
