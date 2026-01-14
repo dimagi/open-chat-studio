@@ -6,16 +6,11 @@ from typing import Self
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from apps.annotations.models import Tag, TagCategories
-from apps.chat.conversation import compress_chat_history
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 
 
 class BaseHistoryManager(metaclass=ABCMeta):
-    @abstractmethod
-    def get_chat_history(self, input_messages: list):
-        pass
-
     @abstractmethod
     def add_messages_to_history(
         self,
@@ -69,15 +64,6 @@ class ExperimentHistoryManager(BaseHistoryManager):
     @classmethod
     def for_assistant(cls, session: ExperimentSession, experiment: Experiment, trace_service) -> Self:
         return cls(session=session, experiment=experiment, trace_service=trace_service)
-
-    def get_chat_history(self, input_messages: list):
-        return compress_chat_history(
-            self.session.chat,
-            llm=self.chat_model,
-            max_token_limit=self.max_token_limit,
-            input_messages=input_messages,
-            history_mode=self.history_mode,
-        )
 
     def add_messages_to_history(
         self,
@@ -146,9 +132,6 @@ class AssistantPipelineHistoryManager(BaseHistoryManager):
     def __init__(self):
         self.input_message_metadata = {}
         self.output_message_metadata = {}
-
-    def get_chat_history(self, input_messages: list):
-        raise NotImplementedError()
 
     def add_messages_to_history(
         self, input: str, input_message_metadata: dict, output: str, output_message_metadata: dict, *args, **kwargs
