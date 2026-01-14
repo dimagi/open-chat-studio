@@ -9,7 +9,7 @@ Banners are temporary notifications that can be displayed to users on specific p
 ## Features
 
 - **Multiple Banner Types**: Information, warning, error, and success banners
-- **Location Targeting**: Display banners on specific pages or globally
+- **Location Targeting**: Display banners on specific pages or globally as well as on specific sites (domains) or all sites
 - **Scheduling**: Set start and end dates for automatic banner display
 - **Feature Flag Integration**: Show banners only to teams with specific feature flags
 - **User Dismissal**: Users can dismiss banners with optional re-appearance timeout
