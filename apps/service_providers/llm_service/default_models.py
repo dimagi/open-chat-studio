@@ -46,12 +46,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4o", 128000),
     ],
     "anthropic": [
-        Model("claude-sonnet-4-20250514", k(200), parameters=AnthropicReasoningParameters),
+        Model("claude-sonnet-4-20250514", k(200), is_default=True, parameters=AnthropicReasoningParameters),
         Model("claude-opus-4-20250514", k(200), is_translation_default=True, parameters=ClaudeOpus4_20250514Parameters),
         Model("claude-3-7-sonnet-20250219", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
-        Model(
-            "claude-3-5-haiku-latest", k(200), deprecated=True, is_default=True, parameters=ClaudeHaikuLatestParameters
-        ),
+        Model("claude-3-5-haiku-latest", k(200), deprecated=True, parameters=ClaudeHaikuLatestParameters),
     ],
     "openai": [
         Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
