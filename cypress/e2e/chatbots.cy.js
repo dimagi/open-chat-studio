@@ -87,7 +87,7 @@ describe('Chatbots Application', () => {
       cy.get('table thead th').should('contain', 'Name')
       cy.get('table thead th').should('contain', 'Total Participants')
       cy.get('table thead th').should('contain', 'Total Sessions')
-      cy.get('table thead th').should('contain', 'Total Messages')
+      cy.get('table thead th').should('contain', 'Total Interactions')
       cy.get('table thead th').should('contain', 'Actions')
     })
 

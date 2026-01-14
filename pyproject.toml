@@ -120,12 +120,14 @@ ignore = ["PT019", "SIM102", "SIM108", "SIM117"]
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+preview = true
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+preview = true
 
 [tool.ruff.lint.extend-per-file-ignores]
 "settings_production.py" = ["F405"]
