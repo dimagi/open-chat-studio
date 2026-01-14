@@ -25,6 +25,7 @@ from apps.chat.channels import ChannelBase, WebChannel
 from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
+from apps.chatbots.tasks import send_bot_message
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.filters import (
     ExperimentSessionFilter,
@@ -50,7 +51,6 @@ from apps.pipelines.views import (
     llm_model_parameter_context,
 )
 from apps.service_providers.models import LlmProvider, LlmProviderModel
-from apps.service_providers.tracing import TraceInfo
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
@@ -545,27 +545,24 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
         team=request.team,
     )
     propagate_event = request.POST.get("fire_end_event") == "on"
-    old_session.end(propagate=propagate_event)
+    with transaction.atomic():
+        old_session.end(propagate=propagate_event)
 
-    experiment = old_session.experiment
-    participant = old_session.participant
-    experiment_channel = old_session.experiment_channel
+        experiment = old_session.experiment
+        participant = old_session.participant
+        experiment_channel = old_session.experiment_channel
 
-    # Create new session using the same channel as the old session
-    channel_cls = ChannelBase.get_channel_class_for_platform(experiment_channel.platform)
-    new_session = channel_cls.start_new_session(
-        working_experiment=experiment,
-        experiment_channel=experiment_channel,
-        participant_identifier=participant.identifier,
-        participant_user=participant.user,
-        session_status=SessionStatus.ACTIVE,
-    )
+        # Create new session using the same channel as the old session
+        channel_cls = ChannelBase.get_channel_class_for_platform(experiment_channel.platform)
+        new_session = channel_cls.start_new_session(
+            working_experiment=experiment,
+            experiment_channel=experiment_channel,
+            participant_identifier=participant.identifier,
+            participant_user=participant.user,
+            session_status=SessionStatus.ACTIVE,
+        )
 
-    # If user provided a prompt and there's no seed message, send it as an ad-hoc message
-    new_session.ad_hoc_bot_message(
-        instruction_prompt=request.POST.get("prompt", "").strip(),
-        trace_info=TraceInfo(name="Manual Session Start"),
-    )
+    send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
 
     messages.success(request, "New session created")
     return redirect("chatbots:chatbot_session_view", team_slug, experiment.public_id, new_session.external_id)

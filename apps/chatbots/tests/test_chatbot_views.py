@@ -342,8 +342,9 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
 @pytest.mark.parametrize(("fire_end_event", "prompt"), [(True, "Start with this"), (False, ""), (False, None)])
 @patch("apps.events.tasks.enqueue_static_triggers")
 @patch("apps.chat.channels.ChannelBase.start_new_session")
+@patch("apps.chatbots.views.send_bot_message.delay")
 def test_new_chatbot_session_view(
-    mock_start_new_session, enqueue_static_triggers_task, fire_end_event, prompt, client, team_with_users
+    task_mock, mock_start_new_session, enqueue_static_triggers_task, fire_end_event, prompt, client, team_with_users
 ):
     """Test that new_chatbot_session creates a new session, ends the old one, and sends ad-hoc message.
 
@@ -404,8 +405,8 @@ def test_new_chatbot_session_view(
     assert call_kwargs["session_status"] == SessionStatus.ACTIVE
 
     # Verify ad_hoc_bot_message was called with correct prompt
-    new_session.ad_hoc_bot_message.assert_called_once()
-    call_args = new_session.ad_hoc_bot_message.call_args
+    task_mock.assert_called_once()
+    call_args = task_mock.call_args
     expected_prompt = prompt if prompt else ""
     assert call_args[1]["instruction_prompt"] == expected_prompt
 
