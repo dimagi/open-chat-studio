@@ -19,17 +19,19 @@ class UserConfig(AppConfig):
         """Patch allauth 0006_emailaddress_lower to work with field_audit."""
 
         def forwards_with_audit(apps, schema_editor):
-            from field_audit.models import AuditAction
+            from field_audit.models import AuditAction, AuditingQuerySet
 
             EmailAddress = apps.get_model("account.EmailAddress")
             User = apps.get_model(settings.AUTH_USER_MODEL)
             EmailAddress.objects.all().exclude(email=Lower("email")).update(email=Lower("email"))
             email_field = app_settings.USER_MODEL_EMAIL_FIELD
             if email_field:
-                User.objects.all().exclude(**{email_field: Lower(email_field)}).update(
-                    **{email_field: Lower(email_field)},
-                    audit_action=AuditAction.IGNORE,
-                )
+                queryset = User.objects.all().exclude(**{email_field: Lower(email_field)})
+                update_kwargs = {email_field: Lower(email_field)}
+                if isinstance(queryset, AuditingQuerySet):
+                    # depending on the migration order this may be a normal Django queryset
+                    update_kwargs["audit_action"] = AuditAction.IGNORE
+                queryset.update(**update_kwargs)
 
         def before_migrations(**kwargs):
             if plan := kwargs.get("plan"):
