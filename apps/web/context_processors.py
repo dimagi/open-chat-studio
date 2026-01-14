@@ -20,9 +20,7 @@ def project_meta(request):
         # put any settings you want made available to all templates here
         # then reference them as {{ project_settings.MY_VALUE }} in templates
         "project_settings": {
-            "ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE": any(
-                "password2" in field for field in settings.ACCOUNT_SIGNUP_FIELDS
-            ),
+            "ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE": settings.ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE,
         },
         "use_i18n": getattr(settings, "USE_I18N", False) and len(getattr(settings, "LANGUAGES", [])) > 1,
         "signup_enabled": settings.SIGNUP_ENABLED,
