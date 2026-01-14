@@ -69,7 +69,7 @@ class RefusingFakeLlmEcho(FakeLlmEcho):
 
 class PydanticValidationErrorLlmEcho(FakeLlmEcho):
     def invoke(self, *args, **kwargs):
-        raise PydanticValidationError("Refused by OpenAI", [])
+        raise PydanticValidationError("Invalid data structure", [])
 
 
 class StructuredOutputValidationErrorLlmEcho(FakeLlmEcho):
