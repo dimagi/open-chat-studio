@@ -4,7 +4,6 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from apps.service_providers.llm_service.utils import (
-    MARKITDOWN_CONVERTIBLE_MIME_TYPES,
     detangle_file_ids,
     extract_file_ids_from_ocs_citations,
     format_multimodal_input,
@@ -134,12 +133,6 @@ def test_populate_reference_section_with_custom_citation():
 )
 def test_remove_citations_from_text(input_text, expected_output):
     assert remove_citations_from_text(input_text) == expected_output
-
-
-class TestMarkitdownConvertibleMimeTypes:
-    def test_pdf_not_in_convertible_types(self):
-        # PDF is natively supported by LLM APIs, should not be in convertible types
-        assert "application/pdf" not in MARKITDOWN_CONVERTIBLE_MIME_TYPES
 
 
 class TestFormatMultimodalInput:

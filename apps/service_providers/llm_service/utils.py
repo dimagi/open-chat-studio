@@ -11,15 +11,6 @@ from apps.files.models import File
 
 logger = logging.getLogger("ocs.llm_service")
 
-# MIME types that should be converted to text using MarkItDown before sending to LLM APIs
-# These formats are not natively supported by OpenAI/Anthropic document APIs
-MARKITDOWN_CONVERTIBLE_MIME_TYPES = {
-    # Word documents
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
-    # Excel spreadsheets
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # .xlsx
-}
-
 
 def detangle_file_ids(file_ids: list[str]) -> list[str]:
     """
@@ -155,18 +146,7 @@ def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
                     "mime_type": mime_type,
                 }
             )
-        elif mime_type in MARKITDOWN_CONVERTIBLE_MIME_TYPES:
-            # Convert DOCX/XLSX to text using MarkItDown since these formats
-            # are not natively supported by OpenAI/Anthropic document APIs
-            text_content = _convert_attachment_to_text(att)
-            if text_content:
-                parts.append(
-                    {
-                        "type": "text",
-                        "text": f'<document filename="{att.name}">\n{text_content}\n</document>',
-                    }
-                )
-        else:
+        elif mime_type == "application/pdf":
             parts.append(
                 {
                     "type": "file",
@@ -176,6 +156,17 @@ def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
                     "filename": att.name,
                 }
             )
+        else:
+            # Attempt to convert other doc types to text since LLM APIs
+            # do not natively support these formats
+            text_content = _convert_attachment_to_text(att)
+            if text_content:
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": f'<document filename="{att.name}">\n{text_content}\n</document>',
+                    }
+                )
     return HumanMessage(content=parts)
 
 
