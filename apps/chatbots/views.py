@@ -545,6 +545,7 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
     )
     experiment_channel = old_session.experiment_channel
     if experiment_channel.platform == ChannelPlatform.WEB:
+        # It doesn't make sense to create new web sessions
         messages.error(request, "Cannot create a new session from a web session.")
         return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
 
