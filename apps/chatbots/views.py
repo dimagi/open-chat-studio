@@ -562,7 +562,7 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
             session_status=SessionStatus.ACTIVE,
         )
 
-    send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
+        send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
 
     messages.success(request, "New session created")
     return redirect("chatbots:chatbot_session_view", team_slug, experiment.public_id, new_session.external_id)
