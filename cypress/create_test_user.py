@@ -16,10 +16,10 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 django.setup()
 
 # NOTE: needs to be below this code but does throw lint error
-from django.contrib.auth import get_user_model  # noqa E402
+from django.contrib.auth import get_user_model  # noqa: E402
 
-from apps.teams import backends  # noqa E402
-from apps.teams.models import Membership, Team  # noqa E402
+from apps.teams import backends  # noqa: E402
+from apps.teams.models import Membership, Team  # noqa: E402
 
 
 def create_test_user():
