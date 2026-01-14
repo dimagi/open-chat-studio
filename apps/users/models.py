@@ -10,7 +10,9 @@ from apps.web.storage_backends import get_public_media_storage
 
 
 class AuditedUserObjectManager(UserManager, AuditingManager):
-    pass
+    # Disable this to work around account.0006_emailaddress_lower migration
+    # which does a data migration using the user model but does not pass the `audit_action` keyword.
+    use_in_migrations = False
 
 
 @audit_fields(*CUSTOM_USER_FIELDS, audit_special_queryset_writes=True)
