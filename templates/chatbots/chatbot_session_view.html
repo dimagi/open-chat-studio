@@ -53,7 +53,7 @@
                   {% endif %}
                   <fieldset class="fieldset">
                       <legend class="fieldset-legend">{% translate "Seed Message Prompt" %}</legend>
-                      <textarea rows="6" name="prompt" class="textarea textarea-bordered" placeholder="{% translate 'Enter a prompt to send to the bot' %}">{{ experiment.default_version.seed_message }}</textarea>
+                      <textarea required rows="6" name="prompt" class="textarea textarea-bordered" placeholder="{% translate 'Enter a prompt to send to the bot' %}">{{ experiment.default_version.seed_message }}</textarea>
                   </fieldset>
                 </form>
                 <div class="modal-action">
