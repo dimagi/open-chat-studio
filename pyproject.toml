@@ -94,9 +94,12 @@ Issues = "https://github.com/dimagi/open-chat-studio/issues"
 Changelog = "https://docs.openchatstudio.com/changelog/"
 
 [tool.pytest.ini_options]
-addopts = "--ds=config.settings --reuse-db --strict-markers --tb=short"
+addopts = "--ds=config.settings --reuse-db --strict-markers --tb=short -m \"not integration\""
 python_files = "tests.py test_*.py *_tests.py"
 norecursedirs = ".* build dist venv node_modules compose assets static"
+markers = [
+    "integration: marks tests as integration tests (deselected by default)",
+]
 
 [tool.ruff]
 exclude = [
