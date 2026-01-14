@@ -84,7 +84,7 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
           AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
           AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
-        run: uv r un pytest -m integration -v -s --tb=short --junitxml=junit-integration.xml
+        run: uv run pytest -m integration -v -s --tb=short --junitxml=junit-integration.xml
 
       - name: Upload test results
         if: always()
