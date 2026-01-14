@@ -1,4 +1,6 @@
 import os
+import subprocess
+import tempfile
 
 import environ
 import pytest
@@ -177,12 +179,19 @@ class TestAzureSpeechIntegration:
             azure_region=azure_credentials["region"],
         )
 
-        _test_transcription(service)
+        # Azure only supports WAV format
+        test_audio_path = os.path.join(settings.BASE_DIR, "apps/service_providers/tests/data/speech_sample1.mp3")
+        test_audio_wav_path = os.path.join(tempfile.gettempdir(), "speech_sample1.wav")
+        subprocess.call(["ffmpeg", "-i", test_audio_path, test_audio_wav_path])
+
+        _test_transcription(service, test_audio_wav_path)
 
 
-def _test_transcription(service):
+def _test_transcription(service, audio_path=None):
     # Load test audio file
-    test_audio_path = os.path.join(settings.BASE_DIR, "apps/service_providers/tests/data/speech_sample1.mp3")
+    test_audio_path = audio_path or os.path.join(
+        settings.BASE_DIR, "apps/service_providers/tests/data/speech_sample1.mp3"
+    )
     with open(test_audio_path, "rb") as audio_file:
         result = service.transcribe_audio(audio_file)
     # Expected: "Oh, I do feel so ill all over me, my dear Ribby;
