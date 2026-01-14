@@ -41,6 +41,7 @@ Cypress.Commands.add('login', (username, password) => {
     cy.get('input[type="submit"]').click()
 
   }, {
+    cacheAcrossSpecs: true,
     validate() {
       cy.request({url: '/users/profile/', followRedirect: false}).its('status').should('eq', 200);
     }
