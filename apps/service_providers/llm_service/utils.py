@@ -163,7 +163,7 @@ def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
                 parts.append(
                     {
                         "type": "text",
-                        "text": f"<document filename=\"{att.name}\">\n{text_content}\n</document>",
+                        "text": f'<document filename="{att.name}">\n{text_content}\n</document>',
                     }
                 )
         else:
@@ -190,6 +190,6 @@ def _convert_attachment_to_text(attachment) -> str | None:
     """
     try:
         return attachment.read_text()
-    except Exception as e:
-        logger.warning(f"Failed to convert attachment {attachment.name} to text: {e}")
-        return None
+    except Exception:
+        logger.exception("Failed to convert attachment to text")
+        return "Error: Unable to read document"
