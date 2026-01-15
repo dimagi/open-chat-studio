@@ -36,7 +36,7 @@ class CurrentThreadExecutor(Executor):
 
 
 @contextmanager
-def patch_executor(executor: type[Executor]) -> Generator[None, Any, None]:
+def patch_executor(executor: type[Executor]) -> Generator[None, Any]:
     """Monkeypatch the langchain executor to run tasks in the current thread.
     This is used for pipeline tests where the DB transaction is not committed."""
     from langchain_core.runnables import config

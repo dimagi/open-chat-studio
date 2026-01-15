@@ -134,20 +134,18 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                 exp_session = state["experiment_session"]
                 participant = getattr(exp_session, "participant", None)
                 if participant:
-                    content.update(
-                        {
-                            "participant_details": {
-                                "identifier": getattr(participant, "identifier", None),
-                                "platform": getattr(participant, "platform", None),
-                            },
-                            "participant_schedules": participant.get_schedules_for_experiment(
-                                exp_session.experiment,
-                                as_dict=True,
-                                include_inactive=True,
-                            )
-                            or [],
-                        }
-                    )
+                    content.update({
+                        "participant_details": {
+                            "identifier": getattr(participant, "identifier", None),
+                            "platform": getattr(participant, "platform", None),
+                        },
+                        "participant_schedules": participant.get_schedules_for_experiment(
+                            exp_session.experiment,
+                            as_dict=True,
+                            include_inactive=True,
+                        )
+                        or [],
+                    })
                 content["participant_data"] = ParticipantDataProxy.from_state(state).get() or {}
 
             template = env.from_string(self.template_string)
@@ -594,6 +592,22 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                         f"All collection indexes must use the same LLM provider as the node. "
                         f"Incompatible collections: {', '.join(incompatible_collections)}",
                     )
+
+                # OpenAI has a limit of 2 vectorstores per request
+                from apps.service_providers.models import LlmProvider, LlmProviderTypes
+
+                try:
+                    llm_provider = LlmProvider.objects.get(id=llm_provider_id)
+                    if llm_provider.type == LlmProviderTypes.openai.value.slug and len(collections) > 2:
+                        raise PydanticCustomError(
+                            "openai_vectorstore_limit",
+                            f"OpenAI hosted vectorstores are limited to 2 per request. "
+                            f"You have selected {len(collections)} collection indexes. "
+                            "Please select at most 2 collection indexes.",
+                        )
+                except LlmProvider.DoesNotExist:
+                    # If provider doesn't exist, let other validation handle it
+                    pass
             else:
                 # local indexes must have a summary
                 missing_summary = [collection.name for collection in collections.values() if not collection.summary]
