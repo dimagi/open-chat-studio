@@ -9,7 +9,7 @@
     </div>
   </div>
   <div class="flex flex-none items-center gap-x-4">
-    <form hx-post="{% url 'experiments:send_invitation' request.team.slug experiment.id session.external_id %}"
+    <form hx-post="{% url 'chatbots:send_chatbot_invitation' request.team.slug experiment.id session.external_id %}"
           hx-target="#session-{{ session.external_id }}"
           hx-swap="outerHTML">
       {% csrf_token %}
