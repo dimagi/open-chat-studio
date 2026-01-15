@@ -22,6 +22,7 @@ django.setup()
 
 # NOTE: needs to be below this code but does throw lint error
 # Import the create_test_user function from create_test_user.py
+# ruff: disable[E402]
 import importlib.util
 import pathlib
 
@@ -33,6 +34,8 @@ from apps.files.models import File, FilePurpose
 from apps.pipelines.models import Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.models import Team
+
+# ruff: enable[E402]
 
 create_test_user_path = pathlib.Path(__file__).parent / "create_test_user.py"
 spec = importlib.util.spec_from_file_location("create_test_user", create_test_user_path)
@@ -89,7 +92,7 @@ def seed_test_data():
     ]
 
     pipelines = []
-    for i, name in enumerate(pipeline_names, 1):
+    for name in pipeline_names:
         pipeline, created = Pipeline.objects.get_or_create(
             team=team,
             name=name,

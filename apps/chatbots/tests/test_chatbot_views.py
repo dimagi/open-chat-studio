@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from django.contrib.auth.models import Permission
@@ -336,3 +336,104 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
         enqueue_static_triggers_task.delay.assert_called_once_with(session.id, StaticTriggerType.CONVERSATION_END)
     else:
         enqueue_static_triggers_task.delay.assert_not_called()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(("fire_end_event", "prompt"), [(True, "Start with this"), (False, ""), (False, None)])
+@patch("apps.events.tasks.enqueue_static_triggers")
+@patch("apps.chat.channels.ChannelBase.start_new_session")
+@patch("apps.chatbots.views.send_bot_message.delay")
+def test_new_chatbot_session_view(
+    task_mock, mock_start_new_session, enqueue_static_triggers_task, fire_end_event, prompt, client, team_with_users
+):
+    """Test that new_chatbot_session creates a new session, ends the old one, and sends ad-hoc message.
+
+    Covers:
+    - Ending old session with/without propagating end event
+    - Creating new session using same channel and participant
+    - Sending ad-hoc message with/without prompt
+    - Redirecting to new session view
+    """
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    old_session = ExperimentSessionFactory(
+        participant__identifier="participant@example.com",
+        team=team,
+        status=SessionStatus.ACTIVE,
+    )
+
+    new_session = ExperimentSessionFactory(
+        participant=old_session.participant,
+        experiment=old_session.experiment,
+        experiment_channel=old_session.experiment_channel,
+        team=team,
+        status=SessionStatus.ACTIVE,
+        external_id="new_session_id",
+    )
+
+    new_session.ad_hoc_bot_message = Mock()
+    mock_start_new_session.return_value = new_session
+
+    url = reverse(
+        "chatbots:chatbot_new_session",
+        args=[team.slug, old_session.experiment.public_id, old_session.external_id],
+    )
+    post_data = {}
+    if fire_end_event:
+        post_data["fire_end_event"] = "on"
+    if prompt is not None:
+        post_data["prompt"] = prompt
+
+    response = client.post(url, post_data)
+    assert response.status_code == 302
+
+    # Verify the old session was ended
+    old_session.refresh_from_db()
+    assert old_session.status == SessionStatus.PENDING_REVIEW
+    assert old_session.ended_at is not None
+
+    # Verify start_new_session was called with correct parameters
+    mock_start_new_session.assert_called_once()
+    call_kwargs = mock_start_new_session.call_args[1]
+    assert call_kwargs["working_experiment"] == old_session.experiment
+    assert call_kwargs["experiment_channel"] == old_session.experiment_channel
+    assert call_kwargs["participant_identifier"] == old_session.participant.identifier
+    assert call_kwargs["participant_user"] == old_session.participant.user
+    assert call_kwargs["session_status"] == SessionStatus.ACTIVE
+
+    # Verify ad_hoc_bot_message was called with correct prompt
+    task_mock.assert_called_once()
+    call_args = task_mock.call_args
+    expected_prompt = prompt if prompt else ""
+    assert call_args[1]["instruction_prompt"] == expected_prompt
+
+    # Verify event was fired if requested
+    if fire_end_event:
+        enqueue_static_triggers_task.delay.assert_called_once_with(old_session.id, StaticTriggerType.CONVERSATION_END)
+    else:
+        enqueue_static_triggers_task.delay.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_disallow_web_channel_session_resets(team_with_users, client):
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    session = ExperimentSessionFactory(
+        participant__identifier="participant@example.com",
+        experiment_channel__platform="web",
+        team=team,
+        status=SessionStatus.ACTIVE,
+    )
+
+    url = reverse(
+        "chatbots:chatbot_new_session",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.post(url, {})
+    assert response.status_code == 302
+    session.refresh_from_db()
+    assert session.status == SessionStatus.ACTIVE  # Session should remain active

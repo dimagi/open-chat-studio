@@ -79,6 +79,7 @@ jobs:
           uv run python cypress/create_test_user.py
         env:
           DEBUG: 'true'
+          USE_DEBUG_TOOLBAR: 'false'
           POSTGRES_DB: open_chat_studio
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
@@ -91,6 +92,7 @@ jobs:
           npx wait-on http://127.0.0.1:8000 --timeout 60000
         env:
           DEBUG: 'true'
+          USE_DEBUG_TOOLBAR: 'false'
           POSTGRES_DB: open_chat_studio
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password

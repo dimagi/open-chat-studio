@@ -16,16 +16,15 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gpt_playground.settings")
 django.setup()
 
 # NOTE: needs to be below this code but does throw lint error
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model  # noqa: E402
 
-from apps.teams import backends
-from apps.teams.models import Membership, Team
+from apps.teams import backends  # noqa: E402
+from apps.teams.models import Membership, Team  # noqa: E402
 
 
 def create_test_user():
     User = get_user_model()
 
-    username = "testuser"
     email = "test@example.com"
     password = "testpassword"
     team_name = "Test Team"
@@ -39,7 +38,7 @@ def create_test_user():
     except Exception as e:
         print(f"⚠ Could not create default groups: {e}")
 
-    user, created = User.objects.get_or_create(username=username, defaults={"email": email})
+    user, created = User.objects.get_or_create(username=email, defaults={"email": email})
 
     if created:
         user.set_password(password)
