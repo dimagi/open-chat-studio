@@ -360,7 +360,6 @@ def test_new_chatbot_session_view(
 
     old_session = ExperimentSessionFactory(
         participant__identifier="participant@example.com",
-        participant__platform="web",
         team=team,
         status=SessionStatus.ACTIVE,
     )
@@ -415,3 +414,26 @@ def test_new_chatbot_session_view(
         enqueue_static_triggers_task.delay.assert_called_once_with(old_session.id, StaticTriggerType.CONVERSATION_END)
     else:
         enqueue_static_triggers_task.delay.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_disallow_web_channel_session_resets(team_with_users, client):
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    session = ExperimentSessionFactory(
+        participant__identifier="participant@example.com",
+        experiment_channel__platform="web",
+        team=team,
+        status=SessionStatus.ACTIVE,
+    )
+
+    url = reverse(
+        "chatbots:chatbot_new_session",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.post(url, {})
+    assert response.status_code == 302
+    session.refresh_from_db()
+    assert session.status == SessionStatus.ACTIVE  # Session should remain active

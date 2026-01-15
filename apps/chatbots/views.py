@@ -102,32 +102,26 @@ def chatbots_settings(request, team_slug, experiment_id):
         form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
         if form.is_valid():
             form.save()
-            context.update(
-                {
-                    "edit_mode": False,
-                    "form": form,
-                    "updated": True,
-                }
-            )
+            context.update({
+                "edit_mode": False,
+                "form": form,
+                "updated": True,
+            })
 
         else:
-            context.update(
-                {
-                    "edit_mode": True,
-                    "form": form,
-                    "updated": False,
-                    "team_participant_identifiers": team_participant_identifiers,
-                }
-            )
-    else:
-        form = ChatbotSettingsForm(request=request, instance=experiment)
-        context.update(
-            {
+            context.update({
                 "edit_mode": True,
                 "form": form,
+                "updated": False,
                 "team_participant_identifiers": team_participant_identifiers,
-            }
-        )
+            })
+    else:
+        form = ChatbotSettingsForm(request=request, instance=experiment)
+        context.update({
+            "edit_mode": True,
+            "form": form,
+            "team_participant_identifiers": team_participant_identifiers,
+        })
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
@@ -180,7 +174,8 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
         queryset = (
-            self.model.objects.get_all()
+            self.model.objects
+            .get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
             .select_related("team")
         )
@@ -199,7 +194,8 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
             )
 
         session_count_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects
+            .filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
@@ -207,7 +203,8 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         participant_count_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects
+            .filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
@@ -215,7 +212,8 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         interaction_count_subquery = (
-            Trace.objects.filter(experiment=OuterRef("pk"))
+            Trace.objects
+            .filter(experiment=OuterRef("pk"))
             .exclude(session__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
@@ -223,7 +221,8 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         last_activity_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects
+            .filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .order_by("-last_activity_at")
             .values("last_activity_at")[:1]
@@ -544,25 +543,29 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
         external_id=session_id,
         team=request.team,
     )
+    experiment_channel = old_session.experiment_channel
+    if experiment_channel.platform == ChannelPlatform.WEB:
+        # It doesn't make sense to create new web sessions
+        messages.error(request, "Cannot create a new session from a web session.")
+        return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
+
     propagate_event = request.POST.get("fire_end_event") == "on"
-    with transaction.atomic():
-        old_session.end(propagate=propagate_event)
+    old_session.end(propagate=propagate_event)
 
-        experiment = old_session.experiment
-        participant = old_session.participant
-        experiment_channel = old_session.experiment_channel
+    experiment = old_session.experiment
+    participant = old_session.participant
 
-        # Create new session using the same channel as the old session
-        channel_cls = ChannelBase.get_channel_class_for_platform(experiment_channel.platform)
-        new_session = channel_cls.start_new_session(
-            working_experiment=experiment,
-            experiment_channel=experiment_channel,
-            participant_identifier=participant.identifier,
-            participant_user=participant.user,
-            session_status=SessionStatus.ACTIVE,
-        )
+    # Create new session using the same channel as the old session
+    channel_cls = ChannelBase.get_channel_class_for_platform(experiment_channel.platform)
+    new_session = channel_cls.start_new_session(
+        working_experiment=experiment,
+        participant_identifier=participant.identifier,
+        participant_user=participant.user,
+        session_status=SessionStatus.ACTIVE,
+        experiment_channel=experiment_channel,
+    )
 
-        send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
+    send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
 
     messages.success(request, "New session created")
     return redirect("chatbots:chatbot_session_view", team_slug, experiment.public_id, new_session.external_id)
