@@ -12,7 +12,7 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-<div x-data="{activeTab: 'spans', selectedSpan: '{{ root_spans.0.id }}'}">
+<div x-data="{activeTab: '{{ trace.error|yesno:"error,inputs" }}', selectedSpan: '{{ root_spans.0.id }}'}">
     <div class="container mx-auto px-4 py-6">
         <!-- Header Section -->
         <div class="flex justify-between w-full">
@@ -31,23 +31,8 @@
             </div>
         </div>
 
-        <!-- Error Message -->
-        {% if trace.error %}
-        <div class="alert alert-error shadow-lg mb-6">
-            <div>
-                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                    <h3 class="font-bold">Trace Error</h3>
-                    <div class="text-sm">{{ trace.error }}</div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
         <!-- Info Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-6">
             <div>
                 <div class="text-sm text-base-content/60 tracking-wide">Experiment</div>
                 <div class="mt-1">
@@ -86,12 +71,14 @@
       <!-- Tab navigation -->
       <div class="border-b border-t border-base-200 mb-2">
         <nav class="px-6 flex space-x-8" aria-label="Tabs">
+          {% if trace.error %}
           <button 
             class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none"
-            :class="activeTab === 'spans' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            @click="activeTab = 'spans'">
-            Spans ({{ root_spans|length }})
+            :class="activeTab === 'error' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            @click="activeTab = 'error'">
+            Error
           </button>
+          {% endif %}
           <button 
             class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none"
             :class="activeTab === 'inputs' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
@@ -108,24 +95,18 @@
       </div>
     </div>
 
-    <div x-show="activeTab === 'spans'" id="spans-content">
-        <div class="card mb-6">
-            <h2 class="text-xl font-bold mb-2">Execution Spans</h2>
-            <div class="flex gap-2">
-                <div class="card-body bg-base-50 shadow-md">
-                    {% for span in root_spans %}
-                        {% include "trace/span_tree.html" with span=span %}
-                    {% empty %}
-                    <div class="card bg-base-100">
-                        <div class="card-body p-4 text-center text-base-content/60">
-                        No spans found for this trace.
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
+    <!-- Error Message -->
+    {% if trace.error %}
+    <div x-show="activeTab === 'error'" id="error-content">
+      <div class="card mb-6">
+        <div class="card-body bg-base-50 shadow-md">
+          <div role="alert" class="alert alert-error alert-soft">
+          <div class="text-sm bg-error">{{ trace.error }}</div>
+          </div>
         </div>
+      </div>
     </div>
+    {% endif %}
 
     <div x-cloak x-show="activeTab === 'inputs'" id="inputs-content">
         <div class="card mb-6">
