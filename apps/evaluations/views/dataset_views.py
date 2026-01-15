@@ -302,6 +302,23 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
         except (ValueError, TypeError):
             return None
 
+    def get_table_pagination(self, table):
+        """Configure pagination and calculate page for highlighted message."""
+        highlight_message_id = self.get_highlight_message_id()
+        page_size = self.table_pagination.get("per_page", 10)
+
+        # On the first load, calculate the page to focus on a specific message_id
+        if highlight_message_id and not self.request.GET.get("page"):
+            queryset = self.get_queryset()
+            messages_before = queryset.filter(id__lt=highlight_message_id).count()
+
+            # Calculate which page contains this message
+            calculated_page = (messages_before // page_size) + 1
+            self.request.GET = self.request.GET.copy()
+            self.request.GET["page"] = str(calculated_page)
+
+        return self.table_pagination
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["highlight_message_id"] = self.get_highlight_message_id()
