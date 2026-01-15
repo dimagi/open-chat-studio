@@ -230,6 +230,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
 class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_results_table.html"
+    paginate_by = 10
 
     def get_queryset(self):
         return self.evaluation_run
@@ -242,7 +243,30 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
         )
 
     def get_table_data(self):
+        """Return all table data for pagination."""
         return self.evaluation_run.get_table_data(include_ids=True)
+
+    def get_table_pagination(self, table):
+        """Configure pagination and calculate page for highlighted result."""
+        highlight_result_id = self.get_highlight_result_id()
+
+        if highlight_result_id and not self.request.GET.get("page"):
+            all_data = self.get_table_data()
+            result_index = None
+            for idx, row in enumerate(all_data):
+                if row.get("id") == highlight_result_id:
+                    result_index = idx
+                    break
+
+            if result_index is not None and self.paginate_by:
+                # Calculate which page contains this result
+                calculated_page = (result_index // self.paginate_by) + 1
+                # Update the request's GET parameters to include the calculated page
+                # This is a bit of a hack but necessary since pagination happens after this
+                self.request.GET = self.request.GET.copy()
+                self.request.GET["page"] = str(calculated_page)
+
+        return {"per_page": self.paginate_by}
 
     def get_highlight_result_id(self):
         """Extract and validate the result_id query parameter for highlighting."""
