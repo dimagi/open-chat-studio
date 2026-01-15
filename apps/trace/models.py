@@ -46,6 +46,7 @@ class Trace(models.Model):
         default=dict, blank=True, help_text="Snapshot of session state at the time of the trace"
     )
     experiment_version_number = models.PositiveIntegerField(null=True, blank=True)
+    error = models.TextField(blank=True, help_text="Error message if the trace failed")
 
     def __str__(self):
         return f"Trace {self.experiment} {self.session} {self.duration}ms"
