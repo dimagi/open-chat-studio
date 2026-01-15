@@ -6,9 +6,11 @@ from unittest.mock import Mock, patch
 import pytest
 from django.core import mail
 from django.test import override_settings
+from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolCall, ToolCallChunk
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from pydantic import Field, create_model
+from pydantic import ValidationError as PydanticValidationError
 
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
@@ -57,6 +59,26 @@ from apps.utils.langchain import (
     build_fake_llm_service,
 )
 from apps.utils.pytest import django_db_with_data
+
+
+# Helper class used by router node tests
+class RefusingFakeLlmEcho(FakeLlmEcho):
+    def invoke(self, *args, **kwargs):
+        raise OpenAIRefusalError("Refused by OpenAI")
+
+
+class PydanticValidationErrorLlmEcho(FakeLlmEcho):
+    def invoke(self, *args, **kwargs):
+        raise PydanticValidationError("Invalid data structure", [])
+
+
+class StructuredOutputValidationErrorLlmEcho(FakeLlmEcho):
+    def invoke(self, *args, **kwargs):
+        raise StructuredOutputValidationError(
+            tool_name="test_tool",
+            source=Exception("Unable to parse json"),
+            ai_message=AIMessage(content=""),
+        )
 
 
 @pytest.fixture()
@@ -355,10 +377,11 @@ class TestRouterNode:
         service = build_fake_llm_service(
             responses=[
                 # "a" is not a valid keyword
-                _tool_call("a"),
+                _tool_call("invalid_keyword"),
                 # This second response is the LLM fixing the fact that the first response did not match any keyword
-                _tool_call("A"),
-                _tool_call("A"),
+                _tool_call("invalid_keyword"),
+                _tool_call("a"),
+                _tool_call("a"),
                 _tool_call("b"),
                 _tool_call("c"),
                 _tool_call("d"),
@@ -368,7 +391,7 @@ class TestRouterNode:
         )
         get_llm_service.return_value = service
         start = start_node()
-        router = router_node(str(provider.id), str(provider_model.id), keywords=["A", "b", "c", "d"])
+        router = router_node(str(provider.id), str(provider_model.id), keywords=["a", "b", "c", "d"])
         template_a = render_template_node("Template A: {{ input }}")
         template_b = render_template_node("Template B: {{ input }}")
         template_c = render_template_node("Template C: {{ input }}")
@@ -447,7 +470,7 @@ class TestRouterNode:
                 django_node=None,
                 name="test_router",
                 prompt="PD: {participant_data}",
-                keywords=["A"],
+                keywords=["a"],
                 llm_provider_id=provider.id,
                 llm_provider_model_id=provider_model.id,
             )
@@ -458,8 +481,8 @@ class TestRouterNode:
                 temp_state={"user_input": "hello world", "outputs": {}},
                 path=[("", "prev_node", [node_id])],
             )
-            with mock.patch.object(node, "_process_conditional", return_value=("A", True)):
-                edge_map = {"A": "next_node_a", "B": "next_node_b"}
+            with mock.patch.object(node, "_process_conditional", return_value=("a", True)):
+                edge_map = {"a": "next_node_a", "b": "next_node_b"}
                 incoming_edges = ["prev_node"]
                 router_func = node.build_router_function(edge_map, incoming_edges)
                 command = router_func(state, {})
@@ -469,16 +492,19 @@ class TestRouterNode:
                 assert node.name in output_state["outputs"]
                 assert "route" in output_state["outputs"][node.name]
                 assert "message" in output_state["outputs"][node.name]
-                assert output_state["outputs"][node.name]["route"] == "A"
+                assert output_state["outputs"][node.name]["route"] == "a"
                 assert output_state["outputs"][node.name]["message"] == "hello world"
                 assert command.goto == ["next_node_a"]
 
     @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-    def test_router_node_openai_refusal_uses_default_keyword(
-        self, get_llm_service, provider, provider_model, experiment_session
+    @pytest.mark.parametrize(
+        "LLMClass", [RefusingFakeLlmEcho, PydanticValidationErrorLlmEcho, StructuredOutputValidationErrorLlmEcho]
+    )
+    def test_router_node_uses_default_keyword_on_error(
+        self, get_llm_service, LLMClass, provider, provider_model, experiment_session
     ):
-        refusing_llm = RefusingFakeLlmEcho(include_system_message=True)
+        refusing_llm = LLMClass(include_system_message=True)
         service = FakeLlmService(llm=refusing_llm, token_counter=FakeTokenCounter(token_counts=[0]))
         get_llm_service.return_value = service
         node = RouterNode(
@@ -486,7 +512,7 @@ class TestRouterNode:
             django_node=None,
             name="test router",
             prompt="PD: {participant_data}",
-            keywords=["DEFAULT", "A", "B"],
+            keywords=["default", "a", "b"],
             llm_provider_id=provider.id,
             llm_provider_model_id=provider_model.id,
         )
@@ -500,7 +526,7 @@ class TestRouterNode:
         )
 
         keyword, is_default_keyword = node._process_conditional(state)
-        assert keyword == "DEFAULT"
+        assert keyword == "default"
         assert is_default_keyword
 
 
@@ -1314,9 +1340,3 @@ class TestPipelineStateHelpers:
         assert state.get_node_path("branch_b") == ["start", "router", "branch_b"]
         assert state.get_node_path("end") == ["start", "router", "branch_a", "end"]
         assert state.get_node_path("nonexistent_node") == ["nonexistent_node"]
-
-
-# Helper class used by router node tests
-class RefusingFakeLlmEcho(FakeLlmEcho):
-    def invoke(self, *args, **kwargs):
-        raise OpenAIRefusalError("Refused by OpenAI")
