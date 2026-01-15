@@ -16,9 +16,9 @@ class Command(BaseCommand):
         parser.add_argument(
             "--format",
             type=str,
-            choices=["simple", "detailed"],
-            default="simple",
-            help="Output format: 'simple' for summary table, 'detailed' for full breakdown",
+            choices=["table", "csv"],
+            default="table",
+            help="Output format: 'table' for console table, 'csv' for CSV output",
         )
         parser.add_argument(
             "--deprecated-only",
@@ -69,10 +69,10 @@ class Command(BaseCommand):
         usage_data = sorted(usage_data, key=lambda d: d["total"], reverse=True)
 
         # Output based on format
-        if format_type == "detailed":
-            self._output_detailed(usage_data)
+        if format_type == "csv":
+            self._output_csv(usage_data)
         else:
-            self._output_simple(usage_data)
+            self._output_table(usage_data)
 
     def _get_model_usage(self, model, include_archived=False):
         """Get usage statistics for a single model."""
@@ -134,86 +134,50 @@ class Command(BaseCommand):
                 return provider_model.name
         return None
 
-    def _output_simple(self, usage_data):
-        """Output in simple table format."""
-        self.stdout.write("\n" + "=" * 100)
-        self.stdout.write(
-            f"{'Model Name':<40} {'Provider':<20} {'Deprecated':<12} {'Total Uses':<10}  {'Replacement':<20}"
-        )
-        self.stdout.write("=" * 100)
+    def _output_table(self, usage_data):
+        """Output in detailed table format."""
+        self.stdout.write("\n" + "=" * 180)
+        self.stdout.write(self.style.SUCCESS("LLM Model Usage Report"))
+        self.stdout.write("=" * 180)
 
+        # Table header
+        header = (
+            f"{'Model':<35} {'Provider':<15} {'Type':<12} {'Depr':<5} "
+            f"{'Expt':<5} {'Asst':<5} {'Anly':<5} {'Tran':<5} {'Pipe':<5} {'Total':<6} "
+            f"{'Arch-E':<6} {'Arch-A':<6} {'Replacement':<20}"
+        )
+        self.stdout.write(header)
+        self.stdout.write("-" * 180)
+
+        # Table rows
         for data in usage_data:
             model = data["model"]
-            deprecated_str = "Yes" if model.deprecated else "No"
-            total_str = str(data["total"])
-            team_suffix = f" (custom: {model.team.name})" if model.is_custom() else ""
-            model_name = f"{model.name}{team_suffix}"
-            replacement = data["suggested_replacement"] or "N/A"
+            model_type = "Custom" if model.is_custom() else "Global"
+            deprecated = "Yes" if model.deprecated else "No"
 
-            self.stdout.write(
-                f"{model_name:<40} {model.type:<20} {deprecated_str:>12} {total_str:>10}  {replacement:<20}"
+            # Truncate model name if too long
+            model_name = model.name
+            if len(model_name) > 34:
+                model_name = model_name[:31] + "..."
+
+            replacement = data["suggested_replacement"] or "-"
+            if len(replacement) > 19:
+                replacement = replacement[:16] + "..."
+
+            row = (
+                f"{model_name:<35} {model.type:<15} {model_type:<12} {deprecated:<5} "
+                f"{data['experiments']:<5} {data['assistants']:<5} {data['analyses']:<5} "
+                f"{data['translation_analyses']:<5} {data['pipeline_nodes']:<5} {data['total']:<6} "
+                f"{data['archived_experiments']:<6} {data['archived_assistants']:<6} {replacement:<20}"
             )
 
-        self.stdout.write("=" * 100 + "\n")
-
-        # Summary
-        total_models = len(usage_data)
-        deprecated_models = sum(1 for d in usage_data if d["model"].deprecated)
-        models_in_use = sum(1 for d in usage_data if d["total"] > 0)
-
-        self.stdout.write("\nSummary:")
-        self.stdout.write(f"  Total models: {total_models}")
-        self.stdout.write(f"  Deprecated models: {deprecated_models}")
-        self.stdout.write(f"  Models in use: {models_in_use}\n")
-
-    def _output_detailed(
-        self,
-        usage_data,
-    ):
-        """Output in detailed format."""
-        self.stdout.write("\n" + "=" * 100)
-        self.stdout.write(self.style.SUCCESS("LLM Model Usage Report"))
-        self.stdout.write("=" * 100 + "\n")
-
-        for data in usage_data:
-            model = data["model"]
-
-            # Header
-            self.stdout.write(f"\nModel: {self.style.SUCCESS(model.name)}")
-            self.stdout.write(f"Provider: {model.type}")
-
-            if model.is_custom():
-                self.stdout.write(f"Type: Custom (Team: {model.team.name})")
+            # Color code deprecated models in use
+            if model.deprecated and data["total"] > 0:
+                self.stdout.write(self.style.WARNING(row))
             else:
-                self.stdout.write("Type: Global")
+                self.stdout.write(row)
 
-            if model.deprecated:
-                self.stdout.write(self.style.WARNING("Status: DEPRECATED"))
-                if data["suggested_replacement"]:
-                    self.stdout.write(f"Suggested replacement: {self.style.SUCCESS(data['suggested_replacement'])}")
-            else:
-                self.stdout.write("Status: Active")
-
-            # Usage breakdown
-            self.stdout.write("\nReferences:")
-            self.stdout.write(f"  Experiments: {data['experiments']}")
-            self.stdout.write(f"  Assistants: {data['assistants']}")
-            self.stdout.write(f"  Analyses: {data['analyses']}")
-            self.stdout.write(f"  Translation Analyses: {data['translation_analyses']}")
-            self.stdout.write(f"  Pipeline Nodes: {data['pipeline_nodes']}")
-
-            total_style = self.style.SUCCESS if data["total"] > 0 else self.style.WARNING
-            self.stdout.write(total_style(f"  Total: {data['total']}"))
-
-            # Show archived counts if not included
-            if not data["include_archived"] and (data["archived_experiments"] > 0 or data["archived_assistants"] > 0):
-                self.stdout.write("\nArchived (not counted above):")
-                if data["archived_experiments"] > 0:
-                    self.stdout.write(f"  Experiments: {data['archived_experiments']}")
-                if data["archived_assistants"] > 0:
-                    self.stdout.write(f"  Assistants: {data['archived_assistants']}")
-
-            self.stdout.write("-" * 100)
+        self.stdout.write("=" * 180)
 
         # Summary
         total_models = len(usage_data)
@@ -222,13 +186,64 @@ class Command(BaseCommand):
         models_in_use = sum(1 for d in usage_data if d["total"] > 0)
         total_references = sum(d["total"] for d in usage_data)
 
-        self.stdout.write("\n" + "=" * 100)
-        self.stdout.write(self.style.SUCCESS("Summary"))
-        self.stdout.write("=" * 100)
-        self.stdout.write(f"Total models: {total_models}")
-        self.stdout.write(f"Deprecated models: {deprecated_models}")
+        self.stdout.write("\n" + self.style.SUCCESS("Summary:"))
+        self.stdout.write(f"  Total models: {total_models}")
+        self.stdout.write(f"  Deprecated models: {deprecated_models}")
         if deprecated_in_use > 0:
-            self.stdout.write(self.style.WARNING(f"Deprecated models still in use: {deprecated_in_use}"))
-        self.stdout.write(f"Models in use: {models_in_use}")
-        self.stdout.write(f"Total references: {total_references}")
-        self.stdout.write("=" * 100 + "\n")
+            self.stdout.write(self.style.WARNING(f"  Deprecated models still in use: {deprecated_in_use}"))
+        self.stdout.write(f"  Models in use: {models_in_use}")
+        self.stdout.write(f"  Total references: {total_references}")
+
+        if usage_data and not usage_data[0]["include_archived"]:
+            self.stdout.write(
+                "\nNote: Arch-E = Archived Experiments, Arch-A = Archived Assistants (not counted in Total)"
+            )
+        self.stdout.write("")
+
+    def _output_csv(self, usage_data):
+        """Output in CSV format."""
+        import csv
+        import sys
+
+        writer = csv.writer(sys.stdout)
+
+        # CSV header
+        writer.writerow([
+            "Model Name",
+            "Provider",
+            "Type",
+            "Deprecated",
+            "Experiments",
+            "Assistants",
+            "Analyses",
+            "Translation Analyses",
+            "Pipeline Nodes",
+            "Total",
+            "Archived Experiments",
+            "Archived Assistants",
+            "Team",
+            "Suggested Replacement",
+        ])
+
+        # CSV rows
+        for data in usage_data:
+            model = data["model"]
+            model_type = "Custom" if model.is_custom() else "Global"
+            team_name = model.team.name if model.is_custom() else ""
+
+            writer.writerow([
+                model.name,
+                model.type,
+                model_type,
+                "Yes" if model.deprecated else "No",
+                data["experiments"],
+                data["assistants"],
+                data["analyses"],
+                data["translation_analyses"],
+                data["pipeline_nodes"],
+                data["total"],
+                data["archived_experiments"],
+                data["archived_assistants"],
+                team_name,
+                data["suggested_replacement"] or "",
+            ])
