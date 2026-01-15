@@ -151,7 +151,7 @@ class Command(BaseCommand):
             replacement = data["suggested_replacement"] or "N/A"
 
             self.stdout.write(
-                f"{model_name:<40} {model.type:<20} {deprecated_str:>10} {total_str:>12}  {replacement:<20}"
+                f"{model_name:<40} {model.type:<20} {deprecated_str:>12} {total_str:>10}  {replacement:<20}"
             )
 
         self.stdout.write("=" * 100 + "\n")
