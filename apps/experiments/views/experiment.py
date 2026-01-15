@@ -915,7 +915,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
             page = (messages_before // page_size) + 1
 
         paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
-        current_page = paginator.page(min(page, paginator.num_pages))
+        current_page = paginator.page(page)
         current_page_messages = list(current_page.object_list)
         total_pages = paginator.num_pages
         page_start_index = current_page.start_index()

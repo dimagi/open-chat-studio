@@ -1,6 +1,9 @@
 import dataclasses
 
 from django.db.models import Model
+from django.urls import reverse
+
+from apps.web.meta import absolute_url
 
 
 @dataclasses.dataclass
@@ -21,7 +24,7 @@ class SearchableModel:
         return f"{app_label}.view_{model_name}"
 
 
-def get_searchable_models(model_name: None):
+def get_searchable_models(model_name: str | None):
     from apps.chat.models import ChatMessage
     from apps.experiments.models import Experiment, ExperimentSession, Participant
 
@@ -36,3 +39,18 @@ def get_searchable_models(model_name: None):
         return [item for item in searchable_models if item.model_cls.__name__ == model_name]
 
     return searchable_models
+
+
+def get_global_search_url(instance: Model) -> str:
+    """Generate a global search URL for a model instance."""
+    model_name = instance.__class__.__name__
+    searchable_models = get_searchable_models(model_name)
+
+    if not searchable_models:
+        return ""
+
+    searchable_model = searchable_models[0]
+    field_value = getattr(instance, searchable_model.field_name)
+
+    uri = reverse("web:global_search")
+    return absolute_url(uri) + f"?q={field_value}&m={model_name}"

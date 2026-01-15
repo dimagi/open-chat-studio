@@ -4,7 +4,6 @@ import textwrap
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from django.urls import reverse
 from langchain_core.language_models import BaseChatModel
 from pydantic import ValidationError
 
@@ -19,6 +18,7 @@ from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.tracing import TraceInfo, TracingService
+from apps.web.search import get_global_search_url
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
@@ -87,7 +87,7 @@ class PipelineBot:
                 input_state["messages"][-1], ChatMessageType.HUMAN, metadata=initial_input_metadata
             )
             input_state["input_message_id"] = human_message.id
-            input_state["input_message_url"] = f"{reverse('web:global_search')}?q={human_message.id}&m=ChatMessage"
+            input_state["input_message_url"] = get_global_search_url(human_message)
 
             if self.trace_service:
                 self.trace_service.set_input_message_id(human_message.id)
