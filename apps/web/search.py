@@ -1,5 +1,6 @@
 import dataclasses
 import re
+from urllib.parse import urlencode
 
 from django.db.models import Model
 from django.urls import reverse
@@ -56,4 +57,5 @@ def get_global_search_url(instance: Model) -> str:
     field_value = getattr(instance, searchable_model.field_name)
 
     uri = reverse("web:global_search")
-    return absolute_url(uri) + f"?q={field_value}&m={model_name}"
+    query_string = urlencode({"q": field_value, "m": model_name})
+    return absolute_url(uri) + f"?{query_string}"
