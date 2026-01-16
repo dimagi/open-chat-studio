@@ -226,7 +226,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
                 "content": content,
                 "additional_kwargs": {
                     "id": self.id,
-                    "message_url": self.get_absolute_url(),
                 },
             },
         }
