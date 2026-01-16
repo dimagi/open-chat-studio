@@ -206,9 +206,9 @@ class TestDefaultParser:
                 "type": "text",
                 "text": "world",
                 "annotations": [
-                    # Uploaded file annotation
+                    # Annotation stating that an uploaded file was cited
                     {"file_id": "file-123", "type": "file_citation"},
-                    # Generated file annotation
+                    # Annotation stating that a container file (generated) was referenced
                     {
                         "file_id": "file-456",
                         "type": "container_file_citation",
