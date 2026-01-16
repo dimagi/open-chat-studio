@@ -187,7 +187,6 @@ class LlmService(pydantic.BaseModel):
                 external_ids = self.get_cited_file_ids(annotation_entries)
                 cited_file_ids_remote.extend(external_ids)
 
-            # TODO: Rename to retrieve_generated_files_from_service_provider
             # Generated files
             generated_files.extend(
                 self.retrieve_generated_files_from_service_provider(annotation_entries, session.team_id)
