@@ -189,8 +189,9 @@ class LlmService(pydantic.BaseModel):
 
             # TODO: Rename to retrieve_generated_files_from_service_provider
             # Generated files
-            generated_files = self.get_generated_files(annotation_entries, session.team_id)
-            generated_files.extend(generated_files)
+            generated_files.extend(
+                self.retrieve_generated_files_from_service_provider(annotation_entries, session.team_id)
+            )
 
             # Replace generated file links with actual file download links
             for generated_file in generated_files:
@@ -231,7 +232,9 @@ class LlmService(pydantic.BaseModel):
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
         return []
 
-    def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
+    def retrieve_generated_files_from_service_provider(
+        self, annotation_entries: list[dict], team_id: int
+    ) -> list[File]:
         return []
 
     def replace_file_links(self, text: str, file: File, session: ExperimentSession) -> str:
@@ -290,7 +293,9 @@ class OpenAIGenericService(LlmService):
         ]
         return detangle_file_ids(external_ids)
 
-    def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
+    def retrieve_generated_files_from_service_provider(
+        self, annotation_entries: list[dict], team_id: int
+    ) -> list[File]:
         """
         Create file records for all generated files in the output.
 
