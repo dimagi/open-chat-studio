@@ -1,4 +1,5 @@
-from unittest.mock import Mock
+from io import BytesIO
+from unittest.mock import Mock, patch
 
 import pytest
 from langchain_classic.agents.output_parsers.tools import ToolAgentAction
@@ -6,8 +7,9 @@ from langchain_core.agents import AgentStep
 from langchain_core.messages import AIMessage, FunctionMessage
 
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
-from apps.service_providers.llm_service.main import LlmService
+from apps.service_providers.llm_service.main import LlmService, OpenAILlmService
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
+from apps.utils.factories.files import FileFactory
 
 
 class TestParseOutputForAnthropic:
@@ -162,57 +164,70 @@ class TestParseOutputForAnthropic:
         assert parse_output_for_anthropic(output, session=None) == expected
 
 
+@pytest.mark.django_db()
 class TestDefaultParser:
-    @pytest.mark.parametrize(
-        ("llm_output", "expected_text"),
-        [
-            ("Hello, world!", "Hello, world!"),
-            ({"output": "Response from dict"}, "Response from dict"),
-            ({"some_key": "some_value"}, ""),
-            (["Hello", "world", "test"], "Hello\nworld\ntest"),
-            (
-                [
-                    {"text": "First part", "type": "text", "annotations": []},
-                    {"text": "second part", "type": "text", "annotations": []},
+    def test_llm_output_parsing(self, team_with_users):
+        session = Mock(team_id=team_with_users.id)
+
+        llm_output = Mock(spec=AIMessage)
+        llm_output.text = "Hello world"
+        llm_output.content_blocks = [
+            {"type": "text", "text": "Hello", "annotations": []},
+            {"type": "text", "text": "world", "annotations": []},
+        ]
+
+        parser = LlmService()
+        result: LlmChatResponse = parser._default_parser(llm_output, session)
+
+        assert result.text == "Hello world"
+        assert len(result.generated_files) == 0
+        assert len(result.cited_files) == 0
+
+    @pytest.mark.parametrize("expect_citations", [True, False])
+    @patch("apps.service_providers.llm_service.main.get_openai_container_file_contents")
+    @patch("apps.files.models.File.download_link")
+    def test_llm_output_parsing_openai(
+        self, download_link_mock, get_file_contents_mock, expect_citations, team_with_users
+    ):
+        session = Mock(team_id=team_with_users.id)
+
+        # Local file that will be cited
+        FileFactory(external_id="file-123", team=team_with_users)
+
+        # Remote generated file content
+        get_file_contents_mock.return_value = BytesIO(b"This is a generated file.")
+        download_link_mock.return_value = "https://files.example.com/download/file-456"
+
+        llm_output = Mock(spec=AIMessage)
+        llm_output.text = "Hello world"
+        llm_output.content_blocks = [
+            {"type": "text", "text": "Hello", "annotations": []},
+            {
+                "type": "text",
+                "text": "world",
+                "annotations": [
+                    # Uploaded file annotation
+                    {"file_id": "file-123", "type": "file_citation"},
+                    # Generated file annotation
+                    {
+                        "file_id": "file-456",
+                        "type": "container_file_citation",
+                        "container_id": "container-1",
+                        "filename": "generated.txt",
+                    },
                 ],
-                "First part\nsecond part",
-            ),
-            # Duplicated text entries should be concatenated without duplication
-            (["Hello", "Hello", "world"], "Hello\nworld"),
-            (
-                [
-                    {"text": "Hello world", "type": "text", "annotations": []},
-                    {"text": "Hello world", "type": "text", "annotations": []},
-                ],
-                "Hello world",
-            ),
-        ],
-    )
-    def test_llm_output_parsing(self, llm_output, expected_text):
-        """Test various LLM output formats are parsed correctly"""
-        session = Mock(team_id=1)
+            },
+        ]
 
-        parser = LlmService()
-        result = parser._default_parser(llm_output, session, include_citations=False)
+        parser = OpenAILlmService(openai_api_key="123")
+        result: LlmChatResponse = parser._default_parser(llm_output, session, include_citations=expect_citations)
 
-        assert result.text == expected_text
-        assert result.generated_files == set()
-        assert result.cited_files == set()
+        assert result.text == "Hello world"
+        assert len(result.generated_files) == 1
+        assert result.generated_files.pop().file.read() == b"This is a generated file."
 
-    def test_llm_output_mixed_list_types_raises_error(self):
-        """Test that mixed list types (strings and dicts) raises TypeError"""
-        output = ["string", {"text": "dict"}]
-        session = Mock(team_id=1)
-        parser = LlmService()
-
-        with pytest.raises(TypeError, match="Unexpected mixed or unsupported list element types"):
-            parser._default_parser(output, session, include_citations=False)
-
-    def test_llm_output_unsupported_type_raises_error(self):
-        """Test that unsupported types raise TypeError"""
-        output = 12345  # Invalid type
-        session = Mock(team_id=1)
-        parser = LlmService()
-
-        with pytest.raises(TypeError, match="Unexpected llm_output type"):
-            parser._default_parser(output, session, include_citations=False)
+        if expect_citations:
+            assert len(result.cited_files) == 1
+            assert result.cited_files.pop().external_id == "file-123"
+        else:
+            assert len(result.cited_files) == 0

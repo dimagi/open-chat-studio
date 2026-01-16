@@ -71,7 +71,7 @@ def execute_sub_agent(node: PipelineNode, state: PipelineState):
 def _process_agent_output(node: PipelineNode, session: ExperimentSession, message: AIMessage):
     output_parser = node.get_llm_service().get_output_parser()
     parsed_output: LlmChatResponse = output_parser(
-        message.content, session=session, include_citations=node.generate_citations
+        output=message, session=session, include_citations=node.generate_citations
     )
     ai_message_metadata = _process_files(
         session, cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
