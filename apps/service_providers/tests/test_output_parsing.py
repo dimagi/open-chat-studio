@@ -1,9 +1,15 @@
+from io import BytesIO
+from unittest.mock import Mock, patch
+
+import pytest
 from langchain_classic.agents.output_parsers.tools import ToolAgentAction
 from langchain_core.agents import AgentStep
 from langchain_core.messages import AIMessage, FunctionMessage
 
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
+from apps.service_providers.llm_service.main import LlmService, OpenAILlmService
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
+from apps.utils.factories.files import FileFactory
 
 
 class TestParseOutputForAnthropic:
@@ -156,3 +162,72 @@ class TestParseOutputForAnthropic:
         ]
         expected = LlmChatResponse(text="Text with incomplete citations [Complete](https://example.com/complete)")
         assert parse_output_for_anthropic(output, session=None) == expected
+
+
+@pytest.mark.django_db()
+class TestDefaultParser:
+    def test_llm_output_parsing(self, team_with_users):
+        session = Mock(team_id=team_with_users.id)
+
+        llm_output = Mock(spec=AIMessage)
+        llm_output.text = "Hello world"
+        llm_output.content_blocks = [
+            {"type": "text", "text": "Hello", "annotations": []},
+            {"type": "text", "text": "world", "annotations": []},
+        ]
+
+        parser = LlmService()
+        result: LlmChatResponse = parser._default_parser(llm_output, session)
+
+        assert result.text == "Hello world"
+        assert len(result.generated_files) == 0
+        assert len(result.cited_files) == 0
+
+    @pytest.mark.parametrize("expect_citations", [True, False])
+    @patch("apps.service_providers.llm_service.main.get_openai_container_file_contents")
+    @patch("apps.files.models.File.download_link")
+    def test_llm_output_parsing_openai(
+        self, download_link_mock, get_file_contents_mock, expect_citations, team_with_users
+    ):
+        session = Mock(team_id=team_with_users.id)
+
+        # Local file that will be cited
+        FileFactory(external_id="file-123", team=team_with_users)
+
+        # Remote generated file content
+        get_file_contents_mock.return_value = BytesIO(b"This is a generated file.")
+        download_link_mock.return_value = "https://files.example.com/download/file-456"
+
+        llm_output = Mock(spec=AIMessage)
+        llm_output.text = "Hello world"
+        llm_output.content_blocks = [
+            {"type": "text", "text": "Hello", "annotations": []},
+            {
+                "type": "text",
+                "text": "world",
+                "annotations": [
+                    # Annotation stating that an uploaded file was cited
+                    {"file_id": "file-123", "type": "file_citation"},
+                    # Annotation stating that a container file (generated) was referenced
+                    {
+                        "file_id": "file-456",
+                        "type": "container_file_citation",
+                        "container_id": "container-1",
+                        "filename": "generated.txt",
+                    },
+                ],
+            },
+        ]
+
+        parser = OpenAILlmService(openai_api_key="123")
+        result: LlmChatResponse = parser._default_parser(llm_output, session, include_citations=expect_citations)
+
+        assert result.text == "Hello world"
+        assert len(result.generated_files) == 1
+        assert result.generated_files.pop().file.read() == b"This is a generated file."
+
+        if expect_citations:
+            assert len(result.cited_files) == 1
+            assert result.cited_files.pop().external_id == "file-123"
+        else:
+            assert len(result.cited_files) == 0
