@@ -27,6 +27,7 @@ from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotFor
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
+from apps.experiments.email import send_experiment_invitation
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
@@ -590,7 +591,7 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
     }
     return TemplateResponse(
         request,
-        "experiments/chat/web_chat.html",
+        "chatbots/chat/web_chat.html",
         {"experiment": experiment, "session": session, "active_tab": "chatbots", **version_specific_vars},
     )
 
@@ -732,7 +733,7 @@ def _chatbot_chat_ui(request, embedded=False):
     }
     return TemplateResponse(
         request,
-        "experiments/chat/web_chat.html",
+        "chatbots/chat/web_chat.html",
         {
             "experiment": request.experiment,
             "session": request.experiment_session,
@@ -827,3 +828,16 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
             "use_dynamic_filters": True,
             **filter_context,
         }
+
+
+@login_and_team_required
+@permission_required("experiments.invite_participants", raise_exception=True)
+def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session_id: str):
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    session = ExperimentSession.objects.get(experiment=experiment, external_id=session_id)
+    send_experiment_invitation(session)
+    return TemplateResponse(
+        request,
+        "chatbots/manage/invite_row.html",
+        context={"request": request, "experiment": experiment, "session": session},
+    )
