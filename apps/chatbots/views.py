@@ -587,7 +587,7 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
     }
     return TemplateResponse(
         request,
-        "experiments/chat/web_chat.html",
+        "chatbots/chat/web_chat.html",
         {"experiment": experiment, "session": session, "active_tab": "chatbots", **version_specific_vars},
     )
 
@@ -729,7 +729,7 @@ def _chatbot_chat_ui(request, embedded=False):
     }
     return TemplateResponse(
         request,
-        "experiments/chat/web_chat.html",
+        "chatbots/chat/web_chat.html",
         {
             "experiment": request.experiment,
             "session": request.experiment_session,
@@ -834,6 +834,6 @@ def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session
     send_experiment_invitation(session)
     return TemplateResponse(
         request,
-        "experiments/manage/invite_row.html",
+        "chatbots/manage/invite_row.html",
         context={"request": request, "experiment": experiment, "session": session},
     )
