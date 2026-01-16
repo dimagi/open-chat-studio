@@ -112,6 +112,9 @@ class PipelineState(dict):
     participant_data: Annotated[dict, operator.or_]
     session_state: Annotated[dict, operator.or_]
 
+    input_message_id: int | None
+    input_message_url: str | None
+
     def json_safe(self):
         # We need to make a copy of `self` to not change the actual value of `experiment_session` forever
         copy = self.copy()

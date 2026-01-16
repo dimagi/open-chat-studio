@@ -32,16 +32,19 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         temp_state={"my_key": "example_key"},
         outputs={},
         participant_data={"custom_key": "custom_value"},
+        input_message_url="https://example.com/",
     )
     template = (
         "input: {{input}}, inputs: {{node_inputs}}, temp_state.my_key: {{temp_state.my_key}}, "
         "participant_id: {{participant_details.identifier}}, "
-        "participant_data: {{participant_data.custom_key}}"
+        "participant_data: {{participant_data.custom_key}}, "
+        "input_message_url: {{input_message_url}} "
     )
     node = RenderTemplate(name="test", node_id="123", django_node=None, template_string=template)
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
     assert node_output["messages"][-1] == (
         "input: Cycling, inputs: ['Cycling'], temp_state.my_key: example_key, "
         "participant_id: participant_123, "
-        "participant_data: custom_value"
+        "participant_data: custom_value, "
+        "input_message_url: https://example.com/ "
     )

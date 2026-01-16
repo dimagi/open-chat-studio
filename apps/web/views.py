@@ -111,14 +111,15 @@ def release_superuser_powers(request, slug):
 
 @login_required
 def global_search(request):
-    query = request.GET.get("q")
+    query = request.GET.get("q", "")
+    model = request.GET.get("m")
     if not query:
         return HttpResponseBadRequest("No query provided")
 
-    if not UUID_PATTERN.match(query):
-        return HttpResponseBadRequest("Only UUID searches are supported")
+    if not query.isdigit() and not UUID_PATTERN.match(query):
+        return HttpResponseBadRequest("Only UUID and Int searches are supported")
 
-    for candidate in get_searchable_models():
+    for candidate in get_searchable_models(model):
         if result := candidate.search(query):
             team = result.team
             if not is_member(request.user, team):

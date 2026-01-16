@@ -68,3 +68,21 @@ def test_chat_message_summary_to_langchain_dict():
         },
     }
     assert summary_message.to_langchain_dict() == expected_dict
+
+
+def test_message_iterator_exclude_message_id(chat):
+    msg1 = ChatMessage.objects.create(chat=chat, content="First")
+    msg2 = ChatMessage.objects.create(chat=chat, content="Second")
+    msg3 = ChatMessage.objects.create(chat=chat, content="Third")
+
+    # Without exclusion, should get all messages
+    all_messages = list(chat.message_iterator(with_summaries=False))
+    assert msg1 in all_messages
+    assert msg2 in all_messages
+    assert msg3 in all_messages
+
+    # With exclusion, should not get msg3
+    messages_without_msg3 = list(chat.message_iterator(with_summaries=False, exclude_message_id=msg3.id))
+    assert msg1 in messages_without_msg3
+    assert msg2 in messages_without_msg3
+    assert msg3 not in messages_without_msg3

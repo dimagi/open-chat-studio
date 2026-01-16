@@ -26,6 +26,7 @@ class StateSchema(AgentState):
     # allows tools to manipulate participant data and session state
     participant_data: Annotated[dict, operator.or_]
     session_state: Annotated[dict, operator.or_]
+    input_message_id: Annotated[int | None, operator.or_]
 
 
 def execute_sub_agent(node: PipelineNode, state: PipelineState):
@@ -41,6 +42,7 @@ def execute_sub_agent(node: PipelineNode, state: PipelineState):
         messages=[formatted_input],
         participant_data=state.get("participant_data") or {},
         session_state=state.get("session_state") or {},
+        input_message_id=state.get("input_message_id"),
     )
     result = agent.invoke(inputs)
     final_message = result["messages"][-1]
