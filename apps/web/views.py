@@ -120,14 +120,6 @@ def global_search(request):
         return HttpResponseBadRequest("Only UUID and Int searches are supported")
 
     for candidate in get_searchable_models(model):
-        if (
-            candidate.require_uuid
-            and not UUID_PATTERN.match(query)
-            or not candidate.require_uuid
-            and not query.isdigit()
-        ):
-            continue
-
         if result := candidate.search(query):
             team = result.team
             if not is_member(request.user, team):
