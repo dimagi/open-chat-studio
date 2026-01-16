@@ -213,8 +213,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
 def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
     combined_events = []
     static_events = (
-        StaticTrigger.objects
-        .filter(experiment=experiment)
+        StaticTrigger.objects.filter(experiment=experiment)
         .annotate(
             failure_count=Count(
                 Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
@@ -224,8 +223,7 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
         .all()
     )
     timeout_events = (
-        TimeoutTrigger.objects
-        .filter(experiment=experiment)
+        TimeoutTrigger.objects.filter(experiment=experiment)
         .annotate(
             failure_count=Count(
                 Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
@@ -453,8 +451,9 @@ def _poll_messages(request):
             logging.exception(f"Unexpected `since` parameter value. Error: {e}")
 
     messages = (
-        ChatMessage.objects
-        .filter(message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since)
+        ChatMessage.objects.filter(
+            message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since
+        )
         .order_by("created_at")
         .all()
     )
@@ -857,8 +856,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 
     chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
     all_tags = (
-        Tag.objects
-        .filter(
+        Tag.objects.filter(
             annotations_customtaggeditem_items__content_type=chat_message_content_type,
             annotations_customtaggeditem_items__object_id__in=Subquery(
                 ChatMessage.objects.filter(chat=session.chat).values("id")
@@ -879,8 +877,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     default_message = "(message generated after last translation)"
 
     messages_queryset = (
-        ChatMessage.objects
-        .filter(chat=session.chat)
+        ChatMessage.objects.filter(chat=session.chat)
         .order_by("created_at")
         .prefetch_related(
             Prefetch(
@@ -983,9 +980,9 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
             messages.error(request, "Selected provider or model not found.")
             return redirect_to_messages_view(request, session)
 
-        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(**{
-            f"translations__{language}__isnull": False
-        })
+        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(
+            **{f"translations__{language}__isnull": False}
+        )
         if not messages_to_translate.exists():
             messages.info(request, "All messages already have translations for this language.")
             return redirect_to_messages_view(request, session)
