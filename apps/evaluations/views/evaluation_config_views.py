@@ -250,7 +250,9 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
         """Configure pagination and calculate page for highlighted result."""
         highlight_result_id = self.get_highlight_result_id()
         page_size = self.table_pagination.get("per_page", 10)
+        pagination_config = dict(self.table_pagination)
 
+        # On first load with highlight, calculate which page contains the result
         if highlight_result_id and not self.request.GET.get("page"):
             all_data = self.get_table_data()
             result_index = None
@@ -260,13 +262,11 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                     break
 
             if result_index is not None:
-                # Calculate which page contains this result
+                # Calculate which page contains this result and add to pagination config
                 calculated_page = (result_index // page_size) + 1
-                # Update the request's GET parameters to include the calculated page
-                self.request.GET = self.request.GET.copy()
-                self.request.GET["page"] = str(calculated_page)
+                pagination_config["page"] = calculated_page
 
-        return self.table_pagination
+        return pagination_config
 
     def get_highlight_result_id(self):
         """Extract and validate the result_id query parameter for highlighting."""
