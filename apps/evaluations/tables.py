@@ -343,6 +343,22 @@ class DatasetMessagesTable(tables.Table):
         super().__init__(*args, **kwargs)
         self.highlight_message_id = highlight_message_id
 
+        # Update row_attrs to include highlighting
+        if highlight_message_id:
+
+            def _row_class_factory(record):
+                class_defaults = settings.DJANGO_TABLES2_ROW_ATTRS["class"]
+                if record.id == highlight_message_id:
+                    return f"{class_defaults} bg-yellow-100 dark:bg-yellow-900/20"
+                return class_defaults
+
+            # Update the Meta row_attrs with highlighting
+            self.Meta.row_attrs = {
+                **settings.DJANGO_TABLES2_ROW_ATTRS,
+                "class": _row_class_factory,
+                "data-message-id": lambda record: record.id,
+            }
+
     class Meta:
         model = EvaluationMessage
         fields = (
@@ -355,5 +371,9 @@ class DatasetMessagesTable(tables.Table):
             "session_state",
             "actions",
         )
+        row_attrs = {
+            **settings.DJANGO_TABLES2_ROW_ATTRS,
+            "data-message-id": lambda record: record.id,
+        }
         orderable = False
         empty_text = "No messages in this dataset yet."
