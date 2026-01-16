@@ -528,10 +528,7 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
         timezone=request.session.get("detected_tz", None),
         metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
     )
-    redirect_url = (
-        "chatbots:chatbot_chat_embed" if request.origin == "chatbots" else "experiments:experiment_chat_embed"
-    )
-    return redirect(redirect_url, team_slug, experiment.public_id, session.external_id)
+    return redirect("chatbots:chatbot_chat_embed", team_slug, experiment.public_id, session.external_id)
 
 
 def _verify_user_or_start_session(identifier, request, experiment, session):
