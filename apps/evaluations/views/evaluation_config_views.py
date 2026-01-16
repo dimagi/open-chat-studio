@@ -280,20 +280,20 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
         context["highlight_result_id"] = self.get_highlight_result_id()
         return context
 
-    def get_table_kwargs(self):
-        kwargs = super().get_table_kwargs()
-        kwargs["highlight_result_id"] = self.get_highlight_result_id()
-        return kwargs
-
     def get_table_class(self):
         """
-        Inspect the first row’s keys and build a Table subclass
+        Inspect the first row's keys and build a Table subclass
         with one Column per field.
         """
+        from django.conf import settings
+
         data = self.get_table_data()
         if not data:
             return type("EmptyTable", (tables.Table,), {})
 
+        highlight_result_id = self.get_highlight_result_id()
+
+        # Build column attributes
         attrs = {}
         for row in data:
             for key in row:
@@ -301,11 +301,26 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                     continue
                 attrs[key] = self.get_column(key)
 
-        def __init__(self, *args, highlight_result_id=None, **kwargs):
-            super(self.__class__, self).__init__(*args, **kwargs)
-            self.highlight_result_id = highlight_result_id
+        # Define row class factory to add highlighting
+        def _row_class_factory(record):
+            class_defaults = settings.DJANGO_TABLES2_ROW_ATTRS["class"]
+            if highlight_result_id and highlight_result_id == record.get("id"):
+                return f"{class_defaults} bg-yellow-100 dark:bg-yellow-900/20"
+            return class_defaults
 
-        attrs["__init__"] = __init__
+        # Create Meta class with row_attrs for highlighting and data-result-id
+        Meta = type(
+            "Meta",
+            (),
+            {
+                "row_attrs": {
+                    **settings.DJANGO_TABLES2_ROW_ATTRS,
+                    "class": _row_class_factory,
+                    "data-result-id": lambda record: record.get("id", ""),
+                },
+            },
+        )
+        attrs["Meta"] = Meta
 
         return type("EvaluationResultTableTable", (tables.Table,), attrs)
 
