@@ -47,6 +47,8 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "anthropic": [
         Model("claude-sonnet-4-5-20250929", k(200), is_default=True, parameters=AnthropicReasoningParameters),
+        Model("claude-haiku-4-5-20251001", k(200), parameters=AnthropicReasoningParameters),
+        Model("claude-opus-4-5-20251101", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-sonnet-4-20250514", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-opus-4-20250514", k(200), is_translation_default=True, parameters=ClaudeOpus4_20250514Parameters),
         Model("claude-3-7-sonnet-20250219", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
