@@ -1840,9 +1840,10 @@ class ExperimentSession(BaseTeamModel):
         """
         from apps.events.tasks import enqueue_static_triggers
 
-        self.update_status(SessionStatus.PENDING_REVIEW)
         if trigger_type and not commit:
             raise ValueError("Commit must be True when trigger_type is specified")
+
+        self.update_status(SessionStatus.PENDING_REVIEW)
 
         self.ended_at = timezone.now()
         if commit:
