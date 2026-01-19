@@ -149,6 +149,10 @@ def test_end_conversation_trigger_also_triggers_generic_end_event(experiment_ses
     )
 
     for end_trigger in StaticTriggerType.end_conversation_types():
+        if end_trigger == StaticTriggerType.CONVERSATION_END:
+            # Don't create a duplicate trigger for the generic end event
+            continue
+
         trigger = StaticTrigger.objects.create(
             experiment=experiment_session.experiment,
             action=EventAction.objects.create(action_type=EventActionType.LOG),
