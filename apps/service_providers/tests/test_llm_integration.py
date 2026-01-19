@@ -81,7 +81,7 @@ def google_vertex_ai_credentials():
     return {
         "credentials_json": credentials_json,
         "location": env.str("GOOGLE_VERTEX_AI_LOCATION", default="global"),
-        "api_transport": env.str("GOOGLE_VERTEX_AI_API_TRANSPORT", default="grpc"),
+        "api_transport": env.str("GOOGLE_VERTEX_AI_API_TRANSPORT", default="rest"),
     }
 
 
@@ -281,6 +281,7 @@ class TestGroqIntegration:
             team_with_users=team_with_users,
             provider_type=LlmProviderTypes.groq,
             provider_config=groq_credentials,
+            model_name="llama-3.1-8b-instant",  # The current default model has been removed
         )
 
 
