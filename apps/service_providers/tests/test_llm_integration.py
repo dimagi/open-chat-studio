@@ -65,6 +65,27 @@ def google_credentials():
 
 
 @pytest.fixture()
+def google_vertex_ai_credentials():
+    """Get real Google Vertex AI credentials from environment"""
+    import json
+
+    credentials_json_str = env.str("GOOGLE_VERTEX_AI_CREDENTIALS_JSON", default=None)
+    if not credentials_json_str:
+        pytest.skip("GOOGLE_VERTEX_AI_CREDENTIALS_JSON not set")
+
+    try:
+        credentials_json = json.loads(credentials_json_str)
+    except json.JSONDecodeError:
+        pytest.skip("GOOGLE_VERTEX_AI_CREDENTIALS_JSON is not valid JSON")
+
+    return {
+        "credentials_json": credentials_json,
+        "location": env.str("GOOGLE_VERTEX_AI_LOCATION", default="global"),
+        "api_transport": env.str("GOOGLE_VERTEX_AI_API_TRANSPORT", default="grpc"),
+    }
+
+
+@pytest.fixture()
 def deepseek_credentials():
     """Get real DeepSeek credentials from environment"""
     api_key = env.str("DEEPSEEK_API_KEY", default=None)
@@ -206,6 +227,19 @@ class TestGoogleGeminiIntegration:
             team_with_users=team_with_users,
             provider_type=LlmProviderTypes.google,
             provider_config=google_credentials,
+        )
+
+
+@pytest.mark.django_db()
+class TestGoogleVertexAIIntegration:
+    """Integration tests for Google Vertex AI LLM provider"""
+
+    def test_google_vertex_ai_chat_completion(self, team_with_users, google_vertex_ai_credentials):
+        """Test Google Vertex AI chat completion through pipeline"""
+        _run_llm_pipeline_test(
+            team_with_users=team_with_users,
+            provider_type=LlmProviderTypes.google_vertex_ai,
+            provider_config=google_vertex_ai_credentials,
         )
 
 
