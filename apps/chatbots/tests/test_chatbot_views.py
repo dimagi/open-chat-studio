@@ -413,7 +413,9 @@ def test_new_chatbot_session_view(
 
     # Verify event was fired if requested
     if fire_end_event:
-        enqueue_static_triggers_task.delay.assert_called_once_with(old_session.id, StaticTriggerType.CONVERSATION_END)
+        enqueue_static_triggers_task.delay.assert_called_once_with(
+            old_session.id, StaticTriggerType.CONVERSATION_END_MANUALLY
+        )
     else:
         enqueue_static_triggers_task.delay.assert_not_called()
 
