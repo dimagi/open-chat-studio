@@ -1828,13 +1828,13 @@ class ExperimentSession(BaseTeamModel):
             args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
         )
 
-    def end(self, trigger_type: StaticTriggerType, commit: bool = True):
+    def end(self, commit: bool = True, trigger_type: StaticTriggerType | None = None):
         """
         Ends this experiment session
 
         Args:
             commit: Whether to save the model after setting the ended_at value
-            trigger_type: The type of conversation end event to trigger
+            trigger_type: The type of conversation end event to trigger. Leaving this as None will not trigger events.
         Raises:
             ValueError: If trigger_type is specified but commit is not.
         """
