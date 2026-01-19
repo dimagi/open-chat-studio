@@ -11,7 +11,7 @@
   </a>
   <button type="button" class="btn btn-ghost btn-xs" onclick="SiteJS.app.copyToClipboard(this, 'copy-result-{{ record.id }}')"
         title="Copy link to clipboard">
-    <input id="copy-result-{{ record.id }}" type="hidden" value="{{ request.build_absolute_uri }}?result_id={{ record.id }}"/>
+    <input id="copy-result-{{ record.id }}" type="hidden" value="{{ request.scheme }}://{{ request.get_host }}{{ result_path }}?result_id={{ record.id }}"/>
     <i class="fa-regular fa-copy"></i>
   </button>
 </div>
