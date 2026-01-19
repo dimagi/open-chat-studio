@@ -578,18 +578,17 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 f"Local collections: {', '.join(local_collections)}.",
             )
 
-        if all(is_remote_flags):
-            # Validate that all remote collections use the same LLM provider as this node
-            incompatible_collections = [
-                collection.name for collection in collections.values() if collection.llm_provider_id != llm_provider_id
-            ]
-            if incompatible_collections:
-                raise PydanticCustomError(
-                    "invalid_collection_index",
-                    f"All collection indexes must use the same LLM provider as the node. "
-                    f"Incompatible collections: {', '.join(incompatible_collections)}",
-                )
-        else:
+        # Validate that all remote collections use the same LLM provider as this node
+        incompatible_collections = [
+            collection.name for collection in collections.values() if collection.llm_provider_id != llm_provider_id
+        ]
+        if incompatible_collections:
+            raise PydanticCustomError(
+                "invalid_collection_index",
+                f"All collection indexes must use the same LLM provider as the node. "
+                f"Incompatible collections: {', '.join(incompatible_collections)}",
+            )
+        if len(collections) > 1 and not all(is_remote_flags):
             # local indexes must have a summary
             missing_summary = [collection.name for collection in collections.values() if not collection.summary]
             if missing_summary:
