@@ -429,7 +429,7 @@ class TestExperimentSession:
 
         mock_channel.send_message_to_user = mock_send_with_db_change
 
-        # Call ad_hoc_bot_message with fail_silently=False so exception propagates
+        # Call ad_hoc_bot_message with fail_silently=False
         with pytest.raises(Exception, match="Send failed - should rollback"):
             experiment_session.ad_hoc_bot_message(
                 "Tell the user we're testing", TraceInfo(name="test"), fail_silently=False

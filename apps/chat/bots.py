@@ -11,6 +11,7 @@ from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation
 from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.files.models import File
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
@@ -210,7 +211,7 @@ class PipelineBot:
         for intent in pipeline_output.get("intents", []):
             match intent:
                 case Intents.END_SESSION:
-                    self.session.end()
+                    self.session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT)
 
     def _save_message_to_history(
         self,
