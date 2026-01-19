@@ -116,6 +116,7 @@ class StaticTriggerType(models.TextChoices):
     @staticmethod
     def end_conversation_types():
         return [
+            StaticTriggerType.CONVERSATION_END,
             StaticTriggerType.CONVERSATION_ENDED_BY_USER,
             StaticTriggerType.CONVERSATION_ENDED_BY_BOT,
             StaticTriggerType.CONVERSATION_ENDED_VIA_API,
