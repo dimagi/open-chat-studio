@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from apps.data_migrations.management.commands.base import IdempotentCommand
-from apps.events.models import EventAction, ScheduledMessage, StaticTrigger, TimeoutTrigger
+from apps.events.models import EventAction, StaticTrigger, TimeoutTrigger
 from apps.teams.email import collect_team_admin_emails, send_bulk_team_admin_emails
 
 
@@ -29,11 +29,6 @@ class Command(IdempotentCommand):
             action__action_type="summarize", experiment__working_version__isnull=True
         ).select_related("experiment__team", "action"):
             teams_data[trigger.experiment.team_id]["experiments"].add(trigger.experiment.name)
-
-        for msg in ScheduledMessage.objects.filter(
-            action__action_type="summarize", experiment__working_version__isnull=True
-        ).select_related("experiment__team", "action"):
-            teams_data[msg.experiment.team_id]["experiments"].add(msg.experiment.name)
 
         # Convert to email context format
         teams_context = {}
@@ -94,27 +89,24 @@ class Command(IdempotentCommand):
                 for error in results["errors"]:
                     self.stdout.write(self.style.ERROR(f"  {error}"))
 
-        # Delete triggers and scheduled messages (actions cascade)
+        # Delete triggers (actions cascade)
         static_count = StaticTrigger.objects.filter(action__action_type="summarize").count()
         timeout_count = TimeoutTrigger.objects.filter(action__action_type="summarize").count()
-        scheduled_count = ScheduledMessage.objects.filter(action__action_type="summarize").count()
 
         StaticTrigger.objects.filter(action__action_type="summarize").delete()
         TimeoutTrigger.objects.filter(action__action_type="summarize").delete()
-        ScheduledMessage.objects.filter(action__action_type="summarize").delete()
 
         # Delete any remaining orphaned actions
         remaining_actions = EventAction.objects.filter(action_type="summarize").count()
         if remaining_actions > 0:
             EventAction.objects.filter(action_type="summarize").delete()
 
-        total_deleted = static_count + timeout_count + scheduled_count
+        total_deleted = static_count + timeout_count
 
         if self.verbosity > 1:
             self.stdout.write(self.style.SUCCESS(f"\nRemoved {total_deleted} total items:"))
             self.stdout.write(f"  Static triggers: {static_count}")
             self.stdout.write(f"  Timeout triggers: {timeout_count}")
-            self.stdout.write(f"  Scheduled messages: {scheduled_count}")
             if remaining_actions > 0:
                 self.stdout.write(f"  Orphaned actions: {remaining_actions}")
         else:
