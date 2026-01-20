@@ -45,7 +45,7 @@ class CustomActionForm(forms.ModelForm):
     health_endpoint = forms.URLField(
         required=False,
         label="Health Check Endpoint",
-        help_text="Optional endpoint to check server health status. Should return 2xx status code when healthy.",
+        help_text="Optional endpoint to check server health status. If left blank, will auto-detect from API schema if available (e.g., /health, /healthz).",
     )
     allowed_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
@@ -92,6 +92,15 @@ class CustomActionForm(forms.ModelForm):
 
         server_url = self.cleaned_data["server_url"]
         validate_api_schema_full(operations, schema, server_url, self.url_validator)
+
+        # Auto-detect health endpoint from API spec if not manually provided
+        health_endpoint = self.cleaned_data.get("health_endpoint")
+        if not health_endpoint and schema and server_url:
+            # Create a temporary instance to use the detection method
+            temp_action = CustomAction(api_schema=schema, server_url=server_url)
+            detected_endpoint = temp_action.detect_health_endpoint_from_spec()
+            if detected_endpoint:
+                self.cleaned_data["health_endpoint"] = detected_endpoint
 
         return {**self.cleaned_data, "allowed_operations": operations}
 

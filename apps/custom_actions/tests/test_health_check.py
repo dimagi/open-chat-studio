@@ -106,27 +106,92 @@ class TestHealthCheckTask:
 @pytest.mark.django_db()
 class TestCustomActionModel:
     """Tests for CustomAction model health fields."""
-    
+
     def test_default_health_status(self, team_with_users):
         """Test that new actions have default health status of 'unknown'."""
         action = CustomActionFactory(team=team_with_users)
         assert action.health_status == "unknown"
         assert action.last_health_check is None
-    
+
     def test_health_endpoint_optional(self, team_with_users):
         """Test that health_endpoint is optional."""
         action = CustomActionFactory(team=team_with_users, health_endpoint=None)
         assert action.health_endpoint is None
-        
+
         action2 = CustomActionFactory(team=team_with_users, health_endpoint="")
         assert action2.health_endpoint == ""
-    
+
     def test_health_status_choices(self, team_with_users):
         """Test that health_status accepts valid choices."""
         action = CustomActionFactory(team=team_with_users)
-        
+
         for status in ["unknown", "up", "down"]:
             action.health_status = status
             action.save()
             action.refresh_from_db()
             assert action.health_status == status
+
+    def test_detect_health_endpoint_from_spec(self, team_with_users):
+        """Test that health endpoint can be detected from API spec."""
+        from apps.utils.factories.custom_actions import ACTION_SCHEMA
+
+        # Add a health endpoint to the schema
+        schema_with_health = {
+            **ACTION_SCHEMA,
+            "paths": {
+                **ACTION_SCHEMA["paths"],
+                "/health": {
+                    "get": {
+                        "summary": "Health check",
+                    }
+                },
+            },
+        }
+
+        action = CustomActionFactory(
+            team=team_with_users,
+            api_schema=schema_with_health,
+            server_url="https://api.example.com"
+        )
+
+        detected = action.detect_health_endpoint_from_spec()
+        assert detected == "https://api.example.com/health"
+
+    def test_detect_health_endpoint_multiple_patterns(self, team_with_users):
+        """Test detection of various health endpoint patterns."""
+        from apps.utils.factories.custom_actions import ACTION_SCHEMA
+
+        test_cases = [
+            ("/health", "https://api.example.com/health"),
+            ("/healthz", "https://api.example.com/healthz"),
+            ("/api/health", "https://api.example.com/api/health"),
+            ("/status", "https://api.example.com/status"),
+        ]
+
+        for path, expected_url in test_cases:
+            schema = {
+                **ACTION_SCHEMA,
+                "paths": {
+                    path: {
+                        "get": {
+                            "summary": "Health check",
+                        }
+                    },
+                },
+            }
+
+            action = CustomActionFactory(
+                team=team_with_users,
+                api_schema=schema,
+                server_url="https://api.example.com"
+            )
+
+            detected = action.detect_health_endpoint_from_spec()
+            assert detected == expected_url
+
+    def test_detect_health_endpoint_no_match(self, team_with_users):
+        """Test that None is returned when no health endpoint is found."""
+        action = CustomActionFactory(team=team_with_users)
+
+        detected = action.detect_health_endpoint_from_spec()
+        assert detected is None

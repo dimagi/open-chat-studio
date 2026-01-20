@@ -84,6 +84,28 @@ class CustomAction(BaseTeamModel):
     def get_operations_by_id(self):
         return {op.operation_id: op for op in self.operations}
 
+    def detect_health_endpoint_from_spec(self) -> str | None:
+        """
+        Attempt to detect a health endpoint from the API schema.
+        
+        Looks for common health check paths like /health, /healthz, /api/health, etc.
+        Returns the full URL if found, None otherwise.
+        """
+        if not self.api_schema or not self.server_url:
+            return None
+        
+        # Common health check path patterns
+        health_paths = ["/health", "/healthz", "/healthcheck", "/api/health", "/status", "/_health"]
+        
+        paths = self.api_schema.get("paths", {})
+        for health_path in health_paths:
+            if health_path in paths:
+                # Check if it has a GET method
+                if "get" in paths[health_path]:
+                    return f"{self.server_url.rstrip('/')}{health_path}"
+        
+        return None
+
 
 class CustomActionOperationManager(VersionsObjectManagerMixin, models.Manager):
     pass

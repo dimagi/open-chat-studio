@@ -29,10 +29,10 @@ class TestCustomActionForm:
     def test_form_saves_health_endpoint(self, rf, team_with_users):
         """Test that the form saves the health_endpoint value."""
         from apps.utils.factories.custom_actions import ACTION_SCHEMA
-        
+
         request = rf.get("/")
         request.team = team_with_users
-        
+
         data = {
             "name": "Test Action",
             "description": "Test description",
@@ -41,15 +41,93 @@ class TestCustomActionForm:
             "api_schema": ACTION_SCHEMA,
             "prompt": "Test prompt",
         }
-        
+
         form = CustomActionForm(request=request, data=data)
         assert form.is_valid(), form.errors
-        
+
         action = form.save(commit=False)
         action.team = team_with_users
         action.save()
 
         assert action.health_endpoint == "https://api.test.com/health"
+
+    def test_form_auto_detects_health_endpoint(self, rf, team_with_users):
+        """Test that the form auto-detects health endpoint from API schema."""
+        from apps.utils.factories.custom_actions import ACTION_SCHEMA
+
+        request = rf.get("/")
+        request.team = team_with_users
+
+        # Schema with health endpoint
+        schema_with_health = {
+            **ACTION_SCHEMA,
+            "paths": {
+                **ACTION_SCHEMA["paths"],
+                "/health": {
+                    "get": {
+                        "summary": "Health check",
+                    }
+                },
+            },
+        }
+
+        data = {
+            "name": "Test Action",
+            "description": "Test description",
+            "server_url": "https://api.test.com",
+            # No health_endpoint provided - should auto-detect
+            "api_schema": schema_with_health,
+            "prompt": "Test prompt",
+        }
+
+        form = CustomActionForm(request=request, data=data)
+        assert form.is_valid(), form.errors
+
+        action = form.save(commit=False)
+        action.team = team_with_users
+        action.save()
+
+        # Should have auto-detected the health endpoint
+        assert action.health_endpoint == "https://api.test.com/health"
+
+    def test_form_manual_override_auto_detection(self, rf, team_with_users):
+        """Test that manual health_endpoint overrides auto-detection."""
+        from apps.utils.factories.custom_actions import ACTION_SCHEMA
+
+        request = rf.get("/")
+        request.team = team_with_users
+
+        # Schema with health endpoint
+        schema_with_health = {
+            **ACTION_SCHEMA,
+            "paths": {
+                **ACTION_SCHEMA["paths"],
+                "/health": {
+                    "get": {
+                        "summary": "Health check",
+                    }
+                },
+            },
+        }
+
+        data = {
+            "name": "Test Action",
+            "description": "Test description",
+            "server_url": "https://api.test.com",
+            "health_endpoint": "https://custom.health.com/status",  # Manual override
+            "api_schema": schema_with_health,
+            "prompt": "Test prompt",
+        }
+
+        form = CustomActionForm(request=request, data=data)
+        assert form.is_valid(), form.errors
+
+        action = form.save(commit=False)
+        action.team = team_with_users
+        action.save()
+
+        # Should use the manually provided endpoint, not the auto-detected one
+        assert action.health_endpoint == "https://custom.health.com/status"
 
 
 @pytest.mark.django_db()
