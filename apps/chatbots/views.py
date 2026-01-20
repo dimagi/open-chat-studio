@@ -388,7 +388,7 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequir
             messages.error(self.request, "Version creation is already in progress.")
             return HttpResponseRedirect(self.get_success_url())
 
-        error_msg = self._check_pipleline_and_assistant_for_errors()
+        error_msg = self._check_pipleline_for_errors()
 
         if error_msg:
             messages.error(self.request, error_msg)
@@ -403,37 +403,13 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequir
 
         return HttpResponseRedirect(self.get_success_url())
 
-    def _check_pipleline_and_assistant_for_errors(self) -> str:
+    def _check_pipleline_for_errors(self) -> str | None:
         """Checks if the pipeline or assistant has errors before creating a new version."""
-        from apps.assistants.sync import OpenAiSyncError
-
         experiment = self.object
-
-        try:
-            if self._is_assistant_out_of_sync(experiment):
-                return "Assistant is out of sync with OpenAI. Please update the assistant first."
-        except OpenAiSyncError as e:
-            return str(e)
-
         if pipeline := experiment.pipeline:
             errors = pipeline.validate()
             if errors:
                 return "Unable to create a new version when the pipeline has errors"
-
-    def _is_assistant_out_of_sync(self, experiment: Experiment) -> bool:
-        from apps.assistants.sync import get_diff_with_openai_assistant, get_out_of_sync_files
-
-        if not experiment.assistant:
-            return False
-
-        if not experiment.assistant.assistant_id:
-            return True
-
-        if len(get_diff_with_openai_assistant(experiment.assistant)) > 0:
-            return True
-
-        files_missing_local, files_missing_remote = get_out_of_sync_files(experiment.assistant)
-        return bool(files_missing_local or files_missing_remote)
 
     def get_success_url(self):
         url = reverse(
