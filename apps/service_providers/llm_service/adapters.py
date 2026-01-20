@@ -1,13 +1,9 @@
 """
 This module provides adapter classes to facilitate interaction with an LLM service or OpenAI Assistant within the
-context of an experiment or pipeline.
+context of a pipeline.
 
 Classes:
-    - ChatAdapter: An adapter for handling chat interactions using an LLM service.
     - AssistantAdapter: An adapter for handling interactions with an OpenAI Assistant.
-
-Usage:
-    Use the `for_experiment` or `for_pipeline` class methods to instantiate `ChatAdapter` or `AssistantAdapter`.
 """
 
 from __future__ import annotations
