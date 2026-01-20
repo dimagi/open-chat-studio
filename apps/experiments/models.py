@@ -128,19 +128,6 @@ class VersionFieldDisplayFormatters:
         return f"{action.name}: {op_details}"
 
     @staticmethod
-    def format_assistant(assistant) -> str:
-        if not assistant:
-            return ""
-        name = assistant.name.split(f" v{assistant.version_number}")[0]
-        template = get_template("generic/chip.html")
-        url = (
-            assistant.get_absolute_url()
-            if assistant.is_working_version
-            else assistant.working_version.get_absolute_url()
-        )
-        return template.render({"chip": Chip(label=name, url=url)})
-
-    @staticmethod
     def format_pipeline(pipeline) -> str:
         if not pipeline:
             return ""
