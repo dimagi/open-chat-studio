@@ -838,7 +838,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         from apps.service_providers.llm_service.default_models import get_model_parameters
 
         service = self.get_llm_service()
-        provider_model_name = self.get_llm_provider_model_name()
+        provider_model_name = self.get_llm_provider_model_name(raises=False)
         if service and provider_model_name:
             params = get_model_parameters(provider_model_name, temperature=self.temperature)
             return service.get_chat_model(provider_model_name, **params)
