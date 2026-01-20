@@ -1,0 +1,15 @@
+Hello {{ team.name }} Admin,
+
+The conversation summarization event action has been removed from Open Chat Studio.
+
+The following {{ chatbot_count }} chatbot{% if chatbot_count != 1 %}s{% endif %} in your team had summarize actions configured:
+{% for chatbot_name in chatbot_names %}
+- {{ chatbot_name }}
+{% endfor %}
+
+These summarize actions have been automatically removed.
+
+If you have any questions, please contact support.
+
+Best regards,
+The Open Chat Studio Team
