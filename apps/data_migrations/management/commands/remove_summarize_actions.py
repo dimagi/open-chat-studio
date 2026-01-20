@@ -69,7 +69,7 @@ class Command(IdempotentCommand):
         results = send_bulk_team_admin_emails(
             teams_context=teams_context,
             subject_template="Open Chat Studio: Summarize feature removed from {{ team.name }}",
-            body_template_name="events/email/summarize_removal",
+            body_template_path="events/email/summarize_removal.txt",
             fail_silently=False,
         )
 

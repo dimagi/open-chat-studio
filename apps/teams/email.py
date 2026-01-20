@@ -5,7 +5,7 @@ from django.template.loader import render_to_string
 
 
 def send_bulk_team_admin_emails(
-    teams_context: dict[int, dict], subject_template: str, body_template_name: str, fail_silently=False
+    teams_context: dict[int, dict], subject_template: str, body_template_path: str, fail_silently=False
 ):
     """
     Send emails to admins of multiple teams with team-specific context.
@@ -15,7 +15,7 @@ def send_bulk_team_admin_emails(
                       e.g., {1: {"experiments": ["Bot A"]}, 2: {"experiments": ["Bot B", "Bot C"]}}
         subject_template: Django template string for subject (can use team variables)
                          e.g., "Update for {{ team.name }}"
-        body_template_name: Template path without extension (e.g., "events/email/my_template")
+        body_template_path: Template path (e.g., "events/email/my_template.txt")
         fail_silently: Whether to suppress email errors
 
     Returns:
@@ -64,7 +64,7 @@ def send_bulk_team_admin_emails(
             # Send email
             send_mail(
                 subject=subject,
-                message=render_to_string(f"{body_template_name}.txt", context=email_context),
+                message=render_to_string(body_template_path, context=email_context),
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=admin_emails,
                 fail_silently=fail_silently,
