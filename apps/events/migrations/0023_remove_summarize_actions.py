@@ -12,7 +12,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        RunDataMigration("remove_summarize_actions"),
+        # Force the data migration in case any new actions were created between the manual run and now.
+        RunDataMigration("remove_summarize_actions", command_options={"force": True}, elidable=True),
         migrations.AlterField(
             model_name='eventaction',
             name='action_type',
