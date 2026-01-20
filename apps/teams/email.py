@@ -28,7 +28,7 @@ def send_bulk_team_admin_emails(
                 2: {"experiments": ["Bot C"]},
             },
             subject_template="Open Chat Studio: Update for {{ team.name }}",
-            body_template_name="events/email/my_notification",
+            body_template_path="events/email/my_notification.txt",
             fail_silently=False
         )
     """
