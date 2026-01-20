@@ -839,12 +839,15 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
         service = self.get_llm_service()
         provider_model_name = self.get_llm_provider_model_name()
-        params = get_model_parameters(provider_model_name, temperature=self.temperature)
-        return service.get_chat_model(provider_model_name, **params)
+        if service and provider_model_name:
+            params = get_model_parameters(provider_model_name, temperature=self.temperature)
+            return service.get_chat_model(provider_model_name, **params)
+        return None
 
     def get_llm_service(self):
         if self.llm_provider:
             return self.llm_provider.get_llm_service()
+        return None
 
     def get_llm_provider_model_name(self, raises=True):
         if self.llm_provider:
@@ -853,6 +856,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     raise ValueError("llm_provider_model is not set for this Experiment")
                 return None
             return self.llm_provider_model.name
+        return None
 
     def get_trend_data(self) -> tuple[list, list]:
         """

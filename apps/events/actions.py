@@ -52,6 +52,9 @@ class SummarizeConversationAction(EventActionHandlerBase):
 
         # TODO remove this and store the llm provider ID and model in the action config
         llm = session.experiment.get_chat_model()
+        if not llm:
+            return "Unable to generate summary. No LLM service configured."
+
         chain = (prompt | llm).with_config({"run_name": "generate_summary"})
         new_lines = get_buffer_string(messages)
         summary = chain.invoke({"summary": current_summary or "", "new_lines": new_lines}).text
