@@ -48,35 +48,35 @@ class TestCustomActionForm:
         action = form.save(commit=False)
         action.team = team_with_users
         action.save()
-        
+
         assert action.health_endpoint == "https://api.test.com/health"
 
 
 @pytest.mark.django_db()
 class TestCheckHealthView:
     """Tests for the CheckCustomActionHealth view."""
-    
+
     def test_check_health_triggers_task(self, client, team_with_users):
         """Test that the check health endpoint triggers the task."""
         user = team_with_users.members.first()
         client.force_login(user)
-        
+
         action = CustomActionFactory(
             team=team_with_users,
-            health_endpoint="https://api.weather.com/health"
+            health_endpoint="https://example.com/health"
         )
-        
+
         url = reverse("custom_actions:check_health", args=[team_with_users.slug, action.pk])
         response = client.post(url)
-        
+
         assert response.status_code == 200
         assert "Checking..." in response.content.decode()
-    
+
     def test_check_health_no_endpoint(self, client, team_with_users):
         """Test checking health on action without endpoint."""
         user = team_with_users.members.first()
         client.force_login(user)
-        
+
         action = CustomActionFactory(team=team_with_users, health_endpoint=None)
         
         url = reverse("custom_actions:check_health", args=[team_with_users.slug, action.pk])

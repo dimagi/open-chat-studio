@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 
 import requests
 from celery.app import shared_task

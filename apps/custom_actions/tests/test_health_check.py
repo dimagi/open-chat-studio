@@ -12,7 +12,7 @@ def custom_action_with_health(team_with_users):
     """Create a custom action with a health endpoint."""
     return CustomActionFactory(
         team=team_with_users,
-        health_endpoint="https://api.weather.com/health"
+        health_endpoint="https://example.com/health"
     )
 
 
@@ -26,55 +26,55 @@ class TestHealthCheckTask:
         # Mock a successful health check response
         responses.add(
             responses.GET,
-            "https://api.weather.com/health",
+            "https://example.com/health",
             status=200,
             json={"status": "ok"}
         )
-        
+
         # Run the health check task
         check_single_custom_action_health(custom_action_with_health.id)
-        
+
         # Refresh from database
         custom_action_with_health.refresh_from_db()
-        
+
         # Verify status was updated
         assert custom_action_with_health.health_status == "up"
         assert custom_action_with_health.last_health_check is not None
-    
+
     @responses.activate
     def test_health_check_failure_bad_status(self, custom_action_with_health):
         """Test that a failed health check (bad status code) updates status to 'down'."""
         # Mock a failed health check response
         responses.add(
             responses.GET,
-            "https://api.weather.com/health",
+            "https://example.com/health",
             status=500,
             json={"error": "Internal server error"}
         )
-        
+
         # Run the health check task
         check_single_custom_action_health(custom_action_with_health.id)
-        
+
         # Refresh from database
         custom_action_with_health.refresh_from_db()
-        
+
         # Verify status was updated
         assert custom_action_with_health.health_status == "down"
         assert custom_action_with_health.last_health_check is not None
-    
+
     @responses.activate
     def test_health_check_failure_connection_error(self, custom_action_with_health):
         """Test that a connection error updates status to 'down'."""
         # Mock a connection error
         responses.add(
             responses.GET,
-            "https://api.weather.com/health",
+            "https://example.com/health",
             body=Exception("Connection refused")
         )
-        
+
         # Run the health check task
         check_single_custom_action_health(custom_action_with_health.id)
-        
+
         # Refresh from database
         custom_action_with_health.refresh_from_db()
         
