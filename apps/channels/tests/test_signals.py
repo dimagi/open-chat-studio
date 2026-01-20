@@ -1,0 +1,48 @@
+import pytest
+from django.utils import timezone
+from time_machine import travel
+
+from apps.chat.models import ChatMessage, ChatMessageType
+from apps.utils.factories.experiment import ExperimentSessionFactory
+
+
+@pytest.mark.django_db()
+def test_signal_sets_first_activity_on_first_message():
+    """
+    Verify that first_activity_at is set only once and remains unchanged,
+    while last_activity_at updates with each new message.
+
+    This is the main test that validates the time-based behavior requested.
+    """
+    with travel("2025-01-01 10:00:00", tick=False):
+        session = ExperimentSessionFactory()
+        first_time = timezone.now()
+
+        # Create first message
+        ChatMessage.objects.create(
+            chat=session.chat,
+            content="First message",
+            message_type=ChatMessageType.HUMAN,
+        )
+        session.refresh_from_db()
+
+        # Both should be set to first_time
+        assert session.first_activity_at == first_time
+        assert session.last_activity_at == first_time
+
+    # Travel 2 hours into the future
+    with travel("2025-01-01 12:00:00", tick=False):
+        second_time = timezone.now()
+
+        # Create second message
+        ChatMessage.objects.create(
+            chat=session.chat,
+            content="Second message",
+            message_type=ChatMessageType.HUMAN,
+        )
+        session.refresh_from_db()
+
+        # first_activity_at should NOT change - it remains the original time
+        assert session.first_activity_at == first_time
+        # last_activity_at should update to the new time
+        assert session.last_activity_at == second_time
