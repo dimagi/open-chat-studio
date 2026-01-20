@@ -114,7 +114,8 @@ def _perform_collection_search(
 
     # Get embeddings for this collection
     embeddings = list(
-        FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
+        FileChunkEmbedding.objects
+        .annotate(distance=CosineDistance("embedding", query_vector))
         .filter(collection_id=collection.id)
         .order_by("distance")
         .select_related("file")
@@ -131,18 +132,16 @@ def _perform_collection_search(
 
     # Format results
     if include_collection_info:
-        retrieved_chunks = "\n".join(
-            [_format_result_with_collection(embedding, collection) for embedding in embeddings]
-        )
+        retrieved_chunks = "\n".join([
+            _format_result_with_collection(embedding, collection) for embedding in embeddings
+        ])
     else:
-        retrieved_chunks = "\n".join(
-            [
-                CHUNK_TEMPLATE.format(
-                    file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
-                ).strip()
-                for embedding in embeddings
-            ]
-        )
+        retrieved_chunks = "\n".join([
+            CHUNK_TEMPLATE.format(
+                file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+            ).strip()
+            for embedding in embeddings
+        ])
 
     response_template = """
 {header}
@@ -646,13 +645,6 @@ TOOL_CLASS_MAP = {
     AgentTools.GET_SESSION_STATE: GetSessionStateTool,
     AgentTools.CALCULATOR: CalculatorTool,
 }
-
-
-def get_tools(experiment_session, experiment) -> list[BaseTool]:
-    tool_holder = experiment.assistant if experiment.assistant else experiment
-    tools = get_tool_instances(tool_holder.tools, experiment_session)
-    tools.extend(get_custom_action_tools(tool_holder))
-    return tools
 
 
 def get_assistant_tools(assistant, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
