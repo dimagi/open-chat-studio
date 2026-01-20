@@ -50,6 +50,7 @@ from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
+    StaticTriggerType,
     TimeoutTrigger,
 )
 from apps.events.tables import (
@@ -61,7 +62,7 @@ from apps.experiments.decorators import (
     set_session_access_cookie,
     verify_session_access_cookie,
 )
-from apps.experiments.email import send_chat_link_email, send_experiment_invitation
+from apps.experiments.email import send_chat_link_email
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
@@ -95,7 +96,6 @@ from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
 from apps.filters.models import FilterSet
 from apps.generics.chips import Chip
-from apps.generics.views import paginate_session, render_session_details
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
@@ -213,7 +213,8 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
 def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
     combined_events = []
     static_events = (
-        StaticTrigger.objects.filter(experiment=experiment)
+        StaticTrigger.objects
+        .filter(experiment=experiment)
         .annotate(
             failure_count=Count(
                 Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
@@ -223,7 +224,8 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
         .all()
     )
     timeout_events = (
-        TimeoutTrigger.objects.filter(experiment=experiment)
+        TimeoutTrigger.objects
+        .filter(experiment=experiment)
         .annotate(
             failure_count=Count(
                 Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
@@ -265,50 +267,6 @@ def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
             experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
         ),
     }
-
-
-@require_POST
-@login_and_team_required
-def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
-    """Start an authed web session with the chosen experiment, be it a specific version or not"""
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-
-    session = WebChannel.start_new_session(
-        working_experiment=experiment,
-        participant_user=request.user,
-        participant_identifier=request.user.email,
-        timezone=request.session.get("detected_tz", None),
-        version=version_number,
-    )
-    return HttpResponseRedirect(
-        reverse("experiments:experiment_chat_session", args=[team_slug, experiment_id, version_number, session.id])
-    )
-
-
-@login_and_team_required
-def experiment_chat_session(
-    request, team_slug: str, experiment_id: int, session_id: int, version_number: int, active_tab: str = "experiments"
-):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = get_object_or_404(
-        ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
-    )
-    try:
-        experiment_version = experiment.get_version(version_number)
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
-        "experiment_name": experiment_version.name,
-        "experiment_version": experiment_version,
-        "experiment_version_number": experiment_version.version_number,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/chat/web_chat.html",
-        {"experiment": experiment, "session": session, "active_tab": active_tab, **version_specific_vars},
-    )
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
@@ -451,9 +409,8 @@ def _poll_messages(request):
             logging.exception(f"Unexpected `since` parameter value. Error: {e}")
 
     messages = (
-        ChatMessage.objects.filter(
-            message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since
-        )
+        ChatMessage.objects
+        .filter(message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since)
         .order_by("created_at")
         .all()
     )
@@ -572,10 +529,7 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
         timezone=request.session.get("detected_tz", None),
         metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
     )
-    redirect_url = (
-        "chatbots:chatbot_chat_embed" if request.origin == "chatbots" else "experiments:experiment_chat_embed"
-    )
-    return redirect(redirect_url, team_slug, experiment.public_id, session.external_id)
+    return redirect("chatbots:chatbot_chat_embed", team_slug, experiment.public_id, session.external_id)
 
 
 def _verify_user_or_start_session(identifier, request, experiment, session):
@@ -650,19 +604,6 @@ def get_export_download_link(request, team_slug: str, experiment_id: str, task_i
     else:
         context["task_id"] = task_id
     return TemplateResponse(request, "experiments/components/exports.html", context)
-
-
-@login_and_team_required
-@permission_required("experiments.invite_participants", raise_exception=True)
-def send_invitation(request, team_slug: str, experiment_id: int, session_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = ExperimentSession.objects.get(experiment=experiment, external_id=session_id)
-    send_experiment_invitation(session)
-    return TemplateResponse(
-        request,
-        "experiments/manage/invite_row.html",
-        context={"request": request, "experiment": experiment, "session": session},
-    )
 
 
 def _record_consent_and_redirect(
@@ -766,44 +707,6 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, ses
     )
 
 
-@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
-@verify_session_access_cookie
-def experiment_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return _experiment_chat_ui(request)
-
-
-@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
-@xframe_options_exempt
-def experiment_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    """Special view for embedding that doesn't have the cookie security. This is OK because of the additional
-    checks to ensure the participant is 'anonymous'."""
-    session = request.experiment_session
-    if not session.participant.is_anonymous:
-        raise Http404
-    return _experiment_chat_ui(request, embedded=True)
-
-
-def _experiment_chat_ui(request, embedded=False):
-    experiment_version = request.experiment.default_version
-    version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
-        "experiment_name": experiment_version.name,
-        "experiment_version": experiment_version,
-        "experiment_version_number": experiment_version.version_number,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/chat/web_chat.html",
-        {
-            "experiment": request.experiment,
-            "session": request.experiment_session,
-            "active_tab": "chatbots" if request.origin == "chatbots" else "experiments",
-            "embedded": embedded,
-            **version_specific_vars,
-        },
-    )
-
-
 def _get_languages_for_chat(session):
     available_language_codes = session.chat.translated_languages
     available_languages = [
@@ -856,7 +759,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 
     chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
     all_tags = (
-        Tag.objects.filter(
+        Tag.objects
+        .filter(
             annotations_customtaggeditem_items__content_type=chat_message_content_type,
             annotations_customtaggeditem_items__object_id__in=Subquery(
                 ChatMessage.objects.filter(chat=session.chat).values("id")
@@ -877,7 +781,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     default_message = "(message generated after last translation)"
 
     messages_queryset = (
-        ChatMessage.objects.filter(chat=session.chat)
+        ChatMessage.objects
+        .filter(chat=session.chat)
         .order_by("created_at")
         .prefetch_related(
             Prefetch(
@@ -980,9 +885,9 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
             messages.error(request, "Selected provider or model not found.")
             return redirect_to_messages_view(request, session)
 
-        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(
-            **{f"translations__{language}__isnull": False}
-        )
+        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(**{
+            f"translations__{language}__isnull": False
+        })
         if not messages_to_translate.exists():
             messages.info(request, "All messages already have translations for this language.")
             return redirect_to_messages_view(request, session)
@@ -1029,7 +934,7 @@ def redirect_to_messages_view(request, session):
 def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     experiment_session = request.experiment_session
     experiment_session.update_status(SessionStatus.PENDING_REVIEW, commit=False)
-    experiment_session.end(commit=True)
+    experiment_session.end(commit=True, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
     return HttpResponseRedirect(reverse("experiments:experiment_review", args=[team_slug, experiment_id, session_id]))
 
 
@@ -1085,30 +990,6 @@ def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, sessi
             "experiment_session": request.experiment_session,
             "active_tab": "experiments",
         },
-    )
-
-
-@experiment_session_view()
-@verify_session_access_cookie
-def experiment_session_details_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return render_session_details(
-        request,
-        team_slug,
-        experiment_id,
-        session_id,
-        active_tab="experiments",
-        template_path="experiments/experiment_session_view.html",
-    )
-
-
-@login_and_team_required
-def experiment_session_pagination_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return paginate_session(
-        request,
-        team_slug,
-        experiment_id,
-        session_id,
-        view_name="experiments:experiment_session_view",
     )
 
 

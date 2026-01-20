@@ -122,7 +122,9 @@ class TestHistoryMixin:
         result = node.get_history(session)
 
         assert result == ["session-history"]
-        session.chat.get_langchain_messages_until_marker.assert_called_once_with(marker=node.get_history_mode())
+        session.chat.get_langchain_messages_until_marker.assert_called_once_with(
+            marker=node.get_history_mode(), exclude_message_id=None
+        )
         pipeline_history.get.assert_not_called()
 
     def test_get_history_uses_pipeline_history_when_configured(self, history_node_factory):

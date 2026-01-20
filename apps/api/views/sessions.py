@@ -10,6 +10,7 @@ from rest_framework.viewsets import GenericViewSet
 from apps.annotations.models import Tag, TagCategories
 from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSessionSerializer
+from apps.events.models import StaticTriggerType
 from apps.experiments.models import ExperimentSession
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
@@ -147,7 +148,8 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
     def get_queryset(self):
         queryset = (
-            ExperimentSession.objects.filter(team__slug=self.request.team.slug)
+            ExperimentSession.objects
+            .filter(team__slug=self.request.team.slug)
             .select_related("team", "experiment", "participant")
             .prefetch_related("chat__tags", "chat__messages__tags")
             .all()
@@ -180,7 +182,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             session = ExperimentSession.objects.get(external_id=id)
         except ExperimentSession.DoesNotExist:
             return Response({"error": "Session not found:{id}"}, status=status.HTTP_404_NOT_FOUND)
-        session.end()
+        session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_VIA_API)
         return Response(status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["patch"])

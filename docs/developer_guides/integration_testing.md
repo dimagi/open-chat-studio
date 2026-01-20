@@ -1,10 +1,10 @@
 # Integration Testing
 
-This guide covers integration tests for services that make real API calls to verify the implementation.
+Integration tests make real API calls to external services to verify the complete implementation. All integration tests share the same `.env.integration` configuration file.
 
 ## Setup
 
-### 1. Create Integration Environment File
+### Create Integration Environment File
 
 Copy the example file and add your real API credentials:
 
@@ -12,11 +12,11 @@ Copy the example file and add your real API credentials:
 cp .env.integration.example .env.integration
 ```
 
-Edit `.env.integration` and add your credentials.
+Edit `.env.integration` and add credentials for the services you want to test. See `.env.integration.example` for all available options and links to get API keys.
 
 **Note:** `.env.integration` is in `.gitignore` and will not be committed.
 
-## Running Integration Tests
+## Running Tests
 
 ### Run All Integration Tests
 
@@ -24,16 +24,32 @@ Edit `.env.integration` and add your credentials.
 pytest -m integration -v -s
 ```
 
-### Skip Integration Tests (Default Behaviour)
+### Skip Integration Tests (Default)
 
 ```bash
 # Run all tests EXCEPT integration tests
-pytest -m "not speech_integration"
+pytest -m "not integration"
 ```
 
-## Using Management Command for Quick Testing
+## Speech Service Integration Tests
 
-The management command is useful for quick manual testing during development:
+**Test file:** `apps/service_providers/tests/test_speech_integration.py`
+
+### What the Tests Cover
+
+- **OpenAI**: Text-to-speech (synthesis) and speech-to-text (transcription)
+- **AWS Polly**: Text-to-speech synthesis
+- **Azure Cognitive Services**: Text-to-speech and speech-to-text
+
+### Running Speech Tests
+
+```bash
+pytest apps/service_providers/tests/test_speech_integration.py -m integration -v -s
+```
+
+### Management Command for Quick Testing
+
+Useful for manual testing during development:
 
 ```bash
 # Test all services
@@ -49,18 +65,25 @@ python manage.py test_speech_live --service openai --text "Hello world"
 
 # Save audio files
 python manage.py test_speech_live --service all --save-audio /tmp/test_audio
+```
 
-# Use different env file
-python manage.py test_speech_live --service openai --env-file .env.prod
+## LLM Provider Integration Tests
+
+**Test file:** `apps/service_providers/tests/test_llm_integration.py`
+
+### Running LLM Tests
+
+```bash
+pytest apps/service_providers/tests/test_llm_integration.py -m integration -v -s
 ```
 
 ## Troubleshooting
 
 ### Tests Skip with "Credentials not set"
 
-Ensure your `.env.integration` file exists and contains valid credentials for the service you're testing.
+Tests automatically skip if required credentials are not found in `.env.integration`. Add the missing credentials to enable those tests.
 
-### Audio Processing Errors
+### Audio Processing Errors (Speech Tests)
 
 If you see pydub errors, ensure ffmpeg is installed:
 

@@ -64,16 +64,6 @@ urlpatterns = [
         name="create_version",
     ),
     path(
-        "e/<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
-        views.start_authed_web_session,
-        name="start_authed_web_session",
-    ),
-    path(
-        "e/<int:experiment_id>/v/<int:version_number>/session/<int:session_id>/",
-        views.experiment_chat_session,
-        name="experiment_chat_session",
-    ),
-    path(
         "e/<uuid:experiment_id>/v/<int:version_number>/session/<str:session_id>/message/",
         views.experiment_session_message,
         name="experiment_session_message",
@@ -101,7 +91,6 @@ urlpatterns = [
     # events
     path("e/<int:experiment_id>/events/", include("apps.events.urls")),
     # superuser tools
-    path("e/<int:experiment_id>/invitations/send/<str:session_id>/", views.send_invitation, name="send_invitation"),
     path("e/<int:experiment_id>/exports/generate", views.generate_chat_export, name="generate_chat_export"),
     path(
         "e/<int:experiment_id>/exports/result/<slug:task_id>",
@@ -120,16 +109,6 @@ urlpatterns = [
         name="experiment_pre_survey",
     ),
     path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/chat/",
-        views.experiment_chat,
-        name="experiment_chat",
-    ),
-    path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/embed/chat/",
-        views.experiment_chat_embed,
-        name="experiment_chat_embed",
-    ),
-    path(
         "e/<uuid:experiment_id>/s/<str:session_id>/end/",
         views.end_experiment,
         name="end_experiment",
@@ -143,16 +122,6 @@ urlpatterns = [
         "e/<uuid:experiment_id>/s/<str:session_id>/complete/",
         views.experiment_complete,
         name="experiment_complete",
-    ),
-    path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/view/",
-        views.experiment_session_details_view,
-        name="experiment_session_view",
-    ),
-    path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/paginate/",
-        views.experiment_session_pagination_view,
-        name="experiment_session_pagination_view",
     ),
     path(
         "e/<uuid:experiment_id>/s/<str:session_id>/messages/",
