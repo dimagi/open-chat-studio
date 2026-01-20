@@ -693,7 +693,7 @@ class ChannelBase(ABC):
             speech_service = self.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
-        return "Unable to transcribe audio"
+        raise ChannelException("Voice transcription is not available for this experiment")
 
     def _get_bot_response(self, message: str) -> tuple[ChatMessage, ChatMessage | None]:
         chat_messages = self.bot.process_input(message, attachments=self.message.attachments)
