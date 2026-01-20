@@ -50,6 +50,7 @@ class SummarizeConversationAction(EventActionHandlerBase):
         current_summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else ""
         messages = session.chat.get_langchain_messages()
 
+        # TODO remove this and store the llm provider ID and model in the action config
         llm = session.experiment.get_chat_model()
         chain = (prompt | llm).with_config({"run_name": "generate_summary"})
         new_lines = get_buffer_string(messages)
@@ -82,7 +83,8 @@ class ScheduleTriggerAction(EventActionHandlerBase):
             params["time_period"] = "mins"
 
         (
-            action.scheduled_messages.annotate(
+            action.scheduled_messages
+            .annotate(
                 new_delta=MakeInterval(params["time_period"], params["frequency"]),
             )
             .filter(is_complete=False, custom_schedule_params={})

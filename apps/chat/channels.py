@@ -689,10 +689,7 @@ class ChannelBase(ABC):
         return transcript
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
-        llm_service = self.experiment.get_llm_service()
-        if llm_service and llm_service.supports_transcription:
-            return llm_service.transcribe_audio(audio)
-        elif self.experiment.voice_provider:
+        if self.experiment.voice_provider:
             speech_service = self.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
@@ -768,7 +765,8 @@ class ChannelBase(ABC):
     def _load_latest_session(self):
         """Loads the latest experiment session on the channel"""
         self.experiment_session = (
-            ExperimentSession.objects.filter(
+            ExperimentSession.objects
+            .filter(
                 experiment=self.experiment.get_working_version(),
                 participant__identifier=str(self.participant_identifier),
             )
