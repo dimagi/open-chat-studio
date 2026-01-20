@@ -29,7 +29,7 @@ def test_get_attached_files():
     message = ChatMessage.objects.create(chat=chat, message_type="ai", content="Hi", metadata=metadata)
     files = message.get_attached_files()
     assert chat_file1 in files
-    assert chat_file1 in files
+    assert chat_file2 in files
     assert assistant_file1 not in files
     assert assistant_file2 not in files
 
