@@ -122,6 +122,7 @@ class StaticTriggerType(models.TextChoices):
             StaticTriggerType.CONVERSATION_ENDED_BY_BOT,
             StaticTriggerType.CONVERSATION_ENDED_VIA_API,
             StaticTriggerType.CONVERSATION_END_MANUALLY,
+            StaticTriggerType.CONVERSATION_ENDED_BY_EVENT,
         ]
 
 

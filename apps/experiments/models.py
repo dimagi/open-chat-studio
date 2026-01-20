@@ -7,7 +7,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime
 from functools import cached_property
-from typing import TYPE_CHECKING, Self
+from typing import Self
 from uuid import uuid4
 
 import markdown
@@ -53,9 +53,6 @@ from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
 from apps.web.meta import absolute_url
-
-if TYPE_CHECKING:
-    from apps.events.models import StaticTriggerType
 
 log = logging.getLogger("ocs.experiments")
 
@@ -1828,7 +1825,7 @@ class ExperimentSession(BaseTeamModel):
             args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
         )
 
-    def end(self, commit: bool = True, trigger_type: StaticTriggerType | None = None):
+    def end(self, commit: bool = True, trigger_type=None):
         """
         Ends this experiment session
 
@@ -1838,10 +1835,19 @@ class ExperimentSession(BaseTeamModel):
         Raises:
             ValueError: If trigger_type is specified but commit is not.
         """
+        from apps.events.models import StaticTriggerType
         from apps.events.tasks import enqueue_static_triggers
 
         if trigger_type and not commit:
             raise ValueError("Commit must be True when trigger_type is specified")
+
+        if trigger_type is not None and trigger_type not in StaticTriggerType.end_conversation_types():
+            raise ValueError("Only a conversation end trigger type can be used when ending an experiment session.")
+
+        if trigger_type == StaticTriggerType.CONVERSATION_END:
+            raise ValueError(
+                "Cannot trigger the generic CONVERSATION_END trigger type. Please specify a more specific type."
+            )
 
         self.update_status(SessionStatus.PENDING_REVIEW)
 

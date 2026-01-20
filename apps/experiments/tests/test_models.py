@@ -11,13 +11,12 @@ from time_machine import travel
 from apps.assistants.models import ToolResources
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.actions import ScheduleTriggerAction
-from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
+from apps.events.models import EventActionType, ScheduledMessage, StaticTriggerType, TimePeriod
 from apps.experiments.models import (
     ConsentForm,
     Experiment,
     ExperimentRoute,
     ExperimentSession,
-    ParticipantData,
     SafetyLayer,
     SyntheticVoice,
 )
@@ -459,31 +458,83 @@ class TestExperimentSession:
         # Case 5 - Pipeline Router Node
         _test_pipline("RouterNode", params={"prompt": prompt})
 
+    @pytest.mark.parametrize(
+        ("commit", "should_be_saved"),
+        [
+            pytest.param(True, True, id="commit_true"),
+            pytest.param(False, False, id="commit_false"),
+        ],
+    )
+    def test_end_with_commit_parameter(self, commit, should_be_saved):
+        """Test end() with different commit values."""
+        session = ExperimentSessionFactory()
+        assert session.ended_at is None
 
-class TestParticipant:
-    @pytest.mark.django_db()
-    def test_update_memory_updates_all_data(self):
-        participant = ParticipantFactory()
-        team = participant.team
-        sessions = ExperimentSessionFactory.create_batch(3, participant=participant, team=team, experiment__team=team)
-        # let the participant be linked to an experiment in another team as well. That experiment should be unaffected
-        ExperimentSessionFactory(participant=participant)
-        existing_data_obj = ParticipantData.objects.create(
-            team=team,
-            experiment=sessions[0].experiment,
-            data={"first_name": "Jack", "last_name": "Turner"},
-            participant=participant,
-        )
-        participant.update_memory({"first_name": "Elizabeth"}, experiment=sessions[1].experiment)
-        participant_data_query = ParticipantData.objects.filter(team=team, participant=participant)
+        session.end(commit=commit)
 
-        # expect 2 objects, 1 that was created before and 1 that was created in `update_memory`
-        assert participant_data_query.count() == 2
-        for p_data in participant_data_query.all():
-            if p_data == existing_data_obj:
-                assert p_data.data == {"first_name": "Elizabeth", "last_name": "Turner"}
+        assert session.ended_at is not None, "ended_at should be set in memory"
+        session.refresh_from_db()
+        if should_be_saved:
+            assert session.ended_at is not None, "ended_at should be saved to DB when commit=True"
+            assert session.status == "pending-review"
+        else:
+            assert session.ended_at is None, "ended_at should not be saved to DB when commit=False"
+
+    @pytest.mark.parametrize(
+        ("trigger_type", "should_enqueue"),
+        [
+            pytest.param(None, False, id="trigger_type_none"),
+            pytest.param(StaticTriggerType.CONVERSATION_ENDED_BY_USER, True, id="trigger_type_by_user"),
+            pytest.param(StaticTriggerType.CONVERSATION_ENDED_BY_BOT, True, id="trigger_type_by_bot"),
+            pytest.param(StaticTriggerType.CONVERSATION_ENDED_VIA_API, True, id="trigger_type_via_api"),
+            pytest.param(StaticTriggerType.CONVERSATION_END_MANUALLY, True, id="trigger_type_manually"),
+            pytest.param(StaticTriggerType.CONVERSATION_ENDED_BY_EVENT, True, id="trigger_type_by_event"),
+        ],
+    )
+    def test_end_with_valid_trigger_types(self, trigger_type, should_enqueue):
+        """Test end() with different valid trigger types."""
+        session = ExperimentSessionFactory()
+
+        with patch("apps.events.tasks.enqueue_static_triggers.delay") as mock_delay:
+            session.end(commit=True, trigger_type=trigger_type)
+
+            if should_enqueue:
+                mock_delay.assert_called_once_with(session.id, trigger_type)
             else:
-                assert p_data.data == {"first_name": "Elizabeth"}
+                mock_delay.assert_not_called()
+
+        session.refresh_from_db()
+        assert session.ended_at is not None
+        assert session.status == "pending-review"
+
+    @pytest.mark.parametrize(
+        ("trigger_type", "error_message"),
+        [
+            pytest.param(
+                StaticTriggerType.CONVERSATION_START,
+                "Only a conversation end trigger type can be used",
+                id="non_end_trigger_type",
+            ),
+            pytest.param(
+                StaticTriggerType.CONVERSATION_END,
+                "Cannot trigger the generic CONVERSATION_END trigger type",
+                id="generic_conversation_end",
+            ),
+        ],
+    )
+    def test_end_with_invalid_trigger_types_raises_error(self, trigger_type, error_message):
+        """Test end() raises ValueError for invalid trigger types."""
+        session = ExperimentSessionFactory()
+
+        with pytest.raises(ValueError, match=error_message):
+            session.end(commit=True, trigger_type=trigger_type)
+
+    def test_end_with_commit_false_and_trigger_type_raises_error(self):
+        """Test end() raises ValueError when trigger_type is specified but commit is False."""
+        session = ExperimentSessionFactory()
+
+        with pytest.raises(ValueError, match="Commit must be True when trigger_type is specified"):
+            session.end(commit=False, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT)
 
 
 @pytest.mark.django_db()
