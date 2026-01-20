@@ -3,7 +3,7 @@ from django.dispatch import receiver
 from django.utils import timezone
 
 from apps.channels.utils import delete_experiment_session_cached
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 
 
@@ -17,15 +17,16 @@ def invalidate_widget_session_cache(sender, instance: ExperimentSession, **kwarg
 @receiver(post_save, sender=ChatMessage)
 def update_session_last_activity(sender, instance: ChatMessage, created, **kwargs):
     """Update ExperimentSession.last_activity_at when a new chat message is created."""
-    if not created:
+    if not created or instance.message_type != ChatMessageType.HUMAN:
         return
 
     try:
         experiment_session = instance.chat.experiment_session
-        experiment_session.last_activity_at = timezone.now()
+        now = timezone.now()
+        experiment_session.last_activity_at = now
         update_fields = ["last_activity_at"]
         if not experiment_session.first_activity_at:
-            experiment_session.first_activity_at = timezone.now()
+            experiment_session.first_activity_at = now
             update_fields.append("first_activity_at")
 
         experiment_session.save(update_fields=update_fields)
