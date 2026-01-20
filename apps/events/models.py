@@ -104,6 +104,7 @@ class StaticTriggerType(models.TextChoices):
     CONVERSATION_ENDED_BY_USER = ("conversation_ended_by_user", "The conversation is ended by the participant")
     CONVERSATION_ENDED_BY_BOT = ("conversation_ended_by_bot", "The conversation is ended by the bot")
     CONVERSATION_ENDED_VIA_API = ("conversation_ended_via_api", "The conversation is ended via the API")
+    CONVERSATION_ENDED_BY_EVENT = ("conversation_ended_by_event", "The conversation is ended by an event")
     CONVERSATION_END_MANUALLY = ("conversation_ended_manually", "The conversation is manually ended by an admin")
     LAST_TIMEOUT = ("last_timeout", "The last timeout occurs")
     HUMAN_SAFETY_LAYER_TRIGGERED = ("human_safety_layer_triggered", "The safety layer is triggered by a human")
