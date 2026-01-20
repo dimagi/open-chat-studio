@@ -101,7 +101,7 @@ class EventLog(BaseModel):
 
 class StaticTriggerType(models.TextChoices):
     CONVERSATION_END = ("conversation_end", "The conversation has ended (user, bot, api or admin)")
-    CONVERSATION_ENDED_BY_USER = ("conversation_ended_by_user", "The conversation is ended by the user")
+    CONVERSATION_ENDED_BY_USER = ("conversation_ended_by_user", "The conversation is ended by the participant")
     CONVERSATION_ENDED_BY_BOT = ("conversation_ended_by_bot", "The conversation is ended by the bot")
     CONVERSATION_ENDED_VIA_API = ("conversation_ended_via_api", "The conversation is ended via the API")
     CONVERSATION_END_MANUALLY = ("conversation_ended_manually", "The conversation is manually ended by an admin")
