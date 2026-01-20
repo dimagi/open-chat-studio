@@ -630,13 +630,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         help_text="The LLM model to use",
         verbose_name="LLM Model",
     )
-    assistant = models.ForeignKey(
-        "assistants.OpenAiAssistant",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name="OpenAI Assistant",
-    )
     pipeline = models.ForeignKey(
         "pipelines.Pipeline",
         on_delete=models.SET_NULL,
