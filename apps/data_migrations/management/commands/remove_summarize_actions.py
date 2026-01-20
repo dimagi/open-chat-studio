@@ -11,32 +11,28 @@ class Command(IdempotentCommand):
     disable_audit = True
 
     def perform_migration(self, dry_run=False):
-        # Collect affected data
+        # Collect all affected data (all versions)
         summarize_actions = EventAction.objects.filter(action_type="summarize").select_related()
 
         if not summarize_actions.exists():
             self.stdout.write(self.style.SUCCESS("No summarize actions found"))
             return
 
-        # Build affected experiments by team
+        # Build affected experiments by team (only working versions for email notifications)
         teams_data = defaultdict(lambda: {"experiments": set()})
-
-        # Process static triggers
-        for trigger in StaticTrigger.objects.filter(action__action_type="summarize").select_related(
-            "experiment__team", "action"
-        ):
+        for trigger in StaticTrigger.objects.filter(
+            action__action_type="summarize", experiment__working_version__isnull=True
+        ).select_related("experiment__team", "action"):
             teams_data[trigger.experiment.team_id]["experiments"].add(trigger.experiment.name)
 
-        # Process timeout triggers
-        for trigger in TimeoutTrigger.objects.filter(action__action_type="summarize").select_related(
-            "experiment__team", "action"
-        ):
+        for trigger in TimeoutTrigger.objects.filter(
+            action__action_type="summarize", experiment__working_version__isnull=True
+        ).select_related("experiment__team", "action"):
             teams_data[trigger.experiment.team_id]["experiments"].add(trigger.experiment.name)
 
-        # Process scheduled messages
-        for msg in ScheduledMessage.objects.filter(action__action_type="summarize").select_related(
-            "experiment__team", "action"
-        ):
+        for msg in ScheduledMessage.objects.filter(
+            action__action_type="summarize", experiment__working_version__isnull=True
+        ).select_related("experiment__team", "action"):
             teams_data[msg.experiment.team_id]["experiments"].add(msg.experiment.name)
 
         # Convert to email context format
