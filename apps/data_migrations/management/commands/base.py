@@ -48,6 +48,7 @@ class IdempotentCommand(BaseCommand):
         if not self.migration_name:
             raise NotImplementedError("Subclass must define 'migration_name' attribute")
 
+        self.verbosity = options["verbosity"]
         force = options.get("force", False)
         dry_run = options.get("dry_run", False)
 

@@ -44,22 +44,28 @@ class Command(IdempotentCommand):
                 "chatbot_count": len(experiments),
             }
 
-        # Show what will be affected (load teams for display)
-        from apps.teams.models import Team
-
+        # Show summary
         total_actions = summarize_actions.count()
         total_teams = len(teams_context)
-        teams = {t.id: t for t in Team.objects.filter(id__in=teams_context.keys())}
 
-        self.stdout.write(f"\nFound {total_actions} summarize actions affecting {total_teams} teams:")
-        for team_id, context in teams_context.items():
-            team = teams[team_id]
-            admin_emails = collect_team_admin_emails(team)
-            self.stdout.write(f"\n  Team: {team.name} (slug: {team.slug})")
-            self.stdout.write(f"    Affected chatbots ({context['chatbot_count']}):")
-            for exp_name in context["chatbot_names"]:
-                self.stdout.write(f"      - {exp_name}")
-            self.stdout.write(f"    Will notify {len(admin_emails)} admin(s): {', '.join(admin_emails)}")
+        if self.verbosity > 1:
+            # Verbose output: show details for each team
+            from apps.teams.models import Team
+
+            teams = {t.id: t for t in Team.objects.filter(id__in=teams_context.keys())}
+
+            self.stdout.write(f"\nFound {total_actions} summarize actions affecting {total_teams} teams:")
+            for team_id, context in teams_context.items():
+                team = teams[team_id]
+                admin_emails = collect_team_admin_emails(team)
+                self.stdout.write(f"\n  Team: {team.name} (slug: {team.slug})")
+                self.stdout.write(f"    Affected chatbots ({context['chatbot_count']}):")
+                for exp_name in context["chatbot_names"]:
+                    self.stdout.write(f"      - {exp_name}")
+                self.stdout.write(f"    Will notify {len(admin_emails)} admin(s): {', '.join(admin_emails)}")
+        else:
+            # Normal output: just summary
+            self.stdout.write(f"Found {total_actions} summarize actions affecting {total_teams} teams")
 
         if dry_run:
             return f"Would remove {total_actions} summarize actions"
@@ -73,17 +79,45 @@ class Command(IdempotentCommand):
         )
 
         # Report email results
-        self.stdout.write("\nEmail results:")
-        self.stdout.write(f"  Sent: {results['sent']}")
-        self.stdout.write(f"  No admins: {results['no_admins']}")
-        self.stdout.write(f"  Failed: {results['failed']}")
-        for error in results["errors"]:
-            self.stdout.write(self.style.ERROR(f"  Error: {error}"))
+        if self.verbosity > 1:
+            self.stdout.write("\nEmail results:")
+            self.stdout.write(f"  Sent: {results['sent']}")
+            self.stdout.write(f"  No admins: {results['no_admins']}")
+            self.stdout.write(f"  Failed: {results['failed']}")
+            for error in results["errors"]:
+                self.stdout.write(self.style.ERROR(f"  Error: {error}"))
+        else:
+            self.stdout.write(f"Sent {results['sent']} email(s)")
+            if results["failed"] > 0:
+                self.stdout.write(self.style.WARNING(f"{results['failed']} email(s) failed"))
+            if results["errors"]:
+                for error in results["errors"]:
+                    self.stdout.write(self.style.ERROR(f"  {error}"))
 
-        # Delete the actions (triggers will cascade)
-        deleted_count = summarize_actions.count()
-        summarize_actions.delete()
+        # Delete triggers and scheduled messages (actions cascade)
+        static_count = StaticTrigger.objects.filter(action__action_type="summarize").count()
+        timeout_count = TimeoutTrigger.objects.filter(action__action_type="summarize").count()
+        scheduled_count = ScheduledMessage.objects.filter(action__action_type="summarize").count()
 
-        self.stdout.write(self.style.SUCCESS(f"\nRemoved {deleted_count} summarize actions"))
+        StaticTrigger.objects.filter(action__action_type="summarize").delete()
+        TimeoutTrigger.objects.filter(action__action_type="summarize").delete()
+        ScheduledMessage.objects.filter(action__action_type="summarize").delete()
 
-        return f"Removed {deleted_count} actions, notified {results['sent']} teams"
+        # Delete any remaining orphaned actions
+        remaining_actions = EventAction.objects.filter(action_type="summarize").count()
+        if remaining_actions > 0:
+            EventAction.objects.filter(action_type="summarize").delete()
+
+        total_deleted = static_count + timeout_count + scheduled_count
+
+        if self.verbosity > 1:
+            self.stdout.write(self.style.SUCCESS(f"\nRemoved {total_deleted} total items:"))
+            self.stdout.write(f"  Static triggers: {static_count}")
+            self.stdout.write(f"  Timeout triggers: {timeout_count}")
+            self.stdout.write(f"  Scheduled messages: {scheduled_count}")
+            if remaining_actions > 0:
+                self.stdout.write(f"  Orphaned actions: {remaining_actions}")
+        else:
+            self.stdout.write(self.style.SUCCESS(f"Removed {total_deleted} items"))
+
+        return f"Removed {total_deleted} items, notified {results['sent']} teams"
