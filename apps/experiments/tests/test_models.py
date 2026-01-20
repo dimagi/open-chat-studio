@@ -697,6 +697,7 @@ class TestExperimentModel:
         experiment.post_survey = post_survey
 
         experiment.pipeline = PipelineFactory(team=experiment.team)
+        experiment.save()
         return experiment
 
     def test_first_version_is_automatically_the_default(self):
