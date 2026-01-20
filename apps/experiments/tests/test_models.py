@@ -709,8 +709,7 @@ class TestExperimentModel:
         assert another_version.version_number == 2
         assert not another_version.is_default_version
 
-    @patch("apps.assistants.sync.push_assistant_to_openai", return_value=None)
-    def test_create_experiment_version(self, mock_push):
+    def test_create_experiment_version(self):
         original_experiment = self._setup_original_experiment()
 
         assert original_experiment.version_number == 1
@@ -741,7 +740,6 @@ class TestExperimentModel:
                 "version_description",
                 "safety_layers",
                 "pipeline",
-                "assistant",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
