@@ -5,6 +5,26 @@ from collections import namedtuple
 from django.db import migrations
 from django.db.models import Q
 
+logger = logging.getLogger(__name__)
+
+
+def _create_default_llm_provider_models(apps, schema_editor):
+    from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS
+    LlmProviderModel = apps.get_model("service_providers", "LlmProviderModel")
+    for provider_type, provider_models in DEFAULT_LLM_PROVIDER_MODELS.items():
+        for provider_model in provider_models:
+            LlmProviderModel.objects.create(
+                team=None,
+                type=provider_type,
+                name=provider_model.name,
+                max_token_limit=provider_model.token_limit,
+            )
+
+
+def _delete_all_llm_provider_models(apps, schema_editor):
+    LlmProviderModel = apps.get_model("service_providers", "LlmProviderModel")
+    LlmProviderModel.objects.all().delete()
+
 
 class Migration(migrations.Migration):
 
@@ -13,6 +33,5 @@ class Migration(migrations.Migration):
         ('pipelines', '0008_pipelinechatmessages_node_id_and_more'),
     ]
 
-    operations = [
-        # operations removed
+    operations = [migrations.RunPython(_create_default_llm_provider_models, reverse_code=_delete_all_llm_provider_models)
     ]
