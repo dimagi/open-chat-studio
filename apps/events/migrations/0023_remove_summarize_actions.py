@@ -2,6 +2,8 @@
 
 from django.db import migrations, models
 
+from apps.data_migrations.utils.migrations import RunDataMigration
+
 
 class Migration(migrations.Migration):
 
@@ -10,6 +12,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        RunDataMigration("remove_summarize_actions"),
         migrations.AlterField(
             model_name='eventaction',
             name='action_type',
