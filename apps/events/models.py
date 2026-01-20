@@ -30,7 +30,6 @@ ACTION_HANDLERS = {
     "pipeline_start": actions.PipelineStartAction,
     "schedule_trigger": actions.ScheduleTriggerAction,
     "send_message_to_bot": actions.SendMessageToBotAction,
-    "summarize": actions.SummarizeConversationAction,
 }
 
 
@@ -53,7 +52,6 @@ class TimeoutTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
 class EventActionType(models.TextChoices):
     LOG = ("log", "Log the last message")
     END_CONVERSATION = ("end_conversation", "End the conversation")
-    SUMMARIZE = ("summarize", "Summarize the conversation")
     SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Prompt the bot to message the user")
     SCHEDULETRIGGER = ("schedule_trigger", "Trigger a schedule")
     PIPELINE_START = ("pipeline_start", "Start a pipeline")
@@ -70,8 +68,10 @@ class EventAction(BaseModel, VersionsMixin):
         else:
             self._clear_version_cache()
             res = super().save(*args, **kwargs)
-            handler = ACTION_HANDLERS[self.action_type]()
-            handler.event_action_updated(self)
+            action_type = ACTION_HANDLERS[self.action_type]
+            if action_type:
+                handler = action_type()
+                handler.event_action_updated(self)
             return res
 
 
@@ -133,7 +133,15 @@ class StaticTrigger(BaseModel, VersionsMixin):
     def fire(self, session):
         working_version = self.get_working_version()
         try:
-            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
+            action_type = ACTION_HANDLERS[self.action.action_type]
+            if not action_type:
+                working_version.event_logs.create(
+                    session=session,
+                    status=EventLogStatusChoices.FAILURE,
+                    log=f"Action with type '{self.action.action_type}' not found.",
+                )
+                return None
+            result = action_type().invoke(session, self.action)
             working_version.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
         except Exception as e:
@@ -217,7 +225,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         time_window_to_ignore = timezone.now() - timedelta(seconds=self.delay)
 
         last_human_message_created_at = (
-            ChatMessage.objects.filter(
+            ChatMessage.objects
+            .filter(
                 chat__experiment_session=OuterRef("pk"),
                 message_type=ChatMessageType.HUMAN,
             )
@@ -225,7 +234,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("created_at")[:1]
         )
         last_human_message_id = (
-            ChatMessage.objects.filter(
+            ChatMessage.objects
+            .filter(
                 chat__experiment_session=OuterRef("session_id"),
                 message_type=ChatMessageType.HUMAN,
             )
@@ -233,7 +243,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("id")[:1]
         )
         success_count_for_last_message = (
-            EventLog.objects.filter(
+            EventLog.objects
+            .filter(
                 session=OuterRef("pk"),
                 chat_message_id=Subquery(last_human_message_id),
                 status=EventLogStatusChoices.SUCCESS,
@@ -244,7 +255,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("count")
         )
         failure_count_for_last_message = (
-            EventLog.objects.filter(
+            EventLog.objects
+            .filter(
                 session=OuterRef("pk"),
                 chat_message_id=Subquery(last_human_message_id),
                 status=EventLogStatusChoices.FAILURE,
@@ -253,7 +265,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("count")
         )
         last_success_log = (
-            EventLog.objects.filter(
+            EventLog.objects
+            .filter(
                 session=OuterRef("pk"),
                 chat_message_id=Subquery(last_human_message_id),
                 status=EventLogStatusChoices.SUCCESS,
@@ -263,7 +276,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         )
 
         sessions = (
-            ExperimentSession.objects.filter(
+            ExperimentSession.objects
+            .filter(
                 experiment=self.experiment.get_working_version(),
                 ended_at=None,
             )
@@ -306,7 +320,16 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 
         working_version = self.get_working_version()
         try:
-            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
+            action_type = ACTION_HANDLERS[self.action.action_type]
+            if not action_type:
+                working_version.event_logs.create(
+                    session=session,
+                    chat_message=last_human_message,
+                    status=EventLogStatusChoices.FAILURE,
+                    log=f"Action with type '{self.action.action_type}' not found.",
+                )
+                return None
+            result = action_type().invoke(session, self.action)
             working_version.event_logs.create(
                 session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
             )
@@ -366,7 +389,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 class ScheduledMessageManager(models.Manager):
     def get_messages_to_fire(self):
         return (
-            self.filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=functions.Now())
+            self
+            .filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=functions.Now())
             .select_related("action")
             .order_by("next_trigger_date")
         )
