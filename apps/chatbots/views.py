@@ -404,12 +404,13 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequir
         return HttpResponseRedirect(self.get_success_url())
 
     def _check_pipleline_for_errors(self) -> str | None:
-        """Checks if the pipeline or assistant has errors before creating a new version."""
+        """Checks if the pipeline has errors before creating a new version."""
         experiment = self.object
         if pipeline := experiment.pipeline:
             errors = pipeline.validate()
             if errors:
                 return "Unable to create a new version when the pipeline has errors"
+        return None
 
     def get_success_url(self):
         url = reverse(
