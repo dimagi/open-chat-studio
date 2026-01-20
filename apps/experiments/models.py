@@ -1000,7 +1000,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             self._copy_attr_to_new_version("consent_form", new_version)
             self._copy_attr_to_new_version("pre_survey", new_version)
             self._copy_attr_to_new_version("post_survey", new_version)
-            self._copy_assistant_to_new_version(new_version)
 
             # not supported for copying
             self._copy_routes_to_new_version(new_version)
@@ -1034,9 +1033,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
             self.scheduled_messages.all().delete()
         else:
-            if self.assistant:
-                self.assistant.archive()
-            elif self.pipeline:
+            if self.pipeline:
                 self.pipeline.archive()
 
     def delete_experiment_channels(self):
@@ -1054,12 +1051,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             new_pipeline.save(update_fields=["name"])
         new_version.pipeline = new_pipeline
         new_version.save(update_fields=["pipeline"])
-
-    def _copy_assistant_to_new_version(self, new_version):
-        if not self.assistant:
-            return
-        new_version.assistant = self.assistant.create_new_version()
-        new_version.save(update_fields=["assistant"])
 
     def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
@@ -1177,16 +1168,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 to_display=VersionFieldDisplayFormatters.format_trigger,
             ),
         ]
-        if self.assistant_id:
-            fields.append(
-                VersionField(
-                    group_name="Assistant",
-                    name="assistant",
-                    raw_value=self.assistant,
-                    to_display=VersionFieldDisplayFormatters.format_assistant,
-                ),
-            )
-        elif self.pipeline_id:
+        if self.pipeline_id:
             fields.append(
                 VersionField(
                     group_name="Pipeline",
@@ -1279,7 +1261,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             )
             if assistant_id:
                 return OpenAiAssistant.objects.get(id=assistant_id)
-        return self.assistant
+        return None
 
 
 class ExperimentRouteType(models.TextChoices):
@@ -1930,9 +1912,7 @@ class ExperimentSession(BaseTeamModel):
         from apps.assistants.models import OpenAiAssistant
         from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt, RouterNode
 
-        if self.experiment.assistant:
-            return "{participant_data}" in self.experiment.assistant.instructions
-        elif self.experiment.pipeline:
+        if self.experiment.pipeline:
             assistant_ids = self.experiment.pipeline.get_node_param_values(AssistantNode, param_name="assistant_id")
             results = OpenAiAssistant.objects.filter(
                 id__in=assistant_ids, instructions__contains="{participant_data}"
