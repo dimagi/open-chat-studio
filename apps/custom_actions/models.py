@@ -87,16 +87,24 @@ class CustomAction(BaseTeamModel):
     def detect_health_endpoint_from_spec(self) -> str | None:
         """
         Attempt to detect a health endpoint from the API schema.
-        
-        Looks for common health check paths like /health, /healthz, /api/health, etc.
-        Returns the full URL if found, None otherwise.
+
+        Searches for common health check endpoint patterns in the OpenAPI spec.
+        Patterns are checked in priority order (most common first):
+        - /health - Standard health check endpoint
+        - /healthz - Kubernetes-style health check
+        - /healthcheck - Alternative common pattern
+        - /api/health - Namespaced health endpoint
+        - /status - General status endpoint
+        - /_health - Internal health check (often used in microservices)
+
+        Returns:
+            The full URL to the health endpoint if found, None otherwise.
         """
         if not self.api_schema or not self.server_url:
             return None
-        
-        # Common health check path patterns
+
         health_paths = ["/health", "/healthz", "/healthcheck", "/api/health", "/status", "/_health"]
-        
+
         paths = self.api_schema.get("paths", {})
         for health_path in health_paths:
             if health_path in paths:
