@@ -42,11 +42,16 @@ class CustomActionForm(forms.ModelForm):
         label="Auth",
         help_text="Select an authentication to use for this action.",
     )
+    health_endpoint = forms.URLField(
+        required=False,
+        label="Health Check Endpoint",
+        help_text="Optional endpoint to check server health status. Should return 2xx status code when healthy.",
+    )
     allowed_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
         model = CustomAction
-        fields = ("name", "description", "auth_provider", "prompt", "server_url", "api_schema", "allowed_operations")
+        fields = ("name", "description", "auth_provider", "prompt", "server_url", "health_endpoint", "api_schema", "allowed_operations")
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)

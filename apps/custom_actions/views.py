@@ -3,6 +3,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.utils.html import format_html
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -10,6 +11,7 @@ from django_tables2 import SingleTableView
 from apps.custom_actions.forms import CustomActionForm
 from apps.custom_actions.models import CustomAction
 from apps.custom_actions.tables import CustomActionTable
+from apps.custom_actions.tasks import check_single_custom_action_health
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -89,3 +91,38 @@ class DeleteCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
         consent_form.delete()
         messages.success(request, "Custom Action Deleted")
         return HttpResponse()
+
+
+class CheckCustomActionHealth(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "custom_actions.view_customaction"
+
+    def post(self, request, team_slug: str, pk: int):
+        """Trigger an immediate health check for a custom action."""
+        action = get_object_or_404(CustomAction, id=pk, team=request.team)
+        
+        if not action.health_endpoint:
+            return HttpResponse(
+                '<span class="text-gray-500">No health endpoint configured</span>',
+                content_type="text/html"
+            )
+        
+        # Trigger the health check task
+        check_single_custom_action_health.delay(action.id)
+        
+        # Return a loading indicator that will be replaced when the check completes
+        # For now, show a loading state
+        return HttpResponse(
+            format_html(
+                '<span class="badge badge-ghost">'
+                '<span class="loading loading-spinner loading-xs"></span> Checking...'
+                '</span>'
+                '<button hx-post="{}" hx-swap="outerHTML" hx-target="closest td" '
+                'class="btn btn-xs btn-ghost ml-2" title="Check now">'
+                '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">'
+                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />'
+                '</svg>'
+                '</button>',
+                reverse("custom_actions:check_health", args=[team_slug, pk])
+            ),
+            content_type="text/html"
+        )

@@ -40,6 +40,17 @@ class CustomAction(BaseTeamModel):
     )
     _operations = models.JSONField(default=list)
     allowed_operations = ArrayField(models.CharField(max_length=255), default=list)
+    health_endpoint = models.URLField(blank=True, null=True, help_text="Optional health check endpoint")
+    health_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("unknown", "Unknown"),
+            ("up", "Up"),
+            ("down", "Down"),
+        ],
+        default="unknown",
+    )
+    last_health_check = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("name",)
