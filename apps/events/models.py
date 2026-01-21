@@ -68,9 +68,9 @@ class EventAction(BaseModel, VersionsMixin):
         else:
             self._clear_version_cache()
             res = super().save(*args, **kwargs)
-            action_type = ACTION_HANDLERS[self.action_type]
-            if action_type:
-                handler = action_type()
+            handler_cls = ACTION_HANDLERS.get(self.action_type)
+            if handler_cls:
+                handler = handler_cls()
                 handler.event_action_updated(self)
             return res
 
@@ -133,15 +133,15 @@ class StaticTrigger(BaseModel, VersionsMixin):
     def fire(self, session):
         working_version = self.get_working_version()
         try:
-            action_type = ACTION_HANDLERS[self.action.action_type]
-            if not action_type:
+            handler_cls = ACTION_HANDLERS.get(self.action.action_type)
+            if not handler_cls:
                 working_version.event_logs.create(
                     session=session,
                     status=EventLogStatusChoices.FAILURE,
                     log=f"Action with type '{self.action.action_type}' not found.",
                 )
                 return None
-            result = action_type().invoke(session, self.action)
+            result = handler_cls().invoke(session, self.action)
             working_version.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
         except Exception as e:
@@ -320,8 +320,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 
         working_version = self.get_working_version()
         try:
-            action_type = ACTION_HANDLERS[self.action.action_type]
-            if not action_type:
+            handler_cls = ACTION_HANDLERS.get(self.action.action_type)
+            if not handler_cls:
                 working_version.event_logs.create(
                     session=session,
                     chat_message=last_human_message,
@@ -329,7 +329,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
                     log=f"Action with type '{self.action.action_type}' not found.",
                 )
                 return None
-            result = action_type().invoke(session, self.action)
+            result = handler_cls().invoke(session, self.action)
             working_version.event_logs.create(
                 session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
             )
