@@ -406,6 +406,8 @@ class TimePeriod(models.TextChoices):
 class ScheduledMessage(BaseTeamModel):
     # this only has to be unique per experiment / participant combination
     external_id = models.CharField(max_length=32, help_text="A unique identifier for the scheduled message")
+    # This action should always be of type `schedule_trigger`. It is used to allow the message to reference
+    # the schedule parameters.
     action = models.ForeignKey(
         EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, blank=True, default=None
     )
