@@ -1,0 +1,38 @@
+Hello {{ team.name }} Admin,
+
+Several deprecated LLM models have been removed from Open Chat Studio.
+
+The following {{ model_count }} model{% if model_count != 1 %}s{% endif %} that were in use by your team have been removed:
+{% for model_name in model_names %}
+- {{ model_name }}
+{% endfor %}
+
+This affects the following resources in your team:
+{% if chatbot_count > 0 %}
+Chatbots ({{ chatbot_count }}):
+{% for chatbot_name in chatbot_names %}
+- {{ chatbot_name }}
+{% endfor %}
+{% endif %}
+{% if pipeline_count > 0 %}
+Pipelines ({{ pipeline_count }}):
+{% for pipeline_name in pipeline_names %}
+- {{ pipeline_name }}
+{% endfor %}
+{% endif %}
+{% if assistant_count > 0 %}
+Assistants ({{ assistant_count }}):
+{% for assistant_name in assistant_names %}
+- {{ assistant_name }}
+{% endfor %}
+{% endif %}
+
+These resources have been updated to no longer reference the removed models. You will need to reconfigure them with a currently supported model before they can be used.
+
+To update your resources:
+1. Navigate to each affected chatbot, pipeline, or assistant
+2. Select a new LLM provider and model from the available options
+3. Save your changes
+
+Best regards,
+The Open Chat Studio Team

@@ -115,6 +115,45 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
 }
 
+DELETED_MODELS = [
+    # Azure
+    ("azure", "gpt-4"),
+    ("azure", "gpt-4-32k"),
+    ("azure", "gpt-35-turbo"),
+    ("azure", "gpt-35-turbo-16k"),
+    # Anthropic
+    ("anthropic", "claude-3-5-sonnet-latest"),
+    ("anthropic", "claude-3-opus-latest"),
+    ("anthropic", "claude-2.0"),
+    ("anthropic", "claude-2.1"),
+    ("anthropic", "claude-instant-1.2"),
+    # OpenAI
+    ("openai", "o1-preview"),
+    ("openai", "o1-mini"),
+    # Groq
+    ("groq", "whisper-large-v3"),
+    ("groq", "llama3-groq-70b-8192-tool-use-preview"),
+    ("groq", "llama3-groq-8b-8192-tool-use-preview"),
+    ("groq", "llama-3.1-70b-versatile"),
+    ("groq", "llama-3.2-1b-preview"),
+    ("groq", "llama-3.2-3b-preview"),
+    ("groq", "llama-3.2-11b-vision-preview"),
+    ("groq", "llama-3.2-90b-vision-preview"),
+    ("groq", "llama-guard-3-8b"),
+    ("groq", "llama3-70b-8192"),
+    ("groq", "llama3-8b-8192"),
+    ("groq", "mixtral-8x7b-32768"),
+    # Perplexity
+    ("perplexity", "sonar-reasoning"),
+    ("perplexity", "llama-3.1-sonar-small-128k-online"),
+    ("perplexity", "llama-3.1-sonar-large-128k-online"),
+    ("perplexity", "llama-3.1-sonar-huge-128k-online"),
+    # Google
+    ("google", "gemini-1.5-flash"),
+    ("google", "gemini-1.5-flash-8b"),
+    ("google", "gemini-1.5-pro"),
+]
+
 
 DEFAULT_EMBEDDING_PROVIDER_MODELS = {
     "openai": ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
@@ -218,21 +257,7 @@ def _update_llm_provider_models(LlmProviderModel):
                         max_token_limit=model.token_limit,
                     )
 
-    # move any that are no longer in the list to be custom models
-    for key, provider_model in existing.items():
-        related_objects = get_related_objects(provider_model)
-        for obj in related_objects:
-            custom_model = _get_or_create_custom_model(obj, key, provider_model, existing_custom_by_team)
-            field = [f for f in obj._meta.fields if f.related_model == LlmProviderModel][0]
-            setattr(obj, field.attname, custom_model.id)
-            obj.save(update_fields=[field.name])
-
-        related_pipeline_nodes = get_related_pipelines_queryset(provider_model, "llm_provider_model_id")
-        for node in related_pipeline_nodes.select_related("pipeline").all():
-            custom_model = _get_or_create_custom_model(node.pipeline, key, provider_model, existing_custom_by_team)
-            _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", custom_model.id)
-
-        provider_model.delete()
+    _delete_removed_models(LlmProviderModel, existing, existing_custom_by_team)
 
     # replace existing custom models with the new global model and delete the custom models
     for key, model in created_models.items():
@@ -249,6 +274,15 @@ def _update_llm_provider_models(LlmProviderModel):
                     _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", model.id)
 
                 custom_model.delete()
+
+
+def _delete_removed_models(LlmProviderModel, to_delete, existing_custom_by_team):
+    # move any that are no longer in the list to be custom models
+    for _key, provider_model in to_delete.items():
+        related_pipeline_nodes = get_related_pipelines_queryset(provider_model, "llm_provider_model_id")
+        for node in related_pipeline_nodes.select_related("pipeline").all():
+            _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", None)
+        provider_model.delete()
 
 
 def _get_or_create_custom_model(team_object, key, global_model, existing_custom_by_team):
