@@ -884,6 +884,12 @@ export function LlmWidget(props: WidgetParams) {
         } else {
           next.data.params.llm_model_parameters = {};
         }
+
+        // Clear built-in tools whenever switching providers
+        if (old.data.params.llm_provider_model_id !== providerModelId) {
+          next.data.params.built_in_tools = [];
+          next.data.params.tool_config = {};
+        }
       })
     );
   };
@@ -1239,6 +1245,11 @@ function BuiltInToolsWidget(props: WidgetParams) {
   const toolConfig = props.nodeParams.tool_config || {};
   const [selectedValues, setSelectedValue] = useState(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
   const setNode = usePipelineStore((state) => state.setNode);
+
+  // Sync local state with prop changes from the store
+  React.useEffect(() => {
+    setSelectedValue(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
+  }, [props.paramValue]);
 
   function getNewNodeData(old: Node, updatedList: string[]) {
     return produce(old, (next) => {
