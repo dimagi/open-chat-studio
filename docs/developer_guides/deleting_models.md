@@ -47,7 +47,7 @@ class Migration(migrations.Migration):
         llm_model_migration(),
 
         # Clean up references and notify teams
-        RunDataMigration("remove_deprecated_models"),
+        RunDataMigration("remove_deprecated_models", command_options={"force": True}),
     ]
 ```
 

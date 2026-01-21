@@ -11,5 +11,5 @@ class Migration(migrations.Migration):
 
     operations = [
         llm_model_migration(),
-        RunDataMigration("remove_deprecated_models"),
+        RunDataMigration("remove_deprecated_models", command_options={"force": True}),
     ]
