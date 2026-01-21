@@ -130,19 +130,6 @@ class VersionFieldDisplayFormatters:
         return f"{action.name}: {op_details}"
 
     @staticmethod
-    def format_assistant(assistant) -> str:
-        if not assistant:
-            return ""
-        name = assistant.name.split(f" v{assistant.version_number}")[0]
-        template = get_template("generic/chip.html")
-        url = (
-            assistant.get_absolute_url()
-            if assistant.is_working_version
-            else assistant.working_version.get_absolute_url()
-        )
-        return template.render({"chip": Chip(label=name, url=url)})
-
-    @staticmethod
     def format_pipeline(pipeline) -> str:
         if not pipeline:
             return ""
@@ -645,13 +632,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         help_text="The LLM model to use",
         verbose_name="LLM Model",
     )
-    assistant = models.ForeignKey(
-        "assistants.OpenAiAssistant",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name="OpenAI Assistant",
-    )
     pipeline = models.ForeignKey(
         "pipelines.Pipeline",
         on_delete=models.SET_NULL,
@@ -833,13 +813,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def trends_cache_key(self) -> str:
         return self.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.id)
 
-    @property
-    def max_token_limit(self) -> int:
-        if self.assistant:
-            return self.assistant.llm_provider_model.max_token_limit
-        elif self.llm_provider:
-            return self.llm_provider_model.max_token_limit
-
     @cached_property
     def default_version(self) -> Experiment:
         """Returns the default experiment, or if there is none, the working experiment"""
@@ -867,29 +840,25 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         from apps.service_providers.llm_service.default_models import get_model_parameters
 
         service = self.get_llm_service()
-        provider_model_name = self.get_llm_provider_model_name()
-        params = get_model_parameters(provider_model_name, temperature=self.temperature)
-        return service.get_chat_model(provider_model_name, **params)
+        provider_model_name = self.get_llm_provider_model_name(raises=False)
+        if service and provider_model_name:
+            params = get_model_parameters(provider_model_name, temperature=self.temperature)
+            return service.get_chat_model(provider_model_name, **params)
+        return None
 
     def get_llm_service(self):
-        if self.assistant:
-            return self.assistant.get_llm_service()
-        elif self.llm_provider:
+        if self.llm_provider:
             return self.llm_provider.get_llm_service()
+        return None
 
     def get_llm_provider_model_name(self, raises=True):
-        if self.assistant:
-            if not self.assistant.llm_provider_model:
-                if raises:
-                    raise ValueError("llm_provider_model is not set for this Assistant")
-                return None
-            return self.assistant.llm_provider_model.name
-        elif self.llm_provider:
+        if self.llm_provider:
             if not self.llm_provider_model:
                 if raises:
                     raise ValueError("llm_provider_model is not set for this Experiment")
                 return None
             return self.llm_provider_model.name
+        return None
 
     def get_trend_data(self) -> tuple[list, list]:
         """
@@ -1017,7 +986,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             self._copy_attr_to_new_version("consent_form", new_version)
             self._copy_attr_to_new_version("pre_survey", new_version)
             self._copy_attr_to_new_version("post_survey", new_version)
-            self._copy_assistant_to_new_version(new_version)
 
             # not supported for copying
             self._copy_routes_to_new_version(new_version)
@@ -1051,9 +1019,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
             self.scheduled_messages.all().delete()
         else:
-            if self.assistant:
-                self.assistant.archive()
-            elif self.pipeline:
+            if self.pipeline:
                 self.pipeline.archive()
 
     def delete_experiment_channels(self):
@@ -1071,12 +1037,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             new_pipeline.save(update_fields=["name"])
         new_version.pipeline = new_pipeline
         new_version.save(update_fields=["pipeline"])
-
-    def _copy_assistant_to_new_version(self, new_version):
-        if not self.assistant:
-            return
-        new_version.assistant = self.assistant.create_new_version()
-        new_version.save(update_fields=["assistant"])
 
     def _copy_attr_to_new_version(self, attr_name, new_version: Experiment):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
@@ -1194,16 +1154,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 to_display=VersionFieldDisplayFormatters.format_trigger,
             ),
         ]
-        if self.assistant_id:
-            fields.append(
-                VersionField(
-                    group_name="Assistant",
-                    name="assistant",
-                    raw_value=self.assistant,
-                    to_display=VersionFieldDisplayFormatters.format_assistant,
-                ),
-            )
-        elif self.pipeline_id:
+        if self.pipeline_id:
             fields.append(
                 VersionField(
                     group_name="Pipeline",
@@ -1296,7 +1247,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             )
             if assistant_id:
                 return OpenAiAssistant.objects.get(id=assistant_id)
-        return self.assistant
+        return None
 
 
 class ExperimentRouteType(models.TextChoices):
@@ -1957,9 +1908,7 @@ class ExperimentSession(BaseTeamModel):
         from apps.assistants.models import OpenAiAssistant
         from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt, RouterNode
 
-        if self.experiment.assistant:
-            return "{participant_data}" in self.experiment.assistant.instructions
-        elif self.experiment.pipeline:
+        if self.experiment.pipeline:
             assistant_ids = self.experiment.pipeline.get_node_param_values(AssistantNode, param_name="assistant_id")
             results = OpenAiAssistant.objects.filter(
                 id__in=assistant_ids, instructions__contains="{participant_data}"
