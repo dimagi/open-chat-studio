@@ -206,6 +206,7 @@ export class OcsChat {
   private chatWindowWidth: number = 450;
   private chatWindowFullscreenWidth: number = 1024;
   private positionInitialized: boolean = false;
+  private internalPageContext?: Record<string, any>;
   @Element() host: HTMLElement;
 
 
@@ -477,8 +478,8 @@ export class OcsChat {
       if (this.allowAttachments && attachmentIds.length > 0) {
         requestBody.attachment_ids = attachmentIds;
       }
-      if (this.pageContext) {
-        requestBody.context = this.pageContext;
+      if (this.internalPageContext) {
+        requestBody.context = this.internalPageContext;
       }
 
       const data = await this.getChatService().sendMessage(this.sessionId, requestBody);
@@ -487,6 +488,7 @@ export class OcsChat {
         throw new Error(data.error || 'Failed to send message');
       }
 
+      this.internalPageContext = undefined;
       this.startTaskPolling(data.task_id);
     } catch (error) {
       const errorText = error instanceof Error ? error.message : 'Failed to send message';
@@ -578,6 +580,16 @@ export class OcsChat {
 
   private toggleWindowVisibility() {
     this.visible = !this.visible;
+  }
+
+  /**
+   * Watch for changes to the `pageContext` prop and sync to internal variable.
+   *
+   * @param pageContext - The new value for the field.
+   */
+  @Watch('pageContext')
+  pageContextHandler(pageContext: Record<string, any> | undefined) {
+    this.internalPageContext = pageContext;
   }
 
   /**
