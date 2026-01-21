@@ -115,6 +115,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
 }
 
+
+# This list of models is used by the `remove_deprecated_models` command. It is safe to clear the list after
+# the command has been run successfully in all environments. Any models that have been in the `main` branch
+# for more than 1 month are safe to remove.
 DELETED_MODELS = [
     # Azure
     ("azure", "gpt-4"),

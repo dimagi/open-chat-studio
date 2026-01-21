@@ -65,3 +65,60 @@ python manage.py remove_deprecated_models --dry-run -v 2
 # Run the migration
 python manage.py migrate
 ```
+
+## Maintenance: Clearing Old Models from DELETED_MODELS
+
+The `DELETED_MODELS` list should be cleaned up periodically to avoid accumulating stale entries.
+
+### When to Remove Models
+
+It is safe to remove models from `DELETED_MODELS` when **both** conditions are met:
+
+1. The `remove_deprecated_models` command has run successfully in **all environments** (development, staging, production)
+2. The models have been in the `main` branch for **more than 1 month**
+
+### Why Wait 1 Month?
+
+- Ensures all environments have executed the migration
+- Gives time for any rollback scenarios
+- Allows thorough testing across deployment cycles
+- Accounts for environments that deploy less frequently
+
+### How to Clean Up
+
+1. **Verify migration has run everywhere**:
+   ```bash
+   # Check if migration is applied
+   python manage.py custom_migrations list --name remove_deprecated_models
+   ```
+
+2. **Check git history** to confirm models have been in main for 1+ month:
+   ```bash
+   # Find when models were added to DELETED_MODELS
+   git log -p --all -S 'DELETED_MODELS' -- apps/service_providers/llm_service/default_models.py
+   ```
+
+3. **Remove old entries** from `DELETED_MODELS`:
+   ```python
+   DELETED_MODELS = [
+       # Keep recent additions (< 1 month in main)
+       ("openai", "gpt-4"),
+       ("anthropic", "claude-2.0"),
+
+       # Remove these - added 2 months ago, migrated everywhere
+       # ("azure", "gpt-35-turbo"),
+       # ("groq", "llama3-70b-8192"),
+   ]
+   ```
+
+4. **Commit the cleanup**:
+   ```bash
+   git add apps/service_providers/llm_service/default_models.py
+   git commit -m "chore: clean up DELETED_MODELS list"
+   ```
+
+### Important Notes
+
+- **Do not** remove models that are still in active migrations
+- **Do not** remove models if any environment hasn't deployed the migration yet
+- This cleanup is purely for code hygiene; it doesn't affect functionality once migrations have run
