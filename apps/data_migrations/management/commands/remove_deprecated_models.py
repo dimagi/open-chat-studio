@@ -13,7 +13,7 @@ from apps.utils.deletion import get_related_pipelines_queryset
 
 class Command(IdempotentCommand):
     help = "Remove deprecated LLM models and notify team admins"
-    migration_name = "remove_deprecated_models_2026_01_21"
+    migration_name = "remove_deprecated_models"
     disable_audit = True
 
     def perform_migration(self, dry_run=False):
