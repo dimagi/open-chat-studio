@@ -154,6 +154,11 @@ export class OcsChat {
 
   @Prop() translationsUrl?: string;
 
+  /**
+   * Optional context object to send with each message. This provides page-specific context to the bot.
+   */
+  @Prop() pageContext?: Record<string, any>;
+
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -471,6 +476,9 @@ export class OcsChat {
       const requestBody: any = { message: message.trim() };
       if (this.allowAttachments && attachmentIds.length > 0) {
         requestBody.attachment_ids = attachmentIds;
+      }
+      if (this.pageContext) {
+        requestBody.context = this.pageContext;
       }
 
       const data = await this.getChatService().sendMessage(this.sessionId, requestBody);
