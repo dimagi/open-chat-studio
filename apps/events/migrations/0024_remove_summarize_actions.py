@@ -8,7 +8,7 @@ from apps.data_migrations.utils.migrations import RunDataMigration
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0022_scheduledmessageattempt'),
+        ('events', '0023_alter_statictrigger_type'),
     ]
 
     operations = [
