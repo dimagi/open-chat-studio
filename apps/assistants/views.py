@@ -222,17 +222,6 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
                         ).values_list("id", flat=True),
                     )
                 )
-            experiments = [
-                Chip(
-                    label=(
-                        f"{experiment.name} [{experiment.get_version_name()}]"
-                        if experiment.is_working_version
-                        else f"{experiment.name} {experiment.get_version_name()} [published]"
-                    ),
-                    url=experiment.get_absolute_url(),
-                )
-                for experiment in assistant.get_related_experiments_queryset(assistant_ids=version_query)
-            ]
             pipeline_nodes = [
                 Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url())
                 for node in assistant.get_related_pipeline_node_queryset(assistant_ids=version_query).select_related(
@@ -250,7 +239,6 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
                 "generic/referenced_objects.html",
                 context={
                     "object_name": "assistant",
-                    "experiments": experiments,
                     "pipeline_nodes": pipeline_nodes,
                     "experiments_with_pipeline_nodes": experiments_with_pipeline_nodes,
                 },
