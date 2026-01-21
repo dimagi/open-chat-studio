@@ -36,7 +36,9 @@ class LogAction(EventActionHandlerBase):
 
 class EndConversationAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        session.end()
+        from apps.events.models import StaticTriggerType
+
+        session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
         return "Session ended"
 
 
@@ -82,7 +84,8 @@ class ScheduleTriggerAction(EventActionHandlerBase):
             params["time_period"] = "mins"
 
         (
-            action.scheduled_messages.annotate(
+            action.scheduled_messages
+            .annotate(
                 new_delta=MakeInterval(params["time_period"], params["frequency"]),
             )
             .filter(is_complete=False, custom_schedule_params={})

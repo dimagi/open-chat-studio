@@ -32,6 +32,7 @@ class OCSTracer(Tracer):
         self.start_time: float = None
         self.trace_record = None
         self.error_detected = False
+        self.error_message: str = ""
 
     @property
     def ready(self) -> bool:
@@ -90,8 +91,9 @@ class OCSTracer(Tracer):
 
         try:
             yield trace_context
-        except Exception:
+        except Exception as e:
             self.error_detected = True
+            self.error_message = str(e)
             raise
         finally:
             # Guaranteed cleanup - update trace duration and status
@@ -104,6 +106,7 @@ class OCSTracer(Tracer):
                     self.trace_record.duration = duration_ms
                     if self.error_detected:
                         self.trace_record.status = TraceStatus.ERROR
+                        self.trace_record.error = self.error_message
                     else:
                         self.trace_record.status = TraceStatus.SUCCESS
 
@@ -129,6 +132,7 @@ class OCSTracer(Tracer):
             # Reset state
             self.trace_record = None
             self.error_detected = False
+            self.error_message = ""
             self.trace_name = None
             self.trace_id = None
             self.session = None

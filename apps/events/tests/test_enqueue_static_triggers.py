@@ -138,3 +138,27 @@ def test_get_static_triggers_to_fire_with_versioning(experiment_session):
     trigger_ids = _get_static_triggers_to_fire(experiment_session.id, StaticTriggerType.CONVERSATION_START)
     assert len(trigger_ids) == 1
     assert StaticTrigger.objects.get(pk=trigger_ids[0]).working_version_id == trigger.id
+
+
+@pytest.mark.django_db()
+def test_end_conversation_trigger_also_triggers_generic_end_event(experiment_session):
+    conversation_end_trigger = StaticTrigger.objects.create(
+        experiment=experiment_session.experiment,
+        action=EventAction.objects.create(action_type=EventActionType.LOG),
+        type=StaticTriggerType.CONVERSATION_END,
+    )
+
+    for end_trigger in StaticTriggerType.end_conversation_types():
+        if end_trigger == StaticTriggerType.CONVERSATION_END:
+            # Don't create a duplicate trigger for the generic end event
+            continue
+
+        trigger = StaticTrigger.objects.create(
+            experiment=experiment_session.experiment,
+            action=EventAction.objects.create(action_type=EventActionType.LOG),
+            type=end_trigger,
+        )
+        ids = _get_static_triggers_to_fire(experiment_session.id, trigger_type=end_trigger)
+        assert len(ids) == 2
+        assert trigger.id in ids
+        assert conversation_end_trigger.id in ids

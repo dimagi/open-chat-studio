@@ -48,6 +48,13 @@ class Banner(models.Model):
     dismiss_timeout = models.PositiveSmallIntegerField(
         default=0, help_text="The banner will re-appear this many days after being dismissed"
     )
+    site = models.ForeignKey(
+        "sites.Site",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The site where the banner will be displayed. Leave blank for all sites.",
+    )
 
     class Meta:
         ordering = ["-end_date"]

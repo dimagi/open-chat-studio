@@ -15,7 +15,7 @@ from langchain_classic.agents.openai_assistant import OpenAIAssistantRunnable as
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager, dispatch_custom_event
 from langchain_core.language_models import BaseChatModel
 from langchain_core.load import dumpd
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig, ensure_config
 from openai import NOT_GIVEN, OpenAI
 from openai._base_client import SyncAPIClient
@@ -165,46 +165,36 @@ class LlmService(pydantic.BaseModel):
         return self._default_parser
 
     def _default_parser(
-        self, llm_output, session: ExperimentSession, include_citations: bool = True
+        self, output: AIMessage, session: ExperimentSession, include_citations: bool = True
     ) -> LlmChatResponse:
-        if isinstance(llm_output, dict):
-            output_content = llm_output.get("output", "")
-        elif isinstance(llm_output, str):
-            output_content = llm_output
-        elif isinstance(llm_output, list):
-            # Normalize list outputs: support list[dict] and list[str]
-            if all(isinstance(o, dict) for o in llm_output):
-                output_content = llm_output
-            elif all(isinstance(o, str) for o in llm_output):
-                output_content = "\n".join(llm_output)
-            else:
-                raise TypeError("Unexpected mixed or unsupported list element types in llm_output")
-        else:
-            raise TypeError(f"Unexpected llm_output type: {type(llm_output).__name__}")
-
-        final_text = ""
+        """
+        Default parser for LLM outputs. Supports various formats including strings, dicts, and lists. This parser
+        also extracts cited and generated files from annotations if present and handles deduplication of text entries
+        (in rare cases).
+        """
+        final_text = output.text
         cited_file_ids_remote = []
         cited_file_ids = []
         generated_files: list[File] = []
-        if isinstance(output_content, str):
-            final_text = output_content
-        elif isinstance(output_content, list):
-            for output in output_content:
-                # Populate text
-                final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
-                annotation_entries = output.get("annotations", [])
-                if include_citations:
-                    external_ids = self.get_cited_file_ids(annotation_entries)
-                    cited_file_ids_remote.extend(external_ids)
+        # Annotations etc are stored in content blocks:
+        # https://docs.langchain.com/oss/python/langchain/messages#content-block-reference
+        for content_block in output.content_blocks:
+            # Uploaded files
+            annotation_entries = content_block.get("annotations", [])
+            if include_citations:
+                # Cited files
+                external_ids = self.get_cited_file_ids(annotation_entries)
+                cited_file_ids_remote.extend(external_ids)
 
-                generated_files.extend(self.get_generated_files(annotation_entries, session.team_id))
+            # Generated files
+            generated_files.extend(
+                self.retrieve_generated_files_from_service_provider(annotation_entries, session.team_id)
+            )
 
-                # Replace generated file links with actual file download links
-                for generated_file in generated_files:
-                    final_text = self.replace_file_links(text=final_text, file=generated_file, session=session)
-        else:
-            raise TypeError(f"Unexpected llm_output type: {type(llm_output).__name__}")
+            # Replace generated file links with actual file download links
+            for generated_file in generated_files:
+                final_text = self.replace_file_links(text=final_text, file=generated_file, session=session)
 
         cited_file_ids.extend(extract_file_ids_from_ocs_citations(final_text))
 
@@ -241,7 +231,9 @@ class LlmService(pydantic.BaseModel):
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
         return []
 
-    def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
+    def retrieve_generated_files_from_service_provider(
+        self, annotation_entries: list[dict], team_id: int
+    ) -> list[File]:
         return []
 
     def replace_file_links(self, text: str, file: File, session: ExperimentSession) -> str:
@@ -290,14 +282,26 @@ class OpenAIGenericService(LlmService):
         return []
 
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
+        """Returns the file ids from the annotation entries of type file_citation
+
+        Expected format for annotation_entries:
+        [{type: "file_citation", "file_id": "file-xxx", ...}]
+        """
         external_ids = [
             entry["file_id"] for entry in annotation_entries if "file_id" in entry and entry["type"] == "file_citation"
         ]
         return detangle_file_ids(external_ids)
 
-    def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
+    def retrieve_generated_files_from_service_provider(
+        self, annotation_entries: list[dict], team_id: int
+    ) -> list[File]:
         """
         Create file records for all generated files in the output.
+
+        Annotation entried for OpenAI generated files look like:
+        [
+            {"type": "container_file_citation", "file_id": "file-xxx", "container_id": "cont-xxx", ...}
+        ]
         """
         generated_files = []
 
