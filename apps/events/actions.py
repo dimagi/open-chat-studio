@@ -36,7 +36,9 @@ class LogAction(EventActionHandlerBase):
 
 class EndConversationAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        session.end()
+        from apps.events.models import StaticTriggerType
+
+        session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
         return "Session ended"
 
 

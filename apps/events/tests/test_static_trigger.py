@@ -30,15 +30,15 @@ def session():
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@mock.patch("apps.events.tasks.fire_static_trigger.run")
+@mock.patch("apps.events.tasks.fire_static_trigger.delay")
 @pytest.mark.django_db()
-def test_end_conversation_fires_event(mock_fire_trigger, session):
+def test_end_conversation_fires_event_only_when_trigger_is_specified(mock_fire_trigger, session):
     static_trigger = StaticTrigger.objects.create(
-        experiment=session.experiment,
+        experiment=session.experiment.default_version,
         action=EventAction.objects.create(action_type=EventActionType.LOG),
-        type=StaticTriggerType.CONVERSATION_END,
+        type=StaticTriggerType.CONVERSATION_END_MANUALLY,
     )
-    session.end()
+    session.end(trigger_type=StaticTriggerType.CONVERSATION_END_MANUALLY)
 
     mock_fire_trigger.assert_called_with(static_trigger.id, session.id)
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import json
 import logging
@@ -151,7 +153,7 @@ class ExperimentRouteObjectManager(VersionsObjectManagerMixin, models.Manager):
 
 
 class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_default_or_working(self, family_member: "Experiment"):
+    def get_default_or_working(self, family_member: Experiment):
         """
         Returns the default version of the family of experiments relating to `family_member` or if there is no default,
         the working experiment.
@@ -519,7 +521,7 @@ class SyntheticVoice(BaseModel):
         return display_str
 
     @staticmethod
-    def get_for_team(team: Team, exclude_services=None) -> list["SyntheticVoice"]:
+    def get_for_team(team: Team, exclude_services=None) -> list[SyntheticVoice]:
         """Returns a queryset for this team comprising of all general synthetic voice records and those exclusive
         to this team. Any services specified by `exclude_services` will be excluded from the final result"""
         exclude_services = exclude_services or []
@@ -781,7 +783,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def get_absolute_url(self):
         return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
 
-    def get_version(self, version: int) -> "Experiment":
+    def get_version(self, version: int) -> Experiment:
         """
         Returns the version of this experiment family matching `version`. If `version` is 0, the default version is
         returned.
@@ -812,7 +814,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.id)
 
     @cached_property
-    def default_version(self) -> "Experiment":
+    def default_version(self) -> Experiment:
         """Returns the default experiment, or if there is none, the working experiment"""
         return Experiment.objects.get_default_or_working(self)
 
@@ -1036,7 +1038,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         new_version.pipeline = new_pipeline
         new_version.save(update_fields=["pipeline"])
 
-    def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
+    def _copy_attr_to_new_version(self, attr_name, new_version: Experiment):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
         linking that to `new_version`
 
@@ -1061,7 +1063,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
 
-    def _copy_safety_layers_to_new_version(self, new_version: "Experiment", is_copy: bool = False):
+    def _copy_safety_layers_to_new_version(self, new_version: Experiment, is_copy: bool = False):
         if is_copy:
             new_version.safety_layers.set(self.safety_layers.all())
         else:
@@ -1070,7 +1072,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 duplicated_layers.append(layer.create_new_version())
             new_version.safety_layers.set(duplicated_layers)
 
-    def _copy_routes_to_new_version(self, new_version: "Experiment"):
+    def _copy_routes_to_new_version(self, new_version: Experiment):
         """
         This copies the experiment routes where this experiment is the parent and sets the new parent to the new
         version.
@@ -1301,7 +1303,7 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         return eligible_experiments.filter(working_version_id=None)
 
     @transaction.atomic()
-    def create_new_version(self, new_parent: Experiment) -> "ExperimentRoute":
+    def create_new_version(self, new_parent: Experiment) -> ExperimentRoute:
         """
         Strategy:
         - If the current child doesn't have any versions, create a new child version for the new route version
@@ -1373,7 +1375,7 @@ class Participant(BaseTeamModel):
         unique_together = [("team", "platform", "identifier")]
 
     @classmethod
-    def create_anonymous(cls, team: Team, platform: str, remote_id: str = "") -> "Participant":
+    def create_anonymous(cls, team: Team, platform: str, remote_id: str = "") -> Participant:
         public_id = str(uuid.uuid4())
         return cls.objects.create(
             team=team,
@@ -1425,7 +1427,7 @@ class Participant(BaseTeamModel):
         except ValueError:
             return self.platform
 
-    def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
+    def get_latest_session(self, experiment: Experiment) -> ExperimentSession:
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
     def last_seen(self) -> datetime:
@@ -1774,27 +1776,37 @@ class ExperimentSession(BaseTeamModel):
             args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
         )
 
-    def end(self, commit: bool = True, propagate: bool = True):
+    def end(self, commit: bool = True, trigger_type=None):
         """
         Ends this experiment session
 
         Args:
             commit: Whether to save the model after setting the ended_at value
-            propagate: Whether to enqueue any static event triggers defined for this experiment_session
+            trigger_type: The type of conversation end event to trigger. Leaving this as None will not trigger events.
         Raises:
-            ValueError: If propagate is True but commit is not.
+            ValueError: If trigger_type is specified but commit is not.
         """
+        from apps.events.models import StaticTriggerType
+        from apps.events.tasks import enqueue_static_triggers
+
+        if trigger_type and not commit:
+            raise ValueError("Commit must be True when trigger_type is specified")
+
+        if trigger_type is not None and trigger_type not in StaticTriggerType.end_conversation_types():
+            raise ValueError("Only a conversation end trigger type can be used when ending an experiment session.")
+
+        if trigger_type == StaticTriggerType.CONVERSATION_END:
+            raise ValueError(
+                "Cannot trigger the generic CONVERSATION_END trigger type. Please specify a more specific type."
+            )
+
         self.update_status(SessionStatus.PENDING_REVIEW)
-        if propagate and not commit:
-            raise ValueError("Commit must be True when propagate is True")
+
         self.ended_at = timezone.now()
         if commit:
             self.save()
-        if commit and propagate:
-            from apps.events.models import StaticTriggerType
-            from apps.events.tasks import enqueue_static_triggers
-
-            enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
+        if commit and trigger_type:
+            enqueue_static_triggers.delay(self.id, trigger_type)
 
     @transaction.atomic()
     def ad_hoc_bot_message(
