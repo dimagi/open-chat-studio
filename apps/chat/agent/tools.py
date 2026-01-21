@@ -8,6 +8,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any, ClassVar, Union
 
 from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.messages import ToolMessage
@@ -533,7 +534,7 @@ class SetSessionStateTool(CustomBaseTool):
     args_schema: type[schemas.SetSessionStateSchema] = schemas.SetSessionStateSchema
 
     def action(self, key: str, value: Any, tool_call_id: str):
-        if key in {"user_input", "outputs", "attachments"}:
+        if key in settings.RESERVED_SESSION_STATE_KEYS:
             return f"Cannot set the '{key}' key in session state - this is read-only"
 
         try:

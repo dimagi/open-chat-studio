@@ -51,7 +51,12 @@ def async_create_experiment_version(
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def get_response_for_webchat_task(
-    self, experiment_session_id: int, experiment_id: int, message_text: str, attachments: list | None = None
+    self,
+    experiment_session_id: int,
+    experiment_id: int,
+    message_text: str,
+    attachments: list | None = None,
+    context: dict | None = None,
 ) -> dict:
     response = {"response": None, "message_id": None, "error": None}
     experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
@@ -59,6 +64,13 @@ def get_response_for_webchat_task(
     )
     try:
         experiment = Experiment.objects.get(id=experiment_id)
+
+        if context:
+            session_state = experiment_session.state or {}
+            session_state["remote_context"] = context
+            experiment_session.state = session_state
+            experiment_session.save(update_fields=["state"])
+
         web_channel = WebChannel(
             experiment,
             experiment_session.experiment_channel,
