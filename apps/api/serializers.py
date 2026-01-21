@@ -220,7 +220,7 @@ class ChatStartSessionResponse(serializers.Serializer):
 class ChatSendMessageRequest(serializers.Serializer):
     message = serializers.CharField(label="Message content")
     context = serializers.DictField(
-        label="Context", required=False, help_text="Additional context data to include with the message"
+        label="Context", required=False, help_text="Additional context data to include with the message such as details about the page the user is on or the action they are trying to perform. This is stored in the session state under the `remote_context` key."
     )
 
 
