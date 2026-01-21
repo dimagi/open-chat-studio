@@ -174,7 +174,8 @@ class Command(IdempotentCommand):
                 _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", None)
 
             # Delete the model
-            model.delete()
+            # Bypass related model checks in LlmProviderModel.delete
+            super(LlmProviderModel, model).delete()
             total_deleted += 1
 
         self.stdout.write(self.style.SUCCESS(f"Removed {total_deleted} models"))
