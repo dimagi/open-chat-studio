@@ -5,9 +5,10 @@ from django.db.models import Q
 from apps.assistants.models import OpenAiAssistant
 from apps.data_migrations.management.commands.base import IdempotentCommand
 from apps.experiments.models import Experiment
-from apps.service_providers.llm_service.default_models import DELETED_MODELS
+from apps.service_providers.llm_service.default_models import DELETED_MODELS, _update_pipeline_node_param
 from apps.service_providers.models import LlmProviderModel
 from apps.teams.email import collect_team_admin_emails, send_bulk_team_admin_emails
+from apps.teams.models import Team
 from apps.utils.deletion import get_related_pipelines_queryset
 
 
@@ -103,8 +104,6 @@ class Command(IdempotentCommand):
 
         if self.verbosity > 1:
             # Verbose output: show details for each team
-            from apps.teams.models import Team
-
             teams = {t.id: t for t in Team.objects.filter(id__in=teams_context.keys())}
 
             self.stdout.write(f"\nFound {total_models} deprecated models affecting {total_teams} teams:")
@@ -169,8 +168,6 @@ class Command(IdempotentCommand):
             # Update pipeline node references
             related_pipeline_nodes = get_related_pipelines_queryset(model, "llm_provider_model_id")
             for node in related_pipeline_nodes.select_related("pipeline").all():
-                from apps.service_providers.llm_service.default_models import _update_pipeline_node_param
-
                 _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", None)
 
             # Delete the model
