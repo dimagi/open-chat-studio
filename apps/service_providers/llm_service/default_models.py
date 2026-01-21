@@ -11,9 +11,9 @@ from apps.service_providers.llm_service.model_parameters import (
     ClaudeHaikuLatestParameters,
     ClaudeOpus4_20250514Parameters,
     GPT5Parameters,
+    GPT5ProParameters,
     GPT51Parameters,
     GPT52Parameters,
-    GPT5ProParameters,
     OpenAIReasoningParameters,
 )
 from apps.utils.deletion import get_related_objects, get_related_pipelines_queryset

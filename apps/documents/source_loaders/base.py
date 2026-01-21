@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Generic, Self, TypeVar
+from typing import Any, Self, TypeVar
 
 from langchain_core.documents import Document
 
@@ -27,7 +27,7 @@ class SyncResult:
 ConfigType = TypeVar("ConfigType")
 
 
-class BaseDocumentLoader(ABC, Generic[ConfigType]):
+class BaseDocumentLoader[ConfigType](ABC):
     """Abstract base class for document loaders"""
 
     def __init__(self, collection: Collection, config: ConfigType, auth_provider: Any = None):
