@@ -913,31 +913,32 @@ export function LlmWidget(props: WidgetParams) {
   }
   const llmModelParamsSchema = getSelectedModelSchema(providerModelId);
   return (
-    <InputField label={props.label} help_text={props.helpText} inputError={error}>
-      <select
-        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
-        // Should be resolved in future versions of browsers.
-        className="select appearance-none w-full"
-        name={props.name}
-        onChange={updateParamValue}
-        value={value}
-        disabled={props.readOnly}
-      >
-        <option value="" disabled>
-          Select a model
-        </option>
-        {parameterValues.LlmProviderId.map((provider) => {
-          const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
+    <>
+      <InputField label={props.label} help_text={props.helpText} inputError={error}>
+        <select
+          // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+          // Should be resolved in future versions of browsers.
+          className="select appearance-none w-full"
+          name={props.name}
+          onChange={updateParamValue}
+          value={value}
+          disabled={props.readOnly}
+        >
+          <option value="" disabled>
+            Select a model
+          </option>
+          {parameterValues.LlmProviderId.map((provider) => {
+            const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
 
-          return providerModelsByType[provider.type] &&
-            providerModelsByType[provider.type].map((providerModel) => (
-              <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
-                {providerModel.label}{providersWithSameType > 1 ? ` (${provider.label})` : ''}
-              </option>
-            ))
-        })}
-      </select>
-
+            return providerModelsByType[provider.type] &&
+              providerModelsByType[provider.type].map((providerModel) => (
+                <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
+                  {providerModel.label}{providersWithSameType > 1 ? ` (${provider.label})` : ''}
+                </option>
+              ))
+          })}
+        </select>
+      </InputField>
       {value && llmModelParamsSchema && (
         <ModelParametersWidget
           nodeId={props.nodeId}
@@ -947,7 +948,7 @@ export function LlmWidget(props: WidgetParams) {
           readOnly={readOnly}
         />
       )}
-    </InputField>
+    </>
   );
 }
 
