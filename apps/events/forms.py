@@ -1,6 +1,5 @@
 from django import forms
 from django.db.models import Q, Subquery
-from langchain_classic.memory.prompt import SUMMARY_PROMPT
 
 from apps.events.models import TimePeriod
 from apps.experiments.models import Experiment, ExperimentRoute
@@ -8,18 +7,6 @@ from apps.generics.type_select_form import TypeSelectForm
 from apps.pipelines.models import Pipeline, PipelineEventInputs
 
 from .models import EventAction, StaticTrigger, TimeoutTrigger
-
-
-class SummarizeConversationForm(forms.Form):
-    prompt = forms.CharField(
-        widget=forms.Textarea, label="With the following prompt:", required=False, initial=SUMMARY_PROMPT.template
-    )
-
-    def clean_prompt(self):
-        data = self.cleaned_data["prompt"]
-        if not data:
-            return SUMMARY_PROMPT.template
-        return data
 
 
 class SendMessageToBotForm(forms.Form):
@@ -147,7 +134,6 @@ def get_action_params_form(data=None, instance=None, team_id=None, experiment_id
             "log": EmptyForm(**form_kwargs),
             "send_message_to_bot": SendMessageToBotForm(**form_kwargs),
             "end_conversation": EmptyForm(**form_kwargs),
-            "summarize": SummarizeConversationForm(**form_kwargs),
             "schedule_trigger": ScheduledMessageConfigForm(experiment_id=experiment_id, **form_kwargs),
             "pipeline_start": PipelineStartForm(team_id=team_id, **form_kwargs),
         },
