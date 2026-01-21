@@ -257,8 +257,6 @@ def _update_llm_provider_models(LlmProviderModel):
                         max_token_limit=model.token_limit,
                     )
 
-    _delete_removed_models(LlmProviderModel, existing, existing_custom_by_team)
-
     # replace existing custom models with the new global model and delete the custom models
     for key, model in created_models.items():
         if key in existing_custom_global:
@@ -274,15 +272,6 @@ def _update_llm_provider_models(LlmProviderModel):
                     _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", model.id)
 
                 custom_model.delete()
-
-
-def _delete_removed_models(LlmProviderModel, to_delete, existing_custom_by_team):
-    # move any that are no longer in the list to be custom models
-    for _key, provider_model in to_delete.items():
-        related_pipeline_nodes = get_related_pipelines_queryset(provider_model, "llm_provider_model_id")
-        for node in related_pipeline_nodes.select_related("pipeline").all():
-            _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", None)
-        provider_model.delete()
 
 
 def _get_or_create_custom_model(team_object, key, global_model, existing_custom_by_team):

@@ -1,5 +1,6 @@
 from django.db import migrations
 
+from apps.data_migrations.utils.migrations import RunDataMigration
 from apps.service_providers.migration_utils import llm_model_migration
 
 
@@ -10,4 +11,5 @@ class Migration(migrations.Migration):
 
     operations = [
         llm_model_migration(),
+        RunDataMigration("remove_deprecated_models"),
     ]
