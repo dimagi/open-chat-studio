@@ -778,7 +778,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
     @field_validator("code", mode="before")
     def check_reserved_session_state_keys(cls, value: str):
         for key in settings.RESERVED_SESSION_STATE_KEYS:
-            pattern = re.compile(rf'set_session_state_key\(["\']{re.escape(key)}["\']')
+            pattern = re.compile(rf'set_session_state_key\([\s*"\']*{re.escape(key)}[\s*"\']')
             if pattern.search(value):
                 raise PydanticCustomError(
                     "reserved_key_used",
