@@ -186,7 +186,7 @@ class HistoryMixin(LLMResponseMixin):
     def get_history_mode(self) -> PipelineChatHistoryModes:
         return self.history_mode or PipelineChatHistoryModes.SUMMARIZE
 
-    def get_history(self, session: ExperimentSession) -> list[BaseMessage]:
+    def get_history(self, session: ExperimentSession, exclude_message_id: int | None = None) -> list[BaseMessage]:
         """
         Returns the chat history messages for the node based on its history configuration.
 
@@ -198,7 +198,9 @@ class HistoryMixin(LLMResponseMixin):
             return []
 
         if self.use_session_history:
-            return session.chat.get_langchain_messages_until_marker(marker=self.get_history_mode())
+            return session.chat.get_langchain_messages_until_marker(
+                marker=self.get_history_mode(), exclude_message_id=exclude_message_id
+            )
         else:
             try:
                 history: PipelineChatHistory = session.pipeline_chat_history.get(
