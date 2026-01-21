@@ -905,12 +905,15 @@ export function LlmWidget(props: WidgetParams) {
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
   const modelParameters = props.nodeParams.llm_model_parameters || {};
   let value = "";
+  let error = props.inputError || props.getNodeFieldError(props.nodeId, "llm_provider_model_id");
   if (providerId && providerModelId) {
     value = makeValue(providerId, providerModelId)
+  } else {
+    error = "This field is required."
   }
   const llmModelParamsSchema = getSelectedModelSchema(providerModelId);
   return (
-    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+    <InputField label={props.label} help_text={props.helpText} inputError={error}>
       <select
         // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
         // Should be resolved in future versions of browsers.
