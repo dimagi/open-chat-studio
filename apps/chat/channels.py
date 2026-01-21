@@ -768,7 +768,8 @@ class ChannelBase(ABC):
     def _load_latest_session(self):
         """Loads the latest experiment session on the channel"""
         self.experiment_session = (
-            ExperimentSession.objects.filter(
+            ExperimentSession.objects
+            .filter(
                 experiment=self.experiment.get_working_version(),
                 participant__identifier=str(self.participant_identifier),
             )
@@ -780,7 +781,7 @@ class ChannelBase(ABC):
     def _reset_session(self):
         """Resets the session by ending the current `experiment_session` (if one exists) and creating a new one"""
         if self.experiment_session:
-            self.experiment_session.end()
+            self.experiment_session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
         self._create_new_experiment_session()
 
     def _create_new_experiment_session(self):

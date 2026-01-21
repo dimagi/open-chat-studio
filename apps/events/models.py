@@ -100,7 +100,12 @@ class EventLog(BaseModel):
 
 
 class StaticTriggerType(models.TextChoices):
-    CONVERSATION_END = ("conversation_end", "The conversation ends")
+    CONVERSATION_END = ("conversation_end", "The conversation has ended (by any means)")
+    CONVERSATION_ENDED_BY_USER = ("conversation_ended_by_user", "The conversation is ended by the participant")
+    CONVERSATION_ENDED_BY_BOT = ("conversation_ended_by_bot", "The conversation is ended by the bot")
+    CONVERSATION_ENDED_VIA_API = ("conversation_ended_via_api", "The conversation is ended via the API")
+    CONVERSATION_ENDED_BY_EVENT = ("conversation_ended_by_event", "The conversation is ended by an event")
+    CONVERSATION_END_MANUALLY = ("conversation_ended_manually", "The conversation is manually ended by an admin")
     LAST_TIMEOUT = ("last_timeout", "The last timeout occurs")
     HUMAN_SAFETY_LAYER_TRIGGERED = ("human_safety_layer_triggered", "The safety layer is triggered by a human")
     BOT_SAFETY_LAYER_TRIGGERED = ("bot_safety_layer_triggered", "The safety layer is triggered by a bot")
@@ -108,6 +113,17 @@ class StaticTriggerType(models.TextChoices):
     NEW_HUMAN_MESSAGE = ("new_human_message", "A new human message is received")
     NEW_BOT_MESSAGE = ("new_bot_message", "A new bot message is received")
     PARTICIPANT_JOINED_EXPERIMENT = ("participant_joined", "A new participant joined the experiment")
+
+    @staticmethod
+    def end_conversation_types():
+        return [
+            StaticTriggerType.CONVERSATION_END,
+            StaticTriggerType.CONVERSATION_ENDED_BY_USER,
+            StaticTriggerType.CONVERSATION_ENDED_BY_BOT,
+            StaticTriggerType.CONVERSATION_ENDED_VIA_API,
+            StaticTriggerType.CONVERSATION_END_MANUALLY,
+            StaticTriggerType.CONVERSATION_ENDED_BY_EVENT,
+        ]
 
 
 class StaticTrigger(BaseModel, VersionsMixin):
@@ -407,6 +423,8 @@ class TimePeriod(models.TextChoices):
 class ScheduledMessage(BaseTeamModel):
     # this only has to be unique per experiment / participant combination
     external_id = models.CharField(max_length=32, help_text="A unique identifier for the scheduled message")
+    # This action should always be of type `schedule_trigger`. It is used to allow the message to reference
+    # the schedule parameters.
     action = models.ForeignKey(
         EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, blank=True, default=None
     )
