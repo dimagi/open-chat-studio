@@ -904,10 +904,11 @@ export function LlmWidget(props: WidgetParams) {
   const providerId = concatenate(props.nodeParams.llm_provider_id);
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
   const modelParameters = props.nodeParams.llm_model_parameters || {};
-  const value = makeValue(providerId, providerModelId)
-  
+  let value = "";
+  if (providerId && providerModelId) {
+    value = makeValue(providerId, providerModelId)
+  }
   const llmModelParamsSchema = getSelectedModelSchema(providerModelId);
-
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <select
