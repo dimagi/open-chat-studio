@@ -79,6 +79,21 @@ def mark_migration_applied(name: str) -> CustomMigration:
     return migration
 
 
+@transaction.atomic()
+def update_migration_timestamp(name: str) -> None:
+    """
+    Update the applied_at timestamp for an existing migration to the current time.
+
+    Used when re-running a migration with --force flag to track when it was last executed.
+
+    Args:
+        name: Unique migration identifier
+    """
+    from django.utils import timezone
+
+    CustomMigration.objects.filter(name=name).update(applied_at=timezone.now())
+
+
 class run_once(ContextDecorator):
     """
     Context manager and decorator to ensure code runs only once.

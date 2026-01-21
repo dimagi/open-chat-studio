@@ -3,7 +3,12 @@ import contextlib
 from django.core.management.base import BaseCommand
 from field_audit import disable_audit
 
-from apps.data_migrations.utils.migrations import is_migration_applied, mark_migration_applied, run_once
+from apps.data_migrations.utils.migrations import (
+    is_migration_applied,
+    mark_migration_applied,
+    run_once,
+    update_migration_timestamp,
+)
 
 
 class IdempotentCommand(BaseCommand):
@@ -104,6 +109,11 @@ class IdempotentCommand(BaseCommand):
                     result = self.perform_migration(dry_run=False)
 
             self.stdout.write(self.style.SUCCESS(f"Migration '{self.migration_name}' completed successfully"))
+
+            # Update timestamp when re-running with --force
+            if force and not migration_context.should_run:
+                update_migration_timestamp(self.migration_name)
+                self.stdout.write("Migration timestamp updated to current time")
 
             if result is not None:
                 self.stdout.write(f"Result: {result}")
