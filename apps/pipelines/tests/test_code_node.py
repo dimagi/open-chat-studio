@@ -227,13 +227,11 @@ def main(input, **kwargs):
     ]
     assert create_runnable(pipeline, nodes).invoke(
         PipelineState(experiment_session=experiment_session, messages=[input])
-    )["messages"][-1] == str(
-        {
-            "start": input,
-            "passthrough": input,
-            "template": f"<b>The input is: {input}</b>",
-        }
-    )
+    )["messages"][-1] == str({
+        "start": input,
+        "passthrough": input,
+        "template": f"<b>The input is: {input}</b>",
+    })
 
 
 def test_temp_state_set_outputs():
@@ -419,3 +417,28 @@ Context:
       8:     return input
       9:     """
     )
+
+
+@pytest.mark.parametrize(
+    ("key_name", "should_raise"),
+    [
+        # Valid cases - should not raise
+        ("custom_key", False),
+        ("other_key", False),
+        # Reserved key - should raise
+        ("remote_context", True),
+        ("attachments", True),
+    ],
+)
+def test_code_node_reserved_session_state_keys(key_name, should_raise):
+    """Test that CodeNode validates and prevents setting reserved session state keys"""
+    code = f"""def main(input, **kwargs):
+    set_session_state_key("{key_name}", "value")
+    return input"""
+
+    if should_raise:
+        with pytest.raises(ValidationError, match="reserved_key_used"):
+            CodeNode(name="test", node_id="123", django_node=None, code=code)
+    else:
+        node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+        assert node is not None

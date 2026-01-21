@@ -901,6 +901,10 @@ components:
         message:
           type: string
           title: Message content
+        context:
+          type: object
+          additionalProperties: {}
+          description: Additional context data to include with the message
         attachment_ids:
           type: array
           items:

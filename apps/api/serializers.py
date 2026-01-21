@@ -219,6 +219,9 @@ class ChatStartSessionResponse(serializers.Serializer):
 
 class ChatSendMessageRequest(serializers.Serializer):
     message = serializers.CharField(label="Message content")
+    context = serializers.DictField(
+        label="Context", required=False, help_text="Additional context data to include with the message"
+    )
 
 
 class ChatSendMessageResponse(serializers.Serializer):

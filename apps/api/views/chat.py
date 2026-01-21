@@ -151,14 +151,12 @@ def chat_upload_file(request, session_id):
                 "participant_remote_id": participant_remote_id,
             },
         )
-        uploaded_files.append(
-            {
-                "id": file_obj.id,
-                "name": file_obj.name,
-                "size": file_obj.content_size,
-                "content_type": file_obj.content_type,
-            }
-        )
+        uploaded_files.append({
+            "id": file_obj.id,
+            "name": file_obj.name,
+            "size": file_obj.content_size,
+            "content_type": file_obj.content_type,
+        })
 
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
@@ -318,6 +316,7 @@ def chat_send_message(request, session_id):
     data = serializer.validated_data
     message_text = data["message"]
     attachment_ids = data.get("attachment_ids", [])
+    context = data.get("context", {})
 
     session = get_experiment_session_cached(session_id)
     if not session:
@@ -350,6 +349,7 @@ def chat_send_message(request, session_id):
         experiment_id=experiment_version.id,
         message_text=message_text,
         attachments=attachment_data if attachment_data else None,
+        context=context,
     ).task_id
 
     response_data = ChatSendMessageResponse({"task_id": task_id, "status": "processing"}).data
