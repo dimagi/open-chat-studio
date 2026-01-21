@@ -2,7 +2,7 @@ import logging
 
 from celery.app import shared_task
 
-from apps.events.models import ScheduledMessage, StaticTrigger, TimeoutTrigger
+from apps.events.models import ScheduledMessage, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import ExperimentSession
 
 logger = logging.getLogger("ocs.events")
@@ -15,13 +15,20 @@ def enqueue_static_triggers(session_id, trigger_type):
         fire_static_trigger.delay(trigger_id, session_id)
 
 
-def _get_static_triggers_to_fire(session_id, trigger_type):
+def _get_static_triggers_to_fire(session_id: int, trigger_type: StaticTrigger):
     session = ExperimentSession.objects.get(id=session_id)
     experiment_version = session.experiment_version
-    trigger_ids = StaticTrigger.objects.filter(
-        experiment=experiment_version, type=trigger_type, is_active=True
-    ).values_list("id", flat=True)
-    return trigger_ids
+
+    trigger_types_to_filter = [trigger_type]
+    if trigger_type in StaticTriggerType.end_conversation_types():
+        # CONVERSATION_END is never raised directly, but it needs to trigger on all end conversation types
+        trigger_types_to_filter.append(StaticTriggerType.CONVERSATION_END)
+
+    queryset = StaticTrigger.objects.filter(
+        experiment=experiment_version, type__in=trigger_types_to_filter, is_active=True
+    )
+
+    return queryset.values_list("id", flat=True)
 
 
 @shared_task(ignore_result=True)

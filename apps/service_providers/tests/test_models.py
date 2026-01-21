@@ -32,21 +32,19 @@ def experiment(llm_provider_model):
 @pytest.fixture()
 def pipeline(llm_provider, llm_provider_model):
     pipeline = PipelineFactory()
-    pipeline.data["nodes"].append(
-        {
+    pipeline.data["nodes"].append({
+        "id": "1",
+        "data": {
             "id": "1",
-            "data": {
-                "id": "1",
-                "label": "LLM",
-                "type": "LLMResponseWithPrompt",
-                "params": {
-                    "llm_provider_id": str(llm_provider.id),
-                    "llm_provider_model_id": str(llm_provider_model.id),
-                    "prompt": "You are a helpful assistant",
-                },
+            "label": "LLM",
+            "type": "LLMResponseWithPrompt",
+            "params": {
+                "llm_provider_id": str(llm_provider.id),
+                "llm_provider_model_id": str(llm_provider_model.id),
+                "prompt": "You are a helpful assistant",
             },
-        }
-    )
+        },
+    })
     pipeline.update_nodes_from_data()
     pipeline.save()
     return pipeline
@@ -96,10 +94,3 @@ class TestServiceProviderModel:
         # global provider models can be deleted
         global_llm_provider_model = LlmProviderModelFactory(team=None)
         global_llm_provider_model.delete()
-
-    @django_db_with_data()
-    def test_experiment_uses_llm_provider_model_max_token_limit(self, experiment):
-        assert experiment.max_token_limit == 8192
-
-        experiment.llm_provider_model.max_token_limit = 100
-        assert experiment.max_token_limit == 100

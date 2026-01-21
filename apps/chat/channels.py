@@ -689,14 +689,11 @@ class ChannelBase(ABC):
         return transcript
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
-        llm_service = self.experiment.get_llm_service()
-        if llm_service and llm_service.supports_transcription:
-            return llm_service.transcribe_audio(audio)
-        elif self.experiment.voice_provider:
+        if self.experiment.voice_provider:
             speech_service = self.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
-        return "Unable to transcribe audio"
+        raise ChannelException("Voice transcription is not available for this experiment")
 
     def _get_bot_response(self, message: str) -> tuple[ChatMessage, ChatMessage | None]:
         chat_messages = self.bot.process_input(message, attachments=self.message.attachments)
@@ -768,7 +765,8 @@ class ChannelBase(ABC):
     def _load_latest_session(self):
         """Loads the latest experiment session on the channel"""
         self.experiment_session = (
-            ExperimentSession.objects.filter(
+            ExperimentSession.objects
+            .filter(
                 experiment=self.experiment.get_working_version(),
                 participant__identifier=str(self.participant_identifier),
             )
@@ -780,7 +778,7 @@ class ChannelBase(ABC):
     def _reset_session(self):
         """Resets the session by ending the current `experiment_session` (if one exists) and creating a new one"""
         if self.experiment_session:
-            self.experiment_session.end()
+            self.experiment_session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
         self._create_new_experiment_session()
 
     def _create_new_experiment_session(self):
