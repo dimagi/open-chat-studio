@@ -32,7 +32,7 @@ class Command(IdempotentCommand):
             return
 
         # Build affected objects by team (only working / published versions for email notifications)
-        teams_data = defaultdict(lambda: {"chatbots": set(), "models": set(), "pipelines": set(), "assistants": set()})
+        teams_data = defaultdict(lambda: {"chatbots": {}, "models": set(), "pipelines": {}, "assistants": set()})
 
         for model in models_to_delete:
             related_pipeline_nodes = get_related_pipelines_queryset(model, "llm_provider_model_id")
@@ -52,11 +52,16 @@ class Command(IdempotentCommand):
             )
 
             for exp in referenced_experiments:
-                teams_data[exp.team_id]["chatbots"].add(exp.name)
+                if exp.name not in teams_data[exp.team_id]["chatbots"]:
+                    teams_data[exp.team_id]["chatbots"][exp.name] = []
+                if exp.pipeline_id:
+                    teams_data[exp.team_id]["chatbots"][exp.name].extend(nodes_by_pipeline[exp.pipeline_id])
                 teams_data[exp.team_id]["models"].add(f"{model.type}/{model.name}")
 
             for pipeline in unreferenced_pipelines:
-                teams_data[pipeline.team_id]["pipelines"].add(pipeline.name)
+                if pipeline.name not in teams_data[pipeline.team_id]["pipelines"]:
+                    teams_data[pipeline.team_id]["pipelines"][pipeline.name] = []
+                teams_data[pipeline.team_id]["pipelines"][pipeline.name].extend(nodes_by_pipeline[pipeline.id])
                 teams_data[pipeline.team_id]["models"].add(f"{model.type}/{model.name}")
 
             for assistant in referenced_assistants:
@@ -66,15 +71,25 @@ class Command(IdempotentCommand):
         # Convert to email context format
         teams_context = {}
         for team_id, data in teams_data.items():
-            chatbots = sorted(data["chatbots"])
-            pipelines = sorted(data["pipelines"])
-            assistants = sorted(data["assistants"])
+            # Build list of chatbot details with their affected nodes
+            chatbots = []
+            for name in sorted(data["chatbots"].keys()):
+                nodes = list(set(data["chatbots"][name]))  # Deduplicate nodes
+                chatbots.append({"name": name, "nodes": sorted(nodes) if nodes else []})
 
+            # Build list of pipeline details with their affected nodes
+            pipelines = []
+            for name in sorted(data["pipelines"].keys()):
+                nodes = list(set(data["pipelines"][name]))  # Deduplicate nodes
+                pipelines.append({"name": name, "nodes": sorted(nodes)})
+
+            assistants = sorted(data["assistants"])
             models = sorted(data["models"])
+
             teams_context[team_id] = {
-                "chatbot_names": chatbots,
+                "chatbots": chatbots,
                 "chatbot_count": len(chatbots),
-                "pipeline_names": pipelines,
+                "pipelines": pipelines,
                 "pipeline_count": len(pipelines),
                 "assistant_names": assistants,
                 "assistant_count": len(assistants),
@@ -101,11 +116,16 @@ class Command(IdempotentCommand):
                 for model_name in context["model_names"]:
                     self.stdout.write(f"      - {model_name}")
                 self.stdout.write(f"    Affected chatbots ({context['chatbot_count']}):")
-                for name in context["chatbot_names"]:
-                    self.stdout.write(f"      - {name}")
+                for chatbot in context["chatbots"]:
+                    if chatbot["nodes"]:
+                        nodes_str = ", ".join(chatbot["nodes"])
+                        self.stdout.write(f"      - {chatbot['name']} (nodes: {nodes_str})")
+                    else:
+                        self.stdout.write(f"      - {chatbot['name']}")
                 self.stdout.write(f"    Affected pipelines ({context['pipeline_count']}):")
-                for name in context["pipeline_names"]:
-                    self.stdout.write(f"      - {name}")
+                for pipeline in context["pipelines"]:
+                    nodes_str = ", ".join(pipeline["nodes"])
+                    self.stdout.write(f"      - {pipeline['name']} (nodes: {nodes_str})")
                 self.stdout.write(f"    Affected assistants ({context['assistant_count']}):")
                 for name in context["assistant_names"]:
                     self.stdout.write(f"      - {name}")
