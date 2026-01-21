@@ -149,7 +149,7 @@ The citation format is `<CIT file-id />`, where `file-id` is the unique identifi
 
 ### 2. Building the Reference Section
 
-After the LLM generates a response containing these citation tags, the system processes the message to create a human-readable reference section. This is handled by the `add_citation_section_from_cited_files` method in the `ChatAdapter` class (`apps/service_providers/llm_service/adapters.py`).
+After the LLM generates a response containing these citation tags, the system processes the message to create a human-readable reference section. This is handled by the `apps.service_providers.llm_service.utils.populate_reference_section_from_citations`).
 
 This method performs three main actions:
 1.  It scans the AI message for all instances of the `<CIT file-id />` pattern.

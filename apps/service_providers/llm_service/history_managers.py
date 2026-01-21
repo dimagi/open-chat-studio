@@ -47,21 +47,6 @@ class ExperimentHistoryManager(BaseHistoryManager):
         self.experiment_is_a_version = experiment.is_a_version
 
     @classmethod
-    def for_llm_chat(
-        cls,
-        session: ExperimentSession,
-        experiment: Experiment,
-        trace_service,
-    ) -> Self:
-        return cls(
-            session=session,
-            experiment=experiment,
-            trace_service=trace_service,
-            max_token_limit=experiment.max_token_limit,
-            chat_model=experiment.get_chat_model(),
-        )
-
-    @classmethod
     def for_assistant(cls, session: ExperimentSession, experiment: Experiment, trace_service) -> Self:
         return cls(session=session, experiment=experiment, trace_service=trace_service)
 
