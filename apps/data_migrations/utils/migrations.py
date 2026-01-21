@@ -3,6 +3,7 @@ from contextlib import ContextDecorator, ExitStack
 from django.core.management import call_command
 from django.db import migrations, transaction
 from django.db.migrations.operations.base import OperationCategory
+from django.utils import timezone
 
 from apps.data_migrations.models import CustomMigration
 
@@ -102,8 +103,6 @@ def update_migration_timestamp(name: str) -> None:
     Args:
         name: Unique migration identifier
     """
-    from django.utils import timezone
-
     CustomMigration.objects.filter(name=name).update(applied_at=timezone.now())
 
 
