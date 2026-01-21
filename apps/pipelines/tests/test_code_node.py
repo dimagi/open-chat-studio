@@ -423,14 +423,14 @@ Context:
     ("key_name", "should_raise"),
     [
         # Valid cases - should not raise
-        # ("custom_key", False),
-        # ("other_key", False),
-        # # Reserved key - should raise
-        # ("remote_context", True),
-        # ("attachments", True),
-        # (" remote_context ", True),
+        ("custom_key", False),
+        ("other_key", False),
+        # Reserved key - should raise
+        ("remote_context", True),
+        ("attachments", True),
+        (" remote_context ", True),
         (" remote_context", True),
-        # ("remote_context ", True),
+        ("remote_context ", True),
     ],
 )
 def test_code_node_reserved_session_state_keys(key_name, should_raise):
