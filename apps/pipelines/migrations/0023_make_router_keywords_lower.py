@@ -8,7 +8,7 @@ def _convert_keywords_to_lower(apps, schema_editor):
     queryset = Node.objects.filter(type__in=["RouterNode", "StaticRouterNode"]).iterator(chunk_size=100)
     for idx, node in enumerate(queryset):
         if "keywords" in node.params:
-            node.params["keywords"] = [kw.lower() for kw in node.params["keywords"]]
+            node.params["keywords"] = [kw.lower() for kw in node.params.get("keywords", [])]
             nodes_to_update.append(node)
         
         if len(nodes_to_update) >= 100:
