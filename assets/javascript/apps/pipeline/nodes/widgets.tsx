@@ -938,7 +938,7 @@ export function LlmWidget(props: WidgetParams) {
         })}
       </select>
 
-      {llmModelParamsSchema && (
+      {value && llmModelParamsSchema && (
         <ModelParametersWidget
           nodeId={props.nodeId}
           schema={llmModelParamsSchema}
