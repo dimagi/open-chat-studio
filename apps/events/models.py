@@ -100,7 +100,12 @@ class EventLog(BaseModel):
 
 
 class StaticTriggerType(models.TextChoices):
-    CONVERSATION_END = ("conversation_end", "The conversation ends")
+    CONVERSATION_END = ("conversation_end", "The conversation has ended (by any means)")
+    CONVERSATION_ENDED_BY_USER = ("conversation_ended_by_user", "The conversation is ended by the participant")
+    CONVERSATION_ENDED_BY_BOT = ("conversation_ended_by_bot", "The conversation is ended by the bot")
+    CONVERSATION_ENDED_VIA_API = ("conversation_ended_via_api", "The conversation is ended via the API")
+    CONVERSATION_ENDED_BY_EVENT = ("conversation_ended_by_event", "The conversation is ended by an event")
+    CONVERSATION_END_MANUALLY = ("conversation_ended_manually", "The conversation is manually ended by an admin")
     LAST_TIMEOUT = ("last_timeout", "The last timeout occurs")
     HUMAN_SAFETY_LAYER_TRIGGERED = ("human_safety_layer_triggered", "The safety layer is triggered by a human")
     BOT_SAFETY_LAYER_TRIGGERED = ("bot_safety_layer_triggered", "The safety layer is triggered by a bot")
@@ -108,6 +113,17 @@ class StaticTriggerType(models.TextChoices):
     NEW_HUMAN_MESSAGE = ("new_human_message", "A new human message is received")
     NEW_BOT_MESSAGE = ("new_bot_message", "A new bot message is received")
     PARTICIPANT_JOINED_EXPERIMENT = ("participant_joined", "A new participant joined the experiment")
+
+    @staticmethod
+    def end_conversation_types():
+        return [
+            StaticTriggerType.CONVERSATION_END,
+            StaticTriggerType.CONVERSATION_ENDED_BY_USER,
+            StaticTriggerType.CONVERSATION_ENDED_BY_BOT,
+            StaticTriggerType.CONVERSATION_ENDED_VIA_API,
+            StaticTriggerType.CONVERSATION_END_MANUALLY,
+            StaticTriggerType.CONVERSATION_ENDED_BY_EVENT,
+        ]
 
 
 class StaticTrigger(BaseModel, VersionsMixin):
@@ -217,7 +233,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         time_window_to_ignore = timezone.now() - timedelta(seconds=self.delay)
 
         last_human_message_created_at = (
-            ChatMessage.objects.filter(
+            ChatMessage.objects
+            .filter(
                 chat__experiment_session=OuterRef("pk"),
                 message_type=ChatMessageType.HUMAN,
             )
@@ -225,7 +242,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("created_at")[:1]
         )
         last_human_message_id = (
-            ChatMessage.objects.filter(
+            ChatMessage.objects
+            .filter(
                 chat__experiment_session=OuterRef("session_id"),
                 message_type=ChatMessageType.HUMAN,
             )
@@ -233,7 +251,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("id")[:1]
         )
         success_count_for_last_message = (
-            EventLog.objects.filter(
+            EventLog.objects
+            .filter(
                 session=OuterRef("pk"),
                 chat_message_id=Subquery(last_human_message_id),
                 status=EventLogStatusChoices.SUCCESS,
@@ -244,7 +263,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("count")
         )
         failure_count_for_last_message = (
-            EventLog.objects.filter(
+            EventLog.objects
+            .filter(
                 session=OuterRef("pk"),
                 chat_message_id=Subquery(last_human_message_id),
                 status=EventLogStatusChoices.FAILURE,
@@ -253,7 +273,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("count")
         )
         last_success_log = (
-            EventLog.objects.filter(
+            EventLog.objects
+            .filter(
                 session=OuterRef("pk"),
                 chat_message_id=Subquery(last_human_message_id),
                 status=EventLogStatusChoices.SUCCESS,
@@ -263,7 +284,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         )
 
         sessions = (
-            ExperimentSession.objects.filter(
+            ExperimentSession.objects
+            .filter(
                 experiment=self.experiment.get_working_version(),
                 ended_at=None,
             )
@@ -366,7 +388,8 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 class ScheduledMessageManager(models.Manager):
     def get_messages_to_fire(self):
         return (
-            self.filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=functions.Now())
+            self
+            .filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=functions.Now())
             .select_related("action")
             .order_by("next_trigger_date")
         )
@@ -383,6 +406,8 @@ class TimePeriod(models.TextChoices):
 class ScheduledMessage(BaseTeamModel):
     # this only has to be unique per experiment / participant combination
     external_id = models.CharField(max_length=32, help_text="A unique identifier for the scheduled message")
+    # This action should always be of type `schedule_trigger`. It is used to allow the message to reference
+    # the schedule parameters.
     action = models.ForeignKey(
         EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, blank=True, default=None
     )

@@ -80,7 +80,18 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
     return actions
 
 
-def parse_output_for_anthropic(output, session: ExperimentSession, include_citations: bool = True) -> LlmChatResponse:
+def parse_output_for_anthropic(
+    output: AIMessage | dict | str | list, session: ExperimentSession, include_citations: bool = True
+) -> LlmChatResponse:
+    """Parse Anthropic's output and append inline URL references to the text.
+
+    Iterates through content blocks to find citations and append them to the corresponding text block while building
+    the final output. Although Langchain exposes a .text attribute on the AIMessage object with the assembled text
+    response from the LLM, we need to process content blocks manually to include inline citation links.
+    """
+    if isinstance(output, AIMessage):
+        output = output.content
+
     if output is None or isinstance(output, str):
         return LlmChatResponse(text=output or "")
 
@@ -98,7 +109,6 @@ def parse_output_for_anthropic(output, session: ExperimentSession, include_citat
             for citation in output.get("citations", []):
                 if citation.get("title") and citation.get("url"):
                     text += f" [{citation['title']}]({citation['url']})"
-            # TODO: Add cited files
             return LlmChatResponse(text=text)
         else:
             return LlmChatResponse(text="")

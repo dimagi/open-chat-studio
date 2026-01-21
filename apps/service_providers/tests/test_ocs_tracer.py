@@ -130,3 +130,21 @@ class TestOCSTracer:
         with tracer.trace(trace_context=trace_context, session=session):
             assert tracer.trace_record.experiment_version_number == version.version_number
             assert tracer.trace_record.experiment_id == experiment.id
+
+    def test_trace_error_recording(self, experiment):
+        """Test that errors during trace execution are captured in the trace record"""
+        tracer = OCSTracer(experiment.id, experiment.team_id)
+        session = ExperimentSessionFactory()
+
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+        error_message = "Test error message"
+
+        # Test that exception is raised and captured
+        with pytest.raises(ValueError, match=error_message):
+            with tracer.trace(trace_context=trace_context, session=session):
+                raise ValueError(error_message)
+
+        # Verify the trace was created with error status and message
+        trace = Trace.objects.get(trace_id=trace_context.id)
+        assert trace.status == "error"
+        assert trace.error == error_message

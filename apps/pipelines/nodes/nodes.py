@@ -128,26 +128,26 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                 "node_inputs": state["node_inputs"],
                 "temp_state": state.get("temp_state", {}),
                 "session_state": state.get("session_state", {}),
+                "input_message_id": state.get("input_message_id"),
+                "input_message_url": state.get("input_message_url"),
             }
 
             if "experiment_session" in state and state["experiment_session"]:
                 exp_session = state["experiment_session"]
                 participant = getattr(exp_session, "participant", None)
                 if participant:
-                    content.update(
-                        {
-                            "participant_details": {
-                                "identifier": getattr(participant, "identifier", None),
-                                "platform": getattr(participant, "platform", None),
-                            },
-                            "participant_schedules": participant.get_schedules_for_experiment(
-                                exp_session.experiment,
-                                as_dict=True,
-                                include_inactive=True,
-                            )
-                            or [],
-                        }
-                    )
+                    content.update({
+                        "participant_details": {
+                            "identifier": getattr(participant, "identifier", None),
+                            "platform": getattr(participant, "platform", None),
+                        },
+                        "participant_schedules": participant.get_schedules_for_experiment(
+                            exp_session.experiment,
+                            as_dict=True,
+                            include_inactive=True,
+                        )
+                        or [],
+                    })
                 content["participant_data"] = ParticipantDataProxy.from_state(state).get() or {}
 
             template = env.from_string(self.template_string)
@@ -275,7 +275,7 @@ class HistoryMixin(LLMResponseMixin):
     def get_history_mode(self) -> PipelineChatHistoryModes:
         return self.history_mode or PipelineChatHistoryModes.SUMMARIZE
 
-    def get_history(self, session: ExperimentSession) -> list[BaseMessage]:
+    def get_history(self, session: ExperimentSession, exclude_message_id: int | None = None) -> list[BaseMessage]:
         """
         Returns the chat history messages for the node based on its history configuration.
 
@@ -287,7 +287,9 @@ class HistoryMixin(LLMResponseMixin):
             return []
 
         if self.use_session_history:
-            return session.chat.get_langchain_messages_until_marker(marker=self.get_history_mode())
+            return session.chat.get_langchain_messages_until_marker(
+                marker=self.get_history_mode(), exclude_message_id=exclude_message_id
+            )
         else:
             try:
                 history: PipelineChatHistory = session.pipeline_chat_history.get(
@@ -565,44 +567,40 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
 
         # Validate that all collections are the same type (either all remote or all local)
         # Only applies when multiple collections are selected
-        if len(collections) > 1:
-            is_remote_flags = [collection.is_remote_index for collection in collections.values()]
-            if not all(is_remote_flags) and any(is_remote_flags):
-                remote_collections = [
-                    f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
-                ]
-                local_collections = [
-                    f"{collection.name}" for cid, collection in collections.items() if not collection.is_remote_index
-                ]
-                raise PydanticCustomError(
-                    "mixed_collection_types",
-                    "All collection indexes must be the same type (either all remote or all local). "
-                    f"Remote collections: {', '.join(remote_collections)}. "
-                    f"Local collections: {', '.join(local_collections)}.",
-                )
+        is_remote_flags = [collection.is_remote_index for collection in collections.values()]
+        if not all(is_remote_flags) and any(is_remote_flags):
+            remote_collections = [
+                f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
+            ]
+            local_collections = [
+                f"{collection.name}" for cid, collection in collections.items() if not collection.is_remote_index
+            ]
+            raise PydanticCustomError(
+                "mixed_collection_types",
+                "All collection indexes must be the same type (either all remote or all local). "
+                f"Remote collections: {', '.join(remote_collections)}. "
+                f"Local collections: {', '.join(local_collections)}.",
+            )
 
-            if all(is_remote_flags):
-                # Validate that all remote collections use the same LLM provider as this node
-                incompatible_collections = [
-                    collection.name
-                    for collection in collections.values()
-                    if collection.llm_provider_id != llm_provider_id
-                ]
-                if incompatible_collections:
-                    raise PydanticCustomError(
-                        "invalid_collection_index",
-                        f"All collection indexes must use the same LLM provider as the node. "
-                        f"Incompatible collections: {', '.join(incompatible_collections)}",
-                    )
-            else:
-                # local indexes must have a summary
-                missing_summary = [collection.name for collection in collections.values() if not collection.summary]
-                if missing_summary:
-                    raise PydanticCustomError(
-                        "collections_missing_summary",
-                        "When using multiple collection indexes, the collections must have a summary. "
-                        f"Collections missing summary: {', '.join(missing_summary)}",
-                    )
+        # Validate that all remote collections use the same LLM provider as this node
+        incompatible_collections = [
+            collection.name for collection in collections.values() if collection.llm_provider_id != llm_provider_id
+        ]
+        if incompatible_collections:
+            raise PydanticCustomError(
+                "invalid_collection_index",
+                f"All collection indexes must use the same LLM provider as the node. "
+                f"Incompatible collections: {', '.join(incompatible_collections)}",
+            )
+        if len(collections) > 1 and not all(is_remote_flags):
+            # local indexes must have a summary
+            missing_summary = [collection.name for collection in collections.values() if not collection.summary]
+            if missing_summary:
+                raise PydanticCustomError(
+                    "collections_missing_summary",
+                    "When using multiple collection indexes, the collections must have a summary. "
+                    f"Collections missing summary: {', '.join(missing_summary)}",
+                )
 
         return value
 
