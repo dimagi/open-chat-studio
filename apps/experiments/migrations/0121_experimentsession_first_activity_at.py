@@ -2,6 +2,7 @@ from django.db import migrations, models
 from django.db.models import OuterRef, Subquery
 
 
+
 def populate_first_activity_at(apps, schema_editor):
     """
     Populate the first_activity_at field for ExperimentSession based on the
@@ -9,6 +10,7 @@ def populate_first_activity_at(apps, schema_editor):
     """
     ExperimentSession = apps.get_model("experiments", "ExperimentSession")
     ChatMessage = apps.get_model("chat", "ChatMessage")
+    from apps.chat.models import ChatMessageType # not a model
 
     # Count sessions to update
     total_count = ExperimentSession.objects.filter(first_activity_at__isnull=True).count()
@@ -22,7 +24,7 @@ def populate_first_activity_at(apps, schema_editor):
     # Subquery to get the created_at of the first message for each chat
     # Using [:1] to ensure only one value is returned
     first_message_subquery = (
-        ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
+        ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), message_type=ChatMessageType.HUMAN)
         .order_by("created_at")
         .values("created_at")[:1]
     )
