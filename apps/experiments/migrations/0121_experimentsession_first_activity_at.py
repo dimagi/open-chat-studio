@@ -1,6 +1,6 @@
-from django.db import migrations, models
-from django.db.models import OuterRef, Subquery
+from django.db import migrations, transaction, models
 
+from django.db.models import OuterRef, Subquery
 
 
 def populate_first_activity_at(apps, schema_editor):
@@ -10,34 +10,41 @@ def populate_first_activity_at(apps, schema_editor):
     """
     ExperimentSession = apps.get_model("experiments", "ExperimentSession")
     ChatMessage = apps.get_model("chat", "ChatMessage")
-    from apps.chat.models import ChatMessageType # not a model
 
-    # Count sessions to update
-    total_count = ExperimentSession.objects.filter(first_activity_at__isnull=True).count()
-
-    if total_count == 0:
-        print("No sessions need first_activity_at update")
-        return
-
-    print(f"Updating first_activity_at for {total_count} sessions...")
-
-    # Subquery to get the created_at of the first message for each chat
-    # Using [:1] to ensure only one value is returned
-    first_message_subquery = (
-        ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), message_type=ChatMessageType.HUMAN)
-        .order_by("created_at")
-        .values("created_at")[:1]
+    # Select all the IDs
+    all_session_ids = list(
+        ExperimentSession.objects.filter(
+            first_activity_at__isnull=True
+        ).values_list('id', flat=True)
     )
 
-    # Single UPDATE query using subquery
-    updated_count = ExperimentSession.objects.filter(first_activity_at__isnull=True).update(
-        first_activity_at=Subquery(first_message_subquery),
-    )
+    total = len(all_session_ids)
+    batch_size = 500
 
-    print(f"Updated {updated_count} sessions with first_activity_at")
+    print(f"Updating first_activity_at for {total} sessions in batches of {batch_size}")
+
+    # Process collected sessions in a batch
+    for i in range(0, total, batch_size):
+        batch_ids = all_session_ids[i:i + batch_size]
+
+        with transaction.atomic():
+            first_human_message = ChatMessage.objects.filter(
+                chat_id=OuterRef('chat_id'),
+                message_type='human'  # Use string literal instead
+            ).order_by('created_at').values('created_at')[:1]
+
+            updated = ExperimentSession.objects.filter(
+                id__in=batch_ids
+            ).update(
+                first_activity_at=Subquery(first_human_message)
+            )
+
+        processed = i + len(batch_ids)
+        print(f"Processed {processed}/{total} (updated {updated} in this batch)")
 
 
 class Migration(migrations.Migration):
+    atomic = False
     dependencies = [
         ('experiments', '0120_backfill_session_fields'),
         ('chat', '0021_alter_chatmessage_created_at'),  # Ensure chat messages exist
