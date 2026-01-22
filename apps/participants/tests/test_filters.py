@@ -30,7 +30,6 @@ def participants_with_various_data(django_db_setup, django_db_blocker):
         p5 = ParticipantFactory(identifier="TEST001", name="David Jones", team=team)
         participants = [p1, p2, p3, p4, p5]
         yield participants
-        Participant.objects.filter(id__in=[p.id for p in participants]).delete()
         delete_object_with_auditing_of_related_objects(team)
 
 
