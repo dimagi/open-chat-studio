@@ -5,6 +5,7 @@ import pytest
 from langchain_classic.agents.output_parsers.tools import ToolAgentAction
 from langchain_core.agents import AgentStep
 from langchain_core.messages import AIMessage, FunctionMessage
+from langchain_core.messages.block_translators.openai import _convert_annotation_to_v1
 
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.main import LlmService, OpenAILlmService
@@ -200,22 +201,25 @@ class TestDefaultParser:
 
         llm_output = Mock(spec=AIMessage)
         llm_output.text = "Hello world"
+        annotations = [
+            # Annotation stating that an uploaded file was cited
+            {"file_id": "file-123", "type": "file_citation"},
+            # Annotation stating that a container file (generated) was referenced
+            {
+                "file_id": "file-456",
+                "type": "container_file_citation",
+                "container_id": "container-1",
+                "filename": "generated.txt",
+            },
+        ]
         llm_output.content_blocks = [
             {"type": "text", "text": "Hello", "annotations": []},
             {
                 "type": "text",
                 "text": "world",
-                "annotations": [
-                    # Annotation stating that an uploaded file was cited
-                    {"file_id": "file-123", "type": "file_citation"},
-                    # Annotation stating that a container file (generated) was referenced
-                    {
-                        "file_id": "file-456",
-                        "type": "container_file_citation",
-                        "container_id": "container-1",
-                        "filename": "generated.txt",
-                    },
-                ],
+                # Langchain does some standardization with annotations, hence we call _convert_annotation_to_v1
+                # which does the same conversion as langchain's internal code.
+                "annotations": [_convert_annotation_to_v1(an) for an in annotations],
             },
         ]
 
