@@ -45,11 +45,6 @@ def delete_object_with_auditing_of_related_objects(obj):
             if model._meta.auto_created:
                 continue
 
-            if len(instances) == 1:
-                list(instances)[0].delete()
-                counter[model._meta.label] += 1
-                continue
-
             audit_kwargs = {}
             if model in get_audited_models() and isinstance(model._default_manager, AuditingManager):
                 audit_kwargs["audit_action"] = AuditAction.AUDIT
