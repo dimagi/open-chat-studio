@@ -208,7 +208,7 @@ def has_related_objects(instance, pipeline_param_key: str | None = None) -> bool
     return any(queryset.exists() for queryset in _get_related_objects_querysets(instance, pipeline_param_key))
 
 
-def _get_related_objects_querysets(instance, pipeline_param_key: str | None = None) -> Generator[Any | None, Any, None]:
+def _get_related_objects_querysets(instance, pipeline_param_key: str | None = None) -> Generator[Any | None, Any]:
     for related in get_candidate_relations_to_delete(instance._meta):
         related_objects = getattr(instance, related.get_accessor_name(), None)
         if related_objects is not None:
