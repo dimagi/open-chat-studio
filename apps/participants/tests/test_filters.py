@@ -5,7 +5,9 @@ from django.http import QueryDict
 
 from apps.experiments.models import Participant
 from apps.participants.filters import ParticipantFilter
+from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.experiment import ParticipantFactory
+from apps.utils.factories.team import TeamFactory
 from apps.web.dynamic_filters.base import Operators
 from apps.web.dynamic_filters.datastructures import FilterParams
 
@@ -20,14 +22,16 @@ def _get_querydict(params: dict) -> QueryDict:
 def participants_with_various_data(django_db_setup, django_db_blocker):
     """Create participants with various identifier and name combinations"""
     with django_db_blocker.unblock():
-        p1 = ParticipantFactory(identifier="AP1", name="Alice Peterson")
-        p2 = ParticipantFactory(identifier="AP2", name="Bob Anderson", team=p1.team)
-        p3 = ParticipantFactory(identifier="AP3", name="Charlie Brown", team=p1.team)
-        p4 = ParticipantFactory(identifier="XYZ123", name="AP Smith", team=p1.team)
-        p5 = ParticipantFactory(identifier="TEST001", name="David Jones", team=p1.team)
+        team = TeamFactory()
+        p1 = ParticipantFactory(identifier="AP1", name="Alice Peterson", team=team)
+        p2 = ParticipantFactory(identifier="AP2", name="Bob Anderson", team=team)
+        p3 = ParticipantFactory(identifier="AP3", name="Charlie Brown", team=team)
+        p4 = ParticipantFactory(identifier="XYZ123", name="AP Smith", team=team)
+        p5 = ParticipantFactory(identifier="TEST001", name="David Jones", team=team)
         participants = [p1, p2, p3, p4, p5]
         yield participants
         Participant.objects.filter(id__in=[p.id for p in participants]).delete()
+        delete_object_with_auditing_of_related_objects(team)
 
 
 @pytest.mark.django_db()
