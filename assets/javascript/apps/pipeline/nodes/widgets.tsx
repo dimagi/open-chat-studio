@@ -886,7 +886,7 @@ export function LlmWidget(props: WidgetParams) {
         }
 
         // Clear built-in tools whenever switching providers
-        if (old.data.params.llm_provider_model_id !== providerModelId) {
+        if (old.data.params.llm_provider_id !== providerId) {
           next.data.params.built_in_tools = [];
           next.data.params.tool_config = {};
         }
