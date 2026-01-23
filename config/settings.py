@@ -842,16 +842,23 @@ OAUTH2_PROVIDER = {
     },
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
-    OAUTH2_PROVIDER.update({
-        "OIDC_ENABLED": True,
-        "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
-    })
-    OAUTH2_PROVIDER["SCOPES"].update({
-        "openid": "OpenID Connect scope",
-        "profile": "User Profile",
-    })
+    OAUTH2_PROVIDER.update(
+        {
+            "OIDC_ENABLED": True,
+            "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
+        }
+    )
+    OAUTH2_PROVIDER["SCOPES"].update(
+        {
+            "openid": "OpenID Connect scope",
+            "profile": "User Profile",
+        }
+    )
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
 OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"
 OAUTH2_PROVIDER_GRANT_MODEL = "oauth.OAuth2Grant"
 OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth.OAuth2RefreshToken"
+
+# Pipeline settings
+RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_context"}

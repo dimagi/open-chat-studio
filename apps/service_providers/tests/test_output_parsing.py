@@ -5,6 +5,7 @@ import pytest
 from langchain_classic.agents.output_parsers.tools import ToolAgentAction
 from langchain_core.agents import AgentStep
 from langchain_core.messages import AIMessage, FunctionMessage
+from langchain_core.messages.block_translators.openai import _convert_annotation_to_v1
 
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.main import LlmService, OpenAILlmService
@@ -200,22 +201,25 @@ class TestDefaultParser:
 
         llm_output = Mock(spec=AIMessage)
         llm_output.text = "Hello world"
+        annotations = [
+            # Annotation stating that an uploaded file was cited
+            {"file_id": "file-123", "type": "file_citation"},
+            # Annotation stating that a container file (generated) was referenced
+            {
+                "file_id": "file-456",
+                "type": "container_file_citation",
+                "container_id": "container-1",
+                "filename": "generated.txt",
+            },
+        ]
         llm_output.content_blocks = [
             {"type": "text", "text": "Hello", "annotations": []},
             {
                 "type": "text",
                 "text": "world",
-                "annotations": [
-                    # Annotation stating that an uploaded file was cited
-                    {"file_id": "file-123", "type": "file_citation"},
-                    # Annotation stating that a container file (generated) was referenced
-                    {
-                        "file_id": "file-456",
-                        "type": "container_file_citation",
-                        "container_id": "container-1",
-                        "filename": "generated.txt",
-                    },
-                ],
+                # Langchain does some standardization with annotations, hence we call _convert_annotation_to_v1
+                # which does the same conversion as langchain's internal code.
+                "annotations": [_convert_annotation_to_v1(an) for an in annotations],
             },
         ]
 
@@ -231,3 +235,25 @@ class TestDefaultParser:
             assert result.cited_files.pop().external_id == "file-123"
         else:
             assert len(result.cited_files) == 0
+
+    def test_get_cited_file_ids_filters_none_values(self, team_with_users):
+        """Test that None values are filtered out from citation file_ids.
+
+        This handles cases where citations contain URLs instead of file IDs,
+        which would result in None values when extracting file_id.
+        """
+        parser = OpenAILlmService(openai_api_key="123")
+
+        # Annotation entries with mixed valid file_ids and None values (from URLs)
+        annotation_entries = [
+            {"type": "citation", "extras": {"file_id": "file-123"}},  # Valid file_id
+            {"type": "citation", "extras": {"url": "https://example.com"}},  # URL instead of file_id (no file_id key)
+            {"type": "citation", "extras": {"file_id": None}},  # Explicit None file_id
+            {"type": "citation", "extras": {"file_id": "file-456"}},  # Valid file_id
+            {"type": "citation", "extras": {}},  # Empty extras (no file_id key)
+        ]
+
+        result = parser.get_cited_file_ids(annotation_entries)
+
+        # Should only return the valid file IDs, with None values filtered out
+        assert result == ["file-123", "file-456"]

@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Annotated, Any, Literal, Self
 
 from django.conf import settings
@@ -773,6 +774,17 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
     @classmethod
     def _get_function_args(cls) -> list[str]:
         return ["input", "**kwargs"]
+
+    @field_validator("code", mode="before")
+    def check_reserved_session_state_keys(cls, value: str):
+        for key in settings.RESERVED_SESSION_STATE_KEYS:
+            pattern = re.compile(rf'set_session_state_key\([\s*"\']*{re.escape(key)}[\s*"\']')
+            if pattern.search(value):
+                raise PydanticCustomError(
+                    "reserved_key_used",
+                    f"The key '{key}' is a reserved session state key and is read-only.",
+                )
+        return value
 
     def _process(self, state: PipelineState) -> PipelineState | Command:
         output_state = PipelineState()

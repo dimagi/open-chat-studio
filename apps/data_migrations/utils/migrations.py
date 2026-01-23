@@ -3,6 +3,7 @@ from contextlib import ContextDecorator, ExitStack
 from django.core.management import call_command
 from django.db import migrations, transaction
 from django.db.migrations.operations.base import OperationCategory
+from django.utils import timezone
 
 from apps.data_migrations.models import CustomMigration
 
@@ -90,6 +91,19 @@ def mark_migration_applied(name: str) -> CustomMigration:
     """
     migration, _created = CustomMigration.objects.get_or_create(name=name)
     return migration
+
+
+@transaction.atomic()
+def update_migration_timestamp(name: str) -> None:
+    """
+    Update the applied_at timestamp for an existing migration to the current time.
+
+    Used when re-running a migration with --force flag to track when it was last executed.
+
+    Args:
+        name: Unique migration identifier
+    """
+    CustomMigration.objects.filter(name=name).update(applied_at=timezone.now())
 
 
 class run_once(ContextDecorator):

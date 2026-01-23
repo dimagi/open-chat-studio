@@ -127,7 +127,6 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-preview = true
 
 [tool.ruff.lint.extend-per-file-ignores]
 "settings_production.py" = ["F405"]

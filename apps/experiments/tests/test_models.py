@@ -997,28 +997,28 @@ class TestExperimentObjectManager:
         assert Experiment.objects.get_default_or_working(family_member=exp_v1) == exp_v2
         assert Experiment.objects.get_default_or_working(family_member=exp_v2) == exp_v2
 
-    def test_working_versions_queryset(self):
-        experiments = ExperimentFactory.create_batch(3)
+    def test_working_versions_queryset(self, team):
+        experiments = ExperimentFactory.create_batch(3, team=team)
         for working_exp in experiments:
             working_exp.create_new_version()
 
-        working_versions_queryset = Experiment.objects.working_versions_queryset()
+        working_versions_queryset = Experiment.objects.working_versions_queryset().filter(team=team)
         assert working_versions_queryset.count() == 3
         for working_version in working_versions_queryset.all():
             # All experiments in this queryset should have versions
             assert working_version.has_versions is True
 
-    def test_archived_experiments_are_filtered_out(self):
+    def test_archived_experiments_are_filtered_out(self, team):
         """Default queries should exclude archived experiments"""
-        experiment = ExperimentFactory()
+        experiment = ExperimentFactory(team=team)
         new_version = experiment.create_new_version()
-        assert Experiment.objects.count() == 2
+        assert Experiment.objects.filter(team=team).count() == 2
         new_version.is_archived = True
         new_version.save()
-        assert Experiment.objects.count() == 1
+        assert Experiment.objects.filter(team=team).count() == 1
 
         # To get all experiment,s use the dedicated object method
-        assert Experiment.objects.get_all().count() == 2
+        assert Experiment.objects.get_all().filter(team=team).count() == 2
 
 
 @pytest.mark.django_db()

@@ -884,6 +884,12 @@ export function LlmWidget(props: WidgetParams) {
         } else {
           next.data.params.llm_model_parameters = {};
         }
+
+        // Clear built-in tools whenever switching providers
+        if (old.data.params.llm_provider_id !== providerId) {
+          next.data.params.built_in_tools = [];
+          next.data.params.tool_config = {};
+        }
       })
     );
   };
@@ -905,37 +911,42 @@ export function LlmWidget(props: WidgetParams) {
   const providerId = concatenate(props.nodeParams.llm_provider_id);
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
   const modelParameters = props.nodeParams.llm_model_parameters || {};
-  const value = makeValue(providerId, providerModelId)
-  
+  let value = "";
+  let error = props.inputError || props.getNodeFieldError(props.nodeId, "llm_provider_model_id");
+  if (providerId && providerModelId) {
+    value = makeValue(providerId, providerModelId)
+  } else {
+    error = "This field is required."
+  }
   const llmModelParamsSchema = getSelectedModelSchema(providerModelId);
-
   return (
-    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
-      <select
-        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
-        // Should be resolved in future versions of browsers.
-        className="select appearance-none w-full"
-        name={props.name}
-        onChange={updateParamValue}
-        value={value}
-        disabled={props.readOnly}
-      >
-        <option value="" disabled>
-          Select a model
-        </option>
-        {parameterValues.LlmProviderId.map((provider) => {
-          const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
+    <>
+      <InputField label={props.label} help_text={props.helpText} inputError={error}>
+        <select
+          // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+          // Should be resolved in future versions of browsers.
+          className="select appearance-none w-full"
+          name={props.name}
+          onChange={updateParamValue}
+          value={value}
+          disabled={props.readOnly}
+        >
+          <option value="" disabled>
+            Select a model
+          </option>
+          {parameterValues.LlmProviderId.map((provider) => {
+            const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
 
-          return providerModelsByType[provider.type] &&
-            providerModelsByType[provider.type].map((providerModel) => (
-              <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
-                {providerModel.label}{providersWithSameType > 1 ? ` (${provider.label})` : ''}
-              </option>
-            ))
-        })}
-      </select>
-
-      {llmModelParamsSchema && (
+            return providerModelsByType[provider.type] &&
+              providerModelsByType[provider.type].map((providerModel) => (
+                <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
+                  {providerModel.label}{providersWithSameType > 1 ? ` (${provider.label})` : ''}
+                </option>
+              ))
+          })}
+        </select>
+      </InputField>
+      {value && llmModelParamsSchema && (
         <ModelParametersWidget
           nodeId={props.nodeId}
           schema={llmModelParamsSchema}
@@ -944,7 +955,7 @@ export function LlmWidget(props: WidgetParams) {
           readOnly={readOnly}
         />
       )}
-    </InputField>
+    </>
   );
 }
 
@@ -1239,6 +1250,11 @@ function BuiltInToolsWidget(props: WidgetParams) {
   const toolConfig = props.nodeParams.tool_config || {};
   const [selectedValues, setSelectedValue] = useState(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
   const setNode = usePipelineStore((state) => state.setNode);
+
+  // Sync local state with prop changes from the store
+  React.useEffect(() => {
+    setSelectedValue(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
+  }, [props.paramValue]);
 
   function getNewNodeData(old: Node, updatedList: string[]) {
     return produce(old, (next) => {
