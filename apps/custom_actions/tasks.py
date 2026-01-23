@@ -4,7 +4,7 @@ import requests
 from celery.app import shared_task
 from django.utils import timezone
 
-from apps.custom_actions.models import CustomAction
+from apps.custom_actions.models import CustomAction, HealthCheckStatus
 
 logger = logging.getLogger("ocs.custom_actions")
 
@@ -16,17 +16,17 @@ HEALTH_CHECK_TIMEOUT = 5
 def check_all_custom_actions_health():
     """Periodic task to check health of all custom actions with health endpoints configured."""
     custom_actions = CustomAction.objects.exclude(health_endpoint__isnull=True).exclude(health_endpoint="")
-    
+
     for action in custom_actions:
         check_single_custom_action_health.delay(action.id)
-    
+
     logger.info(f"Scheduled health checks for {custom_actions.count()} custom actions")
 
 
 @shared_task(ignore_result=True)
-def check_single_custom_action_health(action_id):
+def check_single_custom_action_health(action_id: int):
     """Check health of a single custom action.
-    
+
     Args:
         action_id: The ID of the CustomAction to check
     """
@@ -35,27 +35,26 @@ def check_single_custom_action_health(action_id):
     except CustomAction.DoesNotExist:
         logger.error(f"CustomAction with id {action_id} not found")
         return
-    
+
     if not action.health_endpoint:
         logger.warning(f"CustomAction {action.name} (id={action_id}) has no health endpoint configured")
         return
-    
+
     try:
-        # Make a GET request to the health endpoint
         response = requests.get(action.health_endpoint, timeout=HEALTH_CHECK_TIMEOUT)
-        
+
         # Consider 2xx status codes as "up"
         if 200 <= response.status_code < 300:
-            new_status = "up"
+            new_status = HealthCheckStatus.UP
             logger.info(f"Health check passed for {action.name}: {response.status_code}")
         else:
-            new_status = "down"
+            new_status = HealthCheckStatus.DOWN
             logger.warning(f"Health check failed for {action.name}: {response.status_code}")
-    
+
     except requests.exceptions.RequestException as e:
-        new_status = "down"
+        new_status = HealthCheckStatus.DOWN
         logger.warning(f"Health check error for {action.name}: {str(e)}")
-    
+
     # Update the action's health status
     action.health_status = new_status
     action.last_health_check = timezone.now()

@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urljoin
 
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
@@ -23,6 +24,12 @@ from apps.utils.models import BaseModel
 log = logging.getLogger("ocs.custom_actions")
 
 
+class HealthCheckStatus(models.TextChoices):
+    UNKNOWN = "unknown", "Unknown"
+    UP = "up", "Up"
+    DOWN = "down", "Down"
+
+
 @audit_fields("team", "name", "prompt", "api_schema", audit_special_queryset_writes=True)
 class CustomAction(BaseTeamModel):
     objects = AuditingManager()
@@ -40,15 +47,11 @@ class CustomAction(BaseTeamModel):
     )
     _operations = models.JSONField(default=list)
     allowed_operations = ArrayField(models.CharField(max_length=255), default=list)
-    health_endpoint = models.URLField(blank=True, null=True, help_text="Optional health check endpoint")
+    healthcheck_path = models.CharField(blank=True, help_text="Optional health check endpoint")
     health_status = models.CharField(
         max_length=20,
-        choices=[
-            ("unknown", "Unknown"),
-            ("up", "Up"),
-            ("down", "Down"),
-        ],
-        default="unknown",
+        choices=HealthCheckStatus.choices,
+        default=HealthCheckStatus.UNKNOWN,
     )
     last_health_check = models.DateTimeField(null=True, blank=True)
 
@@ -58,6 +61,11 @@ class CustomAction(BaseTeamModel):
     @property
     def operations(self) -> list[APIOperationDetails]:
         return [APIOperationDetails(**op) for op in self._operations]
+
+    @property
+    def health_endpoint(self) -> str | None:
+        # TODO: Test cases
+        return urljoin(self.server_url, self.healthcheck_path) if self.healthcheck_path else None
 
     @operations.setter
     def operations(self, value: list[APIOperationDetails]):
@@ -103,15 +111,15 @@ class CustomAction(BaseTeamModel):
         if not self.api_schema or not self.server_url:
             return None
 
-        health_paths = ["/health", "/healthz", "/healthcheck", "/api/health", "/status", "/_health"]
+        healthcheck_paths = ["/health", "/healthz", "/healthcheck", "/api/health", "/status", "/_health"]
 
         paths = self.api_schema.get("paths", {})
-        for health_path in health_paths:
-            if health_path in paths:
+        for healthcheck_path in healthcheck_paths:
+            if healthcheck_path in paths:
                 # Check if it has a GET method
-                if "get" in paths[health_path]:
-                    return f"{self.server_url.rstrip('/')}{health_path}"
-        
+                if "get" in paths[healthcheck_path]:
+                    return healthcheck_path
+
         return None
 
 

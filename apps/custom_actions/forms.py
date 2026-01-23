@@ -42,16 +42,28 @@ class CustomActionForm(forms.ModelForm):
         label="Auth",
         help_text="Select an authentication to use for this action.",
     )
-    health_endpoint = forms.URLField(
+    healthcheck_path = forms.CharField(
         required=False,
-        label="Health Check Endpoint",
-        help_text="Optional endpoint to check server health status. If left blank, will auto-detect from API schema if available (e.g., /health, /healthz).",
+        label="Health Check Path",
+        help_text=(
+            "Optional endpoint to check server health status. If left blank, will auto-detect from API schema if "
+            "available (e.g., /health, /healthz)."
+        ),
     )
     allowed_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
         model = CustomAction
-        fields = ("name", "description", "auth_provider", "prompt", "server_url", "health_endpoint", "api_schema", "allowed_operations")
+        fields = (
+            "name",
+            "description",
+            "auth_provider",
+            "prompt",
+            "server_url",
+            "healthcheck_path",
+            "api_schema",
+            "allowed_operations",
+        )
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -94,13 +106,13 @@ class CustomActionForm(forms.ModelForm):
         validate_api_schema_full(operations, schema, server_url, self.url_validator)
 
         # Auto-detect health endpoint from API spec if not manually provided
-        health_endpoint = self.cleaned_data.get("health_endpoint")
-        if not health_endpoint and schema and server_url:
+        healthcheck_path = self.cleaned_data.get("healthcheck_path")
+        if not healthcheck_path and schema and server_url:
             # Create a temporary instance to use the detection method
             temp_action = CustomAction(api_schema=schema, server_url=server_url)
             detected_endpoint = temp_action.detect_health_endpoint_from_spec()
             if detected_endpoint:
-                self.cleaned_data["health_endpoint"] = detected_endpoint
+                self.cleaned_data["healthcheck_path"] = detected_endpoint
 
         return {**self.cleaned_data, "allowed_operations": operations}
 
@@ -134,9 +146,9 @@ def validate_api_schema_full(operations, schema, server_url, url_validator):
     operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
     invalid_operations = set(operations) - set(operations_by_id)
     if invalid_operations:
-        raise forms.ValidationError(
-            {"allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"}
-        )
+        raise forms.ValidationError({
+            "allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"
+        })
     for op_id in operations:
         op = operations_by_id[op_id]
 

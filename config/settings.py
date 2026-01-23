@@ -496,7 +496,7 @@ SCHEDULED_TASKS = {
     },
     "custom_actions.tasks.check_all_custom_actions_health": {
         "task": "apps.custom_actions.tasks.check_all_custom_actions_health",
-        "schedule": 30,  # Run every 30 seconds
+        "schedule": crontab(minute="5"),
     },
 }
 
@@ -630,8 +630,12 @@ DJANGO_TABLES2_ROW_ATTRS = {
         border-b border-base-300 hover:bg-base-200
         data-redirect-url:[&:not([data-redirect-url=''])]:hover:cursor-pointer
     """,
-    "id": lambda record: f"record-{record.id}",
-    "data-redirect-url": lambda record: record.get_absolute_url() if hasattr(record, "get_absolute_url") else "",
+    "id": lambda record: f"record-{record.get('id') if isinstance(record, dict) else record.id}",
+    "data-redirect-url": lambda record: (
+        record.get("get_absolute_url", lambda: "")()
+        if isinstance(record, dict)
+        else (record.get_absolute_url() if hasattr(record, "get_absolute_url") else "")
+    ),
 }
 
 # This is only used for development purposes
@@ -838,18 +842,14 @@ OAUTH2_PROVIDER = {
     },
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
-    OAUTH2_PROVIDER.update(
-        {
-            "OIDC_ENABLED": True,
-            "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
-        }
-    )
-    OAUTH2_PROVIDER["SCOPES"].update(
-        {
-            "openid": "OpenID Connect scope",
-            "profile": "User Profile",
-        }
-    )
+    OAUTH2_PROVIDER.update({
+        "OIDC_ENABLED": True,
+        "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
+    })
+    OAUTH2_PROVIDER["SCOPES"].update({
+        "openid": "OpenID Connect scope",
+        "profile": "User Profile",
+    })
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
 OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"

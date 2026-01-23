@@ -58,6 +58,7 @@ class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Cre
         resp = super().form_valid(form)
         self.object.allowed_operations = list(self.object.get_operations_by_id())
         self.object.save(update_fields=["allowed_operations"])
+        check_single_custom_action_health(self.object.id)
         return resp
 
 
@@ -99,18 +100,14 @@ class CheckCustomActionHealth(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         """Trigger an immediate health check for a custom action."""
         action = get_object_or_404(CustomAction, id=pk, team=request.team)
 
-        if not action.health_endpoint:
-            return HttpResponse(
-                '<span class="text-gray-500">No health endpoint configured</span>',
-                content_type="text/html"
-            )
+        if action.healthcheck_path:
+            check_single_custom_action_health(action.id)
+            action.refresh_from_db()
+        else:
+            messages.warning(request, "No health check path configured for this custom action.")
 
-        # Trigger the health check task
-        check_single_custom_action_health.delay(action.id)
-
-        # Return a loading indicator that will be replaced when the check completes
         return render(
             request,
-            "custom_actions/health_check_loading.html",
-            {"team_slug": team_slug, "pk": pk}
+            "custom_actions/health_status_column.html",
+            {"team_slug": team_slug, "record": action},
         )
