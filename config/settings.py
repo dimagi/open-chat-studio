@@ -593,9 +593,15 @@ LOGGING = {
             "style": "{",
             "datefmt": "%d/%b/%Y %H:%M:%S",  # match Django server time format
         },
+        "json": {
+            "()": "pythonjsonlogger.json.JsonFormatter",
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+            "datefmt": "%Y-%m-%dT%H:%M:%S",
+        },
     },
     "handlers": {
         "console": {"class": "logging.StreamHandler", "formatter": "verbose"},
+        "json_console": {"class": "logging.StreamHandler", "formatter": "json"},
     },
     "loggers": {
         "": {  # Root logger
@@ -606,6 +612,7 @@ LOGGING = {
         "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
+        "apps.web.request_logging_middleware": {"handlers": ["json_console"], "level": "INFO", "propagate": False},
     },
 }
 

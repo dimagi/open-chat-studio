@@ -39,14 +39,15 @@ class LegacyDomainLoggingMiddleware(MiddlewareMixin):
             return None
 
         logger.info(
-            "legacy_domain_request | host=%s | path=%s | method=%s | team=%s | experiment=%s | session=%s "
-            "| widget_version=%s",
-            request.get_host(),
-            request.path,
-            request.method,
-            view_kwargs.get("team_slug"),
-            view_kwargs.get("experiment_id"),
-            view_kwargs.get("session_id"),
-            request.headers.get("x-ocs-widget-version"),
+            "legacy_domain_request",
+            extra={
+                "host": request.get_host(),
+                "path": request.path,
+                "method": request.method,
+                "team": view_kwargs.get("team_slug"),
+                "experiment_id": str(view_kwargs.get("experiment_id", "")),
+                "session_id": str(view_kwargs.get("session_id", "")),
+                "widget_version": request.headers.get("x-ocs-widget-version"),
+            },
         )
         return None
