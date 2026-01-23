@@ -3,11 +3,7 @@
 
 {% block app %}
   <section class="app-card" x-data="{
-    allExpanded: false,
-    toggleAll() {
-      this.allExpanded = !this.allExpanded;
-      this.$dispatch('toggle-all', { expanded: this.allExpanded });
-    }
+    allExpanded: false
   }">
     <div class="flex justify-between items-center mb-6">
       <h1 class="pg-title">{% translate "Feature Flags" %}</h1>
@@ -18,7 +14,7 @@
           type="checkbox"
           class="toggle toggle-primary"
           x-model="allExpanded"
-          @change="toggleAll()"
+          @change="$dispatch('toggle-all', { expanded: allExpanded })"
         />
       </div>
     </div>
