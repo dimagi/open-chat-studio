@@ -98,12 +98,8 @@ class CustomActionForm(forms.ModelForm):
             return
 
         schema = self.cleaned_data.get("api_schema")
+        server_url = self.cleaned_data.get("server_url")
         operations = self.cleaned_data.get("allowed_operations")
-        if schema is None or operations is None:
-            return self.cleaned_data
-
-        server_url = self.cleaned_data["server_url"]
-        validate_api_schema_full(operations, schema, server_url, self.url_validator)
 
         # Auto-detect health endpoint from API spec if not manually provided
         healthcheck_path = self.cleaned_data.get("healthcheck_path")
@@ -114,7 +110,12 @@ class CustomActionForm(forms.ModelForm):
             if detected_endpoint:
                 self.cleaned_data["healthcheck_path"] = detected_endpoint
 
-        return {**self.cleaned_data, "allowed_operations": operations}
+        # Validate operations if present (for existing instances)
+        if schema is not None and operations is not None:
+            validate_api_schema_full(operations, schema, server_url, self.url_validator)
+            return {**self.cleaned_data, "allowed_operations": operations}
+
+        return self.cleaned_data
 
     @cached_property
     def url_validator(self):

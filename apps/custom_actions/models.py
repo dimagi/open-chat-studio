@@ -64,8 +64,8 @@ class CustomAction(BaseTeamModel):
 
     @property
     def health_endpoint(self) -> str | None:
-        # TODO: Test cases
-        return urljoin(self.server_url, self.healthcheck_path) if self.healthcheck_path else None
+        if self.healthcheck_path:
+            return urljoin(self.server_url, self.healthcheck_path)
 
     @operations.setter
     def operations(self, value: list[APIOperationDetails]):
