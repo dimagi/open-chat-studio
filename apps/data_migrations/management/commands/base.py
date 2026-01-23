@@ -3,7 +3,12 @@ import contextlib
 from django.core.management.base import BaseCommand
 from field_audit import disable_audit
 
-from apps.data_migrations.utils.migrations import is_migration_applied, run_once
+from apps.data_migrations.utils.migrations import (
+    is_migration_applied,
+    mark_migration_applied,
+    run_once,
+    update_migration_timestamp,
+)
 
 
 class IdempotentCommand(BaseCommand):
@@ -15,6 +20,11 @@ class IdempotentCommand(BaseCommand):
         - atomic: Set to False to disable atomic migration
         - disable_audit: Set to True to disable model auditing for this migration
         - perform_migration(): Method containing the actual migration logic
+
+    Command options:
+        --dry-run: Preview changes without applying them or marking as complete
+        --force: Re-run even if already applied
+        --fake: Mark migration as complete without running it
 
     Example:
         class Command(IdempotentCommand):
@@ -42,14 +52,30 @@ class IdempotentCommand(BaseCommand):
             action="store_true",
             help="Preview changes without applying them",
         )
+        parser.add_argument(
+            "--fake",
+            action="store_true",
+            help="Mark migration as complete without running it",
+        )
 
     def handle(self, *args, **options):
         # Validate that migration_name is defined
         if not self.migration_name:
             raise NotImplementedError("Subclass must define 'migration_name' attribute")
 
+        self.verbosity = options["verbosity"]
         force = options.get("force", False)
         dry_run = options.get("dry_run", False)
+        fake = options.get("fake", False)
+
+        # Handle fake mode: mark as complete without running
+        if fake:
+            if is_migration_applied(self.migration_name):
+                self.stdout.write(self.style.WARNING(f"Migration '{self.migration_name}' is already marked as applied"))
+            else:
+                mark_migration_applied(self.migration_name)
+                self.stdout.write(self.style.SUCCESS(f"Migration '{self.migration_name}' marked as applied (fake)"))
+            return
 
         # Check if migration already applied (unless force flag is set)
         if not force and is_migration_applied(self.migration_name):
@@ -83,6 +109,11 @@ class IdempotentCommand(BaseCommand):
                     result = self.perform_migration(dry_run=False)
 
             self.stdout.write(self.style.SUCCESS(f"Migration '{self.migration_name}' completed successfully"))
+
+            # Update timestamp when re-running with --force
+            if force and not migration_context.should_run:
+                update_migration_timestamp(self.migration_name)
+                self.stdout.write("Migration timestamp updated to current time")
 
             if result is not None:
                 self.stdout.write(f"Result: {result}")

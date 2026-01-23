@@ -11,7 +11,9 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import SessionStatus
 from apps.teams.models import Team
+from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.team import TeamFactory
 from apps.web.dynamic_filters.base import Operators
 from apps.web.dynamic_filters.datastructures import FilterParams
 
@@ -354,11 +356,12 @@ class TestParticipantFilter:
     def session(self, django_db_setup, django_db_blocker):
         """Create a base experiment session with participant"""
         with django_db_blocker.unblock():
+            team = TeamFactory()
             session = ExperimentSessionFactory(
-                participant__name="Jeremy Fisher", participant__identifier="test.user@example.com"
+                team=team, participant__name="Jeremy Fisher", participant__identifier="test.user@example.com"
             )
             yield session
-            session.delete()
+            delete_object_with_auditing_of_related_objects(team)
 
     @pytest.mark.parametrize(
         ("operator", "value", "count"),

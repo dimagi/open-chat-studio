@@ -901,6 +901,13 @@ components:
         message:
           type: string
           title: Message content
+        context:
+          type: object
+          additionalProperties: {}
+          description: Additional context data to include with the message such as
+            details about the page the user is on or the action they are trying to
+            perform. This is stored in the session state under the `remote_context`
+            key.
         attachment_ids:
           type: array
           items:

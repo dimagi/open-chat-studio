@@ -285,11 +285,13 @@ class OpenAIGenericService(LlmService):
         """Returns the file ids from the annotation entries of type file_citation
 
         Expected format for annotation_entries:
-        [{type: "file_citation", "file_id": "file-xxx", ...}]
+        [{"type: "citation", "extras": {"file_id": "file-xxx"}}, ...]
         """
         external_ids = [
-            entry["file_id"] for entry in annotation_entries if "file_id" in entry and entry["type"] == "file_citation"
+            entry.get("extras", {}).get("file_id") for entry in annotation_entries if entry["type"] == "citation"
         ]
+        # Filter out None values (e.g., when citations contain URLs instead of file_ids)
+        external_ids = [file_id for file_id in external_ids if file_id is not None]
         return detangle_file_ids(external_ids)
 
     def retrieve_generated_files_from_service_provider(
@@ -298,14 +300,30 @@ class OpenAIGenericService(LlmService):
         """
         Create file records for all generated files in the output.
 
-        Annotation entried for OpenAI generated files look like:
+        Annotation entries for OpenAI generated files look like:
         [
             {"type": "container_file_citation", "file_id": "file-xxx", "container_id": "cont-xxx", ...}
+        ]
+
+        but Langchain transforms unknown annotation types into dicts with a "value" key and the type as
+        `non_standard_annotation`. See
+        https://github.com/langchain-ai/langchain/blob/master/libs/core/langchain_core/messages/block_translators/openai.py#L602-L607
+        so we expect to find entries like this:
+        [
+            {
+                "type": "non_standard_annotation",
+                "value": {"type": "container_file_citation", "file_id": "file-xxx", "container_id": "cont-xxx", ...}
+            }
         ]
         """
         generated_files = []
 
         for entry in annotation_entries:
+            # We know to look for container_file_citation entries in entries for type = non_standard_annotation
+            if entry.get("type", "") != "non_standard_annotation":
+                continue
+
+            entry = entry.get("value", entry)
             if entry.get("type") != "container_file_citation":
                 continue
 

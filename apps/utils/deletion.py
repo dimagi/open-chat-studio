@@ -45,11 +45,6 @@ def delete_object_with_auditing_of_related_objects(obj):
             if model._meta.auto_created:
                 continue
 
-            if len(instances) == 1:
-                list(instances)[0].delete()
-                counter[model._meta.label] += 1
-                continue
-
             audit_kwargs = {}
             if model in get_audited_models() and isinstance(model._default_manager, AuditingManager):
                 audit_kwargs["audit_action"] = AuditAction.AUDIT
@@ -257,8 +252,7 @@ def _get_related_pipeline_experiments_queryset(
     instance_ids_str = [str(instance_id) for instance_id in instance_ids]
     instance_ids_int = [int(instance_id) for instance_id in instance_ids]
     return (
-        Experiment.objects
-        .exclude(pipeline=None)
+        Experiment.objects.exclude(pipeline=None)
         .filter(
             Q(**{f"pipeline__node__params__{pipeline_param_key}{operator}": instance_ids_int})
             | Q(**{f"pipeline__node__params__{pipeline_param_key}{operator}": instance_ids_str})

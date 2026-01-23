@@ -8,7 +8,6 @@ from django.db.utils import IntegrityError
 from django.utils import timezone
 from time_machine import travel
 
-from apps.assistants.models import ToolResources
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.actions import ScheduleTriggerAction
 from apps.events.models import EventActionType, ScheduledMessage, StaticTriggerType, TimePeriod
@@ -38,7 +37,6 @@ from apps.utils.factories.experiment import (
     SurveyFactory,
     SyntheticVoiceFactory,
 )
-from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     VoiceProviderFactory,
@@ -703,11 +701,6 @@ class TestExperimentModel:
         with pytest.raises(IntegrityError, match=r'.*"unique_version_number_per_experiment".*'):
             ExperimentFactory(working_version=working_exp, team=team, version_number=2)
 
-    def test_get_assistant_with_assistant_directly_linked(self):
-        assistant = OpenAiAssistantFactory()
-        experiment = ExperimentFactory(assistant=assistant)
-        assert experiment.get_assistant() == assistant
-
     @pytest.mark.parametrize("assistant_id_populated", [True, False])
     def test_get_assistant_from_pipeline(self, assistant_id_populated):
         assistant = OpenAiAssistantFactory()
@@ -755,16 +748,6 @@ class TestExperimentModel:
         experiment.post_survey = post_survey
 
         experiment.pipeline = PipelineFactory(team=experiment.team)
-        experiment.assistant = OpenAiAssistantFactory(
-            assistant_id="a-123", builtin_tools=["code_interpreter", "file_search"]
-        )
-        code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=experiment.assistant)
-        code_resource.files.set([FileFactory(external_id="ci-123")])
-
-        search_resource = ToolResources.objects.create(
-            tool_type="file_search", assistant=experiment.assistant, extra={"vector_store_id": "123"}
-        )
-        search_resource.files.set([FileFactory(external_id="fs-123")])
         experiment.save()
         return experiment
 
@@ -778,8 +761,7 @@ class TestExperimentModel:
         assert another_version.version_number == 2
         assert not another_version.is_default_version
 
-    @patch("apps.assistants.sync.push_assistant_to_openai", return_value=None)
-    def test_create_experiment_version(self, mock_push):
+    def test_create_experiment_version(self):
         original_experiment = self._setup_original_experiment()
 
         assert original_experiment.version_number == 1
@@ -810,7 +792,6 @@ class TestExperimentModel:
                 "version_description",
                 "safety_layers",
                 "pipeline",
-                "assistant",
             ],
         )
         self._assert_safety_layers_are_duplicated(original_experiment, new_version)
@@ -827,7 +808,6 @@ class TestExperimentModel:
         self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
         self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
         self._assert_pipeline_is_duplicated(original_experiment, new_version)
-        self._assert_assistant_is_duplicated(original_experiment, new_version)
 
         another_new_version = original_experiment.create_new_version()
         original_experiment.refresh_from_db()
@@ -841,23 +821,6 @@ class TestExperimentModel:
         assert original_experiment.pipeline.version_number == 2
         for node in original_experiment.pipeline.node_set.all():
             assert new_version.pipeline.node_set.filter(working_version_id=node.id).exists()
-
-    def _assert_assistant_is_duplicated(self, original_experiment, new_version):
-        assert new_version.assistant.working_version == original_experiment.assistant
-        assert new_version.assistant.version_number == 1
-        assert original_experiment.assistant.version_number == 2
-        assert new_version.assistant.tool_resources.filter(tool_type="file_search").first().files.count() == 1
-        assert new_version.assistant.tool_resources.filter(tool_type="code_interpreter").first().files.count() == 1
-
-        # Check that the assistant_id is cleared
-        assert original_experiment.assistant.assistant_id != new_version.assistant.assistant_id
-        assert new_version.assistant.assistant_id == ""
-
-        # Check that the vector_store_id is cleared
-        original_fs_resource = original_experiment.assistant.tool_resources.get(tool_type="file_search")
-        assert original_fs_resource.extra["vector_store_id"] is not None
-        new_fs_resource = new_version.assistant.tool_resources.get(tool_type="file_search")
-        assert new_fs_resource.extra["vector_store_id"] is None
 
     def test_copy_attr_to_new_version(self):
         """
@@ -993,36 +956,6 @@ class TestExperimentModel:
 
     @patch("apps.assistants.tasks.delete_openai_assistant_task.delay")
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_archive_with_assistant(self, delete_openai_assistant_task):
-        """
-        Archiving an assistant experiment should only archive the assistant when it is not still being referenced by
-        another experiment or pipeline or when referenced by the working version
-        """
-
-        assistant = OpenAiAssistantFactory()
-        experiment1 = ExperimentFactory(assistant=assistant)
-        experiment2 = ExperimentFactory(assistant=assistant)
-
-        # Version assistant should be archived and removed from OpenAI. Only the version points to it
-        new_version = experiment1.create_new_version()
-        assistant_version = new_version.assistant
-        new_version.archive()
-        delete_openai_assistant_task.assert_called_with(assistant_version.id)
-        delete_openai_assistant_task.reset_mock()
-        self._assert_archived(assistant_version, True)
-
-        experiment1.archive()
-        self._assert_archived(experiment1, True)
-        self._assert_archived(assistant, False)
-
-        experiment2.archive()
-        self._assert_archived(experiment2, True)
-        self._assert_archived(assistant, False)
-
-        delete_openai_assistant_task.assert_not_called()
-
-    @patch("apps.assistants.tasks.delete_openai_assistant_task.delay")
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_with_pipeline(self, delete_openai_assistant_task):
         assistant = OpenAiAssistantFactory()
         pipeline = PipelineFactory()
@@ -1064,28 +997,28 @@ class TestExperimentObjectManager:
         assert Experiment.objects.get_default_or_working(family_member=exp_v1) == exp_v2
         assert Experiment.objects.get_default_or_working(family_member=exp_v2) == exp_v2
 
-    def test_working_versions_queryset(self):
-        experiments = ExperimentFactory.create_batch(3)
+    def test_working_versions_queryset(self, team):
+        experiments = ExperimentFactory.create_batch(3, team=team)
         for working_exp in experiments:
             working_exp.create_new_version()
 
-        working_versions_queryset = Experiment.objects.working_versions_queryset()
+        working_versions_queryset = Experiment.objects.working_versions_queryset().filter(team=team)
         assert working_versions_queryset.count() == 3
         for working_version in working_versions_queryset.all():
             # All experiments in this queryset should have versions
             assert working_version.has_versions is True
 
-    def test_archived_experiments_are_filtered_out(self):
+    def test_archived_experiments_are_filtered_out(self, team):
         """Default queries should exclude archived experiments"""
-        experiment = ExperimentFactory()
+        experiment = ExperimentFactory(team=team)
         new_version = experiment.create_new_version()
-        assert Experiment.objects.count() == 2
+        assert Experiment.objects.filter(team=team).count() == 2
         new_version.is_archived = True
         new_version.save()
-        assert Experiment.objects.count() == 1
+        assert Experiment.objects.filter(team=team).count() == 1
 
         # To get all experiment,s use the dedicated object method
-        assert Experiment.objects.get_all().count() == 2
+        assert Experiment.objects.get_all().filter(team=team).count() == 2
 
 
 @pytest.mark.django_db()

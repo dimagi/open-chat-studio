@@ -30,7 +30,6 @@ ACTION_HANDLERS = {
     "pipeline_start": actions.PipelineStartAction,
     "schedule_trigger": actions.ScheduleTriggerAction,
     "send_message_to_bot": actions.SendMessageToBotAction,
-    "summarize": actions.SummarizeConversationAction,
 }
 
 
@@ -53,7 +52,6 @@ class TimeoutTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
 class EventActionType(models.TextChoices):
     LOG = ("log", "Log the last message")
     END_CONVERSATION = ("end_conversation", "End the conversation")
-    SUMMARIZE = ("summarize", "Summarize the conversation")
     SEND_MESSAGE_TO_BOT = ("send_message_to_bot", "Prompt the bot to message the user")
     SCHEDULETRIGGER = ("schedule_trigger", "Trigger a schedule")
     PIPELINE_START = ("pipeline_start", "Start a pipeline")
@@ -70,8 +68,10 @@ class EventAction(BaseModel, VersionsMixin):
         else:
             self._clear_version_cache()
             res = super().save(*args, **kwargs)
-            handler = ACTION_HANDLERS[self.action_type]()
-            handler.event_action_updated(self)
+            handler_cls = ACTION_HANDLERS.get(self.action_type)
+            if handler_cls:
+                handler = handler_cls()
+                handler.event_action_updated(self)
             return res
 
 
@@ -149,7 +149,15 @@ class StaticTrigger(BaseModel, VersionsMixin):
     def fire(self, session):
         working_version = self.get_working_version()
         try:
-            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
+            handler_cls = ACTION_HANDLERS.get(self.action.action_type)
+            if not handler_cls:
+                working_version.event_logs.create(
+                    session=session,
+                    status=EventLogStatusChoices.FAILURE,
+                    log=f"Action with type '{self.action.action_type}' not found.",
+                )
+                return None
+            result = handler_cls().invoke(session, self.action)
             working_version.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
             return result
         except Exception as e:
@@ -328,7 +336,16 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 
         working_version = self.get_working_version()
         try:
-            result = ACTION_HANDLERS[self.action.action_type]().invoke(session, self.action)
+            handler_cls = ACTION_HANDLERS.get(self.action.action_type)
+            if not handler_cls:
+                working_version.event_logs.create(
+                    session=session,
+                    chat_message=last_human_message,
+                    status=EventLogStatusChoices.FAILURE,
+                    log=f"Action with type '{self.action.action_type}' not found.",
+                )
+                return None
+            result = handler_cls().invoke(session, self.action)
             working_version.event_logs.create(
                 session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
             )
@@ -406,6 +423,8 @@ class TimePeriod(models.TextChoices):
 class ScheduledMessage(BaseTeamModel):
     # this only has to be unique per experiment / participant combination
     external_id = models.CharField(max_length=32, help_text="A unique identifier for the scheduled message")
+    # This action should always be of type `schedule_trigger`. It is used to allow the message to reference
+    # the schedule parameters.
     action = models.ForeignKey(
         EventAction, on_delete=models.CASCADE, related_name="scheduled_messages", null=True, blank=True, default=None
     )

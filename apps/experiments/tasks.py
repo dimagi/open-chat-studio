@@ -42,7 +42,7 @@ def async_create_experiment_version(
     self, experiment_id: int, version_description: str | None = None, make_default: bool = False
 ):
     try:
-        experiment = Experiment.objects.prefetch_related("assistant", "pipeline").get(id=experiment_id)
+        experiment = Experiment.objects.prefetch_related("pipeline").get(id=experiment_id)
         with current_team(experiment.team):
             experiment.create_new_version(version_description, make_default)
     finally:
@@ -51,7 +51,12 @@ def async_create_experiment_version(
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def get_response_for_webchat_task(
-    self, experiment_session_id: int, experiment_id: int, message_text: str, attachments: list | None = None
+    self,
+    experiment_session_id: int,
+    experiment_id: int,
+    message_text: str,
+    attachments: list | None = None,
+    context: dict | None = None,
 ) -> dict:
     response = {"response": None, "message_id": None, "error": None}
     experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
@@ -59,6 +64,13 @@ def get_response_for_webchat_task(
     )
     try:
         experiment = Experiment.objects.get(id=experiment_id)
+
+        if context:
+            session_state = experiment_session.state or {}
+            session_state["remote_context"] = context
+            experiment_session.state = session_state
+            experiment_session.save(update_fields=["state"])
+
         web_channel = WebChannel(
             experiment,
             experiment_session.experiment_channel,
@@ -129,22 +141,20 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
 
     # Create a history event. This isn't a deep copy this dictionary, but I think that's fine.
     history_event = data_dict
-    history_event["messages"].append(
-        {
-            "author": "Assistant",
-            "message": answer,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            # The id field is used on the UI side. It just has to be unique
-            # The reason we're doing this is to mimic JS's Date.now() output,
-            # which we use when we add new messages on the UI side.
-            # It doens't acutally matter as long as the ID doesn't conflict.
-            # I prepended the character s to denote server-side and so that in
-            # the infinitely small case that timezones mean the server and client
-            # create some overlap it won't actually clash.
-            "id": f"s{int(time.time() * 1000)}",
-        }
-    )
+    history_event["messages"].append({
+        "author": "Assistant",
+        "message": answer,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        # The id field is used on the UI side. It just has to be unique
+        # The reason we're doing this is to mimic JS's Date.now() output,
+        # which we use when we add new messages on the UI side.
+        # It doens't acutally matter as long as the ID doesn't conflict.
+        # I prepended the character s to denote server-side and so that in
+        # the infinitely small case that timezones mean the server and client
+        # create some overlap it won't actually clash.
+        "id": f"s{int(time.time() * 1000)}",
+    })
     history_event |= {"preview": answer, "time": timezone.now().time().strftime("%H:%M")}
     PromptBuilderHistory.objects.create(team_id=team_id, owner=user, history=history_event)
     return {"message": answer, "input_tokens": input_tokens, "output_tokens": output_tokens}

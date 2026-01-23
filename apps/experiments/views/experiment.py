@@ -176,8 +176,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     if active_tab == "experiments":
         if pipeline := experiment.pipeline:
             bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
-        elif assistant := experiment.assistant:
-            bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
 
     context = {
         "active_tab": active_tab,

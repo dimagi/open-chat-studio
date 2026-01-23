@@ -67,7 +67,7 @@
     "immer": "^10.1.1",
     "js-cookie": "^3.0.5",
     "js-tiktoken": "^1.0.16",
-    "lodash": "^4.17.21",
+    "lodash": "^4.17.23",
     "open-chat-studio-widget": "^0.4.7",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

@@ -1,9 +1,5 @@
 from django.db.models import Case, DateTimeField, F, When
-from langchain_classic.memory.prompt import SUMMARY_PROMPT
-from langchain_core.messages import get_buffer_string
-from langchain_core.prompts.prompt import PromptTemplate
 
-from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineEventInputs
 from apps.pipelines.nodes.base import PipelineState
@@ -40,24 +36,6 @@ class EndConversationAction(EventActionHandlerBase):
 
         session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
         return "Session ended"
-
-
-class SummarizeConversationAction(EventActionHandlerBase):
-    def invoke(self, session: ExperimentSession, action) -> str:
-        try:
-            prompt = PromptTemplate(template=action.params["prompt"], input_variables=["summary", "new_lines"])
-        except KeyError:
-            prompt = SUMMARY_PROMPT
-        history = session.chat.get_langchain_messages_until_marker(marker=PipelineChatHistoryModes.SUMMARIZE)
-        current_summary = history.pop(0).content if history[0].type == ChatMessageType.SYSTEM else ""
-        messages = session.chat.get_langchain_messages()
-
-        llm = session.experiment.get_chat_model()
-        chain = (prompt | llm).with_config({"run_name": "generate_summary"})
-        new_lines = get_buffer_string(messages)
-        summary = chain.invoke({"summary": current_summary or "", "new_lines": new_lines}).text
-
-        return summary
 
 
 class ScheduleTriggerAction(EventActionHandlerBase):
@@ -117,7 +95,7 @@ class SendMessageToBotAction(EventActionHandlerBase):
 
 class PipelineStartAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.pipelines.models import Pipeline, PipelineChatHistoryModes
+        from apps.pipelines.models import Pipeline
 
         try:
             pipeline: Pipeline = Pipeline.objects.get(id=action.params["pipeline_id"])
