@@ -58,7 +58,7 @@ export namespace Components {
         /**
           * Optional context object to send with each message. This provides page-specific context to the bot.
          */
-        "pageContext"?: string;
+        "pageContext"?: Record<string, any>;
         /**
           * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
           * @default true
@@ -166,7 +166,7 @@ declare namespace LocalJSX {
         /**
           * Optional context object to send with each message. This provides page-specific context to the bot.
          */
-        "pageContext"?: string;
+        "pageContext"?: Record<string, any>;
         /**
           * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
           * @default true

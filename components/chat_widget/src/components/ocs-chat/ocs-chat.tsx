@@ -157,7 +157,7 @@ export class OcsChat {
   /**
    * Optional context object to send with each message. This provides page-specific context to the bot.
    */
-  @Prop() pageContext?: string;
+  @Prop({ mutable: true }) pageContext?: Record<string, any>;
 
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
@@ -228,7 +228,10 @@ export class OcsChat {
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
-    this.loadInternalPageContext(this.pageContext);
+    if (this.pageContext) {
+      console.error("Unsupported `page-context` attribute. Set pageContext using a JavaScript object instead.");
+      this.pageContext = undefined;
+    }
   }
 
   componentDidLoad() {
@@ -324,12 +327,6 @@ export class OcsChat {
 
   private parseStarterQuestions() {
     this.parsedStarterQuestions = this.parseJSONProp(this.starterQuestions, 'starter questions');
-  }
-
-  private loadInternalPageContext(pageContext?: string) {
-    if (pageContext) {
-      this.internalPageContext = this.parseJSONProp(pageContext, "page context");
-    }
   }
 
   private async initializeTranslations() {
@@ -594,8 +591,8 @@ export class OcsChat {
    * @param pageContext - The new value for the field.
    */
   @Watch('pageContext')
-  pageContextHandler(pageContext: string) {
-    this.loadInternalPageContext(pageContext)
+  pageContextHandler(pageContext: Record<string, any>) {
+    this.internalPageContext = pageContext
   }
 
   /**
