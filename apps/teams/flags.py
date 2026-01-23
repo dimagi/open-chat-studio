@@ -31,17 +31,17 @@ class FlagInfo:
 class Flags(FlagInfo, Enum):
     """All feature flags with their metadata."""
 
-    OPEN_AI_VOICE_ENGINE = ("flag_open_ai_voice_engine", "Enables OpenAI voice synthesis for audio responses", "")
+    OPEN_AI_VOICE_ENGINE = ("flag_open_ai_voice_engine", "Enables OpenAI voice synthesis for audio responses")
 
-    SESSION_ANALYSIS = ("flag_session-analysis", "Enables detailed session analysis and reporting", "")
+    SESSION_ANALYSIS = ("flag_session-analysis", "Enables detailed session analysis and reporting")
 
-    EVENTS = ("flag_events", "Enables event-driven triggers and scheduled messages", "")
+    EVENTS = ("flag_events", "Enables event-driven triggers and scheduled messages", "events", [], True)
 
     SSO_LOGIN = ("flag_sso_login", "Enables Single Sign-On authentication integration", "")
 
     COMMCARE_CONNECT = ("flag_commcare_connect", "Enables integration with CommCare Connect platform", "")
 
-    TRACING = ("flag_tracing", "Enables users to see OCS traces", "")
+    TRACING = ("flag_tracing", "Enables users to see OCS traces", "", [], True)
 
     @property
     def docs_url(self):
