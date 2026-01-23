@@ -664,6 +664,7 @@ DOCUMENTATION_LINKS = {
     "collections": "/concepts/collections/",
     "migrate_from_assistant": "/how-to/assistants_migration/",
     "events": "/concepts/events/",
+    "evals": "/concepts/evaluations/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
