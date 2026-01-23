@@ -15,7 +15,7 @@ HEALTH_CHECK_TIMEOUT = 5
 @shared_task(ignore_result=True)
 def check_all_custom_actions_health():
     """Periodic task to check health of all custom actions with health endpoints configured."""
-    custom_actions = CustomAction.objects.exclude(health_endpoint__isnull=True).exclude(health_endpoint="")
+    custom_actions = CustomAction.objects.exclude(healthcheck_path__isnull=True).exclude(healthcheck_path="")
 
     for action in custom_actions:
         check_single_custom_action_health.delay(action.id)
