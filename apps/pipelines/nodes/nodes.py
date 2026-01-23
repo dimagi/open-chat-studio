@@ -57,6 +57,7 @@ from apps.service_providers.llm_service.runnables import (
     AssistantChat,
     ChainOutput,
 )
+from apps.service_providers.models import LlmProvider
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
@@ -386,17 +387,17 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                         f"Incompatible collections: {', '.join(incompatible_collections)}",
                     )
 
-                # OpenAI has a limit of 2 vectorstores per request
-                from apps.service_providers.models import LlmProvider, LlmProviderTypes
-
+                # Check if provider has a limit on number of vector stores
                 try:
                     llm_provider = LlmProvider.objects.get(id=llm_provider_id)
-                    if llm_provider.type == LlmProviderTypes.openai.value.slug and len(collections) > 2:
+                    max_vector_stores = llm_provider.type_enum.value.max_vector_stores
+                    if max_vector_stores and len(collections) > max_vector_stores:
                         raise PydanticCustomError(
-                            "openai_vectorstore_limit",
-                            f"OpenAI hosted vectorstores are limited to 2 per request. "
+                            "vectorstore_limit_exceeded",
+                            f"{llm_provider.type_enum.value.label} hosted vectorstores are limited to "
+                            f"{max_vector_stores} per request. "
                             f"You have selected {len(collections)} collection indexes. "
-                            "Please select at most 2 collection indexes.",
+                            f"Please select at most {max_vector_stores} collection indexes.",
                         )
                 except LlmProvider.DoesNotExist:
                     # If provider doesn't exist, let other validation handle it
