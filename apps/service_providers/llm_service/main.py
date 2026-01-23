@@ -290,6 +290,8 @@ class OpenAIGenericService(LlmService):
         external_ids = [
             entry.get("extras", {}).get("file_id") for entry in annotation_entries if entry["type"] == "citation"
         ]
+        # Filter out None values (e.g., when citations contain URLs instead of file_ids)
+        external_ids = [file_id for file_id in external_ids if file_id is not None]
         return detangle_file_ids(external_ids)
 
     def retrieve_generated_files_from_service_provider(
