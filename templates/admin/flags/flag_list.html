@@ -3,7 +3,7 @@
 <div class="bg-base-100 shadow overflow-hidden sm:rounded-md">
     <ul class="divide-y divide-base-200">
       {% for flag in flags %}
-        <li x-data="{ expanded: false }" @toggle-all.window="expanded = $event.detail.expanded">
+        <li x-data="{ expanded: false }" @toggle-all.window="expanded = $event.detail.expanded" id="flag-{{ flag.id }}">
           <div class="px-4 py-4 sm:px-6">
             <div class="flex items-center justify-between">
               <div class="flex-1 min-w-0">
@@ -71,6 +71,18 @@
                     <a href="{% url 'ocs_admin:flag_detail' flag.name %}" class="btn btn-sm" aria-label="Edit flag">
                       <i class="fa fa-pencil" aria-hidden="true"></i>
                     </a>
+                    {% if show_legacy %}
+                      <button
+                        class="btn btn-sm btn-error"
+                        hx-delete="{% url 'ocs_admin:delete_flag' flag.name %}"
+                        hx-target="#flag-{{ flag.id }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="Are you sure you want to delete the legacy flag '{{ flag.name }}'? This action cannot be undone."
+                        aria-label="Delete flag"
+                      >
+                        <i class="fa fa-trash" aria-hidden="true"></i>
+                      </button>
+                    {% endif %}
                   </div>
                 </div>
                 <div class="mt-2">

@@ -283,6 +283,24 @@ def update_flag(request, flag_name):
 
 
 @is_superuser
+@require_http_methods(["DELETE"])
+def delete_flag(request, flag_name):
+    flag = get_object_or_404(Flag, name=flag_name)
+    flag_info_map = get_all_flag_info()
+
+    # Only allow deletion of legacy flags (not in flag_info_map)
+    if flag.name in flag_info_map:
+        return HttpResponse("Cannot delete active flag", status=403)
+
+    try:
+        flag.delete()
+        return HttpResponse(status=200)
+    except Exception:
+        logger.exception("Failed to delete flag")
+        return HttpResponse("Failed to delete flag", status=500)
+
+
+@is_superuser
 def configuration(request):
     """View for editing the single OcsConfiguration instance."""
     # Get or create the single configuration instance
