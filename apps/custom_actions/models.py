@@ -47,7 +47,7 @@ class CustomAction(BaseTeamModel):
     )
     _operations = models.JSONField(default=list)
     allowed_operations = ArrayField(models.CharField(max_length=255), default=list)
-    healthcheck_path = models.CharField(blank=True, help_text="Optional health check endpoint")
+    healthcheck_path = models.CharField(blank=True, help_text="Optional health check endpoint", default="")
     health_status = models.CharField(
         max_length=20,
         choices=HealthCheckStatus.choices,
