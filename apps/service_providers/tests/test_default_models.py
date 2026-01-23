@@ -48,68 +48,12 @@ def test_creates_new_models():
 
 
 @pytest.mark.django_db()
-def test_removes_old_models():
+def test_old_models_are_not_removed():
     old_global_model = LlmProviderModelFactory(team=None)
 
     update_llm_provider_models()
 
-    assert not LlmProviderModel.objects.filter(
-        team=None, type=old_global_model.type, name=old_global_model.name
-    ).exists()
-
-
-@pytest.mark.django_db()
-def test_converts_old_global_models_to_custom_models():
-    old_global_model = LlmProviderModelFactory(team=None)
-    experiment = ExperimentFactory(llm_provider_model=old_global_model)
-
-    # no custom model should exist
-    assert not LlmProviderModel.objects.filter(
-        team=experiment.team, type=old_global_model.type, name=old_global_model.name
-    ).exists()
-
-    update_llm_provider_models()
-
-    # global model is removed
-    assert not LlmProviderModel.objects.filter(
-        team=None, type=old_global_model.type, name=old_global_model.name
-    ).exists()
-
-    # custom model is created
-    custom_model = LlmProviderModel.objects.get(
-        team=experiment.team, type=old_global_model.type, name=old_global_model.name
-    )
-    # experiment is updated to use the custom model
-    experiment.refresh_from_db()
-    assert experiment.llm_provider_model_id == custom_model.id
-
-
-@pytest.mark.django_db()
-def test_converts_old_global_models_to_custom_models_pipelines():
-    old_global_model = LlmProviderModelFactory(team=None)
-    pipeline = get_pipeline(old_global_model)
-
-    # no custom model should exist
-    assert not LlmProviderModel.objects.filter(
-        team=pipeline.team, type=old_global_model.type, name=old_global_model.name
-    ).exists()
-
-    update_llm_provider_models()
-
-    # global model is removed
-    assert not LlmProviderModel.objects.filter(
-        team=None, type=old_global_model.type, name=old_global_model.name
-    ).exists()
-
-    # custom model is created
-    custom_model = LlmProviderModel.objects.get(
-        team=pipeline.team, type=old_global_model.type, name=old_global_model.name
-    )
-    # pipeline is updated to use the custom model
-    pipeline.refresh_from_db()
-    assert pipeline.node_set.get(type="LLMResponseWithPrompt").params["llm_provider_model_id"] == custom_model.id
-    node_data = [node for node in pipeline.data["nodes"] if node["data"]["type"] == "LLMResponseWithPrompt"]
-    assert node_data[0]["data"]["params"]["llm_provider_model_id"] == custom_model.id
+    assert LlmProviderModel.objects.filter(team=None, type=old_global_model.type, name=old_global_model.name).exists()
 
 
 @pytest.mark.django_db()
@@ -160,20 +104,18 @@ def test_converts_custom_models_to_global_models_pipelines():
 
 def get_pipeline(llm_provider_model):
     pipeline = PipelineFactory()
-    pipeline.data["nodes"].append(
-        {
+    pipeline.data["nodes"].append({
+        "id": "1",
+        "data": {
             "id": "1",
-            "data": {
-                "id": "1",
-                "label": "LLM",
-                "type": "LLMResponseWithPrompt",
-                "params": {
-                    "llm_provider_model_id": str(llm_provider_model.id),
-                    "prompt": "You are a helpful assistant",
-                },
+            "label": "LLM",
+            "type": "LLMResponseWithPrompt",
+            "params": {
+                "llm_provider_model_id": str(llm_provider_model.id),
+                "prompt": "You are a helpful assistant",
             },
-        }
-    )
+        },
+    })
     pipeline.update_nodes_from_data()
     pipeline.save()
     return pipeline
