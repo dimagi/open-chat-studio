@@ -228,6 +228,7 @@ export class OcsChat {
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
+    this.loadInternalPageContext(this.pageContext);
   }
 
   componentDidLoad() {
@@ -238,10 +239,6 @@ export class OcsChat {
     this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
-    if (this.pageContext) {
-      this.internalPageContext = this.parseJSONProp(this.pageContext, "page context");
-    }
-
     // Initialize button position from computed styles
     this.initializeButtonPosition();
 
@@ -327,6 +324,12 @@ export class OcsChat {
 
   private parseStarterQuestions() {
     this.parsedStarterQuestions = this.parseJSONProp(this.starterQuestions, 'starter questions');
+  }
+
+  private loadInternalPageContext(pageContext?: string) {
+    if (pageContext) {
+      this.internalPageContext = this.parseJSONProp(pageContext, "page context");
+    }
   }
 
   private async initializeTranslations() {
@@ -592,7 +595,7 @@ export class OcsChat {
    */
   @Watch('pageContext')
   pageContextHandler(pageContext: string) {
-    this.internalPageContext = this.parseJSONProp(pageContext, "page context");;
+    this.loadInternalPageContext(pageContext)
   }
 
   /**
