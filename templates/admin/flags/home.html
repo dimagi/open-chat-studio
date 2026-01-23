@@ -2,9 +2,25 @@
 {% load i18n %}
 
 {% block app %}
-  <section class="app-card">
+  <section class="app-card" x-data="{
+    allExpanded: false,
+    toggleAll() {
+      this.allExpanded = !this.allExpanded;
+      this.$dispatch('toggle-all', { expanded: this.allExpanded });
+    }
+  }">
     <div class="flex justify-between items-center mb-6">
       <h1 class="pg-title">{% translate "Feature Flags" %}</h1>
+
+      <div class="flex items-center gap-2">
+        <span class="text-sm">{% translate "Show All Details" %}</span>
+        <input
+          type="checkbox"
+          class="toggle toggle-primary"
+          x-model="allExpanded"
+          @change="toggleAll()"
+        />
+      </div>
     </div>
 
     <!-- DaisyUI Tabs -->
