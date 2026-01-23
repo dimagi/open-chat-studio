@@ -228,10 +228,7 @@ export class OcsChat {
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
-    if (this.pageContext) {
-      console.error("Unsupported `page-context` attribute. Set pageContext using a JavaScript object instead.");
-      this.pageContext = undefined;
-    }
+    this.loadInternalPageContext();
   }
 
   componentDidLoad() {
@@ -336,6 +333,19 @@ export class OcsChat {
         customTranslationsObj = await this.loadTranslationsFromUrl(this.translationsUrl);
     }
     this.translationManager = new TranslationManager(this.language, customTranslationsObj);
+  }
+
+  private loadInternalPageContext() {
+    if (this.pageContext === undefined || this.pageContext === null) {
+      return;
+    }
+
+    if (typeof this.pageContext !== 'object' || Array.isArray(this.pageContext)) {
+      console.error("pageContext is expected to be a plain JavaScript object.");
+      return;
+    }
+
+    this.internalPageContext = this.pageContext;
   }
 
   private async loadTranslationsFromUrl(url: string): Promise<Partial<TranslationStrings>> {
@@ -591,8 +601,8 @@ export class OcsChat {
    * @param pageContext - The new value for the field.
    */
   @Watch('pageContext')
-  pageContextHandler(pageContext: Record<string, any>) {
-    this.internalPageContext = pageContext
+  pageContextHandler() {
+    this.loadInternalPageContext()
   }
 
   /**
