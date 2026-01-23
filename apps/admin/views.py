@@ -126,12 +126,17 @@ def flags_home(request):
     flags = Flag.objects.prefetch_related("teams", "users").all().order_by("name")
     flag_info_map = get_all_flag_info()
 
+    # Separate flags into active and legacy
+    active_flags = [flag for flag in flags if flag.name in flag_info_map]
+    legacy_flags = [flag for flag in flags if flag.name not in flag_info_map]
+
     return TemplateResponse(
         request,
         "admin/flags/home.html",
         context={
             "active_tab": "flags",
-            "flags": flags,
+            "active_flags": active_flags,
+            "legacy_flags": legacy_flags,
             "flag_info_map": flag_info_map,
         },
     )
