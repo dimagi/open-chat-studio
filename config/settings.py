@@ -156,6 +156,7 @@ MIDDLEWARE = list(
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.generics.middleware.OriginDetectionMiddleware",
+            "apps.web.request_logging_middleware.LegacyDomainLoggingMiddleware",
             "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],
     )
@@ -628,7 +629,8 @@ DJANGO_TABLES2_ROW_ATTRS = {
     """,
     "id": lambda record: f"record-{record.get('id') if isinstance(record, dict) else record.id}",
     "data-redirect-url": lambda record: (
-        record.get("get_absolute_url", lambda: "")() if isinstance(record, dict)
+        record.get("get_absolute_url", lambda: "")()
+        if isinstance(record, dict)
         else (record.get_absolute_url() if hasattr(record, "get_absolute_url") else "")
     ),
 }
@@ -837,14 +839,18 @@ OAUTH2_PROVIDER = {
     },
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
-    OAUTH2_PROVIDER.update({
-        "OIDC_ENABLED": True,
-        "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
-    })
-    OAUTH2_PROVIDER["SCOPES"].update({
-        "openid": "OpenID Connect scope",
-        "profile": "User Profile",
-    })
+    OAUTH2_PROVIDER.update(
+        {
+            "OIDC_ENABLED": True,
+            "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
+        }
+    )
+    OAUTH2_PROVIDER["SCOPES"].update(
+        {
+            "openid": "OpenID Connect scope",
+            "profile": "User Profile",
+        }
+    )
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
 OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"
@@ -853,3 +859,7 @@ OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth.OAuth2RefreshToken"
 
 # Pipeline settings
 RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_context"}
+
+# Legacy domain logging - log API/webhook requests from old domains for migration tracking
+# Comma-separated list of regex patterns to match legacy hostnames
+LEGACY_DOMAIN_PATTERNS = env.list("LEGACY_DOMAIN_PATTERNS", default=[])
