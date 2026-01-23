@@ -612,7 +612,7 @@ LOGGING = {
         "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": ["console"], "level": "WARN"},
         "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
-        "apps.web.request_logging_middleware": {"handlers": ["json_console"], "level": "INFO", "propagate": False},
+        "ocs.request": {"handlers": ["json_console"], "level": "INFO", "propagate": False},
     },
 }
 

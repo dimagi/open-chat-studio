@@ -5,7 +5,7 @@ from django.conf import settings
 from django.core.exceptions import MiddlewareNotUsed
 from django.utils.deprecation import MiddlewareMixin
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.request")
 
 # Path prefixes for API-type requests (webhooks, REST API)
 API_PATH_PREFIXES = ("/api/", "/channels/")
