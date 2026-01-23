@@ -57,14 +57,8 @@
                       </span>
                     {% endif %}
                     {% if flag.rollout %}
-                      <span class="badge badge-primary">
-                        Rollout
-                      </span>
-                    {% endif %}
-                    {% if flag.rollout %}
-                      <span class="badge badge-neutral">
-                        {{ flag.percent }}%
-                      </span>
+                      <span class="badge badge-primary">Rollout</span>
+                      <span class="badge badge-neutral">{{ flag.percent }}%</span>
                     {% endif %}
                   </div>
                   <div class="flex items-center space-x-2">
