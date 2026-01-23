@@ -165,19 +165,21 @@
     <label for="context-input" style="display: block; margin-bottom: 5px; font-weight: bold;">Page Context (Object):</label>
     <textarea id="context-input" style="width: 100%; height: 60px; padding: 5px; border: 1px solid #ccc; border-radius: 3px;" placeholder="Enter page context as JSON (e.g., page URL, user info, etc.)">{"user_role": "OCS Developer", "page_location": "localhost"}</textarea>
     <button onclick="updatePageContext()" style="margin-top: 5px; padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">Update Context</button>
+    <span id="success-indicator" style="margin-left: 10px; color: #28a745; font-weight: bold; display: none; font-size: 0.9em;">✓ Updated</span>
   </div>
   <open-chat-studio-widget
     id="contextual-widget"
     class="widget regular-button"
     api-base-url="http://localhost:8000"
     visible="false"
-    chatbot-id="183312ac-cbe5-4c91-9e7b-d9df96b088e4"
+    chatbot-id="dcc34dce-27cb-4fc1-bc27-91376b1046a6"
     button-text="Chat with Context"
     header-text="Chat with page context"
     position="center"
     persistent-session="true"
     persistent-session-expire="100"
     allow-attachments="true"
+    page-context='{"user_role": "OCS Developer", "page_location": "localhost"}'
   ></open-chat-studio-widget>
 </div>
 
@@ -185,18 +187,18 @@
     function updatePageContext() {
       const contextInput = document.getElementById('context-input');
       const widget = document.getElementById('contextual-widget');
-      if (contextInput && widget) {
-        try {
-          const contextObj = JSON.parse(contextInput.value);
-          widget.pageContext = contextObj;
-        } catch (e) {
-          console.error('Invalid JSON in context input:', e);
-          alert('Invalid JSON in page context field');
-        }
-      }
+      const indicator = document.getElementById('success-indicator');
+      
+      widget.pageContext = contextInput.value;
+      
+      // Show success indicator
+      indicator.style.display = 'inline';
+      
+      // Hide after 2 seconds
+      setTimeout(() => {
+        indicator.style.display = 'none';
+      }, 2000);
     }
-    
-    document.addEventListener('DOMContentLoaded', updatePageContext);
 </script>
 </body>
 </html>

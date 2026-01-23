@@ -157,7 +157,7 @@ export class OcsChat {
   /**
    * Optional context object to send with each message. This provides page-specific context to the bot.
    */
-  @Prop() pageContext?: Record<string, any> | string;
+  @Prop() pageContext?: string;
 
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
@@ -238,12 +238,8 @@ export class OcsChat {
     this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
-    if (this.pageContext && typeof this.pageContext === 'string') {
-      try {
-        this.internalPageContext = JSON.parse(this.pageContext);
-      } catch {
-        console.error('Failed to parse pageContext JSON string');
-      }
+    if (this.pageContext) {
+      this.internalPageContext = this.parseJSONProp(this.pageContext, "page context");
     }
 
     // Initialize button position from computed styles
@@ -486,7 +482,7 @@ export class OcsChat {
         requestBody.attachment_ids = attachmentIds;
       }
       if (this.internalPageContext) {
-                requestBody.context = this.internalPageContext;
+        requestBody.context = this.internalPageContext;
       }
 
       const data = await this.getChatService().sendMessage(this.sessionId, requestBody);
@@ -595,8 +591,8 @@ export class OcsChat {
    * @param pageContext - The new value for the field.
    */
   @Watch('pageContext')
-  pageContextHandler(pageContext: Record<string, any> | undefined) {
-    this.internalPageContext = pageContext;
+  pageContextHandler(pageContext: string) {
+    this.internalPageContext = this.parseJSONProp(pageContext, "page context");;
   }
 
   /**
