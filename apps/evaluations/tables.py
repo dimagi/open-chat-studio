@@ -284,6 +284,17 @@ class EvaluationSessionsSelectionTable(tables.Table):
         empty_text = "No sessions available for selection."
 
 
+def _row_class_factory(table, record):
+    class_defaults = settings.DJANGO_TABLES2_ROW_ATTRS["class"]
+    if (
+        hasattr(table, "highlight_message_id")
+        and table.highlight_message_id
+        and record.id == table.highlight_message_id
+    ):
+        return f"{class_defaults} bg-yellow-100 dark:bg-yellow-900/20"
+    return class_defaults
+
+
 class DatasetMessagesTable(tables.Table):
     human_message_content = TemplateColumn(
         template_name="evaluations/dataset_message_human_column.html",
@@ -343,21 +354,6 @@ class DatasetMessagesTable(tables.Table):
         super().__init__(*args, **kwargs)
         self.highlight_message_id = highlight_message_id
 
-        # Update row_attrs to include highlighting
-        if highlight_message_id:
-
-            def _row_class_factory(record):
-                class_defaults = settings.DJANGO_TABLES2_ROW_ATTRS["class"]
-                if record.id == highlight_message_id:
-                    return f"{class_defaults} bg-yellow-100 dark:bg-yellow-900/20"
-                return class_defaults
-
-            # Update the Meta row_attrs with highlighting
-            self.Meta.row_attrs = {
-                **settings.DJANGO_TABLES2_ROW_ATTRS,
-                "class": _row_class_factory,
-            }
-
     class Meta:
         model = EvaluationMessage
         fields = (
@@ -370,6 +366,9 @@ class DatasetMessagesTable(tables.Table):
             "session_state",
             "actions",
         )
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        row_attrs = {
+            **settings.DJANGO_TABLES2_ROW_ATTRS,
+            "class": _row_class_factory,
+        }
         orderable = False
         empty_text = "No messages in this dataset yet."
