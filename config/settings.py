@@ -586,7 +586,8 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
 
 LOG_LEVEL = env("OCS_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO")
 
-HANDLER = "console" if DEBUG or IS_TESTING else "json_console"
+JSON_LOGGING = env.bool("ENABLE_JSON_LOGGING", default=not (DEBUG or IS_TESTING))
+HANDLER = "json_console" if JSON_LOGGING else "console"
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -632,9 +633,10 @@ LOGGING = {
         "httpx": {"handlers": [HANDLER], "level": "WARN"},
         "slack_bolt": {"handlers": [HANDLER], "level": "DEBUG"},
         "celery.app.trace": {"level": "INFO", "handlers": [HANDLER]},
-        "django.server": {"handlers": [HANDLER], "level": "CRITICAL", "propagate": False},
-        "django.request": {"handlers": [HANDLER], "level": "CRITICAL", "propagate": False},
-        "ocs.request": {"handlers": [HANDLER], "level": "INFO", "propagate": IS_TESTING},
+        "ocs.request": {"handlers": [HANDLER], "level": "INFO"},
+        # disable these when using JSON logging (see `apps.web.request_logging_middleware.RequestLoggingMiddleware`)
+        "django.request": {"handlers": [HANDLER], "level": "CRITICAL" if JSON_LOGGING else "INFO", "propagate": False},
+        "django.server": {"handlers": [HANDLER], "level": "CRITICAL" if JSON_LOGGING else "INFO", "propagate": False},
     },
 }
 

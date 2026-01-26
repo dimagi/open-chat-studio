@@ -3,6 +3,7 @@ import logging
 import time
 
 from django.conf import settings
+from django.core.exceptions import MiddlewareNotUsed
 
 from apps.audit.transaction import get_audit_transaction_id
 
@@ -18,6 +19,8 @@ class RequestLoggingMiddleware:
 
     def __init__(self, get_response):
         self.get_response = get_response
+        if not settings.JSON_LOGGING:
+            raise MiddlewareNotUsed()
 
     def __call__(self, request):
         start_time = time.perf_counter()
@@ -73,13 +76,9 @@ class RequestLoggingMiddleware:
             if value:
                 extra[key] = value
 
-        msg = "django_request"
-        if settings.DEBUG:
-            # log the full message in DEBUG since we aren't using the JSON logger in DEBUG mode
-            msg = f"{request.method} {request.get_full_path()} {response.status_code} {duration_ms}"
         if response.status_code >= 500:
-            logger.error(msg, extra=extra)
+            logger.error("django_request", extra=extra)
         elif response.status_code >= 400:
-            logger.warning(msg, extra=extra)
+            logger.warning("django_request", extra=extra)
         else:
-            logger.info(msg, extra=extra)
+            logger.info("django_request", extra=extra)
