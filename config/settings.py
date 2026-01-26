@@ -898,7 +898,3 @@ OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth.OAuth2RefreshToken"
 
 # Pipeline settings
 RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_context"}
-
-# Request logging - log API/webhook requests from domains
-# Comma-separated list of regex patterns to match hostnames
-REQUEST_LOG_DOMAIN_PATTER = env.list("REQUEST_LOG_DOMAIN_PATTER", default=[])
