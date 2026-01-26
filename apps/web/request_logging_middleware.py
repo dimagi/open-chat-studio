@@ -1,13 +1,13 @@
 import json
-import logging
 import re
 
+import structlog
 from django.conf import settings
 from django.core.exceptions import MiddlewareNotUsed
 
 from apps.audit.middleware import get_audit_transaction_id
 
-logger = logging.getLogger("ocs.request")
+logger = structlog.get_logger("ocs.request")
 
 # Path prefixes for API-type requests (webhooks, REST API)
 API_PATH_PREFIXES = ("/api/", "/channels/")
@@ -37,8 +37,8 @@ class RequestLoggingMiddleware:
         return response
 
     def _should_log(self, request) -> bool:
-        if not request.path.startswith(API_PATH_PREFIXES):
-            return False
+        # if not request.path.startswith(API_PATH_PREFIXES):
+        #     return False
         host = request.get_host()
         return any(p.search(host) for p in self._host_patterns)
 
@@ -86,12 +86,10 @@ class RequestLoggingMiddleware:
 
         logger.info(
             "ocs_request",
-            extra={
-                "request_id": get_audit_transaction_id(request),
-                "host": request.get_host(),
-                "path": request.path,
-                "method": request.method,
-                "status": response.status_code,
-                **optional_fields,
-            },
+            request_id=get_audit_transaction_id(request),
+            host=request.get_host(),
+            path=request.path,
+            method=request.method,
+            status=response.status_code,
+            **optional_fields,
         )

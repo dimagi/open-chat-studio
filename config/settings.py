@@ -17,6 +17,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+import structlog
 from celery.schedules import crontab
 from django.utils.translation import gettext_lazy
 
@@ -87,6 +88,7 @@ THIRD_PARTY_APPS = [
     "template_partials",
     "silk",
     "oauth2_provider",
+    "django_structlog",
 ]
 
 PROJECT_APPS = [
@@ -135,6 +137,7 @@ MIDDLEWARE = list(
         [
             "corsheaders.middleware.CorsMiddleware",
             "django.middleware.security.SecurityMiddleware",
+            "django_structlog.middlewares.RequestMiddleware",
             "whitenoise.middleware.WhiteNoiseMiddleware",
             "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
             "django.contrib.sessions.middleware.SessionMiddleware",
@@ -584,35 +587,66 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
     )
 
 LOG_LEVEL = env("OCS_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO")
+
+shared_processors: list[structlog.types.Processor] = [
+    structlog.contextvars.merge_contextvars,
+    structlog.stdlib.add_logger_name,
+    structlog.stdlib.add_log_level,
+    structlog.stdlib.PositionalArgumentsFormatter(),
+    structlog.processors.TimeStamper(fmt="iso"),
+    structlog.processors.StackInfoRenderer(),
+    structlog.processors.UnicodeDecoder(),
+]
+
+structlog.configure(
+    processors=[structlog.stdlib.filter_by_level]
+    + shared_processors
+    + [
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+    ],
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=not IS_TESTING,
+)
+
+HANDLER = "console" if DEBUG or IS_TESTING else "json_console"
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "verbose": {
-            "format": '[{asctime}] {levelname} "{name}" {message}',
-            "style": "{",
-            "datefmt": "%d/%b/%Y %H:%M:%S",  # match Django server time format
-        },
         "json": {
-            "()": "pythonjsonlogger.json.JsonFormatter",
-            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
-            "datefmt": "%Y-%m-%dT%H:%M:%S",
+            "()": structlog.stdlib.ProcessorFormatter,
+            "processors": [
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.processors.JSONRenderer(),
+            ],
+            "foreign_pre_chain": shared_processors,
+        },
+        "console": {
+            "()": structlog.stdlib.ProcessorFormatter,
+            "processors": [
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.dev.ConsoleRenderer(),
+            ],
+            "foreign_pre_chain": shared_processors,
         },
     },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "verbose"},
+        "console": {"class": "logging.StreamHandler", "formatter": "console"},
         "json_console": {"class": "logging.StreamHandler", "formatter": "json"},
     },
     "loggers": {
         "": {  # Root logger
-            "handlers": ["console"],
+            "handlers": [HANDLER],
             "level": "WARN",
         },
-        "django": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
-        "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
-        "httpx": {"handlers": ["console"], "level": "WARN"},
-        "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
-        "ocs.request": {"handlers": ["json_console"], "level": "INFO", "propagate": False},
+        "django": {"handlers": [HANDLER], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
+        "django.server": {"handlers": [HANDLER], "level": "CRITICAL", "propagate": False},
+        "ocs": {"handlers": [HANDLER], "level": LOG_LEVEL, "propagate": IS_TESTING},
+        "httpx": {"handlers": [HANDLER], "level": "WARN"},
+        "slack_bolt": {"handlers": [HANDLER], "level": "DEBUG"},
+        "ocs.request": {"handlers": [HANDLER], "level": "INFO", "propagate": False},
+        "django_structlog": {"handlers": [HANDLER], "level": "INFO", "propagate": False},
     },
 }
 
