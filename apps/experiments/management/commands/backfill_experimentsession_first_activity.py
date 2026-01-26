@@ -43,7 +43,7 @@ class Command(IdempotentCommand):
                 first_human_message = (
                     ChatMessage.objects.filter(
                         chat_id=OuterRef("chat_id"),
-                        message_type="human",  # Use string literal instead
+                        message_type=ChatMessageType.HUMAN,
                     )
                     .order_by("created_at")
                     .values("created_at")[:1]
