@@ -867,6 +867,6 @@ OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth.OAuth2RefreshToken"
 # Pipeline settings
 RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_context"}
 
-# Legacy domain logging - log API/webhook requests from old domains for migration tracking
-# Comma-separated list of regex patterns to match legacy hostnames
-LEGACY_DOMAIN_PATTERNS = env.list("LEGACY_DOMAIN_PATTERNS", default=[])
+# Request logging - log API/webhook requests from domains
+# Comma-separated list of regex patterns to match hostnames
+REQUEST_LOG_DOMAIN_PATTER = env.list("REQUEST_LOG_DOMAIN_PATTER", default=[])

@@ -20,14 +20,14 @@ class LegacyDomainLoggingMiddleware(MiddlewareMixin):
     for API requests matching configured legacy host patterns.
 
     Settings:
-        LEGACY_DOMAIN_PATTERNS: List of regex patterns for legacy hosts
+        REQUEST_LOG_DOMAIN_PATTER: List of regex patterns for hosts to log
     """
 
     def __init__(self, get_response):
         super().__init__(get_response)
-        patterns = getattr(settings, "LEGACY_DOMAIN_PATTERNS", None)
+        patterns = getattr(settings, "REQUEST_LOG_DOMAIN_PATTER", None)
         if not patterns:
-            raise MiddlewareNotUsed("LEGACY_DOMAIN_PATTERNS not configured")
+            raise MiddlewareNotUsed("REQUEST_LOG_DOMAIN_PATTER not configured")
         self._host_patterns = [re.compile(p) for p in patterns]
 
     def _should_log(self, request) -> bool:
@@ -41,7 +41,7 @@ class LegacyDomainLoggingMiddleware(MiddlewareMixin):
             return None
 
         logger.info(
-            "legacy_domain_request",
+            "ocs_request",
             extra={
                 "request_id": get_audit_transaction_id(request),
                 "host": request.get_host(),
