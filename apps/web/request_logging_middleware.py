@@ -9,10 +9,10 @@ logger = structlog.get_logger("ocs.request")
 
 
 class RequestLoggingMiddleware:
-    """Log API/webhook requests
+    """Log requests
 
-    Logs team, chatbot/experiment ID, session ID, widget version, and response status
-    for requests matching configured host patterns.
+    Logs host, team, chatbot/experiment ID, session ID, widget version, and response status
+    for requests.
     """
 
     def __init__(self, get_response):
@@ -58,7 +58,6 @@ class RequestLoggingMiddleware:
         optional_fields = {
             key: value
             for key, value in {
-                "team": view_kwargs.get("team_slug"),
                 "experiment_id": self._get_field(view_kwargs, post_data, "experiment_id", "chatbot_id"),
                 "session_id": self._get_field(view_kwargs, post_data, "session_id"),
                 "widget_version": request.headers.get("x-ocs-widget-version"),
