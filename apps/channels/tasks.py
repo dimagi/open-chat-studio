@@ -1,6 +1,5 @@
 import uuid
 
-import structlog
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from taskbadger.celery import Task as TaskbadgerTask
@@ -24,7 +23,7 @@ from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.taskbadger import update_taskbadger_data
 
-log = structlog.wrap_logger(get_task_logger("ocs.channels"))
+log = get_task_logger("ocs.channels")
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)

@@ -17,9 +17,9 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
-import structlog
 from celery.schedules import crontab
 from django.utils.translation import gettext_lazy
+from pythonjsonlogger.json import JsonFormatter
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -586,53 +586,41 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
 
 LOG_LEVEL = env("OCS_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO")
 
-shared_processors: list[structlog.types.Processor] = [
-    structlog.contextvars.merge_contextvars,
-    structlog.stdlib.add_logger_name,
-    structlog.stdlib.add_log_level,
-    structlog.stdlib.PositionalArgumentsFormatter(),
-    structlog.processors.TimeStamper(fmt="iso"),
-    structlog.processors.StackInfoRenderer(),
-    structlog.processors.format_exc_info,
-    structlog.processors.UnicodeDecoder(),
-]
-
-structlog.configure(
-    processors=[structlog.stdlib.filter_by_level]
-    + shared_processors
-    + [
-        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-    ],
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    wrapper_class=structlog.stdlib.BoundLogger,
-    cache_logger_on_first_use=not IS_TESTING,
-)
-
 HANDLER = "console" if DEBUG or IS_TESTING else "json_console"
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "context_vars": {
+            "()": "apps.utils.logging.ContextVarFilter",
+        },
+        "celery_context": {
+            "()": "apps.utils.logging.CeleryContextFilter",
+        },
+    },
     "formatters": {
         "json": {
-            "()": structlog.stdlib.ProcessorFormatter,
-            "processors": [
-                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                structlog.processors.JSONRenderer(),
-            ],
-            "foreign_pre_chain": shared_processors,
+            "()": JsonFormatter,
+            "format": "%(levelname)s %(name)s %(message)s",
+            "rename_fields": {"levelname": "level", "name": "logger"},
+            "timestamp": True,
         },
         "console": {
-            "()": structlog.stdlib.ProcessorFormatter,
-            "processors": [
-                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                structlog.dev.ConsoleRenderer(sort_keys=False),
-            ],
-            "foreign_pre_chain": shared_processors,
+            "format": "%(asctime)s %(levelname)s %(name)s [%(team)s] %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
         },
     },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "console"},
-        "json_console": {"class": "logging.StreamHandler", "formatter": "json"},
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "console",
+            "filters": ["context_vars", "celery_context"],
+        },
+        "json_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+            "filters": ["context_vars", "celery_context"],
+        },
     },
     "loggers": {
         "": {  # Root logger
@@ -640,12 +628,13 @@ LOGGING = {
             "level": "WARN",
         },
         "django": {"handlers": [HANDLER], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
-        "django.server": {"handlers": [HANDLER], "level": "CRITICAL", "propagate": False},
-        "django.request": {"handlers": [HANDLER], "level": "ERROR", "propagate": False},
         "ocs": {"handlers": [HANDLER], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": [HANDLER], "level": "WARN"},
         "slack_bolt": {"handlers": [HANDLER], "level": "DEBUG"},
         "celery.app.trace": {"level": "INFO", "handlers": [HANDLER]},
+        "django.server": {"handlers": [HANDLER], "level": "CRITICAL", "propagate": False},
+        "django.request": {"handlers": [HANDLER], "level": "CRITICAL", "propagate": False},
+        "ocs.request": {"handlers": [HANDLER], "level": "INFO", "propagate": IS_TESTING},
     },
 }
 

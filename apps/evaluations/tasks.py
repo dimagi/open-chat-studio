@@ -6,7 +6,6 @@ from datetime import timedelta
 from io import StringIO
 from typing import cast
 
-import structlog
 from celery import chord, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
@@ -36,7 +35,7 @@ from apps.teams.utils import current_team
 
 EVAL_SESSIONS_TTL_DAYS = 30
 
-logger = structlog.wrap_logger(get_task_logger("ocs.evaluations"))
+logger = get_task_logger("ocs.evaluations")
 
 
 def _save_dataset_error(dataset: EvaluationDataset, error_message: str):

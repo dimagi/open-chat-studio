@@ -1,6 +1,5 @@
 import time
 
-import structlog
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from django.core.files.base import ContentFile
@@ -20,7 +19,7 @@ from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
 
-logger = structlog.wrap_logger(get_task_logger("ocs.experiments"))
+logger = get_task_logger("ocs.experiments")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)

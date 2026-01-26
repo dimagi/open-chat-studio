@@ -5,7 +5,6 @@ from io import BytesIO
 from itertools import groupby
 
 import openai
-import structlog
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
@@ -30,7 +29,7 @@ from apps.files.models import File, FilePurpose
 from apps.service_providers.models import LlmProvider
 from apps.utils.celery import TaskbadgerTaskWrapper
 
-logger = structlog.wrap_logger(get_task_logger("ocs.documents"))
+logger = get_task_logger("ocs.documents")
 
 
 @shared_task(ignore_result=True)

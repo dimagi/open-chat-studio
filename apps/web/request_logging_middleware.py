@@ -1,11 +1,12 @@
 import json
+import logging
 import time
 
-import structlog
+from django.conf import settings
 
 from apps.audit.transaction import get_audit_transaction_id
 
-logger = structlog.get_logger("ocs.request")
+logger = logging.getLogger("ocs.request")
 
 
 class RequestLoggingMiddleware:
@@ -22,7 +23,7 @@ class RequestLoggingMiddleware:
         start_time = time.perf_counter()
         response = self.get_response(request)
         duration_ms = (time.perf_counter() - start_time) * 1000
-        self._log_request(request, response, duration_ms)
+        self._log_request(request, response, int(duration_ms))
         return response
 
     def _get_post_data(self, request) -> dict:
@@ -55,29 +56,30 @@ class RequestLoggingMiddleware:
         view_kwargs = resolver_match.kwargs if resolver_match else {}
         post_data = self._get_post_data(request)
 
-        optional_fields = {
-            key: value
-            for key, value in {
-                "experiment_id": self._get_field(view_kwargs, post_data, "experiment_id", "chatbot_id"),
-                "session_id": self._get_field(view_kwargs, post_data, "session_id"),
-                "widget_version": request.headers.get("x-ocs-widget-version"),
-                "query": request.META.get("QUERY_STRING", ""),
-            }.items()
-            if value
+        extra = {
+            "host": request.get_host(),
+            "method": request.method,
+            "status": response.status_code,
+            "path": request.path,
+            "request_id": get_audit_transaction_id(),
+            "duration": duration_ms,
         }
+        for key, value in {
+            "experiment_id": self._get_field(view_kwargs, post_data, "experiment_id", "chatbot_id"),
+            "session_id": self._get_field(view_kwargs, post_data, "session_id"),
+            "widget_version": request.headers.get("x-ocs-widget-version"),
+            "query": request.META.get("QUERY_STRING", ""),
+        }.items():
+            if value:
+                extra[key] = value
 
-        logger_fn = logger.info
+        msg = "django_request"
+        if settings.DEBUG:
+            # log the full message in DEBUG since we aren't using the JSON logger in DEBUG mode
+            msg = f"{request.method} {request.get_full_path()} {response.status_code} {duration_ms}"
         if response.status_code >= 500:
-            logger_fn = logger.error
+            logger.error(msg, extra=extra)
         elif response.status_code >= 400:
-            logger_fn = logger.warning
-        logger_fn(
-            "django_request",
-            host=request.get_host(),
-            method=request.method,
-            status=response.status_code,
-            path=request.path,
-            request_id=get_audit_transaction_id(),
-            duration=duration_ms,
-            **optional_fields,
-        )
+            logger.warning(msg, extra=extra)
+        else:
+            logger.info(msg, extra=extra)

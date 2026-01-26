@@ -1,9 +1,10 @@
 import os
 
-import structlog
 from celery import Celery, signals
 from celery.app import trace
 from django import db
+
+from apps.utils.logging import CeleryContextFilter
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -37,7 +38,12 @@ app.conf.update(
 
 @signals.task_prerun.connect
 def on_task_prerun(sender, task_id, task, args, kwargs, **_):
-    structlog.contextvars.bind_contextvars(task_id=task_id, task_name=task.name)
+    CeleryContextFilter.set_task_context(task_id, task.name)
+
+
+@signals.task_postrun.connect
+def on_task_postrun(sender, **_):
+    CeleryContextFilter.clear_task_context()
 
 
 def close_db_connection(sender, **kwargs):

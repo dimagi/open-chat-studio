@@ -4,7 +4,6 @@ from contextvars import ContextVar, Token
 from functools import lru_cache
 
 import sentry_sdk
-import structlog
 from django.core.cache import cache
 
 log = logging.getLogger("ocs.teams")
@@ -45,10 +44,8 @@ def set_current_team(team) -> Token:
     token = _context.set(team)
     if team:
         sentry_sdk.get_current_scope().set_tag("team", team.slug)
-        structlog.contextvars.bind_contextvars(team=team.slug)
     else:
         sentry_sdk.get_current_scope().remove_tag("team")
-        structlog.contextvars.unbind_contextvars("team")
     return token
 
 

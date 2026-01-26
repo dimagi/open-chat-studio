@@ -2,7 +2,6 @@ import csv
 import io
 from io import StringIO
 
-import structlog
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
@@ -14,7 +13,7 @@ from apps.teams.utils import current_team
 from .models import AnalysisStatus, TranscriptAnalysis
 from .translation import get_message_content, translate_messages_with_llm
 
-logger = structlog.wrap_logger(get_task_logger("ocs.analysis"))
+logger = get_task_logger("ocs.analysis")
 
 
 @shared_task(bind=True)
