@@ -39,7 +39,7 @@ class CustomActionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
 class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = CustomAction
     form_class = CustomActionForm
-    template_name = "generic/object_form.html"
+    template_name = "custom_actions/custom_actions_form.html"
     extra_context = {
         "title": "Create Custom Action",
         "button_text": "Create",
@@ -65,7 +65,7 @@ class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Cre
 class EditCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = CustomAction
     form_class = CustomActionForm
-    template_name = "generic/object_form.html"
+    template_name = "custom_actions/custom_actions_form.html"
     extra_context = {
         "title": "Update Custom Action",
         "button_text": "Update",

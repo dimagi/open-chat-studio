@@ -1,23 +1,24 @@
-{% load i18n %}
-{% if record.healthcheck_path %}
-  {% if record.health_status == "up" %}
-    <span class="badge badge-success">Up</span>
-  {% elif record.health_status == "down" %}
-    <span class="badge badge-error">Down</span>
+{% load humanize i18n %}
+<div id="health-status-{{ record.id }}">
+  {% if record.healthcheck_path %}
+      {% if record.health_status == "up" %}
+        <span class="badge badge-success">Up</span>
+      {% elif record.health_status == "down" %}
+        <span class="badge badge-error">Down</span>
+      {% else %}
+        <span class="badge badge-ghost">Unknown</span>
+      {% endif %}
+      <span class="text-xs pl-2">{{ record.last_health_check|naturaltime }}</span>
+      <button hx-post="{% url 'custom_actions:check_health' request.team.slug record.pk %}"
+              hx-swap="innerHTML"
+              hx-target="#health-status-{{ record.id }}"
+              hx-indicator="#indicator-{{ record.id }}"
+              class="btn btn-xs btn-ghost ml-2"
+              title="Check now">
+        <i class="fa fa-refresh text-xs"></i>
+      </button>
+    <i id="indicator-{{ record.id }}" class="mx-2 htmx-indicator fa fa-spinner fa-pulse"></i>
   {% else %}
-    <span class="badge badge-ghost">Unknown</span>
+    <span class="text-gray-500">-</span>
   {% endif %}
-  <button hx-post="{% url 'custom_actions:check_health' request.team.slug record.pk %}"
-          hx-swap="innerHTML"
-          hx-target="closest td"
-          hx-indicator=".htmx-indicator"
-          class="btn btn-xs btn-ghost ml-2"
-          title="Check now">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-    </svg>
-  </button>
-  <i class="mx-2 htmx-indicator fa fa-spinner fa-pulse"></i>
-{% else %}
-  <span class="text-gray-500">-</span>
-{% endif %}
+</div>
