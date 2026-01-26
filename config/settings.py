@@ -640,6 +640,7 @@ LOGGING = {
         },
         "django": {"handlers": [HANDLER], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
         "django.server": {"handlers": [HANDLER], "level": "CRITICAL", "propagate": False},
+        "django.request": {"handlers": [HANDLER], "level": "ERROR", "propagate": False},
         "ocs": {"handlers": [HANDLER], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": [HANDLER], "level": "WARN"},
         "slack_bolt": {"handlers": [HANDLER], "level": "DEBUG"},
