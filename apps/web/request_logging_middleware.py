@@ -13,11 +13,11 @@ logger = logging.getLogger("ocs.request")
 API_PATH_PREFIXES = ("/api/", "/channels/")
 
 
-class LegacyDomainLoggingMiddleware(MiddlewareMixin):
-    """Log API/webhook requests to legacy domains to track migration progress.
+class RequestLoggingMiddleware(MiddlewareMixin):
+    """Log API/webhook requests
 
     Logs team, chatbot/experiment ID, session ID, and widget version
-    for API requests matching configured legacy host patterns.
+    for API requests matching configured host patterns.
 
     Settings:
         REQUEST_LOG_DOMAIN_PATTER: List of regex patterns for hosts to log
@@ -40,6 +40,18 @@ class LegacyDomainLoggingMiddleware(MiddlewareMixin):
         if not self._should_log(request):
             return None
 
+        optional_fields = {
+            key: value
+            for key, value in {
+                "query": request.META.get("QUERY_STRING", ""),
+                "team": view_kwargs.get("team_slug"),
+                "experiment_id": str(view_kwargs.get("experiment_id")),
+                "session_id": str(view_kwargs.get("session_id")),
+                "widget_version": request.headers.get("x-ocs-widget-version"),
+            }.items()
+            if value
+        }
+
         logger.info(
             "ocs_request",
             extra={
@@ -47,10 +59,7 @@ class LegacyDomainLoggingMiddleware(MiddlewareMixin):
                 "host": request.get_host(),
                 "path": request.path,
                 "method": request.method,
-                "team": view_kwargs.get("team_slug"),
-                "experiment_id": str(view_kwargs.get("experiment_id", "")),
-                "session_id": str(view_kwargs.get("session_id", "")),
-                "widget_version": request.headers.get("x-ocs-widget-version"),
+                **optional_fields,
             },
         )
         return None
