@@ -3,7 +3,7 @@ import time
 
 import structlog
 
-from apps.audit.middleware import get_audit_transaction_id
+from apps.audit.transaction import get_audit_transaction_id
 
 logger = structlog.get_logger("ocs.request")
 
@@ -77,7 +77,7 @@ class RequestLoggingMiddleware:
             method=request.method,
             status=response.status_code,
             path=request.path,
-            request_id=get_audit_transaction_id(request),
+            request_id=get_audit_transaction_id(),
             duration=duration_ms,
             **optional_fields,
         )
