@@ -1,5 +1,4 @@
 import logging
-from urllib.parse import urljoin
 
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
@@ -65,7 +64,9 @@ class CustomAction(BaseTeamModel):
     @property
     def health_endpoint(self) -> str | None:
         if self.healthcheck_path:
-            return urljoin(self.server_url, self.healthcheck_path)
+            path = self.healthcheck_path.lstrip("/")
+            root = self.server_url.rstrip("/")
+            return root + "/" + path
 
     @operations.setter
     def operations(self, value: list[APIOperationDetails]):
