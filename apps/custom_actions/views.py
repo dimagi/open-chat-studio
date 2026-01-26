@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -10,6 +10,7 @@ from django_tables2 import SingleTableView
 from apps.custom_actions.forms import CustomActionForm
 from apps.custom_actions.models import CustomAction
 from apps.custom_actions.tables import CustomActionTable
+from apps.custom_actions.tasks import check_single_custom_action_health
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
@@ -38,7 +39,7 @@ class CustomActionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
 class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = CustomAction
     form_class = CustomActionForm
-    template_name = "generic/object_form.html"
+    template_name = "custom_actions/custom_actions_form.html"
     extra_context = {
         "title": "Create Custom Action",
         "button_text": "Create",
@@ -57,13 +58,14 @@ class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Cre
         resp = super().form_valid(form)
         self.object.allowed_operations = list(self.object.get_operations_by_id())
         self.object.save(update_fields=["allowed_operations"])
+        check_single_custom_action_health(self.object.id)
         return resp
 
 
 class EditCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = CustomAction
     form_class = CustomActionForm
-    template_name = "generic/object_form.html"
+    template_name = "custom_actions/custom_actions_form.html"
     extra_context = {
         "title": "Update Custom Action",
         "button_text": "Update",
@@ -89,3 +91,23 @@ class DeleteCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
         consent_form.delete()
         messages.success(request, "Custom Action Deleted")
         return HttpResponse()
+
+
+class CheckCustomActionHealth(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "custom_actions.view_customaction"
+
+    def post(self, request, team_slug: str, pk: int):
+        """Trigger an immediate health check for a custom action."""
+        action = get_object_or_404(CustomAction, id=pk, team=request.team)
+
+        if action.healthcheck_path:
+            check_single_custom_action_health(action.id)
+            action.refresh_from_db()
+        else:
+            messages.warning(request, "No health check path configured for this custom action.")
+
+        return render(
+            request,
+            "custom_actions/health_status_column.html",
+            {"team_slug": team_slug, "record": action},
+        )

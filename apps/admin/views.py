@@ -126,12 +126,17 @@ def flags_home(request):
     flags = Flag.objects.prefetch_related("teams", "users").all().order_by("name")
     flag_info_map = get_all_flag_info()
 
+    # Separate flags into active and legacy
+    active_flags = [flag for flag in flags if flag.name in flag_info_map]
+    legacy_flags = [flag for flag in flags if flag.name not in flag_info_map]
+
     return TemplateResponse(
         request,
         "admin/flags/home.html",
         context={
             "active_tab": "flags",
-            "flags": flags,
+            "active_flags": active_flags,
+            "legacy_flags": legacy_flags,
             "flag_info_map": flag_info_map,
         },
     )
@@ -275,6 +280,24 @@ def update_flag(request, flag_name):
     except Exception:
         logger.exception("Failed to update flag")
         return JsonResponse({"error": "Failed to update flag"}, status=500)
+
+
+@is_superuser
+@require_http_methods(["DELETE"])
+def delete_flag(request, flag_name):
+    flag = get_object_or_404(Flag, name=flag_name)
+    flag_info_map = get_all_flag_info()
+
+    # Only allow deletion of legacy flags (not in flag_info_map)
+    if flag.name in flag_info_map:
+        return HttpResponse("Cannot delete active flag", status=403)
+
+    try:
+        flag.delete()
+        return HttpResponse(status=200)
+    except Exception:
+        logger.exception("Failed to delete flag")
+        return HttpResponse("Failed to delete flag", status=500)
 
 
 @is_superuser
