@@ -254,6 +254,9 @@ Key settings in `.env` file such as database connection strings, credentials for
 
 ## Development Patterns
 
+### Making reqests
+Prefer using the httpx library instead of the requests library.
+
 ### Model Architecture Patterns
 
 #### Base Model Classes
