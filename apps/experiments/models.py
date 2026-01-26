@@ -1616,6 +1616,13 @@ class SessionStatus(models.TextChoices):
 
 
 class ExperimentSessionQuerySet(models.QuerySet):
+    def annotate_with_first_message_created_at(self):
+        """Annotate queryset with the created_at timestamp of the first message in each session."""
+        first_message_subquery = Subquery(
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id")).order_by("created_at").values("created_at")[:1]
+        )
+        return self.annotate(first_message_created_at=first_message_subquery)
+
     def annotate_with_message_count(self):
         message_count_subquery = Subquery(
             ChatMessage.objects
@@ -1685,7 +1692,6 @@ class ExperimentSession(BaseTeamModel):
         help_text="Array of unique experiment version numbers seen by this session",
     )
     last_activity_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last user interaction")
-    first_activity_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the first user interaction")
 
     class Meta:
         ordering = ["-created_at"]
