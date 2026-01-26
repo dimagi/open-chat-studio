@@ -628,7 +628,8 @@ DJANGO_TABLES2_ROW_ATTRS = {
     """,
     "id": lambda record: f"record-{record.get('id') if isinstance(record, dict) else record.id}",
     "data-redirect-url": lambda record: (
-        record.get("get_absolute_url", lambda: "")() if isinstance(record, dict)
+        record.get("get_absolute_url", lambda: "")()
+        if isinstance(record, dict)
         else (record.get_absolute_url() if hasattr(record, "get_absolute_url") else "")
     ),
 }
@@ -662,6 +663,8 @@ DOCUMENTATION_LINKS = {
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
     "migrate_from_assistant": "/how-to/assistants_migration/",
+    "events": "/concepts/events/",
+    "evals": "/concepts/evaluations/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
@@ -837,14 +840,18 @@ OAUTH2_PROVIDER = {
     },
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
-    OAUTH2_PROVIDER.update({
-        "OIDC_ENABLED": True,
-        "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
-    })
-    OAUTH2_PROVIDER["SCOPES"].update({
-        "openid": "OpenID Connect scope",
-        "profile": "User Profile",
-    })
+    OAUTH2_PROVIDER.update(
+        {
+            "OIDC_ENABLED": True,
+            "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
+        }
+    )
+    OAUTH2_PROVIDER["SCOPES"].update(
+        {
+            "openid": "OpenID Connect scope",
+            "profile": "User Profile",
+        }
+    )
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
 OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"
