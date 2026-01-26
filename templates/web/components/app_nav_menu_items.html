@@ -8,6 +8,12 @@
 </li>
 <ul class="menu">
   <li>
+    <a href="{% url 'ocs_notifications:notifications_home' %}" {% if active_tab == 'profile' %}class="menu-active"{% endif %}>
+      <i class="fa-solid fa-bell"></i>
+      {% translate "Notifications" %}
+    </a>
+  </li>
+  <li>
     <a href="{% url 'users:user_profile' %}" {% if active_tab == 'profile' %}class="menu-active"{% endif %}>
       <i class="fa fa-user h-4 w-4"></i>
       {% translate "Profile" %}
