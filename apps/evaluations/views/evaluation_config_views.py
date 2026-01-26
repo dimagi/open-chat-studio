@@ -211,10 +211,14 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         if evaluation_run.status in [EvaluationRunStatus.PROCESSING]:
             context["group_job_id"] = evaluation_run.job_id
         else:
-            context["table_url"] = reverse(
+            table_url = reverse(
                 "evaluations:evaluation_results_table",
                 args=[team_slug, kwargs["evaluation_pk"], kwargs["evaluation_run_pk"]],
             )
+            result_id = self.request.GET.get("result_id")
+            if result_id:
+                table_url = f"{table_url}?result_id={result_id}"
+            context["table_url"] = table_url
             # Add total results count
             context["total_results"] = evaluation_run.results.count()
             if evaluation_run.status == EvaluationRunStatus.COMPLETED:
@@ -226,7 +230,8 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
 
 class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationrun"
-    template_name = "table/single_table.html"
+    template_name = "evaluations/evaluation_results_table.html"
+    table_pagination = {"per_page": 10}
 
     def get_queryset(self):
         return self.evaluation_run
@@ -239,23 +244,84 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
         )
 
     def get_table_data(self):
-        return self.evaluation_run.get_table_data()
+        """Return all table data for pagination."""
+        return self.evaluation_run.get_table_data(include_ids=True)
+
+    def get_table_pagination(self, table):
+        """Configure pagination and calculate page for highlighted result."""
+        highlight_result_id = self.get_highlight_result_id()
+        page_size = self.table_pagination.get("per_page", 10)
+        pagination_config = dict(self.table_pagination)
+
+        # On first load with highlight, calculate which page contains the result
+        if highlight_result_id and not self.request.GET.get("page"):
+            all_data = self.get_table_data()
+            result_index = None
+            for idx, row in enumerate(all_data):
+                if row.get("id") == highlight_result_id:
+                    result_index = idx
+                    break
+
+            if result_index is not None:
+                # Calculate which page contains this result and add to pagination config
+                calculated_page = (result_index // page_size) + 1
+                pagination_config["page"] = calculated_page
+
+        return pagination_config
+
+    def get_highlight_result_id(self):
+        """Extract and validate the result_id query parameter for highlighting."""
+        try:
+            return int(self.request.GET.get("result_id"))
+        except (ValueError, TypeError):
+            return None
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["highlight_result_id"] = self.get_highlight_result_id()
+        return context
 
     def get_table_class(self):
         """
-        Inspect the first row’s keys and build a Table subclass
+        Inspect the first row's keys and build a Table subclass
         with one Column per field.
         """
+        from django.conf import settings
+
         data = self.get_table_data()
         if not data:
             return type("EmptyTable", (tables.Table,), {})
 
+        highlight_result_id = self.get_highlight_result_id()
+
+        # Build column attributes
         attrs = {}
         for row in data:
             for key in row:
                 if key in attrs:
                     continue
                 attrs[key] = self.get_column(key)
+
+        # Define row class factory to add highlighting
+        def _row_class_factory(record):
+            class_defaults = settings.DJANGO_TABLES2_ROW_ATTRS["class"]
+            if highlight_result_id and highlight_result_id == record.get("id"):
+                return f"{class_defaults} bg-yellow-100 dark:bg-yellow-900/20"
+            return class_defaults
+
+        # Create Meta class with row_attrs for highlighting and data-result-id
+        Meta = type(
+            "Meta",
+            (),
+            {
+                "row_attrs": {
+                    **settings.DJANGO_TABLES2_ROW_ATTRS,
+                    "class": _row_class_factory,
+                    "data-result-id": lambda record: record.get("id", ""),
+                },
+            },
+        )
+        attrs["Meta"] = Meta
 
         return type("EvaluationResultTableTable", (tables.Table,), attrs)
 
@@ -286,6 +352,20 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
 
         header = key.replace("_", " ").title()
         match key:
+            case "#":
+                return columns.TemplateColumn(
+                    template_name="evaluations/evaluation_result_id_column.html",
+                    verbose_name=header,
+                    orderable=False,
+                    extra_context={
+                        "team_slug": self.kwargs["team_slug"],
+                        "evaluation_pk": self.kwargs["evaluation_pk"],
+                        "evaluation_run_pk": self.kwargs["evaluation_run_pk"],
+                    },
+                )
+            case "id":
+                # Hide the id column but keep it in the data
+                return columns.Column(verbose_name=header, visible=False)
             case "session":
                 return actions.ActionsColumn(
                     verbose_name=header,

@@ -23,7 +23,7 @@ describe('All Application Pages', () => {
   describe('Assistants', () => {
     it('assistants page loads', () => {
       cy.visit(`/a/${teamSlug}/assistants/`)
-      cy.pageTitleEquals('OpenAI Assistant')
+      cy.pageTitleEquals('OpenAI Assistants')
     })
 
     it('assistants page has table and new button', () => {

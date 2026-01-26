@@ -7,15 +7,17 @@ from pydantic_core import ValidationError
 
 from apps.chat.conversation import COMPRESSION_MARKER
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
-from apps.pipelines.nodes.nodes import (
-    HistoryMixin,
-    MaxHistoryLengthHistoryMiddleware,
-    OptionalInt,
+from apps.pipelines.nodes.history_middleware import MaxHistoryLengthHistoryMiddleware
+from apps.pipelines.nodes.mixins import (
     PipelineChatHistory,
-    SendEmail,
-    StructuredDataSchemaValidatorMixin,
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
+)
+from apps.pipelines.nodes.nodes import (
+    HistoryMixin,
+    OptionalInt,
+    SendEmail,
+    StructuredDataSchemaValidatorMixin,
 )
 
 
@@ -83,7 +85,7 @@ class TestHistoryNode(HistoryMixin):
 @pytest.fixture(autouse=True)
 def mock_llm_provider_model():
     # Mock get_llm_provider_model for all tests
-    with patch("apps.pipelines.nodes.nodes.get_llm_provider_model") as get_llm_provider_model:
+    with patch("apps.pipelines.nodes.mixins.get_llm_provider_model") as get_llm_provider_model:
         get_llm_provider_model.return_value = Mock(name="non-existing-model", max_token_limit=1000, deprecated=False)
         yield get_llm_provider_model
 
@@ -121,7 +123,9 @@ class TestHistoryMixin:
         result = node.get_history(session)
 
         assert result == ["session-history"]
-        session.chat.get_langchain_messages_until_marker.assert_called_once_with(marker=node.get_history_mode())
+        session.chat.get_langchain_messages_until_marker.assert_called_once_with(
+            marker=node.get_history_mode(), exclude_message_id=None
+        )
         pipeline_history.get.assert_not_called()
 
     def test_get_history_uses_pipeline_history_when_configured(self, history_node_factory):
@@ -153,7 +157,7 @@ class TestHistoryMixin:
             history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
         )
 
-        with patch("apps.pipelines.nodes.nodes.ChatMessage") as mock_chat_message_class:
+        with patch("apps.pipelines.nodes.mixins.ChatMessage") as mock_chat_message_class:
             mock_message = Mock(metadata={}, save=Mock())
             mock_chat_message_class.objects.get.return_value = mock_message
 
@@ -168,7 +172,7 @@ class TestHistoryMixin:
             history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
         )
 
-        with patch("apps.pipelines.nodes.nodes.PipelineChatMessages") as mock_pipeline_chat_message_class:
+        with patch("apps.pipelines.nodes.mixins.PipelineChatMessages") as mock_pipeline_chat_message_class:
             queryset_mock = Mock()
             mock_pipeline_chat_message_class.objects.filter.return_value = queryset_mock
 
@@ -181,7 +185,7 @@ class TestHistoryMixin:
             history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
         )
 
-        with patch("apps.pipelines.nodes.nodes.ChatMessage") as mock_chat_message_class:
+        with patch("apps.pipelines.nodes.mixins.ChatMessage") as mock_chat_message_class:
             mock_message = Mock(metadata={}, save=Mock())
             mock_chat_message_class.objects.get.return_value = mock_message
 
@@ -195,7 +199,7 @@ class TestHistoryMixin:
             history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
         )
 
-        with patch("apps.pipelines.nodes.nodes.PipelineChatMessages") as mock_pipeline_chat_message_class:
+        with patch("apps.pipelines.nodes.mixins.PipelineChatMessages") as mock_pipeline_chat_message_class:
             queryset_mock = Mock()
             mock_pipeline_chat_message_class.objects.filter.return_value = queryset_mock
 
@@ -222,8 +226,8 @@ class TestHistoryMixin:
         middleware = node.build_history_middleware(session, SystemMessage(content="system"))
         assert isinstance(middleware, MaxHistoryLengthHistoryMiddleware)
 
-    @patch("apps.pipelines.nodes.nodes.LLMResponseMixin.get_chat_model")
-    @patch("apps.pipelines.nodes.nodes.count_tokens_approximately")
+    @patch("apps.pipelines.nodes.mixins.LLMResponseMixin.get_chat_model")
+    @patch("apps.pipelines.nodes.mixins.count_tokens_approximately")
     def test_build_history_middleware_uses_summarize_mode(
         self,
         count_tokens,
@@ -246,8 +250,8 @@ class TestHistoryMixin:
         assert isinstance(middleware, SummarizeHistoryMiddleware)
         count_tokens.assert_called_once_with([system_message])
 
-    @patch("apps.pipelines.nodes.nodes.LLMResponseMixin.get_chat_model")
-    @patch("apps.pipelines.nodes.nodes.count_tokens_approximately")
+    @patch("apps.pipelines.nodes.mixins.LLMResponseMixin.get_chat_model")
+    @patch("apps.pipelines.nodes.mixins.count_tokens_approximately")
     def test_build_history_middleware_uses_truncate_tokens_mode(
         self,
         count_tokens,

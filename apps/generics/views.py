@@ -129,7 +129,7 @@ def render_session_details(
             ),
             "participant_id": session.participant_id,
             "has_conversation_end_events": StaticTrigger.objects.filter(
-                experiment=experiment, type=StaticTriggerType.CONVERSATION_END, is_active=True
+                experiment=experiment, type__in=StaticTriggerType.end_conversation_types(), is_active=True
             ).exists(),
         },
     )

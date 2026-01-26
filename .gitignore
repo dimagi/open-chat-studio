@@ -15,6 +15,7 @@ docs/_build
 _dist/
 .env
 .env.docker
+.env.integration
 .env.production
 .DS_Store
 .direnv

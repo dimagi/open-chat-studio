@@ -11,9 +11,9 @@ from apps.service_providers.llm_service.model_parameters import (
     ClaudeHaikuLatestParameters,
     ClaudeOpus4_20250514Parameters,
     GPT5Parameters,
+    GPT5ProParameters,
     GPT51Parameters,
     GPT52Parameters,
-    GPT5ProParameters,
     OpenAIReasoningParameters,
 )
 from apps.utils.deletion import get_related_objects, get_related_pipelines_queryset
@@ -38,26 +38,21 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
         Model("o3", 200000, parameters=OpenAIReasoningParameters),
         Model("o3-mini", 200000, parameters=OpenAIReasoningParameters),
+        Model("gpt-5.1", k(400), parameters=GPT51Parameters),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
         Model("gpt-4.1-nano", 1000000),
         Model("gpt-4o-mini", 128000),
         Model("gpt-4o", 128000),
-        Model("gpt-4", k(8), deprecated=True),
-        Model("gpt-4-32k", 32768, deprecated=True),
-        Model("gpt-35-turbo", 16385),
-        Model("gpt-35-turbo-16k", 16384, deprecated=True),
     ],
     "anthropic": [
+        Model("claude-sonnet-4-5-20250929", k(200), is_default=True, parameters=AnthropicReasoningParameters),
+        Model("claude-haiku-4-5-20251001", k(200), parameters=AnthropicReasoningParameters),
+        Model("claude-opus-4-5-20251101", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-sonnet-4-20250514", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-opus-4-20250514", k(200), is_translation_default=True, parameters=ClaudeOpus4_20250514Parameters),
-        Model("claude-3-7-sonnet-20250219", k(200), parameters=AnthropicNonReasoningParameters),
-        Model("claude-3-5-sonnet-latest", k(200), parameters=AnthropicNonReasoningParameters),
-        Model("claude-3-5-haiku-latest", k(200), is_default=True, parameters=ClaudeHaikuLatestParameters),
-        Model("claude-3-opus-latest", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
-        Model("claude-2.0", k(100), deprecated=True, parameters=AnthropicNonReasoningParameters),
-        Model("claude-2.1", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
-        Model("claude-instant-1.2", k(100), deprecated=True, parameters=AnthropicNonReasoningParameters),
+        Model("claude-3-7-sonnet-20250219", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
+        Model("claude-3-5-haiku-latest", k(200), deprecated=True, parameters=ClaudeHaikuLatestParameters),
     ],
     "openai": [
         Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
@@ -69,9 +64,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("o3-mini", 128000, parameters=OpenAIReasoningParameters),
         Model("gpt-4o-mini", 128000),
         Model("gpt-4o", 128000),
-        Model("chatgpt-4o-latest", 128000),
-        Model("o1-preview", 128000, deprecated=True),
-        Model("o1-mini", 128000, deprecated=True),
+        Model("chatgpt-4o-latest", 128000, deprecated=True),
         Model("gpt-4", k(8)),
         Model("gpt-4-turbo", 128000),
         Model("gpt-4-turbo-preview", 128000),
@@ -79,7 +72,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4-1106-preview", 128000, deprecated=True),
         Model("gpt-4-0613", k(8), deprecated=True),
         Model("gpt-3.5-turbo", k(16)),
-        Model("gpt-3.5-turbo-1106", k(16)),
+        Model("gpt-3.5-turbo-1106", k(16), deprecated=True),
         Model("gpt-5", k(400), parameters=GPT5Parameters),
         Model("gpt-5.1", k(400), parameters=GPT51Parameters),
         Model("gpt-5.2", k(400), parameters=GPT52Parameters),
@@ -89,32 +82,17 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5-pro", k(400), parameters=GPT5ProParameters),
     ],
     "groq": [
-        Model("whisper-large-v3", k(8)),
         Model("whisper-large-v3-turbo", k(8)),
         Model("gemma2-9b-it", k(8)),
         Model("gemma-7b-it", k(8), deprecated=True),
-        Model("llama3-groq-70b-8192-tool-use-preview", k(8), deprecated=True),
-        Model("llama3-groq-8b-8192-tool-use-preview", k(8), deprecated=True),
-        Model("llama-3.1-70b-versatile", k(128), is_default=True, is_translation_default=True),
+        Model("llama-3.3-70b-versatile", k(128), is_default=True, is_translation_default=True),
         Model("llama-3.1-8b-instant", k(128)),
-        Model("llama-3.2-1b-preview", k(128), deprecated=True),
-        Model("llama-3.2-3b-preview", k(128), deprecated=True),
-        Model("llama-3.2-11b-vision-preview", k(128), deprecated=True),
-        Model("llama-3.2-90b-vision-preview", k(128), deprecated=True),
-        Model("llama-guard-3-8b", k(8)),
-        Model("llama3-70b-8192", k(8)),
-        Model("llama3-8b-8192", k(8)),
-        Model("mixtral-8x7b-32768", 32768),
     ],
     "perplexity": [
         Model("sonar", 128000, is_default=True),
         Model("sonar-pro", 200000),
-        Model("sonar-reasoning", 128000, is_translation_default=True),
-        Model("sonar-reasoning-pro", 128000),
+        Model("sonar-reasoning-pro", 128000, is_translation_default=True),
         Model("sonar-deep-research", 128000),
-        Model("llama-3.1-sonar-small-128k-online", 127072, deprecated=True),
-        Model("llama-3.1-sonar-large-128k-online", 127072, deprecated=True),
-        Model("llama-3.1-sonar-huge-128k-online", 127072, deprecated=True),
         Model("llama-3.1-sonar-small-128k-chat", 127072),
         Model("llama-3.1-sonar-large-128k-chat", 127072),
         Model("llama-3.1-8b-instruct", 131072),
@@ -127,10 +105,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     "google": [
         Model("gemini-2.5-flash", 1048576, is_default=True),
         Model("gemini-2.5-pro", 1048576, is_translation_default=True),
-        Model("gemini-2.0-flash", 1048576),
-        Model("gemini-1.5-flash", 1048576),
-        Model("gemini-1.5-flash-8b", 1048576),
-        Model("gemini-1.5-pro", 2097152),
+        Model("gemini-2.0-flash", 1048576, deprecated=True),
     ],
     "google_vertex_ai": [
         Model("gemini-3-pro-preview", 1048576),
@@ -139,6 +114,49 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-2.5-flash-lite", 1048576),
     ],
 }
+
+
+# This list of models is used by the `remove_deprecated_models` command. It is safe to clear the list after
+# the command has been run successfully in all environments. Any models that have been in the `main` branch
+# for more than 1 month are safe to remove.
+DELETED_MODELS = [
+    # Azure
+    ("azure", "gpt-4"),
+    ("azure", "gpt-4-32k"),
+    ("azure", "gpt-35-turbo"),
+    ("azure", "gpt-35-turbo-16k"),
+    # Anthropic
+    ("anthropic", "claude-3-5-sonnet-latest"),
+    ("anthropic", "claude-3-opus-latest"),
+    ("anthropic", "claude-2.0"),
+    ("anthropic", "claude-2.1"),
+    ("anthropic", "claude-instant-1.2"),
+    # OpenAI
+    ("openai", "o1-preview"),
+    ("openai", "o1-mini"),
+    # Groq
+    ("groq", "whisper-large-v3"),
+    ("groq", "llama3-groq-70b-8192-tool-use-preview"),
+    ("groq", "llama3-groq-8b-8192-tool-use-preview"),
+    ("groq", "llama-3.1-70b-versatile"),
+    ("groq", "llama-3.2-1b-preview"),
+    ("groq", "llama-3.2-3b-preview"),
+    ("groq", "llama-3.2-11b-vision-preview"),
+    ("groq", "llama-3.2-90b-vision-preview"),
+    ("groq", "llama-guard-3-8b"),
+    ("groq", "llama3-70b-8192"),
+    ("groq", "llama3-8b-8192"),
+    ("groq", "mixtral-8x7b-32768"),
+    # Perplexity
+    ("perplexity", "sonar-reasoning"),
+    ("perplexity", "llama-3.1-sonar-small-128k-online"),
+    ("perplexity", "llama-3.1-sonar-large-128k-online"),
+    ("perplexity", "llama-3.1-sonar-huge-128k-online"),
+    # Google
+    ("google", "gemini-1.5-flash"),
+    ("google", "gemini-1.5-flash-8b"),
+    ("google", "gemini-1.5-pro"),
+]
 
 
 DEFAULT_EMBEDDING_PROVIDER_MODELS = {
@@ -242,22 +260,6 @@ def _update_llm_provider_models(LlmProviderModel):
                         name=model.name,
                         max_token_limit=model.token_limit,
                     )
-
-    # move any that are no longer in the list to be custom models
-    for key, provider_model in existing.items():
-        related_objects = get_related_objects(provider_model)
-        for obj in related_objects:
-            custom_model = _get_or_create_custom_model(obj, key, provider_model, existing_custom_by_team)
-            field = [f for f in obj._meta.fields if f.related_model == LlmProviderModel][0]
-            setattr(obj, field.attname, custom_model.id)
-            obj.save(update_fields=[field.name])
-
-        related_pipeline_nodes = get_related_pipelines_queryset(provider_model, "llm_provider_model_id")
-        for node in related_pipeline_nodes.select_related("pipeline").all():
-            custom_model = _get_or_create_custom_model(node.pipeline, key, provider_model, existing_custom_by_team)
-            _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", custom_model.id)
-
-        provider_model.delete()
 
     # replace existing custom models with the new global model and delete the custom models
     for key, model in created_models.items():

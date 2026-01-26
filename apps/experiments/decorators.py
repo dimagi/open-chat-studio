@@ -90,7 +90,7 @@ def verify_session_access_cookie(view):
         if request.user.is_authenticated:
             if request.experiment_session.participant.user_id == request.user.id:
                 return view(request, *args, **kwargs)
-            elif request.resolver_match.url_name in ["experiment_chat", "chatbot_chat"]:
+            elif request.resolver_match.url_name == "chatbot_chat":
                 # Authenticated users should only be able to access the chat UI for their own sessions
                 return redirect(
                     reverse(

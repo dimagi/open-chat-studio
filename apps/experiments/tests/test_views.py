@@ -10,8 +10,6 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.chat.channels import WebChannel
-from apps.chat.models import Chat
-from apps.experiments.forms import ExperimentForm
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
@@ -21,7 +19,6 @@ from apps.experiments.models import (
 )
 from apps.experiments.views.experiment import _verify_user_or_start_session
 from apps.teams.backends import add_user_to_team
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
     ConsentFormFactory,
     ExperimentFactory,
@@ -61,44 +58,6 @@ def test_create_experiment_creates_first_version(client, team_with_users):
     assert working_verison is not None
     assert versioned_exp is not None
     assert versioned_exp.is_default_version
-
-
-@pytest.mark.parametrize(
-    ("with_assistant", "with_prompt", "with_llm_provider", "with_llm_model", "errors"),
-    [
-        (True, False, False, False, {}),
-        (False, True, True, True, {}),
-        (False, False, True, True, {"prompt_text"}),
-        (False, True, False, True, {"llm_provider"}),
-        (False, True, True, False, {"llm_provider_model"}),
-    ],
-)
-def test_experiment_form_with_assistants(
-    with_assistant, with_prompt, with_llm_provider, with_llm_model, errors, db, team_with_users
-):
-    assistant = OpenAiAssistantFactory(team=team_with_users)
-    request = mock.Mock()
-    request.team = team_with_users
-    llm_provider = LlmProviderFactory(team=team_with_users)
-    llm_provider_model = LlmProviderModelFactory(team=team_with_users, type=llm_provider.type)
-    form = ExperimentForm(
-        request,
-        data={
-            "name": "some name",
-            "type": "assistant" if with_assistant else "llm",
-            "assistant": assistant.id if with_assistant else None,
-            "prompt_text": "text" if with_prompt else None,
-            "llm_provider": llm_provider.id if with_llm_provider else None,
-            "llm_provider_model": llm_provider_model.id if with_llm_model else None,
-            "temperature": 0.7,
-            "max_token_limit": 10,
-            "consent_form": ConsentFormFactory(team=team_with_users).id,
-            "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
-        },
-    )
-    assert form.is_valid() == bool(not errors), form.errors
-    for error in errors:
-        assert error in form.errors
 
 
 @pytest.mark.parametrize(
@@ -372,30 +331,6 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
     assert ci_resource.files.filter(name="ci.text").exists()
     fs_resource = session.chat.attachments.get(tool_type="file_search")
     assert fs_resource.files.filter(name="fs.text").exists()
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("version_number", [1, 2])
-def test_start_authed_web_session_with_version(version_number, client):
-    team = TeamWithUsersFactory()
-    working_experiment = ExperimentFactory(team=team)
-    working_experiment.create_new_version()
-
-    client.force_login(working_experiment.team.members.first())
-    url = reverse(
-        "experiments:start_authed_web_session",
-        kwargs={
-            "team_slug": working_experiment.team.slug,
-            "experiment_id": working_experiment.id,
-            "version_number": version_number,
-        },
-    )
-
-    response = client.post(url, data={})
-    assert response.status_code == 302
-    assert working_experiment.sessions.count() == 1
-    expected_chat_metadata = {Chat.MetadataKeys.EXPERIMENT_VERSION: version_number}
-    assert working_experiment.sessions.first().chat.metadata == expected_chat_metadata
 
 
 @pytest.mark.django_db()

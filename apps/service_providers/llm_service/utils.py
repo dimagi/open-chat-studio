@@ -1,3 +1,4 @@
+import logging
 import re
 from io import BytesIO
 
@@ -7,6 +8,8 @@ from langchain_core.messages import HumanMessage
 
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
+
+logger = logging.getLogger("ocs.llm_service")
 
 
 def detangle_file_ids(file_ids: list[str]) -> list[str]:
@@ -143,7 +146,7 @@ def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
                     "mime_type": mime_type,
                 }
             )
-        else:
+        elif mime_type == "application/pdf":
             parts.append(
                 {
                     "type": "file",
@@ -153,4 +156,31 @@ def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
                     "filename": att.name,
                 }
             )
+        else:
+            # Attempt to convert other doc types to text since LLM APIs
+            # do not natively support these formats
+            text_content = _convert_attachment_to_text(att)
+            if text_content:
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": f'<document filename="{att.name}">\n{text_content}\n</document>',
+                    }
+                )
     return HumanMessage(content=parts)
+
+
+def _convert_attachment_to_text(attachment) -> str | None:
+    """Convert an attachment to text using MarkItDown.
+
+    Args:
+        attachment: The attachment object to convert
+
+    Returns:
+        The text content of the attachment, or None if conversion failed
+    """
+    try:
+        return attachment.read_text()
+    except Exception:
+        logger.exception("Failed to convert attachment to text")
+        return "Error: Unable to read document"

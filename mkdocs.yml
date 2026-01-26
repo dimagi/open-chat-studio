@@ -67,12 +67,13 @@ nav:
   - Architecture:
     - Overview: architecture/index.md
   - Developer Guides:
-    - developer_guides/index.md
     - Processes:
       - User Docs: developer_guides/user_docs.md
       - Deployment: developer_guides/deployment.md
       - AI Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
+      - Data Migrations: developer_guides/custom_migrations.md
+      - developer_guides/deleting_models.md
     - Code Systems:
       - Common Practises: developer_guides/common_practises.md
       - Object Versioning: developer_guides/versioning.md
@@ -81,6 +82,8 @@ nav:
       - Dynamic Filters: developer_guides/dynamic_filters.md
       - Slack Channel Integration: developer_guides/slack_channel_integration.md
       - Index Managers: developer_guides/index_managers.md
+    - Testing:
+      - Integration Testing: developer_guides/integration_testing.md
   - Admin Guides:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md

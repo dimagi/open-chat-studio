@@ -62,15 +62,12 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     "allauth",  # allauth account/registration management
     "allauth.account",
+    "allauth.mfa",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.microsoft",
     "django_htmx",
     "django_browser_reload",
-    "django_otp",
-    "django_otp.plugins.otp_totp",
-    "django_otp.plugins.otp_static",
     "django_watchfiles",
-    "allauth_2fa",
     "rest_framework",
     "drf_spectacular",
     "rest_framework_api_key",
@@ -146,7 +143,6 @@ MIDDLEWARE = list(
             "django.middleware.common.CommonMiddleware",
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
-            "django_otp.middleware.OTPMiddleware",
             "django_htmx.middleware.HtmxMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
@@ -277,13 +273,11 @@ if SIGNUP_ENABLED:
     ACCOUNT_ADAPTER = "apps.teams.adapter.AcceptInvitationAdapter"
 else:
     ACCOUNT_ADAPTER = "apps.teams.adapter.NoNewUsersAccountAdapter"
-ACCOUNT_AUTHENTICATION_METHOD = "email"
-ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*"]
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 ACCOUNT_CONFIRM_EMAIL_ON_GET = False
 ACCOUNT_UNIQUE_EMAIL = True
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE = False
 ACCOUNT_SESSION_REMEMBER = True
 ACCOUNT_LOGOUT_ON_GET = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
@@ -301,11 +295,14 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
+# Multi-Factor Authentication
+MFA_ADAPTER = "apps.users.adapter.MfaAdapter"
+MFA_RECOVERY_CODE_COUNT = 10
+MFA_TOTP_ISSUER = "Open Chat Studio"
+
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
 ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="optional")
-
-ALLAUTH_2FA_ALWAYS_REVEAL_BACKUP_TOKENS = False
 
 AUTHENTICATION_BACKENDS = (
     # check permissions exist (DEBUG only)
@@ -497,6 +494,10 @@ SCHEDULED_TASKS = {
         "task": "apps.web.tasks.cleanup_silk_data",
         "schedule": crontab(minute="0", hour="1"),
     },
+    "custom_actions.tasks.check_all_custom_actions_health": {
+        "task": "apps.custom_actions.tasks.check_all_custom_actions_health",
+        "schedule": crontab(minute="5"),
+    },
 }
 
 CACHES = {
@@ -629,8 +630,12 @@ DJANGO_TABLES2_ROW_ATTRS = {
         border-b border-base-300 hover:bg-base-200
         data-redirect-url:[&:not([data-redirect-url=''])]:hover:cursor-pointer
     """,
-    "id": lambda record: f"record-{record.id}",
-    "data-redirect-url": lambda record: record.get_absolute_url() if hasattr(record, "get_absolute_url") else "",
+    "id": lambda record: f"record-{record.get('id') if isinstance(record, dict) else record.id}",
+    "data-redirect-url": lambda record: (
+        record.get("get_absolute_url", lambda: "")()
+        if isinstance(record, dict)
+        else (record.get_absolute_url() if hasattr(record, "get_absolute_url") else "")
+    ),
 }
 
 # This is only used for development purposes
@@ -662,6 +667,8 @@ DOCUMENTATION_LINKS = {
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
     "migrate_from_assistant": "/how-to/assistants_migration/",
+    "events": "/concepts/events/",
+    "evals": "/concepts/evaluations/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
@@ -854,3 +861,6 @@ OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
 OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"
 OAUTH2_PROVIDER_GRANT_MODEL = "oauth.OAuth2Grant"
 OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth.OAuth2RefreshToken"
+
+# Pipeline settings
+RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_context"}

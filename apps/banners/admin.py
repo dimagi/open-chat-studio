@@ -16,14 +16,15 @@ class BannerAdmin(admin.ModelAdmin):
         "is_active",
         "status_display",
         "feature_flag_display",
+        "site",
     ]
-    list_filter = ["banner_type", "is_active", "location", "feature_flag"]
+    list_filter = ["banner_type", "is_active", "location", "feature_flag", "site"]
     search_fields = ["title", "message"]
     date_hierarchy = "end_date"
     list_editable = ["is_active", "location"]
 
     fieldsets = (
-        (None, {"fields": ("title", "message", "banner_type")}),
+        (None, {"fields": ("title", "message", "banner_type", "site")}),
         (
             "Location",
             {
