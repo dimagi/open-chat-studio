@@ -37,7 +37,7 @@ class CommCareConnectClient:
     @retry(
         wait=wait_exponential(multiplier=1, min=1, max=5),
         reraise=True,
-        retry=retry_if_exception_type(httpx.ConnectError),
+        retry=retry_if_exception_type((httpx.NetworkError, httpx.TimeoutException)),
         stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger, logging.INFO),
     )
