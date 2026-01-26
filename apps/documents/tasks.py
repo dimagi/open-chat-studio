@@ -1,12 +1,13 @@
 import contextlib
-import logging
 import zipfile
 from datetime import timedelta
 from io import BytesIO
 from itertools import groupby
 
 import openai
+import structlog
 from celery.app import shared_task
+from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
@@ -29,7 +30,7 @@ from apps.files.models import File, FilePurpose
 from apps.service_providers.models import LlmProvider
 from apps.utils.celery import TaskbadgerTaskWrapper
 
-logger = logging.getLogger("ocs.documents.tasks.link_files_to_index")
+logger = structlog.wrap_logger(get_task_logger("ocs.documents"))
 
 
 @shared_task(ignore_result=True)

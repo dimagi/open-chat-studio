@@ -1,7 +1,8 @@
-import logging
 import time
 
+import structlog
 from celery.app import shared_task
+from celery.utils.log import get_task_logger
 from django.core.files.base import ContentFile
 from django.utils import timezone
 from field_audit.models import AuditAction
@@ -19,7 +20,7 @@ from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
 
-logger = logging.getLogger("ocs.experiments")
+logger = structlog.wrap_logger(get_task_logger("ocs.experiments"))
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
@@ -141,20 +142,22 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
 
     # Create a history event. This isn't a deep copy this dictionary, but I think that's fine.
     history_event = data_dict
-    history_event["messages"].append({
-        "author": "Assistant",
-        "message": answer,
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        # The id field is used on the UI side. It just has to be unique
-        # The reason we're doing this is to mimic JS's Date.now() output,
-        # which we use when we add new messages on the UI side.
-        # It doens't acutally matter as long as the ID doesn't conflict.
-        # I prepended the character s to denote server-side and so that in
-        # the infinitely small case that timezones mean the server and client
-        # create some overlap it won't actually clash.
-        "id": f"s{int(time.time() * 1000)}",
-    })
+    history_event["messages"].append(
+        {
+            "author": "Assistant",
+            "message": answer,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            # The id field is used on the UI side. It just has to be unique
+            # The reason we're doing this is to mimic JS's Date.now() output,
+            # which we use when we add new messages on the UI side.
+            # It doens't acutally matter as long as the ID doesn't conflict.
+            # I prepended the character s to denote server-side and so that in
+            # the infinitely small case that timezones mean the server and client
+            # create some overlap it won't actually clash.
+            "id": f"s{int(time.time() * 1000)}",
+        }
+    )
     history_event |= {"preview": answer, "time": timezone.now().time().strftime("%H:%M")}
     PromptBuilderHistory.objects.create(team_id=team_id, owner=user, history=history_event)
     return {"message": answer, "input_tokens": input_tokens, "output_tokens": output_tokens}

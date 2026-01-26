@@ -88,7 +88,6 @@ THIRD_PARTY_APPS = [
     "template_partials",
     "silk",
     "oauth2_provider",
-    "django_structlog",
 ]
 
 PROJECT_APPS = [
@@ -137,7 +136,6 @@ MIDDLEWARE = list(
         [
             "corsheaders.middleware.CorsMiddleware",
             "django.middleware.security.SecurityMiddleware",
-            "django_structlog.middlewares.RequestMiddleware",
             "whitenoise.middleware.WhiteNoiseMiddleware",
             "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
             "django.contrib.sessions.middleware.SessionMiddleware",
@@ -626,7 +624,7 @@ LOGGING = {
             "()": structlog.stdlib.ProcessorFormatter,
             "processors": [
                 structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                structlog.dev.ConsoleRenderer(),
+                structlog.dev.ConsoleRenderer(sort_keys=False),
             ],
             "foreign_pre_chain": shared_processors,
         },
@@ -645,8 +643,7 @@ LOGGING = {
         "ocs": {"handlers": [HANDLER], "level": LOG_LEVEL, "propagate": IS_TESTING},
         "httpx": {"handlers": [HANDLER], "level": "WARN"},
         "slack_bolt": {"handlers": [HANDLER], "level": "DEBUG"},
-        "ocs.request": {"handlers": [HANDLER], "level": "INFO", "propagate": False},
-        "django_structlog": {"handlers": [HANDLER], "level": "INFO", "propagate": False},
+        "celery.app.trace": {"level": "INFO", "handlers": [HANDLER]},
     },
 }
 

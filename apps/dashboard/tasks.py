@@ -1,9 +1,9 @@
-import logging
-
+import structlog
 from celery import shared_task
+from celery.utils.log import get_task_logger
 from django.utils import timezone
 
-logger = logging.getLogger(__name__)
+logger = structlog.wrap_logger(get_task_logger("ocs.dashboard"))
 
 
 @shared_task(ignore_result=True)

@@ -1,5 +1,6 @@
 import os
 
+import structlog
 from celery import Celery, signals
 from celery.app import trace
 from django import db
@@ -18,14 +19,25 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 # Load task modules from all registered Django app configs.
 app.autodiscover_tasks()
 
-app.conf.result_expires = 86400  # expire results in redis in 1 day
-
+# don't log task result
 trace.LOG_SUCCESS = """\
 Task %(name)s[%(id)s] succeeded in %(runtime)ss\
 """
 
 worker_max_tasks_per_child = 100  # Restart worker periodically
 task_acks_late = True
+
+app.conf.update(
+    result_expires=86400,  # expire results in redis in 1 day
+    worker_hijack_root_logger=False,
+    worker_log_format="%(message)s",
+    worker_task_log_format="%(message)s",
+)
+
+
+@signals.task_prerun.connect
+def on_task_prerun(sender, task_id, task, args, kwargs, **_):
+    structlog.contextvars.bind_contextvars(task_id=task_id, task_name=task.name)
 
 
 def close_db_connection(sender, **kwargs):
