@@ -390,7 +390,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 # Check if provider has a limit on number of vector stores
                 try:
                     llm_provider = LlmProvider.objects.get(id=llm_provider_id)
-                    max_vector_stores = llm_provider.type_enum.value.max_vector_stores
+                    max_vector_stores = llm_provider.type_enum.max_vector_stores
                     if max_vector_stores and len(collections) > max_vector_stores:
                         raise PydanticCustomError(
                             "vectorstore_limit_exceeded",
