@@ -152,7 +152,6 @@ dev = [
     "pytest-xdist",
     "django-debug-toolbar>=5.2.0",
     "djlint>=1.36.4",
-    "responses"
 ]
 docs = [
     "mkdocs-material>=9.6.12",

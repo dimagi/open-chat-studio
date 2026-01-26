@@ -1,6 +1,6 @@
 import logging
 
-import requests
+import httpx
 from celery.app import shared_task
 from django.utils import timezone
 
@@ -41,7 +41,7 @@ def check_single_custom_action_health(action_id: int):
         return
 
     try:
-        response = requests.get(action.health_endpoint, timeout=HEALTH_CHECK_TIMEOUT)
+        response = httpx.get(action.health_endpoint, timeout=HEALTH_CHECK_TIMEOUT)
 
         # Consider 2xx status codes as "up"
         if 200 <= response.status_code < 300:
@@ -51,7 +51,7 @@ def check_single_custom_action_health(action_id: int):
             new_status = HealthCheckStatus.DOWN
             logger.warning(f"Health check failed for {action.name}: {response.status_code}")
 
-    except requests.exceptions.RequestException as e:
+    except httpx.RequestError as e:
         new_status = HealthCheckStatus.DOWN
         logger.warning(f"Health check error for {action.name}: {str(e)}")
 

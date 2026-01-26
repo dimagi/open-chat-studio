@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 import pytest
-import responses
 
 from apps.custom_actions.models import HealthCheckStatus
 from apps.custom_actions.tasks import check_all_custom_actions_health, check_single_custom_action_health
@@ -13,22 +12,13 @@ class TestHealthCheckTask:
     """Tests for the health check task."""
 
     @pytest.mark.parametrize(
-        ("response_kwargs", "expected_status", "description"),
+        ("status_code", "expected_status", "description"),
         [
-            (
-                {"status": 200, "json": {"status": "ok"}},
-                HealthCheckStatus.UP,
-                "successful health check",
-            ),
-            (
-                {"status": 500, "json": {"error": "Internal server error"}},
-                HealthCheckStatus.DOWN,
-                "bad status code",
-            ),
+            (200, HealthCheckStatus.UP, "successful health check"),
+            (500, HealthCheckStatus.DOWN, "bad status code"),
         ],
     )
-    @responses.activate
-    def test_health_check_status(self, response_kwargs, expected_status, description, team_with_users):
+    def test_health_check_status(self, status_code, expected_status, description, team_with_users, httpx_mock):
         """Test health check with various response scenarios."""
         custom_action_with_health = CustomActionFactory(
             team=team_with_users,
@@ -37,7 +27,7 @@ class TestHealthCheckTask:
         )
 
         # Mock the health check response
-        responses.add(responses.GET, "https://example.com/health", **response_kwargs)
+        httpx_mock.add_response(url="https://example.com/health", status_code=status_code, json={"status": "ok"})
 
         # Run the health check task
         check_single_custom_action_health(custom_action_with_health.id)
