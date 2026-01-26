@@ -5,6 +5,8 @@ from django.conf import settings
 from django.core.exceptions import MiddlewareNotUsed
 from django.utils.deprecation import MiddlewareMixin
 
+from apps.audit.middleware import get_audit_transaction_id
+
 logger = logging.getLogger("ocs.request")
 
 # Path prefixes for API-type requests (webhooks, REST API)
@@ -41,6 +43,7 @@ class LegacyDomainLoggingMiddleware(MiddlewareMixin):
         logger.info(
             "legacy_domain_request",
             extra={
+                "request_id": get_audit_transaction_id(request),
                 "host": request.get_host(),
                 "path": request.path,
                 "method": request.method,
