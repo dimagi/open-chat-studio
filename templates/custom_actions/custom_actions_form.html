@@ -1,0 +1,7 @@
+{% extends "generic/object_form.html" %}
+
+{% block pre_form %}
+    {% if form.instance.id %}
+        {% include "custom_actions/health_status_column.html" with record=form.instance %}
+    {% endif %}
+{% endblock pre_form %}

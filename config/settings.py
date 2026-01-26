@@ -494,6 +494,10 @@ SCHEDULED_TASKS = {
         "task": "apps.web.tasks.cleanup_silk_data",
         "schedule": crontab(minute="0", hour="1"),
     },
+    "custom_actions.tasks.check_all_custom_actions_health": {
+        "task": "apps.custom_actions.tasks.check_all_custom_actions_health",
+        "schedule": crontab(minute="5"),
+    },
 }
 
 CACHES = {
