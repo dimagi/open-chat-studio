@@ -74,56 +74,6 @@ class TestAssistantArchival:
         assert assistant.is_archived is True
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_archive_assistant_succeeds_with_released_related_experiment(self):
-        exp_v1 = ExperimentFactory()
-        assistant = OpenAiAssistantFactory()
-        exp_v2 = exp_v1.create_new_version()
-        exp_v2.assistant = assistant
-        exp_v2.is_default_version = False
-        exp_v2.save()
-        assert exp_v2.is_default_version is False
-        assert exp_v2.is_working_version is False
-        assistant.archive()
-        assistant.refresh_from_db()
-
-        assert assistant.is_archived is True  # archiving succeeded
-
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_assistant_archive_blocked_by_working_related_experiment(self):
-        assistant = OpenAiAssistantFactory()
-        experiment = ExperimentFactory(assistant=assistant)
-        experiment.save()
-
-        assert experiment.is_working_version is True
-        assert not assistant.archive()  # archiving blocked
-
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_assistant_archive_blocked_by_published_related_experiment(self):
-        assistant = OpenAiAssistantFactory()
-        exp_v1 = ExperimentFactory()
-        exp_v2 = exp_v1.create_new_version(make_default=True)
-        exp_v2.assistant = assistant
-        exp_v2.save()
-
-        assert not assistant.archive()  # archiving blocked
-
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_assistant_blocked_by_assistant_version_referenced_by_unpublished_related_experiment(self):
-        assistant = OpenAiAssistantFactory()
-        v2_assistant = assistant.create_new_version()
-        experiment = ExperimentFactory(assistant=v2_assistant)
-        experiment.save()
-
-        assert experiment.is_working_version is True
-
-        assert not assistant.archive()  # archiving failed
-        assert not v2_assistant.archive()  # archiving failed
-
-        experiment.archive()  # first archive related experiment through v2_assistant
-        assert assistant.archive()  # archiving successful
-        assert v2_assistant.archive()  # archiving successful
-
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_assistant_succeeds_with_unpublished_related_pipeline(self):
         pipeline = PipelineFactory()
         exp_v1 = ExperimentFactory(pipeline=pipeline)

@@ -494,6 +494,10 @@ SCHEDULED_TASKS = {
         "task": "apps.web.tasks.cleanup_silk_data",
         "schedule": crontab(minute="0", hour="1"),
     },
+    "custom_actions.tasks.check_all_custom_actions_health": {
+        "task": "apps.custom_actions.tasks.check_all_custom_actions_health",
+        "schedule": crontab(minute="5"),
+    },
 }
 
 CACHES = {
@@ -626,8 +630,12 @@ DJANGO_TABLES2_ROW_ATTRS = {
         border-b border-base-300 hover:bg-base-200
         data-redirect-url:[&:not([data-redirect-url=''])]:hover:cursor-pointer
     """,
-    "id": lambda record: f"record-{record.id}",
-    "data-redirect-url": lambda record: record.get_absolute_url() if hasattr(record, "get_absolute_url") else "",
+    "id": lambda record: f"record-{record.get('id') if isinstance(record, dict) else record.id}",
+    "data-redirect-url": lambda record: (
+        record.get("get_absolute_url", lambda: "")()
+        if isinstance(record, dict)
+        else (record.get_absolute_url() if hasattr(record, "get_absolute_url") else "")
+    ),
 }
 
 # This is only used for development purposes
@@ -659,6 +667,8 @@ DOCUMENTATION_LINKS = {
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
     "migrate_from_assistant": "/how-to/assistants_migration/",
+    "events": "/concepts/events/",
+    "evals": "/concepts/evaluations/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
@@ -851,3 +861,6 @@ OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
 OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"
 OAUTH2_PROVIDER_GRANT_MODEL = "oauth.OAuth2Grant"
 OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth.OAuth2RefreshToken"
+
+# Pipeline settings
+RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_context"}

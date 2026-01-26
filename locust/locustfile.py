@@ -5,9 +5,9 @@ import time
 from collections import defaultdict
 
 from bs4 import BeautifulSoup
+from locust.exception import InterruptTaskSet
 
 from locust import HttpUser, between, events, run_single_user, task
-from locust.exception import InterruptTaskSet
 
 
 @events.init_command_line_parser.add_listener

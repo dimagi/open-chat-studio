@@ -1,9 +1,9 @@
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 
 
-class Proxy(Generic[T]):
+class Proxy[T]:
     """Simple proxy object that forwards all attribute access to the target object."""
 
     def __init__(self, target: T) -> None:

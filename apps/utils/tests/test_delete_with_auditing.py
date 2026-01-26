@@ -14,8 +14,8 @@ from apps.utils.factories.team import TeamFactory
 @pytest.mark.parametrize(
     ("obj_name", "delete_events", "update_events", "expected_stats"),
     [
-        ("b1", ["Bot b1"], [], {"Bot": 1}),
-        ("t1", ["Tool t1"], [], {"Tool": 1, "Param": 2}),
+        ("b1", ["Bot b1"], [], {"Bot": 1, "Bot_tools": 2}),
+        ("t1", ["Tool t1"], [], {"Tool": 1, "Param": 2, "Bot_tools": 2}),
         ("c1", ["Collection c1", "Bot b1", "Bot b2"], ["Tool-collection"], {"Collection": 1, "Bot": 2, "Bot_tools": 3}),
         ("c2", ["Collection c2", "Bot b3"], ["Tool-collection"], {"Collection": 1, "Bot": 1}),
     ],

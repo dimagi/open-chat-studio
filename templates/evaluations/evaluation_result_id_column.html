@@ -1,0 +1,17 @@
+{% load django_tables2 %}
+{% url 'evaluations:evaluation_results_home' team_slug evaluation_pk evaluation_run_pk as result_path %}
+<div class="flex items-center gap-1">
+  <span>{{ value }}</span>
+  <a href="{{ result_path }}?result_id={{ record.id }}"
+     class="text-primary hover:text-primary-focus"
+     title="Link to this result"
+     target="_blank"
+     rel="noopener noreferrer">
+    <i class="fa-solid fa-external-link"></i>
+  </a>
+  <button type="button" class="btn btn-ghost btn-xs" onclick="SiteJS.app.copyToClipboard(this, 'copy-result-{{ record.id }}')"
+        title="Copy link to clipboard">
+    <input id="copy-result-{{ record.id }}" type="hidden" value="{{ request.scheme }}://{{ request.get_host }}{{ result_path }}?result_id={{ record.id }}"/>
+    <i class="fa-regular fa-copy"></i>
+  </button>
+</div>

@@ -23,6 +23,12 @@ from apps.utils.models import BaseModel
 log = logging.getLogger("ocs.custom_actions")
 
 
+class HealthCheckStatus(models.TextChoices):
+    UNKNOWN = "unknown", "Unknown"
+    UP = "up", "Up"
+    DOWN = "down", "Down"
+
+
 @audit_fields("team", "name", "prompt", "api_schema", audit_special_queryset_writes=True)
 class CustomAction(BaseTeamModel):
     objects = AuditingManager()
@@ -40,6 +46,13 @@ class CustomAction(BaseTeamModel):
     )
     _operations = models.JSONField(default=list)
     allowed_operations = ArrayField(models.CharField(max_length=255), default=list)
+    healthcheck_path = models.CharField(blank=True, help_text="Optional health check endpoint", default="")
+    health_status = models.CharField(
+        max_length=20,
+        choices=HealthCheckStatus.choices,
+        default=HealthCheckStatus.UNKNOWN,
+    )
+    last_health_check = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("name",)
@@ -47,6 +60,13 @@ class CustomAction(BaseTeamModel):
     @property
     def operations(self) -> list[APIOperationDetails]:
         return [APIOperationDetails(**op) for op in self._operations]
+
+    @property
+    def health_endpoint(self) -> str | None:
+        if self.healthcheck_path:
+            path = self.healthcheck_path.lstrip("/")
+            root = self.server_url.rstrip("/")
+            return root + "/" + path
 
     @operations.setter
     def operations(self, value: list[APIOperationDetails]):
@@ -72,6 +92,36 @@ class CustomAction(BaseTeamModel):
 
     def get_operations_by_id(self):
         return {op.operation_id: op for op in self.operations}
+
+    def detect_health_endpoint_from_spec(self) -> str | None:
+        """
+        Attempt to detect a health endpoint from the API schema.
+
+        Searches for common health check endpoint patterns in the OpenAPI spec.
+        Patterns are checked in priority order (most common first):
+        - /health - Standard health check endpoint
+        - /healthz - Kubernetes-style health check
+        - /healthcheck - Alternative common pattern
+        - /api/health - Namespaced health endpoint
+        - /status - General status endpoint
+        - /_health - Internal health check (often used in microservices)
+
+        Returns:
+            The full URL to the health endpoint if found, None otherwise.
+        """
+        if not self.api_schema or not self.server_url:
+            return None
+
+        healthcheck_paths = ["/health", "/healthz", "/healthcheck", "/api/health", "/status", "/_health"]
+
+        paths = self.api_schema.get("paths", {})
+        for healthcheck_path in healthcheck_paths:
+            if healthcheck_path in paths:
+                # Check if it has a GET method
+                if "get" in paths[healthcheck_path]:
+                    return healthcheck_path
+
+        return None
 
 
 class CustomActionOperationManager(VersionsObjectManagerMixin, models.Manager):

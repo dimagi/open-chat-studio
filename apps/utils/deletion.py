@@ -45,11 +45,6 @@ def delete_object_with_auditing_of_related_objects(obj):
             if model._meta.auto_created:
                 continue
 
-            if len(instances) == 1:
-                list(instances)[0].delete()
-                counter[model._meta.label] += 1
-                continue
-
             audit_kwargs = {}
             if model in get_audited_models() and isinstance(model._default_manager, AuditingManager):
                 audit_kwargs["audit_action"] = AuditAction.AUDIT
@@ -208,7 +203,7 @@ def has_related_objects(instance, pipeline_param_key: str | None = None) -> bool
     return any(queryset.exists() for queryset in _get_related_objects_querysets(instance, pipeline_param_key))
 
 
-def _get_related_objects_querysets(instance, pipeline_param_key: str | None = None) -> Generator[Any | None, Any, None]:
+def _get_related_objects_querysets(instance, pipeline_param_key: str | None = None) -> Generator[Any | None, Any]:
     for related in get_candidate_relations_to_delete(instance._meta):
         related_objects = getattr(instance, related.get_accessor_name(), None)
         if related_objects is not None:

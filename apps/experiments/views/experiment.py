@@ -50,6 +50,7 @@ from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
     EventLogStatusChoices,
     StaticTrigger,
+    StaticTriggerType,
     TimeoutTrigger,
 )
 from apps.events.tables import (
@@ -175,8 +176,6 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
     if active_tab == "experiments":
         if pipeline := experiment.pipeline:
             bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
-        elif assistant := experiment.assistant:
-            bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
 
     context = {
         "active_tab": active_tab,
@@ -933,7 +932,7 @@ def redirect_to_messages_view(request, session):
 def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     experiment_session = request.experiment_session
     experiment_session.update_status(SessionStatus.PENDING_REVIEW, commit=False)
-    experiment_session.end(commit=True)
+    experiment_session.end(commit=True, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
     return HttpResponseRedirect(reverse("experiments:experiment_review", args=[team_slug, experiment_id, session_id]))
 
 

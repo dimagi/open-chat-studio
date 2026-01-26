@@ -26,6 +26,7 @@ from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
+from apps.events.models import StaticTriggerType
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.filters import (
@@ -388,7 +389,7 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequir
             messages.error(self.request, "Version creation is already in progress.")
             return HttpResponseRedirect(self.get_success_url())
 
-        error_msg = self._check_pipleline_and_assistant_for_errors()
+        error_msg = self._check_pipleline_for_errors()
 
         if error_msg:
             messages.error(self.request, error_msg)
@@ -403,37 +404,14 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequir
 
         return HttpResponseRedirect(self.get_success_url())
 
-    def _check_pipleline_and_assistant_for_errors(self) -> str:
-        """Checks if the pipeline or assistant has errors before creating a new version."""
-        from apps.assistants.sync import OpenAiSyncError
-
+    def _check_pipleline_for_errors(self) -> str | None:
+        """Checks if the pipeline has errors before creating a new version."""
         experiment = self.object
-
-        try:
-            if self._is_assistant_out_of_sync(experiment):
-                return "Assistant is out of sync with OpenAI. Please update the assistant first."
-        except OpenAiSyncError as e:
-            return str(e)
-
         if pipeline := experiment.pipeline:
             errors = pipeline.validate()
             if errors:
                 return "Unable to create a new version when the pipeline has errors"
-
-    def _is_assistant_out_of_sync(self, experiment: Experiment) -> bool:
-        from apps.assistants.sync import get_diff_with_openai_assistant, get_out_of_sync_files
-
-        if not experiment.assistant:
-            return False
-
-        if not experiment.assistant.assistant_id:
-            return True
-
-        if len(get_diff_with_openai_assistant(experiment.assistant)) > 0:
-            return True
-
-        files_missing_local, files_missing_remote = get_out_of_sync_files(experiment.assistant)
-        return bool(files_missing_local or files_missing_remote)
+        return None
 
     def get_success_url(self):
         url = reverse(
@@ -528,8 +506,7 @@ def end_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
         external_id=session_id,
         team=request.team,
     )
-    propagate_event = request.POST.get("fire_end_event") == "on"
-    experiment_session.end(propagate=propagate_event)
+    _end_session_from_request(experiment_session, request)
     messages.success(request, "Session ended")
     return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
 
@@ -550,8 +527,7 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
         messages.error(request, "Cannot create a new session from a web session.")
         return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
 
-    propagate_event = request.POST.get("fire_end_event") == "on"
-    old_session.end(propagate=propagate_event)
+    _end_session_from_request(old_session, request)
 
     experiment = old_session.experiment
     participant = old_session.participant
@@ -570,6 +546,13 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
 
     messages.success(request, "New session created")
     return redirect("chatbots:chatbot_session_view", team_slug, experiment.public_id, new_session.external_id)
+
+
+def _end_session_from_request(session: ExperimentSession, request) -> None:
+    end_kwargs = {}
+    if request.POST.get("fire_end_event") == "on":
+        end_kwargs["trigger_type"] = StaticTriggerType.CONVERSATION_END_MANUALLY
+    session.end(**end_kwargs)
 
 
 @login_and_team_required

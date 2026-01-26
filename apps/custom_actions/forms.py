@@ -42,11 +42,28 @@ class CustomActionForm(forms.ModelForm):
         label="Auth",
         help_text="Select an authentication to use for this action.",
     )
+    healthcheck_path = forms.CharField(
+        required=False,
+        label="Health Check Path",
+        help_text=(
+            "Optional endpoint to check server health status. If left blank, will auto-detect from API schema if "
+            "available (e.g., /health, /healthz)."
+        ),
+    )
     allowed_operations = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, required=False)
 
     class Meta:
         model = CustomAction
-        fields = ("name", "description", "auth_provider", "prompt", "server_url", "api_schema", "allowed_operations")
+        fields = (
+            "name",
+            "description",
+            "auth_provider",
+            "prompt",
+            "server_url",
+            "healthcheck_path",
+            "api_schema",
+            "allowed_operations",
+        )
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -81,14 +98,24 @@ class CustomActionForm(forms.ModelForm):
             return
 
         schema = self.cleaned_data.get("api_schema")
+        server_url = self.cleaned_data.get("server_url")
         operations = self.cleaned_data.get("allowed_operations")
-        if schema is None or operations is None:
-            return self.cleaned_data
 
-        server_url = self.cleaned_data["server_url"]
-        validate_api_schema_full(operations, schema, server_url, self.url_validator)
+        # Auto-detect health endpoint from API spec if not manually provided
+        healthcheck_path = self.cleaned_data.get("healthcheck_path")
+        if not healthcheck_path and schema and server_url:
+            # Create a temporary instance to use the detection method
+            temp_action = CustomAction(api_schema=schema, server_url=server_url)
+            detected_endpoint = temp_action.detect_health_endpoint_from_spec()
+            if detected_endpoint:
+                self.cleaned_data["healthcheck_path"] = detected_endpoint
 
-        return {**self.cleaned_data, "allowed_operations": operations}
+        # Validate operations if present (for existing instances)
+        if schema is not None and operations is not None:
+            validate_api_schema_full(operations, schema, server_url, self.url_validator)
+            return {**self.cleaned_data, "allowed_operations": operations}
+
+        return self.cleaned_data
 
     @cached_property
     def url_validator(self):
@@ -120,9 +147,9 @@ def validate_api_schema_full(operations, schema, server_url, url_validator):
     operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
     invalid_operations = set(operations) - set(operations_by_id)
     if invalid_operations:
-        raise forms.ValidationError(
-            {"allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"}
-        )
+        raise forms.ValidationError({
+            "allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"
+        })
     for op_id in operations:
         op = operations_by_id[op_id]
 

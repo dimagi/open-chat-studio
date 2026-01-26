@@ -14,6 +14,6 @@ def get_assistant_tool_options():
     ]
 
 
-def chunk_list(list_: list, chunk_size: int) -> Generator[list, None, None]:
+def chunk_list(list_: list, chunk_size: int) -> Generator[list]:
     for i in range(0, len(list_), chunk_size):
         yield list_[i : i + chunk_size]

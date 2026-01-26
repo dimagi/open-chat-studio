@@ -73,6 +73,7 @@ nav:
       - AI Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
+      - developer_guides/deleting_models.md
     - Code Systems:
       - Common Practises: developer_guides/common_practises.md
       - Object Versioning: developer_guides/versioning.md
