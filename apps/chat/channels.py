@@ -990,7 +990,9 @@ class TelegramChannel(ChannelBase):
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.media_id)
-        ogg_audio = BytesIO(httpx.get(file_url).content)
+        response = httpx.get(file_url)
+        response.raise_for_status()
+        ogg_audio = BytesIO(response.content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
     def _handle_telegram_api_error(self, e: ApiTelegramException):
