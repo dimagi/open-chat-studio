@@ -41,7 +41,11 @@ class RequestLoggingMiddleware:
         if "application/json" not in content_type:
             return {}
         try:
-            return json.loads(request.body)
+            parsed_data = json.loads(request.body)
+            # Ensure we return a dict even if the JSON is a list or other type
+            if isinstance(parsed_data, dict):
+                return parsed_data
+            return {}
         except (json.JSONDecodeError, ValueError, RawPostDataException):
             return {}
 
