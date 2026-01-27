@@ -52,8 +52,9 @@ def validate_file_upload(file):
     if file_size_mb > MAX_FILE_SIZE_MB:
         return False, f"File '{file.name}' exceeds maximum size of {MAX_FILE_SIZE_MB}MB"
     file_ext = pathlib.Path(file.name).suffix.lower()
-    mime_type = file.content_type
-    content_type = mime_type.split("/")[0]
+    content_type = None
+    if mime_type := file.content_type:
+        content_type = mime_type.split("/")[0]
     # All text files are allowed
     if content_type != "text" and file_ext not in SUPPORTED_FILE_EXTENSIONS:
         return False, f"File type '{file_ext}' is not supported. Allowed types: {', '.join(SUPPORTED_FILE_EXTENSIONS)}"
