@@ -5,7 +5,6 @@ from datetime import timedelta
 from io import BytesIO
 from itertools import groupby
 
-import openai
 from celery.app import shared_task
 from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
@@ -93,6 +92,8 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
 
 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):
+    import openai  # lazy import to avoid import on startup
+
     llm_provider = LlmProvider.objects.get(id=llm_provider_id)
     old_manager = llm_provider.get_remote_index_manager(vector_store_id)
     old_manager.delete_remote_index()
