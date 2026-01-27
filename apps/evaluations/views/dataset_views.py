@@ -283,7 +283,7 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     model = EvaluationMessage
     table_class = DatasetMessagesTable
     table_pagination = {"per_page": 10}
-    template_name = "table/single_table.html"
+    template_name = "evaluations/dataset_messages_table.html"
     permission_required = "evaluations.view_evaluationdataset"
 
     def get_queryset(self):
@@ -294,6 +294,40 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
         return EvaluationMessage.objects.filter(
             evaluationdataset__id=dataset_id, evaluationdataset__team=self.request.team
         ).order_by("id")
+
+    def get_highlight_message_id(self):
+        """Extract and validate the message_id query parameter for highlighting."""
+        try:
+            return int(self.request.GET.get("message_id"))
+        except (ValueError, TypeError):
+            return None
+
+    def get_table_pagination(self, table):
+        """Configure pagination and calculate page for highlighted message."""
+        highlight_message_id = self.get_highlight_message_id()
+        page_size = self.table_pagination.get("per_page", 10)
+        pagination_config = dict(self.table_pagination)
+
+        # On first load with highlight, calculate which page contains the message
+        if highlight_message_id and not self.request.GET.get("page"):
+            queryset = self.get_queryset()
+            messages_before = queryset.filter(id__lt=highlight_message_id).count()
+
+            # Calculate which page contains this message and add to pagination config
+            calculated_page = (messages_before // page_size) + 1
+            pagination_config["page"] = calculated_page
+
+        return pagination_config
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["highlight_message_id"] = self.get_highlight_message_id()
+        return context
+
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        kwargs["highlight_message_id"] = self.get_highlight_message_id()
+        return kwargs
 
 
 @login_and_team_required
