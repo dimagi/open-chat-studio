@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, DateTimeField, F, IntegerField, OuterRef, Prefetch, Q, Subquery, When
+from django.db.models import Case, Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery, When
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -20,7 +20,6 @@ from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
-from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import ChannelBase, WebChannel
 from apps.chat.models import Chat
@@ -506,26 +505,14 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
 
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
-        experiment_filter = Q()
-        if experiment_id := self.kwargs.get("experiment_id"):
-            experiment_filter = Q(experiment__id=experiment_id)
-
-        query_set = ExperimentSession.objects.filter(experiment_filter, team=self.request.team)
+        experiment_id = self.kwargs.get("experiment_id")
+        query_set = ExperimentSession.objects.get_table_queryset(self.request.team, experiment_id)
         timezone = self.request.session.get("detected_tz", None)
-
         session_filter = ExperimentSessionFilter()
         query_set = session_filter.apply(
             query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
         )
-
-        query_set = query_set.select_related("experiment", "participant__user", "chat").prefetch_related(
-            Prefetch(
-                "chat__tagged_items",
-                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                to_attr="prefetched_tagged_items",
-            ),
-        )
-        return query_set.annotate_with_message_count().order_by(F("last_activity_at").desc(nulls_last=True))
+        return query_set
 
     def get_table(self, **kwargs):
         """When viewing sessions for a specific chatbot, hide the chatbot column."""

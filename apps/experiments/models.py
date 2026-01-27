@@ -20,7 +20,9 @@ from django.db.models import (
     BooleanField,
     Case,
     Count,
+    F,
     OuterRef,
+    Prefetch,
     Q,
     Subquery,
     UniqueConstraint,
@@ -1622,6 +1624,22 @@ class ExperimentSessionQuerySet(models.QuerySet):
 class ExperimentSessionObjectManager(models.Manager):
     def get_queryset(self):
         return ExperimentSessionQuerySet(self.model, using=self._db)
+
+    def get_table_queryset(self, team, experiment_id=None):
+        from apps.annotations.models import CustomTaggedItem
+
+        queryset = self.get_queryset().filter(team=team)
+        if experiment_id:
+            queryset = queryset.filter(experiment__id=experiment_id)
+
+        queryset = queryset.select_related("experiment", "participant__user", "chat").prefetch_related(
+            Prefetch(
+                "chat__tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            ),
+        )
+        return queryset.annotate_with_message_count().order_by(F("last_activity_at").desc(nulls_last=True))
 
 
 class ExperimentSession(BaseTeamModel):
