@@ -23,17 +23,17 @@ django.setup()
 # NOTE: needs to be below this code but does throw lint error
 # Import the create_test_user function from create_test_user.py
 # ruff: disable[E402]
-import importlib.util
-import pathlib
+import importlib.util  # noqa: E402
+import pathlib  # noqa: E402
 
-from apps.assistants.models import OpenAiAssistant
-from apps.chat.models import ChatMessage, ChatMessageType
-from apps.documents.models import Collection
-from apps.experiments.models import Experiment, ExperimentSession, Participant
-from apps.files.models import File, FilePurpose
-from apps.pipelines.models import Pipeline
-from apps.service_providers.models import LlmProvider, LlmProviderModel
-from apps.teams.models import Team
+from apps.assistants.models import OpenAiAssistant  # noqa: E402
+from apps.chat.models import ChatMessage, ChatMessageType  # noqa: E402
+from apps.documents.models import Collection  # noqa: E402
+from apps.experiments.models import Experiment, ExperimentSession, Participant  # noqa: E402
+from apps.files.models import File, FilePurpose  # noqa: E402
+from apps.pipelines.models import Pipeline  # noqa: E402
+from apps.service_providers.models import LlmProvider, LlmProviderModel  # noqa: E402
+from apps.teams.models import Team  # noqa: E402
 
 # ruff: enable[E402]
 
@@ -125,7 +125,6 @@ def seed_test_data():
                 "pipeline": pipelines[i - 1] if i <= len(pipelines) else None,
                 "llm_provider": None,  # Pipeline experiments don't use these fields
                 "llm_provider_model": None,
-                "assistant": None,
             },
         )
         if created:
