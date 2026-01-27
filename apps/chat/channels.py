@@ -30,7 +30,7 @@ from apps.chat.exceptions import (
     ParticipantNotAllowedException,
     VersionedExperimentSessionsNotAllowedException,
 )
-from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -41,7 +41,7 @@ from apps.experiments.models import (
     SessionStatus,
     VoiceResponseBehaviours,
 )
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
@@ -341,7 +341,20 @@ class ChannelBase(ABC):
             return self._extract_user_query()
         except Exception:
             metadata = self.trace_service.get_trace_metadata()
-            self._add_message_to_history("", ChatMessageType.HUMAN, metadata)
+            message = self._add_message_to_history("", ChatMessageType.HUMAN, metadata)
+            if self._user_message_is_voice and self.message.cached_media_data:
+                message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
+                chat_attachment, _ = ChatAttachment.objects.get_or_create(
+                    chat=self.experiment_session.chat, tool_type="voice_message"
+                )
+                file = File.create(
+                    "voice_note",
+                    self.message.cached_media_data.data,
+                    self.experiment.team_id,
+                    purpose=FilePurpose.MESSAGE_MEDIA,
+                )
+                chat_attachment.files.add(file)
+                message.metadata["ocs_attachment_file_ids"] = [file.id]
             raise
 
     def reset_user_query(self):
@@ -705,7 +718,7 @@ class ChannelBase(ABC):
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType, metadata=None):
         """Use this to update the chat history when not using the normal bot flow"""
-        ChatMessage.objects.create(
+        return ChatMessage.objects.create(
             chat=self.experiment_session.chat,
             message_type=message_type,
             content=message,

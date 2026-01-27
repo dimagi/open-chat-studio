@@ -1,6 +1,7 @@
 import base64
 import logging
 from functools import cached_property
+from io import BytesIO
 from typing import Literal
 
 import phonenumbers
@@ -12,6 +13,11 @@ from apps.chat.channels import MESSAGE_TYPES
 logger = logging.getLogger("ocs.channels")
 
 AttachmentType = Literal["code_interpreter", "file_search", "ocs_attachments"]
+
+
+class MediaCache(BaseModel):
+    content_type: str
+    data: BytesIO
 
 
 class Attachment(BaseModel):
@@ -77,6 +83,8 @@ class BaseMessage(BaseModel):
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     attachments: list[Attachment] = Field(default=[])
+
+    cached_media_data: MediaCache | None = Field(default=None)
 
 
 class TelegramMessage(BaseMessage):
