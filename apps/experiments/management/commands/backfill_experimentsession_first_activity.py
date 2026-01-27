@@ -8,7 +8,7 @@ from apps.experiments.models import ExperimentSession
 
 class Command(IdempotentCommand):
     help = "Backfill first_activity_at on ExperimentSession based on the created_at timestamp of the first ChatMessage."
-    migration_name = "0122_experimentsession_first_activity_at"
+    migration_name = "backfill_experiment_first_activity_at_2026_01_27"
     atomic = False
     disable_audit = True
 
