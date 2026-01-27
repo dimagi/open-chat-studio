@@ -13,7 +13,6 @@ from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
-from apps.files.models import File
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
@@ -128,20 +127,12 @@ class PipelineBot:
 
     def _updates_state_with_attachments(self, state: PipelineState, attachments: list[Attachment]):
         attachments = attachments or []
-        incoming_file_ids = []
-
-        for attachment in attachments:
-            file = File.objects.get(id=attachment.id, team_id=self.team.id)
-            incoming_file_ids.append(file.id)
-
-        input_message_metadata = {}
-        if incoming_file_ids:
-            input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
-
-        state["input_message_metadata"] = input_message_metadata
-
-        serializable_attachments = [attachment.model_dump() for attachment in attachments]
-        state["attachments"] = serializable_attachments
+        state["input_message_metadata"] = {}
+        if attachments:
+            state["input_message_metadata"]["ocs_attachment_file_ids"] = [
+                attachment.file_id for attachment in attachments
+            ]
+            state["attachments"] = [attachment.model_dump() for attachment in attachments]
         return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
