@@ -1,6 +1,7 @@
 import hashlib
 
 from django.contrib.auth.models import AbstractUser, UserManager
+from django.core.cache import cache
 from django.db import models
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
@@ -50,3 +51,12 @@ class CustomUser(AbstractUser):
     def gravatar_id(self) -> str:
         # https://en.gravatar.com/site/implement/hash/
         return hashlib.md5(self.email.lower().strip().encode("utf-8")).hexdigest()
+
+    def unread_notifications_count(self) -> int:
+        cache_key = f"{self.id}-unread-notifications-count"
+        if count := cache.get(cache_key):
+            return count
+
+        count = self.notifications.through.objects.filter(read=False).count()
+        cache.set(cache_key, count, 5 * 3600)
+        return count
