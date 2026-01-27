@@ -488,19 +488,15 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
         query_set = session_filter.apply(
             query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
         )
-        return query_set
 
-    def get_table_data(self):
-        """Add expensive annotations only to the paginated data, not for counting."""
-        queryset = self.get_queryset()
-        queryset = queryset.select_related("experiment", "participant__user", "chat").prefetch_related(
+        query_set = query_set.select_related("experiment", "participant__user", "chat").prefetch_related(
             Prefetch(
                 "chat__tagged_items",
                 queryset=CustomTaggedItem.objects.select_related("tag", "user"),
                 to_attr="prefetched_tagged_items",
             ),
         )
-        return queryset.annotate_with_versions_list().annotate_with_message_count()
+        return query_set.annotate_with_message_count()
 
     def get_table(self, **kwargs):
         """When viewing sessions for a specific chatbot, hide the chatbot column."""
