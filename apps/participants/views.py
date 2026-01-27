@@ -13,6 +13,7 @@ from django_tables2 import SingleTableView
 
 from apps.api.tasks import trigger_bot_message_task
 from apps.channels.models import ChannelPlatform
+from apps.chatbots.tables import ChatbotSessionsTable
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.filters.models import FilterSet
 from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm, TriggerBotForm
@@ -21,7 +22,6 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..events.models import ScheduledMessage
 from ..experiments.filters import get_filter_context_data
-from ..experiments.tables import ExperimentSessionsTable
 from ..generics import actions
 from ..web.dynamic_filters.datastructures import FilterParams
 from .filters import ParticipantFilter
@@ -46,9 +46,9 @@ def single_participant_home_context(context: dict, participant_id: int, experime
 
     if experiment_id:
         sessions = participant.experimentsession_set.filter(experiment_id=experiment_id).all()
-        context["session_table"] = ExperimentSessionsTable(
+        context["session_table"] = ChatbotSessionsTable(
             sessions,
-            extra_columns=[("participant", None)],  # remove participant column
+            exclude=["participant"],  # remove participant column
         )
         context["selected_experiment_id"] = experiment_id
         data = participant.get_data_for_experiment(experiment_id)

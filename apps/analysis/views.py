@@ -10,11 +10,11 @@ from django.views.generic import CreateView, DeleteView, DetailView
 from django_htmx.http import HttpResponseClientRedirect, HttpResponseClientRefresh
 from django_tables2 import RequestConfig, SingleTableView
 
+from apps.chatbots.tables import ChatbotSessionsTable
 from apps.experiments.export import filtered_export_to_csv
 from apps.experiments.models import Experiment
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
-from ..experiments.tables import ExperimentSessionsTable
 from ..teams.decorators import login_and_team_required
 from .forms import TranscriptAnalysisForm
 from .models import AnalysisQuery, TranscriptAnalysis
@@ -101,7 +101,7 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
 
     def get_table(self):
         queryset = self.object.sessions.all()
-        table = ExperimentSessionsTable(data=queryset)
+        table = ChatbotSessionsTable(data=queryset)
         return RequestConfig(self.request).configure(table)
 
 
