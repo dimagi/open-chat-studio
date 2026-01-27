@@ -1,5 +1,5 @@
 {% extends "generic/object_form.html" %}
-{% load form_tags i18n static %}
+{% load django_tables2 form_tags i18n static %}
 
 {% block page_head %}
   {{ block.super }}
@@ -56,7 +56,7 @@
     {% endif %}
     <h2 class="pg-subtitle">{% translate "Dataset Messages" %}</h2>
     <div id="dataset-messages-table"
-         hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}{% if request.GET.message_id %}{% querystring %}"
+         hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}{% if request.GET.message_id %}?{% querystring %}{% endif %}"
          hx-trigger="load, refreshTable from:body"
          hx-target="this"
          hx-swap="innerHTML">
