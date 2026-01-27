@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Count, DateTimeField, F, IntegerField, OuterRef, Prefetch, Q, Subquery
+from django.db.models import Case, Count, DateTimeField, F, IntegerField, OuterRef, Prefetch, Q, Subquery, When
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -27,7 +27,8 @@ from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
-from apps.events.models import StaticTriggerType
+from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
+from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.filters import (
@@ -40,9 +41,9 @@ from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
 from apps.experiments.views import ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
-    base_single_experiment_view,
     start_session_public,
 )
+from apps.experiments.views.utils import get_channels_context
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
@@ -293,9 +294,37 @@ class CreateChatbot(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_chatbot_home(request, team_slug: str, experiment_id: int):
-    return base_single_experiment_view(
-        request, team_slug, experiment_id, "chatbots/single_chatbot_home.html", "chatbots"
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
+
+    channels, available_platforms = get_channels_context(experiment)
+
+    deployed_version = None
+    if experiment != experiment.default_version:
+        deployed_version = experiment.default_version.version_number
+
+    context = {
+        "active_tab": "chatbots",
+        "experiment": experiment,
+        "platforms": available_platforms,
+        "channels": channels,
+        "deployed_version": deployed_version,
+        "allow_copy": not experiment.child_links.exists(),
+        **_get_events_context(experiment, team_slug, request.origin),
+    }
+    session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
+
+    columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
+    filter_context = get_filter_context_data(
+        request.team,
+        columns=columns,
+        date_range_column="last_message",
+        table_url=session_table_url,
+        table_container_id="sessions-table",
+        table_type=FilterSet.TableType.SESSIONS,
     )
+    context.update(filter_context)
+
+    return TemplateResponse(request, "chatbots/single_chatbot_home.html", context)
 
 
 class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -848,3 +877,41 @@ def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session
         "chatbots/manage/invite_row.html",
         context={"request": request, "experiment": experiment, "session": session},
     )
+
+
+def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
+    combined_events = []
+    static_events = (
+        StaticTrigger.objects.filter(experiment=experiment)
+        .annotate(
+            failure_count=Count(
+                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
+            )
+        )
+        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count", "is_active")
+        .all()
+    )
+    timeout_events = (
+        TimeoutTrigger.objects.filter(experiment=experiment)
+        .annotate(
+            failure_count=Count(
+                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
+            )
+        )
+        .values(
+            "id",
+            "experiment_id",
+            "delay",
+            "action__action_type",
+            "action__params",
+            "total_num_triggers",
+            "failure_count",
+            "is_active",
+        )
+        .all()
+    )
+    for event in static_events:
+        combined_events.append({**event, "team_slug": team_slug})
+    for event in timeout_events:
+        combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
+    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events, origin=origin)}

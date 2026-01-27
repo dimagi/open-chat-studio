@@ -15,7 +15,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
+from django.db.models import CharField, Count, F, Prefetch, Subquery, Value
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import (
@@ -48,13 +48,7 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
-    EventLogStatusChoices,
-    StaticTrigger,
     StaticTriggerType,
-    TimeoutTrigger,
-)
-from apps.events.tables import (
-    EventsTable,
 )
 from apps.experiments.decorators import (
     experiment_session_view,
@@ -63,10 +57,6 @@ from apps.experiments.decorators import (
     verify_session_access_cookie,
 )
 from apps.experiments.email import send_chat_link_email
-from apps.experiments.filters import (
-    ExperimentSessionFilter,
-    get_filter_context_data,
-)
 from apps.experiments.forms import (
     ConsentForm,
     SurveyCompletedForm,
@@ -75,26 +65,19 @@ from apps.experiments.forms import (
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     Experiment,
-    ExperimentRouteType,
     ExperimentSession,
     Participant,
     SessionStatus,
 )
 from apps.experiments.tables import (
-    ChildExperimentRoutesTable,
     ExperimentVersionsTable,
-    ParentExperimentRoutesTable,
-    TerminalBotsTable,
 )
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
-from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
-from apps.filters.models import FilterSet
-from apps.generics.chips import Chip
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
@@ -113,108 +96,6 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
         other_versions = Experiment.objects.get_all().filter(working_version=self.kwargs["experiment_id"]).all()
         return (experiment_row | other_versions).order_by("-version_number")
-
-
-def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
-    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
-
-    channels, available_platforms = get_channels_context(experiment)
-
-    deployed_version = None
-    if experiment != experiment.default_version:
-        deployed_version = experiment.default_version.version_number
-
-    bot_type_chip = None
-    if active_tab == "experiments":
-        if pipeline := experiment.pipeline:
-            bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
-
-    context = {
-        "active_tab": active_tab,
-        "bot_type_chip": bot_type_chip,
-        "experiment": experiment,
-        "platforms": available_platforms,
-        "channels": channels,
-        "deployed_version": deployed_version,
-        "allow_copy": not experiment.child_links.exists(),
-        **_get_events_context(experiment, team_slug, request.origin),
-    }
-    if active_tab != "chatbots":
-        context.update(**_get_terminal_bots_context(experiment, team_slug))
-        context.update(**_get_routes_context(experiment, team_slug))
-        session_table_url = reverse("experiments:sessions-list", args=(team_slug, experiment_id))
-    else:
-        session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
-
-    columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
-    filter_context = get_filter_context_data(
-        request.team,
-        columns=columns,
-        date_range_column="last_message",
-        table_url=session_table_url,
-        table_container_id="sessions-table",
-        table_type=FilterSet.TableType.SESSIONS,
-    )
-    context.update(filter_context)
-
-    return TemplateResponse(request, template_name, context)
-
-
-def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
-    combined_events = []
-    static_events = (
-        StaticTrigger.objects.filter(experiment=experiment)
-        .annotate(
-            failure_count=Count(
-                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
-            )
-        )
-        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count", "is_active")
-        .all()
-    )
-    timeout_events = (
-        TimeoutTrigger.objects.filter(experiment=experiment)
-        .annotate(
-            failure_count=Count(
-                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
-            )
-        )
-        .values(
-            "id",
-            "experiment_id",
-            "delay",
-            "action__action_type",
-            "action__params",
-            "total_num_triggers",
-            "failure_count",
-            "is_active",
-        )
-        .all()
-    )
-    for event in static_events:
-        combined_events.append({**event, "team_slug": team_slug})
-    for event in timeout_events:
-        combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
-    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events, origin=origin)}
-
-
-def _get_routes_context(experiment: Experiment, team_slug: str):
-    route_type = ExperimentRouteType.PROCESSOR
-    parent_links = experiment.parent_links.filter(type=route_type).all()
-    return {
-        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.filter(type=route_type).all()),
-        "parent_routes_table": ParentExperimentRoutesTable(parent_links),
-        "first_parent_id": parent_links[0].parent_id if parent_links else None,
-        "can_make_child_routes": len(parent_links) == 0,
-    }
-
-
-def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
-    return {
-        "terminal_bots_table": TerminalBotsTable(
-            experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
-        ),
-    }
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
