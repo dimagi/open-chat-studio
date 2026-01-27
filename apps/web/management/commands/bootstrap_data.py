@@ -157,7 +157,7 @@ class Command(BaseCommand):
             pipeline = Pipeline.create_default(
                 team=team, name=name, llm_provider_id=llm_provider.id, llm_provider_model=llm_model
             )
-            self._log_created("pipeline", name, created)
+            self._log_created("pipeline", name, True)
             pipelines.append(pipeline)
 
         # Experiments (Chatbots)
@@ -171,7 +171,7 @@ class Command(BaseCommand):
         ]
 
         for i, name in enumerate(chatbot_names, 1):
-            experiment, created = Experiment.objects.get_or_create(
+            _experiment, created = Experiment.objects.get_or_create(
                 team=team,
                 name=name,
                 defaults={
