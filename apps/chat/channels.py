@@ -337,7 +337,11 @@ class ChannelBase(ABC):
         """Returns the user query, extracted from whatever (supported) message type was used to convey the
         message
         """
-        return self._extract_user_query()
+        try:
+            return self._extract_user_query()
+        except Exception:
+            self._add_message_to_history("", ChatMessageType.HUMAN)
+            raise
 
     def reset_user_query(self):
         with contextlib.suppress(AttributeError):
