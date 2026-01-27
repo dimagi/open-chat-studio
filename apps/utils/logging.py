@@ -1,6 +1,10 @@
 """Custom logging utilities for Open Chat Studio."""
 
 import logging
+from contextvars import ContextVar
+
+_celery_task_id: ContextVar[str | None] = ContextVar("celery_task_id", default=None)
+_celery_task_name: ContextVar[str | None] = ContextVar("celery_task_name", default=None)
 
 
 class ContextVarFilter(logging.Filter):
@@ -18,24 +22,21 @@ class ContextVarFilter(logging.Filter):
 
 
 class CeleryContextFilter(logging.Filter):
-    """Log filter that adds Celery task context."""
+    """Log filter that adds Celery task context using contextvars for async safety."""
 
-    _task_id = None
-    _task_name = None
+    @staticmethod
+    def set_task_context(task_id: str, task_name: str):
+        _celery_task_id.set(task_id)
+        _celery_task_name.set(task_name)
 
-    @classmethod
-    def set_task_context(cls, task_id: str, task_name: str):
-        cls._task_id = task_id
-        cls._task_name = task_name
-
-    @classmethod
-    def clear_task_context(cls):
-        cls._task_id = None
-        cls._task_name = None
+    @staticmethod
+    def clear_task_context():
+        _celery_task_id.set(None)
+        _celery_task_name.set(None)
 
     def filter(self, record):
-        if self._task_id:
-            record.task_id = self._task_id
-        if self._task_name:
-            record.task_name = self._task_name
+        if task_id := _celery_task_id.get():
+            record.task_id = task_id
+        if task_name := _celery_task_name.get():
+            record.task_name = task_name
         return True
