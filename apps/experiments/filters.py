@@ -164,7 +164,7 @@ class ExperimentSessionFilter(MultiColumnFilter):
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
         TimestampFilter(label="Last Message", column="last_activity_at", query_param="last_message"),
-        TimestampFilter(label="First Message", column="first_message_created_at", query_param="first_message"),
+        TimestampFilter(label="First Message", column="first_activity_at", query_param="first_message"),
         TimestampFilter(label="Message Date", column="chat__messages__created_at", query_param="message_date"),
         ChatMessageTagsFilter(),
         VersionsFilter(),
@@ -173,10 +173,6 @@ class ExperimentSessionFilter(MultiColumnFilter):
         StatusFilter(query_param="state"),
         RemoteIdFilter(),
     ]
-
-    def prepare_queryset(self, queryset):
-        """Prepare the queryset by annotating with first message timestamp."""
-        return queryset.annotate_with_first_message_created_at()
 
 
 class ChatMessageFilter(MultiColumnFilter):
