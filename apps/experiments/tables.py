@@ -13,6 +13,7 @@ from apps.experiments.models import (
     Survey,
 )
 from apps.generics import actions, chips
+from apps.generics.tables import ArrayColumn
 
 
 class SafetyLayerTable(tables.Table):
@@ -116,7 +117,7 @@ class ExperimentSessionsTable(tables.Table):
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_activity_at", verbose_name="Last Message", orderable=True)
     tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html")
-    versions = columns.Column(verbose_name="Versions", accessor="experiment_versions")
+    versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions")
     state = columns.Column(verbose_name="State", accessor="status", orderable=True)
     remote_id = columns.Column(verbose_name="Remote Id", accessor="participant__remote_id")
     actions = actions.ActionsColumn(
