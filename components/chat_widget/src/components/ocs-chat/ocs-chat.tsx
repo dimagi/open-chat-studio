@@ -50,8 +50,9 @@ export class OcsChat {
 
   private static readonly MAX_FILE_SIZE_MB = 50;
   private static readonly MAX_TOTAL_SIZE_MB = 50;
-  private static readonly SUPPORTED_FILE_EXTENSIONS = ['.txt', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.jpg', '.jpeg',
-    '.png', '.gif', '.bmp', '.webp', '.svg', '.mp4', '.mov', '.avi', '.mp3', '.wav' ];
+  private static readonly SUPPORTED_FILE_EXTENSIONS = ['.txt', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.jpg',
+    '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.mp4', '.mov', '.avi', '.mp3', '.wav', '.html', '.htm', '.css',
+    '.js', '.xml', '.md', '.ics', '.vcf', '.rtf', '.tsv', '.yaml', '.yml', '.py', '.c'];
 
   /**
    * The ID of the chatbot to connect to.
@@ -1659,7 +1660,7 @@ export class OcsChat {
                         id="ocs-file-input"
                         type="file"
                         multiple
-                        accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',')}
+                        accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',') + ',text/*'}
                         onChange={(e) => this.handleFileSelect(e)}
                         class="hidden"
                       />
