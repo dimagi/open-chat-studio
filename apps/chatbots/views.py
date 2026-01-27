@@ -496,7 +496,7 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
                 to_attr="prefetched_tagged_items",
             ),
         )
-        return query_set.annotate_with_message_count()
+        return query_set.annotate_with_message_count().order_by(F("last_activity_at").desc(nulls_last=True))
 
     def get_table(self, **kwargs):
         """When viewing sessions for a specific chatbot, hide the chatbot column."""
