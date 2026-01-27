@@ -4,6 +4,8 @@ from celery import Celery, signals
 from celery.app import trace
 from django import db
 
+from apps.utils.logging import CeleryContextFilter
+
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
@@ -18,14 +20,30 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 # Load task modules from all registered Django app configs.
 app.autodiscover_tasks()
 
-app.conf.result_expires = 86400  # expire results in redis in 1 day
-
+# don't log task result
 trace.LOG_SUCCESS = """\
 Task %(name)s[%(id)s] succeeded in %(runtime)ss\
 """
 
 worker_max_tasks_per_child = 100  # Restart worker periodically
 task_acks_late = True
+
+app.conf.update(
+    result_expires=86400,  # expire results in redis in 1 day
+    worker_hijack_root_logger=False,
+    worker_log_format="%(message)s",
+    worker_task_log_format="%(message)s",
+)
+
+
+@signals.task_prerun.connect
+def on_task_prerun(sender, task_id, task, args, kwargs, **_):
+    CeleryContextFilter.set_task_context(task_id, task.name)
+
+
+@signals.task_postrun.connect
+def on_task_postrun(sender, **_):
+    CeleryContextFilter.clear_task_context()
 
 
 def close_db_connection(sender, **kwargs):

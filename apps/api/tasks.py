@@ -1,6 +1,5 @@
-import logging
-
 from celery.app import shared_task
+from celery.utils.log import get_task_logger
 from django.db.models import Subquery
 
 from apps.channels.clients.connect_client import CommCareConnectClient
@@ -10,7 +9,7 @@ from apps.experiments.models import Experiment, ParticipantData
 from apps.service_providers.tracing import TraceInfo
 from apps.teams.utils import current_team
 
-logger = logging.getLogger("ocs.api.commcare_connect.setup_connect_channels_for_bots")
+logger = get_task_logger("ocs.api")
 
 
 @shared_task(

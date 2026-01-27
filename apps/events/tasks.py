@@ -1,11 +1,10 @@
-import logging
-
 from celery.app import shared_task
+from celery.utils.log import get_task_logger
 
 from apps.events.models import ScheduledMessage, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import ExperimentSession
 
-logger = logging.getLogger("ocs.events")
+logger = get_task_logger("ocs.events")
 
 
 @shared_task(ignore_result=True)

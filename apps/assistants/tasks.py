@@ -1,10 +1,9 @@
-import logging
-
 from celery import shared_task
+from celery.utils.log import get_task_logger
 
 from apps.assistants.sync import OpenAiSyncError, delete_openai_assistant
 
-logger = logging.getLogger("ocs.openai_sync")
+logger = get_task_logger("ocs.openai_sync")
 
 
 @shared_task(

@@ -19,6 +19,7 @@ from pathlib import Path
 import environ
 from celery.schedules import crontab
 from django.utils.translation import gettext_lazy
+from pythonjsonlogger.json import JsonFormatter
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -156,6 +157,7 @@ MIDDLEWARE = list(
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.generics.middleware.OriginDetectionMiddleware",
+            "apps.web.request_logging_middleware.RequestLoggingMiddleware",
             "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],
     )
@@ -587,28 +589,58 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
     )
 
 LOG_LEVEL = env("OCS_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO")
+
+JSON_LOGGING = env.bool("ENABLE_JSON_LOGGING", default=not (DEBUG or IS_TESTING))
+HANDLER = "json_console" if JSON_LOGGING else "console"
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "context_vars": {
+            "()": "apps.utils.logging.ContextVarFilter",
+        },
+        "celery_context": {
+            "()": "apps.utils.logging.CeleryContextFilter",
+        },
+    },
     "formatters": {
-        "verbose": {
-            "format": '[{asctime}] {levelname} "{name}" {message}',
-            "style": "{",
-            "datefmt": "%d/%b/%Y %H:%M:%S",  # match Django server time format
+        "json": {
+            "()": JsonFormatter,
+            "format": "%(levelname)s %(name)s %(message)s",
+            "rename_fields": {"levelname": "level", "name": "logger"},
+            "timestamp": True,
+        },
+        "console": {
+            "format": "%(asctime)s %(levelname)s %(name)s [%(team)s] %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
         },
     },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "verbose"},
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "console",
+            "filters": ["context_vars", "celery_context"],
+        },
+        "json_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+            "filters": ["context_vars", "celery_context"],
+        },
     },
     "loggers": {
         "": {  # Root logger
-            "handlers": ["console"],
+            "handlers": [HANDLER],
             "level": "WARN",
         },
-        "django": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
-        "ocs": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": IS_TESTING},
-        "httpx": {"handlers": ["console"], "level": "WARN"},
-        "slack_bolt": {"handlers": ["console"], "level": "DEBUG"},
+        "django": {"handlers": [HANDLER], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
+        "ocs": {"handlers": [HANDLER], "level": LOG_LEVEL, "propagate": IS_TESTING},
+        "httpx": {"handlers": [HANDLER], "level": "WARN"},
+        "slack_bolt": {"handlers": [HANDLER], "level": "DEBUG"},
+        "celery.app.trace": {"level": "INFO", "handlers": [HANDLER]},
+        "ocs.request": {"handlers": [HANDLER], "level": "INFO"},
+        # disable these when using JSON logging (see `apps.web.request_logging_middleware.RequestLoggingMiddleware`)
+        "django.request": {"handlers": [HANDLER], "level": "CRITICAL" if JSON_LOGGING else "INFO", "propagate": False},
+        "django.server": {"handlers": [HANDLER], "level": "CRITICAL" if JSON_LOGGING else "INFO", "propagate": False},
     },
 }
 

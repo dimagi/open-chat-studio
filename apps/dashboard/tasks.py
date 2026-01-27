@@ -1,9 +1,8 @@
-import logging
-
 from celery import shared_task
+from celery.utils.log import get_task_logger
 from django.utils import timezone
 
-logger = logging.getLogger(__name__)
+logger = get_task_logger("ocs.dashboard")
 
 
 @shared_task(ignore_result=True)

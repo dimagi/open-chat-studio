@@ -1,5 +1,4 @@
 import csv
-import logging
 import math
 from collections import defaultdict
 from collections.abc import Iterable
@@ -8,6 +7,7 @@ from io import StringIO
 from typing import cast
 
 from celery import chord, shared_task
+from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.utils import timezone
 from taskbadger.celery import Task as TaskbadgerTask
@@ -35,7 +35,7 @@ from apps.teams.utils import current_team
 
 EVAL_SESSIONS_TTL_DAYS = 30
 
-logger = logging.getLogger("ocs.evaluations")
+logger = get_task_logger("ocs.evaluations")
 
 
 def _save_dataset_error(dataset: EvaluationDataset, error_message: str):
