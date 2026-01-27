@@ -48,7 +48,8 @@ export class FileAttachmentManager {
 
     for (const file of fileArray) {
       const extension = this.getFileExtension(file.name);
-      if (!this.supportedExtensions.includes(extension)) {
+      const contentType = file.type.split("/")[0];
+      if (contentType != "text" && !this.supportedExtensions.includes(extension)) {
         newSelected.push({ file, error: `File type ${extension} not supported` });
         continue;
       }

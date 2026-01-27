@@ -52,7 +52,10 @@ def validate_file_upload(file):
     if file_size_mb > MAX_FILE_SIZE_MB:
         return False, f"File '{file.name}' exceeds maximum size of {MAX_FILE_SIZE_MB}MB"
     file_ext = pathlib.Path(file.name).suffix.lower()
-    if file_ext not in SUPPORTED_FILE_EXTENSIONS:
+    mime_type = file.content_type
+    content_type = mime_type.split("/")[0]
+    # All text files are allowed
+    if content_type != "text" and file_ext not in SUPPORTED_FILE_EXTENSIONS:
         return False, f"File type '{file_ext}' is not supported. Allowed types: {', '.join(SUPPORTED_FILE_EXTENSIONS)}"
     return True, None
 
@@ -151,12 +154,14 @@ def chat_upload_file(request, session_id):
                 "participant_remote_id": participant_remote_id,
             },
         )
-        uploaded_files.append({
-            "id": file_obj.id,
-            "name": file_obj.name,
-            "size": file_obj.content_size,
-            "content_type": file_obj.content_type,
-        })
+        uploaded_files.append(
+            {
+                "id": file_obj.id,
+                "name": file_obj.name,
+                "size": file_obj.content_size,
+                "content_type": file_obj.content_type,
+            }
+        )
 
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
