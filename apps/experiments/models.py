@@ -1692,6 +1692,7 @@ class ExperimentSession(BaseTeamModel):
         help_text="Array of unique experiment version numbers seen by this session",
     )
     last_activity_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last user interaction")
+    first_activity_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the first user interaction")
 
     class Meta:
         ordering = ["-created_at"]
