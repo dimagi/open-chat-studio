@@ -20,7 +20,8 @@ from apps.documents.models import Collection
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
 from apps.pipelines.models import Pipeline
-from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.service_providers.models import LlmProvider
+from apps.service_providers.utils import get_first_llm_provider_model
 from apps.teams import backends
 from apps.teams.models import Membership, Team
 
@@ -139,10 +140,7 @@ class Command(BaseCommand):
         )
         self._log_created("LLM provider", llm_provider.name, created)
 
-        llm_model, created = LlmProviderModel.objects.get_or_create(
-            team=team, name="gpt-4", type="openai", defaults={"max_token_limit": 8192}
-        )
-        self._log_created("LLM model", llm_model.name, created)
+        llm_model = get_first_llm_provider_model(llm_provider, team.id)
 
         # Pipelines
         self.stdout.write("")
@@ -156,10 +154,8 @@ class Command(BaseCommand):
 
         pipelines = []
         for name in pipeline_names:
-            pipeline, created = Pipeline.objects.get_or_create(
-                team=team,
-                name=name,
-                defaults={"data": {"nodes": [], "edges": []}},
+            pipeline, created = Pipeline.create_default(
+                team=team, name=name, llm_provider_id=llm_provider.id, llm_provider_model=llm_model
             )
             self._log_created("pipeline", name, created)
             pipelines.append(pipeline)
@@ -182,8 +178,6 @@ class Command(BaseCommand):
                     "owner": user,
                     "description": f"Test pipeline chatbot #{i} for development",
                     "pipeline": pipelines[i - 1] if i <= len(pipelines) else None,
-                    "llm_provider": None,
-                    "llm_provider_model": None,
                 },
             )
             self._log_created("experiment", name, created)
