@@ -16,7 +16,7 @@ import getpass
 import os
 import sys
 
-import requests
+import httpx
 
 
 def get_api_key():
@@ -48,9 +48,9 @@ def get_chatbots(base_url, api_key):
 
     while url:
         try:
-            response = requests.get(url, headers=headers, timeout=30)
+            response = httpx.get(url, headers=headers, timeout=30)
             response.raise_for_status()
-        except requests.exceptions.RequestException as e:
+        except httpx.RequestError as e:
             print(f"Error fetching chatbots: {e}", file=sys.stderr)
             sys.exit(1)
 

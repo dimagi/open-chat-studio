@@ -10,7 +10,7 @@ from io import BytesIO
 from typing import TYPE_CHECKING, ClassVar
 
 import emoji
-import requests
+import httpx
 from django.conf import settings
 from django.db import transaction
 from django.http import Http404
@@ -765,8 +765,7 @@ class ChannelBase(ABC):
     def _load_latest_session(self):
         """Loads the latest experiment session on the channel"""
         self.experiment_session = (
-            ExperimentSession.objects
-            .filter(
+            ExperimentSession.objects.filter(
                 experiment=self.experiment.get_working_version(),
                 participant__identifier=str(self.participant_identifier),
             )
@@ -991,7 +990,9 @@ class TelegramChannel(ChannelBase):
 
     def get_message_audio(self) -> BytesIO:
         file_url = self.telegram_bot.get_file_url(self.message.media_id)
-        ogg_audio = BytesIO(requests.get(file_url).content)
+        response = httpx.get(file_url)
+        response.raise_for_status()
+        ogg_audio = BytesIO(response.content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
 
     def _handle_telegram_api_error(self, e: ApiTelegramException):
