@@ -50,7 +50,7 @@ export class OcsChat {
 
   private static readonly MAX_FILE_SIZE_MB = 50;
   private static readonly MAX_TOTAL_SIZE_MB = 50;
-  private static readonly SUPPORTED_FILE_EXTENSIONS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg',
+  private static readonly SUPPORTED_FILE_EXTENSIONS = ['.txt', '.csv', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg',
     '.png', '.gif', '.bmp', '.webp', '.svg', '.mp4', '.mov', '.avi', '.mp3', '.wav' ];
 
   /**
