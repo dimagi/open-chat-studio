@@ -6,6 +6,7 @@ Usage:
     python manage.py delete_team test-team --force  # Skip confirmation
 """
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.teams.models import Team
@@ -29,6 +30,11 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not settings.DEBUG:
+            raise CommandError(
+                "This command can only be used in dev environments. "
+                "You can delete a team on a live env from the team admin page."
+            )
         team_slug = options["team_slug"]
         force = options["force"]
 
