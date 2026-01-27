@@ -340,7 +340,8 @@ class ChannelBase(ABC):
         try:
             return self._extract_user_query()
         except Exception:
-            self._add_message_to_history("", ChatMessageType.HUMAN)
+            metadata = self.trace_service.get_trace_metadata()
+            self._add_message_to_history("", ChatMessageType.HUMAN, metadata)
             raise
 
     def reset_user_query(self):
@@ -702,12 +703,13 @@ class ChannelBase(ABC):
         chat_messages = self.bot.process_input(message, attachments=self.message.attachments)
         return chat_messages
 
-    def _add_message_to_history(self, message: str, message_type: ChatMessageType):
+    def _add_message_to_history(self, message: str, message_type: ChatMessageType, metadata=None):
         """Use this to update the chat history when not using the normal bot flow"""
         ChatMessage.objects.create(
             chat=self.experiment_session.chat,
             message_type=message_type,
             content=message,
+            metadata=metadata or {},
         )
 
     def _ensure_sessions_exists(self):
