@@ -4,6 +4,7 @@ import time
 
 from django.conf import settings
 from django.core.exceptions import MiddlewareNotUsed
+from django.http import RawPostDataException
 
 from apps.audit.transaction import get_audit_transaction_id
 
@@ -41,7 +42,7 @@ class RequestLoggingMiddleware:
             return {}
         try:
             return json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
+        except (json.JSONDecodeError, ValueError, RawPostDataException):
             return {}
 
     def _get_field(self, view_kwargs: dict, post_data: dict, *keys: str) -> str | None:
