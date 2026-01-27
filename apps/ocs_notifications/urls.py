@@ -6,5 +6,5 @@ app_name = "ocs_notifications"
 
 urlpatterns = [
     path("", views.NotificationHome.as_view(), name="notifications_home"),
-    path("table/", views.NotificationReceiptTableView.as_view(), name="notifications_table"),
+    path("table/", views.UserNotificationTableView.as_view(), name="notifications_table"),
 ]

@@ -3,8 +3,8 @@ from django.urls import reverse
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
-from apps.ocs_notifications.models import NotificationReceipt
-from apps.ocs_notifications.tables import NotificationReceiptTable
+from apps.ocs_notifications.models import UserNotification
+from apps.ocs_notifications.tables import UserNotificationTable
 
 
 class NotificationHome(LoginRequiredMixin, TemplateView):
@@ -19,10 +19,10 @@ class NotificationHome(LoginRequiredMixin, TemplateView):
         }
 
 
-class NotificationReceiptTableView(LoginRequiredMixin, SingleTableView):
-    model = NotificationReceipt
-    table_class = NotificationReceiptTable
+class UserNotificationTableView(LoginRequiredMixin, SingleTableView):
+    model = UserNotification
+    table_class = UserNotificationTable
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return NotificationReceipt.objects.filter(user=self.request.user).select_related("notification")
+        return UserNotification.objects.filter(user=self.request.user).select_related("notification")
