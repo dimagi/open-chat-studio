@@ -2,7 +2,7 @@
 Script to clean up sample data created for Cypress E2E tests.
 
 This removes all sample chatbots, participants, assistants, files, and other test data
-that was created by the seed_test_data.py script.
+that was created by the seed_dev_data management command.
 
 Run this from the Django project root:
     python cypress/cleanup_test_data.py
@@ -118,8 +118,7 @@ def cleanup_test_data():
     print("✅ Complete cleanup finished!")
     print("\nAll test data, team, and user have been deleted.")
     print("To recreate the test setup, run:")
-    print("  python cypress/create_test_user.py")
-    print("  python cypress/seed_test_data.py  # (optional, for more test data)")
+    print("  python manage.py seed_dev_data")
 
 
 if __name__ == "__main__":
