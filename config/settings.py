@@ -759,7 +759,10 @@ SUPPORTED_FILE_TYPES = {
     "file_search": (
         ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
     ),
-    "collections": ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav",
+    "collections": (
+        ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav,.html,.htm,"
+        ".css,.js,.xml,.md,.ics,.vcf,.rtf,.tsv,.yaml,.yml,.py,.c"
+    ),
 }
 
 # CORS configuration for chat widget
