@@ -76,7 +76,7 @@ jobs:
       - name: Set up test database and user
         run: |
           uv run python manage.py migrate
-          uv run python manage.py seed_dev_data
+          uv run python manage.py bootstrap_data
         env:
           DEBUG: 'true'
           USE_DEBUG_TOOLBAR: 'false'

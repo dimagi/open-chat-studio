@@ -9,7 +9,7 @@ npm install cypress --save-dev
 
 ### 2. Create Test User and Seed Data
 ```bash
-python manage.py seed_dev_data
+python manage.py bootstrap_data
 ```
 
 This will output something like:
@@ -102,13 +102,13 @@ Tests are **graceful** - they won't fail if:
 
 ```bash
 # Create user/team only (no sample data)
-python manage.py seed_dev_data --skip-sample-data
+python manage.py bootstrap_data --skip-sample-data
 
 # Custom email and team
-python manage.py seed_dev_data --email dev@test.com --team-slug dev-team
+python manage.py bootstrap_data --email dev@test.com --team-slug dev-team
 
 # See all options
-python manage.py seed_dev_data --help
+python manage.py bootstrap_data --help
 ```
 
 ## Troubleshooting
@@ -120,7 +120,7 @@ Login failed for user 'test@example.com'
 
 **Solution:** Run the setup command again:
 ```bash
-python manage.py seed_dev_data
+python manage.py bootstrap_data
 ```
 
 ### Wrong Team Slug

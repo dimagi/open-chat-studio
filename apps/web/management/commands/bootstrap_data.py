@@ -5,9 +5,9 @@ Creates a test user, team, and sample data (chatbots, participants, files, etc.)
 to enable developers to quickly set up a working environment.
 
 Usage:
-    python manage.py seed_dev_data                    # Use defaults
-    python manage.py seed_dev_data --email dev@test.com --team-slug dev-team
-    python manage.py seed_dev_data --skip-sample-data  # Only create user/team
+    python manage.py bootstrap_data                    # Use defaults
+    python manage.py bootstrap_data --email dev@test.com --team-slug dev-team
+    python manage.py bootstrap_data --skip-sample-data  # Only create user/team
 """
 
 from django.contrib.auth import get_user_model
@@ -87,7 +87,7 @@ class Command(BaseCommand):
         self.stdout.write("")
         if skip_sample_data:
             self.stdout.write("To add sample data later, run:")
-            self.stdout.write(f"  python manage.py seed_dev_data --email {email} --team-slug {team_slug}")
+            self.stdout.write(f"  python manage.py bootstrap_data --email {email} --team-slug {team_slug}")
 
     def _create_user_and_team(self, email: str, password: str, team_slug: str, team_name: str):
         """Create test user and team with owner permissions."""
