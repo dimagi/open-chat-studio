@@ -376,15 +376,15 @@ class TestRouterNode:
 
         service = build_fake_llm_service(
             responses=[
-                # "a" is not a valid keyword
+                # "A" is not a valid keyword on first attempt (invalid_keyword)
                 _tool_call("invalid_keyword"),
                 # This second response is the LLM fixing the fact that the first response did not match any keyword
                 _tool_call("invalid_keyword"),
-                _tool_call("a"),
-                _tool_call("a"),
-                _tool_call("b"),
-                _tool_call("c"),
-                _tool_call("d"),
+                _tool_call("A"),
+                _tool_call("A"),
+                _tool_call("B"),
+                _tool_call("C"),
+                _tool_call("D"),
                 _tool_call("z"),
             ],
             token_counts=[0],
@@ -481,8 +481,8 @@ class TestRouterNode:
                 temp_state={"user_input": "hello world", "outputs": {}},
                 path=[("", "prev_node", [node_id])],
             )
-            with mock.patch.object(node, "_process_conditional", return_value=("a", True)):
-                edge_map = {"a": "next_node_a", "b": "next_node_b"}
+            with mock.patch.object(node, "_process_conditional", return_value=("A", True)):
+                edge_map = {"A": "next_node_a", "B": "next_node_b"}
                 incoming_edges = ["prev_node"]
                 router_func = node.build_router_function(edge_map, incoming_edges)
                 command = router_func(state, {})
@@ -492,7 +492,7 @@ class TestRouterNode:
                 assert node.name in output_state["outputs"]
                 assert "route" in output_state["outputs"][node.name]
                 assert "message" in output_state["outputs"][node.name]
-                assert output_state["outputs"][node.name]["route"] == "a"
+                assert output_state["outputs"][node.name]["route"] == "A"
                 assert output_state["outputs"][node.name]["message"] == "hello world"
                 assert command.goto == ["next_node_a"]
 
@@ -526,7 +526,7 @@ class TestRouterNode:
         )
 
         keyword, is_default_keyword = node._process_conditional(state)
-        assert keyword == "default"
+        assert keyword == "DEFAULT"
         assert is_default_keyword
 
 
@@ -674,8 +674,8 @@ def main(input, **kwargs):
             )
             assert output["output_message_tags"] == [(f"static router:{expected_tag}", TagCategories.BOT_RESPONSE)]
 
-        _check_routing_and_tags("first", "first")
-        _check_routing_and_tags("second", "second")
+        _check_routing_and_tags("first", "FIRST")
+        _check_routing_and_tags("second", "SECOND")
 
     @django_db_with_data()
     @pytest.mark.parametrize(
