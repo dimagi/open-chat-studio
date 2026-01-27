@@ -11,6 +11,7 @@ from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
@@ -337,6 +338,18 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
             # Check if session value exists (not empty string)
             return bool(record.get("session"))
 
+        def dataset_url_factory(_, __, record, value):
+            if not value:
+                return "#"
+            dataset_id = self.evaluation_run.config.dataset_id
+            message_id = record.get("message_id")
+
+            url = reverse("evaluations:dataset_edit", args=[self.kwargs["team_slug"], dataset_id])
+            return f"{url}?message_id={message_id}"
+
+        def dataset_enabled_condition(_, record):
+            return bool(record.get("message_id"))
+
         header = key.replace("_", " ").title()
         match key:
             case "#":
@@ -362,9 +375,18 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                             url_factory=session_url_factory,
                             enabled_condition=session_enabled_condition,
                         ),
+                        actions.chip_action(
+                            label=mark_safe('<i class="fa-solid fa-external-link"></i>'),
+                            url_factory=dataset_url_factory,
+                            enabled_condition=dataset_enabled_condition,
+                            open_url_in_new_tab=True,
+                        ),
                     ],
                     align="right",
                 )
+            case "message_id":
+                # Skip rendering message_id as a separate column since it's now in session column
+                return None
         return columns.Column(verbose_name=header)
 
 

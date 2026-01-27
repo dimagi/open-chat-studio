@@ -1,0 +1,28 @@
+{% load static %}
+{% load render_table from django_tables2 %}
+
+{% render_table table %}
+
+{% if highlight_message_id %}
+<script>
+    function scrollToMessage() {
+        const messageId = "{{ highlight_message_id }}";
+        const selectedRow = document.getElementById(`record-${messageId}`);
+        if (selectedRow) {
+            selectedRow.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+            });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', scrollToMessage);
+    } else {
+        scrollToMessage();
+    }
+</script>
+{% endif %}
+
+{% block modal %}
+{% endblock modal %}
