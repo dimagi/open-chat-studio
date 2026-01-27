@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery
+from django.db.models import Count, DateTimeField, F, IntegerField, OuterRef, Prefetch, Q, Subquery
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -20,6 +20,7 @@ from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
+from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import ChannelBase, WebChannel
 from apps.chat.models import Chat
@@ -37,7 +38,7 @@ from apps.experiments.forms import ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
-from apps.experiments.views import ExperimentSessionsTableView, ExperimentVersionsTableView
+from apps.experiments.views import ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
     base_single_experiment_view,
     start_session_public,
@@ -58,6 +59,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.trace.models import Trace
 from apps.utils.search import similarity_search
+from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
 
@@ -104,26 +106,32 @@ def chatbots_settings(request, team_slug, experiment_id):
         form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
         if form.is_valid():
             form.save()
-            context.update({
-                "edit_mode": False,
-                "form": form,
-                "updated": True,
-            })
+            context.update(
+                {
+                    "edit_mode": False,
+                    "form": form,
+                    "updated": True,
+                }
+            )
 
         else:
-            context.update({
-                "edit_mode": True,
-                "form": form,
-                "updated": False,
-                "team_participant_identifiers": team_participant_identifiers,
-            })
+            context.update(
+                {
+                    "edit_mode": True,
+                    "form": form,
+                    "updated": False,
+                    "team_participant_identifiers": team_participant_identifiers,
+                }
+            )
     else:
         form = ChatbotSettingsForm(request=request, instance=experiment)
-        context.update({
-            "edit_mode": True,
-            "form": form,
-            "team_participant_identifiers": team_participant_identifiers,
-        })
+        context.update(
+            {
+                "edit_mode": True,
+                "form": form,
+                "team_participant_identifiers": team_participant_identifiers,
+            }
+        )
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
@@ -176,8 +184,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
         queryset = (
-            self.model.objects
-            .get_all()
+            self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
             .select_related("team")
         )
@@ -196,8 +203,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
             )
 
         session_count_subquery = (
-            ExperimentSession.objects
-            .filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
@@ -205,8 +211,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         participant_count_subquery = (
-            ExperimentSession.objects
-            .filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
@@ -214,8 +219,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         interaction_count_subquery = (
-            Trace.objects
-            .filter(experiment=OuterRef("pk"))
+            Trace.objects.filter(experiment=OuterRef("pk"))
             .exclude(session__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
@@ -223,8 +227,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         last_activity_subquery = (
-            ExperimentSession.objects
-            .filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .order_by("-last_activity_at")
             .values("last_activity_at")[:1]
@@ -464,18 +467,43 @@ def chatbot_version_create_status(
     )
 
 
-class ChatbotSessionsTableView(ExperimentSessionsTableView):
+class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+    """View for rendering chatbot sessions table with filtering support."""
+
+    model = ExperimentSession
     table_class = ChatbotSessionsTable
+    template_name = "table/single_table.html"
+    permission_required = "experiments.view_experimentsession"
+
+    def get_queryset(self):
+        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
+        experiment_filter = Q()
+        if experiment_id := self.kwargs.get("experiment_id"):
+            experiment_filter = Q(experiment__id=experiment_id)
+
+        query_set = ExperimentSession.objects.filter(experiment_filter, team=self.request.team)
+        timezone = self.request.session.get("detected_tz", None)
+
+        session_filter = ExperimentSessionFilter()
+        query_set = session_filter.apply(
+            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
+        )
+        return query_set
 
     def get_table_data(self):
-        """Add message_count annotation to the paginated data."""
-        queryset = super().get_table_data()
-        return queryset.annotate_with_message_count()
+        """Add expensive annotations only to the paginated data, not for counting."""
+        queryset = self.get_queryset()
+        queryset = queryset.select_related("experiment", "participant__user", "chat").prefetch_related(
+            Prefetch(
+                "chat__tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            ),
+        )
+        return queryset.annotate_with_versions_list().annotate_with_message_count()
 
     def get_table(self, **kwargs):
-        """
-        When viewing sessions for a specific chatbot, hide the chatbot column
-        """
+        """When viewing sessions for a specific chatbot, hide the chatbot column."""
         table = super().get_table(**kwargs)
         if self.kwargs.get("experiment_id"):
             table.exclude = ("chatbot",)

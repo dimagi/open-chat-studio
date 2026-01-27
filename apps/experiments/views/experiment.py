@@ -15,7 +15,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Subquery, Value, When
+from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Subquery, Value, When
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import (
@@ -82,7 +82,6 @@ from apps.experiments.models import (
 )
 from apps.experiments.tables import (
     ChildExperimentRoutesTable,
-    ExperimentSessionsTable,
     ExperimentVersionsTable,
     ParentExperimentRoutesTable,
     TerminalBotsTable,
@@ -101,54 +100,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
-
-
-class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
-    """
-    This view is used to render experiment sessions. When called by a specific chatbot, it includes an "experiment_id"
-    parameter in the request, which narrows the sessions to only those belonging to that chatbot.
-    """
-
-    model = ExperimentSession
-    table_class = ExperimentSessionsTable
-    template_name = "table/single_table.html"
-    permission_required = "experiments.view_experimentsession"
-
-    def get_queryset(self):
-        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
-        experiment_filter = Q()
-        if experiment_id := self.kwargs.get("experiment_id"):
-            experiment_filter = Q(experiment__id=experiment_id)
-
-        query_set = ExperimentSession.objects.filter(experiment_filter, team=self.request.team)
-        timezone = self.request.session.get("detected_tz", None)
-
-        session_filter = ExperimentSessionFilter()
-        query_set = session_filter.apply(
-            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
-        )
-        return query_set
-
-    def get_table_data(self):
-        """Add expensive annotations only to the paginated data, not for counting."""
-        queryset = super().get_table_data()
-        # Add expensive annotations after filtering but before display
-        queryset = (
-            # Select related source
-            # experiment: participant.get_link_to_experiment_data
-            # participant__user: str(participant)
-            # chat: tags prefetch
-            queryset.select_related("experiment", "participant__user", "chat").prefetch_related(
-                Prefetch(
-                    "chat__tagged_items",
-                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                    to_attr="prefetched_tagged_items",
-                ),
-            )
-        )
-        return queryset.annotate_with_versions_list()
 
 
 class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -211,8 +163,7 @@ def base_single_experiment_view(request, team_slug, experiment_id, template_name
 def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
     combined_events = []
     static_events = (
-        StaticTrigger.objects
-        .filter(experiment=experiment)
+        StaticTrigger.objects.filter(experiment=experiment)
         .annotate(
             failure_count=Count(
                 Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
@@ -222,8 +173,7 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
         .all()
     )
     timeout_events = (
-        TimeoutTrigger.objects
-        .filter(experiment=experiment)
+        TimeoutTrigger.objects.filter(experiment=experiment)
         .annotate(
             failure_count=Count(
                 Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
@@ -407,8 +357,9 @@ def _poll_messages(request):
             logging.exception(f"Unexpected `since` parameter value. Error: {e}")
 
     messages = (
-        ChatMessage.objects
-        .filter(message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since)
+        ChatMessage.objects.filter(
+            message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since
+        )
         .order_by("created_at")
         .all()
     )
@@ -757,8 +708,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 
     chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
     all_tags = (
-        Tag.objects
-        .filter(
+        Tag.objects.filter(
             annotations_customtaggeditem_items__content_type=chat_message_content_type,
             annotations_customtaggeditem_items__object_id__in=Subquery(
                 ChatMessage.objects.filter(chat=session.chat).values("id")
@@ -779,8 +729,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     default_message = "(message generated after last translation)"
 
     messages_queryset = (
-        ChatMessage.objects
-        .filter(chat=session.chat)
+        ChatMessage.objects.filter(chat=session.chat)
         .order_by("created_at")
         .prefetch_related(
             Prefetch(
@@ -883,9 +832,9 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
             messages.error(request, "Selected provider or model not found.")
             return redirect_to_messages_view(request, session)
 
-        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(**{
-            f"translations__{language}__isnull": False
-        })
+        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(
+            **{f"translations__{language}__isnull": False}
+        )
         if not messages_to_translate.exists():
             messages.info(request, "All messages already have translations for this language.")
             return redirect_to_messages_view(request, session)
