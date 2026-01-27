@@ -154,7 +154,7 @@ class Command(BaseCommand):
 
         pipelines = []
         for name in pipeline_names:
-            pipeline, created = Pipeline.create_default(
+            pipeline = Pipeline.create_default(
                 team=team, name=name, llm_provider_id=llm_provider.id, llm_provider_model=llm_model
             )
             self._log_created("pipeline", name, created)
