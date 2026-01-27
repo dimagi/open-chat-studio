@@ -115,18 +115,20 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                 exp_session = state["experiment_session"]
                 participant = getattr(exp_session, "participant", None)
                 if participant:
-                    content.update({
-                        "participant_details": {
-                            "identifier": getattr(participant, "identifier", None),
-                            "platform": getattr(participant, "platform", None),
-                        },
-                        "participant_schedules": participant.get_schedules_for_experiment(
-                            exp_session.experiment,
-                            as_dict=True,
-                            include_inactive=True,
-                        )
-                        or [],
-                    })
+                    content.update(
+                        {
+                            "participant_details": {
+                                "identifier": getattr(participant, "identifier", None),
+                                "platform": getattr(participant, "platform", None),
+                            },
+                            "participant_schedules": participant.get_schedules_for_experiment(
+                                exp_session.experiment,
+                                as_dict=True,
+                                include_inactive=True,
+                            )
+                            or [],
+                        }
+                    )
                 content["participant_data"] = ParticipantDataProxy.from_state(state).get() or {}
 
             template = env.from_string(self.template_string)
@@ -541,7 +543,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             context = {"messages": [HumanMessage(content=node_input)]}
             result = agent.invoke(context, config=self._config)
             structured_response = result["structured_response"]
-            keyword = structured_response.route.lower()  # ensure case-insensitive matching
+            keyword = structured_response.route.upper()  # ensure case-insensitive matching
         except PydanticValidationError:
             keyword = None
         except OpenAIRefusalError:
@@ -601,9 +603,9 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
         except KeyError:
             result = ""
 
-        result_lower = result.lower()
+        result_upper = result.upper()
         for keyword in self.keywords:
-            if keyword == result_lower:
+            if keyword == result_upper:
                 return keyword, False
         return self.keywords[self.default_keyword_index], True
 

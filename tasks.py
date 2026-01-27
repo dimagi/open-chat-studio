@@ -3,7 +3,7 @@ import textwrap
 import time
 from pathlib import Path
 
-import requests
+import httpx
 from invoke import Context, Exit, call, task
 from packaging.version import Version
 from termcolor import cprint
@@ -146,7 +146,7 @@ def ngrok_url(c: Context):
     c.run("ngrok http 8000", echo=True, asynchronous=True)
     while True:
         try:
-            response = requests.get("http://localhost:4040/api/tunnels", timeout=10)
+            response = httpx.get("http://localhost:4040/api/tunnels", timeout=10)
             if response.status_code == 200:
                 public_url = response.json()["tunnels"][0]["public_url"].split("https://")[1]
                 break

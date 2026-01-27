@@ -7,8 +7,8 @@ from typing import IO, ClassVar
 
 import azure.cognitiveservices.speech as speechsdk
 import boto3
+import httpx
 import pydantic
-import requests
 from openai import OpenAI
 from pydub import AudioSegment
 
@@ -222,7 +222,7 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
             "speed": "1.0",
             "response_format": "mp3",
         }
-        response = requests.post(url, headers=headers, data=data, files=files)
+        response = httpx.post(url, headers=headers, data=data, files=files)
 
         if response.status_code == 200:
             audio_data = BytesIO(response.content)

@@ -5,7 +5,6 @@ from celery.utils.log import get_task_logger
 from django.core.files.base import ContentFile
 from django.utils import timezone
 from field_audit.models import AuditAction
-from langchain_core.messages import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import Attachment, BaseMessage
@@ -163,6 +162,9 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
 
 
 def _convert_prompt_builder_history(messages_history):
+    # lazy import to avoid import on startup
+    from langchain_core.messages import AIMessage, HumanMessage
+
     history = []
     for message in messages_history:
         if "message" not in message:

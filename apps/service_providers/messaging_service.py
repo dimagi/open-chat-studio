@@ -7,8 +7,8 @@ from urllib.parse import urljoin
 
 import backoff
 import boto3
+import httpx
 import pydantic
-import requests
 from botocore.client import Config
 from django.conf import settings
 from slack_sdk import WebClient
@@ -171,7 +171,7 @@ class TwilioService(MessagingService):
 
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:
         auth = (self.account_sid, self.auth_token)
-        response = requests.get(message.media_url, auth=auth)
+        response = httpx.get(message.media_url, auth=auth)
         # Example header: {'Content-Type': 'audio/ogg'}
         content_type = response.headers["Content-Type"].split("/")[1]
         return audio.convert_audio(BytesIO(response.content), target_format="wav", source_format=content_type)
@@ -288,7 +288,7 @@ class SureAdhereService(MessagingService):
             "client_secret": self.client_secret,
             "scope": self.client_scope,
         }
-        response = requests.post(self.auth_url, data=auth_data)
+        response = httpx.post(self.auth_url, data=auth_data)
         response.raise_for_status()
         return response.json()["access_token"]
 
@@ -297,7 +297,7 @@ class SureAdhereService(MessagingService):
         send_msg_url = urljoin(self.base_url, "/treatment/external/send-msg")
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"}
         data = {"patient_Id": to, "message_Body": message}
-        response = requests.post(send_msg_url, headers=headers, json=data)
+        response = httpx.post(send_msg_url, headers=headers, json=data)
         response.raise_for_status()
 
 

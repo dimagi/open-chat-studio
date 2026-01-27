@@ -290,9 +290,9 @@ class RouterMixin(BaseModel):
     )
 
     @field_validator("keywords")
-    def ensure_keywords_are_lowercase(cls, value):
+    def ensure_keywords_are_uppercase(cls, value):
         if isinstance(value, list):
-            return [entry.lower() for entry in value]
+            return [entry.upper() for entry in value]
         return []
 
     @field_validator("keywords")

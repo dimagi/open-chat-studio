@@ -254,6 +254,23 @@ Key settings in `.env` file such as database connection strings, credentials for
 
 ## Development Patterns
 
+### HTTP Requests
+Use `httpx` instead of `requests` for making HTTP calls. `httpx` provides:
+- Async/await support for non-blocking I/O
+- Better performance in Celery tasks and async contexts
+- Consistent API with optional request/response hooks
+- Built-in timeout defaults for safety
+
+```python
+# ❌ Avoid
+import requests
+response = requests.get("https://api.example.com/data")
+
+# ✅ Prefer
+import httpx
+response = httpx.get("https://api.example.com/data", timeout=10.0)
+```
+
 ### Model Architecture Patterns
 
 #### Base Model Classes

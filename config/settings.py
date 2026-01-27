@@ -496,6 +496,10 @@ SCHEDULED_TASKS = {
         "task": "apps.web.tasks.cleanup_silk_data",
         "schedule": crontab(minute="0", hour="1"),
     },
+    "custom_actions.tasks.check_all_custom_actions_health": {
+        "task": "apps.custom_actions.tasks.check_all_custom_actions_health",
+        "schedule": crontab(minute="5"),
+    },
 }
 
 CACHES = {
@@ -695,6 +699,8 @@ DOCUMENTATION_LINKS = {
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
     "migrate_from_assistant": "/how-to/assistants_migration/",
+    "events": "/concepts/events/",
+    "evals": "/concepts/evaluations/",
 }
 # Available in templates as `docs_base_url`. Also see `apps.generics.help` and `generics/help.html`
 DOCUMENTATION_BASE_URL = env("DOCUMENTATION_BASE_URL", default="https://docs.openchatstudio.com")
@@ -785,7 +791,10 @@ SUPPORTED_FILE_TYPES = {
     "file_search": (
         ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
     ),
-    "collections": ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav",
+    "collections": (
+        ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav,.html,.htm,"
+        ".css,.js,.xml,.md,.ics,.vcf,.rtf,.tsv,.yaml,.yml,.py,.c"
+    ),
 }
 
 # CORS configuration for chat widget

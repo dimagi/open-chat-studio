@@ -50,8 +50,9 @@ export class OcsChat {
 
   private static readonly MAX_FILE_SIZE_MB = 50;
   private static readonly MAX_TOTAL_SIZE_MB = 50;
-  private static readonly SUPPORTED_FILE_EXTENSIONS = ['.txt', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.jpg', '.jpeg',
-    '.png', '.gif', '.bmp', '.webp', '.svg', '.mp4', '.mov', '.avi', '.mp3', '.wav' ];
+  private static readonly SUPPORTED_FILE_EXTENSIONS = ['.txt', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.jpg',
+    '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.mp4', '.mov', '.avi', '.mp3', '.wav', '.html', '.htm', '.css',
+    '.js', '.xml', '.md', '.ics', '.vcf', '.rtf', '.tsv', '.yaml', '.yml', '.py', '.c'];
 
   /**
    * The ID of the chatbot to connect to.
@@ -154,6 +155,11 @@ export class OcsChat {
 
   @Prop() translationsUrl?: string;
 
+  /**
+   * Optional context object to send with each message. This provides page-specific context to the bot.
+   */
+  @Prop({ mutable: true }) pageContext?: Record<string, any>;
+
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -201,6 +207,7 @@ export class OcsChat {
   private chatWindowWidth: number = 450;
   private chatWindowFullscreenWidth: number = 1024;
   private positionInitialized: boolean = false;
+  private internalPageContext?: Record<string, any>;
   @Element() host: HTMLElement;
 
 
@@ -222,6 +229,7 @@ export class OcsChat {
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
+    this.loadInternalPageContext();
   }
 
   componentDidLoad() {
@@ -232,7 +240,6 @@ export class OcsChat {
     this.chatWindowHeight = varToPixels(windowHeightVar, window.innerHeight, this.chatWindowHeight);
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
-
     // Initialize button position from computed styles
     this.initializeButtonPosition();
 
@@ -327,6 +334,19 @@ export class OcsChat {
         customTranslationsObj = await this.loadTranslationsFromUrl(this.translationsUrl);
     }
     this.translationManager = new TranslationManager(this.language, customTranslationsObj);
+  }
+
+  private loadInternalPageContext() {
+    if (this.pageContext === undefined || this.pageContext === null) {
+      return;
+    }
+
+    if (typeof this.pageContext !== 'object' || Array.isArray(this.pageContext)) {
+      console.error("pageContext is expected to be a plain JavaScript object.");
+      return;
+    }
+
+    this.internalPageContext = this.pageContext;
   }
 
   private async loadTranslationsFromUrl(url: string): Promise<Partial<TranslationStrings>> {
@@ -472,6 +492,9 @@ export class OcsChat {
       if (this.allowAttachments && attachmentIds.length > 0) {
         requestBody.attachment_ids = attachmentIds;
       }
+      if (this.internalPageContext) {
+        requestBody.context = this.internalPageContext;
+      }
 
       const data = await this.getChatService().sendMessage(this.sessionId, requestBody);
 
@@ -479,6 +502,7 @@ export class OcsChat {
         throw new Error(data.error || 'Failed to send message');
       }
 
+      this.internalPageContext = undefined;
       this.startTaskPolling(data.task_id);
     } catch (error) {
       const errorText = error instanceof Error ? error.message : 'Failed to send message';
@@ -570,6 +594,16 @@ export class OcsChat {
 
   private toggleWindowVisibility() {
     this.visible = !this.visible;
+  }
+
+  /**
+   * Watch for changes to the `pageContext` prop and sync to internal variable.
+   *
+   * @param pageContext - The new value for the field.
+   */
+  @Watch('pageContext')
+  pageContextHandler() {
+    this.loadInternalPageContext()
   }
 
   /**
@@ -1626,7 +1660,7 @@ export class OcsChat {
                         id="ocs-file-input"
                         type="file"
                         multiple
-                        accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',')}
+                        accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',') + ',text/*'}
                         onChange={(e) => this.handleFileSelect(e)}
                         class="hidden"
                       />
