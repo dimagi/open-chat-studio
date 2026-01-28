@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import ClassVar
 
-from apps.ocs_notifications.models import CategoryChoices
+from apps.ocs_notifications.models import LevelChoices
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import TimestampFilter
 
@@ -42,27 +42,27 @@ class ReadFilter(ChoiceColumnFilter):
 
 
 class StatusFilter(ChoiceColumnFilter):
-    """Filter notifications by category/status."""
+    """Filter notifications by level/status."""
 
     query_param: str = "status"
-    column: str = "notification__category"
+    column: str = "notification__level"
     label: str = "Status"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.options = [{"id": choice[0], "label": choice[1]} for choice in CategoryChoices.choices]
+        self.options = [{"id": choice[0], "label": choice[1]} for choice in LevelChoices.choices]
 
     def apply_any_of(self, queryset, value, timezone=None):
-        """Filter notifications by category (any of the selected values)."""
+        """Filter notifications by level (any of the selected values)."""
         if not value:
             return queryset
-        return queryset.filter(notification__category__in=value)
+        return queryset.filter(notification__level__in=value)
 
     def apply_excludes(self, queryset, value, timezone=None):
         """Exclude notifications with specified categories."""
         if not value:
             return queryset
-        return queryset.exclude(notification__category__in=value)
+        return queryset.exclude(notification__level__in=value)
 
 
 class UserNotificationFilter(MultiColumnFilter):

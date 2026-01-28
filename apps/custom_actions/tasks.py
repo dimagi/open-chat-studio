@@ -5,6 +5,7 @@ from celery.app import shared_task
 from django.utils import timezone
 
 from apps.custom_actions.models import CustomAction, HealthCheckStatus
+from apps.ocs_notifications.models import LevelChoices
 from apps.ocs_notifications.utils import create_notification
 
 logger = logging.getLogger("ocs.custom_actions")
@@ -68,6 +69,6 @@ def check_single_custom_action_health(action_id: int):
         create_notification(
             title="Custom Action is down",
             message=f"The custom action '{action.name}' is currently unreachable at its health endpoint.",
-            category="error",
+            level=LevelChoices.ERROR,
             team=action.team,
         )

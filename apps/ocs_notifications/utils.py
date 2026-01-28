@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from apps.teams.models import Team
 
-from .models import CategoryChoices, Notification, UserNotification
+from .models import LevelChoices, Notification, UserNotification
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -13,7 +13,7 @@ CACHE_KEY_FORMAT = "{user_id}-unread-notifications-count"
 
 
 def create_notification(
-    title: str, message: str, category: CategoryChoices, users: list | None = None, team: Team | None = None, link=None
+    title: str, message: str, level: LevelChoices, users: list | None = None, team: Team | None = None, link=None
 ):
     """
     Create a notification and associate it with the given users.
@@ -38,10 +38,10 @@ def create_notification(
         notification, created = Notification.objects.get_or_create(
             title=title,
             message=message,
-            category=category,
+            level=level,
         )
         for user in users:
-            if category == CategoryChoices.ERROR:
+            if level == LevelChoices.ERROR:
                 bust_unread_notification_cache(user.id)
 
             UserNotification.objects.update_or_create(

@@ -72,7 +72,7 @@ class CustomUser(AbstractUser):
         preferences, _created = UserNotificationPreferences.objects.get_or_create(user=self)
         if preferences.in_app_enabled:
             level = preferences.in_app_level
-            count = UserNotification.objects.filter(user_id=self.id, read=False, notification__category=level).count()
+            count = UserNotification.objects.filter(user_id=self.id, read=False, notification__level__gte=level).count()
         else:
             count = 0
 

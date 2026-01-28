@@ -1,9 +1,0 @@
-{% if record.notification.category == 'info' %}
-  <span class="badge badge-info">{{ record.notification.get_category_display }}</span>
-{% elif record.notification.category == 'warning' %}
-  <span class="badge badge-warning">{{ record.notification.get_category_display }}</span>
-{% elif record.notification.category == 'error' %}
-  <span class="badge badge-error">{{ record.notification.get_category_display }}</span>
-{% else %}
-  <span class="badge">{{ record.notification.get_category_display }}</span>
-{% endif %}

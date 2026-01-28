@@ -10,10 +10,10 @@ class UserNotificationTable(tables.Table):
         verbose_name="Notification",
         orderable=False,
     )
-    category = columns.TemplateColumn(
-        template_name="ocs_notifications/components/category_badge.html",
-        accessor="notification__category",
-        verbose_name="Category",
+    level = columns.TemplateColumn(
+        template_name="ocs_notifications/components/level_badge.html",
+        accessor="notification__level",
+        verbose_name="Level",
         orderable=False,
     )
     read = columns.TemplateColumn(
@@ -24,7 +24,7 @@ class UserNotificationTable(tables.Table):
         model = UserNotification
         fields = (
             "notification_content",
-            "category",
+            "level",
             "read",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
