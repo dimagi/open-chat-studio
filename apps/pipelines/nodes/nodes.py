@@ -57,7 +57,6 @@ from apps.service_providers.llm_service.runnables import (
     AssistantChat,
     ChainOutput,
 )
-from apps.service_providers.models import LlmProvider
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
@@ -68,6 +67,7 @@ from .mixins import (
     OutputMessageTagMixin,
     RouterMixin,
     StructuredDataSchemaValidatorMixin,
+    get_llm_provider,
 )
 
 logger = logging.getLogger("ocs.pipelines.nodes")
@@ -366,8 +366,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         if len(collections) > 1:
             if all(is_remote_flags):
                 # Check if provider has a limit on number of vector stores
-                try:
-                    llm_provider = LlmProvider.objects.get(id=llm_provider_id)
+                llm_provider = get_llm_provider(llm_provider_id)
+                if llm_provider:
                     max_vector_stores = llm_provider.type_enum.max_vector_stores
                     if max_vector_stores and len(collections) > max_vector_stores:
                         raise PydanticCustomError(
@@ -377,9 +377,6 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                             f"You have selected {len(collections)} collection indexes. "
                             f"Please select at most {max_vector_stores} collection indexes.",
                         )
-                except LlmProvider.DoesNotExist:
-                    # If provider doesn't exist, let other validation handle it
-                    pass
             else:
                 # local indexes must have a summary
                 missing_summary = [collection.name for collection in collections.values() if not collection.summary]
