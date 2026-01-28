@@ -67,6 +67,7 @@ from .mixins import (
     OutputMessageTagMixin,
     RouterMixin,
     StructuredDataSchemaValidatorMixin,
+    get_llm_provider,
 )
 
 logger = logging.getLogger("ocs.pipelines.nodes")
@@ -362,15 +363,29 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 f"All collection indexes must use the same LLM provider as the node. "
                 f"Incompatible collections: {', '.join(incompatible_collections)}",
             )
-        if len(collections) > 1 and not all(is_remote_flags):
-            # local indexes must have a summary
-            missing_summary = [collection.name for collection in collections.values() if not collection.summary]
-            if missing_summary:
-                raise PydanticCustomError(
-                    "collections_missing_summary",
-                    "When using multiple collection indexes, the collections must have a summary. "
-                    f"Collections missing summary: {', '.join(missing_summary)}",
-                )
+        if len(collections) > 1:
+            if all(is_remote_flags):
+                # Check if provider has a limit on number of vector stores
+                llm_provider = get_llm_provider(llm_provider_id)
+                if llm_provider:
+                    max_vector_stores = llm_provider.type_enum.max_vector_stores
+                    if max_vector_stores and len(collections) > max_vector_stores:
+                        raise PydanticCustomError(
+                            "vectorstore_limit_exceeded",
+                            f"{llm_provider.type_enum.value.label} hosted vectorstores are limited to "
+                            f"{max_vector_stores} per request. "
+                            f"You have selected {len(collections)} collection indexes. "
+                            f"Please select at most {max_vector_stores} collection indexes.",
+                        )
+            else:
+                # local indexes must have a summary
+                missing_summary = [collection.name for collection in collections.values() if not collection.summary]
+                if missing_summary:
+                    raise PydanticCustomError(
+                        "collections_missing_summary",
+                        "When using multiple collection indexes, the collections must have a summary. "
+                        f"Collections missing summary: {', '.join(missing_summary)}",
+                    )
 
         return value
 

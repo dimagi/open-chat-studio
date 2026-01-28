@@ -42,7 +42,7 @@ from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import BasicParameters
-from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 
 logger = logging.getLogger("ocs.pipelines.nodes")
@@ -56,6 +56,14 @@ def get_llm_provider_model(llm_provider_model_id: int):
         return LlmProviderModel.objects.get(id=llm_provider_model_id)
     except LlmProviderModel.DoesNotExist:
         raise PipelineNodeBuildError(f"LLM provider model with id {llm_provider_model_id} does not exist") from None
+
+
+@lru_cache
+def get_llm_provider(llm_provider_id: int):
+    try:
+        return LlmProvider.objects.get(id=llm_provider_id)
+    except LlmProvider.DoesNotExist:
+        return None
 
 
 class OutputMessageTagMixin(BaseModel):

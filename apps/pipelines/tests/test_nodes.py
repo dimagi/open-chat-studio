@@ -15,6 +15,7 @@ from apps.pipelines.nodes.mixins import (
 )
 from apps.pipelines.nodes.nodes import (
     HistoryMixin,
+    LLMResponseWithPrompt,
     OptionalInt,
     SendEmail,
     StructuredDataSchemaValidatorMixin,
@@ -274,3 +275,130 @@ class TestHistoryMixin:
 
         assert isinstance(middleware, TruncateTokensHistoryMiddleware)
         count_tokens.assert_called_once_with([system_message])
+
+
+@pytest.mark.django_db()
+class TestLLMResponseWithPromptValidation:
+    """Tests for LLMResponseWithPrompt node validation."""
+
+    def test_openai_remote_vectorstore_limit_with_2_collections(self):
+        """Test that OpenAI provider accepts exactly 2 remote vectorstores."""
+        from apps.service_providers.models import LlmProviderTypes
+        from apps.utils.factories.documents import CollectionFactory
+        from apps.utils.factories.service_provider_factories import LlmProviderFactory
+
+        # Create OpenAI provider
+        openai_provider = LlmProviderFactory(type=LlmProviderTypes.openai.value.slug)
+
+        # Create 2 remote collections with the same provider
+        collection1 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+        collection2 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+
+        # Should not raise validation error with exactly 2 collections
+        node = LLMResponseWithPrompt(
+            node_id="test-node",
+            name="Test LLM",
+            django_node=None,
+            llm_provider_id=openai_provider.id,
+            llm_provider_model_id=1,
+            prompt="You are a helpful assistant. {collection_index_summaries}",
+            collection_index_ids=[collection1.id, collection2.id],
+        )
+        assert node.collection_index_ids == [collection1.id, collection2.id]
+
+    def test_openai_remote_vectorstore_limit_with_3_collections(self):
+        """Test that OpenAI provider rejects more than 2 remote vectorstores."""
+        from apps.service_providers.models import LlmProviderTypes
+        from apps.utils.factories.documents import CollectionFactory
+        from apps.utils.factories.service_provider_factories import LlmProviderFactory
+
+        # Create OpenAI provider
+        openai_provider = LlmProviderFactory(type=LlmProviderTypes.openai.value.slug)
+
+        # Create 3 remote collections with the same provider
+        collection1 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+        collection2 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+        collection3 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+
+        # Should raise validation error with 3 collections
+        with pytest.raises(ValidationError, match="OpenAI hosted vectorstores are limited to 2 per request"):
+            LLMResponseWithPrompt(
+                node_id="test-node",
+                name="Test LLM",
+                django_node=None,
+                llm_provider_id=openai_provider.id,
+                llm_provider_model_id=1,
+                prompt="You are a helpful assistant. {collection_index_summaries}",
+                collection_index_ids=[collection1.id, collection2.id, collection3.id],
+            )
+
+    def test_non_openai_provider_allows_more_than_2_remote_vectorstores(self):
+        """Test that non-OpenAI providers are not limited to 2 vectorstores."""
+        from apps.service_providers.models import LlmProviderTypes
+        from apps.utils.factories.documents import CollectionFactory
+        from apps.utils.factories.service_provider_factories import LlmProviderFactory
+
+        # Create Anthropic provider (non-OpenAI)
+        anthropic_provider = LlmProviderFactory(type=LlmProviderTypes.anthropic.value.slug)
+
+        # Create 3 remote collections with the same provider
+        collection1 = CollectionFactory(is_remote_index=True, llm_provider=anthropic_provider, is_index=True)
+        collection2 = CollectionFactory(is_remote_index=True, llm_provider=anthropic_provider, is_index=True)
+        collection3 = CollectionFactory(is_remote_index=True, llm_provider=anthropic_provider, is_index=True)
+
+        # Should not raise validation error for non-OpenAI provider
+        node = LLMResponseWithPrompt(
+            node_id="test-node",
+            name="Test LLM",
+            django_node=None,
+            llm_provider_id=anthropic_provider.id,
+            llm_provider_model_id=1,
+            prompt="You are a helpful assistant. {collection_index_summaries}",
+            collection_index_ids=[collection1.id, collection2.id, collection3.id],
+        )
+        assert node.collection_index_ids == [collection1.id, collection2.id, collection3.id]
+
+    def test_openai_local_vectorstores_not_limited(self):
+        """Test that local (non-remote) vectorstores are not subject to the limit."""
+        from apps.service_providers.models import LlmProviderTypes
+        from apps.utils.factories.documents import CollectionFactory
+        from apps.utils.factories.service_provider_factories import EmbeddingProviderModelFactory, LlmProviderFactory
+
+        # Create OpenAI provider
+        openai_provider = LlmProviderFactory(type=LlmProviderTypes.openai.value.slug)
+        embedding_model = EmbeddingProviderModelFactory()
+
+        # Create 3 local collections (is_remote_index=False)
+        collection1 = CollectionFactory(
+            is_remote_index=False,
+            llm_provider=openai_provider,
+            is_index=True,
+            summary="Collection 1",
+            embedding_provider_model=embedding_model,
+        )
+        collection2 = CollectionFactory(
+            is_remote_index=False,
+            llm_provider=openai_provider,
+            is_index=True,
+            summary="Collection 2",
+            embedding_provider_model=embedding_model,
+        )
+        collection3 = CollectionFactory(
+            is_remote_index=False,
+            llm_provider=openai_provider,
+            is_index=True,
+            summary="Collection 3",
+            embedding_provider_model=embedding_model,
+        )
+
+        # Should not raise validation error for local indexes
+        node = LLMResponseWithPrompt(
+            node_id="test-node",
+            name="Test LLM",
+            django_node=None,
+            llm_provider_id=openai_provider.id,
+            llm_provider_model_id=1,
+            prompt="You are a helpful assistant. {collection_index_summaries}",
+            collection_index_ids=[collection1.id, collection2.id, collection3.id],
+        )
+        assert node.collection_index_ids == [collection1.id, collection2.id, collection3.id]
