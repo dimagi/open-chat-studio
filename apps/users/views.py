@@ -14,6 +14,8 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django_htmx.http import HttpResponseLocation
 
 from apps.oauth.models import OAuth2AccessToken
+from apps.ocs_notifications.forms import NotificationPreferencesForm
+from apps.ocs_notifications.models import UserNotificationPreferences
 from apps.web.waf import WafRule, waf_allow
 
 from .forms import ApiKeyForm, CustomUserChangeForm, UploadAvatarForm
@@ -54,6 +56,10 @@ def profile(request):
 
     new_api_key = request.session.pop(SESSION_API_KEY, None)
 
+    # Get or create notification preferences
+    preferences, created = UserNotificationPreferences.objects.get_or_create(user=request.user)
+    notification_preferences_form = NotificationPreferencesForm(instance=preferences)
+
     oauth_tokens = (
         OAuth2AccessToken.objects.filter(user=request.user).select_related("application").order_by("-created")
     )
@@ -70,6 +76,7 @@ def profile(request):
         "account/profile.html",
         {
             "form": form,
+            "notification_preferences_form": notification_preferences_form,
             "active_tab": "profile",
             "page_title": _("Profile"),
             "api_keys": request.user.api_keys.filter(revoked=False).select_related("team"),
@@ -140,4 +147,18 @@ def revoke_oauth_token(request):
             app=token.application.name,
         ),
     )
+    return HttpResponseRedirect(reverse("users:user_profile"))
+
+
+@login_required
+@require_POST
+def save_notification_preferences(request):
+    """Save notification preferences from the profile page"""
+    preferences, created = UserNotificationPreferences.objects.get_or_create(user=request.user)
+    form = NotificationPreferencesForm(request.POST, instance=preferences)
+    if form.is_valid():
+        form.save()
+        messages.success(request, _("Notification preferences saved successfully."))
+    else:
+        messages.error(request, _("Failed to save notification preferences."))
     return HttpResponseRedirect(reverse("users:user_profile"))
