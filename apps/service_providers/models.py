@@ -82,16 +82,16 @@ class LlmProviderTypes(LlmProviderType, Enum):
 
     @property
     def supports_transcription(self):
-        return self.value.additional_config.get("supports_transcription", False)
+        return self.additional_config.get("supports_transcription", False)
 
     @property
     def supports_assistants(self):
-        return self.value.additional_config.get("supports_assistants", False)
+        return self.additional_config.get("supports_assistants", False)
 
     @property
     def max_vector_stores(self) -> int | None:
         """Returns the maximum number of vector stores supported per request, or None if unlimited."""
-        return self.value.additional_config.get("max_vector_stores")
+        return self.additional_config.get("max_vector_stores")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -115,7 +115,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict) -> llm_service.LlmService:
-        config = {**config, **self.value.additional_config, "_type": self.value.slug}
+        config = {**config, **self.additional_config, "_type": self.slug}
         try:
             match self:
                 case LlmProviderTypes.openai:
