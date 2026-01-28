@@ -653,7 +653,7 @@ class ChannelBase(ABC):
         self._bot_message_is_voice = True
         voice_provider = self.experiment.voice_provider
         synthetic_voice = self.experiment.synthetic_voice
-        voice = self.bot.synthesize_voice()
+        voice = self.bot.get_synthetic_voice()
         if voice:
             synthetic_voice = voice
 
