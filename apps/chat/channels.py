@@ -470,9 +470,7 @@ class ChannelBase(ABC):
 
     def _send_seed_message(self) -> str:
         with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}) as span:
-            bot_response, _ = self.bot.process_input(
-                user_input=self.experiment.seed_message, save_input_to_history=False
-            )
+            bot_response = self.bot.process_input(user_input=self.experiment.seed_message)
             span.set_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
             if self._bot_message_is_voice:
@@ -713,8 +711,15 @@ class ChannelBase(ABC):
         raise ChannelException("Voice transcription is not available for this experiment")
 
     def _get_bot_response(self, message: str) -> tuple[ChatMessage, ChatMessage | None]:
-        chat_messages = self.bot.process_input(message, attachments=self.message.attachments)
-        return chat_messages
+        attachments = self.message.attachments
+        metadata = {}
+        if attachments:
+            metadata["ocs_attachment_file_ids"] = [attachment.file_id for attachment in attachments]
+        human_message = self._add_message_to_history(message, ChatMessageType.HUMAN, metadata=metadata)
+        if self.trace_service:
+            self.trace_service.set_input_message_id(human_message.id)
+        ai_message = self.bot.process_input(message, attachments=attachments, human_message=human_message)
+        return ai_message, human_message
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType, metadata=None):
         """Use this to update the chat history when not using the normal bot flow"""

@@ -16,6 +16,8 @@ AttachmentType = Literal["code_interpreter", "file_search", "ocs_attachments"]
 
 
 class MediaCache(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     content_type: str
     data: BytesIO
 

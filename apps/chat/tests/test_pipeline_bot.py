@@ -11,7 +11,6 @@ def test_session_tags():
     bot._save_outputs(
         input_state=PipelineState(messages=["hi"]),
         output=PipelineState(messages=["Hello"], session_tags=[("my-tag", None)]),
-        save_input_to_history=False,
     )
     session.chat.create_and_add_tag.assert_called_with("my-tag", session.team, tag_category=None)
 
@@ -23,7 +22,6 @@ def test_save_session_state():
     bot._save_outputs(
         input_state=PipelineState(messages=["hi"]),
         output=PipelineState(messages=["Hello"], session_state={"test": "demo"}),
-        save_input_to_history=False,
     )
     assert session.state == {"test": "demo"}
     session.save.assert_called()
@@ -38,7 +36,6 @@ def test_save_participant_data():
     bot._save_outputs(
         input_state=PipelineState(messages=["hi"]),
         output=PipelineState(messages=["Hello"], participant_data={"test": "demo"}),
-        save_input_to_history=False,
     )
     assert participant_data.data == {"test": "demo"}
     participant_data.save.assert_called()

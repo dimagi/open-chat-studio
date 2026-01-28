@@ -3,6 +3,7 @@ from unittest import mock
 import pytest
 
 from apps.chat.bots import PipelineBot
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistory
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
@@ -214,13 +215,19 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
         trace_service=TracingService.empty(),
     )
 
+    def send_message(text):
+        human_message = ChatMessage.objects.create(
+            chat=experiment_session.chat, message_type=ChatMessageType.HUMAN, content=text
+        )
+        return bot.process_input(text, human_message=human_message)
+
     user_input = "The User Input"
-    output_1, _ = bot.process_input(user_input)
+    output_1 = send_message(user_input)
     user_input_2 = "Saying more stuff"
-    output_2, _ = bot.process_input(user_input_2)
+    output_2 = send_message(user_input_2)
 
     user_input_3 = "Tell me something interesting"
-    bot.process_input(user_input_3)
+    send_message(user_input_3)
 
     expected_call_messages = [
         # First interaction with Node 1, no history yet
