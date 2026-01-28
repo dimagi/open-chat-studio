@@ -627,6 +627,9 @@ class ChannelBase(ABC):
 
         if self._bot_message_is_voice:
             ai_message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
+            if self._synthesized_voice_audio:
+                self._save_voice_attachment(self._synthesized_voice_audio, ai_message)
+                self._synthesized_voice_audio = None
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
@@ -647,6 +650,7 @@ class ChannelBase(ABC):
 
         speech_service = voice_provider.get_speech_service()
         synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
+        self._synthesized_voice_audio = synthetic_voice_audio
         self.send_voice_to_user(synthetic_voice_audio)
 
     def _get_voice_transcript(self) -> str:
@@ -678,23 +682,17 @@ class ChannelBase(ABC):
         return self._create_chat_message(message_text)
 
     def _create_chat_message(self, message_text):
-        metadata = {}
+        metadata = {"ocs_attachment_file_ids": []}
         is_voice = self.message.content_type == MESSAGE_TYPES.VOICE
         if is_voice and self.message.cached_media_data:
-            file = File.create(
-                "voice_note",
-                self.message.cached_media_data.data,
-                self.experiment.team_id,
-                purpose=FilePurpose.MESSAGE_MEDIA,
-            )
             file = self._create_voice_note_attachment(
                 self.message.cached_media_data.data, self.message.cached_media_data.content_type
             )
-            metadata["ocs_attachment_file_ids"] = [file.id]
+            metadata["ocs_attachment_file_ids"].append(file.id)
 
         attachments = self.message.attachments
         if attachments:
-            metadata["ocs_attachment_file_ids"] = [attachment.file_id for attachment in attachments]
+            metadata["ocs_attachment_file_ids"].extend([attachment.file_id for attachment in attachments])
         human_message = self._add_message_to_history(message_text, ChatMessageType.HUMAN, metadata=metadata)
         if is_voice:
             human_message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
@@ -713,6 +711,12 @@ class ChannelBase(ABC):
         )
         self.experiment_session.chat.attach_files("voice_message", [file])
         return file
+
+    def _save_voice_attachment(self, audio: SynthesizedAudio, message: ChatMessage):
+        """Save synthesized voice audio as attachment on message."""
+        audio.audio.seek(0)
+        file = self._create_voice_note_attachment(audio.audio, audio.content_type)
+        message.add_attachment_id(file.id)
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType, metadata=None):
         """Use this to update the chat history when not using the normal bot flow"""
