@@ -186,7 +186,9 @@ class TwilioService(MessagingService):
         family, sub_type = content_type.split("/", 1)
         if family != "audio":
             raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
-        return audio.convert_audio(data, target_format="wav", source_format=sub_type)
+        converted = audio.convert_audio(data, target_format="wav", source_format=sub_type)
+        data.seek(0)
+        return converted
 
     def _get_account_numbers(self) -> list[str]:
         """Returns all numbers associated with this client account"""
