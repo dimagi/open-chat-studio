@@ -171,7 +171,7 @@ class TwilioService(MessagingService):
 
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:
         auth = (self.account_sid, self.auth_token)
-        response = httpx.get(message.media_url, auth=auth)
+        response = httpx.get(message.media_url, auth=auth, follow_redirects=True)
         # Example header: {'Content-Type': 'audio/ogg'}
         content_type = response.headers["Content-Type"].split("/")[1]
         return audio.convert_audio(BytesIO(response.content), target_format="wav", source_format=content_type)
