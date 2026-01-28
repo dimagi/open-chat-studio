@@ -86,7 +86,7 @@ class BaseMessage(BaseModel):
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     attachments: list[Attachment] = Field(default=[])
 
-    cached_media_data: MediaCache | None = Field(default=None)
+    cached_media_data: MediaCache | None = Field(default=None, exclude=True)
 
 
 class TelegramMessage(BaseMessage):
