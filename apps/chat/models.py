@@ -261,8 +261,9 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def add_attachment_id(self, file_id: int):
         """Add a file ID to the message's attachment list."""
         ids = self.metadata.setdefault("ocs_attachment_file_ids", [])
-        ids.append(file_id)
-        self.save(update_fields=["metadata"])
+        if file_id not in ids:
+            ids.append(file_id)
+            self.save(update_fields=["metadata"])
 
     def add_version_tag(self, version_number: int, is_a_version: bool):
         tag = f"v{version_number}"
