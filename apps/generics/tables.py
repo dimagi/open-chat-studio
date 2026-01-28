@@ -47,3 +47,12 @@ class TimeAgoColumn(tables.TemplateColumn):
         </time>
         """
         super().__init__(template_code=template, *args, **kwargs)  # noqa B026
+
+
+class ArrayColumn(tables.Column):
+    """
+    A column that renders `array` fields.
+    """
+
+    def render(self, value):
+        return ", ".join([str(v) for v in value])

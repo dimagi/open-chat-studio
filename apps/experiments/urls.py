@@ -41,7 +41,6 @@ urlpatterns = [
     # experiments - redirect to chatbots
     path("new/", RedirectView.as_view(pattern_name="chatbots:new"), name="new"),
     path("e/<int:experiment_id>/trends/data", views.trends_data, name="trends_data"),
-    path("e/<int:experiment_id>/sessions-table/", views.ExperimentSessionsTableView.as_view(), name="sessions-list"),
     path("e/<int:experiment_id>/versions/", views.ExperimentVersionsTableView.as_view(), name="versions-list"),
     path(
         "e/<int:experiment_id>/versions/archive/<int:version_number>/",
