@@ -58,6 +58,7 @@ def check_single_custom_action_health(action_id: int):
         logger.warning(f"Health check error for {action.name}: {str(e)}")
 
     # Update the action's health status
+    previous_status = action.health_status
     action.health_status = new_status
     action.last_health_check = timezone.now()
     action.save(update_fields=["health_status", "last_health_check"])
@@ -65,7 +66,7 @@ def check_single_custom_action_health(action_id: int):
     # Notify team members if status changed to DOWN
     # TODO: Consider notifying on UP status as well
     # TODO: Conditional notification
-    if new_status == HealthCheckStatus.DOWN:
+    if previous_status == HealthCheckStatus.UP and new_status == HealthCheckStatus.DOWN:
         create_notification(
             title="Custom Action is down",
             message=f"The custom action '{action.name}' is currently unreachable at its health endpoint.",
