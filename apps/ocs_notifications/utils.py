@@ -3,6 +3,7 @@ import logging
 from django.core.cache import cache
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
+from django.utils import timezone
 
 from apps.teams.models import Team
 
@@ -36,10 +37,11 @@ def create_notification(
     users = set(users)
 
     try:
-        notification, created = Notification.objects.get_or_create(
+        notification, created = Notification.objects.update_or_create(
             title=title,
             message=message,
             level=level,
+            defaults={"last_event_at": timezone.now()},
         )
         for user in users:
             if level == LevelChoices.ERROR:

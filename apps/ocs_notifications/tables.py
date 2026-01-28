@@ -22,7 +22,7 @@ class UserNotificationTable(tables.Table):
     )
     timestamp = TimeAgoColumn(
         verbose_name="Timestamp",
-        accessor="updated_at",
+        accessor="notification__last_event_at",
         orderable=True,
     )
 

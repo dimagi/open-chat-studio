@@ -14,9 +14,15 @@ class Notification(BaseModel):
     message = models.TextField()
     level = models.CharField(max_length=1, choices=LevelChoices.choices)
     users = models.ManyToManyField("users.CustomUser", through="UserNotification", related_name="notifications")
+    last_event_at = models.DateTimeField()
 
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+        if self.last_event_at is None:
+            self.last_event_at = self.created_at
+        super().save(*args, **kwargs)
 
 
 class UserNotification(BaseModel):
