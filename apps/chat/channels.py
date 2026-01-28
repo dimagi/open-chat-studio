@@ -485,7 +485,6 @@ class ChannelBase(ABC):
         """Sends the `bot_message` to the user. The experiment's config will determine which message type to use"""
         files = files or []
         supported_files = []
-        unsupported_files = []
 
         reply_text = True
         user_sent_voice = self.message and self.message.content_type == MESSAGE_TYPES.VOICE
@@ -517,12 +516,12 @@ class ChannelBase(ABC):
 
             try:
                 self._reply_voice_message(bot_message)
-
                 if urls_to_append:
                     self.send_text_to_user(urls_to_append)
             except AudioSynthesizeException as e:
                 logger.exception(e)
                 bot_message = f"{bot_message}\n\n{urls_to_append}"
+                self.send_text_to_user(bot_message)
 
         # Finally send the attachments that are supported by the channel
         if supported_files:
