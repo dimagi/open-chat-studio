@@ -41,12 +41,12 @@ class ReadFilter(ChoiceColumnFilter):
         return queryset.exclude(read__in=value)
 
 
-class StatusFilter(ChoiceColumnFilter):
-    """Filter notifications by level/status."""
+class SeverityLevelFilter(ChoiceColumnFilter):
+    """Filter notifications by level/level."""
 
-    query_param: str = "status"
+    query_param: str = "level"
     column: str = "notification__level"
-    label: str = "Status"
+    label: str = "Severity Level"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -71,5 +71,5 @@ class UserNotificationFilter(MultiColumnFilter):
     filters: ClassVar[Sequence] = [
         ReadFilter(),
         TimestampFilter(label="Notification Date", column="created_at", query_param="notification_date"),
-        StatusFilter(),
+        SeverityLevelFilter(),
     ]
