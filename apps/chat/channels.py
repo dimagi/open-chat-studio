@@ -708,6 +708,7 @@ class ChannelBase(ABC):
             data,
             self.experiment.team_id,
             purpose=FilePurpose.MESSAGE_MEDIA,
+            content_type=content_type,
         )
         self.experiment_session.chat.attach_files("voice_message", [file])
         return file
