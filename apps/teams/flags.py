@@ -47,6 +47,8 @@ class Flags(FlagInfo, Enum):
 
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
 
+    NOTIFICATIONS = ("flag_notifications", "User notifications")
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)
