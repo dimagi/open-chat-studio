@@ -66,8 +66,8 @@ def check_single_custom_action_health(action_id: int):
     # TODO: Conditional notification
     if new_status == HealthCheckStatus.DOWN:
         create_notification(
-            title=f"Custom Action '{action.name}' is DOWN",
-            message="",
+            title="Custom Action is down",
+            message=f"The custom action '{action.name}' is currently unreachable at its health endpoint.",
             category="error",
             team=action.team,
         )

@@ -5,17 +5,26 @@ from apps.ocs_notifications.models import UserNotification
 
 
 class UserNotificationTable(tables.Table):
-    notification_title = columns.Column(accessor="notification__title", verbose_name="Title")
-    notification_message = columns.Column(accessor="notification__message", verbose_name="Message")
-    notification_category = columns.Column(accessor="notification__category", verbose_name="Category")
-    read = columns.BooleanColumn(verbose_name="Read")
+    notification_content = columns.TemplateColumn(
+        template_name="ocs_notifications/components/notification_content.html",
+        verbose_name="Notification",
+        orderable=False,
+    )
+    category = columns.TemplateColumn(
+        template_name="ocs_notifications/components/category_badge.html",
+        accessor="notification__category",
+        verbose_name="Category",
+        orderable=False,
+    )
+    read = columns.TemplateColumn(
+        template_name="ocs_notifications/components/read_button.html", verbose_name="Read Status", orderable=False
+    )
 
     class Meta:
         model = UserNotification
         fields = (
-            "notification_title",
-            "notification_message",
-            "notification_category",
+            "notification_content",
+            "category",
             "read",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS

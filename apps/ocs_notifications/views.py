@@ -1,5 +1,7 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.utils import timezone
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
@@ -26,3 +28,22 @@ class UserNotificationTableView(LoginRequiredMixin, SingleTableView):
 
     def get_queryset(self):
         return UserNotification.objects.filter(user=self.request.user).select_related("notification")
+
+
+class ToggleNotificationReadView(LoginRequiredMixin, TemplateView):
+    template_name = "ocs_notifications/components/read_button.html"
+
+    def post(self, request, *args, **kwargs):
+        notification_id = kwargs.get("notification_id")
+        user_notification = get_object_or_404(UserNotification, id=notification_id, user=request.user)
+
+        # Toggle the read status
+        user_notification.read = not user_notification.read
+        if user_notification.read:
+            user_notification.read_at = timezone.now()
+        else:
+            user_notification.read_at = None
+        user_notification.save()
+
+        # Return the updated button
+        return self.render_to_response({"record": user_notification})
