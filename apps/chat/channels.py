@@ -687,7 +687,9 @@ class ChannelBase(ABC):
                 self.experiment.team_id,
                 purpose=FilePurpose.MESSAGE_MEDIA,
             )
-            self.experiment_session.chat.attach_files("voice_message", [file])
+            file = self._create_voice_note_attachment(
+                self.message.cached_media_data.data, self.message.cached_media_data.content_type
+            )
             metadata["ocs_attachment_file_ids"] = [file.id]
 
         attachments = self.message.attachments
@@ -700,6 +702,17 @@ class ChannelBase(ABC):
             self.trace_service.set_input_message_id(human_message.id)
 
         return human_message
+
+    def _create_voice_note_attachment(self, data: BytesIO, content_type: str) -> File:
+        ext = content_type.split("/")[1]
+        file = File.create(
+            f"voice_note.{ext}",
+            data,
+            self.experiment.team_id,
+            purpose=FilePurpose.MESSAGE_MEDIA,
+        )
+        self.experiment_session.chat.attach_files("voice_message", [file])
+        return file
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType, metadata=None):
         """Use this to update the chat history when not using the normal bot flow"""

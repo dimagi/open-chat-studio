@@ -34,6 +34,10 @@ class SynthesizedAudio:
             audio = convert_audio(audio=self.audio, target_format=format, source_format=self.format, codec=codec)
         return audio.getvalue()
 
+    @property
+    def content_type(self):
+        return f"audio/{self.format}"
+
 
 class SpeechService(pydantic.BaseModel):
     _type: ClassVar[str]

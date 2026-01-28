@@ -79,10 +79,11 @@ class File(BaseTeamModel, VersionsMixin):
         metadata: dict | None = None,
         purpose: FilePurpose | None = None,
         expiry_date: datetime | None = None,
+        content_type: str | None = None,
     ):
         content = file_obj.read() if file_obj else None
 
-        content_type = mimetypes.guess_type(filename)[0]
+        content_type = content_type or mimetypes.guess_type(filename)[0]
         if not content_type and content:
             # typically means the filename doesn't have an extension
             content_type = magic.from_buffer(content, mime=True)
