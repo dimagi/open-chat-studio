@@ -30,7 +30,7 @@ from apps.chat.exceptions import (
     ParticipantNotAllowedException,
     VersionedExperimentSessionsNotAllowedException,
 )
-from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -83,6 +83,7 @@ def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
 class MESSAGE_TYPES(Enum):
     TEXT = "text"
     VOICE = "voice"
+    OTHER = "other"
 
     @staticmethod
     def is_member(value: str):
@@ -194,7 +195,6 @@ class ChannelBase(ABC):
         self._user_message_is_voice = False
         self._bot_message_is_voice = False
         self.reset_bot()
-        self.reset_user_query()
 
     @cached_property
     def messaging_service(self):
@@ -332,35 +332,6 @@ class ChannelBase(ABC):
             experiment_session=experiment_session,
         )
 
-    @cached_property
-    def user_query(self) -> str:
-        """Returns the user query, extracted from whatever (supported) message type was used to convey the
-        message
-        """
-        try:
-            return self._extract_user_query()
-        except Exception:
-            metadata = self.trace_service.get_trace_metadata()
-            message = self._add_message_to_history("", ChatMessageType.HUMAN, metadata)
-            if self._user_message_is_voice and self.message.cached_media_data:
-                message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
-                chat_attachment, _ = ChatAttachment.objects.get_or_create(
-                    chat=self.experiment_session.chat, tool_type="voice_message"
-                )
-                file = File.create(
-                    "voice_note",
-                    self.message.cached_media_data.data,
-                    self.experiment.team_id,
-                    purpose=FilePurpose.MESSAGE_MEDIA,
-                )
-                chat_attachment.files.add(file)
-                message.metadata["ocs_attachment_file_ids"] = [file.id]
-            raise
-
-    def reset_user_query(self):
-        with contextlib.suppress(AttributeError):
-            del self.user_query
-
     def _add_message(self, message: BaseMessage):
         """Adds the message to the handler in order to extract session information"""
         self.message = message
@@ -407,6 +378,8 @@ class ChannelBase(ABC):
                 resp = self._handle_unsupported_message()
                 return ChatMessage(content=resp)
 
+            human_message = self._create_chat_message_from_user_message()
+
             if self.supports_conversational_consent_flow:
                 # Webchats' statuses are updated through an "external" flow
                 if self._is_reset_conversation_request():
@@ -422,7 +395,7 @@ class ChannelBase(ABC):
                     self.experiment_session.update_status(SessionStatus.ACTIVE)
 
             enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
-            return self._handle_supported_message()
+            return self._handle_supported_message(human_message)
         except Exception as e:
             self._inform_user_of_error(e)
             raise e
@@ -440,9 +413,6 @@ class ChannelBase(ABC):
 
         (Status==PENDING_PRE_SURVEY) user indicated that they took the survey -> sett status to ACTIVE
         """
-        # We manually add the message to the history here, since this doesn't follow the normal flow
-        self._add_message_to_history(self.user_query, ChatMessageType.HUMAN)
-
         if self.experiment_session.status == SessionStatus.SETUP:
             return self._chat_initiated()
         elif self.experiment_session.status == SessionStatus.PENDING:
@@ -652,10 +622,12 @@ class ChannelBase(ABC):
                 download_link = file.download_link(self.experiment_session.id)
                 self.send_text_to_user(download_link)
 
-    def _handle_supported_message(self):
-        with self.trace_service.span("Process Message", inputs={"input": self.user_query}) as span:
+    def _handle_supported_message(self, human_message):
+        with self.trace_service.span("Process Message", inputs={"input": human_message.content}) as span:
             self.submit_input_to_llm()
-            ai_message, human_message = self._get_bot_response(message=self.user_query)
+            ai_message = self.bot.process_input(
+                human_message.content, attachments=self.message.attachments, human_message=human_message
+            )
 
             files = ai_message.get_attached_files() or []
             span.set_outputs({"response": ai_message.content, "attachments": [file.name for file in files]})
@@ -667,9 +639,6 @@ class ChannelBase(ABC):
 
         if self._bot_message_is_voice:
             ai_message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
-
-        if human_message and self._user_message_is_voice:
-            human_message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
 
         # Returning the response here is a bit of a hack to support chats through the web UI while trying to
         # use a coherent interface to manage / handle user messages
@@ -710,16 +679,40 @@ class ChannelBase(ABC):
                 return speech_service.transcribe_audio(audio)
         raise ChannelException("Voice transcription is not available for this experiment")
 
-    def _get_bot_response(self, message: str) -> tuple[ChatMessage, ChatMessage | None]:
-        attachments = self.message.attachments
+    def _create_chat_message_from_user_message(self) -> ChatMessage:
+        message_text = self.message.message_text
+        if self.message.content_type == MESSAGE_TYPES.VOICE:
+            try:
+                message_text = self._get_voice_transcript()
+            except Exception:
+                self._create_chat_message(message_text)
+                raise
+
+        return self._create_chat_message(message_text)
+
+    def _create_chat_message(self, message_text):
         metadata = {}
+        is_voice = self.message.content_type == MESSAGE_TYPES.VOICE
+        if is_voice and self.message.cached_media_data:
+            file = File.create(
+                "voice_note",
+                self.message.cached_media_data.data,
+                self.experiment.team_id,
+                purpose=FilePurpose.MESSAGE_MEDIA,
+            )
+            self.experiment_session.chat.attach_files("voice_message", [file])
+            metadata["ocs_attachment_file_ids"] = [file.id]
+
+        attachments = self.message.attachments
         if attachments:
             metadata["ocs_attachment_file_ids"] = [attachment.file_id for attachment in attachments]
-        human_message = self._add_message_to_history(message, ChatMessageType.HUMAN, metadata=metadata)
+        human_message = self._add_message_to_history(message_text, ChatMessageType.HUMAN, metadata=metadata)
+        if is_voice:
+            human_message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)
         if self.trace_service:
             self.trace_service.set_input_message_id(human_message.id)
-        ai_message = self.bot.process_input(message, attachments=attachments, human_message=human_message)
-        return ai_message, human_message
+
+        return human_message
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType, metadata=None):
         """Use this to update the chat history when not using the normal bot flow"""

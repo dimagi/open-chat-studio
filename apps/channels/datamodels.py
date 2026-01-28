@@ -130,6 +130,7 @@ class TwilioMessage(BaseMessage):
             return MESSAGE_TYPES.TEXT
         if value and value in ["audio/ogg", "video/mp4"]:
             return MESSAGE_TYPES.VOICE
+        return MESSAGE_TYPES.OTHER
 
     @staticmethod
     def parse(message_data: dict) -> "TwilioMessage":
