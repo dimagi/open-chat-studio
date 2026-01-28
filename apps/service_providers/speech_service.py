@@ -228,7 +228,9 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
     openai_organization: str | None = None
 
     @property
-    def _client(self) -> OpenAI:
+    def _client(self) -> "OpenAI":
+        from openai import OpenAI
+
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
