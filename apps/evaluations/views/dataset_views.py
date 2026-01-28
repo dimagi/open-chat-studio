@@ -179,11 +179,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 
         if has_explicit_filters:
             # Apply the same filters to get the filtered session IDs
-            queryset = (
-                ExperimentSession.objects.with_last_message_created_at()
-                .filter(team=self.request.team)
-                .select_related("participant__user")
-            )
+            queryset = ExperimentSession.objects.filter(team=self.request.team).select_related("participant__user")
             timezone = self.request.session.get("detected_tz", None)
             session_filter = ExperimentSessionFilter()
             filtered_queryset = session_filter.apply(
