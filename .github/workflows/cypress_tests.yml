@@ -76,8 +76,7 @@ jobs:
       - name: Set up test database and user
         run: |
           uv run python manage.py migrate
-          uv run python cypress/create_test_user.py
-          uv run python cypress/seed_test_data.py
+          uv run python manage.py bootstrap_data
         env:
           DEBUG: 'true'
           USE_DEBUG_TOOLBAR: 'false'

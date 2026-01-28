@@ -1,34 +1,38 @@
 # Cypress E2E Tests - Quick Start
 
-## 🚀 Getting Started in 3 Steps
+## Getting Started in 3 Steps
 
 ### 1. Install Cypress
 ```bash
 npm install cypress --save-dev
 ```
 
-### 2. Create Test User
+### 2. Create Test User and Seed Data
 ```bash
-python cypress/create_test_user.py
+python manage.py bootstrap_data
 ```
 
 This will output something like:
 ```
-✓ Created user: test@example.com
-✓ Created team: test-team
-✓ Added user to team as admin
+==================================================
+Seeding development data...
+==================================================
+Default groups initialized
+Created user: test@example.com
+Created team: test-team
+Added user to team as owner
+...
 
-Setup complete! Update your cypress.env.json with:
+Setup complete!
 
-{
-  "TEAM_SLUG": "test-team",
-  "TEST_USER": "test@example.com",
-  "TEST_PASSWORD": "testpassword"
-}
+You can now log in with:
+  Email: test@example.com
+  Password: testpassword
+  Team: test-team
 ```
 
 ### 3. Create `cypress.env.json`
-Copy the JSON output above into a new file `cypress.env.json` in your project root:
+Create a new file `cypress.env.json` in your project root:
 
 ```json
 {
@@ -38,7 +42,7 @@ Copy the JSON output above into a new file `cypress.env.json` in your project ro
 }
 ```
 
-## ✅ Run Tests
+## Run Tests
 
 ### Quick Run (Simplified Tests Only)
 ```bash
@@ -80,30 +84,43 @@ npx cypress run --spec "cypress/e2e/all-apps-simple.cy.js"
 
 Use the simplified tests for CI/CD and general testing.
 
-## 📝 What Gets Tested
+## What Gets Tested
 
 The simplified tests check that:
-- ✅ Pages load successfully
-- ✅ Pages have content
-- ✅ Basic navigation works
-- ✅ Forms exist where expected
-- ✅ Tables/lists display when data exists
+- Pages load successfully
+- Pages have content
+- Basic navigation works
+- Forms exist where expected
+- Tables/lists display when data exists
 
 Tests are **graceful** - they won't fail if:
 - Pages are empty (no data yet)
 - Features require special permissions
 - Optional elements don't exist
 
-## 🔧 Troubleshooting
+## Management Command Options
+
+```bash
+# Create user/team only (no sample data)
+python manage.py bootstrap_data --skip-sample-data
+
+# Custom email and team
+python manage.py bootstrap_data --email dev@test.com --team-slug dev-team
+
+# See all options
+python manage.py bootstrap_data --help
+```
+
+## Troubleshooting
 
 ### Login Fails
 ```
-❌ Login failed for user 'test@example.com'
+Login failed for user 'test@example.com'
 ```
 
-**Solution:** Run the setup script again:
+**Solution:** Run the setup command again:
 ```bash
-python cypress/create_test_user.py
+python manage.py bootstrap_data
 ```
 
 ### Wrong Team Slug
@@ -115,7 +132,7 @@ AssertionError: expected 'http://localhost:8000/404' to include '/chatbots/'
 
 ### Tests Skip Login
 ```
-⚠️ No credentials provided. Tests will attempt to run without authentication
+No credentials provided. Tests will attempt to run without authentication
 ```
 
 **Solution:** Make sure `cypress.env.json` exists and has TEST_USER and TEST_PASSWORD
@@ -130,7 +147,7 @@ Error: Cypress failed to verify that your server is running
 python manage.py runserver
 ```
 
-## 🎯 Test Files
+## Test Files
 
 - `*-simple.cy.js` - Simplified, robust tests (recommended)
 - `*.cy.js` - Detailed tests with more assumptions
