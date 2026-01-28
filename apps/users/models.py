@@ -57,6 +57,6 @@ class CustomUser(AbstractUser):
         if count := cache.get(cache_key):
             return count
 
-        count = self.notifications.through.objects.filter(read=False).count()
+        count = self.notifications.through.objects.filter(user_id=self.id, read=False).count()
         cache.set(cache_key, count, 5 * 3600)
         return count
