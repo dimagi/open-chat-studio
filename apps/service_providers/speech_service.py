@@ -3,18 +3,17 @@ import tempfile
 from contextlib import closing
 from dataclasses import dataclass
 from io import BytesIO
-from typing import IO, ClassVar
+from typing import IO, TYPE_CHECKING, ClassVar
 
-import azure.cognitiveservices.speech as speechsdk
-import boto3
 import httpx
 import pydantic
-from openai import OpenAI
-from pydub import AudioSegment
 
 from apps.channels.audio import convert_audio
 from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException
 from apps.experiments.models import SyntheticVoice
+
+if TYPE_CHECKING:
+    from openai import OpenAI
 
 log = logging.getLogger("ocs.speech")
 
@@ -75,6 +74,10 @@ class AWSSpeechService(SpeechService):
         """
         Calls AWS Polly to convert the text to speech using the synthetic_voice
         """
+        # keep heavy imports inline
+        import boto3
+        from pydub import AudioSegment
+
         polly_client = boto3.Session(
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key,
@@ -106,6 +109,10 @@ class AzureSpeechService(SpeechService):
         """
         Calls Azure's cognitive speech services to convert the text to speech using the synthetic_voice
         """
+        # keep heavy imports inline
+        import azure.cognitiveservices.speech as speechsdk
+        from pydub import AudioSegment
+
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
@@ -142,6 +149,9 @@ class AzureSpeechService(SpeechService):
             raise AudioSynthesizeException(f"Unexpected result: {result}")
 
     def _transcribe_audio(self, audio: IO[bytes]) -> str:
+        # keep heavy imports inline
+        import azure.cognitiveservices.speech as speechsdk
+
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
         speech_config.speech_recognition_language = "en-US"
 
@@ -177,13 +187,19 @@ class OpenAISpeechService(SpeechService):
     openai_organization: str | None = None
 
     @property
-    def _client(self) -> OpenAI:
+    def _client(self) -> "OpenAI":
+        # keep heavy imports inline
+        from openai import OpenAI
+
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
         """
         Calls OpenAI to convert the text to speech using the synthetic_voice
         """
+        # keep heavy imports inline
+        from pydub import AudioSegment
+
         response = self._client.audio.speech.create(model="gpt-4o-mini-tts", voice=synthetic_voice.name, input=text)
         audio_data = response.read()
 
@@ -214,6 +230,9 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
         """
         Uses the voice sample from `synthetic_voice` and calls OpenAI to synthesize audio with the sample voice
         """
+        # keep heavy imports inline
+        from pydub import AudioSegment
+
         sample_audio = synthetic_voice.file
 
         url = "https://api.openai.com/v1/audio/synthesize"

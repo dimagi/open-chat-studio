@@ -229,7 +229,7 @@ class PipelineBot:
                 chat_message.create_and_add_tag(tag_value, self.session.team, category or "")
         return chat_message
 
-    def get_synthetic_voice(self) -> tuple[SyntheticVoice] | None:
+    def get_synthetic_voice(self) -> SyntheticVoice | None:
         from apps.experiments.models import SyntheticVoice
 
         if self.synthetic_voice_id is None:
