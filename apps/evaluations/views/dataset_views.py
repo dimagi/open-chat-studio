@@ -236,9 +236,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
 
     def get_queryset(self):
         queryset = get_base_session_queryset(self.request)
-        queryset = queryset.annotate_with_versions_list().annotate(
-            message_count=Coalesce(Count("chat__messages", distinct=True), 0)
-        )
+        queryset = queryset.annotate(message_count=Coalesce(Count("chat__messages", distinct=True), 0))
         return queryset.select_related("team", "participant__user", "chat", "experiment").order_by("experiment__name")
 
 
