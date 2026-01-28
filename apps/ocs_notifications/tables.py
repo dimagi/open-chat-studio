@@ -1,6 +1,7 @@
 from django.conf import settings
 from django_tables2 import columns, tables
 
+from apps.generics.tables import TimeAgoColumn
 from apps.ocs_notifications.models import UserNotification
 
 
@@ -19,6 +20,11 @@ class UserNotificationTable(tables.Table):
     read = columns.TemplateColumn(
         template_name="ocs_notifications/components/read_button.html", verbose_name="Read Status", orderable=True
     )
+    timestamp = TimeAgoColumn(
+        verbose_name="Timestamp",
+        accessor="updated_at",
+        orderable=True,
+    )
 
     class Meta:
         model = UserNotification
@@ -26,6 +32,7 @@ class UserNotificationTable(tables.Table):
             "notification_content",
             "level",
             "read",
+            "timestamp",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
