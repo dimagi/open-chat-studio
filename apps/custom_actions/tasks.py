@@ -5,6 +5,7 @@ from celery.app import shared_task
 from django.utils import timezone
 
 from apps.custom_actions.models import CustomAction, HealthCheckStatus
+from apps.ocs_notifications.utils import create_notification
 
 logger = logging.getLogger("ocs.custom_actions")
 
@@ -59,3 +60,14 @@ def check_single_custom_action_health(action_id: int):
     action.health_status = new_status
     action.last_health_check = timezone.now()
     action.save(update_fields=["health_status", "last_health_check"])
+
+    # Notify team members if status changed to DOWN
+    # TODO: Consider notifying on UP status as well
+    # TODO: Conditional notification
+    if new_status == HealthCheckStatus.DOWN:
+        create_notification(
+            title=f"Custom Action '{action.name}' is DOWN",
+            message="",
+            category="error",
+            team=action.team,
+        )
