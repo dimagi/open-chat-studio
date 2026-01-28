@@ -1,10 +1,11 @@
 import logging
 
 from django.core.cache import cache
+from django.utils import timezone
 
 from apps.teams.models import Team
 
-from .models import CategoryChoices, Notification
+from .models import CategoryChoices, Notification, UserNotification
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -34,18 +35,21 @@ def create_notification(
     users = set(users)
 
     try:
-        notification = Notification.objects.create(
+        notification, created = Notification.objects.get_or_create(
             title=title,
             message=message,
             category=category,
         )
         for user in users:
             if category == CategoryChoices.ERROR:
-                # Bust cache for errors
-                cache_key = f"{user.id}-unread-notifications-count"
-                cache.delete(cache_key)
+                bust_unread_notification_cache(user.id)
 
-            user.notifications.add(notification)
+            UserNotification.objects.update_or_create(
+                notification=notification,
+                user=user,
+                defaults={"read": False, "read_at": timezone.now()},
+                create_defaults={"read_at": timezone.now()},
+            )
     except Exception:
         logger.exception("Failed to create notification")
 

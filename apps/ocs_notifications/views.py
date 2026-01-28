@@ -113,6 +113,7 @@ def notification_preferences(request):
     form = NotificationPreferencesForm(request.POST, instance=preferences)
     if form.is_valid():
         form.save()
+        bust_unread_notification_cache(request.user.id)
         messages.success(request, _("Notification preferences saved successfully."))
         return redirect(reverse("users:user_profile"))
     else:
