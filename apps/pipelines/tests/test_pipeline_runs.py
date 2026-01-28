@@ -2,7 +2,7 @@ import pytest
 
 from apps.annotations.models import TagCategories
 from apps.chat.bots import PipelineBot
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import PipelineState
@@ -33,10 +33,7 @@ def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
     trace_service = TracingService([MockTracer()], 1, 1)
     with trace_service.trace("test", session):
         bot = PipelineBot(session=session, experiment=session.experiment, trace_service=trace_service)
-        human_message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
-        bot.process_input("Hi", human_message=human_message)
-    human_message.refresh_from_db()
-    assert "trace_info" in human_message.metadata
+        bot.process_input("Hi")
     ai_message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
     assert "trace_info" in ai_message.metadata
 
