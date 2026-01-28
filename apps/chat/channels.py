@@ -518,8 +518,9 @@ class ChannelBase(ABC):
                 self._reply_voice_message(bot_message)
                 if urls_to_append:
                     self.send_text_to_user(urls_to_append)
-            except AudioSynthesizeException as e:
-                logger.exception(e)
+            except AudioSynthesizeException:
+                logger.exception("Error generating voice response")
+                self._bot_message_is_voice = False
                 bot_message = f"{bot_message}\n\n{urls_to_append}"
                 self.send_text_to_user(bot_message)
 
