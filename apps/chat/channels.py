@@ -116,7 +116,6 @@ class ChannelBase(ABC):
         _can_send_file: A method to check if a file can be sent through the channel.
         get_message_audio: The method to retrieve the audio content of the message from the external channel
         transcription_started:A callback indicating that the transcription process has started
-        transcription_finished: A callback indicating that the transcription process has finished.
         submit_input_to_llm: A callback indicating that the user input will be given to the language model
     Public API:
         new_user_message: Handles a message coming from the user.
@@ -244,7 +243,7 @@ class ChannelBase(ABC):
         """Channel specific way of sending text back to the user"""
         raise NotImplementedError()
 
-    def send_file_to_user(self, files: list[File]):  # noqa: B027
+    def send_file_to_user(self, file: File):  # noqa: B027
         """
         Sends the file to the user. This is a channel specific way of sending files.
         The default implementation does nothing.
@@ -263,10 +262,6 @@ class ChannelBase(ABC):
 
     def transcription_started(self):  # noqa: B027
         """Callback indicating that the transcription process started"""
-        pass
-
-    def transcription_finished(self, transcript: str):  # noqa: B027
-        """Callback indicating that the transcription is finished"""
         pass
 
     def submit_input_to_llm(self):  # noqa: B027
@@ -486,12 +481,6 @@ class ChannelBase(ABC):
             and self.message.message_text.strip() == USER_CONSENT_TEXT
         )
 
-    def _extract_user_query(self) -> str:
-        if self.message.content_type == MESSAGE_TYPES.VOICE:
-            self._user_message_is_voice = True
-            return self._get_voice_transcript()
-        return self.message.message_text
-
     def send_message_to_user(self, bot_message: str, files: list[File] | None = None):
         """Sends the `bot_message` to the user. The experiment's config will determine which message type to use"""
         files = files or []
@@ -669,7 +658,6 @@ class ChannelBase(ABC):
         transcript = self._transcribe_audio(audio_file)
         if self.experiment.echo_transcript:
             self.echo_transcript(transcript)
-        self.transcription_finished(transcript)
         return transcript
 
     def _transcribe_audio(self, audio: BytesIO) -> str:
@@ -1127,14 +1115,6 @@ class SureAdhereChannel(ChannelBase):
     @property
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
-
-    @property
-    def message_content_type(self):
-        return self.message.content_type
-
-    @property
-    def message_text(self):
-        return self.message.message_text
 
 
 class FacebookMessengerChannel(ChannelBase):
