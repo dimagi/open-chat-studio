@@ -1,11 +1,12 @@
 import logging
 
 from django.core.cache import cache
-from django.utils import timezone
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
 
 from apps.teams.models import Team
 
-from .models import LevelChoices, Notification, UserNotification
+from .models import LevelChoices, Notification, UserNotification, UserNotificationPreferences
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -44,12 +45,15 @@ def create_notification(
             if level == LevelChoices.ERROR:
                 bust_unread_notification_cache(user.id)
 
-            UserNotification.objects.update_or_create(
-                notification=notification,
-                user=user,
-                defaults={"read": False, "read_at": timezone.now()},
-                create_defaults={"read_at": timezone.now()},
-            )
+            user_notification, created = UserNotification.objects.get_or_create(notification=notification, user=user)
+            should_send_email = created or user_notification.read is True
+            user_notification.read = False
+            user_notification.read_at = None
+            user_notification.save()
+
+            if should_send_email:
+                send_notification_email(user_notification)
+
     except Exception:
         logger.exception("Failed to create notification")
 
@@ -86,3 +90,47 @@ def bust_unread_notification_cache(user_id: int):
         user_id (int): The ID of the user whose cache should be busted.
     """
     cache.delete(CACHE_KEY_FORMAT.format(user_id=user_id))
+
+
+def send_notification_email(user_notification: UserNotification):
+    """
+    Send an email notification to the user.
+
+    Args:
+        user: The user to send the email to
+        notification: The notification object containing title, message, and level
+    """
+    user = user_notification.user
+    notification = user_notification.notification
+    if not UserNotificationPreferences.objects.filter(user=user_notification.user, email_enabled=True).exists():
+        return
+
+    subject = f"Notification: {notification.title}"
+
+    context = {
+        "user": user,
+        "notification": notification,
+        "title": notification.title,
+        "message": notification.message,
+        "level": notification.get_level_display(),
+    }
+
+    # Try to render a template if it exists, otherwise use plain text
+    try:
+        message = render_to_string("ocs_notifications/email/notification.html", context)
+        send_mail(
+            subject=subject,
+            message="",
+            from_email=None,  # Uses DEFAULT_FROM_EMAIL from settings
+            recipient_list=[user.email],
+            html_message=message,
+        )
+    except Exception:
+        # Fallback to plain text email
+        message = f"{notification.title}\n\n{notification.message}"
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=None,
+            recipient_list=[user.email],
+        )
