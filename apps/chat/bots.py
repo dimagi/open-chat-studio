@@ -168,12 +168,11 @@ class PipelineBot:
         output_metadata = output.get("output_message_metadata", {})
         trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
         if trace_metadata:
-            input_metadata.update(trace_metadata)
             output_metadata.update(trace_metadata)
 
         if human_message:
-            if input_metadata != human_message.metadata:
-                human_message.metadata = input_metadata
+            if input_metadata != input_state.get("input_message_metadata"):
+                human_message.metadata.update(input_metadata)
                 human_message.save(update_fields=["metadata"])
 
         output_tags = output.get("output_message_tags")
