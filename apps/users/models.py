@@ -1,11 +1,11 @@
 import hashlib
 
 from django.contrib.auth.models import AbstractUser, UserManager
-from django.core.cache import cache
 from django.db import models
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
+from apps.ocs_notifications.utils import get_user_notification_cache_value, set_user_notification_cache
 from apps.users.model_audit_fields import CUSTOM_USER_FIELDS
 from apps.web.storage_backends import get_public_media_storage
 
@@ -53,10 +53,10 @@ class CustomUser(AbstractUser):
         return hashlib.md5(self.email.lower().strip().encode("utf-8")).hexdigest()
 
     def unread_notifications_count(self) -> int:
-        cache_key = f"{self.id}-unread-notifications-count"
-        if count := cache.get(cache_key):
+        # TODO: Test
+        if count := get_user_notification_cache_value(self.id):
             return count
 
         count = self.notifications.through.objects.filter(user_id=self.id, read=False).count()
-        cache.set(cache_key, count, 5 * 3600)
+        set_user_notification_cache(self.id, count)
         return count

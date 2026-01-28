@@ -8,6 +8,8 @@ from .models import CategoryChoices, Notification
 
 logger = logging.getLogger("ocs.notifications")
 
+CACHE_KEY_FORMAT = "{user_id}-unread-notifications-count"
+
 
 def create_notification(
     title: str, message: str, category: CategoryChoices, users: list | None = None, team: Team | None = None, link=None
@@ -48,3 +50,35 @@ def create_notification(
         logger.exception("Failed to create notification")
 
     return notification
+
+
+# TODO: Test these methods
+def get_user_notification_cache_value(user_id: int) -> int | None:
+    """
+    Get the unread notifications count cache for a specific user.
+    Args:
+        user_id (int): The ID of the user whose cache should be retrieved.
+    """
+    return cache.get(CACHE_KEY_FORMAT.format(user_id=user_id))
+
+
+def set_user_notification_cache(user_id: int, count: int):
+    """
+    Set the unread notifications count cache for a specific user.
+
+    Args:
+        user_id (int): The ID of the user whose cache should be set.
+        count (int): The unread notifications count to cache.
+    """
+    cache_key = CACHE_KEY_FORMAT.format(user_id=user_id)
+    cache.set(cache_key, count, 5 * 60)  # Cache for 5 minutes
+
+
+def bust_unread_notification_cache(user_id: int):
+    """
+    Bust the unread notifications count cache for a specific user.
+
+    Args:
+        user_id (int): The ID of the user whose cache should be busted.
+    """
+    cache.delete(CACHE_KEY_FORMAT.format(user_id=user_id))

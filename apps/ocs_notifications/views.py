@@ -12,6 +12,8 @@ from apps.ocs_notifications.models import UserNotification
 from apps.ocs_notifications.tables import UserNotificationTable
 from apps.web.dynamic_filters.datastructures import FilterParams
 
+from .utils import bust_unread_notification_cache
+
 
 class NotificationHome(LoginRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
@@ -69,6 +71,7 @@ class ToggleNotificationReadView(LoginRequiredMixin, TemplateView):
         else:
             user_notification.read_at = None
         user_notification.save()
+        bust_unread_notification_cache(request.user.id)
 
         # Return the updated button
         return self.render_to_response({"record": user_notification})
