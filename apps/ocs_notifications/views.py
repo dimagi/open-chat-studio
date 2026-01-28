@@ -57,8 +57,10 @@ class UserNotificationTableView(LoginRequiredMixin, SingleTableView):
         return notification_filter.apply(queryset, filter_params=filter_params, timezone=timezone)
 
 
-class ToggleNotificationReadView(LoginRequiredMixin, TemplateView):
-    template_name = "ocs_notifications/components/read_button.html"
+class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
+    model = UserNotification
+    table_class = UserNotificationTable
+    template_name = "table/single_table.html"
 
     def post(self, request, *args, **kwargs):
         notification_id = kwargs.get("notification_id")
@@ -73,5 +75,15 @@ class ToggleNotificationReadView(LoginRequiredMixin, TemplateView):
         user_notification.save()
         bust_unread_notification_cache(request.user.id)
 
-        # Return the updated button
-        return self.render_to_response({"record": user_notification})
+        # Return the updated filtered table
+        return self.get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        queryset = UserNotification.objects.filter(user=self.request.user).select_related("notification")
+
+        # Apply filters
+        notification_filter = UserNotificationFilter()
+        filter_params = FilterParams.from_request(self.request)
+        timezone = self.request.session.get("detected_tz")
+
+        return notification_filter.apply(queryset, filter_params=filter_params, timezone=timezone)

@@ -17,7 +17,7 @@ class UserNotificationTable(tables.Table):
         orderable=False,
     )
     read = columns.TemplateColumn(
-        template_name="ocs_notifications/components/read_button.html", verbose_name="Read Status", orderable=False
+        template_name="ocs_notifications/components/read_button.html", verbose_name="Read Status", orderable=True
     )
 
     class Meta:
