@@ -54,9 +54,9 @@ def api_key(team_with_users):
     available_apps=["apps.api", "apps.experiments", "apps.teams", "apps.users", "apps.oauth"],
     serialized_rollback=True,
 )
-@patch("apps.chat.channels.ApiChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_chat_completion(mock_experiment_response, experiment, api_key, live_server):
-    mock_experiment_response.return_value = ChatMessage(content="So, this ain't the end, I saw you again today"), None
+    mock_experiment_response.return_value = ChatMessage(content="So, this ain't the end, I saw you again today")
 
     base_url = f"{live_server.url}/api/openai/{experiment.public_id}"
 
