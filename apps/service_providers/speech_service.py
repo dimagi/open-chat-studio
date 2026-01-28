@@ -35,7 +35,12 @@ class SynthesizedAudio:
 
     @property
     def content_type(self):
-        return f"audio/{self.format}"
+        mime_map = {
+            "mp3": "audio/mpeg",
+            "wav": "audio/wav",
+            "ogg": "audio/ogg",
+        }
+        return mime_map.get(self.format, f"audio/{self.format}")
 
 
 class SpeechService(pydantic.BaseModel):
