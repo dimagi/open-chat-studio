@@ -1,5 +1,4 @@
 {% extends "web/app/app_base.html" %}
-{% load waffle_tags %}
 
 {% block breadcrumbs %}
     <div class="breadcrumbs text-sm">
@@ -12,7 +11,7 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-<div x-data="{activeTab: '{{ trace.error|yesno:"error,inputs" }}', selectedSpan: '{{ root_spans.0.id }}'}">
+<div x-data="{selectedSpan: '{{ root_spans.0.id }}'}">
     <div class="container mx-auto px-4 py-6">
         <!-- Header Section -->
         <div class="flex justify-between w-full">
@@ -67,47 +66,17 @@
         </div>
     </div>
 
-    {% if trace.error %}
-    <div class="flex-1 overflow-auto">
-      <!-- Tab navigation -->
-      <div class="border-b border-t border-base-200 mb-2">
-        <nav class="px-6 flex space-x-8" aria-label="Tabs">
-          <button
-            class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none"
-            :class="activeTab === 'error' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            @click="activeTab = 'error'">
-            Error
-          </button>
-          <button
-            class="py-4 px-1 border-b-2 font-medium text-sm focus:outline-none"
-            :class="activeTab === 'inputs' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            @click="activeTab = 'inputs'">
-            Input / Output
-          </button>
-        </nav>
-      </div>
-    </div>
-
-    <!-- Error Message -->
-    <div x-show="activeTab === 'error'" id="error-content">
-      <div class="card mb-6">
-        <div class="card-body bg-base-50 shadow-md">
-          <div role="alert" class="alert alert-error alert-soft">
-          <div class="text-sm bg-error">{{ trace.error }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div x-cloak x-show="activeTab === 'inputs'" id="inputs-outputs-content">
-        {% include "trace/inputs_outputs.html" %}
-    </div>
-    {% else %}
-    <!-- No error - show Input/Output directly -->
     <div class="border-t border-base-200 mt-2 pt-4">
+        {% if trace.error %}
+        <!-- Error Message -->
+        <div role="alert" class="alert alert-error mb-6">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <div class="text-sm">{{ trace.error }}</div>
+        </div>
+        {% endif %}
+
         {% include "trace/inputs_outputs.html" %}
     </div>
-    {% endif %}
 </div>
 {% endblock app %}
 
