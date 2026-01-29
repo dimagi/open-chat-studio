@@ -34,22 +34,17 @@ class TestSureAdhere:
         assert message.content_type == MESSAGE_TYPES.TEXT
 
     @pytest.mark.django_db()
-    @pytest.mark.parametrize(
-        ("incoming_message", "message_type"),
-        [(sureadhere_messages.inbound_message(), "text")],
-    )
     @patch("apps.service_providers.messaging_service.SureAdhereService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
     def test_sureadhere_channel_implementation(
         self,
         bot_process_input,
         send_text_message,
-        incoming_message,
-        message_type,
         sureadhere_channel,
     ):
         bot_process_input.return_value = ChatMessage(content="Hi")
         handle_sureadhere_message(
-            sureadhere_tenant_id=sureadhere_channel.extra_data["sureadhere_tenant_id"], message_data=incoming_message
+            sureadhere_tenant_id=sureadhere_channel.extra_data["sureadhere_tenant_id"],
+            message_data=sureadhere_messages.inbound_message(),
         )
         send_text_message.assert_called()
