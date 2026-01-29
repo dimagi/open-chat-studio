@@ -22,7 +22,7 @@ def create_notification(
     level: LevelChoices,
     users: list | None = None,
     team: Team | None = None,
-    data: dict | None = None,
+    event_data: dict | None = None,
 ):
     """
     Create a notification and associate it with the given users.
@@ -33,7 +33,7 @@ def create_notification(
         level (str): The level of the notification (info, warning, error).
         users (list): A list of user instances to associate with the notification.
         team (Team, optional): A team whose members will be associated with the notification.
-        data (dict, optional): Additional data to store with the notification.
+        event_data (dict, optional): Additional data to store with the notification.
 
     Returns:
         Notification: The created Notification instance, or None if creation failed.
@@ -46,7 +46,7 @@ def create_notification(
     users = set(users)
 
     try:
-        identifier = create_identifier(data) if data else None
+        identifier = create_identifier(event_data)
         notification, created = Notification.objects.update_or_create(
             title=title,
             message=message,
@@ -161,7 +161,7 @@ def send_notification_email(user_notification: UserNotification):
         )
 
 
-def create_identifier(data: dict) -> str:
+def create_identifier(data: dict | None = None) -> str:
     """
     Create a unique identifier string based on the provided data dictionary.
 
@@ -171,6 +171,8 @@ def create_identifier(data: dict) -> str:
     Returns:
         str: A base64-encoded JSON string representing the identifier.
     """
+    if not data:
+        return ""
     json_data = json.dumps(data, sort_keys=True)
     encoded_data = b64encode(json_data.encode("utf-8")).decode("utf-8")
     return encoded_data
