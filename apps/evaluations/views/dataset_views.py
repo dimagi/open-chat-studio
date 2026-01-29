@@ -8,7 +8,7 @@ from itertools import islice
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, Exists, OuterRef
+from django.db.models import Count
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -41,7 +41,6 @@ from apps.evaluations.utils import (
     parse_history_text,
 )
 from apps.experiments.filters import (
-    ChatMessageFilter,
     ExperimentSessionFilter,
     get_filter_context_data,
 )
@@ -179,11 +178,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 
         if has_explicit_filters:
             # Apply the same filters to get the filtered session IDs
-            queryset = (
-                ExperimentSession.objects.with_last_message_created_at()
-                .filter(team=self.request.team)
-                .select_related("participant__user")
-            )
+            queryset = ExperimentSession.objects.filter(team=self.request.team).select_related("participant__user")
             timezone = self.request.session.get("detected_tz", None)
             session_filter = ExperimentSessionFilter()
             filtered_queryset = session_filter.apply(
@@ -240,9 +235,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
 
     def get_queryset(self):
         queryset = get_base_session_queryset(self.request)
-        queryset = queryset.annotate_with_versions_list().annotate(
-            message_count=Coalesce(Count("chat__messages", distinct=True), 0)
-        )
+        queryset = queryset.annotate(message_count=Coalesce(Count("chat__messages", distinct=True), 0))
         return queryset.select_related("team", "participant__user", "chat", "experiment").order_by("experiment__name")
 
 
@@ -250,23 +243,9 @@ def get_base_session_queryset(request):
     """Returns a queryset with filtering applied but without any annotations or related model selection."""
     timezone = request.session.get("detected_tz", None)
     filter_params = FilterParams.from_request(request)
-
-    # Get filtered message IDs more efficiently
-    message_filter = ChatMessageFilter()
-    base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
-    filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
-
-    # Use Exists for filtering instead of Count with IN subquery - avoids cartesian product
-    has_messages = Exists(filtered_messages)
-
-    # Build the query with basic filtering only
-    query_set = ExperimentSession.objects.filter(team=request.team).filter(has_messages)
-
-    # Apply session filter (this will add first_message_created_at)
+    query_set = ExperimentSession.objects.filter(team=request.team)
     session_filter = ExperimentSessionFilter()
-    query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
-
-    return query_set
+    return session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
 
 
 @login_and_team_required

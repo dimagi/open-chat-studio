@@ -6,11 +6,20 @@ from django.urls import reverse
 from django_tables2 import columns
 
 from apps.experiments.models import Experiment, ExperimentSession
-from apps.experiments.tables import ExperimentSessionsTable, _show_chat_button, session_chat_url
 from apps.generics import actions, chips
 from apps.generics.actions import chip_action
-from apps.generics.tables import ColumnWithHelp, TimeAgoColumn
+from apps.generics.tables import ArrayColumn, ColumnWithHelp, TimeAgoColumn
 from apps.teams.utils import get_slug_for_team
+
+
+def session_chat_url(url_name, request, record, value):
+    return reverse(
+        url_name, args=[request.team.slug, record.experiment_id, record.get_experiment_version_number(), record.id]
+    )
+
+
+def _show_chat_button(request, record):
+    return record.participant.user == request.user and not record.is_complete and record.experiment.is_editable
 
 
 def _name_label_factory(record, _):
@@ -80,18 +89,23 @@ def chatbot_url_factory(_, __, record, value):
     )
 
 
-class ChatbotSessionsTable(ExperimentSessionsTable):
+class ChatbotSessionsTable(tables.Table):
     chatbot = columns.Column(
         verbose_name="Chatbot",
         accessor="experiment",
         orderable=True,
     )
+    participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     message_count = columns.Column(
         verbose_name="Message Count",
         accessor="message_count",
         orderable=True,
     )
     last_message = TimeAgoColumn(accessor="last_activity_at", verbose_name="Last activity", orderable=True)
+    tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html")
+    versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions")
+    state = columns.Column(verbose_name="State", accessor="status", orderable=True)
+    remote_id = columns.Column(verbose_name="Remote Id", accessor="participant__remote_id")
 
     actions = actions.ActionsColumn(
         actions=[
@@ -110,6 +124,18 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
         align="right",
     )
 
+    def render_tags(self, record, bound_column):
+        template = get_template(bound_column.column.template_name)
+        return template.render({"object": record.chat})
+
+    def render_participant(self, record):
+        template = get_template("generic/chip.html")
+        participant = record.participant
+        chip = chips.Chip(
+            label=str(participant), url=participant.get_link_to_experiment_data(experiment=record.experiment)
+        )
+        return template.render({"chip": chip})
+
     def render_chatbot(self, record):
         template = get_template("generic/chip.html")
         chatbot = record.experiment
@@ -123,4 +149,3 @@ class ChatbotSessionsTable(ExperimentSessionsTable):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No sessions yet!"
-        order_by = ("-last_message",)

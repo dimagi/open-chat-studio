@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery
+from django.db.models import Case, Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery, When
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -26,7 +26,8 @@ from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
-from apps.events.models import StaticTriggerType
+from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
+from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.filters import (
@@ -37,11 +38,11 @@ from apps.experiments.forms import ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
-from apps.experiments.views import ExperimentSessionsTableView, ExperimentVersionsTableView
+from apps.experiments.views import ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
-    base_single_experiment_view,
     start_session_public,
 )
+from apps.experiments.views.utils import get_channels_context
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
@@ -58,6 +59,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.trace.models import Trace
 from apps.utils.search import similarity_search
+from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
 
@@ -104,26 +106,32 @@ def chatbots_settings(request, team_slug, experiment_id):
         form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
         if form.is_valid():
             form.save()
-            context.update({
-                "edit_mode": False,
-                "form": form,
-                "updated": True,
-            })
+            context.update(
+                {
+                    "edit_mode": False,
+                    "form": form,
+                    "updated": True,
+                }
+            )
 
         else:
-            context.update({
-                "edit_mode": True,
-                "form": form,
-                "updated": False,
-                "team_participant_identifiers": team_participant_identifiers,
-            })
+            context.update(
+                {
+                    "edit_mode": True,
+                    "form": form,
+                    "updated": False,
+                    "team_participant_identifiers": team_participant_identifiers,
+                }
+            )
     else:
         form = ChatbotSettingsForm(request=request, instance=experiment)
-        context.update({
-            "edit_mode": True,
-            "form": form,
-            "team_participant_identifiers": team_participant_identifiers,
-        })
+        context.update(
+            {
+                "edit_mode": True,
+                "form": form,
+                "team_participant_identifiers": team_participant_identifiers,
+            }
+        )
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
@@ -176,8 +184,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
         queryset = (
-            self.model.objects
-            .get_all()
+            self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
             .select_related("team")
         )
@@ -196,8 +203,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
             )
 
         session_count_subquery = (
-            ExperimentSession.objects
-            .filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
@@ -205,8 +211,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         participant_count_subquery = (
-            ExperimentSession.objects
-            .filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
@@ -214,8 +219,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         interaction_count_subquery = (
-            Trace.objects
-            .filter(experiment=OuterRef("pk"))
+            Trace.objects.filter(experiment=OuterRef("pk"))
             .exclude(session__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
@@ -223,8 +227,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         last_activity_subquery = (
-            ExperimentSession.objects
-            .filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .order_by("-last_activity_at")
             .values("last_activity_at")[:1]
@@ -290,9 +293,37 @@ class CreateChatbot(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_chatbot_home(request, team_slug: str, experiment_id: int):
-    return base_single_experiment_view(
-        request, team_slug, experiment_id, "chatbots/single_chatbot_home.html", "chatbots"
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
+
+    channels, available_platforms = get_channels_context(experiment)
+
+    deployed_version = None
+    if experiment != experiment.default_version:
+        deployed_version = experiment.default_version.version_number
+
+    context = {
+        "active_tab": "chatbots",
+        "experiment": experiment,
+        "platforms": available_platforms,
+        "channels": channels,
+        "deployed_version": deployed_version,
+        "allow_copy": not experiment.child_links.exists(),
+        **_get_events_context(experiment, team_slug, request.origin),
+    }
+    session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
+
+    columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
+    filter_context = get_filter_context_data(
+        request.team,
+        columns=columns,
+        date_range_column="last_message",
+        table_url=session_table_url,
+        table_container_id="sessions-table",
+        table_type=FilterSet.TableType.SESSIONS,
     )
+    context.update(filter_context)
+
+    return TemplateResponse(request, "chatbots/single_chatbot_home.html", context)
 
 
 class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -464,18 +495,27 @@ def chatbot_version_create_status(
     )
 
 
-class ChatbotSessionsTableView(ExperimentSessionsTableView):
-    table_class = ChatbotSessionsTable
+class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+    """View for rendering chatbot sessions table with filtering support."""
 
-    def get_table_data(self):
-        """Add message_count annotation to the paginated data."""
-        queryset = super().get_table_data()
-        return queryset.annotate_with_message_count()
+    model = ExperimentSession
+    table_class = ChatbotSessionsTable
+    template_name = "table/single_table.html"
+    permission_required = "experiments.view_experimentsession"
+
+    def get_queryset(self):
+        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
+        experiment_id = self.kwargs.get("experiment_id")
+        query_set = ExperimentSession.objects.get_table_queryset(self.request.team, experiment_id)
+        timezone = self.request.session.get("detected_tz", None)
+        session_filter = ExperimentSessionFilter()
+        query_set = session_filter.apply(
+            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
+        )
+        return query_set
 
     def get_table(self, **kwargs):
-        """
-        When viewing sessions for a specific chatbot, hide the chatbot column
-        """
+        """When viewing sessions for a specific chatbot, hide the chatbot column."""
         table = super().get_table(**kwargs)
         if self.kwargs.get("experiment_id"):
             table.exclude = ("chatbot",)
@@ -824,3 +864,41 @@ def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session
         "chatbots/manage/invite_row.html",
         context={"request": request, "experiment": experiment, "session": session},
     )
+
+
+def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
+    combined_events = []
+    static_events = (
+        StaticTrigger.objects.filter(experiment=experiment)
+        .annotate(
+            failure_count=Count(
+                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
+            )
+        )
+        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count", "is_active")
+        .all()
+    )
+    timeout_events = (
+        TimeoutTrigger.objects.filter(experiment=experiment)
+        .annotate(
+            failure_count=Count(
+                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
+            )
+        )
+        .values(
+            "id",
+            "experiment_id",
+            "delay",
+            "action__action_type",
+            "action__params",
+            "total_num_triggers",
+            "failure_count",
+            "is_active",
+        )
+        .all()
+    )
+    for event in static_events:
+        combined_events.append({**event, "team_slug": team_slug})
+    for event in timeout_events:
+        combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
+    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events, origin=origin)}
