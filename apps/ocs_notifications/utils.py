@@ -20,7 +20,6 @@ def create_notification(
     title: str,
     message: str,
     level: LevelChoices,
-    users: list | None = None,
     team: Team | None = None,
     event_data: dict | None = None,
 ):
@@ -31,7 +30,6 @@ def create_notification(
         title (str): The title of the notification.
         message (str): The message content of the notification.
         level (str): The level of the notification (info, warning, error).
-        users (list): A list of user instances to associate with the notification.
         team (Team, optional): A team whose members will be associated with the notification.
         event_data (dict, optional): Additional data to store with the notification.
 
@@ -39,11 +37,7 @@ def create_notification(
         Notification: The created Notification instance, or None if creation failed.
     """
     notification = None
-    users = users or []
-    if team:
-        users.extend([member.user for member in team.membership_set.select_related("user").all()])
-
-    users = set(users)
+    users = [member.user for member in team.membership_set.select_related("user").all()]
 
     try:
         identifier = create_identifier(event_data)

@@ -110,14 +110,11 @@ class TestCreateNotification:
         1. A UserNotification entry is created for the specified user
         2. The user's unread notification cache is invalidated
         """
-        user = team_with_users.membership_set.first().user
+        user = team_with_users.members.first()
         assert UserNotification.objects.filter(user=user).count() == 0
 
         create_notification(
-            title="Test Notification",
-            message="Test message",
-            level=LevelChoices.INFO,
-            users=[user],
+            title="Test Notification", message="Test message", level=LevelChoices.INFO, team=team_with_users
         )
 
         assert UserNotification.objects.filter(user=user).count() == 1
@@ -134,17 +131,13 @@ class TestCreateNotification:
            again resets it to unread
         3. The cache is busted upon renotification
         """
-        user = team_with_users.membership_set.first().user
-
         # Create initial notification
         create_notification(
-            title="Test Notification",
-            message="Test message",
-            level=LevelChoices.ERROR,
-            users=[user],
+            title="Test Notification", message="Test message", level=LevelChoices.ERROR, team=team_with_users
         )
 
         # Get the notification and mark it as read
+        user = team_with_users.members.first()
         assert UserNotification.objects.filter(user=user).count() == 1
         user_notification = UserNotification.objects.get(user=user)
         assert user_notification.read is False, "UserNotification should be marked as unread"
@@ -158,10 +151,7 @@ class TestCreateNotification:
 
         # Create another notification with same identifier
         create_notification(
-            title="Test Notification",
-            message="Test message",
-            level=LevelChoices.ERROR,
-            users=[user],
+            title="Test Notification", message="Test message", level=LevelChoices.ERROR, team=team_with_users
         )
 
         # Cache should be busted again (renotification)
@@ -185,7 +175,6 @@ class TestCreateNotification:
         3. Different event_data produces different identifiers, enabling
            proper duplicate detection for renotification
         """
-        user = team_with_users.membership_set.first().user
 
         # Create notification with event_data
         event_data = {"action": "test", "id": 123}
@@ -193,7 +182,7 @@ class TestCreateNotification:
             title="Test Notification 1",
             message="Test message",
             level=LevelChoices.INFO,
-            users=[user],
+            team=team_with_users,
             event_data=event_data,
         )
 
@@ -206,10 +195,7 @@ class TestCreateNotification:
 
         # Create another notification with different event_data
         create_notification(
-            title="Test Notification 2",
-            message="Test message",
-            level=LevelChoices.INFO,
-            users=[user],
+            title="Test Notification 2", message="Test message", level=LevelChoices.INFO, team=team_with_users
         )
 
         notification2 = Notification.objects.get(title="Test Notification 2")
@@ -217,34 +203,3 @@ class TestCreateNotification:
         assert notification2.identifier != notification1.identifier, (
             "Different event_data should produce different identifiers"
         )
-
-    @patch("apps.ocs_notifications.utils.bust_unread_notification_cache", wraps=bust_unread_notification_cache)
-    @patch("apps.ocs_notifications.utils.send_notification_email", wraps=send_notification_email)
-    def test_create_notification_notifies_users_once(self, mock_send_email, mock_bust_cache, team_with_users):
-        """
-        Test that users are notified only once when specified by both team and users parameters.
-
-        Verifies that when a notification is created for both a team and overlapping
-        individual users, each user receives only one notification, not duplicates.
-        """
-        # Get two users from the team
-        users = [m.user for m in team_with_users.membership_set.all()]
-        user = users[0]
-
-        # Create notification with both team and overlapping users
-        create_notification(
-            title="Test Notification",
-            message="Test message",
-            level=LevelChoices.INFO,
-            team=team_with_users,
-            users=[user],  # user is already in team_with_users
-            event_data={"test": "data"},  # Add event_data to avoid empty identifier issue
-        )
-
-        # Get the created notification
-        notification = Notification.objects.first()
-        assert notification is not None, "Notification should have been created"
-
-        # user1 should only have one UserNotification entry (not duplicated)
-        user_notifications = UserNotification.objects.filter(user=user, notification=notification)
-        assert user_notifications.count() == 1
