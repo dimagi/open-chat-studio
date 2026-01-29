@@ -53,7 +53,7 @@ def unread_notifications_count(request):
     """
     count = 0
     if request.user.is_authenticated and request.team:
-        count = request.user.unread_notifications_count(team_slug=request.team.slug)
+        count = request.user.unread_notifications_count(team=request.team)
     return {
         "unread_notifications_count": count,
     }
