@@ -92,8 +92,9 @@
                     <!-- Langfuse trace link -->
                     {% for trace_info in trace.output_message.trace_info %}
                         {% if trace_info.trace_provider == "langfuse" %}
-                            <a href="{{ trace_info.trace_url }}" target="_blank" class="btn btn-sm btn-ghost" title="View on Langfuse">
+                            <a href="{{ trace_info.trace_url }}" target="_blank" class="btn btn-sm btn-outline gap-1" title="View on Langfuse">
                                 {% include "svg/langfuse.svg" %}
+                                <span class="hidden sm:inline">Langfuse</span>
                             </a>
                         {% endif %}
                     {% endfor %}
