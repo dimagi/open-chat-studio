@@ -17,6 +17,7 @@ class FilterSet(BaseTeamModel):
         ALL_SESSIONS = "all_sessions"
         PARTICIPANTS = "participants"
         TRACES = "traces"
+        NOTIFICATIONS = "notifications"
 
     name = models.CharField(max_length=256)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)

@@ -45,3 +45,15 @@ def google_analytics_id(request):
         }
     else:
         return {}
+
+
+def unread_notifications_count(request):
+    """
+    Adds unread notification count to context
+    """
+    count = 0
+    if request.user.is_authenticated and request.team:
+        count = request.user.unread_notifications_count(team=request.team)
+    return {
+        "unread_notifications_count": count,
+    }

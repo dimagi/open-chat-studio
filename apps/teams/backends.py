@@ -104,6 +104,7 @@ CONTENT_TYPES = {
     "trace": ["trace", "span"],
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],
+    "ocs_notifications": ["notification", "usernotification", "usernotificationpreferences"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}

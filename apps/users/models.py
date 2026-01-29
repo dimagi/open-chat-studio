@@ -5,6 +5,9 @@ from django.db import models
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
+from apps.ocs_notifications.models import UserNotification, UserNotificationPreferences
+from apps.ocs_notifications.utils import get_user_notification_cache_value, set_user_notification_cache
+from apps.teams.models import Team
 from apps.users.model_audit_fields import CUSTOM_USER_FIELDS
 from apps.web.storage_backends import get_public_media_storage
 
@@ -50,3 +53,31 @@ class CustomUser(AbstractUser):
     def gravatar_id(self) -> str:
         # https://en.gravatar.com/site/implement/hash/
         return hashlib.md5(self.email.lower().strip().encode("utf-8")).hexdigest()
+
+    def unread_notifications_count(self, team: Team) -> int:
+        """
+        Get the count of unread notifications for the user.
+
+        Returns the number of unread in-app notifications based on the user's
+        notification preferences. The count is cached to improve performance and
+        reduces database queries on repeated calls.
+
+        Returns:
+            int: The number of unread notifications for this user.
+        """
+        count = get_user_notification_cache_value(self.id, team_slug=team.slug)
+        if count is not None:
+            return count
+
+        preferences, _created = UserNotificationPreferences.objects.get_or_create(user=self, team=team)
+        if preferences.in_app_enabled:
+            level = preferences.in_app_level
+            count = UserNotification.objects.filter(
+                team__slug=team.slug, user_id=self.id, read=False, notification__level__gte=level
+            ).count()
+        else:
+            count = 0
+
+        # This cache gets busted when an error happens or when the user changes preferences
+        set_user_notification_cache(self.id, team_slug=team.slug, count=count)
+        return count
