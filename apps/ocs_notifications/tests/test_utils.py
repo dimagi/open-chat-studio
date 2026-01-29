@@ -76,7 +76,7 @@ def test_send_notification_email_respects_levels(mock_send_mail, mock_render, te
        email notification threshold level
     """
     user = team_with_users.members.first()
-    user_notification = UserNotificationFactory.create(user=user, notification__level=LevelChoices.WARNING)
+    user_notification = UserNotificationFactory.create(user=user, notification__level=LevelChoices.ERROR)
 
     # Test 1: Email not sent when preferences doesn't exist
     send_notification_email(user_notification)
@@ -87,7 +87,7 @@ def test_send_notification_email_respects_levels(mock_send_mail, mock_render, te
         team=user_notification.team,
         user=user,
         email_enabled=True,
-        email_level=LevelChoices.ERROR,  # Only send ERROR level, not WARNING
+        email_level=LevelChoices.WARNING,  # Only send ERROR level, not WARNING
     )
 
     mock_send_mail.reset_mock()

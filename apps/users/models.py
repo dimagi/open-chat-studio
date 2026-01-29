@@ -64,7 +64,6 @@ class CustomUser(AbstractUser):
         Returns:
             int: The number of unread notifications for this user.
         """
-        print("CustomUser.unread_notifications_count called")
         count = get_user_notification_cache_value(self.id, team_slug=team_slug)
         if count is not None:
             return count
