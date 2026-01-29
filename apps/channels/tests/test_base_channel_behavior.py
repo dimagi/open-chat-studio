@@ -677,6 +677,9 @@ def test_voice_response_with_urls(
     get_speech_service,
     test_channel,
 ):
+    get_speech_service.return_value = MagicMock(
+        synthesize_voice=MagicMock(return_value=SynthesizedAudio(audio=BytesIO(), duration=1, format="mp3"))
+    )
     get_voice_transcript.return_value = "Hello bot. Give me a URL"
     bot_process_input.return_value = ChatMessage.objects.create(
         content=(

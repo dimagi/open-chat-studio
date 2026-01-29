@@ -11,6 +11,7 @@ from apps.api.models import UserAPIKey
 from apps.chat.models import ChatMessage
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.pytest import django_db_with_data
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -47,7 +48,7 @@ def api_key(team_with_users):
     return key
 
 
-@pytest.mark.django_db(serialized_rollback=True)
+@django_db_with_data()
 @patch("apps.chat.bots.PipelineBot.process_input")
 def test_chat_completion(bot_process_input, experiment, api_key, live_server):
     bot_process_input.return_value = ChatMessage(content="So, this ain't the end, I saw you again today")
