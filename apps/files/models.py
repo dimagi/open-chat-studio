@@ -127,6 +127,10 @@ class File(BaseTeamModel, VersionsMixin):
         return self.content_type.startswith("image/")
 
     @property
+    def is_audio(self):
+        return self.content_type.startswith("audio/")
+
+    @property
     def display_size(self):
         return humanize_bytes(self.content_size)
 
