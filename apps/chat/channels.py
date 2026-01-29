@@ -27,7 +27,9 @@ from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import (
     AudioSynthesizeException,
     ChannelException,
+    ChatException,
     ParticipantNotAllowedException,
+    UserReportableError,
     VersionedExperimentSessionsNotAllowedException,
 )
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -46,6 +48,7 @@ from apps.service_providers.llm_service.history_managers import ExperimentHistor
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.service_providers.tracing import TraceInfo, TracingService
+from apps.service_providers.tracing.base import TraceContext
 from apps.slack.utils import parse_session_external_id
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
@@ -355,7 +358,7 @@ class ChannelBase(ABC):
                     session=self.experiment_session,
                     inputs={"input": self.message.model_dump()},
                 ) as span:
-                    response = self._new_user_message()
+                    response = self._new_user_message(span)
                     span.set_outputs({"response": response.content})
                     self._update_experiment_versions()
                     return response
@@ -367,14 +370,23 @@ class ChannelBase(ABC):
             return True
         return self.experiment.is_participant_allowed(self.participant_identifier)
 
-    def _new_user_message(self) -> ChatMessage:
+    def _new_user_message(self, span: TraceContext) -> ChatMessage:
+        if not self.is_message_type_supported():
+            resp = self._handle_unsupported_message()
+            return ChatMessage(content=resp)
+
         try:
-            if not self.is_message_type_supported():
-                resp = self._handle_unsupported_message()
-                return ChatMessage(content=resp)
-
             human_message = self._create_chat_message_from_user_message()
+        except UserReportableError as e:
+            # handle errors in processing the user's message e.g. voice transcription errors
+            message = self._inform_user_of_error(e)
+            span.mark_span_as_error(message=e.message, exception=e)
+            return ChatMessage(content=message)
+        except Exception as e:
+            self._inform_user_of_error(e)
+            raise
 
+        try:
             if self.supports_conversational_consent_flow:
                 # Webchats' statuses are updated through an "external" flow
                 if self._is_reset_conversation_request():
@@ -669,7 +681,7 @@ class ChannelBase(ABC):
             speech_service = self.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
-        raise ChannelException("Voice transcription is not available for this experiment")
+        raise UserReportableError("Voice transcription is not available for this chatbot")
 
     def _create_chat_message_from_user_message(self) -> ChatMessage:
         message_text = self.message.message_text
@@ -722,11 +734,14 @@ class ChannelBase(ABC):
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType, metadata=None):
         """Use this to update the chat history when not using the normal bot flow"""
+        metadata = metadata or {}
+        if self.trace_service:
+            metadata.update(self.trace_service.get_trace_metadata())
         return ChatMessage.objects.create(
             chat=self.experiment_session.chat,
             message_type=message_type,
             content=message,
-            metadata=metadata or {},
+            metadata=metadata,
         )
 
     def _ensure_sessions_exists(self):
@@ -844,11 +859,19 @@ class ChannelBase(ABC):
         """
 
         trace_info = TraceInfo(name="error", metadata={"error": str(exception)})
-        try:
-            bot_message = EventBot(self.experiment_session, self.experiment, trace_info).get_user_message(
-                "Tell the user that something went wrong while processing their message and that they should "
-                "try again later."
+        prompt = (
+            "Tell the user that something went wrong while processing their message"
+            " and that they should try again later."
+        )
+        if isinstance(exception, ChatException):
+            prompt = (
+                f"Tell the user that you were unable to process their message and that "
+                f"they should try again later or adjust the message type or contents "
+                f"according to the following error message: {exception}"
             )
+        event_bot = EventBot(self.experiment_session, self.experiment, trace_info, trace_service=self.trace_service)
+        try:
+            bot_message = event_bot.get_user_message(prompt)
         except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to generate an appropriate error message for the user")
             bot_message = DEFAULT_ERROR_RESPONSE_TEXT
@@ -857,6 +880,8 @@ class ChannelBase(ABC):
             self.send_message_to_user(bot_message)
         except Exception:  # noqa BLE001
             logger.exception("Something went wrong while trying to inform the user of an error")
+
+        return bot_message
 
     def _get_supported_unsupported_files(self, files: list[File]) -> tuple[list[File], list[File]]:
         """
