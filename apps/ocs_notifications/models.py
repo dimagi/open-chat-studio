@@ -1,6 +1,6 @@
 from django.db import models
 
-from apps.utils.models import BaseModel
+from apps.teams.models import BaseTeamModel
 
 
 class LevelChoices(models.TextChoices):
@@ -9,7 +9,7 @@ class LevelChoices(models.TextChoices):
     ERROR = "2", "Error"
 
 
-class Notification(BaseModel):
+class Notification(BaseTeamModel):
     title = models.CharField(max_length=255)
     message = models.TextField()
     level = models.CharField(max_length=1, choices=LevelChoices.choices, db_index=True)
@@ -35,7 +35,7 @@ class Notification(BaseModel):
         super().save(*args, **kwargs)
 
 
-class UserNotification(BaseModel):
+class UserNotification(BaseTeamModel):
     notification = models.ForeignKey(Notification, on_delete=models.CASCADE)
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
     read = models.BooleanField(default=False, db_index=True)
@@ -48,7 +48,7 @@ class UserNotification(BaseModel):
         return f"{self.user} - {self.notification.title}"
 
 
-class UserNotificationPreferences(BaseModel):
+class UserNotificationPreferences(BaseTeamModel):
     """Store user preferences for in-app and email notifications"""
 
     user = models.OneToOneField("users.CustomUser", on_delete=models.CASCADE, related_name="notification_preferences")
