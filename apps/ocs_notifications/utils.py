@@ -48,6 +48,7 @@ def create_notification(
                 bust_unread_notification_cache(user.id)
 
             user_notification, created = UserNotification.objects.get_or_create(notification=notification, user=user)
+            # Email will only be sent when the notification is newly created or if the notification was previously read
             should_send_email = created or user_notification.read is True
             user_notification.read = False
             user_notification.read_at = None
