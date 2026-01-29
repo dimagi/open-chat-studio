@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import re
 import time
@@ -26,12 +28,12 @@ from apps.service_providers.llm_service.history_managers import (
     AssistantPipelineHistoryManager,
     ExperimentHistoryManager,
 )
-from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.parsers import custom_parse_ai_message
 
 lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
+    from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
 
 logger = logging.getLogger("ocs.runnables")
 
@@ -41,7 +43,7 @@ class GenerationError(Exception):
 
 
 class GenerationCancelled(Exception):
-    def __init__(self, output: "ChainOutput"):
+    def __init__(self, output: ChainOutput):
         self.output = output
 
 
@@ -74,7 +76,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def invoke(
-        self, input: str, config: RunnableConfig | None = None, attachments: list["Attachment"] | None = None
+        self, input: str, config: RunnableConfig | None = None, attachments: list[Attachment] | None = None
     ) -> ChainOutput:
         callback = self.adapter.callback_handler
         config = ensure_config(config)
@@ -301,7 +303,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
 
         return file_name, file_link
 
-    def _upload_tool_resource_files(self, attachments: list["Attachment"] | None = None) -> dict[str, list[str]]:
+    def _upload_tool_resource_files(self, attachments: list[Attachment] | None = None) -> dict[str, list[str]]:
         """Uploads the files in `attachments` to OpenAI
 
         Params:

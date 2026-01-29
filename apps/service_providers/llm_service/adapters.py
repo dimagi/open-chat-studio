@@ -20,13 +20,13 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.main import (
     AnthropicBuiltinTool,
-    OpenAIAssistantRunnable,
     OpenAIBuiltinTool,
 )
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.nodes import AssistantNode
+    from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
 
 
 class BaseAdapter:
