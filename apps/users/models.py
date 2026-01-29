@@ -53,7 +53,7 @@ class CustomUser(AbstractUser):
         # https://en.gravatar.com/site/implement/hash/
         return hashlib.md5(self.email.lower().strip().encode("utf-8")).hexdigest()
 
-    def unread_notifications_count(self) -> int:
+    def unread_notifications_count(self, team_slug: str) -> int:
         """
         Get the count of unread notifications for the user.
 
@@ -64,18 +64,20 @@ class CustomUser(AbstractUser):
         Returns:
             int: The number of unread notifications for this user.
         """
-        # TODO: Test
-        count = get_user_notification_cache_value(self.id)
+        print("CustomUser.unread_notifications_count called")
+        count = get_user_notification_cache_value(self.id, team_slug=team_slug)
         if count is not None:
             return count
 
-        preferences, _created = UserNotificationPreferences.objects.get_or_create(user=self)
+        preferences, _created = UserNotificationPreferences.objects.get_or_create(user=self, team__slug=team_slug)
         if preferences.in_app_enabled:
             level = preferences.in_app_level
-            count = UserNotification.objects.filter(user_id=self.id, read=False, notification__level__gte=level).count()
+            count = UserNotification.objects.filter(
+                team__slug=team_slug, user_id=self.id, read=False, notification__level__gte=level
+            ).count()
         else:
             count = 0
 
         # This cache gets busted when an error happens or when the user changes preferences
-        set_user_notification_cache(self.id, count)
+        set_user_notification_cache(self.id, team_slug=team_slug, count=count)
         return count

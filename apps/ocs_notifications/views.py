@@ -61,7 +61,9 @@ class UserNotificationTableView(LoginRequiredMixin, SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        queryset = UserNotification.objects.filter(user=self.request.user).select_related("notification")
+        queryset = UserNotification.objects.filter(user=self.request.user, team=self.request.team).select_related(
+            "notification"
+        )
 
         # Apply filters
         notification_filter = UserNotificationFilter()
@@ -87,7 +89,7 @@ class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
         else:
             user_notification.read_at = None
         user_notification.save()
-        bust_unread_notification_cache(request.user.id)
+        bust_unread_notification_cache(request.user.id, team_slug=request.team.slug)
 
         # Return the updated filtered table
         return self.get(request, *args, **kwargs)
@@ -108,12 +110,12 @@ class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
 def notification_preferences(request):
     """View for managing notification preferences"""
     # Get or create preferences for the user
-    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user)[0]
+    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user, team=request.team)[0]
 
     form = NotificationPreferencesForm(request.POST, instance=preferences)
     if form.is_valid():
         form.save()
-        bust_unread_notification_cache(request.user.id)
+        bust_unread_notification_cache(request.user.id, team_slug=request.team.slug)
         messages.success(request, _("Notification preferences saved successfully."))
         return redirect(reverse("users:user_profile"))
 

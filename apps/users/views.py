@@ -57,7 +57,7 @@ def profile(request):
     new_api_key = request.session.pop(SESSION_API_KEY, None)
 
     # Get or create notification preferences
-    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user)[0]
+    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user, team=request.team)[0]
     notification_preferences_form = NotificationPreferencesForm(instance=preferences)
 
     oauth_tokens = (
@@ -154,7 +154,7 @@ def revoke_oauth_token(request):
 @require_POST
 def save_notification_preferences(request):
     """Save notification preferences from the profile page"""
-    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user)[0]
+    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user, team=request.team)[0]
     form = NotificationPreferencesForm(request.POST, instance=preferences)
     if form.is_valid():
         form.save()

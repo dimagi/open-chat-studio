@@ -197,6 +197,7 @@ TEMPLATES = [
                 "apps.users.context_processors.user_teams",
                 # this line can be removed if not using google analytics
                 "apps.web.context_processors.google_analytics_id",
+                "apps.web.context_processors.unread_notifications_count",
                 "apps.admin.context_processors.ocs_config",
             ],
             "loaders": _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS,

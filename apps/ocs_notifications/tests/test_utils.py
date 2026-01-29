@@ -12,8 +12,7 @@ from apps.ocs_notifications.utils import (
     send_notification_email,
     set_user_notification_cache,
 )
-from apps.utils.factories.notifications import NotificationFactory, UserNotificationFactory
-from apps.utils.factories.user import UserFactory
+from apps.utils.factories.notifications import UserNotificationFactory
 
 
 @patch("apps.ocs_notifications.utils.cache.get")
@@ -26,9 +25,9 @@ def test_get_user_notification_cache_value(mock_cache_get):
     """
     user_id = 123
     mock_cache_get.return_value = 5
-    result = get_user_notification_cache_value(user_id)
+    result = get_user_notification_cache_value(user_id, team_slug="test-team")
 
-    expected_key = CACHE_KEY_FORMAT.format(user_id=user_id)
+    expected_key = CACHE_KEY_FORMAT.format(user_id=user_id, team_slug="test-team")
     mock_cache_get.assert_called_once_with(expected_key)
     assert result == 5
 
@@ -43,9 +42,9 @@ def test_set_user_notification_cache(mock_cache_set):
     """
     user_id = 456
     count = 10
-    set_user_notification_cache(user_id, count)
+    set_user_notification_cache(user_id, count=count, team_slug="test-team")
 
-    expected_key = CACHE_KEY_FORMAT.format(user_id=user_id)
+    expected_key = CACHE_KEY_FORMAT.format(user_id=user_id, team_slug="test-team")
     mock_cache_set.assert_called_once_with(expected_key, count, 5 * 60)
 
 
@@ -58,16 +57,16 @@ def test_bust_unread_notification_cache(mock_cache_delete):
     to invalidate the cached unread notification count.
     """
     user_id = 789
-    bust_unread_notification_cache(user_id)
+    bust_unread_notification_cache(user_id, team_slug="test-team")
 
-    expected_key = CACHE_KEY_FORMAT.format(user_id=user_id)
+    expected_key = CACHE_KEY_FORMAT.format(user_id=user_id, team_slug="test-team")
     mock_cache_delete.assert_called_once_with(expected_key)
 
 
 @pytest.mark.django_db()
 @patch("apps.ocs_notifications.utils.render_to_string")
 @patch("apps.ocs_notifications.utils.send_mail")
-def test_send_notification_email_respects_levels(mock_send_mail, mock_render):
+def test_send_notification_email_respects_levels(mock_send_mail, mock_render, team_with_users):
     """
     Test that email notifications respect user notification level preferences.
 
@@ -76,9 +75,8 @@ def test_send_notification_email_respects_levels(mock_send_mail, mock_render):
     2. Email is sent only when notification level meets or exceeds user's
        email notification threshold level
     """
-    user = UserFactory.create()
-    notification = NotificationFactory.create(level=LevelChoices.WARNING)
-    user_notification = UserNotificationFactory.create(notification=notification, user=user)
+    user = team_with_users.members.first()
+    user_notification = UserNotificationFactory.create(user=user, notification__level=LevelChoices.WARNING)
 
     # Test 1: Email not sent when preferences doesn't exist
     send_notification_email(user_notification)
@@ -86,6 +84,7 @@ def test_send_notification_email_respects_levels(mock_send_mail, mock_render):
 
     # Test 2: Email sent when preferences allow it
     UserNotificationPreferences.objects.create(
+        team=user_notification.team,
         user=user,
         email_enabled=True,
         email_level=LevelChoices.ERROR,  # Only send ERROR level, not WARNING

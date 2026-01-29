@@ -78,3 +78,7 @@ class SuperuserMembership:
 
     def is_team_admin(self):
         return self.user.is_superuser
+
+    def unread_notifications_count(self):
+        print("SuperuserMembership.unread_notifications_count called")
+        return self.user.unread_notifications_count(team_slug=self.team.slug)

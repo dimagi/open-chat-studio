@@ -110,6 +110,10 @@ class Membership(BaseModel, PermissionsMixin):
     def is_team_admin(self) -> bool:
         return self.has_perms(["teams.change_team", "teams.delete_team"])
 
+    def unread_notifications_count(self) -> int:
+        print("Membership.unread_notifications_count called")
+        return self.user.unread_notifications_count(team_slug=self.team.slug)
+
 
 class Invitation(BaseModel):
     """

@@ -13,14 +13,14 @@ from .models import LevelChoices, Notification, UserNotification, UserNotificati
 
 logger = logging.getLogger("ocs.notifications")
 
-CACHE_KEY_FORMAT = "{user_id}-unread-notifications-count"
+CACHE_KEY_FORMAT = "{user_id}-{team_slug}-unread-notifications-count"
 
 
 def create_notification(
     title: str,
     message: str,
     level: LevelChoices,
-    team: Team | None = None,
+    team: Team,
     event_data: dict | None = None,
 ):
     """
@@ -42,6 +42,7 @@ def create_notification(
     try:
         identifier = create_identifier(event_data)
         notification, created = Notification.objects.update_or_create(
+            team=team,
             title=title,
             message=message,
             level=level,
@@ -49,7 +50,9 @@ def create_notification(
             defaults={"last_event_at": timezone.now()},
         )
         for user in users:
-            user_notification, created = UserNotification.objects.get_or_create(notification=notification, user=user)
+            user_notification, created = UserNotification.objects.get_or_create(
+                team=team, notification=notification, user=user
+            )
             # Uuser will only be notified when notification is created or if the notification was previously read
             user_should_be_notified = created or user_notification.read is True
             user_notification.read = False
@@ -58,23 +61,23 @@ def create_notification(
 
             # Bust cache when notification is created or when marking previously read notification as unread
             if user_should_be_notified:
-                bust_unread_notification_cache(user.id)
+                bust_unread_notification_cache(user.id, team_slug=team.slug)
                 send_notification_email(user_notification)
 
     except Exception:
         logger.exception("Failed to create notification")
 
 
-def get_user_notification_cache_value(user_id: int) -> int | None:
+def get_user_notification_cache_value(user_id: int, team_slug: str) -> int | None:
     """
     Get the unread notifications count cache for a specific user.
     Args:
         user_id (int): The ID of the user whose cache should be retrieved.
     """
-    return cache.get(CACHE_KEY_FORMAT.format(user_id=user_id))
+    return cache.get(CACHE_KEY_FORMAT.format(user_id=user_id, team_slug=team_slug))
 
 
-def set_user_notification_cache(user_id: int, count: int):
+def set_user_notification_cache(user_id: int, team_slug: str, count: int):
     """
     Set the unread notifications count cache for a specific user.
 
@@ -82,18 +85,18 @@ def set_user_notification_cache(user_id: int, count: int):
         user_id (int): The ID of the user whose cache should be set.
         count (int): The unread notifications count to cache.
     """
-    cache_key = CACHE_KEY_FORMAT.format(user_id=user_id)
+    cache_key = CACHE_KEY_FORMAT.format(user_id=user_id, team_slug=team_slug)
     cache.set(cache_key, count, 5 * 60)  # Cache for 5 minutes
 
 
-def bust_unread_notification_cache(user_id: int):
+def bust_unread_notification_cache(user_id: int, team_slug: str):
     """
     Bust the unread notifications count cache for a specific user.
 
     Args:
         user_id (int): The ID of the user whose cache should be busted.
     """
-    cache.delete(CACHE_KEY_FORMAT.format(user_id=user_id))
+    cache.delete(CACHE_KEY_FORMAT.format(user_id=user_id, team_slug=team_slug))
 
 
 def send_notification_email(user_notification: UserNotification):
@@ -109,7 +112,7 @@ def send_notification_email(user_notification: UserNotification):
 
     # Check if user has email notifications enabled and meets minimum level threshold
     try:
-        preferences = UserNotificationPreferences.objects.get(user=user)
+        preferences = UserNotificationPreferences.objects.get(user=user, team=user_notification.team)
         if not preferences.email_enabled:
             return
         # Ignore if notification level is higher than the user's preference

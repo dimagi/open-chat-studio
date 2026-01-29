@@ -11,7 +11,7 @@
     <li>
       <a href="{% url 'ocs_notifications:notifications_home' %}" {% if active_tab == 'notifications' %}class="menu-active"{% endif %}>
         <i class="fa-solid fa-bell"></i>
-        {% translate "Notifications" %} {% if user.unread_notifications_count %}<span class="badge badge-xs badge-error">{{ user.unread_notifications_count }}</span>{% endif %}
+        {% translate "Notifications" %} {% if unread_notifications_count %}<span class="badge badge-xs badge-error">{{ unread_notifications_count }}</span>{% endif %}
       </a>
     </li>
   {% endflag %}
