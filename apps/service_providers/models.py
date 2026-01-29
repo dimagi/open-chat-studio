@@ -15,15 +15,15 @@ from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
-from apps.service_providers import auth_service, const, model_audit_fields, tracing
+from apps.service_providers import auth_service, const, model_audit_fields
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
 from ..teams.utils import get_slug_for_team
-from . import llm_service, messaging_service, speech_service
 from .exceptions import ServiceProviderConfigError
 
 if TYPE_CHECKING:
+    from apps.service_providers import llm_service, messaging_service, speech_service, tracing
     from apps.service_providers.forms import ProviderTypeConfigForm
 
 
@@ -100,7 +100,9 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.GoogleVertexAIConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_llm_service(self, config: dict) -> llm_service.LlmService:
+    def get_llm_service(self, config: dict) -> "llm_service.LlmService":
+        from . import llm_service
+
         config = {**config, **self.additional_config, "_type": self.slug}
         try:
             match self:
@@ -141,7 +143,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     def type_enum(self):
         return LlmProviderTypes[str(self.type)]
 
-    def get_llm_service(self) -> llm_service.LlmService:
+    def get_llm_service(self) -> "llm_service.LlmService":
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_llm_service(config)
 
@@ -262,7 +264,9 @@ class VoiceProviderType(models.TextChoices):
                 return forms.OpenAIVoiceEngineConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_speech_service(self, config: dict):
+    def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
+        from . import speech_service
+
         try:
             match self:
                 case VoiceProviderType.aws:
@@ -295,7 +299,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
     def type_enum(self):
         return VoiceProviderType(self.type)
 
-    def get_speech_service(self) -> speech_service.SpeechService:
+    def get_speech_service(self) -> "speech_service.SpeechService":
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_speech_service(config)
 
@@ -380,7 +384,9 @@ class MessagingProviderType(models.TextChoices):
                 return forms.SlackMessagingConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_messaging_service(self, config: dict) -> messaging_service.MessagingService:
+    def get_messaging_service(self, config: dict) -> "messaging_service.MessagingService":
+        from . import messaging_service
+
         match self:
             case MessagingProviderType.twilio:
                 return messaging_service.TwilioService(**config)
@@ -395,6 +401,8 @@ class MessagingProviderType(models.TextChoices):
     @staticmethod
     def platform_supported_provider_types(platform: ChannelPlatform) -> list["MessagingProviderType"]:
         """Finds all provider types supporting the platform specified by `platform`"""
+        from . import messaging_service
+
         provider_types = []
         for service in messaging_service.MessagingService.__subclasses__():
             if platform in service.supported_platforms:
@@ -419,7 +427,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
     def type_enum(self):
         return MessagingProviderType(self.type)
 
-    def get_messaging_service(self) -> messaging_service.MessagingService:
+    def get_messaging_service(self) -> "messaging_service.MessagingService":
         return self.type_enum.get_messaging_service(self.config)
 
 
@@ -494,7 +502,9 @@ class TraceProviderType(models.TextChoices):
                 return forms.LangfuseTraceProviderForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_service(self, config: dict) -> tracing.Tracer:
+    def get_service(self, config: dict) -> "tracing.Tracer":
+        from . import tracing
+
         match self:
             case TraceProviderType.langfuse:
                 return tracing.LangFuseTracer(self, config)
@@ -518,7 +528,7 @@ class TraceProvider(BaseTeamModel):
     def type_enum(self):
         return TraceProviderType(self.type)
 
-    def get_service(self) -> tracing.Tracer:
+    def get_service(self) -> "tracing.Tracer":
         return self.type_enum.get_service(self.config)
 
 
