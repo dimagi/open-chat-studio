@@ -5,7 +5,8 @@ intended.
 
 import re
 import uuid
-from unittest.mock import Mock, patch
+from io import BytesIO
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from django.test import override_settings
@@ -36,6 +37,7 @@ from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.langchain import mock_llm
 
+from ...service_providers.speech_service import SynthesizedAudio
 from ...utils.factories.service_provider_factories import LlmProviderFactory
 from ..datamodels import BaseMessage
 from .message_examples import base_messages
@@ -440,16 +442,16 @@ def test_failed_transcription_informs_the_user(
 @pytest.mark.django_db()
 @patch("apps.chat.bots.EventBot.get_user_message")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_message_to_user")
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.is_message_type_supported")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._handle_supported_message")
 def test_any_failure_informs_users(
-    is_message_type_supported, send_message_to_user, _get_user_message, test_channel, caplog
+    _handle_supported_message, send_message_to_user, _get_user_message, test_channel, caplog
 ):
     """
     Any failure should try and inform the user that something went wrong. The method that does the informing should
     not fail.
     """
 
-    is_message_type_supported.side_effect = Exception("Random error")
+    _handle_supported_message.side_effect = Exception("Random error")
     # The generate response should fail, causing the default error message to be sent
     _get_user_message.side_effect = Exception("Generation error")
 
@@ -676,13 +678,11 @@ def test_voice_response_with_urls(
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Give me a URL"
-    bot_process_input.return_value = (
-        ChatMessage.objects.create(
-            content=(
-                "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
-            ),
-            chat=Chat.objects.create(team=test_channel.experiment.team),
+    bot_process_input.return_value = ChatMessage.objects.create(
+        content=(
+            "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
         ),
+        chat=Chat.objects.create(team=test_channel.experiment.team),
     )
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
@@ -705,6 +705,9 @@ def test_voice_response_with_urls(
 def test_voice_tag_created_on_message(
     send_voice_to_user, send_text_to_user, get_speech_service, get_voice_transcript, test_channel
 ):
+    get_speech_service.return_value = MagicMock(
+        synthesize_voice=MagicMock(return_value=SynthesizedAudio(audio=BytesIO(), duration=1, format="mp3"))
+    )
     get_voice_transcript.return_value = "I'm groot"
 
     experiment = test_channel.experiment
