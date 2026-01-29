@@ -58,7 +58,7 @@ def provider_model():
     "apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations",
     Mock(return_value=("hello", [])),
 )
-@patch("apps.service_providers.llm_service.main.OpenAIAssistantRunnable.invoke")
+@patch("apps.service_providers.llm_service.openai_assistant.OpenAIAssistantRunnable.invoke")
 def test_assistant_node(patched_invoke, disabled_tools):
     patched_invoke.return_value = OpenAIAssistantFinish(
         return_values={

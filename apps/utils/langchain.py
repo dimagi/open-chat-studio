@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from apps.service_providers.llm_service import LlmService, OpenAIGenericService
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
-from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
+from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.token_counters import TokenCounter
 
 

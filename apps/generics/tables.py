@@ -55,4 +55,4 @@ class ArrayColumn(tables.Column):
     """
 
     def render(self, value):
-        return ", ".join([str(v) for v in value])
+        return ", ".join([str(v) for v in value]) if value else ""

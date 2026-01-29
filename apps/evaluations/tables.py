@@ -15,7 +15,7 @@ from apps.evaluations.utils import get_evaluator_type_display
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 from apps.generics.actions import chip_action
-from apps.generics.tables import TemplateColumnWithCustomHeader
+from apps.generics.tables import ArrayColumn, TemplateColumnWithCustomHeader
 from apps.teams.utils import get_slug_for_team
 
 
@@ -259,7 +259,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_activity_at", verbose_name="Last Message", orderable=True)
-    versions = columns.Column(verbose_name="Versions", accessor="versions_list", orderable=False)
+    versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions", orderable=False)
     message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
     session = actions.ActionsColumn(
         actions=[

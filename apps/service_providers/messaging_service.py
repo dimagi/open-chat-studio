@@ -2,22 +2,21 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import urljoin
 
 import backoff
-import boto3
 import httpx
 import pydantic
 import requests
-from botocore.client import Config
 from django.conf import settings
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
 from telebot.util import smart_split
-from turn import TurnClient
-from twilio.rest import Client
-from twilio.rest.api.v2010.account.message import MessageContext, MessageInstance
+
+if TYPE_CHECKING:
+    from slack_sdk import WebClient
+    from turn import TurnClient
+    from twilio.rest import Client
+    from twilio.rest.api.v2010.account.message import MessageInstance
 
 from apps.channels import audio
 from apps.channels.datamodels import MediaCache, TurnWhatsappMessage, TwilioMessage
@@ -78,11 +77,16 @@ class TwilioService(MessagingService):
         return bool(settings.WHATSAPP_S3_AUDIO_BUCKET)
 
     @property
-    def client(self) -> Client:
+    def client(self) -> "Client":
+        from twilio.rest import Client
+
         return Client(self.account_sid, self.auth_token)
 
     @property
     def s3_client(self):
+        import boto3
+        from botocore.client import Config
+
         return boto3.client(
             "s3",
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
@@ -121,7 +125,7 @@ class TwilioService(MessagingService):
 
     @backoff.on_predicate(
         backoff.constant,
-        lambda status: status not in [MessageInstance.Status.DELIVERED, MessageInstance.Status.READ],
+        lambda status: status not in ["delivered", "read"],
         max_time=10,
         interval=2,
         jitter=None,
@@ -132,7 +136,7 @@ class TwilioService(MessagingService):
 
         See https://shorturl.at/EZocp for a list of possible statuses.
         """
-        message_context: MessageContext = self.client.messages.get(current_chunk_sid)
+        message_context = self.client.messages.get(current_chunk_sid)
         message = message_context.fetch()
         return message.status
 
@@ -220,7 +224,9 @@ class TurnIOService(MessagingService):
     auth_token: str
 
     @property
-    def client(self) -> TurnClient:
+    def client(self) -> "TurnClient":
+        from turn import TurnClient
+
         return TurnClient(token=self.auth_token)
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
@@ -337,7 +343,7 @@ class SlackService(MessagingService):
 
     slack_team_id: str
     slack_installation_id: int
-    _client: WebClient | None = pydantic.PrivateAttr(default=None)
+    _client: "WebClient | None" = pydantic.PrivateAttr(default=None)
 
     def send_text_message(
         self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str = None, **kwargs
@@ -349,7 +355,7 @@ class SlackService(MessagingService):
         )
 
     @property
-    def client(self) -> WebClient:
+    def client(self) -> "WebClient":
         if not self._client:
             from apps.slack.client import get_slack_client
 
@@ -357,7 +363,7 @@ class SlackService(MessagingService):
         return self._client
 
     @client.setter
-    def client(self, value: WebClient):
+    def client(self, value: "WebClient"):
         self._client = value
 
     def iter_channels(self):
@@ -370,6 +376,8 @@ class SlackService(MessagingService):
                 return channel
 
     def join_channel(self, channel_id: str):
+        from slack_sdk.errors import SlackApiError
+
         try:
             self.client.conversations_info(channel=channel_id)
         except SlackApiError as e:
