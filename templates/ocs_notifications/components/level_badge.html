@@ -1,0 +1,9 @@
+{% if record.notification.level == '0' %}
+  <span class="badge badge-info">{{ record.notification.get_level_display }}</span>
+{% elif record.notification.level == '1' %}
+  <span class="badge badge-warning">{{ record.notification.get_level_display }}</span>
+{% elif record.notification.level == '2' %}
+  <span class="badge badge-error">{{ record.notification.get_level_display }}</span>
+{% else %}
+  <span class="badge">{{ record.notification.get_level_display }}</span>
+{% endif %}

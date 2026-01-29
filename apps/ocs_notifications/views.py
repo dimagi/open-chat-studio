@@ -1,0 +1,124 @@
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+from django.views.decorators.http import require_http_methods
+from django.views.generic import TemplateView
+from django_tables2 import SingleTableView
+
+from apps.experiments.filters import get_filter_context_data
+from apps.filters.models import FilterSet
+from apps.generics import actions
+from apps.ocs_notifications.filters import UserNotificationFilter
+from apps.ocs_notifications.forms import NotificationPreferencesForm
+from apps.ocs_notifications.models import UserNotification, UserNotificationPreferences
+from apps.ocs_notifications.tables import UserNotificationTable
+from apps.web.dynamic_filters.datastructures import FilterParams
+
+from .utils import bust_unread_notification_cache
+
+
+class NotificationHome(LoginRequiredMixin, TemplateView):
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, **kwargs):
+        context = {
+            "active_tab": "notifications",
+            "title": "Notifications",
+            "table_url": reverse("ocs_notifications:notifications_table"),
+            "enable_search": False,
+            "actions": [
+                actions.Action(
+                    url_name="users:user_profile",
+                    url_factory=lambda url_name, _request, _record, _value: reverse(url_name),
+                    label="Preferences",
+                    icon_class="fa fa-cog",
+                )
+            ],
+        }
+
+        # Add filter context
+        columns = UserNotificationFilter.columns(request=self.request, team=self.request.team)
+        filter_context = get_filter_context_data(
+            team=self.request.team,
+            columns=columns,
+            date_range_column="notification_date",
+            table_url=reverse("ocs_notifications:notifications_table"),
+            table_container_id="data-table",
+            table_type=FilterSet.TableType.NOTIFICATIONS,
+        )
+        context.update(filter_context)
+
+        return context
+
+
+class UserNotificationTableView(LoginRequiredMixin, SingleTableView):
+    model = UserNotification
+    table_class = UserNotificationTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        queryset = UserNotification.objects.filter(user=self.request.user).select_related("notification")
+
+        # Apply filters
+        notification_filter = UserNotificationFilter()
+        filter_params = FilterParams.from_request(self.request)
+        user_timezone = self.request.session.get("detected_tz")
+
+        return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
+
+
+class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
+    model = UserNotification
+    table_class = UserNotificationTable
+    template_name = "table/single_table.html"
+
+    def post(self, request, *args, **kwargs):
+        notification_id = kwargs.get("notification_id")
+        user_notification = get_object_or_404(UserNotification, id=notification_id, user=request.user)
+
+        # Toggle the read status
+        user_notification.read = not user_notification.read
+        if user_notification.read:
+            user_notification.read_at = timezone.now()
+        else:
+            user_notification.read_at = None
+        user_notification.save()
+        bust_unread_notification_cache(request.user.id)
+
+        # Return the updated filtered table
+        return self.get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        queryset = UserNotification.objects.filter(user=self.request.user).select_related("notification")
+
+        # Apply filters
+        notification_filter = UserNotificationFilter()
+        filter_params = FilterParams.from_request(self.request)
+        user_timezone = self.request.session.get("detected_tz")
+
+        return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
+
+
+@login_required
+@require_http_methods(["POST"])
+def notification_preferences(request):
+    """View for managing notification preferences"""
+    # Get or create preferences for the user
+    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user)[0]
+
+    form = NotificationPreferencesForm(request.POST, instance=preferences)
+    if form.is_valid():
+        form.save()
+        bust_unread_notification_cache(request.user.id)
+        messages.success(request, _("Notification preferences saved successfully."))
+        return redirect(reverse("users:user_profile"))
+
+    return render(
+        request,
+        "ocs_notifications/notification_preferences_form.html",
+        {"form": form, "preferences": preferences},
+    )

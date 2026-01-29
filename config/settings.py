@@ -124,6 +124,7 @@ PROJECT_APPS = [
     "apps.filters",
     "apps.data_migrations",
     "apps.oauth",
+    "apps.ocs_notifications",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
