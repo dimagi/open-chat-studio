@@ -34,10 +34,23 @@ class TraceContext:
     id: UUID
     name: str
     outputs: dict[str, Any] = dataclasses.field(default_factory=dict)
+    error: str | None = dataclasses.field(default=None)
+    exception: Exception | None = dataclasses.field(default=None)
 
     def set_outputs(self, outputs: dict[str, Any]) -> None:
         """Set outputs for this trace/span. Can be called multiple times to merge outputs."""
         self.outputs |= outputs or {}
+
+    def mark_span_as_error(self, message: str, exception=None):
+        self.error = message
+        self.exception = exception
+
+        if exception:
+            exception_trace = format_exception_for_trace(exception)
+            self.error += f"\n\n**Details:**\n\n{exception_trace}"
+
+    def has_error(self):
+        return self.error or self.exception
 
 
 class Tracer(ABC):
@@ -135,3 +148,43 @@ class Tracer(ABC):
 class TraceInfo:
     name: str
     metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+
+def format_exception_for_trace(exc: Exception) -> str:
+    """
+    Format an exception and its causes into a string for trace error recording.
+
+    Includes exception type, message, and any chained causes, but excludes stack trace.
+
+    Args:
+        exc: The exception to format
+
+    Returns:
+        A string representation of the exception chain
+    """
+    parts = []
+    current_exc = exc
+    seen = set()  # Prevent infinite loops in case of circular references
+
+    while current_exc is not None and id(current_exc) not in seen:
+        seen.add(id(current_exc))
+
+        # Format the current exception
+        exc_type = type(current_exc).__name__
+        exc_msg = str(current_exc)
+
+        if exc_msg:
+            parts.append(f"{exc_type}: {exc_msg}")
+        else:
+            parts.append(exc_type)
+
+        # Follow the exception chain
+        # Check explicit cause (__cause__) first, then implicit context (__context__)
+        if current_exc.__cause__ is not None:
+            current_exc = current_exc.__cause__
+        elif not getattr(current_exc, "__suppress_context__", False) and current_exc.__context__ is not None:
+            current_exc = current_exc.__context__
+        else:
+            break
+
+    return "\n*caused by*\n".join(parts)
