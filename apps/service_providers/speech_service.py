@@ -9,7 +9,7 @@ import httpx
 import pydantic
 
 from apps.channels.audio import convert_audio
-from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException
+from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException, UserReportableError
 from apps.experiments.models import SyntheticVoice
 
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ class SpeechService(pydantic.BaseModel):
             return self._transcribe_audio(audio)
         except Exception as e:
             log.exception(e)
-            raise AudioTranscriptionException(f"Unable to transcribe audio. Error: {e}") from e
+            raise UserReportableError("Unable to transcribe audio") from e
 
     def _transcribe_audio(self, audio: IO[bytes]) -> str:
         raise NotImplementedError
@@ -173,7 +173,7 @@ class AzureSpeechService(SpeechService):
             return result.text
         elif result.reason == speechsdk.ResultReason.NoMatch:
             reason = result.no_match_details.reason
-            raise AudioTranscriptionException(f"No speech could be recognized {reason}")
+            raise AudioTranscriptionException(f"No speech could be recognized: {reason}")
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
             msg = f"Azure speech transcription failed: {cancellation_details.reason.name}"
