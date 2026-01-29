@@ -25,6 +25,7 @@ class FilePurpose(models.TextChoices):
     COLLECTION = "collection", "Collection"
     EVALUATION_DATASET = "evaluation_dataset", "Evaluation Dataset"
     DATA_EXPORT = "data_export", "Data Export"
+    MESSAGE_MEDIA = "message_media", "Message Media"
 
 
 class FileObjectManager(VersionsObjectManagerMixin, models.Manager):
@@ -78,10 +79,11 @@ class File(BaseTeamModel, VersionsMixin):
         metadata: dict | None = None,
         purpose: FilePurpose | None = None,
         expiry_date: datetime | None = None,
+        content_type: str | None = None,
     ):
         content = file_obj.read() if file_obj else None
 
-        content_type = mimetypes.guess_type(filename)[0]
+        content_type = content_type or mimetypes.guess_type(filename)[0]
         if not content_type and content:
             # typically means the filename doesn't have an extension
             content_type = magic.from_buffer(content, mime=True)
@@ -123,6 +125,10 @@ class File(BaseTeamModel, VersionsMixin):
     @property
     def is_image(self):
         return self.content_type.startswith("image/")
+
+    @property
+    def is_audio(self):
+        return self.content_type.startswith("audio/")
 
     @property
     def display_size(self):

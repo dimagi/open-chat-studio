@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 import backoff
 import httpx
 import pydantic
+import requests
 from django.conf import settings
 from telebot.util import smart_split
 
@@ -18,12 +19,12 @@ if TYPE_CHECKING:
     from twilio.rest.api.v2010.account.message import MessageInstance
 
 from apps.channels import audio
-from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import MediaCache, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 from apps.files.models import File
 from apps.service_providers import supported_mime_types
-from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.exceptions import AudioConversionError, ServiceProviderConfigError
 from apps.service_providers.speech_service import SynthesizedAudio
 
 logger = logging.getLogger("ocs.messaging")
@@ -176,9 +177,22 @@ class TwilioService(MessagingService):
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:
         auth = (self.account_sid, self.auth_token)
         response = httpx.get(message.media_url, auth=auth, follow_redirects=True)
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise AudioConversionError("Unable to fetch message media") from e
+
+        data = BytesIO(response.content)
+        content_type = response.headers["Content-Type"]
+        message.cached_media_data = MediaCache(content_type=content_type, data=data)
+
         # Example header: {'Content-Type': 'audio/ogg'}
-        content_type = response.headers["Content-Type"].split("/")[1]
-        return audio.convert_audio(BytesIO(response.content), target_format="wav", source_format=content_type)
+        family, sub_type = content_type.split("/", 1)
+        if family != "audio":
+            raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
+        converted = audio.convert_audio(data, target_format="wav", source_format=sub_type)
+        data.seek(0)
+        return converted
 
     def _get_account_numbers(self) -> list[str]:
         """Returns all numbers associated with this client account"""
@@ -232,8 +246,22 @@ class TurnIOService(MessagingService):
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
         response = self.client.media.get_media(message.media_id)
-        ogg_audio = BytesIO(response.content)
-        return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
+
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as e:
+            raise AudioConversionError("Unable to fetch message media") from e
+
+        data = BytesIO(response.content)
+        content_type = response.headers["Content-Type"]
+        message.cached_media_data = MediaCache(content_type=content_type, data=data)
+
+        # Example header: {'Content-Type': 'audio/ogg'}
+        family, sub_type = content_type.split("/", 1)
+        if family != "audio":
+            raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
+
+        return audio.convert_audio(data, target_format="wav", source_format=sub_type)
 
     def can_send_file(self, file: File) -> bool:
         mime = file.content_type

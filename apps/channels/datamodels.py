@@ -1,6 +1,7 @@
 import base64
 import logging
 from functools import cached_property
+from io import BytesIO
 from typing import Literal
 
 import phonenumbers
@@ -12,6 +13,13 @@ from apps.chat.channels import MESSAGE_TYPES
 logger = logging.getLogger("ocs.channels")
 
 AttachmentType = Literal["code_interpreter", "file_search", "ocs_attachments"]
+
+
+class MediaCache(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    content_type: str
+    data: BytesIO
 
 
 class Attachment(BaseModel):
@@ -78,6 +86,8 @@ class BaseMessage(BaseModel):
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     attachments: list[Attachment] = Field(default=[])
 
+    cached_media_data: MediaCache | None = Field(default=None, exclude=True)
+
 
 class TelegramMessage(BaseMessage):
     media_id: str | None = None
@@ -120,6 +130,7 @@ class TwilioMessage(BaseMessage):
             return MESSAGE_TYPES.TEXT
         if value and value in ["audio/ogg", "video/mp4"]:
             return MESSAGE_TYPES.VOICE
+        return MESSAGE_TYPES.OTHER
 
     @staticmethod
     def parse(message_data: dict) -> "TwilioMessage":

@@ -181,7 +181,7 @@ def _run_llm_pipeline_test(
     # Run pipeline
     bot = PipelineBot(session=session, experiment=experiment, trace_service=TracingService.empty())
     input_state = PipelineState(messages=["Hello"], experiment_session=session)
-    ai_message, _ = bot.invoke_pipeline(input_state=input_state, pipeline=pipeline)
+    ai_message = bot.invoke_pipeline(input_state=input_state, pipeline=pipeline)
 
     # Verify output
     assert ai_message is not None

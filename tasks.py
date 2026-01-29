@@ -144,13 +144,15 @@ def ngrok_url(c: Context):
     """Start ngrok tunnel for local development and return public URL."""
     #  You need to have ngrok installed on your system
     c.run("ngrok http 8000", echo=True, asynchronous=True)
-    while True:
+    tries = 4
+    while tries > 0:
         try:
             response = httpx.get("http://localhost:4040/api/tunnels", timeout=10)
             if response.status_code == 200:
                 public_url = response.json()["tunnels"][0]["public_url"].split("https://")[1]
                 break
         except Exception:
+            tries -= 1
             time.sleep(1)
             print("Trying to a public address from ngrok")
 
@@ -164,11 +166,17 @@ def runserver(c: Context, public=False):
     runserver_command = "python manage.py runserver"
     if public:
         public_url = ngrok_url(c)
+        env_vars = [
+            "CSRF_TRUSTED_ORIGINS='https://*.ngrok.io,https://*.ngrok-free.app'",
+            f"SITE_URL_ROOT='{public_url}'",
+        ]
         if platform.system() == "Windows":
-            runserver_command = f"powershell -Command \"$env:SITE_URL_ROOT='{public_url}'; {runserver_command}\""
+            env = "; ".join([f"$env:{var}" for var in env_vars])
+            runserver_command = f'powershell -Command "{env}; {runserver_command}"'
             pty = False
         else:
-            runserver_command = f"SITE_URL_ROOT={public_url} {runserver_command}"
+            env = " ".join(env_vars)
+            runserver_command = f"{env} {runserver_command}"
             pty = True
     else:
         pty = True

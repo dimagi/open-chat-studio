@@ -98,6 +98,7 @@ class OCSTracer(Tracer):
         finally:
             # Guaranteed cleanup - update trace duration and status
             if self.trace_record and self.start_time:
+                self.error_detected = self.error_detected or trace_context.has_error()
                 try:
                     end_time = time.time()
                     duration = end_time - self.start_time
@@ -106,7 +107,7 @@ class OCSTracer(Tracer):
                     self.trace_record.duration = duration_ms
                     if self.error_detected:
                         self.trace_record.status = TraceStatus.ERROR
-                        self.trace_record.error = self.error_message
+                        self.trace_record.error = self.error_message or trace_context.error
                     else:
                         self.trace_record.status = TraceStatus.SUCCESS
 

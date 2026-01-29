@@ -59,10 +59,10 @@ class TestTwilio:
     @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
-    @patch("apps.chat.channels.FacebookMessengerChannel._get_bot_response")
+    @patch("apps.chat.bots.PipelineBot.process_input")
     def test_twilio_uses_facebook_channel_implementation(
         self,
-        get_llm_response_mock,
+        bot_process_input,
         send_text_message,
         send_voice_message,
         get_voice_transcript_mock,
@@ -78,7 +78,7 @@ class TestTwilio:
         ):
             experiment = ExperimentFactory(conversational_consent_enabled=True)
             chat = Chat.objects.create(team=experiment.team)
-            get_llm_response_mock.return_value = ChatMessage.objects.create(content="Hi", chat=chat), None
+            bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
             get_voice_transcript_mock.return_value = "Hi"
 
             handle_twilio_message(message_data=incoming_message)

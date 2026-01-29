@@ -118,6 +118,12 @@
                                   </div>
                                 </div>
                               </div>
+                            {% elif file.is_audio %}
+                              <div class="mt-1">
+                                <audio controls class="h-8">
+                                  <source src="{% url 'experiments:download_file' request.team.slug experiment_session.id file.id %}" type="{{ file.content_type }}">
+                                </audio>
+                              </div>
                             {% endif %}
                           </div>
                         {% endfor %}

@@ -84,6 +84,7 @@ nav:
       - Index Managers: developer_guides/index_managers.md
     - Testing:
       - Integration Testing: developer_guides/integration_testing.md
+      - developer_guides/twilio_testing.md
   - Admin Guides:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md
