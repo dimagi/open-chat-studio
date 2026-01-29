@@ -19,7 +19,11 @@ class Notification(BaseModel):
 
     class Meta:
         constraints = [
-            models.CheckConstraint(condition=~models.Q(identifier=""), name="unique_identifier_per_notification"),
+            models.UniqueConstraint(
+                fields=["identifier"],
+                condition=~models.Q(identifier=""),
+                name="unique_identifier_per_notification",
+            ),
         ]
 
     def __str__(self):
