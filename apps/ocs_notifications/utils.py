@@ -71,9 +71,6 @@ def create_notification(
 
     except Exception:
         logger.exception("Failed to create notification")
-        return None
-
-    return notification
 
 
 # TODO: Test these methods
