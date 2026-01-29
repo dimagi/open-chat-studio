@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load waffle_tags %}
+{% load chat_tags waffle_tags %}
 
 {% block breadcrumbs %}
     <div class="breadcrumbs text-sm">
@@ -101,7 +101,7 @@
       <div class="card mb-6">
         <div class="card-body bg-base-50 shadow-md">
           <div role="alert" class="alert alert-error alert-soft">
-          <div class="text-sm bg-error">{{ trace.error }}</div>
+          <div class="text-sm">{{ trace.error|render_markdown }}</div>
           </div>
         </div>
       </div>
