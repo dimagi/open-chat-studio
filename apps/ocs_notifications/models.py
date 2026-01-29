@@ -12,9 +12,15 @@ class LevelChoices(models.TextChoices):
 class Notification(BaseModel):
     title = models.CharField(max_length=255)
     message = models.TextField()
-    level = models.CharField(max_length=1, choices=LevelChoices.choices)
+    level = models.CharField(max_length=1, choices=LevelChoices.choices, db_index=True)
     users = models.ManyToManyField("users.CustomUser", through="UserNotification", related_name="notifications")
     last_event_at = models.DateTimeField()
+    identifier = models.CharField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=~models.Q(identifier=""), name="unique_identifier_per_notification"),
+        ]
 
     def __str__(self):
         return self.title

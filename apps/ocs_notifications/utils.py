@@ -1,4 +1,6 @@
+import json
 import logging
+from base64 import b64encode
 
 from django.core.cache import cache
 from django.core.mail import send_mail
@@ -15,7 +17,13 @@ CACHE_KEY_FORMAT = "{user_id}-unread-notifications-count"
 
 
 def create_notification(
-    title: str, message: str, level: LevelChoices, users: list | None = None, team: Team | None = None, link=None
+    title: str,
+    message: str,
+    level: LevelChoices,
+    users: list | None = None,
+    team: Team | None = None,
+    link=None,
+    data: dict | None = None,
 ):
     """
     Create a notification and associate it with the given users.
@@ -37,10 +45,12 @@ def create_notification(
     users = set(users)
 
     try:
+        identifier = create_identifier(data) if data else None
         notification, created = Notification.objects.update_or_create(
             title=title,
             message=message,
             level=level,
+            identifier=identifier,
             defaults={"last_event_at": timezone.now()},
         )
         for user in users:
@@ -137,3 +147,18 @@ def send_notification_email(user_notification: UserNotification):
             from_email=None,
             recipient_list=[user.email],
         )
+
+
+def create_identifier(data: dict) -> str:
+    """
+    Create a unique identifier string based on the provided data dictionary.
+
+    Args:
+        data (dict): A dictionary of data to base the identifier on.
+
+    Returns:
+        str: A base64-encoded JSON string representing the identifier.
+    """
+    json_data = json.dumps(data, sort_keys=True)
+    encoded_data = b64encode(json_data.encode("utf-8")).decode("utf-8")
+    return encoded_data

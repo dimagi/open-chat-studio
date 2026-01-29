@@ -72,4 +72,5 @@ def check_single_custom_action_health(action_id: int):
             message=f"The custom action '{action.name}' is currently unreachable at its health endpoint.",
             level=LevelChoices.ERROR,
             team=action.team,
+            data={"action_id": action.id, "status": action.health_status},
         )
