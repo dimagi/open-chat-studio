@@ -56,24 +56,21 @@ def create_notification(
         )
         for user in users:
             user_notification, created = UserNotification.objects.get_or_create(notification=notification, user=user)
-            # Email will only be sent when the notification is newly created or if the notification was previously read
-            should_send_email = created or user_notification.read is True
+            # Uuser will only be notified when notification is created or if the notification was previously read
+            user_should_be_notified = created or user_notification.read is True
             user_notification.read = False
             user_notification.read_at = None
             user_notification.save()
 
             # Bust cache when notification is created or when marking previously read notification as unread
-            if created or should_send_email:
+            if user_should_be_notified:
                 bust_unread_notification_cache(user.id)
-
-            if should_send_email:
                 send_notification_email(user_notification)
 
     except Exception:
         logger.exception("Failed to create notification")
 
 
-# TODO: Test these methods
 def get_user_notification_cache_value(user_id: int) -> int | None:
     """
     Get the unread notifications count cache for a specific user.
@@ -121,9 +118,10 @@ def send_notification_email(user_notification: UserNotification):
         preferences = UserNotificationPreferences.objects.get(user=user)
         if not preferences.email_enabled:
             return
-        # Check if notification level meets or exceeds user's minimum email level
-        if notification.level <= preferences.email_level:
+        # Ignore if notification level is higher than the user's preference
+        if notification.level > preferences.email_level:
             return
+
     except UserNotificationPreferences.DoesNotExist:
         return
 
