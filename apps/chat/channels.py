@@ -375,6 +375,11 @@ class ChannelBase(ABC):
             resp = self._handle_unsupported_message()
             return ChatMessage(content=resp)
 
+        if self.supports_conversational_consent_flow and self._is_reset_conversation_request():
+            # Exit early and don't record `/reset` command
+            # Webchats' statuses are updated through an "external" flow
+            return ChatMessage(content="Conversation reset")
+
         try:
             human_message = self._create_chat_message_from_user_message()
         except UserReportableError as e:
@@ -388,10 +393,6 @@ class ChannelBase(ABC):
 
         try:
             if self.supports_conversational_consent_flow:
-                # Webchats' statuses are updated through an "external" flow
-                if self._is_reset_conversation_request():
-                    return ChatMessage(content="Conversation reset")
-
                 if self.experiment.conversational_consent_enabled and self.experiment.consent_form_id:
                     if self._should_handle_pre_conversation_requirements():
                         resp = self._handle_pre_conversation_requirements()
