@@ -22,7 +22,6 @@ def create_notification(
     level: LevelChoices,
     users: list | None = None,
     team: Team | None = None,
-    link=None,
     data: dict | None = None,
 ):
     """
@@ -31,13 +30,15 @@ def create_notification(
     Args:
         title (str): The title of the notification.
         message (str): The message content of the notification.
-        category (str): The category of the notification (info, warning, error).
+        level (str): The level of the notification (info, warning, error).
         users (list): A list of user instances to associate with the notification.
-        link (str, optional): An optional link related to the notification.
+        team (Team, optional): A team whose members will be associated with the notification.
+        data (dict, optional): Additional data to store with the notification.
 
     Returns:
-        Notification: The created Notification instance.
+        Notification: The created Notification instance, or None if creation failed.
     """
+    notification = None
     users = users or []
     if team:
         users.extend([member.user for member in team.membership_set.select_related("user").all()])
@@ -54,9 +55,6 @@ def create_notification(
             defaults={"last_event_at": timezone.now()},
         )
         for user in users:
-            if level == LevelChoices.ERROR:
-                bust_unread_notification_cache(user.id)
-
             user_notification, created = UserNotification.objects.get_or_create(notification=notification, user=user)
             # Email will only be sent when the notification is newly created or if the notification was previously read
             should_send_email = created or user_notification.read is True
@@ -64,11 +62,16 @@ def create_notification(
             user_notification.read_at = None
             user_notification.save()
 
+            # Bust cache when notification is created or when marking previously read notification as unread
+            if created or should_send_email:
+                bust_unread_notification_cache(user.id)
+
             if should_send_email:
                 send_notification_email(user_notification)
 
     except Exception:
         logger.exception("Failed to create notification")
+        return None
 
     return notification
 
@@ -115,7 +118,16 @@ def send_notification_email(user_notification: UserNotification):
     """
     user = user_notification.user
     notification = user_notification.notification
-    if not UserNotificationPreferences.objects.filter(user=user_notification.user, email_enabled=True).exists():
+
+    # Check if user has email notifications enabled and meets minimum level threshold
+    try:
+        preferences = UserNotificationPreferences.objects.get(user=user)
+        if not preferences.email_enabled:
+            return
+        # Check if notification level meets or exceeds user's minimum email level
+        if notification.level <= preferences.email_level:
+            return
+    except UserNotificationPreferences.DoesNotExist:
         return
 
     subject = f"Notification: {notification.title}"

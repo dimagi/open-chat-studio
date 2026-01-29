@@ -52,7 +52,7 @@ class UserNotificationPreferences(BaseModel):
     # In-app notification preferences
     in_app_enabled = models.BooleanField(default=True)
     in_app_level = models.CharField(
-        max_length=20,
+        max_length=1,
         choices=LevelChoices.choices,
         default=LevelChoices.INFO,
     )

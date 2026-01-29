@@ -66,9 +66,9 @@ class UserNotificationTableView(LoginRequiredMixin, SingleTableView):
         # Apply filters
         notification_filter = UserNotificationFilter()
         filter_params = FilterParams.from_request(self.request)
-        timezone = self.request.session.get("detected_tz")
+        user_timezone = self.request.session.get("detected_tz")
 
-        return notification_filter.apply(queryset, filter_params=filter_params, timezone=timezone)
+        return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
 
 
 class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
@@ -98,9 +98,9 @@ class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
         # Apply filters
         notification_filter = UserNotificationFilter()
         filter_params = FilterParams.from_request(self.request)
-        timezone = self.request.session.get("detected_tz")
+        user_timezone = self.request.session.get("detected_tz")
 
-        return notification_filter.apply(queryset, filter_params=filter_params, timezone=timezone)
+        return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
 
 
 @login_required
@@ -108,7 +108,7 @@ class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
 def notification_preferences(request):
     """View for managing notification preferences"""
     # Get or create preferences for the user
-    preferences, created = UserNotificationPreferences.objects.get_or_create(user=request.user)
+    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user)[0]
 
     form = NotificationPreferencesForm(request.POST, instance=preferences)
     if form.is_valid():
@@ -116,8 +116,6 @@ def notification_preferences(request):
         bust_unread_notification_cache(request.user.id)
         messages.success(request, _("Notification preferences saved successfully."))
         return redirect(reverse("users:user_profile"))
-    else:
-        form = NotificationPreferencesForm(instance=preferences)
 
     return render(
         request,

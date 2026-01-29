@@ -1,14 +1,9 @@
 from django import forms
 
-from apps.ocs_notifications.models import UserNotificationPreferences
+from apps.ocs_notifications.models import LevelChoices, UserNotificationPreferences
 
 
 class NotificationPreferencesForm(forms.ModelForm):
-    in_app_enabled = forms.BooleanField(required=False, widget=forms.CheckboxInput())
-    in_app_level = forms.RadioSelect()
-    email_enabled = forms.BooleanField(required=False, widget=forms.CheckboxInput())
-    email_level = forms.RadioSelect()
-
     class Meta:
         model = UserNotificationPreferences
         fields = [
@@ -17,3 +12,9 @@ class NotificationPreferencesForm(forms.ModelForm):
             "email_enabled",
             "email_level",
         ]
+        widgets = {
+            "in_app_enabled": forms.CheckboxInput(),
+            "email_enabled": forms.CheckboxInput(),
+            "in_app_level": forms.RadioSelect(choices=LevelChoices.choices),
+            "email_level": forms.RadioSelect(choices=LevelChoices.choices),
+        }
