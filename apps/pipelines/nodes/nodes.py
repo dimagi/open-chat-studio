@@ -353,16 +353,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 f"Local collections: {', '.join(local_collections)}.",
             )
 
-        # Validate that all remote collections use the same LLM provider as this node
-        incompatible_collections = [
-            collection.name for collection in collections.values() if collection.llm_provider_id != llm_provider_id
-        ]
-        if incompatible_collections:
-            raise PydanticCustomError(
-                "invalid_collection_index",
-                f"All collection indexes must use the same LLM provider as the node. "
-                f"Incompatible collections: {', '.join(incompatible_collections)}",
-            )
+        if all(is_remote_flags):
+            # Validate that all remote collections use the same LLM provider as this node
+            incompatible_collections = [
+                collection.name for collection in collections.values() if collection.llm_provider_id != llm_provider_id
+            ]
+            if incompatible_collections:
+                raise PydanticCustomError(
+                    "invalid_collection_index",
+                    f"All remote collection indexes must use the same LLM provider as the node. "
+                    f"Incompatible collections: {', '.join(incompatible_collections)}",
+                )
+
         if len(collections) > 1:
             if all(is_remote_flags):
                 # Check if provider has a limit on number of vector stores
