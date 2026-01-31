@@ -339,7 +339,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         # Validate that all collections are the same type (either all remote or all local)
         # Only applies when multiple collections are selected
         is_remote_flags = [collection.is_remote_index for collection in collections.values()]
-        if not all(is_remote_flags) and any(is_remote_flags):
+        all_are_remote = all(is_remote_flags)
+        if not all_are_remote and any(is_remote_flags):
             remote_collections = [
                 f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
             ]
@@ -353,39 +354,42 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 f"Local collections: {', '.join(local_collections)}.",
             )
 
-        # Validate that all remote collections use the same LLM provider as this node
-        incompatible_collections = [
-            collection.name for collection in collections.values() if collection.llm_provider_id != llm_provider_id
-        ]
-        if incompatible_collections:
-            raise PydanticCustomError(
-                "invalid_collection_index",
-                f"All collection indexes must use the same LLM provider as the node. "
-                f"Incompatible collections: {', '.join(incompatible_collections)}",
-            )
-        if len(collections) > 1:
-            if all(is_remote_flags):
-                # Check if provider has a limit on number of vector stores
-                llm_provider = get_llm_provider(llm_provider_id)
-                if llm_provider:
-                    max_vector_stores = llm_provider.type_enum.max_vector_stores
-                    if max_vector_stores and len(collections) > max_vector_stores:
-                        raise PydanticCustomError(
-                            "vectorstore_limit_exceeded",
-                            f"{llm_provider.type_enum.value.label} hosted vectorstores are limited to "
-                            f"{max_vector_stores} per request. "
-                            f"You have selected {len(collections)} collection indexes. "
-                            f"Please select at most {max_vector_stores} collection indexes.",
-                        )
-            else:
-                # local indexes must have a summary
-                missing_summary = [collection.name for collection in collections.values() if not collection.summary]
-                if missing_summary:
+        # From this point on, we either have all remote or all local
+
+        if all_are_remote:
+            # Validate that all remote collections use the same LLM provider as this node
+            incompatible_collections = [
+                collection.name for collection in collections.values() if collection.llm_provider_id != llm_provider_id
+            ]
+            if incompatible_collections:
+                raise PydanticCustomError(
+                    "invalid_collection_index",
+                    f"All remote collection indexes must use the same LLM provider as the node. "
+                    f"Incompatible collections: {', '.join(incompatible_collections)}",
+                )
+
+            # Check if provider has a limit on number of vector stores
+            llm_provider = get_llm_provider(llm_provider_id)
+            if llm_provider:
+                max_vector_stores = llm_provider.type_enum.max_vector_stores
+                if max_vector_stores and len(collections) > max_vector_stores:
                     raise PydanticCustomError(
-                        "collections_missing_summary",
-                        "When using multiple collection indexes, the collections must have a summary. "
-                        f"Collections missing summary: {', '.join(missing_summary)}",
+                        "vectorstore_limit_exceeded",
+                        f"{llm_provider.type_enum.value.label} hosted vectorstores are limited to "
+                        f"{max_vector_stores} per request. "
+                        f"You have selected {len(collections)} collection indexes. "
+                        f"Please select at most {max_vector_stores} collection indexes.",
                     )
+
+        if len(collections) > 1 and not all_are_remote:
+            # local indexes must have a summary
+            missing_summary = [collection.name for collection in collections.values() if not collection.summary]
+            if missing_summary:
+                raise PydanticCustomError(
+                    "collections_missing_summary",
+                    "When using multiple collection indexes, the collections must have a summary. "
+                    f"Collections missing summary: {', '.join(missing_summary)}",
+                )
 
         return value
 
