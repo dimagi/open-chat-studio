@@ -646,6 +646,7 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
     csv_data: List of dictionaries representing CSV rows
     column_mappings: Dictionary mapping column names to evaluator names
     """
+    from apps.evaluations.aggregation import compute_aggregates_for_run
 
     if not csv_data:
         return {"success": False, "error": "CSV file is empty"}
@@ -659,6 +660,8 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
             stats = process_evaluation_results_csv_rows(
                 evaluation_run, csv_data, column_mappings or {}, progress_recorder, team
             )
+            # Re-compute aggregates after updating results
+            compute_aggregates_for_run(evaluation_run)
             progress_recorder.set_progress(100, 100, "Upload complete")
             return {
                 "success": True,
@@ -715,6 +718,18 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
                 value = row[column_name]
                 if value is None:
                     value = ""
+
+                # Try to convert numeric strings to actual numbers for proper aggregation
+                if isinstance(value, str) and value.strip():
+                    try:
+                        # Try int first, then float
+                        if "." in value:
+                            value = float(value)
+                        else:
+                            value = int(value)
+                    except ValueError:
+                        # Keep as string if not a number
+                        pass
 
                 result_key = column_name
                 if "(" in column_name and column_name.endswith(")"):
