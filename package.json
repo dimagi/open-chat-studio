@@ -29,7 +29,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.51.0",
-    "@typescript-eslint/parser": "^8.51.0",
+    "@typescript-eslint/parser": "^8.54.0",
     "autoprefixer": "^10.4.20",
     "babel-loader": "^10.0.0",
     "css-loader": "^7.1.2",
