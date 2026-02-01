@@ -117,7 +117,8 @@
             const fileId = (typeof result === "object" && result.result) ? result.result : result;
 
             if (fileId) {
-              this.downloadUrl = downloadBaseUrl.replace("0", fileId);
+              // Replace only the trailing "/0" segment to avoid corrupting slugs containing "0"
+              this.downloadUrl = downloadBaseUrl.replace(/\/0(\/?$)/, `/${fileId}$1`);
               this.status = "success";
             } else {
               this.errorMessage = "No file was created. Please try again.";
