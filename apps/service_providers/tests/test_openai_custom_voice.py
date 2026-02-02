@@ -292,3 +292,36 @@ class TestOpenAICustomVoiceSpeechService:
 
         assert result == "Transcribed text"
         mock_client.audio.transcriptions.create.assert_called_once()
+
+
+class TestVoiceProviderCustomVoiceClient:
+    """Tests for VoiceProvider.get_custom_voice_client method"""
+
+    def test_get_custom_voice_client_success(self):
+        """Test getting custom voice client from provider"""
+        from apps.service_providers.models import VoiceProvider, VoiceProviderType
+
+        provider = Mock(spec=VoiceProvider)
+        provider.type = VoiceProviderType.openai_custom_voice
+        provider.config = {
+            "openai_api_key": "sk-test-key",
+            "openai_organization": "org-test",
+            "openai_api_base": None,
+        }
+
+        # Call the actual method
+        client = VoiceProvider.get_custom_voice_client(provider)
+
+        assert client is not None
+        assert client.api_key == "sk-test-key"
+        assert client.organization == "org-test"
+
+    def test_get_custom_voice_client_wrong_provider_type(self):
+        """Test that getting client fails for non-custom-voice provider"""
+        from apps.service_providers.models import VoiceProvider, VoiceProviderType
+
+        provider = Mock(spec=VoiceProvider)
+        provider.type = VoiceProviderType.openai
+
+        with pytest.raises(ValueError, match="Custom voice client not available"):
+            VoiceProvider.get_custom_voice_client(provider)

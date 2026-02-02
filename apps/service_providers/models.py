@@ -322,6 +322,22 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_speech_service(config)
 
+    def get_custom_voice_client(self):
+        """
+        Get OpenAI Custom Voice API client for voice management operations.
+        Only available for openai_custom_voice provider type.
+        """
+        if self.type != VoiceProviderType.openai_custom_voice:
+            raise ValueError(f"Custom voice client not available for provider type: {self.type}")
+
+        from apps.service_providers.openai_custom_voice import OpenAICustomVoiceClient
+
+        return OpenAICustomVoiceClient(
+            api_key=self.config["openai_api_key"],
+            organization=self.config.get("openai_organization"),
+            base_url=self.config.get("openai_api_base"),
+        )
+
     @transaction.atomic()
     def add_files(self, files):
         if self.type == VoiceProviderType.openai_voice_engine:
