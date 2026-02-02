@@ -16,6 +16,7 @@ from django_htmx.http import HttpResponseLocation
 from apps.oauth.models import OAuth2AccessToken
 from apps.ocs_notifications.forms import NotificationPreferencesForm
 from apps.ocs_notifications.models import UserNotificationPreferences
+from apps.ocs_notifications.utils import bust_unread_notification_cache
 from apps.web.waf import WafRule, waf_allow
 
 from .forms import ApiKeyForm, CustomUserChangeForm, UploadAvatarForm
@@ -158,6 +159,7 @@ def save_notification_preferences(request):
     form = NotificationPreferencesForm(request.POST, instance=preferences)
     if form.is_valid():
         form.save()
+        bust_unread_notification_cache(request.user.id, team_slug=request.team.slug)
         messages.success(request, _("Notification preferences saved successfully."))
     else:
         messages.error(request, _("Failed to save notification preferences."))

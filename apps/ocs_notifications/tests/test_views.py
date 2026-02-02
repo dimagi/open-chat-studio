@@ -85,7 +85,7 @@ class TestToggleNotificationReadView:
 class TestNotificationPreferencesView:
     """Tests for notification_preferences view"""
 
-    @patch("apps.ocs_notifications.views.bust_unread_notification_cache")
+    @patch("apps.users.views.bust_unread_notification_cache")
     def test_user_preference_updates_persisted_and_cache_busted(self, mock_bust_cache, client, team_with_users):
         """
         Test that user preference updates are persisted and that it busts the cache.
@@ -109,7 +109,7 @@ class TestNotificationPreferencesView:
         assert UserNotificationPreferences.objects.filter(user=user, team=team_with_users).exists() is False
 
         # Step 2: POST form data to update preferences
-        url = reverse("ocs_notifications:notification_preferences")
+        url = reverse("users:save_notification_preferences")
         form_data = {
             "in_app_enabled": True,
             "in_app_level": "1",  # Warning
@@ -126,9 +126,9 @@ class TestNotificationPreferencesView:
         # Step 3: Verify preferences were created/updated
         preferences = UserNotificationPreferences.objects.get(user=user, team=team_with_users)
         assert preferences.in_app_enabled is True
-        assert preferences.in_app_level == "1"
+        assert preferences.in_app_level == 1
         assert preferences.email_enabled is True
-        assert preferences.email_level == "2"
+        assert preferences.email_level == 2
 
         # Step 4: Verify cache was busted
         mock_bust_cache.assert_called_once()
@@ -151,9 +151,9 @@ class TestNotificationPreferencesView:
         # Verify updated preferences
         preferences.refresh_from_db()
         assert preferences.in_app_enabled is False
-        assert preferences.in_app_level == "0"
+        assert preferences.in_app_level == 0
         assert preferences.email_enabled is False
-        assert preferences.email_level == "1"
+        assert preferences.email_level == 1
 
         # Verify cache was busted again
         mock_bust_cache.assert_called_once()
