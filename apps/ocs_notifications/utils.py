@@ -42,6 +42,7 @@ def create_notification(
     users = [member.user for member in team.membership_set.select_related("user").all()]
 
     try:
+        event_data = event_data or {"message": message}
         identifier = create_identifier(event_data)
         notification, created = Notification.objects.update_or_create(
             team=team,
@@ -160,7 +161,7 @@ def send_notification_email(user_notification: UserNotification):
         )
 
 
-def create_identifier(data: dict | None = None) -> str:
+def create_identifier(data: dict) -> str:
     """
     Create a unique identifier string based on the provided data dictionary.
 
@@ -170,8 +171,6 @@ def create_identifier(data: dict | None = None) -> str:
     Returns:
         str: A base64-encoded JSON string representing the identifier.
     """
-    if not data:
-        return ""
     json_data = json.dumps(data, sort_keys=True)
     encoded_data = b64encode(json_data.encode("utf-8")).decode("utf-8")
     return encoded_data

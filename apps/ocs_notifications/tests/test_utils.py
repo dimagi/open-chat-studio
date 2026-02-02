@@ -1,3 +1,4 @@
+from base64 import b64decode
 from unittest.mock import patch
 
 import pytest
@@ -161,44 +162,36 @@ class TestCreateNotification:
         user_notification.refresh_from_db()
         assert user_notification.read is False, "UserNotification should be marked as unread again"
 
-    @patch("apps.ocs_notifications.utils.bust_unread_notification_cache", wraps=bust_unread_notification_cache)
-    @patch("apps.ocs_notifications.utils.send_notification_email", wraps=send_notification_email)
-    def test_create_notification_with_and_without_event_data(self, mock_send_email, mock_bust_cache, team_with_users):
+    def test_create_identifier(self):
         """
-        Test notification identifier generation with and without event data.
+        Test identifier generation with and without event data.
 
         Verifies that:
-        1. Notifications created with event_data generate a non-empty identifier
-           based on that event data
-        2. Notifications created without event_data generate an empty identifier
-        3. Different event_data produces different identifiers, enabling
-           proper duplicate detection for renotification
+        1. Non-empty event_data generates a non-empty identifier based on that event data
+        2. No event data results in an empty identifier
+        3. Different event_data produces different identifiers
         """
 
         # Create notification with event_data
-        event_data = {"action": "test", "id": 123}
+        assert len(create_identifier(None)) > 0
+        assert create_identifier({"action": "test", "id": 123}) != create_identifier({"action": "test", "id": 124})
+
+    @patch("apps.ocs_notifications.utils.bust_unread_notification_cache", wraps=bust_unread_notification_cache)
+    @patch("apps.ocs_notifications.utils.send_notification_email", wraps=send_notification_email)
+    def test_empty_event_data_uses_notification_message_as_identifier(
+        self, mock_send_email, mock_bust_cache, team_with_users
+    ):
+        """
+        Test that when event_data is None, the notification message is used to create the identifier.
+        """
+
+        # Create notification with event_data
         create_notification(
             title="Test Notification 1",
-            message="Test message",
+            message="A very unique message",
             level=LevelChoices.INFO,
             team=team_with_users,
-            event_data=event_data,
+            event_data=None,
         )
-
-        notification1 = Notification.objects.get(title="Test Notification 1")
-        expected_identifier1 = create_identifier(event_data)
-        assert notification1.identifier == expected_identifier1, (
-            f"Expected identifier {expected_identifier1}, got {notification1.identifier}"
-        )
-        assert notification1.identifier != ""
-
-        # Create another notification with different event_data
-        create_notification(
-            title="Test Notification 2", message="Test message", level=LevelChoices.INFO, team=team_with_users
-        )
-
-        notification2 = Notification.objects.get(title="Test Notification 2")
-        assert notification2.identifier == "", f"Expected identifier empty identifier, got {notification2.identifier}"
-        assert notification2.identifier != notification1.identifier, (
-            "Different event_data should produce different identifiers"
-        )
+        notification = Notification.objects.first()
+        assert b64decode(notification.identifier) == b'{"message": "A very unique message"}'
