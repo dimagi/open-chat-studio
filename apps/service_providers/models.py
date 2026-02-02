@@ -52,9 +52,18 @@ class LlmProviderType:
     def __str__(self):
         return self.slug
 
+    @property
+    def max_vector_stores(self) -> int | None:
+        """Returns the maximum number of vector stores supported per request, or None if unlimited."""
+        return self.additional_config.get("max_vector_stores")
+
 
 class LlmProviderTypes(LlmProviderType, Enum):
-    openai = "openai", _("OpenAI"), {"supports_transcription": True, "supports_assistants": True}
+    openai = (
+        "openai",
+        _("OpenAI"),
+        {"supports_transcription": True, "supports_assistants": True, "max_vector_stores": 2},
+    )
     azure = "azure", _("Azure OpenAI")
     anthropic = "anthropic", _("Anthropic")
     groq = "groq", _("Groq"), {"openai_api_base": "https://api.groq.com/openai/v1/"}
@@ -78,6 +87,11 @@ class LlmProviderTypes(LlmProviderType, Enum):
     @property
     def supports_assistants(self):
         return self.additional_config.get("supports_assistants", False)
+
+    @property
+    def max_vector_stores(self) -> int | None:
+        """Returns the maximum number of vector stores supported per request, or None if unlimited."""
+        return self.additional_config.get("max_vector_stores")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:

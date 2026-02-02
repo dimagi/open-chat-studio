@@ -639,12 +639,15 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         total_pages = 1
         page_start_index = 1
     else:
+        paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
+
         # on the first load, scroll to the page to focus on a specific message id
         if highlight_message_id and not request.GET.get("page"):
             messages_before = messages_queryset.filter(id__lt=highlight_message_id).count()
             page = (messages_before // page_size) + 1
 
-        paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
+        # Ensure page is valid
+        page = min(page, paginator.num_pages) if paginator.num_pages > 0 else 1
         current_page = paginator.page(page)
         current_page_messages = list(current_page.object_list)
         total_pages = paginator.num_pages
