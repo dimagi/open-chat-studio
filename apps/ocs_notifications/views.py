@@ -1,3 +1,5 @@
+from functools import cached_property
+
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -69,16 +71,25 @@ class UserNotificationTableView(LoginRequiredMixin, SingleTableView):
         return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
 
 
-class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
-    model = UserNotification
-    table_class = UserNotificationTable
-    template_name = "table/single_table.html"
+class ToggleNotificationReadView(LoginRequiredMixin, TemplateView):
+    template_name = "ocs_notifications/toggle_notification_response_htmx.html"
+
+    def get_context_data(self, *args, **kwargs) -> dict:
+        context = super().get_context_data()
+        context["record"] = self.user_notification
+        return context
+
+    @cached_property
+    def user_notification(self) -> UserNotification:
+        return get_object_or_404(
+            UserNotification,
+            id=self.kwargs.get("notification_id"),
+            user=self.request.user,
+            team__slug=self.kwargs.get("team_slug"),
+        )
 
     def post(self, request, team_slug: str, *args, **kwargs):
-        notification_id = kwargs.get("notification_id")
-        user_notification = get_object_or_404(
-            UserNotification, id=notification_id, user=request.user, team__slug=team_slug
-        )
+        user_notification = self.user_notification
 
         # Toggle the read status
         user_notification.read = not user_notification.read
@@ -91,15 +102,3 @@ class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
 
         # Return the updated filtered table
         return self.get(request, *args, **kwargs)
-
-    def get_queryset(self):
-        queryset = UserNotification.objects.filter(
-            user=self.request.user, team__slug=self.kwargs["team_slug"]
-        ).select_related("notification")
-
-        # Apply filters
-        notification_filter = UserNotificationFilter()
-        filter_params = FilterParams.from_request(self.request)
-        user_timezone = self.request.session.get("detected_tz")
-
-        return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)

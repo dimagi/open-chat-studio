@@ -1,21 +1,19 @@
-{% if record.read %}
-  <button
-    class="btn btn-sm"
-    hx-post="{% url 'ocs_notifications:toggle_notification_read' record.team.slug record.id %}{% querystring %}"
-    hx-swap="innerHTML"
-    hx-target="#data-table"
-    title="Mark as unread"
-  >
-    Mark Unread
-  </button>
-{% else %}
-  <button
-    class="btn btn-sm"
-    hx-post="{% url 'ocs_notifications:toggle_notification_read' record.team.slug record.id %}{% querystring %}"
-    hx-swap="innerHTML"
-    hx-target="#data-table"
-    title="Mark as read"
-  >
-    Mark Read
-  </button>
-{% endif %}
+<div id="record-{{ record.id }}-read-button">
+  {% if record.read %}
+    <button
+      class="btn btn-sm"
+      hx-post="{% url 'ocs_notifications:toggle_notification_read' record.team.slug record.id %}{% querystring %}"
+      title="Mark as unread"
+    >
+      Mark Unread
+    </button>
+  {% else %}
+    <button
+      class="btn btn-sm"
+      hx-post="{% url 'ocs_notifications:toggle_notification_read' record.team.slug record.id %}{% querystring %}"
+      title="Mark as read"
+    >
+      Mark Read
+    </button>
+  {% endif %}
+</div>
