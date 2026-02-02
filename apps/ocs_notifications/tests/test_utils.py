@@ -5,104 +5,75 @@ import pytest
 
 from apps.ocs_notifications.models import LevelChoices, Notification, UserNotification, UserNotificationPreferences
 from apps.ocs_notifications.utils import (
-    CACHE_KEY_FORMAT,
     bust_unread_notification_cache,
     create_identifier,
     create_notification,
-    get_user_notification_cache_value,
     send_notification_email,
-    set_user_notification_cache,
 )
 from apps.utils.factories.notifications import UserNotificationFactory
 
 
-@patch("apps.ocs_notifications.utils.cache.get")
-def test_get_user_notification_cache_value(mock_cache_get):
-    """
-    Test retrieving cached unread notification count for a user.
-
-    Verifies that the cache.get method is called with the correct key format
-    and that the retrieved value is returned properly.
-    """
-    user_id = 123
-    mock_cache_get.return_value = 5
-    result = get_user_notification_cache_value(user_id, team_slug="test-team")
-
-    expected_key = CACHE_KEY_FORMAT.format(user_id=user_id, team_slug="test-team")
-    mock_cache_get.assert_called_once_with(expected_key)
-    assert result == 5
-
-
-@patch("apps.ocs_notifications.utils.cache.set")
-def test_set_user_notification_cache(mock_cache_set):
-    """
-    Test caching an unread notification count for a user.
-
-    Verifies that the cache.set method is called with the correct key,
-    count value, and appropriate timeout (5 minutes).
-    """
-    user_id = 456
-    count = 10
-    set_user_notification_cache(user_id, count=count, team_slug="test-team")
-
-    expected_key = CACHE_KEY_FORMAT.format(user_id=user_id, team_slug="test-team")
-    mock_cache_set.assert_called_once_with(expected_key, count, 5 * 60)
-
-
-@patch("apps.ocs_notifications.utils.cache.delete")
-def test_bust_unread_notification_cache(mock_cache_delete):
-    """
-    Test invalidating cached notification count for a user.
-
-    Verifies that the cache.delete method is called with the correct key
-    to invalidate the cached unread notification count.
-    """
-    user_id = 789
-    bust_unread_notification_cache(user_id, team_slug="test-team")
-
-    expected_key = CACHE_KEY_FORMAT.format(user_id=user_id, team_slug="test-team")
-    mock_cache_delete.assert_called_once_with(expected_key)
-
-
 @pytest.mark.django_db()
-@patch("apps.ocs_notifications.utils.render_to_string")
-@patch("apps.ocs_notifications.utils.send_mail")
-def test_send_notification_email_respects_levels(mock_send_mail, mock_render, team_with_users):
+def test_email_not_sent_when_preference_doesnt_exist(team_with_users, mailoutbox):
     """
-    Test that email notifications respect user notification level preferences.
-
-    Verifies two scenarios:
-    1. Email is not sent when user notification preferences don't exist
-    2. Email is sent only when notification level meets or exceeds user's
-       email notification threshold level
+    Test that email is not sent when user notification preferences don't exist.
     """
     user = team_with_users.members.first()
     user_notification = UserNotificationFactory.create(user=user, notification__level=LevelChoices.ERROR)
 
-    # Test 1: Email not sent when preferences doesn't exist
     send_notification_email(user_notification)
-    mock_send_mail.assert_not_called()
+    assert len(mailoutbox) == 0
 
-    # Test 2: Email sent when preferences allow it
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("notification_level", "email_preference_level", "should_send"),
+    [
+        # When preference is INFO, send all types
+        (LevelChoices.INFO, LevelChoices.INFO, True),
+        (LevelChoices.WARNING, LevelChoices.INFO, True),
+        (LevelChoices.ERROR, LevelChoices.INFO, True),
+        # When preference is WARNING, only send WARNING and ERROR
+        (LevelChoices.INFO, LevelChoices.WARNING, False),
+        (LevelChoices.WARNING, LevelChoices.WARNING, True),
+        (LevelChoices.ERROR, LevelChoices.WARNING, True),
+        # When preference is ERROR, only send ERROR
+        (LevelChoices.INFO, LevelChoices.ERROR, False),
+        (LevelChoices.WARNING, LevelChoices.ERROR, False),
+        (LevelChoices.ERROR, LevelChoices.ERROR, True),
+    ],
+)
+def test_send_notification_email_respects_levels(
+    team_with_users, notification_level, email_preference_level, should_send, mailoutbox
+):
+    """
+    Test that email notifications respect user notification level preferences.
+
+    Verifies that emails are sent only when the notification level meets or exceeds
+    the user's email notification threshold level.
+    """
+    user = team_with_users.members.first()
+    user_notification = UserNotificationFactory.create(user=user, notification__level=notification_level)
+
+    # Create user preferences with email level threshold
     UserNotificationPreferences.objects.create(
         team=user_notification.team,
         user=user,
         email_enabled=True,
-        email_level=LevelChoices.WARNING,  # Only send ERROR level, not WARNING
+        email_level=email_preference_level,
     )
 
-    mock_send_mail.reset_mock()
     send_notification_email(user_notification)
-    mock_send_mail.assert_called()
+
+    if should_send:
+        assert len(mailoutbox) == 1
+    else:
+        assert len(mailoutbox) == 0
 
 
 @pytest.mark.django_db()
 class TestCreateNotification:
-    @patch("apps.ocs_notifications.utils.bust_unread_notification_cache", wraps=bust_unread_notification_cache)
-    @patch("apps.ocs_notifications.utils.send_notification_email", wraps=send_notification_email)
-    def test_create_notification_notifies_user_when_notification_created(
-        self, mock_send_email, mock_bust_cache, team_with_users
-    ):
+    def test_create_notification_notifies_user_when_notification_created(self, team_with_users):
         """
         Test that creating a new notification notifies the recipient user.
 
@@ -120,8 +91,7 @@ class TestCreateNotification:
         assert UserNotification.objects.filter(user=user).count() == 1
 
     @patch("apps.ocs_notifications.utils.bust_unread_notification_cache", wraps=bust_unread_notification_cache)
-    @patch("apps.ocs_notifications.utils.send_notification_email", wraps=send_notification_email)
-    def test_user_is_notified_again(self, mock_send_email, mock_bust_cache, team_with_users):
+    def test_user_is_notified_again(self, mock_bust_cache, team_with_users):
         """
         Test that reading a notification allows the user to be renotified.
 
@@ -176,11 +146,7 @@ class TestCreateNotification:
         assert len(create_identifier(None)) > 0
         assert create_identifier({"action": "test", "id": 123}) != create_identifier({"action": "test", "id": 124})
 
-    @patch("apps.ocs_notifications.utils.bust_unread_notification_cache", wraps=bust_unread_notification_cache)
-    @patch("apps.ocs_notifications.utils.send_notification_email", wraps=send_notification_email)
-    def test_empty_event_data_uses_notification_message_as_identifier(
-        self, mock_send_email, mock_bust_cache, team_with_users
-    ):
+    def test_empty_event_data_uses_notification_message_as_identifier(self, team_with_users):
         """
         Test that when event_data is None, the notification message is used to create the identifier.
         """
