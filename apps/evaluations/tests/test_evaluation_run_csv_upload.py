@@ -255,13 +255,13 @@ def test_upload_task_recomputes_aggregates(evaluation_setup):
         {
             "id": str(evaluation_setup["message"].id),
             "existing_score (GPT-4 Evaluator)": "9.5",
-            "existing_score (Claude Evaluator)": "8.0",
+            "new_field (Claude Evaluator)": "8.0",
         }
     ]
 
     column_mappings = {
         "existing_score (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id,
-        "existing_score (Claude Evaluator)": evaluation_setup["evaluator2"].id,
+        "new_field (Claude Evaluator)": evaluation_setup["evaluator2"].id,
     }
 
     results = _upload_evaluation_run_results(
@@ -274,5 +274,6 @@ def test_upload_task_recomputes_aggregates(evaluation_setup):
     agg1.refresh_from_db()
     agg2.refresh_from_db()
 
-    assert agg1.aggregates["existing_score"]["mean"] == 9.5
-    assert agg2.aggregates["existing_score"]["mean"] == 8.0
+    assert agg1.aggregates["existing_score"]["mean"] == 9.5, "Value present in CSV should be updated"
+    assert agg2.aggregates["existing_score"]["mean"] == 7.0, "Value not present in CSV should not be changed"
+    assert agg2.aggregates["new_field"]["mean"] == 8.0, "New value from CSV get's saved and type converted"

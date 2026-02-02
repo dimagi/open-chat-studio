@@ -747,13 +747,21 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
 
                     current_value = updated_output["result"].get(result_key)
 
-                    # attempt to preserve types
-                    if isinstance(current_value, int):
-                        with contextlib.suppress(ValueError):
+                    if current_value is not None and value:
+                        # attempt to preserve types
+                        if isinstance(current_value, int):
+                            with contextlib.suppress(ValueError):
+                                value = int(value)
+                        elif isinstance(current_value, float):
+                            with contextlib.suppress(ValueError):
+                                value = float(value)
+                    elif value:
+                        # optimistically try to convert new values
+                        try:
                             value = int(value)
-                    elif isinstance(current_value, float):
-                        with contextlib.suppress(ValueError):
-                            value = float(value)
+                        except ValueError:
+                            with contextlib.suppress(ValueError):
+                                value = float(value)
 
                     if current_value != value:
                         updated_output["result"][result_key] = value
