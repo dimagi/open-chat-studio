@@ -5,9 +5,11 @@ from base64 import b64encode
 from django.core.cache import cache
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.teams.models import Team
+from apps.web.meta import absolute_url
 
 from .models import LevelChoices, Notification, UserNotification, UserNotificationPreferences
 
@@ -115,8 +117,8 @@ def send_notification_email(user_notification: UserNotification):
         preferences = UserNotificationPreferences.objects.get(user=user, team=user_notification.team)
         if not preferences.email_enabled:
             return
-        # Ignore if notification level is higher than the user's preference
-        if notification.level >= preferences.email_level:
+        # Ignore if notification level is lower than the user's preference
+        if notification.level < preferences.email_level:
             return
 
     except UserNotificationPreferences.DoesNotExist:
@@ -124,12 +126,16 @@ def send_notification_email(user_notification: UserNotification):
 
     subject = f"Notification: {notification.title}"
 
+    # Build absolute URL for user profile
+    profile_url = absolute_url(reverse("users:user_profile"))
+
     context = {
         "user": user,
         "notification": notification,
         "title": notification.title,
         "message": notification.message,
         "level": notification.get_level_display(),
+        "profile_url": profile_url,
     }
 
     # Try to render a template if it exists, otherwise use plain text
@@ -143,6 +149,7 @@ def send_notification_email(user_notification: UserNotification):
             html_message=message,
         )
     except Exception:
+        logger.exception("Failed to render email template")
         # Fallback to plain text email
         message = f"{notification.title}\n\n{notification.message}"
         send_mail(
