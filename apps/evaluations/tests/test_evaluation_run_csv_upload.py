@@ -120,7 +120,7 @@ def test_process_csv_with_valid_mapping(evaluation_setup):
     setup["result2"].refresh_from_db()
 
     assert setup["result1"].output["result"]["existing_score"] == 9.0
-    assert setup["result2"].output["result"]["new_score"] == "8.5"
+    assert setup["result2"].output["result"]["new_score"] == 8.5
 
 
 @pytest.mark.django_db()
