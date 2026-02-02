@@ -1,4 +1,5 @@
 {% extends "web/app/app_base.html" %}
+{% load chat_tags %}
 
 {% block breadcrumbs %}
     <div class="breadcrumbs text-sm">
@@ -71,7 +72,7 @@
         <!-- Error Message -->
         <div role="alert" class="alert alert-error mb-6">
             <i class="fa-solid fa-circle-exclamation"></i>
-            <div class="text-sm">{{ trace.error }}</div>
+            <div class="text-sm">{{ trace.error|render_markdown }}</div>
         </div>
         {% endif %}
 

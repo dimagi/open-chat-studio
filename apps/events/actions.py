@@ -62,8 +62,7 @@ class ScheduleTriggerAction(EventActionHandlerBase):
             params["time_period"] = "mins"
 
         (
-            action.scheduled_messages
-            .annotate(
+            action.scheduled_messages.annotate(
                 new_delta=MakeInterval(params["time_period"], params["frequency"]),
             )
             .filter(is_complete=False, custom_schedule_params={})
@@ -137,7 +136,7 @@ class PipelineStartAction(EventActionHandlerBase):
                 experiment=session.experiment_version,
                 trace_service=trace_service,
             )
-            output, _ = bot.invoke_pipeline(
+            output = bot.invoke_pipeline(
                 input_state=state,
                 pipeline=pipeline,
                 save_run_to_history=False,

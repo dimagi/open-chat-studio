@@ -5,7 +5,8 @@ intended.
 
 import re
 import uuid
-from unittest.mock import Mock, patch
+from io import BytesIO
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from django.test import override_settings
@@ -36,6 +37,7 @@ from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.langchain import mock_llm
 
+from ...service_providers.speech_service import SynthesizedAudio
 from ...utils.factories.service_provider_factories import LlmProviderFactory
 from ..datamodels import BaseMessage
 from .message_examples import base_messages
@@ -268,7 +270,7 @@ def test_reset_conversation_does_not_create_new_session(test_channel):
 
 
 def _send_user_message_on_channel(channel_instance, user_message: BaseMessage):
-    with patch("apps.chat.channels.ChannelBase._get_bot_response", return_value=[ChatMessage(content="OK"), None]):
+    with patch("apps.chat.bots.PipelineBot.process_input", return_value=ChatMessage(content="OK")):
         channel_instance.new_user_message(user_message)
 
 
@@ -376,9 +378,9 @@ def test_unsupported_message_type_triggers_bot_response(_unsupported_message_typ
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._reply_voice_message")
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_voice_response_behaviour(
-    get_llm_response,
+    bot_process_input,
     _reply_voice_message,
     send_text_to_user,
     get_voice_transcript,
@@ -388,7 +390,7 @@ def test_voice_response_behaviour(
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = ChatMessage(content="Hello user. No"), None
+    bot_process_input.return_value = ChatMessage(content="Hello user. No")
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = voice_behaviour
     experiment.save()
@@ -440,16 +442,16 @@ def test_failed_transcription_informs_the_user(
 @pytest.mark.django_db()
 @patch("apps.chat.bots.EventBot.get_user_message")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_message_to_user")
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.is_message_type_supported")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._handle_supported_message")
 def test_any_failure_informs_users(
-    is_message_type_supported, send_message_to_user, _get_user_message, test_channel, caplog
+    _handle_supported_message, send_message_to_user, _get_user_message, test_channel, caplog
 ):
     """
     Any failure should try and inform the user that something went wrong. The method that does the informing should
     not fail.
     """
 
-    is_message_type_supported.side_effect = Exception("Random error")
+    _handle_supported_message.side_effect = Exception("Random error")
     # The generate response should fail, causing the default error message to be sent
     _get_user_message.side_effect = Exception("Generation error")
 
@@ -467,16 +469,16 @@ def test_any_failure_informs_users(
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._reply_voice_message")
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_reply_with_text_when_synthetic_voice_not_specified(
-    get_llm_response,
+    bot_process_input,
     _reply_voice_message,
     send_text_to_user,
     get_voice_transcript,
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = ChatMessage(content="Hello user. No"), None
+    bot_process_input.return_value = ChatMessage(content="Hello user. No")
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     # Let's remove the synthetic voice and see what happens
@@ -666,25 +668,25 @@ def test_url_regex():
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_voice_to_user")
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_voice_response_with_urls(
-    get_llm_response,
+    bot_process_input,
     send_voice_to_user,
     send_text_to_user,
     get_voice_transcript,
     get_speech_service,
     test_channel,
 ):
+    get_speech_service.return_value = MagicMock(
+        synthesize_voice=MagicMock(return_value=SynthesizedAudio(audio=BytesIO(), duration=1, format="mp3"))
+    )
     get_voice_transcript.return_value = "Hello bot. Give me a URL"
-    get_llm_response.return_value = [
-        ChatMessage.objects.create(
-            content=(
-                "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
-            ),
-            chat=Chat.objects.create(team=test_channel.experiment.team),
+    bot_process_input.return_value = ChatMessage.objects.create(
+        content=(
+            "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
         ),
-        None,
-    ]
+        chat=Chat.objects.create(team=test_channel.experiment.team),
+    )
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     experiment.save()
@@ -706,6 +708,9 @@ def test_voice_response_with_urls(
 def test_voice_tag_created_on_message(
     send_voice_to_user, send_text_to_user, get_speech_service, get_voice_transcript, test_channel
 ):
+    get_speech_service.return_value = MagicMock(
+        synthesize_voice=MagicMock(return_value=SynthesizedAudio(audio=BytesIO(), duration=1, format="mp3"))
+    )
     get_voice_transcript.return_value = "I'm groot"
 
     experiment = test_channel.experiment

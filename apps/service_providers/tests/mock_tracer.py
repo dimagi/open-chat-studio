@@ -69,7 +69,7 @@ class MockTracer(Tracer):
 
             # Mark as ended and store outputs/error
             self._trace_data["outputs"] = outputs
-            self._trace_data["error"] = error_to_record
+            self._trace_data["error"] = str(error_to_record) or str(trace_context.exception)
             self._trace_data["ended"] = True
 
             # Reset state
@@ -109,7 +109,7 @@ class MockTracer(Tracer):
             # Mark as ended and store outputs/error
             span = self.spans[span_context.id]
             span["outputs"] = outputs
-            span["error"] = str(error_to_record) if error_to_record else None
+            span["error"] = str(error_to_record) or str(span_context.exception)
             span["ended"] = True
 
     def get_langchain_callback(self) -> BaseCallbackHandler:

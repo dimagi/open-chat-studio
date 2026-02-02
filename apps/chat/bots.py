@@ -13,7 +13,6 @@ from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
-from apps.files.models import File
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
@@ -58,57 +57,47 @@ class PipelineBot:
         self.synthetic_voice_id = None
 
     def process_input(
-        self, user_input: str, save_input_to_history=True, attachments: list[Attachment] | None = None
-    ) -> tuple[ChatMessage, ChatMessage | None]:
+        self,
+        user_input: str,
+        attachments: list[Attachment] | None = None,
+        human_message: ChatMessage | None = None,
+    ) -> ChatMessage:
         input_state = self._get_input_state(attachments, user_input)
 
-        kwargs = {
-            "input_state": input_state,
-            "save_run_to_history": True,
-            "save_input_to_history": save_input_to_history,
-        }
-        with self.trace_service.span("Run Pipeline", inputs=kwargs | {"input_state": input_state.json_safe()}) as span:
-            ai_message, human_message = self.invoke_pipeline(**kwargs)
+        if human_message:
+            input_state["input_message_id"] = human_message.id
+            input_state["input_message_url"] = get_global_search_url(human_message)
+
+        with self.trace_service.span("Run Pipeline", inputs={"input_state": input_state.json_safe()}) as span:
+            ai_message = self.invoke_pipeline(
+                input_state=input_state, human_message=human_message, save_run_to_history=True
+            )
             span.set_outputs({"content": ai_message.content})
-            return ai_message, human_message
+            return ai_message
 
     def invoke_pipeline(
         self,
         input_state: PipelineState,
         save_run_to_history=True,
-        save_input_to_history=True,
         pipeline=None,
-    ) -> tuple[ChatMessage, ChatMessage | None]:
+        human_message: ChatMessage | None = None,
+    ) -> ChatMessage:
         pipeline_to_use = pipeline or self.experiment.pipeline
-
-        human_message = None
-        if save_run_to_history and save_input_to_history and self.session is not None:
-            initial_input_metadata = input_state.get("input_message_metadata", {})
-            human_message = self._save_message_to_history(
-                input_state["messages"][-1], ChatMessageType.HUMAN, metadata=initial_input_metadata
-            )
-            input_state["input_message_id"] = human_message.id
-            input_state["input_message_url"] = get_global_search_url(human_message)
-
-            if self.trace_service:
-                self.trace_service.set_input_message_id(human_message.id)
 
         output = self._run_pipeline(input_state, pipeline_to_use)
 
         if save_run_to_history and self.session is not None:
             output = self._process_interrupts(output)
-            ai_message, human_message = self._save_outputs(
+            ai_message = self._save_outputs(
                 input_state,
                 output,
-                save_input_to_history,
-                existing_human_message=human_message,
+                human_message=human_message,
             )
         else:
             ai_message = ChatMessage(content=output)
-            human_message = None
         self._process_intents(output)
         self.synthetic_voice_id = output.get("synthetic_voice_id", None)
-        return ai_message, human_message
+        return ai_message
 
     def _get_input_state(self, attachments: list[Attachment], user_input: str):
         state = PipelineState(
@@ -128,20 +117,12 @@ class PipelineBot:
 
     def _updates_state_with_attachments(self, state: PipelineState, attachments: list[Attachment]):
         attachments = attachments or []
-        incoming_file_ids = []
-
-        for attachment in attachments:
-            file = File.objects.get(id=attachment.id, team_id=self.team.id)
-            incoming_file_ids.append(file.id)
-
-        input_message_metadata = {}
-        if incoming_file_ids:
-            input_message_metadata["ocs_attachment_file_ids"] = incoming_file_ids
-
-        state["input_message_metadata"] = input_message_metadata
-
-        serializable_attachments = [attachment.model_dump() for attachment in attachments]
-        state["attachments"] = serializable_attachments
+        state["input_message_metadata"] = {}
+        if attachments:
+            state["input_message_metadata"]["ocs_attachment_file_ids"] = [
+                attachment.file_id for attachment in attachments
+            ]
+            state["attachments"] = [attachment.model_dump() for attachment in attachments]
         return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
@@ -181,30 +162,18 @@ class PipelineBot:
         self,
         input_state,
         output,
-        save_input_to_history,
-        existing_human_message=None,
+        human_message=None,
     ):
         input_metadata = output.get("input_message_metadata", {})
         output_metadata = output.get("output_message_metadata", {})
         trace_metadata = self.trace_service.get_trace_metadata() if self.trace_service else None
         if trace_metadata:
-            input_metadata.update(trace_metadata)
             output_metadata.update(trace_metadata)
 
-        if save_input_to_history:
-            if existing_human_message:
-                if input_metadata != existing_human_message.metadata:
-                    existing_human_message.metadata = input_metadata
-                    existing_human_message.save(update_fields=["metadata"])
-                human_message = existing_human_message
-            else:
-                human_message = self._save_message_to_history(
-                    input_state["messages"][-1], ChatMessageType.HUMAN, metadata=input_metadata
-                )
-                if self.trace_service:
-                    self.trace_service.set_input_message_id(human_message.id)
-        else:
-            human_message = None
+        if human_message:
+            if input_metadata != input_state.get("input_message_metadata"):
+                human_message.metadata.update(input_metadata)
+                human_message.save(update_fields=["metadata"])
 
         output_tags = output.get("output_message_tags")
         ai_message = self._save_message_to_history(
@@ -236,7 +205,7 @@ class PipelineBot:
         if out_session_state is not None and out_session_state != input_state.get("session_state"):
             self.session.state = out_session_state
             self.session.save(update_fields=["state"])
-        return ai_message, human_message
+        return ai_message
 
     def _process_intents(self, pipeline_output: dict):
         for intent in pipeline_output.get("intents", []):
@@ -260,7 +229,7 @@ class PipelineBot:
                 chat_message.create_and_add_tag(tag_value, self.session.team, category or "")
         return chat_message
 
-    def synthesize_voice(self) -> tuple[SyntheticVoice] | None:
+    def get_synthetic_voice(self) -> SyntheticVoice | None:
         from apps.experiments.models import SyntheticVoice
 
         if self.synthetic_voice_id is None:

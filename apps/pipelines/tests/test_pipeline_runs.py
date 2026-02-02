@@ -29,24 +29,11 @@ def session(experiment):
 
 
 @django_db_transactional()
-@pytest.mark.parametrize("save_input_to_history", [True, False])
-def test_save_input_to_history(save_input_to_history, pipeline: Pipeline, session: ExperimentSession):
-    input = "Hi"
-    bot = PipelineBot(session=session, experiment=session.experiment, trace_service=TracingService.empty())
-    bot.process_input(input, save_input_to_history=save_input_to_history)
-    assert (
-        session.chat.messages.filter(content="Hi", message_type=ChatMessageType.HUMAN).exists() == save_input_to_history
-    )
-
-
-@django_db_transactional()
 def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
     trace_service = TracingService([MockTracer()], 1, 1)
     with trace_service.trace("test", session):
         bot = PipelineBot(session=session, experiment=session.experiment, trace_service=trace_service)
         bot.process_input("Hi")
-    human_message = session.chat.messages.filter(message_type=ChatMessageType.HUMAN).first()
-    assert "trace_info" in human_message.metadata
     ai_message = session.chat.messages.filter(message_type=ChatMessageType.AI).first()
     assert "trace_info" in ai_message.metadata
 
@@ -57,7 +44,7 @@ def test_output_message_tagging(pipeline: Pipeline, session: ExperimentSession):
     pipeline_state = PipelineState(messages=["Hi"], output_message_tags=output_message_tags)
 
     bot = PipelineBot(session=session, experiment=session.experiment, trace_service=TracingService.empty())
-    result, _ = bot.invoke_pipeline(input_state=pipeline_state, pipeline=pipeline)
+    result = bot.invoke_pipeline(input_state=pipeline_state, pipeline=pipeline)
 
     tags = list(result.tags.all())
     version_tag = (f"v{session.experiment.version_number}-unreleased", TagCategories.EXPERIMENT_VERSION.value)

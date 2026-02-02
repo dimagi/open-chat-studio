@@ -1,6 +1,6 @@
 import json
 import os
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
@@ -11,6 +11,7 @@ from apps.api.models import UserAPIKey
 from apps.chat.models import ChatMessage
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.pytest import django_db_with_data
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -47,16 +48,10 @@ def api_key(team_with_users):
     return key
 
 
-@pytest.mark.django_db(
-    # Needed to provide cascaded rollback for the testdata. I'm not certain which apps are necessary but these
-    # seem to work.
-    # See https://docs.djangoproject.com/en/5.0/topics/testing/advanced/#django.test.TransactionTestCase.available_apps
-    available_apps=["apps.api", "apps.experiments", "apps.teams", "apps.users", "apps.oauth"],
-    serialized_rollback=True,
-)
-@patch("apps.chat.channels.ApiChannel._get_bot_response")
-def test_chat_completion(mock_experiment_response, experiment, api_key, live_server):
-    mock_experiment_response.return_value = ChatMessage(content="So, this ain't the end, I saw you again today"), None
+@django_db_with_data()
+@patch("apps.chat.bots.PipelineBot.process_input")
+def test_chat_completion(bot_process_input, experiment, api_key, live_server):
+    bot_process_input.return_value = ChatMessage(content="So, this ain't the end, I saw you again today")
 
     base_url = f"{live_server.url}/api/openai/{experiment.public_id}"
 
@@ -85,11 +80,12 @@ def test_chat_completion(mock_experiment_response, experiment, api_key, live_ser
     assert completion.id == session.external_id
     assert completion.model == experiment.llm_provider_model.name
     assert completion.choices[0].message.content == "So, this ain't the end, I saw you again today"
-    assert mock_experiment_response.call_args_list == [call(message="Sing a song for me Barracuda")]
+    assert bot_process_input.call_args_list[0][0] == ("Sing a song for me Barracuda",)
     assert [(m.message_type, m.content) for m in session.chat.messages.all()] == [
         ("system", "You are a helpful assistant."),
         ("human", "Hi, how are you?"),
         ("ai", "Lekker!"),
+        ("human", "Sing a song for me Barracuda"),
     ]
 
 

@@ -20,9 +20,9 @@ def experiment(db):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.ApiChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, experiment, client):
-    get_llm_response_mock.return_value = ChatMessage(content="Hi user"), None
+    get_llm_response_mock.return_value = ChatMessage(content="Hi user")
 
     channels_queryset = ExperimentChannel.objects.filter(team=experiment.team, platform=ChannelPlatform.API)
     assert not channels_queryset.exists()
@@ -47,9 +47,9 @@ def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, ex
 
 @pytest.mark.django_db()
 @patch("apps.chat.channels.ApiChannel._load_latest_session")
-@patch("apps.chat.channels.ApiChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_new_message_with_existing_session(get_llm_response_mock, _load_latest_session, experiment, client):
-    get_llm_response_mock.return_value = ChatMessage(content="Hi user"), None
+    get_llm_response_mock.return_value = ChatMessage(content="Hi user")
 
     user = experiment.team.members.first()
     participant, _ = Participant.objects.get_or_create(
@@ -94,7 +94,7 @@ def test_new_message_to_another_users_session(experiment, client):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.ApiChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_create_new_session_and_post_message(mock_response, experiment):
     user = experiment.team.members.first()
 
@@ -116,7 +116,7 @@ def test_create_new_session_and_post_message(mock_response, experiment):
     assert response.status_code == 201, response_json
     session_id = response_json["id"]
 
-    mock_response.return_value = ChatMessage(content="Fido"), None
+    mock_response.return_value = ChatMessage(content="Fido")
     new_message_url = reverse("channels:new_api_message", kwargs={"experiment_id": experiment_id})
     response = client.post(
         new_message_url, data={"message": "What should I call my dog?", "session": session_id}, format="json"
@@ -126,7 +126,7 @@ def test_create_new_session_and_post_message(mock_response, experiment):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.ApiChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_attachments_returned(mock_response, experiment):
     user = experiment.team.members.first()
 
@@ -134,7 +134,7 @@ def test_attachments_returned(mock_response, experiment):
     file = FileFactory()
     mock_chat_message = Mock(spec=ChatMessage, chat=session.chat, content="Fido")
     mock_chat_message.get_attached_files.return_value = [file]
-    mock_response.return_value = mock_chat_message, None
+    mock_response.return_value = mock_chat_message
 
     client = ApiTestClient(user, experiment.team)
 
