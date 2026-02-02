@@ -20,10 +20,11 @@ class NotificationHome(LoginRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
 
     def get_context_data(self, **kwargs):
+        table_url = reverse("ocs_notifications:notifications_table", args=[self.request.team.slug])
         context = {
             "active_tab": "notifications",
             "title": "Notifications",
-            "table_url": reverse("ocs_notifications:notifications_table"),
+            "table_url": table_url,
             "enable_search": False,
             "actions": [
                 actions.Action(
@@ -41,7 +42,7 @@ class NotificationHome(LoginRequiredMixin, TemplateView):
             team=self.request.team,
             columns=columns,
             date_range_column="notification_date",
-            table_url=reverse("ocs_notifications:notifications_table"),
+            table_url=table_url,
             table_container_id="data-table",
             table_type=FilterSet.TableType.NOTIFICATIONS,
         )

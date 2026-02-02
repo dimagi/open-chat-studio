@@ -56,6 +56,7 @@ team_urlpatterns = [
     path("evaluations/", include("apps.evaluations.urls")),
     path("traces/", include("apps.trace.urls")),
     path("filters/", include("apps.filters.urls")),
+    path("notifications/", include("apps.ocs_notifications.urls")),
 ]
 urlpatterns = [
     path("favicon.ico", RedirectView.as_view(url=static_url("images/favicons/favicon-96x96.png"), permanent=True)),
@@ -89,7 +90,6 @@ urlpatterns = [
     path("tz_detect/", include("tz_detect.urls")),
     path("__reload__/", include("django_browser_reload.urls")),
     path("silk/", include("silk.urls", namespace="silk")),
-    path("notifications/", include("apps.ocs_notifications.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.USE_DEBUG_TOOLBAR:

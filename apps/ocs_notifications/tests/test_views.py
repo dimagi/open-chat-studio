@@ -45,10 +45,8 @@ class TestToggleNotificationReadView:
         assert user_notification.read_at is None
 
         # Step 2: Toggle read status to True
-        url = reverse("ocs_notifications:toggle_notification_read", args=[notification_id])
-        with patch("apps.web.context_processors.unread_notifications_count") as mock_context:
-            mock_context.return_value = {}
-            response = client.post(url)
+        url = reverse("ocs_notifications:toggle_notification_read", args=[team_with_users.slug, notification_id])
+        response = client.post(url)
 
         # Verify response is successful
         assert response.status_code == 200
@@ -66,9 +64,7 @@ class TestToggleNotificationReadView:
 
         # Step 3: Toggle read status back to False
         mock_bust_cache.reset_mock()
-        with patch("apps.web.context_processors.unread_notifications_count") as mock_context:
-            mock_context.return_value = {}
-            response = client.post(url)
+        response = client.post(url)
 
         # Verify response is successful
         assert response.status_code == 200
