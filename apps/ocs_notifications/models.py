@@ -51,7 +51,7 @@ class UserNotification(BaseTeamModel):
 class UserNotificationPreferences(BaseTeamModel):
     """Store user preferences for in-app and email notifications"""
 
-    user = models.OneToOneField("users.CustomUser", on_delete=models.CASCADE, related_name="notification_preferences")
+    user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE, related_name="notification_preferences")
 
     # In-app notification preferences
     in_app_enabled = models.BooleanField(default=True)
