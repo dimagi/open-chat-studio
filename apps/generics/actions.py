@@ -212,8 +212,12 @@ def chip_action(
 
 
 class ActionsColumn(TemplateColumn):
-    def __init__(self, actions, align: Literal["left", "right", "center"] = "center", **extra):
-        extra_context = {"actions": actions}
+    def __init__(
+        self, actions, align: Literal["left", "right", "center"] = "center", extra_context: dict = None, **extra
+    ):
+        context = {"actions": actions}
+        if extra_context:
+            context.update(extra_context)
         if align != "left":
             th = settings.DJANGO_TABLES2_TABLE_ATTRS["th"].copy()
             th["class"] = th["class"].replace("text-left", f"text-{align}")
@@ -221,7 +225,7 @@ class ActionsColumn(TemplateColumn):
             td["class"] = td["class"].replace("text-left", f"text-{align}")
             extra = {"attrs": {"th": th, "td": td}, **extra}
         extra["orderable"] = False
-        super().__init__(template_name="generic/crud_actions_column.html", extra_context=extra_context, **extra)
+        super().__init__(template_name="generic/crud_actions_column.html", extra_context=context, **extra)
 
 
 def chip_column(label: str = None, align="left", **kwargs):
