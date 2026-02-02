@@ -12,5 +12,4 @@ urlpatterns = [
         views.ToggleNotificationReadView.as_view(),
         name="toggle_notification_read",
     ),
-    path("preferences/", views.notification_preferences, name="notification_preferences"),
 ]

@@ -1,11 +1,7 @@
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
-from django.views.decorators.http import require_http_methods
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
@@ -13,8 +9,7 @@ from apps.experiments.filters import get_filter_context_data
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
-from apps.ocs_notifications.forms import NotificationPreferencesForm
-from apps.ocs_notifications.models import UserNotification, UserNotificationPreferences
+from apps.ocs_notifications.models import UserNotification
 from apps.ocs_notifications.tables import UserNotificationTable
 from apps.web.dynamic_filters.datastructures import FilterParams
 
@@ -103,24 +98,3 @@ class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
         user_timezone = self.request.session.get("detected_tz")
 
         return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
-
-
-@login_required
-@require_http_methods(["POST"])
-def notification_preferences(request):
-    """View for managing notification preferences"""
-    # Get or create preferences for the user
-    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user, team=request.team)[0]
-
-    form = NotificationPreferencesForm(request.POST, instance=preferences)
-    if form.is_valid():
-        form.save()
-        bust_unread_notification_cache(request.user.id, team_slug=request.team.slug)
-        messages.success(request, _("Notification preferences saved successfully."))
-        return redirect(reverse("users:user_profile"))
-
-    return render(
-        request,
-        "ocs_notifications/notification_preferences_form.html",
-        {"form": form, "preferences": preferences},
-    )
