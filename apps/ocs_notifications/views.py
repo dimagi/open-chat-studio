@@ -73,9 +73,11 @@ class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
     table_class = UserNotificationTable
     template_name = "table/single_table.html"
 
-    def post(self, request, *args, **kwargs):
+    def post(self, request, team_slug: str, *args, **kwargs):
         notification_id = kwargs.get("notification_id")
-        user_notification = get_object_or_404(UserNotification, id=notification_id, user=request.user)
+        user_notification = get_object_or_404(
+            UserNotification, id=notification_id, user=request.user, team__slug=team_slug
+        )
 
         # Toggle the read status
         user_notification.read = not user_notification.read
@@ -84,7 +86,7 @@ class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
         else:
             user_notification.read_at = None
         user_notification.save()
-        bust_unread_notification_cache(request.user.id, team_slug=request.team.slug)
+        bust_unread_notification_cache(request.user.id, team_slug=team_slug)
 
         # Return the updated filtered table
         return self.get(request, *args, **kwargs)
