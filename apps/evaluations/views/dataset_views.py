@@ -306,6 +306,7 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["highlight_message_id"] = self.get_highlight_message_id()
+        kwargs["dataset_id"] = self.kwargs["dataset_id"]
         return kwargs
 
 
