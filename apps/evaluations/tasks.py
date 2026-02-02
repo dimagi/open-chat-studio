@@ -1,3 +1,4 @@
+import contextlib
 import csv
 import math
 from collections import defaultdict
@@ -646,11 +647,15 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
     csv_data: List of dictionaries representing CSV rows
     column_mappings: Dictionary mapping column names to evaluator names
     """
+    progress_recorder = ProgressRecorder(self)
+    return _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings)
+
+
+def _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings=None):
+    from apps.evaluations.aggregation import compute_aggregates_for_run
 
     if not csv_data:
         return {"success": False, "error": "CSV file is empty"}
-
-    progress_recorder = ProgressRecorder(self)
 
     try:
         evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id, team_id=team_id)
@@ -659,6 +664,8 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
             stats = process_evaluation_results_csv_rows(
                 evaluation_run, csv_data, column_mappings or {}, progress_recorder, team
             )
+            # Re-compute aggregates after updating results
+            compute_aggregates_for_run(evaluation_run)
             progress_recorder.set_progress(100, 100, "Upload complete")
             return {
                 "success": True,
@@ -739,6 +746,23 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
                         updated_output["result"] = {}
 
                     current_value = updated_output["result"].get(result_key)
+
+                    if current_value is not None and value:
+                        # attempt to preserve types
+                        if isinstance(current_value, int):
+                            with contextlib.suppress(ValueError):
+                                value = int(value)
+                        elif isinstance(current_value, float):
+                            with contextlib.suppress(ValueError):
+                                value = float(value)
+                    elif value:
+                        # optimistically try to convert new values
+                        try:
+                            value = int(value)
+                        except ValueError:
+                            with contextlib.suppress(ValueError):
+                                value = float(value)
+
                     if current_value != value:
                         updated_output["result"][result_key] = value
                         evaluation_result.output = updated_output
