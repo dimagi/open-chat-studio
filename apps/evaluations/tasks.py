@@ -647,12 +647,15 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
     csv_data: List of dictionaries representing CSV rows
     column_mappings: Dictionary mapping column names to evaluator names
     """
+    progress_recorder = ProgressRecorder(self)
+    return _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings)
+
+
+def _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings=None):
     from apps.evaluations.aggregation import compute_aggregates_for_run
 
     if not csv_data:
         return {"success": False, "error": "CSV file is empty"}
-
-    progress_recorder = ProgressRecorder(self)
 
     try:
         evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id, team_id=team_id)

@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from apps.evaluations.tasks import process_evaluation_results_csv_rows
+from apps.evaluations.tasks import _upload_evaluation_run_results, process_evaluation_results_csv_rows
 from apps.evaluations.views.evaluation_config_views import generate_evaluation_results_column_suggestions
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -240,47 +240,39 @@ def test_upload_task_recomputes_aggregates(evaluation_setup):
     from apps.evaluations.aggregation import compute_aggregates_for_run
     from apps.evaluations.models import EvaluationRunAggregate
 
-    setup = evaluation_setup
-
-    # Initial results with score 8.5 and 7.0
-    setup["result1"].output = {"result": {"score": 8.5}}
-    setup["result1"].save()
-    setup["result2"].output = {"result": {"score": 7.0}}
-    setup["result2"].save()
-
     # Compute initial aggregates
-    compute_aggregates_for_run(setup["run"])
+    compute_aggregates_for_run(evaluation_setup["run"])
 
     # Verify initial aggregates
-    agg1 = EvaluationRunAggregate.objects.get(run=setup["run"], evaluator=setup["evaluator1"])
-    assert agg1.aggregates["score"]["mean"] == 8.5
+    agg1 = EvaluationRunAggregate.objects.get(run=evaluation_setup["run"], evaluator=evaluation_setup["evaluator1"])
+    assert agg1.aggregates["existing_score"]["mean"] == 8.5
 
-    agg2 = EvaluationRunAggregate.objects.get(run=setup["run"], evaluator=setup["evaluator2"])
-    assert agg2.aggregates["score"]["mean"] == 7.0
+    agg2 = EvaluationRunAggregate.objects.get(run=evaluation_setup["run"], evaluator=evaluation_setup["evaluator2"])
+    assert agg2.aggregates["existing_score"]["mean"] == 7.0
 
     # Update results via CSV upload
     csv_data = [
         {
-            "id": str(setup["message"].id),
-            "new_score (GPT-4 Evaluator)": "9.5",
-            "new_score (Claude Evaluator)": "8.0",
+            "id": str(evaluation_setup["message"].id),
+            "existing_score (GPT-4 Evaluator)": "9.5",
+            "existing_score (Claude Evaluator)": "8.0",
         }
     ]
 
     column_mappings = {
-        "new_score (GPT-4 Evaluator)": setup["evaluator1"].id,
-        "new_score (Claude Evaluator)": setup["evaluator2"].id,
+        "existing_score (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id,
+        "existing_score (Claude Evaluator)": evaluation_setup["evaluator2"].id,
     }
 
-    progress_recorder = Mock()
-    process_evaluation_results_csv_rows(setup["run"], csv_data, column_mappings, progress_recorder, setup["team"])
-
-    # Manually trigger aggregation (simulating what the task does)
-    compute_aggregates_for_run(setup["run"])
+    results = _upload_evaluation_run_results(
+        Mock(), evaluation_setup["run"].id, csv_data, evaluation_setup["team"].id, column_mappings
+    )
+    assert results["success"]
+    assert not results["errors"]
 
     # Verify aggregates were updated with new values
     agg1.refresh_from_db()
     agg2.refresh_from_db()
 
-    assert agg1.aggregates["new_score"]["mean"] == 9.5
-    assert agg2.aggregates["new_score"]["mean"] == 8.0
+    assert agg1.aggregates["existing_score"]["mean"] == 9.5
+    assert agg2.aggregates["existing_score"]["mean"] == 8.0
