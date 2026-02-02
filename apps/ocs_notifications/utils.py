@@ -67,9 +67,10 @@ def create_notification(
             )
             # Uuser will only be notified when notification is created or if the notification was previously read
             user_should_be_notified = created or user_notification.read is True
-            user_notification.read = False
-            user_notification.read_at = None
-            user_notification.save()
+            if user_notification.read is True:
+                user_notification.read = False
+                user_notification.read_at = None
+                user_notification.save()
 
             # Bust cache when notification is created or when marking previously read notification as unread
             if user_should_be_notified:
