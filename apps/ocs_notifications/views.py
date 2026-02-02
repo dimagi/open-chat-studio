@@ -93,7 +93,9 @@ class ToggleNotificationReadView(LoginRequiredMixin, SingleTableView):
         return self.get(request, *args, **kwargs)
 
     def get_queryset(self):
-        queryset = UserNotification.objects.filter(user=self.request.user).select_related("notification")
+        queryset = UserNotification.objects.filter(
+            user=self.request.user, team__slug=self.kwargs["team_slug"]
+        ).select_related("notification")
 
         # Apply filters
         notification_filter = UserNotificationFilter()
