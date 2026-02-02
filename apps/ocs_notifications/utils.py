@@ -116,7 +116,7 @@ def send_notification_email(user_notification: UserNotification):
         if not preferences.email_enabled:
             return
         # Ignore if notification level is higher than the user's preference
-        if int(preferences.email_level) > int(notification.level):
+        if notification.level >= preferences.email_level:
             return
 
     except UserNotificationPreferences.DoesNotExist:

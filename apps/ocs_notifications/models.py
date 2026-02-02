@@ -3,16 +3,16 @@ from django.db import models
 from apps.teams.models import BaseTeamModel
 
 
-class LevelChoices(models.TextChoices):
-    INFO = "0", "Info"
-    WARNING = "1", "Warning"
-    ERROR = "2", "Error"
+class LevelChoices(models.IntegerChoices):
+    INFO = 0, "Info"
+    WARNING = 1, "Warning"
+    ERROR = 2, "Error"
 
 
 class Notification(BaseTeamModel):
     title = models.CharField(max_length=255)
     message = models.TextField()
-    level = models.CharField(max_length=1, choices=LevelChoices.choices, db_index=True)
+    level = models.PositiveSmallIntegerField(choices=LevelChoices.choices, db_index=True)
     users = models.ManyToManyField("users.CustomUser", through="UserNotification", related_name="notifications")
     last_event_at = models.DateTimeField()
     identifier = models.CharField(blank=True)
@@ -55,16 +55,14 @@ class UserNotificationPreferences(BaseTeamModel):
 
     # In-app notification preferences
     in_app_enabled = models.BooleanField(default=True)
-    in_app_level = models.CharField(
-        max_length=1,
+    in_app_level = models.PositiveSmallIntegerField(
         choices=LevelChoices.choices,
         default=LevelChoices.INFO,
     )
 
     # Email notification preferences
     email_enabled = models.BooleanField(default=False)
-    email_level = models.CharField(
-        max_length=1,
+    email_level = models.PositiveSmallIntegerField(
         choices=LevelChoices.choices,
         default=LevelChoices.WARNING,
     )
