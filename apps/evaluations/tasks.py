@@ -1,3 +1,4 @@
+import contextlib
 import csv
 import math
 from collections import defaultdict
@@ -719,18 +720,6 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
                 if value is None:
                     value = ""
 
-                # Try to convert numeric strings to actual numbers for proper aggregation
-                if isinstance(value, str) and value.strip():
-                    try:
-                        # Try int first, then float
-                        if "." in value:
-                            value = float(value)
-                        else:
-                            value = int(value)
-                    except ValueError:
-                        # Keep as string if not a number
-                        pass
-
                 result_key = column_name
                 if "(" in column_name and column_name.endswith(")"):
                     result_key = column_name[: column_name.rfind("(")].strip()
@@ -754,6 +743,15 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
                         updated_output["result"] = {}
 
                     current_value = updated_output["result"].get(result_key)
+
+                    # attempt to preserve types
+                    if isinstance(current_value, int):
+                        with contextlib.suppress(ValueError):
+                            value = int(value)
+                    elif isinstance(current_value, float):
+                        with contextlib.suppress(ValueError):
+                            value = float(value)
+
                     if current_value != value:
                         updated_output["result"][result_key] = value
                         evaluation_result.output = updated_output
