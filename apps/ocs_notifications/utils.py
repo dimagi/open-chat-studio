@@ -174,3 +174,30 @@ def create_identifier(data: dict) -> str:
     json_data = json.dumps(data, sort_keys=True)
     encoded_data = b64encode(json_data.encode("utf-8")).decode("utf-8")
     return encoded_data
+
+
+def get_unread_notification_count(user) -> int:
+    """
+    Get the count of unread notifications for a user.
+
+    Args:
+        user: The user to get unread notification count for.
+
+    Returns:
+        int: The count of unread notifications.
+    """
+    return UserNotification.objects.filter(user=user, read=False).count()
+
+
+def mark_notification_read(user, notification_id: int) -> None:
+    """
+    Mark a specific notification as read for a user.
+
+    Args:
+        user: The user whose notification should be marked as read.
+        notification_id (int): The ID of the notification to mark as read.
+    """
+    user_notification = UserNotification.objects.get(notification_id=notification_id, user=user)
+    user_notification.read = True
+    user_notification.read_at = timezone.now()
+    user_notification.save()

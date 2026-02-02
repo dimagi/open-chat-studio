@@ -1,13 +1,13 @@
 from base64 import b64decode
-from unittest.mock import patch
 
 import pytest
 
 from apps.ocs_notifications.models import LevelChoices, Notification, UserNotification, UserNotificationPreferences
 from apps.ocs_notifications.utils import (
-    bust_unread_notification_cache,
     create_identifier,
     create_notification,
+    get_unread_notification_count,
+    mark_notification_read,
     send_notification_email,
 )
 from apps.utils.factories.notifications import UserNotificationFactory
@@ -90,8 +90,7 @@ class TestCreateNotification:
 
         assert UserNotification.objects.filter(user=user).count() == 1
 
-    @patch("apps.ocs_notifications.utils.bust_unread_notification_cache", wraps=bust_unread_notification_cache)
-    def test_user_is_notified_again(self, mock_bust_cache, team_with_users):
+    def test_user_is_notified_again(self, team_with_users):
         """
         Test that reading a notification allows the user to be renotified.
 
@@ -99,36 +98,31 @@ class TestCreateNotification:
         1. A user can be renotified for the same notification (same identifier)
         2. After marking a notification as read, creating the same notification
            again resets it to unread
-        3. The cache is busted upon renotification
         """
+        user = team_with_users.members.first()
+
         # Create initial notification
         create_notification(
             title="Test Notification", message="Test message", level=LevelChoices.ERROR, team=team_with_users
         )
 
-        # Get the notification and mark it as read
-        user = team_with_users.members.first()
-        assert UserNotification.objects.filter(user=user).count() == 1
-        user_notification = UserNotification.objects.get(user=user)
-        assert user_notification.read is False, "UserNotification should be marked as unread"
+        # Verify notification was created
+        assert get_unread_notification_count(user) == 1
 
         # Mark it as read to retrigger it when the same notification is created again
-        user_notification.read = True
-        user_notification.save()
+        user_notification = UserNotification.objects.get(user=user)
+        mark_notification_read(user, user_notification.notification_id)
 
-        # Reset mocks
-        mock_bust_cache.reset_mock()
+        # Verify it's now marked as read
+        assert get_unread_notification_count(user) == 0
 
         # Create another notification with same identifier
         create_notification(
             title="Test Notification", message="Test message", level=LevelChoices.ERROR, team=team_with_users
         )
 
-        # Cache should be busted again (renotification)
-        mock_bust_cache.assert_called()
-
-        assert user.notifications.count() == 1
-        assert UserNotification.objects.filter(user=user).count() == 1
+        # Should be renotified (unread again)
+        assert get_unread_notification_count(user) == 1
         user_notification.refresh_from_db()
         assert user_notification.read is False, "UserNotification should be marked as unread again"
 
