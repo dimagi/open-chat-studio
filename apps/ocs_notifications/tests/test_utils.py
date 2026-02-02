@@ -1,6 +1,7 @@
 from base64 import b64decode
 
 import pytest
+from django.contrib.auth.models import Group
 
 from apps.ocs_notifications.models import LevelChoices, Notification, UserNotification, UserNotificationPreferences
 from apps.ocs_notifications.utils import (
@@ -155,3 +156,32 @@ class TestCreateNotification:
         )
         notification = Notification.objects.first()
         assert b64decode(notification.identifier) == b'{"message": "A very unique message"}'
+
+    def test_permissions_dictate_which_members_receive_notification(self, team_with_users):
+        """
+        Test that only team members with the required permissions receive the notification.
+
+        Verifies that:
+        1. Only users with the specified permissions receive the notification.
+        2. Users without the required permissions do not receive the notification.
+        """
+        Membership = team_with_users.members.through
+        user_with_perm = Membership.objects.first()
+        user_with_perm.groups.add(Group.objects.get(name="Team Admin"))
+        user_without_perm = Membership.objects.last()
+
+        # Sanity check
+        assert user_with_perm.has_perm("custom_actions.change_customaction") is True
+        assert user_without_perm.has_perm("custom_actions.change_customaction") is False
+
+        create_notification(
+            title="Permission Test Notification",
+            message="This is a test message for permissions.",
+            level=LevelChoices.INFO,
+            team=team_with_users,
+            permissions=["custom_actions.change_customaction"],
+        )
+
+        # # Verify that only the user with permission received the notification
+        assert UserNotification.objects.filter(user_id=user_with_perm.user_id).count() == 1
+        assert UserNotification.objects.filter(user_id=user_without_perm.user_id).count() == 0

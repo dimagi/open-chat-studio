@@ -24,6 +24,7 @@ def create_notification(
     level: LevelChoices,
     team: Team,
     event_data: dict | None = None,
+    permissions=None,
 ):
     """
     Create a notification and associate it with the given users.
@@ -39,7 +40,15 @@ def create_notification(
         Notification: The created Notification instance, or None if creation failed.
     """
     notification = None
-    users = [member.user for member in team.membership_set.select_related("user").all()]
+
+    def _can_receive_notification(member):
+        if not permissions:
+            return True
+        return member.has_perms(permissions)
+
+    users = [
+        member.user for member in team.membership_set.select_related("user").all() if _can_receive_notification(member)
+    ]
 
     try:
         event_data = event_data or {"message": message}

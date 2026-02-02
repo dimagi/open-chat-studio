@@ -73,4 +73,5 @@ def check_single_custom_action_health(action_id: int):
             level=LevelChoices.ERROR,
             team=action.team,
             event_data={"action_id": action.id, "status": action.health_status},
+            permissions=["custom_actions.change_customaction"],
         )
