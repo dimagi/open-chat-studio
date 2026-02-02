@@ -269,3 +269,76 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
             file=audio,
         )
         return transcript.text
+
+
+class OpenAICustomVoiceSpeechService(SpeechService):
+    """
+    OpenAI Custom Voice TTS service using the stable /v1/audio/speech API.
+    Requires custom voices to be created via the Voice API first.
+    """
+
+    _type: ClassVar[str] = SyntheticVoice.OpenAICustomVoice
+    supports_transcription: ClassVar[bool] = True
+    openai_api_key: str
+    openai_api_base: str | None = None
+    openai_organization: str | None = None
+
+    @property
+    def _client(self) -> "OpenAI":
+        from openai import OpenAI
+
+        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
+        """
+        Synthesize speech using a custom voice.
+
+        The voice must already be created in OpenAI and have its voice_id
+        stored in synthetic_voice.config['voice_id'].
+        """
+        # keep heavy imports inline
+        from pydub import AudioSegment
+
+        # Extract voice_id from config
+        voice_id = synthetic_voice.config.get("voice_id") if synthetic_voice.config else None
+        if not voice_id:
+            raise AudioSynthesizeException(
+                f"Custom voice '{synthetic_voice.name}' missing voice_id in config. "
+                "Voice must be created via OpenAI Voice API first."
+            )
+
+        # Get model from config or use default
+        model = synthetic_voice.config.get("model", "gpt-4o-mini-tts")
+
+        # Get optional instructions from config
+        instructions = synthetic_voice.config.get("instructions")
+
+        # Build request parameters
+        kwargs = {
+            "model": model,
+            "voice": {"id": voice_id},  # Custom voice object format
+            "input": text,
+            "response_format": "mp3",
+        }
+
+        # Add instructions if available and model supports it
+        if instructions and model == "gpt-4o-mini-tts":
+            kwargs["instructions"] = instructions
+
+        # Call OpenAI API
+        response = self._client.audio.speech.create(**kwargs)
+        audio_data = response.read()
+
+        # Calculate duration
+        audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
+        duration_seconds = len(audio_segment) / 1000
+
+        return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
+
+    def _transcribe_audio(self, audio: IO[bytes]) -> str:
+        """Transcription using OpenAI Whisper API (shared with OpenAISpeechService)"""
+        transcript = self._client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=audio,
+        )
+        return transcript.text
