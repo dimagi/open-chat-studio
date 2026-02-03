@@ -3,6 +3,7 @@ from django.dispatch import receiver
 
 from apps.teams.models import Team
 
+from ..teams.utils import current_team
 from .const import DEFAULT_CONSENT_TEXT
 from .models import ConsentForm
 
@@ -14,11 +15,12 @@ def create_default_consent_for_team_handler(sender, instance, created, **kwargs)
 
 
 def create_default_consent_for_team(team):
-    ConsentForm.objects.get_or_create(
-        team=team,
-        is_default=True,
-        defaults={
-            "name": "Default Consent",
-            "consent_text": DEFAULT_CONSENT_TEXT,
-        },
-    )
+    with current_team(team):
+        ConsentForm.objects.get_or_create(
+            team=team,
+            is_default=True,
+            defaults={
+                "name": "Default Consent",
+                "consent_text": DEFAULT_CONSENT_TEXT,
+            },
+        )
