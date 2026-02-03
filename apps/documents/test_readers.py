@@ -39,7 +39,7 @@ class TestPlaintextReader:
         with mock.patch("apps.documents.readers.UnicodeDammit") as mock_dammit:
             mock_dammit.return_value.unicode_markup = None
 
-            with pytest.raises(FileReadException, match="Unable to detect file encoding"):
+            with pytest.raises(FileReadException, match="Unable to decode file contents to text"):
                 plaintext_reader(file_obj)
 
     def test_plaintext_reader_unicode_dammit_raises_exception(self):
