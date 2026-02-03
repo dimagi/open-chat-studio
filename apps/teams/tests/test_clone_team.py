@@ -225,9 +225,9 @@ def test_clone_team_clones_experiments_with_remapped_fks(source_team):
     target_exp = Experiment.objects.filter(team=target).first()
     source_exp = Experiment.objects.filter(team=source_team).first()
 
-    # Verify experiment cloned
+    # Verify experiment cloned with same name (no _copy suffix)
     assert target_exp is not None
-    assert target_exp.name.endswith("_copy")
+    assert target_exp.name == source_exp.name
 
     # Verify FKs remapped to new team's objects
     if source_exp.llm_provider:

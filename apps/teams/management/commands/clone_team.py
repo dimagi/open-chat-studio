@@ -424,7 +424,7 @@ class Command(BaseCommand):
 
             # Use create_new_version(is_copy=True) for independent copy
             # This also copies the pipeline if present
-            new_exp = experiment.create_new_version(is_copy=True)
+            new_exp = experiment.create_new_version(is_copy=True, name=experiment.name)
             new_exp.team = ctx.target_team
             new_exp.owner = ctx.user
 
