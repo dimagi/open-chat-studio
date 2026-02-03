@@ -22,7 +22,9 @@ from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider, VoiceProvider
 from apps.teams import backends
 from apps.teams.models import Team
+from apps.teams.utils import current_team
 from apps.users.models import CustomUser
+from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 
 
 @dataclass
@@ -152,6 +154,17 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR("\nFailed teams:"))
             for name, error in failed:
                 self.stdout.write(f"  {name}: {error}")
+
+            # Prompt to delete created teams on failure
+            if created_teams:
+                self.stdout.write("")
+                confirm = input(f"Delete the {len(created_teams)} successfully created team(s)? [y/N] ")
+                if confirm.lower() == "y":
+                    for team in created_teams:
+                        self.stdout.write(f"Deleting {team.slug}...")
+                        with current_team(team):
+                            delete_object_with_auditing_of_related_objects(team)
+                    self.stdout.write(self.style.SUCCESS("Deleted all created teams."))
 
     def _preview_source(self, team: Team):
         """Display source team data counts."""
