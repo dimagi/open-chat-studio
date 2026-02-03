@@ -262,6 +262,7 @@ class Command(BaseCommand):
         """Add target team to same feature flags as source team."""
         for flag in Flag.objects.filter(teams=ctx.source_team):
             flag.teams.add(ctx.target_team)
+            flag.save()
 
     def _clone_providers(self, ctx: CloneContext):
         """Clone LLM, Voice, and Trace providers."""
