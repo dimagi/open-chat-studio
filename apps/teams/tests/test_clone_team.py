@@ -113,7 +113,7 @@ def test_clone_team_dry_run(source_team):
 
     output = out.getvalue()
     assert "DRY RUN MODE" in output
-    assert "Would create:" in output
+    assert "Would create" in output
     assert "test_1" in output
     assert "test_2" in output
 
@@ -133,6 +133,7 @@ def test_clone_team_creates_team_and_user(source_team):
         "--name-template=client_{n}",
         "--email-template=client{n}@example.com",
         "--password-template=password{n}",
+        "--force",
         stdout=out,
     )
     output = out.getvalue()
@@ -162,6 +163,7 @@ def test_clone_team_clones_providers(source_team):
         "--name-template=target_{n}",
         "--email-template=target{n}@example.com",
         "--password-template=pass{n}",
+        "--force",
         stdout=StringIO(),
     )
 
@@ -185,6 +187,7 @@ def test_clone_team_clones_content(source_team):
         "--name-template=target_{n}",
         "--email-template=target{n}@example.com",
         "--password-template=pass{n}",
+        "--force",
         stdout=StringIO(),
     )
 
@@ -214,6 +217,7 @@ def test_clone_team_clones_experiments_with_remapped_fks(source_team):
         "--name-template=target_{n}",
         "--email-template=target{n}@example.com",
         "--password-template=pass{n}",
+        "--force",
         stdout=StringIO(),
     )
 
@@ -255,6 +259,7 @@ def test_clone_team_clones_evaluations(source_team):
         "--name-template=target_{n}",
         "--email-template=target{n}@example.com",
         "--password-template=pass{n}",
+        "--force",
         stdout=StringIO(),
     )
 
@@ -287,6 +292,7 @@ def test_clone_team_multiple_teams(source_team):
         "--email-template=demo{n}@example.com",
         "--password-template=pass{n}",
         "--start-index=5",
+        "--force",
         stdout=StringIO(),
     )
 
@@ -311,6 +317,7 @@ def test_clone_team_clones_pipelines(source_team):
         "--name-template=target_{n}",
         "--email-template=target{n}@example.com",
         "--password-template=pass{n}",
+        "--force",
         stdout=StringIO(),
     )
 
@@ -337,6 +344,7 @@ def test_clone_team_remaps_pipeline_node_params(source_team):
         "--name-template=target_{n}",
         "--email-template=target{n}@example.com",
         "--password-template=pass{n}",
+        "--force",
         stdout=StringIO(),
     )
 

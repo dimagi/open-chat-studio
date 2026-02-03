@@ -100,6 +100,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Preview what would be created without making changes",
         )
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Skip confirmation prompt",
+        )
 
     def handle(self, *args, **options):
         source_slug = options["source_team"]
@@ -109,6 +114,7 @@ class Command(BaseCommand):
         password_template = options["password_template"]
         start_index = options["start_index"]
         dry_run = options["dry_run"]
+        force = options["force"]
 
         # Validate source team exists
         try:
@@ -116,13 +122,20 @@ class Command(BaseCommand):
         except Team.DoesNotExist:
             raise CommandError(f"Source team '{source_slug}' does not exist.") from None
 
-        # Preview source team data
+        # Preview source team data and targets
         self._preview_source(source_team)
+        self._preview_targets(name_template, email_template, password_template, start_index, count)
 
         if dry_run:
-            self.stdout.write(self.style.WARNING("\n=== DRY RUN MODE ==="))
-            self._preview_targets(name_template, email_template, password_template, start_index, count)
+            self.stdout.write(self.style.WARNING("\n=== DRY RUN MODE - no changes made ==="))
             return
+
+        # Confirmation prompt
+        if not force:
+            confirm = input(f"\nProceed with cloning {count} team(s)? [y/N] ")
+            if confirm.lower() != "y":
+                self.stdout.write(self.style.WARNING("Aborted."))
+                return
 
         # Clone teams
         created_teams = []
@@ -189,14 +202,17 @@ class Command(BaseCommand):
         self.stdout.write(f"    Evaluation Configs: {EvaluationConfig.objects.filter(team=team).count()}")
 
     def _preview_targets(self, name_template, email_template, password_template, start_index, count):
-        """Preview what teams would be created."""
-        self.stdout.write("\nWould create:")
-        for i in range(start_index, start_index + count):
+        """Preview what teams would be created (first 5 only)."""
+        self.stdout.write(f"\nWould create {count} team(s):")
+        preview_count = min(count, 5)
+        for i in range(start_index, start_index + preview_count):
             team_name = name_template.format(n=i)
             email = email_template.format(n=i)
             slug = team_name.lower().replace(" ", "_").replace("-", "_")
             self.stdout.write(f"  Team: {team_name} (slug: {slug})")
             self.stdout.write(f"    Owner: {email}")
+        if count > 5:
+            self.stdout.write(f"  ... and {count - 5} more")
 
     def _clone_team(
         self,
