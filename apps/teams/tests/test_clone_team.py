@@ -8,7 +8,7 @@ from apps.evaluations.models import EvaluationConfig, EvaluationDataset, Evaluat
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial, Survey
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider, VoiceProvider
-from apps.teams.models import Membership, Team
+from apps.teams.models import Flag, Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory, SurveyFactory
@@ -372,3 +372,27 @@ def test_clone_team_remaps_pipeline_node_params(source_team):
             # Should reference target team's model, not source
             assert params["llm_provider_model_id"] == target_llm_model.id
             assert params["llm_provider_model_id"] != source_llm_model.id
+
+
+@pytest.mark.django_db()
+def test_clone_team_copies_feature_flags(source_team):
+    """Test target team is added to same feature flags as source team."""
+    # Create a feature flag and add source team
+    flag, _ = Flag.objects.get_or_create(name="flag_test_clone")
+    flag.teams.add(source_team)
+
+    call_command(
+        "clone_team",
+        f"--source-team={source_team.slug}",
+        "--count=1",
+        "--name-template=target_{n}",
+        "--email-template=target{n}@example.com",
+        "--password-template=pass{n}",
+        "--force",
+        stdout=StringIO(),
+    )
+
+    target = Team.objects.get(slug="target_1")
+
+    # Verify target team is in the same flag
+    assert flag.teams.filter(id=target.id).exists()

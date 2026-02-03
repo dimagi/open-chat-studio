@@ -21,7 +21,7 @@ from apps.experiments.models import ConsentForm, Experiment, SourceMaterial, Sur
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider, VoiceProvider
 from apps.teams import backends
-from apps.teams.models import Team
+from apps.teams.models import Flag, Team
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
@@ -206,6 +206,7 @@ class Command(BaseCommand):
         self.stdout.write(f"    Evaluators: {Evaluator.objects.filter(team=team).count()}")
         self.stdout.write(f"    Evaluation Datasets: {EvaluationDataset.objects.filter(team=team).count()}")
         self.stdout.write(f"    Evaluation Configs: {EvaluationConfig.objects.filter(team=team).count()}")
+        self.stdout.write(f"    Feature Flags: {Flag.objects.filter(teams=team).count()}")
 
     def _preview_targets(self, name_template, email_template, password_template, start_index, count):
         """Preview what teams would be created (first 5 only)."""
@@ -238,6 +239,9 @@ class Command(BaseCommand):
 
         ctx = CloneContext(source_team=source_team, target_team=target_team, user=user)
 
+        # Add target team to same feature flags as source team
+        self._clone_feature_flags(ctx)
+
         # Set team context for audit logging
         with current_team(target_team):
             # Phase 2: Clone providers
@@ -253,6 +257,11 @@ class Command(BaseCommand):
             self._clone_evaluations(ctx)
 
         return ctx
+
+    def _clone_feature_flags(self, ctx: CloneContext):
+        """Add target team to same feature flags as source team."""
+        for flag in Flag.objects.filter(teams=ctx.source_team):
+            flag.teams.add(ctx.target_team)
 
     def _clone_providers(self, ctx: CloneContext):
         """Clone LLM, Voice, and Trace providers."""
