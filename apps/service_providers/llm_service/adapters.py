@@ -186,7 +186,7 @@ class AssistantAdapter(BaseAdapter):
                 "role": message.role,
             }
             for message in reversed(to_sync)
-            if message.message_type != "system"
+            if message.message_type != "system" and message.content.strip()
         ]
 
     def get_openai_assistant(self) -> OpenAIAssistantRunnable:
