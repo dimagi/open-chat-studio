@@ -232,20 +232,22 @@ class Command(BaseCommand):
 
         ctx = CloneContext(source_team=source_team, target_team=target_team, user=user)
 
-        # Phase 2: Clone providers
-        self._clone_providers(ctx)
+        # Set team context for audit logging
+        with current_team(target_team):
+            # Phase 2: Clone providers
+            self._clone_providers(ctx)
 
-        # Phase 3: Clone content (versioned models)
-        self._clone_content(ctx)
+            # Phase 3: Clone content (versioned models)
+            self._clone_content(ctx)
 
-        # Phase 4: Clone experiments (which also copies their pipelines)
-        self._clone_experiments(ctx)
+            # Phase 4: Clone experiments (which also copies their pipelines)
+            self._clone_experiments(ctx)
 
-        # Clone orphan pipelines (not linked to any experiment)
-        self._clone_orphan_pipelines(ctx)
+            # Clone orphan pipelines (not linked to any experiment)
+            self._clone_orphan_pipelines(ctx)
 
-        # Phase 5: Clone evaluations
-        self._clone_evaluations(ctx)
+            # Phase 5: Clone evaluations
+            self._clone_evaluations(ctx)
 
         return ctx
 
