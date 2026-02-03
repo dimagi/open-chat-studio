@@ -81,8 +81,6 @@ def plaintext_reader(file_obj) -> Document:
             if detected_content is None:
                 raise FileReadException("Unable to detect file encoding")
             content = detected_content
-        except FileReadException:
-            raise
         except Exception as e:
             raise FileReadException("Unable to decode file contents to text") from e
     return Document(parts=[DocumentPart(content=content)])
