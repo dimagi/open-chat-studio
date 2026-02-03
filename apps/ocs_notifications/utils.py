@@ -23,6 +23,7 @@ def create_notification(
     message: str,
     level: LevelChoices,
     team: Team,
+    slug: str,
     event_data: dict | None = None,
     permissions=None,
 ):
@@ -34,7 +35,8 @@ def create_notification(
         message (str): The message content of the notification.
         level (str): The level of the notification (info, warning, error).
         team (Team, optional): A team whose members will be associated with the notification.
-        event_data (dict, optional): Additional data to store with the notification.
+        slug (str): A slug to identify the notification type. Used with event_data for uniqueness.
+        event_data (dict, optional): Additional data to store with the notification. Combined with slug for uniqueness.
 
     Returns:
         Notification: The created Notification instance, or None if creation failed.
@@ -51,15 +53,17 @@ def create_notification(
     ]
 
     try:
-        event_data = event_data or {"message": message}
-        identifier = create_identifier(event_data)
+        event_data = event_data or {}
+        identifier = create_identifier(slug, event_data)
         notification, created = Notification.objects.update_or_create(
             team=team,
-            title=title,
-            message=message,
-            level=level,
             identifier=identifier,
-            defaults={"last_event_at": timezone.now()},
+            defaults={
+                "title": title,
+                "message": message,
+                "level": level,
+                "last_event_at": timezone.now(),
+            },
         )
         for user in users:
             user_notification, created = UserNotification.objects.get_or_create(
@@ -171,17 +175,19 @@ def send_notification_email(user_notification: UserNotification):
         )
 
 
-def create_identifier(data: dict) -> str:
+def create_identifier(slug: str, data: dict) -> str:
     """
-    Create a unique identifier string based on the provided data dictionary.
+    Create a unique identifier string based on the provided slug and data dictionary.
 
     Args:
+        slug (str): A slug to identify the notification type.
         data (dict): A dictionary of data to base the identifier on.
 
     Returns:
-        str: A base64-encoded JSON string representing the identifier.
+        str: A base64-encoded JSON string representing the slug and data combined.
     """
-    json_data = json.dumps(data, sort_keys=True)
+    combined_data = {"slug": slug, "data": data}
+    json_data = json.dumps(combined_data, sort_keys=True)
     encoded_data = b64encode(json_data.encode("utf-8")).decode("utf-8")
     return encoded_data
 

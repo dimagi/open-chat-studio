@@ -86,7 +86,11 @@ class TestCreateNotification:
         assert UserNotification.objects.filter(user=user).count() == 0
 
         create_notification(
-            title="Test Notification", message="Test message", level=LevelChoices.INFO, team=team_with_users
+            title="Test Notification",
+            message="Test message",
+            level=LevelChoices.INFO,
+            team=team_with_users,
+            slug="test-notification",
         )
 
         assert UserNotification.objects.filter(user=user).count() == 1
@@ -104,7 +108,11 @@ class TestCreateNotification:
 
         # Create initial notification
         create_notification(
-            title="Test Notification", message="Test message", level=LevelChoices.ERROR, team=team_with_users
+            title="Test Notification",
+            message="Test message",
+            level=LevelChoices.ERROR,
+            team=team_with_users,
+            slug="test-notification",
         )
 
         # Verify notification was created
@@ -119,7 +127,11 @@ class TestCreateNotification:
 
         # Create another notification with same identifier
         create_notification(
-            title="Test Notification", message="Test message", level=LevelChoices.ERROR, team=team_with_users
+            title="Test Notification",
+            message="Test message",
+            level=LevelChoices.ERROR,
+            team=team_with_users,
+            slug="test-notification",
         )
 
         # Should be renotified (unread again)
@@ -129,21 +141,25 @@ class TestCreateNotification:
 
     def test_create_identifier(self):
         """
-        Test identifier generation with and without event data.
+        Test identifier generation with slug and event data.
 
         Verifies that:
-        1. Non-empty event_data generates a non-empty identifier based on that event data
-        2. No event data results in an empty identifier
-        3. Different event_data produces different identifiers
+        1. Identifiers are generated based on slug and event_data
+        2. Different event_data produces different identifiers
+        3. Different slugs produce different identifiers
         """
 
-        # Create notification with event_data
-        assert len(create_identifier(None)) > 0
-        assert create_identifier({"action": "test", "id": 123}) != create_identifier({"action": "test", "id": 124})
+        # Create identifier with different event_data
+        assert len(create_identifier("test-slug", {})) > 0
+        assert create_identifier("test-slug", {"action": "test", "id": 123}) != create_identifier(
+            "test-slug", {"action": "test", "id": 124}
+        )
+        # Different slugs should produce different identifiers even with same data
+        assert create_identifier("slug-1", {"action": "test"}) != create_identifier("slug-2", {"action": "test"})
 
-    def test_empty_event_data_uses_notification_message_as_identifier(self, team_with_users):
+    def test_identifier_includes_slug_and_event_data(self, team_with_users):
         """
-        Test that when event_data is None, the notification message is used to create the identifier.
+        Test that identifier includes both slug and event_data.
         """
 
         # Create notification with event_data
@@ -152,10 +168,14 @@ class TestCreateNotification:
             message="A very unique message",
             level=LevelChoices.INFO,
             team=team_with_users,
-            event_data=None,
+            slug="test-slug",
+            event_data={"key": "value"},
         )
         notification = Notification.objects.first()
-        assert b64decode(notification.identifier) == b'{"message": "A very unique message"}'
+        decoded = b64decode(notification.identifier).decode()
+        assert "test-slug" in decoded
+        assert "key" in decoded
+        assert "value" in decoded
 
     def test_permissions_dictate_which_members_receive_notification(self, team_with_users):
         """
@@ -179,6 +199,7 @@ class TestCreateNotification:
             message="This is a test message for permissions.",
             level=LevelChoices.INFO,
             team=team_with_users,
+            slug="permission-test",
             permissions=["custom_actions.change_customaction"],
         )
 
