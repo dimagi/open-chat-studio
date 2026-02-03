@@ -149,14 +149,20 @@ class Command(BaseCommand):
 
             self.stdout.write(f"\n--- Cloning team {i}: {team_name} ---")
 
+            target_team = None
             try:
                 with transaction.atomic():
                     ctx = self._clone_team(source_team, team_name, slug, email, password)
-                    created_teams.append(ctx.target_team)
-                    self.stdout.write(self.style.SUCCESS(f"  Created: {ctx.target_team.slug}"))
+                    target_team = ctx.target_team
+                    self.stdout.write(self.style.SUCCESS(f"  Created: {target_team.slug}"))
+                created_teams.append(target_team)
             except Exception as e:
                 failed.append((team_name, str(e)))
                 self.stdout.write(self.style.ERROR(f"  Failed: {e}"))
+                # Check if team was partially created (transaction should rollback, but be safe)
+                partial_team = Team.objects.filter(slug=slug).first()
+                if partial_team:
+                    created_teams.append(partial_team)
 
         # Summary
         self.stdout.write("\n=== Summary ===")
