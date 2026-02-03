@@ -385,6 +385,18 @@ class Command(BaseCommand):
     def _clone_experiments(self, ctx: CloneContext):
         """Clone experiments and remap team + FKs."""
         for experiment in Experiment.objects.working_versions_queryset().filter(team=ctx.source_team):
+            # Fail if experiment has events (triggers) - these are not cloned
+            if experiment.static_triggers.exists():
+                raise CommandError(
+                    f"Experiment '{experiment.name}' has static triggers which cannot be cloned. "
+                    f"Remove events before cloning."
+                )
+            if experiment.timeout_triggers.exists():
+                raise CommandError(
+                    f"Experiment '{experiment.name}' has timeout triggers which cannot be cloned. "
+                    f"Remove events before cloning."
+                )
+
             # Use create_new_version(is_copy=True) for independent copy
             # This also copies the pipeline if present
             new_exp = experiment.create_new_version(is_copy=True)
