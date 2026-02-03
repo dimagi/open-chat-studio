@@ -377,24 +377,30 @@ class Command(BaseCommand):
         # Remap llm_provider_id
         if "llm_provider_id" in params and params["llm_provider_id"]:
             old_id = int(params["llm_provider_id"])
-            if old_id not in ctx.llm_providers:
+            if old_id in ctx.llm_providers:
+                params["llm_provider_id"] = ctx.llm_providers[old_id].id
+                changed = True
+            elif not LlmProvider.objects.filter(id=old_id, team__isnull=True).exists():
+                # Not a global provider and not in our mapping - error
                 raise CommandError(
                     f"Pipeline node '{node.label}' references llm_provider_id={old_id} "
                     f"which was not found in source team."
                 )
-            params["llm_provider_id"] = ctx.llm_providers[old_id].id
-            changed = True
+            # else: global provider, leave as-is
 
         # Remap llm_provider_model_id
         if "llm_provider_model_id" in params and params["llm_provider_model_id"]:
             old_id = int(params["llm_provider_model_id"])
-            if old_id not in ctx.llm_provider_models:
+            if old_id in ctx.llm_provider_models:
+                params["llm_provider_model_id"] = ctx.llm_provider_models[old_id].id
+                changed = True
+            elif not LlmProviderModel.objects.filter(id=old_id, team__isnull=True).exists():
+                # Not a global model and not in our mapping - error
                 raise CommandError(
                     f"Pipeline node '{node.label}' references llm_provider_model_id={old_id} "
                     f"which was not found in source team."
                 )
-            params["llm_provider_model_id"] = ctx.llm_provider_models[old_id].id
-            changed = True
+            # else: global model, leave as-is
 
         # Remap source_material_id
         if "source_material_id" in params and params["source_material_id"]:
