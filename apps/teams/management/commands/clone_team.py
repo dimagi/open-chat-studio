@@ -239,11 +239,11 @@ class Command(BaseCommand):
 
         ctx = CloneContext(source_team=source_team, target_team=target_team, user=user)
 
-        # Add target team to same feature flags as source team
-        self._clone_feature_flags(ctx)
-
         # Set team context for audit logging
         with current_team(target_team):
+            # Add target team to same feature flags as source team
+            self._clone_feature_flags(ctx)
+
             # Phase 2: Clone providers
             self._clone_providers(ctx)
 
