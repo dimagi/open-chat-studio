@@ -4,7 +4,7 @@ from django.template import Context
 
 def render_table_row(request, table_cls, record):
     table = table_cls(data=[record], request=request)
-    render_first_table_row(request, table)
+    return render_first_table_row(request, table)
 
 
 def render_first_table_row(request, table):
