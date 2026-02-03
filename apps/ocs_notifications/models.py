@@ -20,9 +20,9 @@ class Notification(BaseTeamModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["identifier"],
+                fields=["team", "identifier"],
                 condition=~models.Q(identifier=""),
-                name="unique_identifier_per_notification",
+                name="unique_notification_per_team_and_identifier",
             ),
         ]
 
