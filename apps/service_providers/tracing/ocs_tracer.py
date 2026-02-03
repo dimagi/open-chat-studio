@@ -107,7 +107,7 @@ class OCSTracer(Tracer):
                     self.trace_record.duration = duration_ms
                     if self.error_detected:
                         self.trace_record.status = TraceStatus.ERROR
-                        self.trace_record.error = self.error_message or trace_context.error
+                        self.trace_record.error = self.error_message or trace_context.error or "Unknown error occurred"
                     else:
                         self.trace_record.status = TraceStatus.SUCCESS
 
@@ -162,6 +162,8 @@ class OCSTracer(Tracer):
         finally:
             if error_to_record:
                 self.error_detected = True
+                if not self.error_message:
+                    self.error_message = str(error_to_record)
 
     def get_langchain_callback(self) -> None:
         """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
@@ -207,9 +209,18 @@ class OCSCallbackHandler(BaseCallbackHandler):
 
     def on_llm_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True
+        if not self.tracer.error_message:
+            error = kwargs.get("error") or (args[0] if args else None)
+            self.tracer.error_message = str(error) if error else "LLM error occurred"
 
     def on_chain_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True
+        if not self.tracer.error_message:
+            error = kwargs.get("error") or (args[0] if args else None)
+            self.tracer.error_message = str(error) if error else "Chain error occurred"
 
     def on_tool_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True
+        if not self.tracer.error_message:
+            error = kwargs.get("error") or (args[0] if args else None)
+            self.tracer.error_message = str(error) if error else "Tool error occurred"
