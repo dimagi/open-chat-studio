@@ -1,10 +1,8 @@
-from functools import cached_property
-
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, View
 from django_tables2 import SingleTableView
 
 from apps.experiments.filters import get_filter_context_data
@@ -13,6 +11,7 @@ from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
 from apps.ocs_notifications.models import UserNotification
 from apps.ocs_notifications.tables import UserNotificationTable
+from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 from .utils import bust_unread_notification_cache
@@ -71,25 +70,14 @@ class UserNotificationTableView(LoginRequiredMixin, SingleTableView):
         return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
 
 
-class ToggleNotificationReadView(LoginRequiredMixin, TemplateView):
-    template_name = "ocs_notifications/toggle_notification_response_htmx.html"
-
-    def get_context_data(self, *args, **kwargs) -> dict:
-        context = super().get_context_data()
-        context["record"] = self.user_notification
-        return context
-
-    @cached_property
-    def user_notification(self) -> UserNotification:
-        return get_object_or_404(
+class ToggleNotificationReadView(LoginRequiredMixin, View):
+    def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
+        user_notification = get_object_or_404(
             UserNotification,
-            id=self.kwargs.get("notification_id"),
+            id=notification_id,
             user=self.request.user,
-            team__slug=self.kwargs.get("team_slug"),
+            team__slug=team_slug,
         )
-
-    def post(self, request, team_slug: str, *args, **kwargs):
-        user_notification = self.user_notification
 
         # Toggle the read status
         user_notification.read = not user_notification.read
@@ -101,4 +89,4 @@ class ToggleNotificationReadView(LoginRequiredMixin, TemplateView):
         bust_unread_notification_cache(request.user.id, team_slug=team_slug)
 
         # Return the updated filtered table
-        return self.get(request, *args, **kwargs)
+        return render_table_row(request, UserNotificationTable, user_notification)
