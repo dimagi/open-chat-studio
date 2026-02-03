@@ -249,9 +249,6 @@ class Command(BaseCommand):
             # Phase 4: Clone experiments (which also copies their pipelines)
             self._clone_experiments(ctx)
 
-            # Clone orphan pipelines (not linked to any experiment)
-            self._clone_orphan_pipelines(ctx)
-
             # Phase 5: Clone evaluations
             self._clone_evaluations(ctx)
 
@@ -342,31 +339,6 @@ class Command(BaseCommand):
                 confirmation_text=survey.confirmation_text,
             )
             ctx.surveys[survey.id] = new_survey
-
-    def _clone_orphan_pipelines(self, ctx: CloneContext):
-        """Clone pipelines not linked to any experiment."""
-        # Find pipelines not linked to any experiment
-        linked_pipeline_ids = set(
-            Experiment.objects.working_versions_queryset()
-            .filter(team=ctx.source_team, pipeline__isnull=False)
-            .values_list("pipeline_id", flat=True)
-        )
-        for pipeline in Pipeline.objects.working_versions_queryset().filter(team=ctx.source_team):
-            if pipeline.id in linked_pipeline_ids:
-                continue  # Already copied when cloning the experiment
-            if pipeline.id in ctx.pipelines:
-                continue  # Already mapped
-
-            # Clone orphan pipeline
-            new_pipeline = pipeline.create_new_version(is_copy=True)
-            new_pipeline.team = ctx.target_team
-            new_pipeline.save(update_fields=["team"])
-
-            # Remap node params
-            for node in new_pipeline.node_set.all():
-                self._remap_node_params(ctx, node)
-
-            ctx.pipelines[pipeline.id] = new_pipeline
 
     def _remap_node_params(self, ctx: CloneContext, node: Node):
         """Remap FK IDs in node params to new team's objects."""
@@ -525,6 +497,9 @@ class Command(BaseCommand):
                 # Remap node params
                 for node in new_exp.pipeline.node_set.all():
                     self._remap_node_params(ctx, node)
+
+            # Create initial published version
+            new_exp.create_new_version("Initial", make_default=True)
 
             ctx.experiments[experiment.id] = new_exp
 
