@@ -514,13 +514,16 @@ class Command(BaseCommand):
 
     def _clone_evaluations(self, ctx: CloneContext):
         """Clone evaluators, datasets, and configs."""
-        # Evaluators (simple copy)
+        # Evaluators - remap llm_provider_id and llm_provider_model_id in params
         for evaluator in Evaluator.objects.filter(team=ctx.source_team):
+            params = dict(evaluator.params)
+            self._remap_evaluator_params(ctx, evaluator.name, params)
+
             new_evaluator = Evaluator.objects.create(
                 team=ctx.target_team,
                 name=evaluator.name,
                 type=evaluator.type,
-                params=evaluator.params,
+                params=params,
             )
             ctx.evaluators[evaluator.id] = new_evaluator
 
@@ -588,14 +591,38 @@ class Command(BaseCommand):
 
             new_config.save()
 
-            # Remap M2M evaluators - error if any not found
+            # Remap M2M evaluators - only include evaluators from source team
             new_evaluator_ids = []
-            for evaluator in config.evaluators.all():
+            for evaluator in config.evaluators.filter(team=ctx.source_team):
                 if evaluator.id not in ctx.evaluators:
                     raise CommandError(
                         f"EvaluationConfig '{config.name}' references evaluator_id={evaluator.id} "
-                        f"not found in source team."
+                        f"not found in cloned evaluators."
                     )
                 new_evaluator_ids.append(ctx.evaluators[evaluator.id].id)
             if new_evaluator_ids:
                 new_config.evaluators.set(new_evaluator_ids)
+
+    def _remap_evaluator_params(self, ctx: CloneContext, name: str, params: dict):
+        """Remap FK IDs in evaluator params to new team's objects."""
+        # Remap llm_provider_id
+        if "llm_provider_id" in params and params["llm_provider_id"]:
+            old_id = int(params["llm_provider_id"])
+            if old_id in ctx.llm_providers:
+                params["llm_provider_id"] = ctx.llm_providers[old_id].id
+            elif not LlmProvider.objects.filter(id=old_id, team__isnull=True).exists():
+                raise CommandError(
+                    f"Evaluator '{name}' references llm_provider_id={old_id} which was not found in source team."
+                )
+            # else: global provider, leave as-is
+
+        # Remap llm_provider_model_id
+        if "llm_provider_model_id" in params and params["llm_provider_model_id"]:
+            old_id = int(params["llm_provider_model_id"])
+            if old_id in ctx.llm_provider_models:
+                params["llm_provider_model_id"] = ctx.llm_provider_models[old_id].id
+            elif not LlmProviderModel.objects.filter(id=old_id, team__isnull=True).exists():
+                raise CommandError(
+                    f"Evaluator '{name}' references llm_provider_model_id={old_id} which was not found in source team."
+                )
+            # else: global model, leave as-is
