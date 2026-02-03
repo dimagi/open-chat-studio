@@ -1,0 +1,562 @@
+"""
+Management command to batch clone teams with all related data.
+
+Usage:
+    python manage.py clone_team --source-team=demo_team --count=10 \
+        --name-template="client_team_{n}" \
+        --email-template="demo{n}@example.org" \
+        --password-template="password{n}" \
+        --start-index=1 \
+        --dry-run
+"""
+
+from dataclasses import dataclass, field
+
+from allauth.account.models import EmailAddress
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+
+from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationMessage, Evaluator
+from apps.experiments.models import ConsentForm, Experiment, SourceMaterial, Survey
+from apps.pipelines.models import Node, Pipeline
+from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider, VoiceProvider
+from apps.teams import backends
+from apps.teams.models import Team
+from apps.users.models import CustomUser
+
+
+@dataclass
+class CloneContext:
+    """Tracks old_id -> new_instance mappings during cloning."""
+
+    source_team: Team
+    target_team: Team
+    user: CustomUser = None
+
+    # Phase 2: Providers
+    llm_providers: dict[int, LlmProvider] = field(default_factory=dict)
+    llm_provider_models: dict[int, LlmProviderModel] = field(default_factory=dict)
+    voice_providers: dict[int, VoiceProvider] = field(default_factory=dict)
+    trace_providers: dict[int, TraceProvider] = field(default_factory=dict)
+
+    # Phase 3: Content
+    source_materials: dict[int, SourceMaterial] = field(default_factory=dict)
+    consent_forms: dict[int, ConsentForm] = field(default_factory=dict)
+    surveys: dict[int, Survey] = field(default_factory=dict)
+
+    # Phase 4: Complex
+    pipelines: dict[int, Pipeline] = field(default_factory=dict)
+    experiments: dict[int, Experiment] = field(default_factory=dict)
+
+    # Phase 5: Evaluations
+    evaluators: dict[int, Evaluator] = field(default_factory=dict)
+    datasets: dict[int, EvaluationDataset] = field(default_factory=dict)
+
+
+class Command(BaseCommand):
+    help = "Clone a team with all related data to create multiple demo teams."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--source-team",
+            type=str,
+            required=True,
+            help="Source team slug to clone from",
+        )
+        parser.add_argument(
+            "--count",
+            type=int,
+            required=True,
+            help="Number of teams to create",
+        )
+        parser.add_argument(
+            "--name-template",
+            type=str,
+            required=True,
+            help="Team name template with {n} placeholder (e.g., 'client_team_{n}')",
+        )
+        parser.add_argument(
+            "--email-template",
+            type=str,
+            required=True,
+            help="User email template with {n} placeholder (e.g., 'demo{n}@example.org')",
+        )
+        parser.add_argument(
+            "--password-template",
+            type=str,
+            required=True,
+            help="User password template with {n} placeholder (e.g., 'password{n}')",
+        )
+        parser.add_argument(
+            "--start-index",
+            type=int,
+            default=1,
+            help="Starting index for {n} placeholder (default: 1)",
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Preview what would be created without making changes",
+        )
+
+    def handle(self, *args, **options):
+        source_slug = options["source_team"]
+        count = options["count"]
+        name_template = options["name_template"]
+        email_template = options["email_template"]
+        password_template = options["password_template"]
+        start_index = options["start_index"]
+        dry_run = options["dry_run"]
+
+        # Validate source team exists
+        try:
+            source_team = Team.objects.get(slug=source_slug)
+        except Team.DoesNotExist:
+            raise CommandError(f"Source team '{source_slug}' does not exist.") from None
+
+        # Preview source team data
+        self._preview_source(source_team)
+
+        if dry_run:
+            self.stdout.write(self.style.WARNING("\n=== DRY RUN MODE ==="))
+            self._preview_targets(name_template, email_template, password_template, start_index, count)
+            return
+
+        # Clone teams
+        created_teams = []
+        failed = []
+
+        for i in range(start_index, start_index + count):
+            team_name = name_template.format(n=i)
+            email = email_template.format(n=i)
+            password = password_template.format(n=i)
+            slug = team_name.lower().replace(" ", "_").replace("-", "_")
+
+            self.stdout.write(f"\n--- Cloning team {i}: {team_name} ---")
+
+            try:
+                with transaction.atomic():
+                    ctx = self._clone_team(source_team, team_name, slug, email, password)
+                    created_teams.append(ctx.target_team)
+                    self.stdout.write(self.style.SUCCESS(f"  Created: {ctx.target_team.slug}"))
+            except Exception as e:
+                failed.append((team_name, str(e)))
+                self.stdout.write(self.style.ERROR(f"  Failed: {e}"))
+
+        # Summary
+        self.stdout.write("\n=== Summary ===")
+        self.stdout.write(f"Created: {len(created_teams)}")
+        self.stdout.write(f"Failed: {len(failed)}")
+
+        if failed:
+            self.stdout.write(self.style.ERROR("\nFailed teams:"))
+            for name, error in failed:
+                self.stdout.write(f"  {name}: {error}")
+
+    def _preview_source(self, team: Team):
+        """Display source team data counts."""
+        self.stdout.write(f"\nSource team: {team.name} ({team.slug})")
+        self.stdout.write("  Data to clone:")
+        self.stdout.write(f"    LLM Providers: {LlmProvider.objects.filter(team=team).count()}")
+        self.stdout.write(f"    LLM Provider Models: {LlmProviderModel.objects.filter(team=team).count()}")
+        self.stdout.write(f"    Voice Providers: {VoiceProvider.objects.filter(team=team).count()}")
+        self.stdout.write(f"    Trace Providers: {TraceProvider.objects.filter(team=team).count()}")
+        sm_count = SourceMaterial.objects.working_versions_queryset().filter(team=team).count()
+        self.stdout.write(f"    Source Materials: {sm_count}")
+        cf_count = ConsentForm.objects.working_versions_queryset().filter(team=team).count()
+        self.stdout.write(f"    Consent Forms: {cf_count}")
+        survey_count = Survey.objects.working_versions_queryset().filter(team=team).count()
+        self.stdout.write(f"    Surveys: {survey_count}")
+        pipeline_count = Pipeline.objects.working_versions_queryset().filter(team=team).count()
+        self.stdout.write(f"    Pipelines: {pipeline_count}")
+        exp_count = Experiment.objects.working_versions_queryset().filter(team=team).count()
+        self.stdout.write(f"    Experiments: {exp_count}")
+        self.stdout.write(f"    Evaluators: {Evaluator.objects.filter(team=team).count()}")
+        self.stdout.write(f"    Evaluation Datasets: {EvaluationDataset.objects.filter(team=team).count()}")
+        self.stdout.write(f"    Evaluation Configs: {EvaluationConfig.objects.filter(team=team).count()}")
+
+    def _preview_targets(self, name_template, email_template, password_template, start_index, count):
+        """Preview what teams would be created."""
+        self.stdout.write("\nWould create:")
+        for i in range(start_index, start_index + count):
+            team_name = name_template.format(n=i)
+            email = email_template.format(n=i)
+            slug = team_name.lower().replace(" ", "_").replace("-", "_")
+            self.stdout.write(f"  Team: {team_name} (slug: {slug})")
+            self.stdout.write(f"    Owner: {email}")
+
+    def _clone_team(
+        self,
+        source_team: Team,
+        name: str,
+        slug: str,
+        email: str,
+        password: str,
+    ) -> CloneContext:
+        """Clone a team with all related data."""
+        # Phase 1: Create team and user
+        target_team = Team.objects.create(name=name, slug=slug)
+
+        user = CustomUser.objects.create_user(username=email, email=email, password=password)
+        EmailAddress.objects.create(user=user, email=email, verified=True, primary=True)
+        backends.make_user_team_owner(target_team, user)
+
+        ctx = CloneContext(source_team=source_team, target_team=target_team, user=user)
+
+        # Phase 2: Clone providers
+        self._clone_providers(ctx)
+
+        # Phase 3: Clone content (versioned models)
+        self._clone_content(ctx)
+
+        # Phase 4: Clone experiments (which also copies their pipelines)
+        self._clone_experiments(ctx)
+
+        # Clone orphan pipelines (not linked to any experiment)
+        self._clone_orphan_pipelines(ctx)
+
+        # Phase 5: Clone evaluations
+        self._clone_evaluations(ctx)
+
+        return ctx
+
+    def _clone_providers(self, ctx: CloneContext):
+        """Clone LLM, Voice, and Trace providers."""
+        # LLM Providers
+        for provider in LlmProvider.objects.filter(team=ctx.source_team):
+            new_provider = LlmProvider.objects.create(
+                team=ctx.target_team,
+                type=provider.type,
+                name=provider.name,
+                config=provider.config,  # Encrypted config copied as-is
+            )
+            ctx.llm_providers[provider.id] = new_provider
+
+        # LLM Provider Models (team-scoped only)
+        for model in LlmProviderModel.objects.filter(team=ctx.source_team):
+            new_model = LlmProviderModel.objects.create(
+                team=ctx.target_team,
+                type=model.type,
+                name=model.name,
+                max_token_limit=model.max_token_limit,
+            )
+            ctx.llm_provider_models[model.id] = new_model
+
+        # Voice Providers
+        for provider in VoiceProvider.objects.filter(team=ctx.source_team):
+            new_provider = VoiceProvider.objects.create(
+                team=ctx.target_team,
+                type=provider.type,
+                name=provider.name,
+                config=provider.config,
+            )
+            ctx.voice_providers[provider.id] = new_provider
+
+        # Trace Providers
+        for provider in TraceProvider.objects.filter(team=ctx.source_team):
+            new_provider = TraceProvider.objects.create(
+                team=ctx.target_team,
+                type=provider.type,
+                name=provider.name,
+                config=provider.config,
+            )
+            ctx.trace_providers[provider.id] = new_provider
+
+    def _clone_content(self, ctx: CloneContext):
+        """Clone versioned content models (working versions only)."""
+        # Source Materials
+        for sm in SourceMaterial.objects.working_versions_queryset().filter(team=ctx.source_team):
+            new_sm = SourceMaterial.objects.create(
+                team=ctx.target_team,
+                owner=ctx.user,
+                topic=sm.topic,
+                description=sm.description,
+                material=sm.material,
+            )
+            ctx.source_materials[sm.id] = new_sm
+
+        # Consent Forms - default consent form is auto-created by signal on Team creation
+        # So we skip cloning the default consent form and map it to the auto-created one
+        default_consent = ConsentForm.objects.filter(team=ctx.target_team, is_default=True).first()
+        for cf in ConsentForm.objects.working_versions_queryset().filter(team=ctx.source_team):
+            if cf.is_default:
+                # Map source default to target's auto-created default
+                if default_consent:
+                    ctx.consent_forms[cf.id] = default_consent
+            else:
+                new_cf = ConsentForm.objects.create(
+                    team=ctx.target_team,
+                    name=cf.name,
+                    consent_text=cf.consent_text,
+                    capture_identifier=cf.capture_identifier,
+                    identifier_label=cf.identifier_label,
+                    identifier_type=cf.identifier_type,
+                    confirmation_text=cf.confirmation_text,
+                    is_default=False,
+                )
+                ctx.consent_forms[cf.id] = new_cf
+
+        # Surveys
+        for survey in Survey.objects.working_versions_queryset().filter(team=ctx.source_team):
+            new_survey = Survey.objects.create(
+                team=ctx.target_team,
+                name=survey.name,
+                url=survey.url,
+                confirmation_text=survey.confirmation_text,
+            )
+            ctx.surveys[survey.id] = new_survey
+
+    def _clone_orphan_pipelines(self, ctx: CloneContext):
+        """Clone pipelines not linked to any experiment."""
+        # Find pipelines not linked to any experiment
+        linked_pipeline_ids = set(
+            Experiment.objects.working_versions_queryset()
+            .filter(team=ctx.source_team, pipeline__isnull=False)
+            .values_list("pipeline_id", flat=True)
+        )
+        for pipeline in Pipeline.objects.working_versions_queryset().filter(team=ctx.source_team):
+            if pipeline.id in linked_pipeline_ids:
+                continue  # Already copied when cloning the experiment
+            if pipeline.id in ctx.pipelines:
+                continue  # Already mapped
+
+            # Clone orphan pipeline
+            new_pipeline = pipeline.create_new_version(is_copy=True)
+            new_pipeline.team = ctx.target_team
+            new_pipeline.save(update_fields=["team"])
+
+            # Remap node params
+            for node in new_pipeline.node_set.all():
+                self._remap_node_params(ctx, node)
+
+            ctx.pipelines[pipeline.id] = new_pipeline
+
+    def _remap_node_params(self, ctx: CloneContext, node: Node):
+        """Remap FK IDs in node params to new team's objects."""
+        params = node.params
+        changed = False
+
+        # Fail if unmapped params have values (these reference objects we don't clone)
+        unmapped_params = ["assistant_id", "collection_id", "collection_index_ids", "synthetic_voice_id"]
+        for param in unmapped_params:
+            if param in params and params[param]:
+                raise CommandError(
+                    f"Pipeline node '{node.label}' has {param}={params[param]} which cannot be cloned. "
+                    f"Remove or clear this reference in the source pipeline before cloning."
+                )
+
+        # Remap llm_provider_id
+        if "llm_provider_id" in params and params["llm_provider_id"]:
+            old_id = int(params["llm_provider_id"])
+            if old_id not in ctx.llm_providers:
+                raise CommandError(
+                    f"Pipeline node '{node.label}' references llm_provider_id={old_id} "
+                    f"which was not found in source team."
+                )
+            params["llm_provider_id"] = ctx.llm_providers[old_id].id
+            changed = True
+
+        # Remap llm_provider_model_id
+        if "llm_provider_model_id" in params and params["llm_provider_model_id"]:
+            old_id = int(params["llm_provider_model_id"])
+            if old_id not in ctx.llm_provider_models:
+                raise CommandError(
+                    f"Pipeline node '{node.label}' references llm_provider_model_id={old_id} "
+                    f"which was not found in source team."
+                )
+            params["llm_provider_model_id"] = ctx.llm_provider_models[old_id].id
+            changed = True
+
+        # Remap source_material_id
+        if "source_material_id" in params and params["source_material_id"]:
+            old_id = int(params["source_material_id"])
+            if old_id not in ctx.source_materials:
+                raise CommandError(
+                    f"Pipeline node '{node.label}' references source_material_id={old_id} "
+                    f"which was not found in source team."
+                )
+            params["source_material_id"] = ctx.source_materials[old_id].id
+            changed = True
+
+        if changed:
+            node.params = params
+            node.save(update_fields=["params"])
+
+    def _clone_experiments(self, ctx: CloneContext):
+        """Clone experiments and remap team + FKs."""
+        for experiment in Experiment.objects.working_versions_queryset().filter(team=ctx.source_team):
+            # Use create_new_version(is_copy=True) for independent copy
+            # This also copies the pipeline if present
+            new_exp = experiment.create_new_version(is_copy=True)
+            new_exp.team = ctx.target_team
+            new_exp.owner = ctx.user
+
+            # Remap FK relationships - error if mapping not found
+            if experiment.llm_provider_id:
+                if experiment.llm_provider_id not in ctx.llm_providers:
+                    raise CommandError(
+                        f"Experiment '{experiment.name}' references llm_provider_id={experiment.llm_provider_id} "
+                        f"not found in source team."
+                    )
+                new_exp.llm_provider = ctx.llm_providers[experiment.llm_provider_id]
+
+            if experiment.llm_provider_model_id:
+                if experiment.llm_provider_model_id not in ctx.llm_provider_models:
+                    raise CommandError(
+                        f"Experiment '{experiment.name}' references llm_provider_model_id="
+                        f"{experiment.llm_provider_model_id} not found in source team."
+                    )
+                new_exp.llm_provider_model = ctx.llm_provider_models[experiment.llm_provider_model_id]
+
+            if experiment.source_material_id:
+                if experiment.source_material_id not in ctx.source_materials:
+                    raise CommandError(
+                        f"Experiment '{experiment.name}' references source_material_id="
+                        f"{experiment.source_material_id} not found in source team."
+                    )
+                new_exp.source_material = ctx.source_materials[experiment.source_material_id]
+
+            if experiment.consent_form_id:
+                if experiment.consent_form_id not in ctx.consent_forms:
+                    raise CommandError(
+                        f"Experiment '{experiment.name}' references consent_form_id="
+                        f"{experiment.consent_form_id} not found in source team."
+                    )
+                new_exp.consent_form = ctx.consent_forms[experiment.consent_form_id]
+
+            if experiment.pre_survey_id:
+                if experiment.pre_survey_id not in ctx.surveys:
+                    raise CommandError(
+                        f"Experiment '{experiment.name}' references pre_survey_id="
+                        f"{experiment.pre_survey_id} not found in source team."
+                    )
+                new_exp.pre_survey = ctx.surveys[experiment.pre_survey_id]
+
+            if experiment.post_survey_id:
+                if experiment.post_survey_id not in ctx.surveys:
+                    raise CommandError(
+                        f"Experiment '{experiment.name}' references post_survey_id="
+                        f"{experiment.post_survey_id} not found in source team."
+                    )
+                new_exp.post_survey = ctx.surveys[experiment.post_survey_id]
+
+            if experiment.voice_provider_id:
+                if experiment.voice_provider_id not in ctx.voice_providers:
+                    raise CommandError(
+                        f"Experiment '{experiment.name}' references voice_provider_id="
+                        f"{experiment.voice_provider_id} not found in source team."
+                    )
+                new_exp.voice_provider = ctx.voice_providers[experiment.voice_provider_id]
+
+            if experiment.trace_provider_id:
+                if experiment.trace_provider_id not in ctx.trace_providers:
+                    raise CommandError(
+                        f"Experiment '{experiment.name}' references trace_provider_id="
+                        f"{experiment.trace_provider_id} not found in source team."
+                    )
+                new_exp.trace_provider = ctx.trace_providers[experiment.trace_provider_id]
+
+            new_exp.save()
+
+            # Update the copied pipeline's team and remap its node params
+            if new_exp.pipeline:
+                new_exp.pipeline.team = ctx.target_team
+                new_exp.pipeline.save(update_fields=["team"])
+
+                # Track the mapping for orphan pipeline check
+                if experiment.pipeline_id:
+                    ctx.pipelines[experiment.pipeline_id] = new_exp.pipeline
+
+                # Remap node params
+                for node in new_exp.pipeline.node_set.all():
+                    self._remap_node_params(ctx, node)
+
+            ctx.experiments[experiment.id] = new_exp
+
+    def _clone_evaluations(self, ctx: CloneContext):
+        """Clone evaluators, datasets, and configs."""
+        # Evaluators (simple copy)
+        for evaluator in Evaluator.objects.filter(team=ctx.source_team):
+            new_evaluator = Evaluator.objects.create(
+                team=ctx.target_team,
+                name=evaluator.name,
+                type=evaluator.type,
+                params=evaluator.params,
+            )
+            ctx.evaluators[evaluator.id] = new_evaluator
+
+        # Evaluation Datasets with M2M messages
+        for dataset in EvaluationDataset.objects.filter(team=ctx.source_team):
+            new_dataset = EvaluationDataset.objects.create(
+                team=ctx.target_team,
+                name=dataset.name,
+                status=dataset.status,
+            )
+
+            # Clone messages (not team-scoped, so we create new copies)
+            new_messages = []
+            for msg in dataset.messages.all():
+                new_msg = EvaluationMessage.objects.create(
+                    input=msg.input,
+                    output=msg.output,
+                    context=msg.context,
+                    history=msg.history,
+                    participant_data=msg.participant_data,
+                    session_state=msg.session_state,
+                    metadata=msg.metadata,
+                    # input_chat_message and expected_output_chat_message are not cloned
+                    # as they reference chat messages from the source team
+                )
+                new_messages.append(new_msg)
+
+            if new_messages:
+                new_dataset.messages.set(new_messages)
+
+            ctx.datasets[dataset.id] = new_dataset
+
+        # Evaluation Configs with FK remapping
+        for config in EvaluationConfig.objects.filter(team=ctx.source_team):
+            # Dataset is required - error if not found
+            if config.dataset_id not in ctx.datasets:
+                raise CommandError(
+                    f"EvaluationConfig '{config.name}' references dataset_id={config.dataset_id} "
+                    f"not found in source team."
+                )
+
+            new_config = EvaluationConfig.objects.create(
+                team=ctx.target_team,
+                name=config.name,
+                dataset=ctx.datasets[config.dataset_id],
+                version_selection_type=config.version_selection_type,
+            )
+
+            # Remap experiment references - error if not found
+            if config.experiment_version_id:
+                if config.experiment_version_id not in ctx.experiments:
+                    raise CommandError(
+                        f"EvaluationConfig '{config.name}' references experiment_version_id="
+                        f"{config.experiment_version_id} not found in source team."
+                    )
+                new_config.experiment_version = ctx.experiments[config.experiment_version_id]
+
+            if config.base_experiment_id:
+                if config.base_experiment_id not in ctx.experiments:
+                    raise CommandError(
+                        f"EvaluationConfig '{config.name}' references base_experiment_id="
+                        f"{config.base_experiment_id} not found in source team."
+                    )
+                new_config.base_experiment = ctx.experiments[config.base_experiment_id]
+
+            new_config.save()
+
+            # Remap M2M evaluators - error if any not found
+            new_evaluator_ids = []
+            for evaluator in config.evaluators.all():
+                if evaluator.id not in ctx.evaluators:
+                    raise CommandError(
+                        f"EvaluationConfig '{config.name}' references evaluator_id={evaluator.id} "
+                        f"not found in source team."
+                    )
+                new_evaluator_ids.append(ctx.evaluators[evaluator.id].id)
+            if new_evaluator_ids:
+                new_config.evaluators.set(new_evaluator_ids)
