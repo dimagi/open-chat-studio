@@ -27,3 +27,55 @@ export async function copyTextToClipboard (callee, text) {
     console.error('Failed to copy: ', err)
   }
 }
+
+/**
+ * Extract page context information for the chat widget.
+ * Returns an object with URL, title, team, section, and breadcrumbs.
+ */
+export function getPageContext() {
+  const path = window.location.pathname;
+  const hash = window.location.hash;
+  const title = document.title;
+
+  // Extract team and section from URL pattern: /a/{team}/{section}/...
+  const urlMatch = path.match(/^\/a\/([^/]+)(?:\/([^/]+))?/);
+  const team = urlMatch ? urlMatch[1] : null;
+  const section = urlMatch ? urlMatch[2] : null;
+
+  // Extract breadcrumb text from nav elements
+  const breadcrumbs = [];
+  const breadcrumbNav = document.querySelector('[aria-label="breadcrumbs"]');
+  if (breadcrumbNav) {
+    const items = breadcrumbNav.querySelectorAll('li');
+    items.forEach(item => {
+      const text = item.textContent?.trim();
+      if (text) {
+        breadcrumbs.push(text);
+      }
+    });
+  }
+
+  const context = {
+    url: path,
+    title: title,
+    team: team,
+    section: section,
+    breadcrumbs: breadcrumbs
+  };
+
+  if (hash) {
+    context.hash = hash;
+  }
+
+  return context;
+}
+
+/**
+ * Initialize page context on the chat widget element.
+ */
+export function initChatWidgetPageContext() {
+  const widget = document.querySelector('open-chat-studio-widget');
+  if (widget) {
+    widget.pageContext = getPageContext();
+  }
+}

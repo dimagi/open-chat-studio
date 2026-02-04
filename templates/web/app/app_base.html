@@ -40,5 +40,10 @@
         user-name="{{ request.user.get_display_name }}"
     >
     </open-chat-studio-widget>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        SiteJS.app.initChatWidgetPageContext();
+      });
+    </script>
   {% endif %}
 {% endblock footer %}
