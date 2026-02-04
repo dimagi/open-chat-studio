@@ -1,6 +1,6 @@
+import hashlib
 import json
 import logging
-from base64 import b64encode
 
 from django.core.cache import cache
 from django.core.mail import send_mail
@@ -184,12 +184,11 @@ def create_identifier(slug: str, data: dict) -> str:
         data (dict): A dictionary of data to base the identifier on.
 
     Returns:
-        str: A base64-encoded JSON string representing the slug and data combined.
+        str: A SHA1 hash string representing the slug and data combined.
     """
     combined_data = {"slug": slug, "data": data}
     json_data = json.dumps(combined_data, sort_keys=True)
-    encoded_data = b64encode(json_data.encode("utf-8")).decode("utf-8")
-    return encoded_data
+    return hashlib.sha1(json_data.encode("utf-8")).hexdigest()
 
 
 def toggle_notification_read(user, user_notification: UserNotification, read: bool) -> None:
