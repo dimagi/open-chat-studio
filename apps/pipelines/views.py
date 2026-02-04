@@ -51,6 +51,7 @@ class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         return {
             "active_tab": "pipelines",
             "title": "Event Pipelines",
+            "page_title": "Event Pipelines",
             "new_object_url": reverse("pipelines:new", args=[team_slug]),
             "table_url": reverse("pipelines:table", args=[team_slug]),
             "title_help_content": render_help_with_link(

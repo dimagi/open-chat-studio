@@ -64,6 +64,7 @@ class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
         return {
             "active_tab": "evaluation_datasets",
             "title": "Datasets",
+            "page_title": "Datasets",
             "new_object_url": reverse("evaluations:dataset_new", args=[team_slug]),
             "table_url": reverse("evaluations:dataset_table", args=[team_slug]),
         }
@@ -90,6 +91,7 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
     template_name = "evaluations/dataset_edit.html"
     extra_context = {
         "title": "Update Dataset",
+        "page_title": "Update Dataset",
         "button_text": "Update",
         "active_tab": "evaluation_datasets",
     }
@@ -153,6 +155,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     form_class = EvaluationDatasetForm
     extra_context = {
         "title": "Create Dataset",
+        "page_title": "Create Dataset",
         "button_text": "Create Dataset",
         "active_tab": "evaluation_datasets",
         "form_attrs": {"id": "dataset-create-form"},

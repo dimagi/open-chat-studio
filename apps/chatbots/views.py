@@ -262,6 +262,7 @@ class CreateChatbot(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "chatbots"
+        context["page_title"] = self.title
         return context
 
     def form_valid(self, form):
@@ -303,6 +304,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
 
     context = {
         "active_tab": "chatbots",
+        "page_title": f"{experiment.name} Details",
         "experiment": experiment,
         "platforms": available_platforms,
         "channels": channels,
@@ -350,6 +352,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
             "pipeline_id": experiment.pipeline_id,
             "node_schemas": _pipeline_node_schemas(),
             "experiment": experiment,
+            "page_title": f"Edit {experiment.name}",
             "parameter_values": _pipeline_node_parameter_values(
                 team=self.request.team,
                 llm_providers=llm_providers,
@@ -406,6 +409,7 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequir
         context["version_details"] = version
         context["has_versions"] = self.latest_version is not None
         context["experiment"] = working_experiment
+        context["page_title"] = f"Create Version - {working_experiment.name}"
         return context
 
     def form_valid(self, form):
@@ -818,6 +822,7 @@ def home(
         {
             "active_tab": title.lower(),
             "title": title,
+            "page_title": title,
             "title_help_content": render_help_with_link("", help_key),
             "table_url": reverse(table_url_name, args=[team_slug]),
             "enable_search": True,
@@ -846,6 +851,7 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
         return {
             "active_tab": "all_sessions",
             "title": "All Sessions",
+            "page_title": "All Sessions",
             "allow_new": False,
             "table_url": table_url,
             "use_dynamic_filters": True,
