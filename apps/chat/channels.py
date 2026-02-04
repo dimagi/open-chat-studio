@@ -402,7 +402,8 @@ class ChannelBase(ABC):
                     # status is ACTIVE
                     self.experiment_session.update_status(SessionStatus.ACTIVE)
 
-            enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
+            if self.experiment_channel.platform != ChannelPlatform.EVALUATIONS:
+                enqueue_static_triggers.delay(self.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
             return self._handle_supported_message(human_message)
         except Exception as e:
             self._inform_user_of_error(e)
@@ -1370,9 +1371,10 @@ def _start_experiment_session(
         if timezone:
             participant.update_memory(data={"timezone": timezone}, experiment=working_experiment)
 
-    if participant.experimentsession_set.filter(experiment=working_experiment).count() == 1:
-        enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
-    enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
+    if experiment_channel.platform != ChannelPlatform.EVALUATIONS:
+        if participant.experimentsession_set.filter(experiment=working_experiment).count() == 1:
+            enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
+        enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return session
 
 

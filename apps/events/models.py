@@ -11,6 +11,7 @@ from django.db.models import Case, F, Func, OuterRef, Q, Subquery, When, functio
 from django.utils import timezone
 from pytz.exceptions import UnknownTimeZoneError
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
@@ -241,8 +242,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         time_window_to_ignore = timezone.now() - timedelta(seconds=self.delay)
 
         last_human_message_created_at = (
-            ChatMessage.objects
-            .filter(
+            ChatMessage.objects.filter(
                 chat__experiment_session=OuterRef("pk"),
                 message_type=ChatMessageType.HUMAN,
             )
@@ -250,8 +250,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("created_at")[:1]
         )
         last_human_message_id = (
-            ChatMessage.objects
-            .filter(
+            ChatMessage.objects.filter(
                 chat__experiment_session=OuterRef("session_id"),
                 message_type=ChatMessageType.HUMAN,
             )
@@ -259,8 +258,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("id")[:1]
         )
         success_count_for_last_message = (
-            EventLog.objects
-            .filter(
+            EventLog.objects.filter(
                 session=OuterRef("pk"),
                 chat_message_id=Subquery(last_human_message_id),
                 status=EventLogStatusChoices.SUCCESS,
@@ -271,8 +269,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("count")
         )
         failure_count_for_last_message = (
-            EventLog.objects
-            .filter(
+            EventLog.objects.filter(
                 session=OuterRef("pk"),
                 chat_message_id=Subquery(last_human_message_id),
                 status=EventLogStatusChoices.FAILURE,
@@ -281,8 +278,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             .values("count")
         )
         last_success_log = (
-            EventLog.objects
-            .filter(
+            EventLog.objects.filter(
                 session=OuterRef("pk"),
                 chat_message_id=Subquery(last_human_message_id),
                 status=EventLogStatusChoices.SUCCESS,
@@ -292,12 +288,12 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         )
 
         sessions = (
-            ExperimentSession.objects
-            .filter(
+            ExperimentSession.objects.filter(
                 experiment=self.experiment.get_working_version(),
                 ended_at=None,
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
             .annotate(
                 last_human_message_created_at=Subquery(last_human_message_created_at),
                 success_count=Subquery(success_count_for_last_message),
@@ -405,8 +401,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 class ScheduledMessageManager(models.Manager):
     def get_messages_to_fire(self):
         return (
-            self
-            .filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=functions.Now())
+            self.filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=functions.Now())
             .select_related("action")
             .order_by("next_trigger_date")
         )
