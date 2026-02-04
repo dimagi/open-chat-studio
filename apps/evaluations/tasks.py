@@ -47,7 +47,7 @@ def _save_dataset_error(dataset: EvaluationDataset, error_message: str):
     dataset.save(update_fields=["status", "error_message", "job_id"])
 
 
-@shared_task(base=TaskbadgerTask, rate_limit="0.5/s")
+@shared_task(base=TaskbadgerTask)
 def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     """
     Run all evaluations over a single message.
