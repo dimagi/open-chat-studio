@@ -6,15 +6,28 @@ This file provides guidance to AI coding agents when working with code in this r
 
 Open Chat Studio is a comprehensive platform for building, deploying, and evaluating AI-powered chat applications. It provides tools for working with various LLMs, creating chatbots, managing conversations, and integrating with different messaging platforms.
 
-* Backend: Django
-* Frontend: React/TypeScript, TailwindCSS, AlpineJS, HTMX
-* Database: PostgreSQL with pgvector extension
-* Task Queue: Celery with Redis
-* Package Management: uv (Python), npm (Node.js)
-* CSS, JS & TS build: webpack
-* Testing: pytest (python)
+## Core Concepts
 
-Key paths:
+* Team: Multi-tenancy root; most resources scoped to a team
+* Experiment: Versioned chat app with participants, channels, and configuration (user facing name: Chatbot)
+* Channel: Platform integration (Telegram, WhatsApp, Slack, API, web widget)
+* Pipeline: DAG workflow (LLM nodes, routing, custom actions) executed during chat (core Chatbot functionality)
+* Session/Chat: Participant conversation with message history
+* Custom Action: HTTP API wrapper (OpenAPI schema) callable from pipelines
+* Service Provider: Credentials for LLM, messaging, voice, and tracing services
+
+## Architecture
+
+* Multi-tenancy: `BaseTeamModel` pattern; team membership + Waffle flags for feature control
+* Versioning: Experiments, Assistants, Pipelines support working/published versions via `VersionsMixin`
+* Async tasks: Celery + Redis for background ops (sync, evaluations, media processing)
+* API: DRF REST API (`/api/`) + OpenAI-compatible assistant endpoints
+* Frontend: React/TS (webpack) + HTMX + Alpine.js in Django templates
+* LLM abstraction: `LlmService` interface; supports OpenAI, Anthropic, Groq, Gemini, Azure, etc.
+* Messaging abstraction: `MessagingService` + platform-specific clients with webhook routing
+* Observability: Trace/Span models for request logging and pipeline step tracking
+
+## Key Paths
 
 * Django settings: `config/settings.py`
 * Frontend build: `webpack.config.js`
@@ -27,7 +40,7 @@ Key paths:
 * Javascript, Typescript and CSS files root: `assets/`
 * Chat Widget component: `components/chat_widget` (standalone StencilJS component used by the Django app)
 
-Useful commands:
+## Useful commands
 
 * Run python tests: `pytest path/to/test.py -v` (all tests in a file)
 * Lint python: `ruff check path/to/file.py --fix`
