@@ -11,7 +11,7 @@ from apps.utils.factories.notifications import UserNotificationFactory
 class TestToggleNotificationReadView:
     """Tests for ToggleNotificationReadView"""
 
-    @patch("apps.ocs_notifications.views.bust_unread_notification_cache")
+    @patch("apps.ocs_notifications.utils.bust_unread_notification_cache")
     def test_toggle_read_status_on_off_on_and_bust_cache(self, mock_bust_cache, client, team_with_users):
         """
         Test that read status is toggled from on -> off -> on and that this busts the cache.
