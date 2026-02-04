@@ -109,17 +109,17 @@ const modulesConfig = {
 
 module.exports = (env, argv) => {
   if (argv.mode === 'production' && process.env.GITHUB_REF === 'refs/heads/main') {
-    config.plugins = config.plugins.concat([
-      // Uploads source maps to Sentry
-      // These env variables must be set in the environment when running 'npm run build'
-      // for the source maps to be uploaded.
-      sentryWebpackPlugin({
-        authToken: process.env.SENTRY_AUTH_TOKEN,
-        org: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
-        telemetry: false,
-      })
-    ])
+    // Uploads source maps to Sentry
+    // These env variables must be set in the environment when running 'npm run build'
+    // for the source maps to be uploaded.
+    const sentryPlugin = sentryWebpackPlugin({
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      telemetry: false,
+    });
+    config.plugins = config.plugins.concat([sentryPlugin]);
+    modulesConfig.plugins = [sentryPlugin];
   }
   return [config, modulesConfig];
 }
