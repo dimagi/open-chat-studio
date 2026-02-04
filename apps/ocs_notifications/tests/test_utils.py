@@ -65,6 +65,27 @@ def test_send_notification_email_respects_levels(
 
 @pytest.mark.django_db()
 class TestCreateNotification:
+    def test_creating_notification_stores_event_data(self, team_with_users):
+        """
+        Test that creating a notification stores the event data correctly.
+
+        Verifies that:
+        1. The event_data passed during notification creation is stored in the Notification model.
+        """
+        event_data = {"action": "test_event", "details": {"key": "value"}}
+
+        create_notification(
+            title="Event Data Test",
+            message="Testing event data storage.",
+            level=LevelChoices.INFO,
+            team=team_with_users,
+            slug="event-data-test",
+            event_data=event_data,
+        )
+
+        notification = UserNotification.objects.filter(user=team_with_users.members.first()).first().notification
+        assert notification.event_data == event_data, "Event data should be stored correctly in the Notification model."
+
     def test_create_notification_notifies_user_when_notification_created(self, team_with_users):
         """
         Test that creating a new notification notifies the recipient user.

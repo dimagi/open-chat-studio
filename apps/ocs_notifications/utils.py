@@ -63,6 +63,7 @@ def create_notification(
                 "message": message,
                 "level": level,
                 "last_event_at": timezone.now(),
+                "event_data": event_data,
             },
         )
         for user in users:

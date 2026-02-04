@@ -1,6 +1,7 @@
 from django.db import models
 
 from apps.teams.models import BaseTeamModel
+from apps.utils.fields import SanitizedJSONField
 
 
 class LevelChoices(models.IntegerChoices):
@@ -16,6 +17,7 @@ class Notification(BaseTeamModel):
     users = models.ManyToManyField("users.CustomUser", through="UserNotification", related_name="notifications")
     last_event_at = models.DateTimeField()
     identifier = models.CharField(max_length=40)
+    event_data = SanitizedJSONField(default=dict, blank=True)
 
     class Meta:
         constraints = [
