@@ -39,6 +39,7 @@ class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
         return {
             "active_tab": "evaluations",
             "title": "Evaluations",
+            "page_title": "Evaluations",
             "new_object_url": reverse("evaluations:new", args=[team_slug]),
             "table_url": reverse("evaluations:table", args=[team_slug]),
             # "title_help_content": render_help_with_link(
@@ -62,7 +63,12 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
     template_name = "evaluations/evaluation_config_form.html"
     model = EvaluationConfig
     form_class = EvaluationConfigForm
-    extra_context = {"title": "Create Evaluation", "button_text": "Create", "active_tab": "evaluations"}
+    extra_context = {
+        "title": "Create Evaluation",
+        "page_title": "Create Evaluation",
+        "button_text": "Create",
+        "active_tab": "evaluations",
+    }
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -88,6 +94,7 @@ class EditEvaluation(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMi
     template_name = "evaluations/evaluation_config_form.html"
     extra_context = {
         "title": "Update Evaluation",
+        "page_title": "Update Evaluation",
         "button_text": "Update",
         "active_tab": "evaluations",
     }
@@ -113,6 +120,7 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequi
     extra_context = {
         "active_tab": "evaluations",
         "title": "Evaluation Runs",
+        "page_title": "Evaluation Runs",
         "allow_new": False,
     }
 
@@ -191,13 +199,13 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
             EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team__slug=team_slug
         )
 
+        title = (
+            "Evaluation Run Preview" if evaluation_run.type == EvaluationRunType.PREVIEW else "Evaluation Run Results"
+        )
         context = {
             "active_tab": "evaluations",
-            "title": (
-                "Evaluation Run Preview"
-                if evaluation_run.type == EvaluationRunType.PREVIEW
-                else "Evaluation Run Results"
-            ),
+            "title": title,
+            "page_title": title,
             "evaluation_run": evaluation_run,
             "allow_new": False,
         }
@@ -481,6 +489,7 @@ def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, e
         context = {
             "active_tab": "evaluations",
             "title": "Upload Results",
+            "page_title": "Upload Results",
             "evaluation_run": evaluation_run,
         }
         return render(request, "evaluations/evaluation_run_update.html", context)

@@ -57,6 +57,7 @@ class CreateSourceMaterial(CreateView):
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Create Source Material",
+        "page_title": "Create Source Material",
         "button_text": "Create",
         "active_tab": "source_material",
     }
@@ -81,6 +82,7 @@ class EditSourceMaterial(UpdateView):
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Update Source Material",
+        "page_title": "Update Source Material",
         "button_text": "Update",
         "active_tab": "source_material",
     }

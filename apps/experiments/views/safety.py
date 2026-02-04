@@ -44,6 +44,7 @@ class CreateSafetyLayer(CreateView):
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Create Safety Layer",
+        "page_title": "Create Safety Layer",
         "button_text": "Create",
         "active_tab": "safety_layers",
     }
@@ -69,6 +70,7 @@ class EditSafetyLayer(UpdateView):
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Update Safety Layer",
+        "page_title": "Update Safety Layer",
         "button_text": "Update",
         "active_tab": "safety_layers",
     }
