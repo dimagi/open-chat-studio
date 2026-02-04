@@ -52,8 +52,9 @@ def unread_notifications_count(request):
     Adds unread notification count to context
     """
     count = 0
-    if request.user.is_authenticated and request.team:
-        count = request.user.unread_notifications_count(team=request.team)
+    team = getattr(request, 'team', None)
+    if request.user.is_authenticated and team:
+        count = request.user.unread_notifications_count(team=team)
     return {
         "unread_notifications_count": count,
     }
