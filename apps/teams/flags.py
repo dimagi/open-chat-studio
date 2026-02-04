@@ -49,6 +49,8 @@ class Flags(FlagInfo, Enum):
 
     NOTIFICATIONS = ("flag_notifications", "User notifications")
 
+    CHAT_WIDGET = ("flag_chat_widget", "Use embedded chat widget instead of full-page chat UI (POC)")
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)
