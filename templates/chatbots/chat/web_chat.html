@@ -1,4 +1,5 @@
 {% extends "web/app/app_base.html" %}
+{% load waffle_tags %}
 
 {% block body_wrapper %}
   <div class="container flex flex-row">
@@ -22,7 +23,25 @@
           </div>
         </div>
       {% endif %}
-      {% include "experiments/chat/chat_ui.html" %}
+      {% flag "flag_chat_widget" %}
+        <div class="flex-1 flex items-center justify-center">
+          <open-chat-studio-widget
+            id="public-chat-widget"
+            visible="true"
+            chatbot-id="{{ experiment.public_id }}"
+            api-base-url="{{ request.scheme }}://{{ request.get_host }}"
+            {% if not request.user.is_anonymous %}
+              user-id="{{ request.user.email }}"
+              user-name="{{ request.user.get_full_name }}"
+            {% endif %}
+            position="center"
+            persistent-session="true"
+            style="position: relative;"
+          ></open-chat-studio-widget>
+        </div>
+      {% else %}
+        {% include "experiments/chat/chat_ui.html" %}
+      {% endflag %}
     </div>
   </div>
 {% endblock body_wrapper %}
