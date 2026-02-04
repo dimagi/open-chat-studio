@@ -192,20 +192,7 @@ def create_identifier(slug: str, data: dict) -> str:
     return encoded_data
 
 
-def get_unread_notification_count(user) -> int:
-    """
-    Get the count of unread notifications for a user.
-
-    Args:
-        user: The user to get unread notification count for.
-
-    Returns:
-        int: The count of unread notifications.
-    """
-    return UserNotification.objects.filter(user=user, read=False).count()
-
-
-def mark_notification_read(user, notification_id: int) -> None:
+def toggle_notification_read(user, user_notification: UserNotification, read: bool) -> None:
     """
     Mark a specific notification as read for a user.
 
@@ -213,7 +200,15 @@ def mark_notification_read(user, notification_id: int) -> None:
         user: The user whose notification should be marked as read.
         notification_id (int): The ID of the notification to mark as read.
     """
-    user_notification = UserNotification.objects.get(notification_id=notification_id, user=user)
-    user_notification.read = True
-    user_notification.read_at = timezone.now()
+
+    if user_notification.read == read:
+        return  # No change needed
+
+    if read:
+        user_notification.read = True
+        user_notification.read_at = timezone.now()
+    else:
+        user_notification.read = False
+        user_notification.read_at = None
     user_notification.save()
+    bust_unread_notification_cache(user.id, team_slug=user_notification.team.slug)

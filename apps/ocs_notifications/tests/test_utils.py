@@ -5,9 +5,8 @@ from apps.ocs_notifications.models import LevelChoices, UserNotification, UserNo
 from apps.ocs_notifications.utils import (
     create_identifier,
     create_notification,
-    get_unread_notification_count,
-    mark_notification_read,
     send_notification_email,
+    toggle_notification_read,
 )
 from apps.utils.factories.notifications import UserNotificationFactory
 
@@ -108,14 +107,14 @@ class TestCreateNotification:
         )
 
         # Verify notification was created
-        assert get_unread_notification_count(user) == 1
+        assert user.unread_notifications_count(team_with_users) == 1
 
         # Mark it as read to retrigger it when the same notification is created again
         user_notification = UserNotification.objects.get(user=user)
-        mark_notification_read(user, user_notification.notification_id)
+        toggle_notification_read(user, user_notification=user_notification, read=True)
 
         # Verify it's now marked as read
-        assert get_unread_notification_count(user) == 0
+        assert user.unread_notifications_count(team_with_users) == 0
 
         # Create another notification with same identifier
         create_notification(
@@ -127,7 +126,7 @@ class TestCreateNotification:
         )
 
         # Should be renotified (unread again)
-        assert get_unread_notification_count(user) == 1
+        assert user.unread_notifications_count(team_with_users) == 1
         user_notification.refresh_from_db()
         assert user_notification.read is False, "UserNotification should be marked as unread again"
 

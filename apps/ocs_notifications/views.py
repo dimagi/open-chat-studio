@@ -1,6 +1,5 @@
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
-from django.utils import timezone
 from django.views.generic import TemplateView, View
 from django_tables2 import SingleTableView
 
@@ -10,11 +9,10 @@ from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
 from apps.ocs_notifications.models import UserNotification
 from apps.ocs_notifications.tables import UserNotificationTable
+from apps.ocs_notifications.utils import toggle_notification_read
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
-
-from .utils import bust_unread_notification_cache
 
 
 class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -79,14 +77,9 @@ class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
             team__slug=team_slug,
         )
 
-        # Toggle the read status
-        user_notification.read = not user_notification.read
-        if user_notification.read:
-            user_notification.read_at = timezone.now()
-        else:
-            user_notification.read_at = None
-        user_notification.save()
-        bust_unread_notification_cache(request.user.id, team_slug=team_slug)
+        toggle_notification_read(
+            user=request.user, user_notification=user_notification, read=not user_notification.read
+        )
 
         # Return the updated filtered table
         return render_table_row(request, UserNotificationTable, user_notification)
