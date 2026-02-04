@@ -29,18 +29,13 @@ export async function copyTextToClipboard (callee, text) {
 }
 
 /**
- * Extract page context information for the chat widget.
- * Returns an object with URL, title, team, section, and breadcrumbs.
+ * Extract client-side page context information for the chat widget.
+ * Returns an object with URL, title, hash, and breadcrumbs.
  */
-export function getPageContext() {
+export function getClientPageContext() {
   const path = window.location.pathname;
   const hash = window.location.hash;
   const title = document.title;
-
-  // Extract team and section from URL pattern: /a/{team}/{section}/...
-  const urlMatch = path.match(/^\/a\/([^/]+)(?:\/([^/]+))?/);
-  const team = urlMatch ? urlMatch[1] : null;
-  const section = urlMatch ? urlMatch[2] : null;
 
   // Extract breadcrumb text from nav elements
   const breadcrumbs = [];
@@ -58,8 +53,6 @@ export function getPageContext() {
   const context = {
     url: path,
     title: title,
-    team: team,
-    section: section,
     breadcrumbs: breadcrumbs
   };
 
@@ -72,10 +65,20 @@ export function getPageContext() {
 
 /**
  * Initialize page context on the chat widget element.
+ * @param {Object} serverContext - Context passed from Django template
+ * @param {string|null} serverContext.team - Team slug
+ * @param {string|null} serverContext.activeTab - Current active tab/section
+ * @param {Array} serverContext.messages - Django messages [{text, level}]
  */
-export function initChatWidgetPageContext() {
+export function initChatWidgetPageContext(serverContext = {}) {
   const widget = document.querySelector('open-chat-studio-widget');
   if (widget) {
-    widget.pageContext = getPageContext();
+    const clientContext = getClientPageContext();
+    widget.pageContext = {
+      ...clientContext,
+      team: serverContext.team || null,
+      activeTab: serverContext.activeTab || null,
+      messages: serverContext.messages || []
+    };
   }
 }

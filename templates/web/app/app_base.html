@@ -42,7 +42,15 @@
     </open-chat-studio-widget>
     <script>
       document.addEventListener('DOMContentLoaded', function() {
-        SiteJS.app.initChatWidgetPageContext();
+        SiteJS.app.initChatWidgetPageContext({
+          team: {% if request.team %}"{{ request.team.slug }}"{% else %}null{% endif %},
+          activeTab: {% if active_tab %}"{{ active_tab }}"{% else %}null{% endif %},
+          messages: [
+            {% for message in messages %}
+              { text: "{{ message.message|escapejs }}", level: "{{ message.tags }}" }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+          ]
+        });
       });
     </script>
   {% endif %}
