@@ -293,7 +293,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
                 ended_at=None,
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
-            .exclude(platform=ChannelPlatform.EVALUATIONS)
+            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
             .annotate(
                 last_human_message_created_at=Subquery(last_human_message_created_at),
                 success_count=Subquery(success_count_for_last_message),
