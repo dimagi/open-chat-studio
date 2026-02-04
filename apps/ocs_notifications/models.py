@@ -15,7 +15,7 @@ class Notification(BaseTeamModel):
     level = models.PositiveSmallIntegerField(choices=LevelChoices.choices, db_index=True)
     users = models.ManyToManyField("users.CustomUser", through="UserNotification", related_name="notifications")
     last_event_at = models.DateTimeField()
-    identifier = models.CharField(blank=True)
+    identifier = models.CharField()
 
     class Meta:
         constraints = [
