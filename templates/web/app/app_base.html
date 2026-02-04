@@ -48,7 +48,7 @@
         pageTitle: {% if page_title %}"{{ page_title|escapejs }}"{% else %}null{% endif %},
         messages: [
           {% for message in messages %}
-            { text: "{{ message.message|escapejs }}", level: "{{ message.tags }}" }{% if not forloop.last %},{% endif %}
+            { text: "{{ message.message|escapejs }}", level: "{{ message.tags|escapejs }}" }{% if not forloop.last %},{% endif %}
           {% endfor %}
         ]
       });
