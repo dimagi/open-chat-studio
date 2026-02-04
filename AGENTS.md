@@ -9,7 +9,7 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 ## Core Concepts
 
 * Team: Multi-tenancy root; most resources scoped to a team
-* Experiment: Versioned chat app with participants, channels, and configuration (user facing name: Chatbot)
+* Experiment: Versioned chat app with participants, channels, and configuration (user-facing name: Chatbot)
 * Channel: Platform integration (Telegram, WhatsApp, Slack, API, web widget)
 * Pipeline: DAG workflow (LLM nodes, routing, custom actions) executed during chat (core Chatbot functionality)
 * Session/Chat: Participant conversation with message history

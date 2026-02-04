@@ -15,5 +15,5 @@ class MyModelManager(AuditingManager):
 @audit_fields("field_a", "field_b", audit_special_queryset_writes=True)
 class MyModel(BaseTeamModel):
     # Define audit fields in model_audit_fields.py
-    objets = MyModelManager()
+    objects = MyModelManager()
 ```

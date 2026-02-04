@@ -1,6 +1,6 @@
 # Versioning System
 
-This project includes a data custom versioning system to allow users to version their chatbots.
+This project includes a custom data versioning system to allow users to version their chatbots.
 
 The main entry point for this is `apps.experiments.Experiment.create_new_version`.
 

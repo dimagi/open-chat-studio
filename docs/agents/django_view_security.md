@@ -18,6 +18,6 @@ def my_view(request, team_slug: str):
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from django.contrib.auth.mixins import PermissionRequiredMixin
 
-class MyView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class MyView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "my_app.view_mymodel"
 ```
