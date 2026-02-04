@@ -71,6 +71,7 @@ class UserNotificationPreferences(BaseTeamModel):
 
     class Meta:
         verbose_name_plural = "User Notification Preferences"
+        unique_together = ("user", "team")
 
     def __str__(self):
         return f"Notification preferences for {self.user}"
