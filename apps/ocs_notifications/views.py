@@ -1,4 +1,3 @@
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
@@ -11,13 +10,14 @@ from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
 from apps.ocs_notifications.models import UserNotification
 from apps.ocs_notifications.tables import UserNotificationTable
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 from .utils import bust_unread_notification_cache
 
 
-class NotificationHome(LoginRequiredMixin, TemplateView):
+class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
 
     def get_context_data(self, **kwargs):
@@ -52,7 +52,7 @@ class NotificationHome(LoginRequiredMixin, TemplateView):
         return context
 
 
-class UserNotificationTableView(LoginRequiredMixin, SingleTableView):
+class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
     model = UserNotification
     table_class = UserNotificationTable
     template_name = "table/single_table.html"
@@ -70,7 +70,7 @@ class UserNotificationTableView(LoginRequiredMixin, SingleTableView):
         return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
 
 
-class ToggleNotificationReadView(LoginRequiredMixin, View):
+class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
         user_notification = get_object_or_404(
             UserNotification,
