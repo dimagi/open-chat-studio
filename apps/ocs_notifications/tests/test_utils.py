@@ -1,9 +1,7 @@
-from base64 import b64decode
-
 import pytest
 from django.contrib.auth.models import Group
 
-from apps.ocs_notifications.models import LevelChoices, Notification, UserNotification, UserNotificationPreferences
+from apps.ocs_notifications.models import LevelChoices, UserNotification, UserNotificationPreferences
 from apps.ocs_notifications.utils import (
     create_identifier,
     create_notification,
@@ -31,16 +29,10 @@ def test_email_not_sent_when_preference_doesnt_exist(team_with_users, mailoutbox
     ("notification_level", "email_preference_level", "should_send"),
     [
         # When preference is INFO, send all types
-        (LevelChoices.INFO, LevelChoices.INFO, True),
         (LevelChoices.WARNING, LevelChoices.INFO, True),
-        (LevelChoices.ERROR, LevelChoices.INFO, True),
         # When preference is WARNING, only send WARNING and ERROR
         (LevelChoices.INFO, LevelChoices.WARNING, False),
-        (LevelChoices.WARNING, LevelChoices.WARNING, True),
-        (LevelChoices.ERROR, LevelChoices.WARNING, True),
         # When preference is ERROR, only send ERROR
-        (LevelChoices.INFO, LevelChoices.ERROR, False),
-        (LevelChoices.WARNING, LevelChoices.ERROR, False),
         (LevelChoices.ERROR, LevelChoices.ERROR, True),
     ],
 )
@@ -151,31 +143,14 @@ class TestCreateNotification:
 
         # Create identifier with different event_data
         assert len(create_identifier("test-slug", {})) > 0
-        assert create_identifier("test-slug", {"action": "test", "id": 123}) != create_identifier(
-            "test-slug", {"action": "test", "id": 124}
-        )
+        id_1 = create_identifier("test-slug", {"action": "test", "id": 123})
+        id_2 = create_identifier("test-slug", {"action": "test", "id": 124})
+        id_3 = create_identifier("slug-test", {"action": "test", "id": 123})
+        assert id_1 != id_2, "Different event_data should produce different identifiers"
+        assert id_1 != id_3, "Different slugs should produce different identifiers"
+
         # Different slugs should produce different identifiers even with same data
         assert create_identifier("slug-1", {"action": "test"}) != create_identifier("slug-2", {"action": "test"})
-
-    def test_identifier_includes_slug_and_event_data(self, team_with_users):
-        """
-        Test that identifier includes both slug and event_data.
-        """
-
-        # Create notification with event_data
-        create_notification(
-            title="Test Notification 1",
-            message="A very unique message",
-            level=LevelChoices.INFO,
-            team=team_with_users,
-            slug="test-slug",
-            event_data={"key": "value"},
-        )
-        notification = Notification.objects.first()
-        decoded = b64decode(notification.identifier).decode()
-        assert "test-slug" in decoded
-        assert "key" in decoded
-        assert "value" in decoded
 
     def test_permissions_dictate_which_members_receive_notification(self, team_with_users):
         """

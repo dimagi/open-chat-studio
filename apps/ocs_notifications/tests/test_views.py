@@ -35,9 +35,6 @@ class TestToggleNotificationReadView:
 
         # Login user and set team in session
         client.force_login(user)
-        session = client.session
-        session["team"] = team_with_users.id
-        session.save()
 
         # Step 1: Verify initial state is read=False
         user_notification.refresh_from_db()
