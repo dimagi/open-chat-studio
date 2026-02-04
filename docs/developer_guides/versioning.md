@@ -86,4 +86,4 @@ An object can only be archived if neither its working version nor any of its oth
 If the object is in use, the user should be informed of the specific usages and prompted to archive those related objects first. For reference, see the behavior when attempting to archive an `OpenAiAssistant`.
 
 
-[user-docs]: https://docs.openchatstudio.com/concepts/versioning/#terms
+[user-docs]: https://docs.openchatstudio.com/concepts/versioning/
