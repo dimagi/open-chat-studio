@@ -3,9 +3,6 @@
   {% if experiment.debug_mode_enabled %}
     <div class="flex gap-2 items-center">
       {% include "experiments/chat/components/trace_icons.html" with trace_infos=message.trace_info %}
-      {% if message.get_safety_layer_tag_name %}
-        <div class="badge badge-sm badge-error">Safety Layer '{{ message.get_safety_layer_tag_name }}' Triggered</div>
-      {% endif %}
       {% if experiment.debug_mode_enabled and message.get_processor_bot_tag_name %}
         <div class="badge badge-sm badge-warning">Routed to {{ message.get_processor_bot_tag_name }}</div>
       {% endif %}

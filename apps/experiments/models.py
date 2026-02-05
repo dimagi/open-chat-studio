@@ -254,7 +254,7 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)
     prompt_text = models.TextField()
     messages_to_review = models.CharField(
-        choices=ChatMessageType.safety_layer_choices,
+        choices=[(ChatMessageType.HUMAN, "Human messages"), (ChatMessageType.AI, "AI messages")],
         default=ChatMessageType.HUMAN,
         help_text="Whether the prompt should be applied to human or AI messages",
         max_length=10,
@@ -646,7 +646,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot. "
         "E.g. 'Safe or unsafe? {input}'",
     )
-    safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
 
     source_material = models.ForeignKey(
         SourceMaterial,
@@ -692,14 +691,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             "If enabled, the consent form will be sent at the start of a conversation for external channels. Note: "
             "This requires the experiment to have a seed message."
         ),
-    )
-    safety_violation_notification_emails = ArrayField(
-        models.CharField(max_length=512),
-        default=list,
-        verbose_name="Safety violation notification emails",
-        help_text="Email addresses to notify when the safety bot detects a violation. Separate addresses with a comma.",
-        null=True,
-        blank=True,
     )
     voice_response_behaviour = models.CharField(
         max_length=10,
@@ -987,7 +978,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             # not supported for copying
             self._copy_routes_to_new_version(new_version)
 
-        self._copy_safety_layers_to_new_version(new_version, is_copy)
         self._copy_trigger_to_new_version(
             trigger_queryset=self.static_triggers, new_version=new_version, is_copy=is_copy
         )
@@ -1059,15 +1049,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             setattr(new_version, attr_name, latest_attr_version)
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
-
-    def _copy_safety_layers_to_new_version(self, new_version: Experiment, is_copy: bool = False):
-        if is_copy:
-            new_version.safety_layers.set(self.safety_layers.all())
-        else:
-            duplicated_layers = []
-            for layer in self.safety_layers.all():
-                duplicated_layers.append(layer.create_new_version())
-            new_version.safety_layers.set(duplicated_layers)
 
     def _copy_routes_to_new_version(self, new_version: Experiment):
         """
@@ -1169,16 +1150,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     ),
                     VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
                     VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
-                    VersionField(
-                        group_name="Safety",
-                        name="safety_layers",
-                        queryset=self.safety_layers,
-                    ),
-                    VersionField(
-                        group_name="Safety",
-                        name="safety_violation_emails",
-                        raw_value=", ".join(self.safety_violation_notification_emails),
-                    ),
                     VersionField(
                         group_name="Safety",
                         name="input_formatter",

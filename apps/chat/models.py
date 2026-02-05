@@ -6,7 +6,6 @@ from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.functional import classproperty
 from langchain_core.messages import BaseMessage, messages_from_dict
 
 from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCommentsMixin
@@ -88,14 +87,6 @@ class ChatMessageType(models.TextChoices):
     HUMAN = "human", "Human"
     AI = "ai", "AI"
     SYSTEM = "system", "System"
-
-    @classproperty
-    def safety_layer_choices(cls):
-        return (
-            (choice[0], f"{choice[1]} messages")
-            for choice in ChatMessageType.choices
-            if choice[0] != ChatMessageType.SYSTEM
-        )
 
     @staticmethod
     def from_role(role: str):
@@ -289,11 +280,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         if self.message_type != ChatMessageType.AI:
             return
         if tag := self.tags.filter(category=TagCategories.BOT_RESPONSE).first():
-            return tag.name
-
-    def get_safety_layer_tag_name(self) -> str | None:
-        """Returns the name of the safety layer tag, if there is one"""
-        if tag := self.tags.filter(category=TagCategories.SAFETY_LAYER_RESPONSE).first():
             return tag.name
 
     def get_absolute_url(self):
