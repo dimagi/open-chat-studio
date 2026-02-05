@@ -2,24 +2,19 @@ name: Claude Incremental Worker
 
 on:
   schedule:
-    # Run daily at 2am UTC
-    - cron: '0 2 * * *'
+    - cron: '0 2 * * *'  # Daily at 2am UTC
   workflow_dispatch:
     inputs:
       issue_number:
         description: 'Specific issue number to work on (optional)'
         required: false
-        type: number
-
-env:
-  LABEL_NAME: claude-incremental
+        type: string
 
 jobs:
-  # Check if there's already an open PR from a previous run
   check-pending-pr:
     runs-on: ubuntu-latest
     outputs:
-      has_pending_pr: ${{ steps.check.outputs.has_pending_pr }}
+      has_open_pr: ${{ steps.check.outputs.has_open_pr }}
       pr_number: ${{ steps.check.outputs.pr_number }}
     steps:
       - name: Check for open PRs with label
@@ -27,205 +22,130 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_NUMBER=$(gh pr list \
-            --repo "${{ github.repository }}" \
-            --label "${{ env.LABEL_NAME }}" \
-            --state open \
-            --json number \
-            --jq '.[0].number // empty')
-
-          if [ -n "$PR_NUMBER" ]; then
-            echo "has_pending_pr=true" >> "$GITHUB_OUTPUT"
-            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-            echo "Found open PR #$PR_NUMBER with label ${{ env.LABEL_NAME }}"
+          PR=$(gh pr list --repo ${{ github.repository }} --label "claude-incremental" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$PR" ]; then
+            echo "has_open_pr=true" >> $GITHUB_OUTPUT
+            echo "pr_number=$PR" >> $GITHUB_OUTPUT
+            echo "::notice::Waiting for PR #$PR to be reviewed"
           else
-            echo "has_pending_pr=false" >> "$GITHUB_OUTPUT"
-            echo "No open PRs with label ${{ env.LABEL_NAME }}"
+            echo "has_open_pr=false" >> $GITHUB_OUTPUT
           fi
 
-  # Find the next task to work on
   find-work:
     needs: check-pending-pr
-    if: needs.check-pending-pr.outputs.has_pending_pr != 'true'
+    if: needs.check-pending-pr.outputs.has_open_pr != 'true'
     runs-on: ubuntu-latest
     outputs:
-      has_work: ${{ steps.find-task.outputs.has_work }}
-      issue_number: ${{ steps.find-task.outputs.issue_number }}
-      task_text: ${{ steps.find-task.outputs.task_text }}
-      task_index: ${{ steps.find-task.outputs.task_index }}
-      branch_name: ${{ steps.find-task.outputs.branch_name }}
-      goal: ${{ steps.find-task.outputs.goal }}
-      context: ${{ steps.find-task.outputs.context }}
-      learnings: ${{ steps.find-task.outputs.learnings }}
+      issue_number: ${{ steps.find.outputs.issue_number }}
+      issue_body: ${{ steps.find.outputs.issue_body }}
+      issue_title: ${{ steps.find.outputs.issue_title }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Find labeled issue
-        id: find-issue
+      - name: Find oldest labeled issue in progress
+        id: find
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Use specific issue if provided via workflow_dispatch
+          # Use specific issue if provided, otherwise find oldest in "In Progress" status
           if [ -n "${{ inputs.issue_number }}" ]; then
             ISSUE_NUMBER="${{ inputs.issue_number }}"
-            echo "Using specified issue #$ISSUE_NUMBER"
           else
-            # Find oldest open issue with label
-            ISSUE_NUMBER=$(gh issue list \
-              --repo "${{ github.repository }}" \
-              --label "${{ env.LABEL_NAME }}" \
-              --state open \
-              --json number,createdAt \
-              --jq 'sort_by(.createdAt) | .[0].number // empty')
+            # Query the GitHub Project to find issues with claude-incremental label
+            # that are in "In Progress" status
+            # Project: https://github.com/orgs/dimagi/projects/3
+            QUERY='
+            query($org: String!, $projectNumber: Int!) {
+              organization(login: $org) {
+                projectV2(number: $projectNumber) {
+                  items(first: 100) {
+                    nodes {
+                      fieldValueByName(name: "Status") {
+                        ... on ProjectV2ItemFieldSingleSelectValue {
+                          name
+                        }
+                      }
+                      content {
+                        ... on Issue {
+                          number
+                          state
+                          createdAt
+                          labels(first: 10) {
+                            nodes {
+                              name
+                            }
+                          }
+                          repository {
+                            nameWithOwner
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }'
+
+            RESULT=$(gh api graphql -f query="$QUERY" -f org="dimagi" -F projectNumber=3)
+
+            # Find the oldest issue that:
+            # 1. Is in this repository
+            # 2. Has the claude-incremental label
+            # 3. Is in "In Progress" status
+            # 4. Is open
+            ISSUE_NUMBER=$(echo "$RESULT" | jq -r '
+              .data.organization.projectV2.items.nodes
+              | map(select(
+                  .content.repository.nameWithOwner == "${{ github.repository }}"
+                  and .content.state == "OPEN"
+                  and .fieldValueByName.name == "In Progress"
+                  and (.content.labels.nodes | map(.name) | contains(["claude-incremental"]))
+                ))
+              | sort_by(.content.createdAt)
+              | .[0].content.number // empty
+            ')
           fi
 
           if [ -z "$ISSUE_NUMBER" ]; then
-            echo "No issues found with label ${{ env.LABEL_NAME }}"
-            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No active projects found (no issues with claude-incremental label in 'In Progress' status)"
             exit 0
           fi
 
-          echo "found=true" >> "$GITHUB_OUTPUT"
-          echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "Found issue #$ISSUE_NUMBER"
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
 
-          # Fetch issue body
-          gh issue view "$ISSUE_NUMBER" \
-            --repo "${{ github.repository }}" \
-            --json body \
-            --jq '.body' > issue_body.txt
+          # Fetch issue details
+          ISSUE_DATA=$(gh issue view "$ISSUE_NUMBER" --repo ${{ github.repository }} --json title,body)
+          ISSUE_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title')
+          ISSUE_BODY=$(echo "$ISSUE_DATA" | jq -r '.body')
 
-      - name: Find next task
-        id: find-task
-        if: steps.find-issue.outputs.found == 'true'
-        run: |
-          ISSUE_NUMBER="${{ steps.find-issue.outputs.issue_number }}"
+          echo "issue_title<<EOF" >> $GITHUB_OUTPUT
+          echo "$ISSUE_TITLE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-          # Run find-next-task.js
-          RESULT=$(node scripts/claude-incremental/find-next-task.js \
-            --issue-number "$ISSUE_NUMBER" \
-            issue_body.txt 2>&1) || true
+          echo "issue_body<<EOF" >> $GITHUB_OUTPUT
+          echo "$ISSUE_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-          echo "Parse result: $RESULT"
-
-          # Check if task was found
-          FOUND=$(echo "$RESULT" | jq -r '.found // false')
-
-          if [ "$FOUND" != "true" ]; then
-            REASON=$(echo "$RESULT" | jq -r '.reason // "unknown"')
-            echo "No task found. Reason: $REASON"
-            echo "has_work=false" >> "$GITHUB_OUTPUT"
-            echo "reason=$REASON" >> "$GITHUB_OUTPUT"
-
-            # If all complete, we might want to close the issue
-            if [ "$REASON" = "all_complete" ]; then
-              echo "All tasks complete - issue should be closed"
-            fi
-            exit 0
-          fi
-
-          # Extract task details
-          TASK_TEXT=$(echo "$RESULT" | jq -r '.task.text')
-          TASK_INDEX=$(echo "$RESULT" | jq -r '.index')
-          BRANCH_NAME=$(echo "$RESULT" | jq -r '.branchName')
-          GOAL=$(echo "$RESULT" | jq -r '.goal // ""')
-          CONTEXT=$(echo "$RESULT" | jq -r '.context // ""')
-          LEARNINGS=$(echo "$RESULT" | jq -r '.learnings // ""')
-
-          echo "Found task: $TASK_TEXT"
-          echo "Branch: $BRANCH_NAME"
-
-          echo "has_work=true" >> "$GITHUB_OUTPUT"
-          echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "task_index=$TASK_INDEX" >> "$GITHUB_OUTPUT"
-          echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
-
-          # Use delimiters for multiline outputs
-          {
-            echo "task_text<<EOF"
-            echo "$TASK_TEXT"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-          {
-            echo "goal<<EOF"
-            echo "$GOAL"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-          {
-            echo "context<<EOF"
-            echo "$CONTEXT"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-          {
-            echo "learnings<<EOF"
-            echo "$LEARNINGS"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-  # Execute the task with Claude
   execute:
     needs: find-work
-    if: needs.find-work.outputs.has_work == 'true'
+    if: needs.find-work.outputs.issue_number != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       issues: write
       id-token: write
-    outputs:
-      success: ${{ steps.claude.outputs.success }}
-      learnings: ${{ steps.claude.outputs.learnings }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create branch
+        id: branch
         run: |
-          git checkout -b "${{ needs.find-work.outputs.branch_name }}"
-
-      - name: Build Claude prompt
-        id: prompt
-        run: |
-          cat << 'PROMPT_EOF' > claude_prompt.txt
-          You are working on an incremental project tracked in issue #${{ needs.find-work.outputs.issue_number }}.
-
-          ## Project Goal
-          ${{ needs.find-work.outputs.goal }}
-
-          ## Your Task
-          ${{ needs.find-work.outputs.task_text }}
-
-          ## Context & Learnings from Previous Runs
-          ${{ needs.find-work.outputs.context }}
-
-          ${{ needs.find-work.outputs.learnings }}
-
-          ## Instructions
-          1. Implement the task described above
-          2. Run lint and fix any issues:
-             - Python: ruff check --fix && ruff format
-             - JS/TS: npm run lint (if applicable)
-          3. Run targeted tests related to your changes
-          4. If tests/lint fail, attempt to fix. Only give up if truly stuck.
-          5. If you discover patterns or gotchas for future tasks, note them in your response under "LEARNINGS:"
-          6. Keep changes focused - only modify what's necessary for this task
-
-          If you cannot complete the task after trying, explain why clearly under "BLOCKED:"
-          PROMPT_EOF
-
-          echo "Prompt built successfully"
+          BRANCH_NAME="claude-incremental/${{ needs.find-work.outputs.issue_number }}-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH_NAME"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
       - name: Run Claude Code
         id: claude
@@ -233,123 +153,76 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            $(cat claude_prompt.txt)
-          claude_args: |
-            --allowedTools "Bash(ruff:*),Bash(npm run lint:*),Bash(npm run type-check:*),Bash(pytest:*),Bash(git add:*),Bash(git status:*),Bash(git diff:*),Read,Write,Edit,Glob,Grep"
+            You are working on an incremental project tracked in issue #${{ needs.find-work.outputs.issue_number }}.
 
-      - name: Check for changes
-        id: changes
+            ## Issue Title
+            ${{ needs.find-work.outputs.issue_title }}
+
+            ## Issue Content
+            ${{ needs.find-work.outputs.issue_body }}
+
+            ## Instructions
+            1. Read the issue and identify the first unchecked task (- [ ]) that is not marked as blocked
+            2. Implement that task
+            3. Run lint and tests, fix any issues:
+               - Python: ruff check --fix && ruff format
+               - JS/TS: npm run lint
+            4. After completing the task, update the issue using gh issue edit to:
+               - Check off the completed task (change - [ ] to - [x])
+               - Add any learnings to the ## Learnings section (create if needed)
+            5. If you cannot complete the task, mark it as blocked (add "blocked:" prefix to the task)
+            6. Add a comment to the issue summarizing what you did
+
+            If all tasks are complete or blocked, comment on the issue explaining the status.
+          allowed_tools: |
+            Bash(npm run lint:*),Bash(npm run type-check:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Read,Write,Edit
+
+      - name: Push changes
         run: |
           if [ -n "$(git status --porcelain)" ]; then
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            git push -u origin ${{ steps.branch.outputs.branch_name }}
           fi
 
-      - name: Commit and push changes
-        if: steps.changes.outputs.has_changes == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "claude-incremental: ${{ needs.find-work.outputs.task_text }}
-
-          Task from issue #${{ needs.find-work.outputs.issue_number }}
-
-          Co-Authored-By: Claude <noreply@anthropic.com>"
-          git push -u origin "${{ needs.find-work.outputs.branch_name }}"
-
-  # Create PR and update tracking issue
   create-pr:
     needs: [find-work, execute]
-    if: needs.find-work.outputs.has_work == 'true'
+    if: needs.find-work.outputs.issue_number != ''
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
-      issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Check if branch exists
-        id: check-branch
+      - name: Check for changes and create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if git ls-remote --heads origin "${{ needs.find-work.outputs.branch_name }}" | grep -q "${{ needs.find-work.outputs.branch_name }}"; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Branch does not exist - no changes were made"
+          # Find the branch created in the execute step
+          BRANCH=$(git branch -r --list "origin/claude-incremental/${{ needs.find-work.outputs.issue_number }}-*" | head -1 | sed 's/origin\///' | xargs)
+
+          if [ -z "$BRANCH" ]; then
+            echo "::notice::No branch found, no changes were made"
+            exit 0
           fi
 
-      - name: Create Pull Request
-        id: create-pr
-        if: steps.check-branch.outputs.exists == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_URL=$(gh pr create \
-            --repo "${{ github.repository }}" \
-            --head "${{ needs.find-work.outputs.branch_name }}" \
-            --base main \
-            --title "claude-incremental: ${{ needs.find-work.outputs.task_text }}" \
-            --label "${{ env.LABEL_NAME }}" \
-            --body "$(cat <<'EOF'
-          ## Summary
-          Automated incremental work from tracking issue #${{ needs.find-work.outputs.issue_number }}.
+          # Check if PR already exists for this branch
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING_PR" ]; then
+            echo "::notice::PR #$EXISTING_PR already exists for branch $BRANCH"
+            exit 0
+          fi
 
-          **Task:** ${{ needs.find-work.outputs.task_text }}
+          # Create PR
+          gh pr create \
+            --title "Claude Incremental: Progress on #${{ needs.find-work.outputs.issue_number }}" \
+            --body "Automated progress on tracking issue #${{ needs.find-work.outputs.issue_number }}.
 
-          ## Tracking Issue
-          Closes task in #${{ needs.find-work.outputs.issue_number }}
+            See the issue for task details and learnings.
 
-          ---
-          *This PR was created automatically by the Claude Incremental Worker.*
-          EOF
-          )")
-
-          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
-          echo "Created PR: $PR_URL"
-
-      - name: Update tracking issue
-        if: steps.check-branch.outputs.exists == 'true' && steps.create-pr.outputs.pr_url != ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Fetch issue body
-          gh issue view "${{ needs.find-work.outputs.issue_number }}" \
-            --repo "${{ github.repository }}" \
-            --json body \
-            --jq '.body' > issue_body.txt
-
-          node scripts/claude-incremental/update-issue.js \
-            --owner "${{ github.repository_owner }}" \
-            --repo "${{ github.event.repository.name }}" \
-            --issue "${{ needs.find-work.outputs.issue_number }}" \
-            --task-index "${{ needs.find-work.outputs.task_index }}" \
-            --action complete \
-            --pr-url "${{ steps.create-pr.outputs.pr_url }}" \
-            --comment "Completed task: ${{ needs.find-work.outputs.task_text }}"
-
-      - name: Comment on issue if no changes
-        if: steps.check-branch.outputs.exists != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh issue comment "${{ needs.find-work.outputs.issue_number }}" \
-            --repo "${{ github.repository }}" \
-            --body "Attempted task: **${{ needs.find-work.outputs.task_text }}**
-
-          No changes were made. This could mean:
-          - The task was already complete
-          - Claude couldn't determine what changes to make
-          - The task needs clarification
-
-          Please review and either clarify the task or mark it as blocked."
+            ---
+            *Created by Claude Incremental Worker*" \
+            --head "$BRANCH" \
+            --label "claude-incremental" || echo "::warning::Failed to create PR"
