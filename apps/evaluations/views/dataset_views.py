@@ -49,7 +49,7 @@ from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.tables import render_table_row
+from apps.utils.tables import render_first_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
@@ -309,6 +309,7 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["highlight_message_id"] = self.get_highlight_message_id()
+        kwargs["dataset_id"] = self.kwargs["dataset_id"]
         return kwargs
 
 
@@ -340,7 +341,7 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
         table_view.kwargs = {"dataset_id": dataset_id}
 
         queryset = table_view.get_queryset()
-        table = table_view.table_class(queryset)
+        table = table_view.table_class(queryset, dataset_id=dataset_id, request=request)
 
         return render(request, "table/single_table.html", {"table": table})
 
@@ -410,7 +411,8 @@ def update_message(request, team_slug, message_id):
 
     dataset = message.evaluationdataset_set.first()
     if dataset:
-        response = render_table_row(request, DatasetMessagesTable, message)
+        table = DatasetMessagesTable(data=[message], dataset_id=dataset.id, request=request)
+        response = render_first_table_row(request, table)
         # Change target to the table row for successful updates
         response = retarget(response, f"#record-{message_id}")
         response = reswap(response, "outerHTML")
