@@ -174,66 +174,18 @@ jobs:
 
             ## Instructions
             1. Read the issue and identify the first unchecked task (- [ ]) that is not marked as blocked
-            2. Implement that task
+            2. Implement that task, making git commits as you go
             3. Run lint and tests, fix any issues:
                - Python: ruff check --fix && ruff format
                - JS/TS: npm run lint
-            4. After completing the task, update the issue using gh issue edit to:
+            4. Push the changes you've made to GitHub and create a PR.
+            5. After completing the task, update the issue using gh issue edit to:
                - Check off the completed task (change - [ ] to - [x])
                - Add any learnings to the ## Learnings section (create if needed)
             5. If you cannot complete the task, mark it as blocked (add "blocked:" prefix to the task)
             6. Add a comment to the issue summarizing what you did
 
             If all tasks are complete or blocked, comment on the issue explaining the status.
-          allowed_tools: |
-            Bash(npm run lint:*),Bash(npm run type-check:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Read,Write,Edit
-
-      - name: Push changes
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git push -u origin ${{ steps.branch.outputs.branch_name }}
-          fi
-
-  create-pr:
-    needs: [find-work, execute]
-    if: needs.find-work.outputs.issue_number != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check for changes and create PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Find the branch created in the execute step (use tail to get newest by timestamp)
-          BRANCH=$(git branch -r --list "origin/claude-incremental/${{ needs.find-work.outputs.issue_number }}-*" | tail -1 | sed 's/origin\///' | xargs)
-
-          if [ -z "$BRANCH" ]; then
-            echo "::notice::No branch found, no changes were made"
-            exit 0
-          fi
-
-          # Check if PR already exists for this branch
-          EXISTING_PR=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number // empty')
-          if [ -n "$EXISTING_PR" ]; then
-            echo "::notice::PR #$EXISTING_PR already exists for branch $BRANCH"
-            exit 0
-          fi
-
-          # Create PR - let failures propagate so workflow fails and alerts maintainers
-          gh pr create \
-            --title "Claude Incremental: Progress on #${{ needs.find-work.outputs.issue_number }}" \
-            --body "Automated progress on tracking issue #${{ needs.find-work.outputs.issue_number }}.
-
-            See the issue for task details and learnings.
-
-            ---
-            *Created by Claude Incremental Worker*" \
-            --head "$BRANCH" \
-            --label "claude-incremental"
+          claude_args: |
+            claude_args: |
+            --allowedTools Bash(npm run lint:*),Bash(npm run type-check:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Read,Write,Edit
