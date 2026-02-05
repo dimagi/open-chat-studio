@@ -52,6 +52,7 @@ from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
+from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
     AssistantChat,
@@ -147,7 +148,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
     def _process(self, state: PipelineState) -> PipelineState:
-        llm = self.get_chat_model()
+        llm = with_llm_retry(self.get_chat_model())
         output = llm.invoke(state["last_node_input"], config=self._config)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
 
