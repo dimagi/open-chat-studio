@@ -33,7 +33,7 @@ Expected Context Variables:
 {% endblock breadcrumbs %}
 
 {% block app %}
-  {# djlint:off H025 #}<div class="max-w-4xl mx-auto" id="endpoint-tester">{# djlint:on H025 #}
+  <div class="max-w-4xl mx-auto" id="endpoint-tester">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-3xl font-bold">Test Endpoints</h1>
     </div>
@@ -225,62 +225,63 @@ Expected Context Variables:
                             </button>
                           </div>
 
-                        <!-- Fullscreen View Toggle -->
-                        <template x-if="getOperationState('{{ operation.operation_id }}').response.is_json">
-                          <div class="flex gap-2 p-4 border-b border-base-300">
-                            <button type="button"
-                                    class="btn btn-xs"
-                                    :class="getOperationState('{{ operation.operation_id }}').viewAs === 'json' ? 'btn-active' : 'btn-ghost'"
-                                    @click="getOperationState('{{ operation.operation_id }}').viewAs = 'json'">
-                              JSON
-                            </button>
-                            <template x-if="isUniformList">
+                          <!-- Fullscreen View Toggle -->
+                          <template x-if="getOperationState('{{ operation.operation_id }}').response.is_json">
+                            <div class="flex gap-2 p-4 border-b border-base-300">
                               <button type="button"
                                       class="btn btn-xs"
-                                      :class="getOperationState('{{ operation.operation_id }}').viewAs === 'table' ? 'btn-active' : 'btn-ghost'"
-                                      @click="getOperationState('{{ operation.operation_id }}').viewAs = 'table'">
-                                Table
+                                      :class="getOperationState('{{ operation.operation_id }}').viewAs === 'json' ? 'btn-active' : 'btn-ghost'"
+                                      @click="getOperationState('{{ operation.operation_id }}').viewAs = 'json'">
+                                JSON
                               </button>
-                            </template>
-                          </div>
-                        </template>
-
-                        <div class="flex-1 overflow-auto p-4">
-                          <!-- Fullscreen JSON View -->
-                          <template x-if="getOperationState('{{ operation.operation_id }}').viewAs === 'json'">
-                            <div class="bg-base-300 rounded p-4 font-mono text-sm h-full overflow-auto">
-                              <pre x-text="formatJsonResponse(getOperationState('{{ operation.operation_id }}').response.body)"></pre>
+                              <template x-if="isUniformList">
+                                <button type="button"
+                                        class="btn btn-xs"
+                                        :class="getOperationState('{{ operation.operation_id }}').viewAs === 'table' ? 'btn-active' : 'btn-ghost'"
+                                        @click="getOperationState('{{ operation.operation_id }}').viewAs = 'table'">
+                                  Table
+                                </button>
+                              </template>
                             </div>
                           </template>
 
-                          <!-- Fullscreen Table View -->
-                          <template x-if="getOperationState('{{ operation.operation_id }}').viewAs === 'table'">
-                            <div class="overflow-auto h-full">
-                              <table class="table table-sm table-zebra w-full">
-                                <thead>
-                                  <tr>
-                                    <template x-for="key in responseKeys"
-                                              :key="key">
-                                      <th x-text="key"></th>
-                                    </template>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  <template x-for="(row, index) in getOperationState('{{ operation.operation_id }}').response.body"
-                                            :key="index">
+                          <div class="flex-1 overflow-auto p-4">
+                            <!-- Fullscreen JSON View -->
+                            <template x-if="getOperationState('{{ operation.operation_id }}').viewAs === 'json'">
+                              <div class="bg-base-300 rounded p-4 font-mono text-sm h-full overflow-auto">
+                                <pre x-text="formatJsonResponse(getOperationState('{{ operation.operation_id }}').response.body)"></pre>
+                              </div>
+                            </template>
+
+                            <!-- Fullscreen Table View -->
+                            <template x-if="getOperationState('{{ operation.operation_id }}').viewAs === 'table'">
+                              <div class="overflow-auto h-full">
+                                <table class="table table-sm table-zebra w-full">
+                                  <thead>
                                     <tr>
                                       <template x-for="key in responseKeys"
                                                 :key="key">
-                                        <td>
-                                          <span x-text="formatTableCell(row[key])"></span>
-                                        </td>
+                                        <th x-text="key"></th>
                                       </template>
                                     </tr>
-                                  </template>
-                                </tbody>
-                              </table>
-                            </div>
-                          </template>
+                                  </thead>
+                                  <tbody>
+                                    <template x-for="(row, index) in getOperationState('{{ operation.operation_id }}').response.body"
+                                              :key="index">
+                                      <tr>
+                                        <template x-for="key in responseKeys"
+                                                  :key="key">
+                                          <td>
+                                            <span x-text="formatTableCell(row[key])"></span>
+                                          </td>
+                                        </template>
+                                      </tr>
+                                    </template>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </template>
+                          </div>
                         </div>
                       </div>
                     </template>
@@ -290,9 +291,11 @@ Expected Context Variables:
 
               <!-- Error Section -->
               <template x-if="getOperationState('{{ operation.operation_id }}').error">
-                <div class="divider my-2"></div>
-                <div class="alert alert-error">
-                  <span x-text="getOperationState('{{ operation.operation_id }}').error"></span>
+                <div>
+                  <div class="divider my-2"></div>
+                  <div class="alert alert-error">
+                    <span x-text="getOperationState('{{ operation.operation_id }}').error"></span>
+                  </div>
                 </div>
               </template>
             </div>
