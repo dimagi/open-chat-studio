@@ -226,7 +226,7 @@ jobs:
             exit 0
           fi
 
-          # Create PR
+          # Create PR - let failures propagate so workflow fails and alerts maintainers
           gh pr create \
             --title "Claude Incremental: Progress on #${{ needs.find-work.outputs.issue_number }}" \
             --body "Automated progress on tracking issue #${{ needs.find-work.outputs.issue_number }}.
@@ -236,4 +236,4 @@ jobs:
             ---
             *Created by Claude Incremental Worker*" \
             --head "$BRANCH" \
-            --label "claude-incremental" || echo "::warning::Failed to create PR"
+            --label "claude-incremental"
