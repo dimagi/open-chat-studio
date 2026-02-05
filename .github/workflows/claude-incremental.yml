@@ -10,6 +10,17 @@ on:
         required: false
         type: string
 
+# Prevent concurrent runs to avoid duplicate PRs
+concurrency:
+  group: claude-incremental
+  cancel-in-progress: false
+
+# Restrict default permissions - jobs override as needed
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
 jobs:
   check-pending-pr:
     runs-on: ubuntu-latest
@@ -200,8 +211,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Find the branch created in the execute step
-          BRANCH=$(git branch -r --list "origin/claude-incremental/${{ needs.find-work.outputs.issue_number }}-*" | head -1 | sed 's/origin\///' | xargs)
+          # Find the branch created in the execute step (use tail to get newest by timestamp)
+          BRANCH=$(git branch -r --list "origin/claude-incremental/${{ needs.find-work.outputs.issue_number }}-*" | tail -1 | sed 's/origin\///' | xargs)
 
           if [ -z "$BRANCH" ]; then
             echo "::notice::No branch found, no changes were made"
