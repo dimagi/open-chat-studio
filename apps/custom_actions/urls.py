@@ -15,3 +15,19 @@ urlpatterns.append(
         name="check_health",
     )
 )
+
+urlpatterns.append(
+    path(
+        "<int:pk>/test-endpoints/",
+        views.CustomActionEndpointTester.as_view(),
+        name="test_endpoints",
+    )
+)
+
+urlpatterns.append(
+    path(
+        "<int:pk>/test-endpoint/",
+        views.TestCustomActionEndpoint.as_view(),
+        name="test_endpoint",
+    )
+)
