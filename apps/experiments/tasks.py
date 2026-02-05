@@ -13,6 +13,7 @@ from apps.chat.channels import WebChannel
 from apps.experiments.export import filtered_export_to_csv, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.files.models import File
+from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
@@ -125,6 +126,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
     source_material_material = source_material.material if source_material else ""
 
     llm = llm_service.get_chat_model(llm_provider_model.name, temperature=float(data_dict["temperature"]))
+    llm = with_llm_retry(llm)
     conversation = create_conversation(data_dict["prompt"], source_material_material, llm)
     conversation.load_memory_from_messages(_convert_prompt_builder_history(messages_history))
     input_formatter = data_dict["inputFormatter"]
