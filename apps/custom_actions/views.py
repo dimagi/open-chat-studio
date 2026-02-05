@@ -11,7 +11,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.custom_actions.forms import CustomActionForm
-from apps.custom_actions.models import CustomAction
+from apps.custom_actions.models import CustomAction, HealthCheckStatus
 from apps.custom_actions.tables import CustomActionTable
 from apps.custom_actions.tasks import check_single_custom_action_health
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -217,6 +217,14 @@ class TestCustomActionEndpoint(LoginAndTeamRequiredMixin, PermissionRequiredMixi
             except (json.JSONDecodeError, ValueError):
                 response_json = response.text
                 is_json = False
+
+                # Update health status if this was a health endpoint and server was down but is healthy now
+            is_health_endpoint = operation.path == custom_action.healthcheck_path
+            server_was_down_previously = custom_action.health_status == HealthCheckStatus.DOWN
+            server_is_healthy_now = response.status_code >= 200 and response.status_code < 300
+            if is_health_endpoint and server_was_down_previously and server_is_healthy_now:
+                custom_action.health_status = HealthCheckStatus.UP
+                custom_action.save(update_fields=["health_status"])
 
             return JsonResponse(
                 {
