@@ -1,9 +1,11 @@
 from copy import deepcopy
+from typing import Any
 
 from django.core.exceptions import ValidationError
 from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
-from pydantic import BaseModel
+from openapi_pydantic import DataType
+from pydantic import BaseModel, Field
 
 
 def get_standalone_schema_for_action_operation(action_operation):
@@ -90,11 +92,22 @@ def resolve_references(openapi_spec: dict) -> dict:
     return resolve_ref(deepcopy(openapi_spec), "")
 
 
+class ParameterDetail(BaseModel):
+    """Represents a single parameter in an API operation."""
+
+    name: str
+    description: str | None = None
+    required: bool = False
+    schema_type: str = Field(default="string")
+    default: Any = None
+
+
 class APIOperationDetails(BaseModel):
     operation_id: str
     description: str
     path: str
     method: str
+    parameters: list[ParameterDetail] = []
 
     def __str__(self):
         return f"{self.method.upper()}: {self.description}"
@@ -102,15 +115,55 @@ class APIOperationDetails(BaseModel):
 
 def get_operations_from_spec_dict(spec_dict) -> list[APIOperationDetails]:
     spec = OpenAPISpec.from_spec_dict(spec_dict)
-    return get_operations_from_spec(spec)
+    return get_operations_from_spec(spec, spec_dict)
 
 
-def get_operations_from_spec(spec) -> list[APIOperationDetails]:
+def get_operations_from_spec(spec, spec_dict=None) -> list[APIOperationDetails]:
     operations = []
     for path in spec.paths:
         for method in spec.get_methods_for_path(path):
             op = APIOperation.from_openapi_spec(spec, path, method)
             operations.append(
-                APIOperationDetails(operation_id=op.operation_id, description=op.description, path=path, method=method)
+                APIOperationDetails(
+                    operation_id=op.operation_id,
+                    description=op.description,
+                    path=path,
+                    method=method,
+                    parameters=_extract_parameters(op, spec_dict, path, method),
+                )
             )
     return operations
+
+
+def _extract_parameters(
+    operation: APIOperation, spec_dict=None, path: str = "", method: str = ""
+) -> list[ParameterDetail]:
+    """Extract parameter details from OpenAPI spec.
+
+    Extracts both query/path parameters and request body parameters.
+    """
+    parameters = []
+    for property in operation.properties:
+        parameters.append(
+            ParameterDetail(
+                name=property.name,
+                required=property.required,
+                schema_type=property.type,
+                description=property.description,
+                default=property.default,
+            )
+        )
+
+    # Extract request body parameters
+    if operation.request_body:
+        for param in operation.request_body.properties:
+            params = param.dict()
+            if isinstance(param.type, DataType):
+                params["schema_type"] = param.type.value
+                # UGLY HACK! DataType.Array is converted into a string like "Array<DataType.STRING>"
+                # See langchain_community/tools/openapi/utils/api_models.py:315
+            elif param.type.startswith("Array<"):
+                params["schema_type"] = DataType.ARRAY.value
+            parameters.append(ParameterDetail.model_validate(params))
+
+    return parameters
