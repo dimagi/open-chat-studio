@@ -220,7 +220,8 @@ jobs:
             3. Run lint and tests, fix any issues:
                - Python: ruff check --fix && ruff format
                - JS/TS: npm run lint
-            4. Push the changes you've made to GitHub and create a PR.
+               - Python test: pytest path/to/file.py -v
+            4. Push the changes you've made to GitHub and create a PR with the 'claude-incremental' label.
             5. After completing the task, update the issue using gh issue edit to:
                - Check off the completed task (change - [ ] to - [x])
                - Add any learnings to the ## Learnings section (create if needed)
