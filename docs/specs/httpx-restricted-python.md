@@ -223,7 +223,8 @@ via Django settings for per-deployment tuning.
 | Per-request timeout | 5 seconds | `RESTRICTED_HTTP_DEFAULT_TIMEOUT` | Keeps sandbox execution bounded. |
 | Maximum per-request timeout | 30 seconds | `RESTRICTED_HTTP_MAX_TIMEOUT` | User can raise timeout but not unboundedly. |
 | Max response body size | 1 MB (1,048,576 bytes) | `RESTRICTED_HTTP_MAX_RESPONSE_BYTES` | Prevents memory exhaustion. |
-| Max request body size | 512 KB (524,288 bytes) | `RESTRICTED_HTTP_MAX_REQUEST_BYTES` | Prevents abuse of outbound bandwidth. |
+| Max request body size | 512 KB (524,288 bytes) | `RESTRICTED_HTTP_MAX_REQUEST_BYTES` | Prevents abuse via `json` / `data` bodies. |
+| Max file upload size | 25 MB (26,214,400 bytes) | `RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES` | Allows real-world file uploads (Excel, PDF). See Addendum A. |
 
 **Enforcement:**
 
@@ -234,8 +235,11 @@ via Django settings for per-deployment tuning.
 - **Response size:** Use `httpx`'s streaming interface. Read the response in chunks, tracking
   cumulative size. If it exceeds the limit, abort the read and raise
   `HttpResponseTooLarge`.
-- **Request body size:** Check `len(data)` or `len(json.dumps(json_body))` before sending.
-  Raise `HttpRequestTooLarge` if exceeded.
+- **Request body size (`json` / `data`):** Check `len(data)` or `len(json.dumps(json_body))`
+  before sending. Raise `HttpRequestTooLarge` if it exceeds `MAX_REQUEST_BYTES`.
+- **File upload size (`files`):** Governed by the separate `MAX_FILE_UPLOAD_BYTES` limit.
+  Total file content is checked using `Attachment.size` (no read required) or `len(bytes)`
+  for raw byte values. Raise `HttpRequestTooLarge` if total exceeds the limit.
 
 ### 5. Retries with Backoff
 
@@ -471,23 +475,29 @@ This maps to httpx's `client.post(url, data=data, files=files)`.
 
 ### Size Limits
 
-File upload bodies are subject to the same `RESTRICTED_HTTP_MAX_REQUEST_BYTES` limit (default
-512 KB). The wrapper computes the total size before sending:
+File uploads have a **separate, higher limit** than regular `json`/`data` bodies because the
+primary use case involves real-world documents (Excel files, PDFs) that routinely reach tens
+of megabytes.
 
-- For each file entry: the byte length of the file content.
-- For `data` fields (when used with `files`): the serialized form field sizes.
-- If the combined size exceeds the limit, `HttpRequestTooLarge` is raised **before** the
-  request is sent, avoiding unnecessary network traffic.
+| Limit | Default | Setting Key |
+|-------|---------|-------------|
+| Regular body (`json`/`data`) | 512 KB | `RESTRICTED_HTTP_MAX_REQUEST_BYTES` |
+| File uploads (`files`) | 25 MB | `RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES` |
 
-The `Attachment.size` attribute can be checked by user code before calling `read_bytes()` to
-avoid loading large files into memory only to hit the limit:
+**Enforcement:**
 
-```python
-attachment = get_temp_state_key("attachments")[0]
-if attachment.size > 500_000:
-    return "File too large to upload"
-response = http.post("https://api.example.com/upload", files={"file": attachment}, auth="My API")
-```
+The wrapper checks total file size **before** reading file content, using the `Attachment.size`
+attribute (populated from `File.content_size` in the database) to avoid loading large files
+into memory only to reject them:
+
+- For `Attachment` objects: use `attachment.size` (no I/O).
+- For `(name, bytes, content_type)` tuples: use `len(bytes)`.
+- For raw `bytes` values: use `len(bytes)`.
+- Sum across all file entries; raise `HttpRequestTooLarge` if total exceeds
+  `MAX_FILE_UPLOAD_BYTES`.
+
+The `data` fields accompanying a file upload are not counted toward the file limit — they
+remain subject to `MAX_REQUEST_BYTES` individually.
 
 ### End-to-End Example
 
@@ -513,17 +523,59 @@ def main(input, **kwargs):
     return f"Uploaded {attachment.name}: {response['json']['document_id']}"
 ```
 
+### Streaming Large Files
+
+Loading a 25 MB Excel file entirely into memory via `attachment.read_bytes()` before passing
+it to httpx is wasteful and creates unnecessary memory pressure. Instead, the wrapper should
+stream file content directly from Django's storage backend.
+
+**Approach:**
+
+When the file entry is an `Attachment` object, the wrapper opens the underlying Django
+`FieldFile` as a file-like object and passes it directly to httpx, which accepts file-like
+objects in the files tuple:
+
+```python
+def _resolve_file_entry(self, field_name, value):
+    """Convert a files dict value into an httpx-compatible tuple."""
+    if isinstance(value, Attachment):
+        file_obj = value._file  # apps.files.models.File instance
+        if not file_obj:
+            raise HttpError(f"Attachment '{value.name}' (id={value.file_id}) not found")
+        # Open the Django FieldFile — returns a file-like object backed by storage
+        fh = file_obj.file.open("rb")
+        return (value.name, fh, value.content_type)
+    elif isinstance(value, tuple):
+        return value  # already (name, data, content_type)
+    elif isinstance(value, bytes):
+        return (field_name, value, "application/octet-stream")
+    else:
+        raise ValueError(f"Unsupported file value type: {type(value).__name__}")
+```
+
+httpx's multipart encoder reads from the file-like object in chunks, so memory usage stays
+bounded regardless of file size. The wrapper ensures all opened file handles are closed after
+the request completes (via a try/finally block or context manager).
+
+**When streaming is not possible:**
+
+For `(name, bytes, content_type)` tuples and raw `bytes` values, the data is already in
+memory. This is fine for small files but means users who construct tuples manually are
+responsible for the memory cost. The size limit still applies.
+
 ### Implementation Notes
 
-- The wrapper resolves `Attachment` → `(name, bytes, content_type)` tuples **inside**
-  `RestrictedHttpClient`, not in user code. This keeps the API simple and avoids exposing
-  `Attachment` internals to `httpx`.
-- `Attachment.read_bytes()` performs a DB lookup + file read (via `File.objects.get` and
-  Django's `FieldFile.read`). This happens synchronously, which is acceptable since the
-  sandbox is already synchronous.
-- The `_file` cached property on `Attachment` is accessed internally by `read_bytes()`. The
+- The wrapper resolves `Attachment` → httpx file tuples **inside** `RestrictedHttpClient`,
+  not in user code. This keeps the API simple and avoids exposing `Attachment` internals to
+  `httpx`.
+- The `_file` cached property on `Attachment` is accessed internally by the wrapper. The
   RestrictedPython `_write_` guard does not block this because the access happens inside the
   wrapper, not in user-authored code within the sandbox's `exec` scope.
+- For `Attachment` objects, the wrapper uses `attachment.size` (from DB, no I/O) for limit
+  checks, then opens the storage-backed `FieldFile` for streaming — avoiding a full
+  `read_bytes()` into memory.
+- Files backed by cloud storage (S3, GCS) are streamed through Django's storage layer, which
+  handles the download transparently.
 
 ### Tests
 
@@ -535,7 +587,9 @@ def main(input, **kwargs):
 | Multiple files | `files=[("f", att1), ("f", att2)]` sends multipart with two file parts |
 | Mixed form + files | `data={"key": "val"}, files={"file": att}` sends both in multipart |
 | `files` + `json` conflict | Raises `ValueError` |
-| Size limit | Total file content exceeding `MAX_REQUEST_BYTES` raises `HttpRequestTooLarge` |
+| File size limit | Total file content exceeding `MAX_FILE_UPLOAD_BYTES` raises `HttpRequestTooLarge` |
+| Streaming | `Attachment` file content is streamed from storage, not loaded via `read_bytes()` |
+| File handle cleanup | Opened `FieldFile` handles are closed after request completes |
 | Attachment read failure | `Attachment` with missing `File` record returns empty bytes; request proceeds or raises depending on API |
 
 ---

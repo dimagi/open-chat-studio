@@ -34,6 +34,7 @@ Critically, users should not need to hard-code API keys or tokens in their Pytho
   ```
 - [ ] Define exception hierarchy: `HttpError` → `HttpRequestLimitExceeded`, `HttpRequestTooLarge`, `HttpResponseTooLarge`, `HttpConnectionError`, `HttpTimeoutError`, `HttpInvalidURL`, `HttpAuthProviderError`
 - [ ] Support `files` parameter on `post`/`put`/`patch` for multipart file uploads (accepts `Attachment` objects, tuples, or raw bytes)
+- [ ] Stream `Attachment` file content from Django storage (via `FieldFile.open`) instead of loading into memory with `read_bytes()`
 
 #### Phase 2: AuthProvider integration
 - [ ] Accept `auth` parameter (string name) on all HTTP verb methods
@@ -59,9 +60,11 @@ Critically, users should not need to hard-code API keys or tokens in their Pytho
   | `RESTRICTED_HTTP_DEFAULT_TIMEOUT` | 5s |
   | `RESTRICTED_HTTP_MAX_TIMEOUT` | 30s |
   | `RESTRICTED_HTTP_MAX_RESPONSE_BYTES` | 1 MB |
-  | `RESTRICTED_HTTP_MAX_REQUEST_BYTES` | 512 KB |
+  | `RESTRICTED_HTTP_MAX_REQUEST_BYTES` | 512 KB (json/data bodies) |
+  | `RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES` | 25 MB (file uploads) |
 
 - [ ] Per-execution request counter, timeout clamping, streamed response size check, request body size check
+- [ ] File upload size checked via `Attachment.size` (no I/O) before streaming; separate limit from json/data bodies
 
 #### Phase 5: Retries with backoff
 - [ ] `tenacity`-based retry (consistent with `AuthService`): 3 attempts, exponential backoff with jitter (1s base, 10s max)
@@ -83,7 +86,7 @@ Critically, users should not need to hard-code API keys or tokens in their Pytho
 - [ ] **Sandbox integration tests:** `http` available in CodeNode, opt-in for PythonEvaluator
 - [ ] **Error translation tests:** each `HttpError` subclass surfaces correctly in `get_code_error_message`
 - [ ] **End-to-end tests:** CodeNode execution with mocked HTTP (via `respx` or `httpx.MockTransport`) including auth provider round-trip
-- [ ] **File upload tests:** `Attachment` shorthand, explicit tuples, raw bytes, multiple files, mixed form+files, `files`+`json` conflict, size limit enforcement
+- [ ] **File upload tests:** `Attachment` shorthand, explicit tuples, raw bytes, multiple files, mixed form+files, `files`+`json` conflict, file size limit (25 MB) vs body size limit (512 KB), streaming from storage, file handle cleanup
 
 ---
 
