@@ -1,6 +1,8 @@
 import logging
 import pathlib
+import textwrap
 
+from anthropic import BaseModel
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -485,3 +487,36 @@ def chat_poll_response(request, session_id):
     session_status = "ended" if session.is_complete else "active"
     response_data = {"messages": messages, "has_more": has_more, "session_status": session_status}
     return Response(ChatPollResponse(response_data).data, status=status.HTTP_200_OK)
+
+
+class ProgressMessagesSchema(BaseModel):
+    messages: list[str]
+
+
+def get_progress_messages(chatbot_name, chatbot_description):
+    from apps.help.agent import build_system_agent
+
+    prompt = textwrap.dedent("""
+        You will be generating progress update messages that are displayed to users while they wait for a
+        chatbot to respond. These messages should keep users engaged and informed during the wait time.
+           
+        Here are the guidelines for creating effective progress messages:
+        
+        - Keep messages SHORT - aim for 2-4 words maximum
+        - Use an encouraging, friendly, and slightly playful tone
+        - Messages should feel dynamic and suggest active work is happening
+        - Vary the style and wording across different messages
+        - Focus on the process (e.g., "thinking", "analyzing", "processing") rather than making promises about results
+        - Avoid technical jargon or overly complex language
+        - Don't make specific claims about what the answer will contain
+        - Don't apologize for wait times or sound negative
+        
+        Generate message options that could be rotated or randomly displayed to users.
+        Each message should feel fresh and distinct from the others.
+        """).strip()
+    agent = build_system_agent("low", prompt, response_format=ProgressMessagesSchema)
+    message = f"Please generate 10 progress messages for this chatbot:\nName: '{chatbot_name}'"
+    if chatbot_description:
+        message += f"\nDescription: '{chatbot_description}'"
+    result = agent.invoke({"messages": [{"role": "user", "content": message}]})
+    return result["structured_response"].messages
