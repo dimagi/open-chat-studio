@@ -60,7 +60,7 @@ jobs:
           if [ -n "${{ inputs.issue_number }}" ]; then
             ISSUE_NUMBER="${{ inputs.issue_number }}"
           else
-            ISSUE_NUMBER=$(gh issue list --repo ${{ github.repository }} --label "claude-incremental" --state open --sort created --json number --jq '.[0].number // empty')
+            ISSUE_NUMBER=$(gh issue list --repo ${{ github.repository }} --label "claude-incremental" --state open --json number,createdAt --jq 'sort_by(.createdAt) | .[0].number // empty')
           fi
 
           if [ -z "$ISSUE_NUMBER" ]; then
