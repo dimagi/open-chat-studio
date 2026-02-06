@@ -6,7 +6,6 @@ from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.functional import classproperty
 from langchain_core.messages import BaseMessage, messages_from_dict
 
 from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCommentsMixin
