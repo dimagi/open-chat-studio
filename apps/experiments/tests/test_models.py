@@ -16,7 +16,6 @@ from apps.experiments.models import (
     Experiment,
     ExperimentRoute,
     ExperimentSession,
-    SafetyLayer,
     SyntheticVoice,
 )
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
@@ -536,22 +535,6 @@ class TestExperimentSession:
 
 
 @pytest.mark.django_db()
-class TestSafetyLayerVersioning:
-    def test_create_new_safety_layer_version(self):
-        original = SafetyLayer.objects.create(
-            prompt_text="Is this message safe?", team=TeamFactory(), prompt_to_bot="Unsafe reply"
-        )
-        new_version = original.create_new_version()
-        original.refresh_from_db()
-        assert original.working_version is None
-        assert new_version != original
-        assert new_version.working_version == original
-        assert new_version.prompt_text == original.prompt_text
-        assert new_version.prompt_to_bot == original.prompt_to_bot
-        assert new_version.team == original.team
-
-
-@pytest.mark.django_db()
 class TestSourceMaterialVersioning:
     def test_create_new_source_material_version(self):
         original = SourceMaterialFactory()
@@ -716,13 +699,6 @@ class TestExperimentModel:
         team = experiment.team
         experiment.consent_form = ConsentForm.get_default(team)
 
-        # Setup Safety Layers
-        layer1 = SafetyLayer.objects.create(
-            prompt_text="Is this message safe?", team=team, prompt_to_bot="Unsafe reply"
-        )
-        layer2 = SafetyLayer.objects.create(prompt_text="What about this one?", team=team, prompt_to_bot="Unsafe reply")
-        experiment.safety_layers.set([layer1, layer2])
-
         # Setup Source material
         experiment.source_material = SourceMaterialFactory(team=team, material="material science is interesting")
         experiment.save()
@@ -790,11 +766,9 @@ class TestExperimentModel:
                 "pre_survey",
                 "post_survey",
                 "version_description",
-                "safety_layers",
                 "pipeline",
             ],
         )
-        self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_routes_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
@@ -855,11 +829,6 @@ class TestExperimentModel:
         assert original_related_instance.versions.count() == 2
         assert experiment_version3.source_material != experiment_version2.source_material
         assert experiment_version3.source_material.working_version == original_experiment.source_material
-
-    def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
-        for layer in original_experiment.safety_layers.all():
-            assert layer.working_version is None
-            assert new_version.safety_layers.filter(working_version=layer).exists()
 
     def _assert_source_material_is_duplicated(self, original_experiment, new_version):
         assert new_version.source_material != original_experiment.source_material

@@ -1,7 +1,7 @@
 import pytest
 
 from apps.custom_actions.models import CustomActionOperation
-from apps.experiments.models import Experiment, SafetyLayer
+from apps.experiments.models import Experiment
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
 from apps.files.models import File
 from apps.utils.factories.custom_actions import CustomActionFactory
@@ -308,16 +308,9 @@ class TestCopyExperiment:
 
         static_trigger = StaticTriggerFactory(experiment=experiment)
         timeout_trigger = TimeoutTriggerFactory(experiment=experiment)
-        safety_layer = SafetyLayer.objects.create(
-            prompt_text="Is this message safe?", team=team, prompt_to_bot="Unsafe reply"
-        )
-        experiment.safety_layers.add(safety_layer)
 
         experiment_copy = experiment.create_new_version(is_copy=True)
         assert experiment_copy.source_material == source_material
-
-        assert experiment_copy.safety_layers.count() == 1
-        assert experiment_copy.safety_layers.first() == safety_layer
 
         assert experiment_copy.static_triggers.count() == 1
         static_trigger_copy = experiment_copy.static_triggers.first()

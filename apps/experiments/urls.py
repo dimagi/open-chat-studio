@@ -175,7 +175,6 @@ urlpatterns = [
     ),
 ]
 
-urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))
 urlpatterns.extend(make_crud_urls(views, "SourceMaterial", "source_material"))
 urlpatterns.extend(make_crud_urls(views, "Survey", "survey"))
 urlpatterns.extend(make_crud_urls(views, "ConsentForm", "consent"))
