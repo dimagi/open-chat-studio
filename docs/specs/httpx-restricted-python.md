@@ -66,9 +66,9 @@ The client exposes one method per HTTP verb, all with the same signature:
 
 ```python
 def get(url, *, params=None, headers=None, auth=None, timeout=None) -> dict
-def post(url, *, params=None, headers=None, auth=None, json=None, data=None, timeout=None) -> dict
-def put(url, *, params=None, headers=None, auth=None, json=None, data=None, timeout=None) -> dict
-def patch(url, *, params=None, headers=None, auth=None, json=None, data=None, timeout=None) -> dict
+def post(url, *, params=None, headers=None, auth=None, json=None, data=None, files=None, timeout=None) -> dict
+def put(url, *, params=None, headers=None, auth=None, json=None, data=None, files=None, timeout=None) -> dict
+def patch(url, *, params=None, headers=None, auth=None, json=None, data=None, files=None, timeout=None) -> dict
 def delete(url, *, params=None, headers=None, auth=None, timeout=None) -> dict
 ```
 
@@ -80,8 +80,9 @@ def delete(url, *, params=None, headers=None, auth=None, timeout=None) -> dict
 | `params` | `dict \| None` | Query string parameters. |
 | `headers` | `dict \| None` | Additional request headers. Certain headers are blocked (see Security). |
 | `auth` | `str \| None` | Name of a team-configured `AuthProvider` to use for this request (see section 3.5). |
-| `json` | `dict \| list \| None` | JSON-serializable request body. Sets `Content-Type: application/json`. |
-| `data` | `str \| bytes \| None` | Raw request body. Mutually exclusive with `json`. |
+| `json` | `dict \| list \| None` | JSON-serializable request body. Sets `Content-Type: application/json`. Mutually exclusive with `data` and `files`. |
+| `data` | `str \| bytes \| dict \| None` | Raw request body or form fields. When used with `files`, `data` provides the non-file form fields. Mutually exclusive with `json`. |
+| `files` | `dict \| None` | File uploads as multipart form data (see Addendum A). Mutually exclusive with `json`. |
 | `timeout` | `float \| None` | Per-request timeout in seconds. Clamped to `[1, MAX_TIMEOUT]`. Defaults to `DEFAULT_TIMEOUT`. |
 
 **Return value:**
@@ -393,6 +394,149 @@ Sensitive headers (`Authorization`, `X-Api-Key`, `Cookie`) are never logged.
   `await http.get(...)` variants.
 - **TOCTOU hardening:** Pin DNS resolution results and pass them to the httpx transport to
   eliminate the window between validation and connection.
+
+---
+
+## Addendum A: File Uploads from Pipeline Attachments
+
+### Motivation
+
+A key use case for the HTTP client is POSTing files received from chat participants to
+external APIs. In the pipeline, incoming message attachments are available in
+`pipeline_state["temp_state"]["attachments"]` as a list of
+`apps.channels.datamodels.Attachment` objects. Code nodes already access these via
+`get_temp_state_key("attachments")`.
+
+Users need a way to take an `Attachment` and send it as a multipart file upload without
+having to manually construct raw bytes or headers.
+
+### `Attachment` Recap
+
+The `Attachment` model (from `apps/channels/datamodels.py`) exposes:
+
+| Attribute / Method | Type | Description |
+|-------------------|------|-------------|
+| `name` | `str` | Original filename (e.g., `"report.pdf"`) |
+| `content_type` | `str` | MIME type (e.g., `"application/pdf"`) |
+| `size` | `int` | File size in bytes |
+| `read_bytes()` | `bytes` | Read the full file content |
+| `read_text()` | `str` | Read and decode as text |
+| `read_base64()` | `str` | Read and base64-encode |
+
+### The `files` Parameter
+
+The `post`, `put`, and `patch` methods accept an optional `files` parameter for
+`multipart/form-data` uploads. Its shape mirrors the `httpx` files convention, but also
+accepts `Attachment` objects directly for convenience.
+
+**Accepted formats:**
+
+```python
+# 1. Attachment object — name, content_type, and bytes are extracted automatically
+files = {"file": attachment}
+
+# 2. Explicit tuple: (filename, data, content_type)
+files = {"file": ("report.pdf", attachment.read_bytes(), "application/pdf")}
+
+# 3. Just bytes — filename defaults to the field name, content_type to application/octet-stream
+files = {"file": b"raw bytes"}
+
+# 4. Multiple files using a list of tuples
+files = [("files", attachment1), ("files", attachment2)]
+```
+
+When an `Attachment` object is passed as a value (format 1), the wrapper calls
+`attachment.read_bytes()` internally and constructs the tuple
+`(attachment.name, attachment.read_bytes(), attachment.content_type)` before passing it to
+`httpx`.
+
+**Combining files with form fields:**
+
+The `data` parameter can be used alongside `files` to send non-file form fields in the same
+multipart request:
+
+```python
+files = {"document": attachment}
+data = {"description": "Monthly report", "category": "finance"}
+response = http.post("https://api.example.com/upload", files=files, data=data, auth="My API Key")
+```
+
+This maps to httpx's `client.post(url, data=data, files=files)`.
+
+**Mutual exclusivity:**
+
+- `files` and `json` are mutually exclusive (raise `ValueError` if both provided).
+- `files` and `data` may be used together (mixed multipart form).
+- `json` and `data` remain mutually exclusive.
+
+### Size Limits
+
+File upload bodies are subject to the same `RESTRICTED_HTTP_MAX_REQUEST_BYTES` limit (default
+512 KB). The wrapper computes the total size before sending:
+
+- For each file entry: the byte length of the file content.
+- For `data` fields (when used with `files`): the serialized form field sizes.
+- If the combined size exceeds the limit, `HttpRequestTooLarge` is raised **before** the
+  request is sent, avoiding unnecessary network traffic.
+
+The `Attachment.size` attribute can be checked by user code before calling `read_bytes()` to
+avoid loading large files into memory only to hit the limit:
+
+```python
+attachment = get_temp_state_key("attachments")[0]
+if attachment.size > 500_000:
+    return "File too large to upload"
+response = http.post("https://api.example.com/upload", files={"file": attachment}, auth="My API")
+```
+
+### End-to-End Example
+
+```python
+def main(input, **kwargs):
+    attachments = get_temp_state_key("attachments")
+    if not attachments:
+        return "No attachments found"
+
+    attachment = attachments[0]
+
+    # POST the file to an external API with auth
+    response = http.post(
+        "https://api.example.com/documents/upload",
+        auth="Document Service API Key",
+        files={"file": attachment},
+        data={"source": "chat", "participant": input},
+    )
+
+    if response["is_error"]:
+        return f"Upload failed: {response['status_code']} - {response['text']}"
+
+    return f"Uploaded {attachment.name}: {response['json']['document_id']}"
+```
+
+### Implementation Notes
+
+- The wrapper resolves `Attachment` → `(name, bytes, content_type)` tuples **inside**
+  `RestrictedHttpClient`, not in user code. This keeps the API simple and avoids exposing
+  `Attachment` internals to `httpx`.
+- `Attachment.read_bytes()` performs a DB lookup + file read (via `File.objects.get` and
+  Django's `FieldFile.read`). This happens synchronously, which is acceptable since the
+  sandbox is already synchronous.
+- The `_file` cached property on `Attachment` is accessed internally by `read_bytes()`. The
+  RestrictedPython `_write_` guard does not block this because the access happens inside the
+  wrapper, not in user-authored code within the sandbox's `exec` scope.
+
+### Tests
+
+| Test case | Description |
+|-----------|-------------|
+| Attachment shorthand | `files={"file": attachment}` extracts name, bytes, content_type correctly |
+| Explicit tuple | `files={"file": ("name", b"data", "type")}` passes through unchanged |
+| Raw bytes | `files={"file": b"data"}` uses field name as filename |
+| Multiple files | `files=[("f", att1), ("f", att2)]` sends multipart with two file parts |
+| Mixed form + files | `data={"key": "val"}, files={"file": att}` sends both in multipart |
+| `files` + `json` conflict | Raises `ValueError` |
+| Size limit | Total file content exceeding `MAX_REQUEST_BYTES` raises `HttpRequestTooLarge` |
+| Attachment read failure | `Attachment` with missing `File` record returns empty bytes; request proceeds or raises depending on API |
 
 ---
 

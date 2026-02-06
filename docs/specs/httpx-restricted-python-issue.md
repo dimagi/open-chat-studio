@@ -33,6 +33,7 @@ Critically, users should not need to hard-code API keys or tokens in their Pytho
   {"status_code": 200, "headers": {...}, "text": "...", "json": {...}, "is_success": True, "is_error": False}
   ```
 - [ ] Define exception hierarchy: `HttpError` → `HttpRequestLimitExceeded`, `HttpRequestTooLarge`, `HttpResponseTooLarge`, `HttpConnectionError`, `HttpTimeoutError`, `HttpInvalidURL`, `HttpAuthProviderError`
+- [ ] Support `files` parameter on `post`/`put`/`patch` for multipart file uploads (accepts `Attachment` objects, tuples, or raw bytes)
 
 #### Phase 2: AuthProvider integration
 - [ ] Accept `auth` parameter (string name) on all HTTP verb methods
@@ -82,26 +83,42 @@ Critically, users should not need to hard-code API keys or tokens in their Pytho
 - [ ] **Sandbox integration tests:** `http` available in CodeNode, opt-in for PythonEvaluator
 - [ ] **Error translation tests:** each `HttpError` subclass surfaces correctly in `get_code_error_message`
 - [ ] **End-to-end tests:** CodeNode execution with mocked HTTP (via `respx` or `httpx.MockTransport`) including auth provider round-trip
+- [ ] **File upload tests:** `Attachment` shorthand, explicit tuples, raw bytes, multiple files, mixed form+files, `files`+`json` conflict, size limit enforcement
 
 ---
 
-### User-facing API example
+### User-facing API examples
 
+**JSON request with auth:**
 ```python
 def main(input, **kwargs):
-    # Anonymous request
-    resp = http.get("https://api.example.com/public")
-
-    # Authenticated request using a team-configured auth provider
     resp = http.post(
         "https://api.example.com/data",
         auth="My API Key",
         json={"query": input},
     )
-
     if resp["is_error"]:
         return f"Error: {resp['status_code']}"
     return resp["json"]["result"]
+```
+
+**File upload from pipeline attachment:**
+```python
+def main(input, **kwargs):
+    attachments = get_temp_state_key("attachments")
+    if not attachments:
+        return "No attachments"
+
+    attachment = attachments[0]
+    resp = http.post(
+        "https://api.example.com/documents/upload",
+        auth="Document Service",
+        files={"file": attachment},
+        data={"source": "chat", "participant": input},
+    )
+    if resp["is_error"]:
+        return f"Upload failed: {resp['status_code']}"
+    return f"Uploaded: {resp['json']['document_id']}"
 ```
 
 ### Future considerations (out of scope)
