@@ -1,3 +1,4 @@
+import uuid
 from unittest import mock
 
 import pytest
@@ -7,6 +8,8 @@ from rest_framework.test import APIClient
 from apps.chat.models import ChatMessage
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
+
+TEST_SESSION_ID = str(uuid.uuid4())
 
 
 @pytest.fixture()
@@ -57,3 +60,63 @@ def test_chat_poll_task_response_with_file_attachments(api_client, session, mock
     assert len(attachments) == 1
     assert attachments[0]["name"] == test_file.name
     assert attachments[0]["content_url"].endswith(f"/api/files/{test_file.id}/content")
+
+
+@pytest.fixture()
+def mock_session():
+    """Mock session lookup to avoid DB fixture issues."""
+    mock_sess = mock.Mock()
+    mock_sess.experiment.name = "TestBot"
+    mock_sess.experiment.description = "A test bot"
+    mock_sess.experiment.is_public = True
+    with (
+        mock.patch("apps.api.views.chat.get_experiment_session_cached", return_value=mock_sess),
+        mock.patch("apps.api.permissions.get_experiment_session_cached", return_value=mock_sess),
+    ):
+        yield mock_sess
+
+
+@pytest.mark.django_db()
+def test_chat_poll_task_response_empty_dict(api_client, mock_session, mock_task_response):
+    """When get_message_task_response returns {} (skip_render), respond with processing status."""
+    mock_task_response.return_value = {}
+
+    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": "test-task-1"})
+    response = api_client.get(url)
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "processing"}
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.api.views.chat.get_progress_message")
+def test_chat_poll_task_response_processing_with_progress(mock_progress, api_client, mock_session, mock_task_response):
+    """When task is still processing, include progress message if available."""
+    mock_task_response.return_value = {"complete": False, "error_msg": None, "message": None}
+    mock_progress.return_value = "Thinking..."
+
+    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": "test-task-2"})
+    response = api_client.get(url)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "processing"
+    assert data["message"] == "Thinking..."
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.api.views.chat.get_progress_message")
+def test_chat_poll_task_response_processing_without_progress(
+    mock_progress, api_client, mock_session, mock_task_response
+):
+    """When task is processing and progress message generation fails, omit message from response."""
+    mock_task_response.return_value = {"complete": False, "error_msg": None, "message": None}
+    mock_progress.return_value = None
+
+    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": "test-task-3"})
+    response = api_client.get(url)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "processing"
+    assert "message" not in data

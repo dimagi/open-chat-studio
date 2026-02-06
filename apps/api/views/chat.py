@@ -1,15 +1,14 @@
 import hashlib
 import logging
 import pathlib
-import textwrap
 
-from anthropic import BaseModel
 from django.conf import settings
 from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, inline_serializer
+from pydantic import BaseModel
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
@@ -411,6 +410,9 @@ def chat_poll_task_response(request, session_id, task_id):
 
     experiment = session.experiment
     task_details = get_message_task_response(experiment, task_id)
+    if not task_details:
+        return Response({"status": "processing"}, status=status.HTTP_200_OK)
+
     if not task_details["complete"]:
         message = get_progress_message(experiment.name, experiment.description)
         data = {"message": message, "status": "processing"}
@@ -494,7 +496,7 @@ def chat_poll_response(request, session_id):
 
 
 def get_progress_message(chatbot_name, chatbot_description) -> str | None:
-    """Get the next progress message. This will generate new messages if there are no more messages"""
+    """Get the next progress message. This will generate new messages if there are no more messages."""
     key_hash = hashlib.sha1(f"{chatbot_name}:{chatbot_description}".encode())
     key = f"progress_messages:{key_hash.hexdigest()}"
     messages = cache.get(key)
@@ -519,27 +521,33 @@ class ProgressMessagesSchema(BaseModel):
 def get_progress_messages(chatbot_name, chatbot_description) -> list[str]:
     from apps.help.agent import build_system_agent
 
-    prompt = textwrap.dedent("""
-        You will be generating progress update messages that are displayed to users while they wait for a
-        chatbot to respond. These messages should keep users engaged and informed during the wait time.
-           
-        Here are the guidelines for creating effective progress messages:
-        
-        - Keep messages SHORT - aim for 2-4 words maximum
-        - Use an encouraging, friendly, and slightly playful tone
-        - Messages should feel dynamic and suggest active work is happening
-        - Vary the style and wording across different messages
-        - Focus on the process (e.g., "thinking", "analyzing", "processing") rather than making promises about results
-        - Avoid technical jargon or overly complex language
-        - Don't make specific claims about what the answer will contain
-        - Don't apologize for wait times or sound negative
-        
-        Generate message options that could be rotated or randomly displayed to users.
-        Each message should feel fresh and distinct from the others.
-        """).strip()
-    agent = build_system_agent("low", prompt, response_format=ProgressMessagesSchema)
-    message = f"Please generate 30 progress messages for this chatbot:\nName: '{chatbot_name}'"
-    if chatbot_description:
-        message += f"\nDescription: '{chatbot_description}'"
-    result = agent.invoke({"messages": [{"role": "user", "content": message}]})
-    return result["structured_response"].messages
+    try:
+        agent = build_system_agent("low", PROGRESS_MESSAGE_PROMPT, response_format=ProgressMessagesSchema)
+        message = f"Please generate 30 progress messages for this chatbot:\nName: '{chatbot_name}'"
+        if chatbot_description:
+            message += f"\nDescription: '{chatbot_description}'"
+        result = agent.invoke({"messages": [{"role": "user", "content": message}]})
+        return result["structured_response"].messages
+    except Exception:
+        logger.exception("Failed to generate progress messages for chatbot '%s'", chatbot_name)
+        return []
+
+
+PROGRESS_MESSAGE_PROMPT = """\
+You will be generating progress update messages that are displayed to users while they \
+wait for a chatbot to respond. These messages should keep users engaged and informed \
+during the wait time.
+
+Here are the guidelines for creating effective progress messages:
+
+- Keep messages SHORT - aim for 2-4 words maximum
+- Use an encouraging, friendly, and slightly playful tone
+- Messages should feel dynamic and suggest active work is happening
+- Vary the style and wording across different messages
+- Focus on the process (e.g., "thinking", "analyzing", "processing") rather than making promises about results
+- Avoid technical jargon or overly complex language
+- Don't make specific claims about what the answer will contain
+- Don't apologize for wait times or sound negative
+
+Generate message options that could be rotated or randomly displayed to users.
+Each message should feel fresh and distinct from the others."""
