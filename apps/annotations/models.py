@@ -22,6 +22,7 @@ logger = logging.getLogger("ocs.annotations")
 
 class TagCategories(models.TextChoices):
     BOT_RESPONSE = "bot_response", _("Bot Response")
+    SAFETY_LAYER_RESPONSE = "safety_layer_response", _("Safety Layer Response")
     EXPERIMENT_VERSION = "experiment_version", _("Experiment Version")
     RESPONSE_RATING = "response_rating", _("Response Rating")
     ERROR = "error", _("Error")
