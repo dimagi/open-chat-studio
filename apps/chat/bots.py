@@ -13,6 +13,8 @@ from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.ocs_notifications.models import LevelChoices
+from apps.ocs_notifications.utils import create_notification
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
@@ -139,7 +141,23 @@ class PipelineBot:
         )
         runnable = graph.build_runnable()
         runner = DjangoLangGraphRunner(DjangoSafeContextThreadPoolExecutor)
-        raw_output = runner.invoke(runnable, input_state, config)
+        try:
+            raw_output = runner.invoke(runnable, input_state, config)
+        except Exception as e:
+            # Notify experiment admins of pipeline execution failure, only for non-working versions
+            if not self.experiment.is_working_version:
+                create_notification(
+                    title=f"Pipeline execution failed for {self.experiment}",
+                    message=(
+                        "Generating a response to the user's message failed due to an error in the pipeline execution"
+                    ),
+                    level=LevelChoices.ERROR,
+                    team=self.team,
+                    slug="pipeline-execution-failed",
+                    event_data={"experiment_id": self.experiment.id, "error": str(e)},
+                    permissions=["experiments.change_experiment"],
+                )
+            raise
         output = PipelineState(**raw_output).json_safe()
         return output
 
