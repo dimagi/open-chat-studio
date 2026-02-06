@@ -6,7 +6,6 @@ EXPERIMENT_FIELDS = [
     "temperature",
     "prompt_text",
     "input_formatter",
-    # "safety_layers", # TODO: Safety layer is not json serializable. Why is this an issue now?
     "source_material",
     "seed_message",
     "pre_survey",
