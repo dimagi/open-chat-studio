@@ -20,6 +20,7 @@ permissions:
   contents: read
   issues: read
   pull-requests: read
+  project: read
 
 jobs:
   check-pending-pr:
