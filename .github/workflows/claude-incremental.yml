@@ -51,10 +51,19 @@ jobs:
       issue_body: ${{ steps.find.outputs.issue_body }}
       issue_title: ${{ steps.find.outputs.issue_title }}
     steps:
+      - name: Generate GitHub App token
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.OCS_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.OCS_AUTOMATION_PEM }}
+          owner: ${{ github.repository_owner }}
+
       - name: Find oldest labeled issue in progress
         id: find
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROJECT_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           # Use specific issue if provided, otherwise find oldest in "In Progress" status
           if [ -n "${{ inputs.issue_number }}" ]; then
@@ -63,6 +72,7 @@ jobs:
             # Query the GitHub Project to find issues with claude-incremental label
             # that are in "In Progress" status
             # Project: https://github.com/orgs/dimagi/projects/3
+            # Uses a GitHub App token since GITHUB_TOKEN cannot access org-level projects
             QUERY='
             query($org: String!, $projectNumber: Int!) {
               organization(login: $org) {
@@ -95,7 +105,7 @@ jobs:
               }
             }'
 
-            RESULT=$(gh api graphql -f query="$QUERY" -f org="dimagi" -F projectNumber=3)
+            RESULT=$(GH_TOKEN="$PROJECT_TOKEN" gh api graphql -f query="$QUERY" -f org="dimagi" -F projectNumber=3)
 
             # Find the oldest issue that:
             # 1. Is in this repository
