@@ -1,9 +1,11 @@
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pytest
 
+from apps.ocs_notifications.models import LevelChoices
 from apps.service_providers.tracing.base import TraceContext
-from apps.service_providers.tracing.ocs_tracer import OCSTracer
+from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
 from apps.trace.models import Span, Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
@@ -148,3 +150,42 @@ class TestOCSTracer:
         trace = Trace.objects.get(trace_id=trace_context.id)
         assert trace.status == "error"
         assert trace.error == error_message
+
+
+class TestOCSCallbackHandler:
+    @patch("apps.service_providers.tracing.ocs_tracer.Team.objects.get")
+    @patch("apps.service_providers.tracing.ocs_tracer.create_notification")
+    def test_on_llm_error_creates_notification(self, mock_create_notification, mock_get_team):
+        """Test that LLM error handler creates a notification."""
+        # Set up team mock
+        team = Mock()
+        team.id = 123
+        mock_get_team.return_value = team
+
+        # Set up tracer
+        tracer = OCSTracer(experiment_id=456, team_id=team.id)
+        tracer.trace_id = str(uuid4())
+
+        # Create callback handler
+        callback_handler = OCSCallbackHandler(tracer=tracer)
+
+        # Trigger LLM error
+        error_message = "Connection timeout to OpenAI API"
+        callback_handler.on_llm_error(error=Exception(error_message))
+
+        # Verify Team.objects.get was called with correct team_id
+        mock_get_team.assert_called_once_with(id=team.id)
+
+        # Verify notification was created with correct parameters
+        mock_create_notification.assert_called_once_with(
+            title="LLM Error Detected",
+            message=error_message,
+            level=LevelChoices.ERROR,
+            team=team,
+            slug="llm-error",
+            event_data={"bot_id": 456, "error_message": error_message},
+        )
+
+        # Verify tracer state is updated
+        assert tracer.error_detected is True
+        assert tracer.error_message == error_message

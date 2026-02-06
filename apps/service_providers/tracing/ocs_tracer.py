@@ -9,7 +9,10 @@ from typing import TYPE_CHECKING, Any
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 
+from apps.ocs_notifications.models import LevelChoices
+from apps.ocs_notifications.utils import create_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
+from apps.teams.models import Team
 from apps.trace.models import Trace, TraceStatus
 
 from .base import TraceContext, Tracer
@@ -209,9 +212,21 @@ class OCSCallbackHandler(BaseCallbackHandler):
 
     def on_llm_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True
+        error_message = "LLM error occurred"
         if not self.tracer.error_message:
-            error = kwargs.get("error") or (args[0] if args else None)
-            self.tracer.error_message = str(error) if error else "LLM error occurred"
+            if _error := kwargs.get("error") or (args[0] if args else None):
+                self.tracer.error_message = error_message = str(_error)
+
+        # Create notification for LLM error
+        team = Team.objects.get(id=self.tracer.team_id)
+        create_notification(
+            title="LLM Error Detected",
+            message=error_message,
+            level=LevelChoices.ERROR,
+            team=team,
+            slug="llm-error",
+            event_data={"bot_id": self.tracer.experiment_id, "error_message": error_message},
+        )
 
     def on_chain_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True
