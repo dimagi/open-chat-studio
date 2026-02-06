@@ -71,7 +71,7 @@ class Evaluator(BaseTeamModel):
         return getattr(module, self.type)
 
     def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
-        return self.evaluator(**self.params).run(message, generated_response)
+        return self.evaluator(**self.params).run(message, generated_response, team=self.team)
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluator_edit", args=[get_slug_for_team(self.team_id), self.id])

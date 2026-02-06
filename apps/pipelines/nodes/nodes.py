@@ -851,7 +851,15 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
+        session = state.get("experiment_session")
+        team = session.team if session else None
+
+        from apps.utils.restricted_http import RestrictedHttpClient
+
+        http_client = RestrictedHttpClient(team=team)
+
         return {
+            "http": http_client,
             "get_participant_data": participant_data_proxy.get,
             "set_participant_data": participant_data_proxy.set,
             "set_participant_data_key": participant_data_proxy.set_key,

@@ -906,3 +906,11 @@ OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth.OAuth2RefreshToken"
 
 # Pipeline settings
 RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_context"}
+
+# Restricted HTTP client settings (used by RestrictedHttpClient in the Python sandbox)
+RESTRICTED_HTTP_MAX_REQUESTS = 10
+RESTRICTED_HTTP_DEFAULT_TIMEOUT = 5  # seconds
+RESTRICTED_HTTP_MAX_TIMEOUT = 30  # seconds
+RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 1_048_576  # 1 MB
+RESTRICTED_HTTP_MAX_REQUEST_BYTES = 524_288  # 512 KB
+RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES = 26_214_400  # 25 MB
