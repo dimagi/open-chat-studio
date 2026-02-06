@@ -1,9 +1,11 @@
+import hashlib
 import logging
 import pathlib
 import textwrap
 
 from anthropic import BaseModel
 from django.conf import settings
+from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
@@ -407,9 +409,11 @@ def chat_poll_task_response(request, session_id, task_id):
     if not session:
         return NotFound()
 
-    task_details = get_message_task_response(session.experiment, task_id)
+    experiment = session.experiment
+    task_details = get_message_task_response(experiment, task_id)
     if not task_details["complete"]:
-        data = {"message": None, "status": "processing"}
+        message = get_progress_message(experiment.name, experiment.description)
+        data = {"message": message, "status": "processing"}
         return Response(data, status=status.HTTP_200_OK)
 
     if error := task_details["error_msg"]:
@@ -489,11 +493,30 @@ def chat_poll_response(request, session_id):
     return Response(ChatPollResponse(response_data).data, status=status.HTTP_200_OK)
 
 
+def get_progress_message(chatbot_name, chatbot_description) -> str | None:
+    """Get the next progress message. This will generate new messages if there are no more messages"""
+    key_hash = hashlib.sha1(f"{chatbot_name}:{chatbot_description}".encode())
+    key = f"progress_messages:{key_hash.hexdigest()}"
+    messages = cache.get(key)
+    if not messages:
+        messages = get_progress_messages(chatbot_name, chatbot_description)
+
+    if not messages:
+        return None
+
+    message, *remainder = messages
+    if remainder:
+        cache.set(key, remainder, 24 * 3600)
+    else:
+        cache.delete(key)
+    return message
+
+
 class ProgressMessagesSchema(BaseModel):
     messages: list[str]
 
 
-def get_progress_messages(chatbot_name, chatbot_description):
+def get_progress_messages(chatbot_name, chatbot_description) -> list[str]:
     from apps.help.agent import build_system_agent
 
     prompt = textwrap.dedent("""
@@ -515,7 +538,7 @@ def get_progress_messages(chatbot_name, chatbot_description):
         Each message should feel fresh and distinct from the others.
         """).strip()
     agent = build_system_agent("low", prompt, response_format=ProgressMessagesSchema)
-    message = f"Please generate 10 progress messages for this chatbot:\nName: '{chatbot_name}'"
+    message = f"Please generate 30 progress messages for this chatbot:\nName: '{chatbot_name}'"
     if chatbot_description:
         message += f"\nDescription: '{chatbot_description}'"
     result = agent.invoke({"messages": [{"role": "user", "content": message}]})
