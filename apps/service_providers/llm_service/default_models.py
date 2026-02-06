@@ -9,6 +9,7 @@ from apps.service_providers.llm_service.model_parameters import (
     AnthropicReasoningParameters,
     BasicParameters,
     ClaudeHaikuLatestParameters,
+    ClaudeOpus46Parameters,
     ClaudeOpus4_20250514Parameters,
     GPT5Parameters,
     GPT5ProParameters,
@@ -46,6 +47,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4o", 128000),
     ],
     "anthropic": [
+        Model("claude-opus-4-6", k(200), parameters=ClaudeOpus46Parameters),
         Model("claude-sonnet-4-5-20250929", k(200), is_default=True, parameters=AnthropicReasoningParameters),
         Model("claude-haiku-4-5-20251001", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-opus-4-5-20251101", k(200), parameters=AnthropicReasoningParameters),

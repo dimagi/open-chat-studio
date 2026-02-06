@@ -34,6 +34,13 @@ class GPT52ReasoningEffortParameter(TextChoices):
     XHIGH = "xhigh", "XHigh"
 
 
+class ClaudeOpus46EffortParameter(TextChoices):
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    MAX = "max", "Max"
+
+
 class OpenAIVerbosityParameter(TextChoices):
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
@@ -234,6 +241,22 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
                 "Thinking can only be used with a temperature of 1.0",
             )
         return value
+
+
+class ClaudeOpus46Parameters(AnthropicBaseParameters):
+    max_tokens: int = Field(
+        title="Max Output Tokens",
+        default=32000,
+        description="The maximum number of tokens to generate in the completion.",
+        ge=1,
+        le=128000,
+    )
+    effort: ClaudeOpus46EffortParameter = Field(
+        title="Reasoning Effort",
+        default=ClaudeOpus46EffortParameter.HIGH,
+        description="Control intelligence, speed, and cost tradeoffs with adaptive thinking.",
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=ClaudeOpus46EffortParameter.labels),
+    )
 
 
 def get_schema(model):
