@@ -34,6 +34,13 @@ class GPT52ReasoningEffortParameter(TextChoices):
     XHIGH = "xhigh", "XHigh"
 
 
+class ClaudeOpus46EffortParameter(TextChoices):
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    MAX = "max", "Max"
+
+
 class OpenAIVerbosityParameter(TextChoices):
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
@@ -180,7 +187,6 @@ class ClaudeHaikuLatestParameters(AnthropicBaseParameters):
 class ClaudeOpus4_20250514Parameters(AnthropicBaseParameters):
     max_tokens: int = Field(
         title="Max Output Tokens",
-        required=True,
         default=32000,
         description="The maximum number of tokens to generate in the completion.",
         ge=1,
@@ -226,6 +232,48 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
         return value
 
     @field_validator("thinking", mode="before")
+    def check_temperature(cls, value: bool, info):
+        # Only when thinking is disabled can the model's temperature be adjusted
+        if value and info.data.get("temperature") != 1.0:
+            raise PydanticCustomError(
+                "invalid_model_parameters",
+                "Thinking can only be used with a temperature of 1.0",
+            )
+        return value
+
+
+class ClaudeOpus46Parameters(BasicParameters):
+    temperature: float | None = Field(
+        default=1.0,
+        ge=0.0,
+        le=2.0,
+        title="Temperature",
+        description="Only supported when reasoning effort is set to 'none'",
+        json_schema_extra=UiSchema(widget=Widgets.range),
+    )
+    max_tokens: int = Field(
+        title="Max Output Tokens",
+        default=32000,
+        description="The maximum number of tokens to generate in the completion.",
+        ge=1,
+        le=128000,
+    )
+    effort: ClaudeOpus46EffortParameter = Field(
+        title="Reasoning Effort",
+        default=ClaudeOpus46EffortParameter.HIGH,
+        description="Control intelligence, speed, and cost tradeoffs with adaptive thinking.",
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=ClaudeOpus46EffortParameter.labels),
+    )
+    adaptive_thinking: bool = Field(
+        title="Enable Adaptive Thinking",
+        default=False,
+        description="Let Claude dynamically decide when and how much to think with adaptive thinking mode. "
+        "At the default effort level (high), Claude will almost always think. "
+        "At lower effort levels, Claude may skip thinking for simpler problems.",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
+
+    @field_validator("adaptive_thinking", mode="before")
     def check_temperature(cls, value: bool, info):
         # Only when thinking is disabled can the model's temperature be adjusted
         if value and info.data.get("temperature") != 1.0:
