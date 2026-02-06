@@ -58,6 +58,7 @@ jobs:
           app-id: ${{ vars.OCS_AUTOMATION_APP_ID }}
           private-key: ${{ secrets.OCS_AUTOMATION_PEM }}
           owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
 
       - name: Find oldest labeled issue in progress
         id: find
