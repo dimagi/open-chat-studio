@@ -20,6 +20,8 @@ resource consumption, and reliability.
 3. Enforce per-execution limits on request count, response size, and wall-clock time.
 4. Provide automatic retries with exponential backoff for transient failures.
 5. Surface clear, actionable errors to the user when requests fail.
+6. Allow users to attach team-configured `AuthProvider` credentials to requests without
+   hard-coding secrets in Python code.
 
 ## Non-Goals
 
@@ -49,7 +51,12 @@ name `http`. User code interacts with it as:
 
 ```python
 def main(input, **kwargs):
-    response = http.get("https://api.example.com/data", headers={"X-Api-Key": "..."})
+    # Anonymous request (no auth)
+    response = http.get("https://api.example.com/public")
+
+    # Request using a team-configured auth provider (by name)
+    response = http.get("https://api.example.com/data", auth="My API Key")
+
     return response["json"]
 ```
 
@@ -58,11 +65,11 @@ def main(input, **kwargs):
 The client exposes one method per HTTP verb, all with the same signature:
 
 ```python
-def get(url, *, params=None, headers=None, timeout=None) -> dict
-def post(url, *, params=None, headers=None, json=None, data=None, timeout=None) -> dict
-def put(url, *, params=None, headers=None, json=None, data=None, timeout=None) -> dict
-def patch(url, *, params=None, headers=None, json=None, data=None, timeout=None) -> dict
-def delete(url, *, params=None, headers=None, timeout=None) -> dict
+def get(url, *, params=None, headers=None, auth=None, timeout=None) -> dict
+def post(url, *, params=None, headers=None, auth=None, json=None, data=None, timeout=None) -> dict
+def put(url, *, params=None, headers=None, auth=None, json=None, data=None, timeout=None) -> dict
+def patch(url, *, params=None, headers=None, auth=None, json=None, data=None, timeout=None) -> dict
+def delete(url, *, params=None, headers=None, auth=None, timeout=None) -> dict
 ```
 
 **Parameters:**
@@ -72,6 +79,7 @@ def delete(url, *, params=None, headers=None, timeout=None) -> dict
 | `url` | `str` | Absolute URL. Must pass SSRF validation. |
 | `params` | `dict \| None` | Query string parameters. |
 | `headers` | `dict \| None` | Additional request headers. Certain headers are blocked (see Security). |
+| `auth` | `str \| None` | Name of a team-configured `AuthProvider` to use for this request (see section 3.5). |
 | `json` | `dict \| list \| None` | JSON-serializable request body. Sets `Content-Type: application/json`. |
 | `data` | `str \| bytes \| None` | Raw request body. Mutually exclusive with `json`. |
 | `timeout` | `float \| None` | Per-request timeout in seconds. Clamped to `[1, MAX_TIMEOUT]`. Defaults to `DEFAULT_TIMEOUT`. |
@@ -137,6 +145,71 @@ Users interact exclusively through the `RestrictedHttpClient` wrapper.
 Redirects are **not followed automatically**. Each redirect target would need SSRF validation,
 and chained redirects complicate reasoning. Users receive the 3xx response and can choose to
 issue a follow-up request to the new URL (which will also be validated).
+
+#### 3.5 AuthProvider Integration
+
+Users should never hard-code API keys, tokens, or passwords in Python code. Instead, the
+`RestrictedHttpClient` integrates with the existing `AuthProvider` system
+(`apps.service_providers.models.AuthProvider`) so that team-managed credentials are injected
+into requests at runtime.
+
+**How it works:**
+
+1. When the `RestrictedHttpClient` is instantiated for a `CodeNode` execution, it receives a
+   reference to the current team (derived from `PipelineState["experiment_session"]`).
+2. User code passes the **name** of an `AuthProvider` via the `auth` parameter:
+
+   ```python
+   response = http.get("https://api.example.com/data", auth="My API Key")
+   ```
+
+3. The client looks up the `AuthProvider` by name within the team scope:
+   ```python
+   AuthProvider.objects.get(team=team, name=auth_name)
+   ```
+
+4. The provider's `get_auth_service()` method returns an `AuthService` instance, and
+   `get_auth_headers()` extracts the authentication headers (Basic, API Key, Bearer, or
+   CommCare). These headers are merged into the request — they take precedence over any
+   user-supplied headers with the same key.
+
+5. The resolved `AuthService` instances are cached for the lifetime of the execution (i.e.,
+   per `RestrictedHttpClient` instance) to avoid repeated database lookups. The cache is keyed
+   by provider name.
+
+**Supported auth types** (all existing `AuthProviderType` values):
+
+| Type | Header(s) injected |
+|------|-------------------|
+| Basic (`basic`) | `Authorization: Basic <base64>` |
+| API Key (`api_key`) | `<configured header name>: <key value>` (e.g., `X-Api-Key: sk-...`) |
+| Bearer (`bearer`) | `Authorization: Bearer <token>` |
+| CommCare (`commcare`) | `Authorization: ApiKey <username>:<api_key>` |
+
+**Security properties:**
+
+- **Credentials never enter sandbox scope.** The `auth` parameter is a plain string name.
+  The `AuthProvider` lookup, decryption (`config` is an encrypted JSONField), and header
+  injection all happen inside `RestrictedHttpClient` — outside the sandbox's `exec` boundary.
+  User code never sees the raw secret values.
+- **Team-scoped access only.** The lookup is filtered by the team that owns the pipeline, so
+  a code node cannot reference providers from other teams.
+- **Graceful errors.** If the named provider does not exist, the client raises
+  `HttpAuthProviderError("Auth provider 'X' not found. Available providers: A, B, C")`,
+  listing available provider names (but not their credentials) to help the user fix typos.
+
+**Constructor changes:**
+
+```python
+class RestrictedHttpClient:
+    def __init__(self, team=None):
+        self._team = team
+        self._request_count = 0
+        self._auth_cache = {}  # name -> AuthService
+```
+
+When `team` is `None` (e.g., in unit tests or when auth is not applicable), passing `auth`
+to any method raises `HttpAuthProviderError("Auth providers are not available in this context")`.
 
 ### 4. Resource Limits
 
@@ -208,7 +281,8 @@ HttpError (base)
 ├── HttpResponseTooLarge        - "Response body exceeds {n} bytes"
 ├── HttpConnectionError         - wraps httpx.ConnectError after retries exhausted
 ├── HttpTimeoutError            - wraps httpx.TimeoutException after retries exhausted
-└── HttpInvalidURL              - wraps urlvalidate.InvalidURL
+├── HttpInvalidURL              - wraps urlvalidate.InvalidURL
+└── HttpAuthProviderError       - "Auth provider '{name}' not found" or "Auth providers not available"
 ```
 
 Non-2xx responses are **not** raised as exceptions by default. The user checks
@@ -220,7 +294,7 @@ A convenience method `raise_for_status()` is **not** provided since the return t
 not an object. Users can write:
 
 ```python
-response = http.get("https://example.com/api")
+response = http.get("https://example.com/api", auth="My Bearer Token")
 if response["is_error"]:
     return f"API error: {response['status_code']}"
 ```
@@ -229,21 +303,41 @@ if response["is_error"]:
 
 #### 7.1 `RestrictedPythonExecutionMixin`
 
-Modify `_get_custom_globals()` to accept an optional `http_client` parameter and inject it:
+The mixin's `compile_and_execute_code` already accepts `additional_globals`. Callers pass
+a pre-configured `RestrictedHttpClient` instance via this mechanism:
 
 ```python
-# In RestrictedPythonExecutionMixin._get_custom_globals
-custom_globals["http"] = http_client or RestrictedHttpClient()
+http_client = RestrictedHttpClient(team=team)
+result = self.compile_and_execute_code(
+    additional_globals={"http": http_client, ...},
+    ...
+)
 ```
 
-The client is created in `compile_and_execute_code` so each execution gets a fresh instance
-with its own request counter.
+Each execution gets a fresh instance with its own request counter and auth cache.
+
+The base mixin does **not** inject `http` by default — it is opt-in per subclass, because
+not all restricted execution contexts should have network access.
 
 #### 7.2 `CodeNode`
 
-No changes required beyond what the mixin provides. The `http` global is automatically
-available in user code. The existing `_get_custom_functions` mechanism could be used if
-node-specific configuration (e.g., per-node request limits) is needed in the future.
+`CodeNode._get_custom_functions` already builds a dict of additional globals injected into
+each execution. The `http` client is added here, with the team derived from the pipeline's
+`experiment_session`:
+
+```python
+def _get_custom_functions(self, state: PipelineState, output_state: PipelineState) -> dict:
+    session = state.get("experiment_session")
+    team = session.team if session else None
+    http_client = RestrictedHttpClient(team=team)
+    return {
+        "http": http_client,
+        # ... existing functions ...
+    }
+```
+
+This follows the same pattern used for `ParticipantDataProxy`, which also derives context
+from the experiment session.
 
 #### 7.3 `PythonEvaluator`
 
@@ -252,6 +346,9 @@ potentially large batches and unrestricted HTTP could cause significant external
 a boolean field `allow_http: bool = False` to `PythonEvaluator`. When `False`, the `http`
 global is not injected (or is replaced with a stub that raises
 `RuntimeError("HTTP requests are not enabled for this evaluator")`).
+
+When enabled, the evaluator must also be provided with a team reference so that auth
+provider lookups work. This may require threading the team through the evaluation runner.
 
 #### 7.4 Import Guard
 
@@ -279,9 +376,10 @@ Sensitive headers (`Authorization`, `X-Api-Key`, `Cookie`) are never logged.
 | Layer | What to test |
 |-------|-------------|
 | Unit: `RestrictedHttpClient` | URL validation rejects private IPs, blocked headers stripped, request count enforced, response size limit enforced, timeout clamping, retry behavior on 429/5xx, retry-after header honored |
+| Unit: auth provider integration | Lookup by name resolves correct provider, auth headers injected, unknown name raises `HttpAuthProviderError` with available names, cross-team lookup blocked, cache hit avoids repeat DB queries, `auth=None` sends no auth headers |
 | Unit: sandbox integration | `http` global available in CodeNode, not available in PythonEvaluator by default, available when `allow_http=True` |
 | Unit: error translation | Each `HttpError` subclass surfaces correctly in `get_code_error_message` output |
-| Integration | End-to-end CodeNode execution with mocked external service (use `respx` or `httpx.MockTransport`) |
+| Integration | End-to-end CodeNode execution with mocked external service (use `respx` or `httpx.MockTransport`), including auth provider round-trip |
 
 ### 10. Future Considerations
 
@@ -302,9 +400,9 @@ Sensitive headers (`Authorization`, `X-Api-Key`, `Cookie`) are never logged.
 
 | File | Change |
 |------|--------|
-| `apps/utils/restricted_http.py` | New module: `RestrictedHttpClient`, exception classes, constants |
-| `apps/utils/python_execution.py` | Inject `http` global in `_get_custom_globals` / `compile_and_execute_code` |
-| `apps/evaluations/evaluators.py` | Add `allow_http` field to `PythonEvaluator` |
+| `apps/utils/restricted_http.py` | New module: `RestrictedHttpClient`, exception classes, constants, `AuthProvider` lookup + caching |
+| `apps/pipelines/nodes/nodes.py` | `CodeNode._get_custom_functions`: create `RestrictedHttpClient(team=...)` and inject as `http` global |
+| `apps/evaluations/evaluators.py` | Add `allow_http` field to `PythonEvaluator`; conditionally inject `http` global |
 | `config/settings.py` | Add `RESTRICTED_HTTP_*` settings with defaults |
-| `tests/utils/test_restricted_http.py` | Unit tests for the wrapper |
+| `tests/utils/test_restricted_http.py` | Unit tests for the wrapper including auth provider integration |
 | `tests/pipelines/test_code_node_http.py` | Integration tests for CodeNode with HTTP |
