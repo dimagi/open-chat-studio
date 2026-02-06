@@ -20,7 +20,7 @@ from apps.chat.channels import (
     ChannelBase,
     strip_urls_and_emojis,
 )
-from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
+from apps.chat.exceptions import AudioSynthesizeException, VersionedExperimentSessionsNotAllowedException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import (
     ExperimentSession,
@@ -30,6 +30,7 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.files.models import File
+from apps.ocs_notifications.models import LevelChoices
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -905,3 +906,117 @@ def test_chat_message_returned_for_cancelled_generate():
     response = channel.new_user_message(channel.message)
 
     assert type(response) is ChatMessage
+
+
+class TestNotifications:
+    @patch("apps.chat.channels.create_notification")
+    def test_audio_synthesis_failure_creates_notification(self, mock_create_notification):
+        """Test that AudioSynthesizeException triggers a notification."""
+        session = ExperimentSessionFactory.build(experiment__voice_response_behaviour=VoiceResponseBehaviours.ALWAYS)
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+        channel._send_text_to_user_with_notification = Mock()
+
+        # Mock voice synthesis to raise AudioSynthesizeException
+        with patch.object(channel, "_reply_voice_message", side_effect=AudioSynthesizeException("Synthesis failed")):
+            channel.send_message_to_user("Hello")
+
+        # Verify notification was created with correct parameters
+        mock_create_notification.assert_called_once_with(
+            title="Audio Synthesis Failed",
+            message="An error occurred while synthesizing a voice response",
+            level=LevelChoices.ERROR,
+            slug="audio-synthesis-failed",
+            team=session.experiment.team,
+            permissions=["experiments.view_experimentsession"],
+            event_data={"bot_id": session.experiment.id},
+        )
+
+    @patch("apps.chat.channels.create_notification")
+    def test_file_delivery_failure_creates_notification(self, mock_create_notification):
+        """Test that file delivery exception triggers a notification."""
+        session = ExperimentSessionFactory.build()
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+        channel.send_text_to_user = Mock()
+
+        # Create a test file
+        test_file = FileFactory.build(name="test.jpg", content_type="image/jpeg")
+        test_file.download_link = lambda *args, **kwargs: "https://example.com/test.jpg"
+
+        # Mock send_file_to_user to raise an exception
+        with patch.object(channel, "send_file_to_user", side_effect=Exception("File delivery failed")):
+            channel._send_files_to_user([test_file])
+
+        # Verify notification was created with correct parameters
+        platform_title = channel.experiment_channel.platform_enum.title()
+        mock_create_notification.assert_called_once_with(
+            title="Message Delivery Failed",
+            message=f"An error occurred while delivering a file attachment to the user via {platform_title}",
+            level=LevelChoices.ERROR,
+            slug="file-delivery-failed",
+            team=session.experiment.team,
+            permissions=["experiments.view_experimentsession"],
+            event_data={
+                "bot_id": session.experiment.id,
+                "platform": channel.experiment_channel.platform,
+                "content_type": test_file.content_type,
+            },
+        )
+
+    @patch("apps.chat.channels.create_notification")
+    def test_audio_transcription_failure_creates_notification(self, mock_create_notification):
+        """Test that audio transcription exception triggers a notification."""
+        session = ExperimentSessionFactory.build()
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+
+        # Mock transcription_started and get_message_audio
+        channel.transcription_started = Mock()
+        channel.get_message_audio = Mock(return_value=BytesIO(b"fake audio data"))
+
+        # Mock _transcribe_audio to raise an exception
+        with patch.object(channel, "_transcribe_audio", side_effect=Exception("Transcription failed")):
+            with pytest.raises(Exception, match="*"):
+                channel._get_voice_transcript()
+
+        # Verify notification was created with correct parameters
+        mock_create_notification.assert_called_once_with(
+            title="Audio Transcription Failed",
+            message="An error occurred while transcribing a voice message",
+            level=LevelChoices.ERROR,
+            slug="audio-transcription-failed",
+            team=session.experiment.team,
+            permissions=["experiments.view_experimentsession"],
+            event_data={
+                "bot_id": session.experiment.id,
+                "platform": channel.experiment_channel.platform,
+            },
+        )
+
+    @patch("apps.chat.channels.create_notification")
+    def test_multiple_file_delivery_failures_create_separate_notifications(self, mock_create_notification):
+        """Test that multiple file delivery failures create separate notifications."""
+        session = ExperimentSessionFactory.build()
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+        channel.send_text_to_user = Mock()
+
+        # Create test files
+        file1 = FileFactory.build(name="test1.jpg", content_type="image/jpeg")
+        file2 = FileFactory.build(name="test2.pdf", content_type="application/pdf")
+        file1.download_link = lambda *args, **kwargs: "https://example.com/test1.jpg"
+        file2.download_link = lambda *args, **kwargs: "https://example.com/test2.jpg"
+
+        # Mock send_file_to_user to raise exceptions for both files
+        with patch.object(channel, "send_file_to_user", side_effect=Exception("File delivery failed")):
+            channel._send_files_to_user([file1, file2])
+
+        # Verify two separate notifications were created
+        assert mock_create_notification.call_count == 2
+
+        # Check first notification (for file1)
+        first_call = mock_create_notification.call_args_list[0][1]
+        assert first_call["title"] == "Message Delivery Failed"
+        assert first_call["event_data"]["content_type"] == "image/jpeg"
+
+        # Check second notification (for file2)
+        second_call = mock_create_notification.call_args_list[1][1]
+        assert second_call["title"] == "Message Delivery Failed"
+        assert second_call["event_data"]["content_type"] == "application/pdf"
