@@ -249,7 +249,6 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         )
 
 
-@audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
 class SafetyLayer(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)
     prompt_text = models.TextField()
