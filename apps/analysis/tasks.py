@@ -8,6 +8,7 @@ from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
 
 from apps.service_providers.llm_service.default_models import get_model_parameters
+from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.teams.utils import current_team
 
 from .models import AnalysisStatus, TranscriptAnalysis
@@ -37,7 +38,7 @@ def process_transcript_analysis(self, analysis_id):
             # Get model using the selected provider model
             model_name = analysis.llm_provider_model.name
             params = get_model_parameters(model_name, temperature=0.1)  # Low temperature for analysis
-            llm = llm_service.get_chat_model(model_name, **params)
+            llm = with_llm_retry(llm_service.get_chat_model(model_name, **params))
 
             translation_language = analysis.translation_language
             translation_llm_provider = analysis.translation_llm_provider
