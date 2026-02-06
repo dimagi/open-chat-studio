@@ -187,7 +187,6 @@ class ClaudeHaikuLatestParameters(AnthropicBaseParameters):
 class ClaudeOpus4_20250514Parameters(AnthropicBaseParameters):
     max_tokens: int = Field(
         title="Max Output Tokens",
-        required=True,
         default=32000,
         description="The maximum number of tokens to generate in the completion.",
         ge=1,
