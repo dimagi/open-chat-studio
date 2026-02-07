@@ -253,7 +253,7 @@ class SafetyLayer(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)
     prompt_text = models.TextField()
     messages_to_review = models.CharField(
-        choices=ChatMessageType.choices,
+        choices=ChatMessageType.safety_layer_choices,
         default=ChatMessageType.HUMAN,
         help_text="Whether the prompt should be applied to human or AI messages",
         max_length=10,
