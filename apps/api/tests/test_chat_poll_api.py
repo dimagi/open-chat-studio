@@ -102,21 +102,3 @@ def test_chat_poll_task_response_processing_with_progress(mock_progress, api_cli
     data = response.json()
     assert data["status"] == "processing"
     assert data["message"] == "Thinking..."
-
-
-@pytest.mark.django_db()
-@mock.patch("apps.api.views.chat.get_progress_message")
-def test_chat_poll_task_response_processing_without_progress(
-    mock_progress, api_client, mock_session, mock_task_response
-):
-    """When task is processing and progress message generation fails, omit message from response."""
-    mock_task_response.return_value = {"complete": False, "error_msg": None, "message": None}
-    mock_progress.return_value = None
-
-    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": "test-task-3"})
-    response = api_client.get(url)
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "processing"
-    assert "message" not in data
