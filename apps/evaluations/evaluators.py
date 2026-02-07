@@ -29,7 +29,7 @@ class EvaluatorResult(BaseModel):
 
 
 class BaseEvaluator(BaseModel):
-    def run(self, message: EvaluationMessage, generated_response: str, team=None) -> EvaluatorResult:
+    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
         raise NotImplementedError
 
 
@@ -79,7 +79,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         json_schema_extra=UiSchema(widget=Widgets.key_value_pairs),
     )
 
-    def run(self, message: EvaluationMessage, generated_response: str, team=None) -> EvaluatorResult:
+    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
         # Create a pydantic class so the llm output is validated
         output_model = schema_to_pydantic_model(self.output_schema)
         llm = self.get_chat_model().with_structured_output(output_model)
@@ -145,11 +145,6 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
         description="The code to run",
         json_schema_extra=UiSchema(widget=Widgets.code),
     )
-    allow_http: bool = Field(
-        default=False,
-        description="Enable HTTP requests in the evaluator code",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
-    )
 
     @classmethod
     def _get_default_code(cls) -> str:
@@ -159,15 +154,7 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
     def _get_function_args(cls) -> list[str]:
         return ["input", "output", "context", "full_history", "generated_response", "**kwargs"]
 
-    def _get_additional_globals(self, team=None):
-        if not self.allow_http:
-            return None
-
-        from apps.utils.restricted_http import RestrictedHttpClient
-
-        return {"http": RestrictedHttpClient(team=team)}
-
-    def run(self, message: EvaluationMessage, generated_response: str, team=None) -> EvaluatorResult:
+    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
         try:
             input = EvaluationMessageContent.model_validate(message.input).model_dump()
         except ValidationError:
@@ -180,7 +167,6 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
 
         try:
             result = self.compile_and_execute_code(
-                additional_globals=self._get_additional_globals(team=team),
                 input=input,
                 output=output,
                 context=message.context,
