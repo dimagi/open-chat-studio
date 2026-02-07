@@ -15,8 +15,6 @@ from apps.utils.restricted_http import (
     RestrictedHttpClient,
 )
 
-_real_httpx_client = httpx.Client
-
 
 @pytest.fixture()
 def client():
@@ -29,92 +27,66 @@ def mock_validate_url():
         yield
 
 
-def _patch_transport(handler):
-    """Patch httpx.Client in restricted_http to use a MockTransport with the given handler."""
-
-    def fake_client(**kwargs):
-        return _real_httpx_client(transport=httpx.MockTransport(handler))
-
-    return patch("apps.utils.restricted_http.httpx.Client", side_effect=fake_client)
-
-
-def _patch_static_response(status_code=200, json=None, text="", headers=None, content=None):
-    """Patch httpx.Client to always return the same static response."""
-    import json as json_module
-
-    resp_headers = dict(headers or {})
-    if json is not None:
-        content = json_module.dumps(json).encode("utf-8")
-        resp_headers.setdefault("content-type", "application/json")
-    elif content is None:
-        content = text.encode("utf-8")
-
-    def handler(request):
-        return httpx.Response(status_code, headers=resp_headers, content=content)
-
-    return _patch_transport(handler)
-
-
 # --- Basic Request Tests ---
 
 
 class TestBasicRequests:
-    def test_get_request(self, client, mock_validate_url):
-        with _patch_static_response(json={"key": "value"}):
-            response = client.get("https://api.example.com/data")
-            assert response["status_code"] == 200
-            assert response["json"] == {"key": "value"}
-            assert response["is_success"] is True
-            assert response["is_error"] is False
+    def test_get_request(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(json={"key": "value"})
+        response = client.get("https://api.example.com/data")
+        assert response["status_code"] == 200
+        assert response["json"] == {"key": "value"}
+        assert response["is_success"] is True
+        assert response["is_error"] is False
 
-    def test_post_request_with_json(self, client, mock_validate_url):
-        with _patch_static_response(json={"created": True}, status_code=201):
-            response = client.post("https://api.example.com/data", json={"name": "test"})
-            assert response["status_code"] == 201
-            assert response["json"] == {"created": True}
-            assert response["is_success"] is True
+    def test_post_request_with_json(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(json={"created": True}, status_code=201)
+        response = client.post("https://api.example.com/data", json={"name": "test"})
+        assert response["status_code"] == 201
+        assert response["json"] == {"created": True}
+        assert response["is_success"] is True
 
-    def test_post_request_with_data(self, client, mock_validate_url):
-        with _patch_static_response(text="ok"):
-            response = client.post("https://api.example.com/data", data={"field": "value"})
-            assert response["status_code"] == 200
-            assert response["text"] == "ok"
+    def test_post_request_with_data(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(text="ok")
+        response = client.post("https://api.example.com/data", data={"field": "value"})
+        assert response["status_code"] == 200
+        assert response["text"] == "ok"
 
-    def test_put_request(self, client, mock_validate_url):
-        with _patch_static_response(json={"updated": True}):
-            response = client.put("https://api.example.com/data/1", json={"name": "updated"})
-            assert response["status_code"] == 200
+    def test_put_request(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(json={"updated": True})
+        response = client.put("https://api.example.com/data/1", json={"name": "updated"})
+        assert response["status_code"] == 200
 
-    def test_patch_request(self, client, mock_validate_url):
-        with _patch_static_response(json={"patched": True}):
-            response = client.patch("https://api.example.com/data/1", json={"name": "patched"})
-            assert response["status_code"] == 200
+    def test_patch_request(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(json={"patched": True})
+        response = client.patch("https://api.example.com/data/1", json={"name": "patched"})
+        assert response["status_code"] == 200
 
-    def test_delete_request(self, client, mock_validate_url):
-        with _patch_static_response(status_code=204, text=""):
-            response = client.delete("https://api.example.com/data/1")
-            assert response["status_code"] == 204
+    def test_delete_request(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(status_code=204)
+        response = client.delete("https://api.example.com/data/1")
+        assert response["status_code"] == 204
 
-    def test_response_dict_shape(self, client, mock_validate_url):
-        with _patch_static_response(json={"data": 1}, headers={"x-custom": "val"}):
-            response = client.get("https://api.example.com/data")
-            assert set(response.keys()) == {"status_code", "headers", "text", "json", "is_success", "is_error"}
-            assert isinstance(response["headers"], dict)
-            assert isinstance(response["text"], str)
+    def test_response_dict_shape(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(json={"data": 1}, headers={"x-custom": "val"})
+        response = client.get("https://api.example.com/data")
+        assert set(response.keys()) == {"status_code", "headers", "text", "json", "is_success", "is_error"}
+        assert isinstance(response["headers"], dict)
+        assert isinstance(response["text"], str)
 
-    def test_non_json_response(self, client, mock_validate_url):
-        with _patch_static_response(text="plain text", headers={"content-type": "text/plain"}):
-            response = client.get("https://api.example.com/text")
-            assert response["json"] is None
-            assert response["text"] == "plain text"
+    def test_non_json_response(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(content=b"plain text", headers={"content-type": "text/plain"})
+        response = client.get("https://api.example.com/text")
+        assert response["json"] is None
+        assert response["text"] == "plain text"
 
-    def test_error_response_not_raised(self, client, mock_validate_url):
+    def test_error_response_not_raised(self, client, mock_validate_url, httpx_mock):
         """Non-2xx responses (except retryable ones) are returned, not raised."""
-        with _patch_static_response(status_code=404, json={"error": "not found"}):
-            response = client.get("https://api.example.com/missing")
-            assert response["status_code"] == 404
-            assert response["is_error"] is True
-            assert response["is_success"] is False
+        httpx_mock.add_response(status_code=404, json={"error": "not found"})
+        response = client.get("https://api.example.com/missing")
+        assert response["status_code"] == 404
+        assert response["is_error"] is True
+        assert response["is_success"] is False
 
 
 # --- URL Validation (SSRF) ---
@@ -125,10 +97,10 @@ class TestURLValidation:
         with pytest.raises(HttpInvalidURL):
             client.get("http://127.0.0.1/secret")
 
-    def test_valid_url_passes(self, client, mock_validate_url):
-        with _patch_static_response(text="ok"):
-            response = client.get("https://api.example.com/data")
-            assert response["status_code"] == 200
+    def test_valid_url_passes(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(text="ok")
+        response = client.get("https://api.example.com/data")
+        assert response["status_code"] == 200
 
 
 # --- Blocked Headers ---
@@ -153,21 +125,23 @@ class TestBlockedHeaders:
 
 class TestRequestCountLimit:
     @patch("apps.utils.restricted_http._get_setting")
-    def test_request_limit_exceeded(self, mock_setting, client, mock_validate_url):
+    def test_request_limit_exceeded(self, mock_setting, client, mock_validate_url, httpx_mock):
         mock_setting.side_effect = lambda name, default: 2 if name == "RESTRICTED_HTTP_MAX_REQUESTS" else default
-        with _patch_static_response(text="ok"):
-            client.get("https://api.example.com/1")
-            client.get("https://api.example.com/2")
-            with pytest.raises(HttpRequestLimitExceeded, match="Request limit of 2 exceeded"):
-                client.get("https://api.example.com/3")
+        httpx_mock.add_response(text="ok")
+        httpx_mock.add_response(text="ok")
+        client.get("https://api.example.com/1")
+        client.get("https://api.example.com/2")
+        with pytest.raises(HttpRequestLimitExceeded, match="Request limit of 2 exceeded"):
+            client.get("https://api.example.com/3")
 
-    def test_request_count_increments(self, client, mock_validate_url):
-        with _patch_static_response(text="ok"):
-            assert client._request_count == 0
-            client.get("https://api.example.com/1")
-            assert client._request_count == 1
-            client.get("https://api.example.com/2")
-            assert client._request_count == 2
+    def test_request_count_increments(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(text="ok")
+        httpx_mock.add_response(text="ok")
+        assert client._request_count == 0
+        client.get("https://api.example.com/1")
+        assert client._request_count == 1
+        client.get("https://api.example.com/2")
+        assert client._request_count == 2
 
 
 # --- Response Size Limit ---
@@ -175,11 +149,11 @@ class TestRequestCountLimit:
 
 class TestResponseSizeLimit:
     @patch("apps.utils.restricted_http._get_setting")
-    def test_response_too_large(self, mock_setting, client, mock_validate_url):
+    def test_response_too_large(self, mock_setting, client, mock_validate_url, httpx_mock):
         mock_setting.side_effect = lambda name, default: 10 if name == "RESTRICTED_HTTP_MAX_RESPONSE_BYTES" else default
-        with _patch_static_response(content=b"x" * 100):
-            with pytest.raises(HttpResponseTooLarge, match="exceeds 10 bytes"):
-                client.get("https://api.example.com/large")
+        httpx_mock.add_response(content=b"x" * 100)
+        with pytest.raises(HttpResponseTooLarge, match="exceeds 10 bytes"):
+            client.get("https://api.example.com/large")
 
 
 # --- Request Body Size Limit ---
@@ -203,13 +177,13 @@ class TestRequestBodySizeLimit:
 
 
 class TestTimeoutClamping:
-    def test_timeout_clamped_to_min(self, client, mock_validate_url):
-        with _patch_static_response(text="ok"):
-            client.get("https://api.example.com/data", timeout=0.1)
+    def test_timeout_clamped_to_min(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(text="ok")
+        client.get("https://api.example.com/data", timeout=0.1)
 
-    def test_timeout_clamped_to_max(self, client, mock_validate_url):
-        with _patch_static_response(text="ok"):
-            client.get("https://api.example.com/data", timeout=999)
+    def test_timeout_clamped_to_max(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(text="ok")
+        client.get("https://api.example.com/data", timeout=999)
 
 
 # --- Mutual Exclusivity ---
@@ -229,73 +203,48 @@ class TestMutualExclusivity:
 
 
 class TestRedirectPolicy:
-    def test_redirects_not_followed(self, client, mock_validate_url):
-        with _patch_static_response(status_code=301, headers={"Location": "https://other.com"}):
-            response = client.get("https://api.example.com/redirect")
-            assert response["status_code"] == 301
+    def test_redirects_not_followed(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(status_code=301, headers={"Location": "https://other.com"})
+        response = client.get("https://api.example.com/redirect")
+        assert response["status_code"] == 301
 
 
 # --- Retry Behavior ---
 
 
 class TestRetryBehavior:
-    def test_retries_on_429(self, client, mock_validate_url):
-        call_count = 0
+    def test_retries_on_429(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(status_code=429, headers={"Retry-After": "0"})
+        httpx_mock.add_response(status_code=429, headers={"Retry-After": "0"})
+        httpx_mock.add_response(json={"ok": True})
+        response = client.get("https://api.example.com/data")
+        assert response["status_code"] == 200
+        assert len(httpx_mock.get_requests()) == 3
 
-        def handler(request):
-            nonlocal call_count
-            call_count += 1
-            if call_count < 3:
-                return httpx.Response(429, headers={"Retry-After": "0"})
-            return httpx.Response(200, content=b'{"ok": true}', headers={"content-type": "application/json"})
+    def test_retries_on_503(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(status_code=503)
+        httpx_mock.add_response(text="ok")
+        response = client.get("https://api.example.com/data")
+        assert response["status_code"] == 200
+        assert len(httpx_mock.get_requests()) == 2
 
-        with _patch_transport(handler):
-            response = client.get("https://api.example.com/data")
-            assert response["status_code"] == 200
-            assert call_count == 3
-
-    def test_retries_on_503(self, client, mock_validate_url):
-        call_count = 0
-
-        def handler(request):
-            nonlocal call_count
-            call_count += 1
-            if call_count < 2:
-                return httpx.Response(503)
-            return httpx.Response(200, content=b"ok")
-
-        with _patch_transport(handler):
-            response = client.get("https://api.example.com/data")
-            assert response["status_code"] == 200
-            assert call_count == 2
-
-    def test_retries_exhausted_returns_last_response(self, client, mock_validate_url):
+    def test_retries_exhausted_returns_last_response(self, client, mock_validate_url, httpx_mock):
         """When all retries are exhausted on a retryable status, return the response."""
+        for _ in range(3):
+            httpx_mock.add_response(status_code=429, json={"error": "rate limited"})
+        response = client.get("https://api.example.com/data")
+        assert response["status_code"] == 429
+        assert response["json"] == {"error": "rate limited"}
+        assert client._request_count == 3  # 1 initial + 2 retries
 
-        def handler(request):
-            return httpx.Response(
-                429, content=b'{"error": "rate limited"}', headers={"content-type": "application/json"}
-            )
-
-        with _patch_transport(handler):
-            response = client.get("https://api.example.com/data")
-            assert response["status_code"] == 429
-            assert response["json"] == {"error": "rate limited"}
-            assert response["text"] == '{"error": "rate limited"}'
-            assert client._request_count == 3  # 1 initial + 2 retries
-
-    def test_retries_count_toward_limit(self, client, mock_validate_url):
+    def test_retries_count_toward_limit(self, client, mock_validate_url, httpx_mock):
         """Each retry counts as a request toward the limit."""
-
-        def handler(request):
-            return httpx.Response(429, content=b"rate limited")
-
-        with (
-            _patch_transport(handler),
-            patch(
-                "apps.utils.restricted_http._get_setting",
-                side_effect=lambda name, default: 5 if name == "RESTRICTED_HTTP_MAX_REQUESTS" else default,
-            ),
+        # First call: 3 attempts (all 429, retries exhausted). Second call: 2 attempts then limit hit.
+        for _ in range(5):
+            httpx_mock.add_response(status_code=429)
+        with patch(
+            "apps.utils.restricted_http._get_setting",
+            side_effect=lambda name, default: 5 if name == "RESTRICTED_HTTP_MAX_REQUESTS" else default,
         ):
             client.get("https://api.example.com/1")  # uses 3 (retries exhausted)
             assert client._request_count == 3
@@ -303,21 +252,17 @@ class TestRetryBehavior:
             with pytest.raises(HttpRequestLimitExceeded):
                 client.get("https://api.example.com/2")
 
-    def test_connection_error_retried_then_raised(self, client, mock_validate_url):
-        def handler(request):
-            raise httpx.ConnectError("connection refused")
+    def test_connection_error_retried_then_raised(self, client, mock_validate_url, httpx_mock):
+        for _ in range(3):
+            httpx_mock.add_exception(httpx.ConnectError("connection refused"))
+        with pytest.raises(HttpConnectionError, match="Connection error"):
+            client.get("https://api.example.com/data")
 
-        with _patch_transport(handler):
-            with pytest.raises(HttpConnectionError, match="Connection error"):
-                client.get("https://api.example.com/data")
-
-    def test_timeout_retried_then_raised(self, client, mock_validate_url):
-        def handler(request):
-            raise httpx.ConnectTimeout("timed out")
-
-        with _patch_transport(handler):
-            with pytest.raises(HttpTimeoutError, match="timed out"):
-                client.get("https://api.example.com/data")
+    def test_timeout_retried_then_raised(self, client, mock_validate_url, httpx_mock):
+        for _ in range(3):
+            httpx_mock.add_exception(httpx.ConnectTimeout("timed out"))
+        with pytest.raises(HttpTimeoutError, match="timed out"):
+            client.get("https://api.example.com/data")
 
 
 # --- Auth Provider Integration ---
@@ -405,38 +350,38 @@ class TestAuthProviderIntegration:
 
 
 class TestFileUpload:
-    def test_bytes_file_upload(self, client, mock_validate_url):
-        with _patch_static_response(json={"uploaded": True}):
-            response = client.post(
-                "https://api.example.com/upload",
-                files={"file": b"raw bytes content"},
-            )
-            assert response["status_code"] == 200
+    def test_bytes_file_upload(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(json={"uploaded": True})
+        response = client.post(
+            "https://api.example.com/upload",
+            files={"file": b"raw bytes content"},
+        )
+        assert response["status_code"] == 200
 
-    def test_tuple_file_upload(self, client, mock_validate_url):
-        with _patch_static_response(json={"uploaded": True}):
-            response = client.post(
-                "https://api.example.com/upload",
-                files={"file": ("report.pdf", b"pdf content", "application/pdf")},
-            )
-            assert response["status_code"] == 200
+    def test_tuple_file_upload(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(json={"uploaded": True})
+        response = client.post(
+            "https://api.example.com/upload",
+            files={"file": ("report.pdf", b"pdf content", "application/pdf")},
+        )
+        assert response["status_code"] == 200
 
-    def test_multiple_files_as_list(self, client, mock_validate_url):
-        with _patch_static_response(json={"uploaded": True}):
-            response = client.post(
-                "https://api.example.com/upload",
-                files=[("files", b"file1"), ("files", b"file2")],
-            )
-            assert response["status_code"] == 200
+    def test_multiple_files_as_list(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(json={"uploaded": True})
+        response = client.post(
+            "https://api.example.com/upload",
+            files=[("files", b"file1"), ("files", b"file2")],
+        )
+        assert response["status_code"] == 200
 
-    def test_mixed_files_and_data(self, client, mock_validate_url):
-        with _patch_static_response(json={"uploaded": True}):
-            response = client.post(
-                "https://api.example.com/upload",
-                files={"file": b"content"},
-                data={"description": "test file"},
-            )
-            assert response["status_code"] == 200
+    def test_mixed_files_and_data(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(json={"uploaded": True})
+        response = client.post(
+            "https://api.example.com/upload",
+            files={"file": b"content"},
+            data={"description": "test file"},
+        )
+        assert response["status_code"] == 200
 
     @patch("apps.utils.restricted_http._get_setting")
     def test_file_size_limit(self, mock_setting, client, mock_validate_url):
