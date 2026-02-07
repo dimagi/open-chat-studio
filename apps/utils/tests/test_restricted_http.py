@@ -102,6 +102,26 @@ class TestURLValidation:
         response = client.get("https://api.example.com/data")
         assert response["status_code"] == 200
 
+    @patch("apps.utils.restricted_http.validate_user_input_url")
+    def test_url_validation_cached_per_host(self, mock_validate, client, httpx_mock):
+        """URL validation (DNS resolution) is only performed once per (hostname, port)."""
+        httpx_mock.add_response(text="ok")
+        httpx_mock.add_response(text="ok")
+        httpx_mock.add_response(text="ok")
+        client.get("https://api.example.com/data")
+        client.get("https://api.example.com/other")
+        client.get("https://api.example.com/third?q=1")
+        mock_validate.assert_called_once()
+
+    @patch("apps.utils.restricted_http.validate_user_input_url")
+    def test_url_validation_not_cached_across_hosts(self, mock_validate, client, httpx_mock):
+        """Different hostnames each trigger their own validation."""
+        httpx_mock.add_response(text="ok")
+        httpx_mock.add_response(text="ok")
+        client.get("https://api.example.com/data")
+        client.get("https://other.example.com/data")
+        assert mock_validate.call_count == 2
+
 
 # --- Blocked Headers ---
 

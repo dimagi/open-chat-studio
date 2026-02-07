@@ -2,6 +2,7 @@ import contextlib
 import json as json_module
 import logging
 import time
+from urllib.parse import urlparse
 
 import httpx
 import tenacity
@@ -110,7 +111,8 @@ class RestrictedHttpClient:
     def __init__(self, team=None):
         self._team = team
         self._request_count = 0
-        self._auth_cache = {}  # name -> AuthService
+        self._auth_cache = {}  # name -> auth headers dict
+        self._validated_hosts = set()  # (hostname, port) tuples
 
     # --- Public API ---
 
@@ -144,11 +146,8 @@ class RestrictedHttpClient:
         if self._request_count >= max_requests:
             raise HttpRequestLimitExceeded(f"Request limit of {max_requests} exceeded")
 
-        # Validate URL (SSRF prevention)
-        try:
-            validate_user_input_url(url, strict=not settings.DEBUG)
-        except InvalidURL as exc:
-            raise HttpInvalidURL(str(exc)) from exc
+        # Validate URL (SSRF prevention) — cached per (hostname, port)
+        self._validate_url(url)
 
         # Validate mutual exclusivity
         if json is not None and data is not None:
@@ -202,6 +201,17 @@ class RestrictedHttpClient:
             for fh in opened_handles:
                 with contextlib.suppress(Exception):
                     fh.close()
+
+    def _validate_url(self, url):
+        parsed = urlparse(url)
+        host_key = (parsed.hostname, parsed.port)
+        if host_key in self._validated_hosts:
+            return
+        try:
+            validate_user_input_url(url, strict=not settings.DEBUG)
+        except InvalidURL as exc:
+            raise HttpInvalidURL(str(exc)) from exc
+        self._validated_hosts.add(host_key)
 
     def _execute_with_retries(self, httpx_kwargs):
         max_wait = 10
