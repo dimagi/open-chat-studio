@@ -1,6 +1,7 @@
 import contextlib
 import json as json_module
 import logging
+import time
 
 import httpx
 import tenacity
@@ -69,8 +70,9 @@ class HttpAuthProviderError(HttpError):
 class _RetryableRequestError(Exception):
     """Wrapper to signal a retryable HTTP status (429, 502, 503, 504)."""
 
-    def __init__(self, response):
+    def __init__(self, response, body=b""):
         self.response = response
+        self.body = body
         super().__init__(f"HTTP {response.status_code}")
 
 
@@ -226,7 +228,7 @@ class RestrictedHttpClient:
                     return result
         except _RetryableRequestError as exc:
             # Retries exhausted on a retryable status — return the response as-is
-            return self._build_response_dict(exc.response)
+            return self._build_response_dict(exc.response, body=exc.body)
         except httpx.ConnectError as exc:
             raise HttpConnectionError(f"Connection error: {exc}") from exc
         except (httpx.ConnectTimeout, httpx.TimeoutException) as exc:
@@ -236,8 +238,6 @@ class RestrictedHttpClient:
         max_response_bytes = _get_setting("RESTRICTED_HTTP_MAX_RESPONSE_BYTES", MAX_RESPONSE_BYTES)
         method = httpx_kwargs["method"]
         url = httpx_kwargs["url"]
-
-        import time
 
         start = time.monotonic()
         with httpx.Client() as client:
@@ -262,22 +262,15 @@ class RestrictedHttpClient:
                     elapsed_ms,
                 )
 
+                body = b"".join(chunks)
+
                 # Check for retryable status codes
                 if status_code in (429, 502, 503, 504):
-                    raise _RetryableRequestError(response)
+                    raise _RetryableRequestError(response, body=body)
 
-                body = b"".join(chunks)
                 return self._build_response_dict(response, body=body)
 
-    def _build_response_dict(self, response, body=None):
-        if body is None:
-            # For retryable responses that exhausted retries, body was already consumed
-            # by the streaming context manager. Read what we can.
-            try:
-                body = response.read()
-            except Exception:
-                body = b""
-
+    def _build_response_dict(self, response, body=b""):
         text = body.decode("utf-8", errors="replace")
         content_type = response.headers.get("content-type", "")
 

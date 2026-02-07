@@ -280,6 +280,8 @@ class TestRetryBehavior:
         with _patch_transport(handler):
             response = client.get("https://api.example.com/data")
             assert response["status_code"] == 429
+            assert response["json"] == {"error": "rate limited"}
+            assert response["text"] == '{"error": "rate limited"}'
             assert client._request_count == 3  # 1 initial + 2 retries
 
     def test_retries_count_toward_limit(self, client, mock_validate_url):
