@@ -12,7 +12,6 @@ from uuid import UUID
 from langfuse._client.get_client import _create_client_from_instance
 from langfuse._client.resource_manager import LangfuseResourceManager
 from langfuse.langchain import CallbackHandler
-from opentelemetry.trace import Status, StatusCode
 
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException, TraceContext
@@ -119,15 +118,10 @@ class LangFuseTracer(Tracer):
             span.update(output=output.copy())
 
         if exc := context.exception:
-            span.record_exception(exc)
+            span.update(level="ERROR", status_message=str(exc))
 
         if error := context.error:
-            span.set_status(
-                Status(
-                    status_code=StatusCode.ERROR,
-                    description=error,
-                )
-            )
+            span.update(level="ERROR", status_message=error)
 
     def get_langchain_callback(self) -> BaseCallbackHandler | None:
         if not self.ready:
