@@ -70,7 +70,6 @@ CONTENT_TYPES = {
         "participant",
         "participantdata",
         "promptbuilderhistory",
-        "safetylayer",
         "sourcematerial",
         "survey",
         "syntheticvoice",
