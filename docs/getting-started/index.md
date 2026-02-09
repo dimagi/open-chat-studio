@@ -48,47 +48,47 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
     - Create a superuser
 
     ??? note "Manual steps"
-       
+
         #### Install the pre-commit hooks
 
         ```shell
         prek install --install-hooks
         ```
-        
+
         #### Set up database
-        
+
         Start the database and redis services and run the DB migrations:
-        
+
         ```shell
         inv up  # start the docker services
         cp .env.example .env
         ./manage.py migrate
         ```
-        
+
         #### Build the front-end resources
-        
+
         To build JavaScript and CSS files, first install npm packages:
-        
+
         ```bash
         inv npm --install
         # or
         npm install
         npm run dev
         ```
-        
+
         **Note**
 
         You should be using node >= 24.0.0. If you have [nvm](https://github.com/nvm-sh/nvm/blob/master/README.md)
         installed, you can run `nvm use` to switch to the correct version.
-        
+
         To check which version you are using use `node --version`.
-        
+
         #### Create a superuser
-        
+
         ```bash
         ./manage.py createsuperuser
         ```
-     
+
 4. **Start the development server**
 
     ```bash
