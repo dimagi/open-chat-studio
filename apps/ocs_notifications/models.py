@@ -18,6 +18,7 @@ class Notification(BaseTeamModel):
     last_event_at = models.DateTimeField()
     identifier = models.CharField(max_length=40)
     event_data = SanitizedJSONField(default=dict, blank=True)
+    links = SanitizedJSONField(default=dict, blank=True)
 
     class Meta:
         constraints = [
