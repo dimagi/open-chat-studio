@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 from apps.custom_actions.schema_utils import (
     APIOperationDetails,
@@ -34,7 +35,7 @@ class TestGetOperationsFromSpecDict:
         param_name: str,
         schema_type: str,
         required: bool = False,
-        default: any = None,
+        default: Any = None,
     ):
         """Helper to assert parameter exists with expected properties."""
         param = self._get_parameter(operation, param_name)
