@@ -9,10 +9,8 @@ from typing import TYPE_CHECKING, Any
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 
-from apps.ocs_notifications.models import LevelChoices
-from apps.ocs_notifications.utils import create_notification
+from apps.ocs_notifications.notifications import llm_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
-from apps.teams.models import Team
 from apps.trace.models import Trace, TraceStatus
 
 from .base import TraceContext, Tracer
@@ -217,38 +215,9 @@ class OCSCallbackHandler(BaseCallbackHandler):
             if _error := kwargs.get("error") or (args[0] if args else None):
                 self.tracer.error_message = error_message = str(_error)
 
-        # Create notification for LLM error
-        team = Team.objects.get(id=self.tracer.team_id)
-        bot_name = self._get_bot_name()
-
-        if participant_identifier := self._get_participant_identifier():
-            message = f"An LLM error occurred for participant '{participant_identifier}': {error_message}"
-        else:
-            message = f"An LLM error occurred: {error_message}"
-        create_notification(
-            title=f"LLM Error Detected for '{bot_name}'",
-            message=message,
-            level=LevelChoices.ERROR,
-            team=team,
-            slug="llm-error",
-            event_data={"bot_id": self.tracer.experiment_id, "error_message": error_message},
+        llm_error_notification(
+            experiment_id=self.tracer.experiment_id, session_id=self.tracer.session.id, error_message=error_message
         )
-
-    def _get_bot_name(self) -> str:
-        """Get the experiment/bot name if available."""
-        from apps.experiments.models import Experiment
-
-        try:
-            return Experiment.objects.values_list("name", flat=True).get(id=self.tracer.experiment_id)
-        except Experiment.DoesNotExist:
-            return ""
-
-    def _get_participant_identifier(self) -> str:
-        """Get the participant identifier from the current session if available."""
-        session = self.tracer.session
-        if session and session.participant:
-            return session.participant.identifier
-        return ""
 
     def on_chain_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True

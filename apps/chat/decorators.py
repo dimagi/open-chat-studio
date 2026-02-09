@@ -1,8 +1,7 @@
 import logging
 from functools import wraps
 
-from apps.ocs_notifications.models import LevelChoices
-from apps.ocs_notifications.utils import create_notification
+from apps.ocs_notifications.notifications import message_delivery_failure_notification
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -26,18 +25,11 @@ def notify_on_delivery_failure(context: str):
             except Exception as e:
                 logger.exception(e)
                 platform_title = self.experiment_channel.platform_enum.title()
-                create_notification(
-                    title=f"Message Delivery Failed for {self.experiment.name}",
-                    message=f"An error occurred while delivering a {context} to the user via {platform_title}",
-                    level=LevelChoices.ERROR,
-                    slug="message-delivery-failed",
-                    team=self.experiment.team,
-                    permissions=["experiments.view_experimentsession"],
-                    event_data={
-                        "bot_id": self.experiment.id,
-                        "platform": self.experiment_channel.platform,
-                        "context": context,
-                    },
+                message_delivery_failure_notification(
+                    self.experiment,
+                    platform=self.experiment_channel.platform,
+                    platform_title=platform_title,
+                    context=context,
                 )
                 raise
 

@@ -25,8 +25,7 @@ from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.files.models import FileChunkEmbedding
-from apps.ocs_notifications.models import LevelChoices
-from apps.ocs_notifications.utils import create_notification
+from apps.ocs_notifications.notifications import tool_error_notification
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
@@ -206,13 +205,10 @@ class CustomBaseTool(BaseTool):
             return self.action(*args, **kwargs)
         except Exception as e:
             logger.exception("Error executing tool: %s", self.name)
-            create_notification(
-                title="Tool Error Detected",
-                message=str(e),
-                level=LevelChoices.ERROR,
+            tool_error_notification(
                 team=get_current_team(),
-                slug="tool-error",
-                event_data={"tool_name": self.name, "error_message": str(e)},
+                tool_name=self.name,
+                error_message=str(e),
             )
 
             return "Something went wrong"

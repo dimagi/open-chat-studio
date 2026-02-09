@@ -3,7 +3,6 @@ from uuid import uuid4
 
 import pytest
 
-from apps.ocs_notifications.models import LevelChoices
 from apps.service_providers.tracing.base import TraceContext
 from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
 from apps.trace.models import Span, Trace
@@ -153,48 +152,34 @@ class TestOCSTracer:
 
 
 class TestOCSCallbackHandler:
-    @patch("apps.service_providers.tracing.ocs_tracer.Team.objects.get")
-    @patch("apps.service_providers.tracing.ocs_tracer.create_notification")
-    def test_on_llm_error_creates_notification(self, mock_create_notification, mock_get_team):
+    @patch("apps.service_providers.tracing.ocs_tracer.llm_error_notification")
+    def test_on_llm_error_creates_notification(self, mock_llm_error_notification):
         """Test that LLM error handler creates a notification."""
-        # Set up team mock
-        team = Mock()
-        team.id = 123
-        mock_get_team.return_value = team
-
         # Set up tracer
-        tracer = OCSTracer(experiment_id=456, team_id=team.id)
+        tracer = OCSTracer(experiment_id=456, team_id=123)
         tracer.trace_id = str(uuid4())
 
         # Set up a session with a participant so the notification includes context
         participant = Mock()
         participant.identifier = "user@example.com"
         session = Mock()
+        session.id = 789
         session.participant = participant
         tracer.session = session
 
-        # Create callback handler and mock _get_bot_name to avoid DB hit
+        # Create callback handler
         callback_handler = OCSCallbackHandler(tracer=tracer)
-        callback_handler._get_bot_name = Mock(return_value="My Bot")
 
         # Trigger LLM error
         error_message = "Connection timeout to OpenAI API"
         callback_handler.on_llm_error(error=Exception(error_message))
 
-        # Verify Team.objects.get was called with correct team_id
-        mock_get_team.assert_called_once_with(id=team.id)
-
-        # Verify notification was created with correct parameters
-        mock_create_notification.assert_called_once()
-        call_kwargs = mock_create_notification.call_args[1]
-        assert call_kwargs["title"] == "LLM Error Detected"
-        assert call_kwargs["message"] == (
-            f"An LLM error occurred for bot 'My Bot' and participant 'user@example.com': {error_message}"
+        # Verify llm_error_notification was called with correct parameters
+        mock_llm_error_notification.assert_called_once_with(
+            experiment_id=456,
+            session_id=789,
+            error_message=error_message,
         )
-        assert call_kwargs["level"] == LevelChoices.ERROR
-        assert call_kwargs["team"] == team
-        assert call_kwargs["slug"] == "llm-error"
-        assert call_kwargs["event_data"] == {"bot_id": 456, "error_message": error_message}
 
         # Verify tracer state is updated
         assert tracer.error_detected is True

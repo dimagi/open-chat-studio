@@ -5,8 +5,7 @@ from celery.app import shared_task
 from django.utils import timezone
 
 from apps.custom_actions.models import CustomAction, HealthCheckStatus
-from apps.ocs_notifications.models import LevelChoices
-from apps.ocs_notifications.utils import create_notification
+from apps.ocs_notifications.notifications import custom_action_health_check_failure_notification
 
 logger = logging.getLogger("ocs.custom_actions")
 
@@ -69,12 +68,4 @@ def check_single_custom_action_health(action_id: int):
 
     # Send notification only on DOWN transition
     if should_notify:
-        create_notification(
-            title="Custom Action is down",
-            message=f"The custom action '{action.name}' health check failed: {failure_reason}.",
-            level=LevelChoices.ERROR,
-            team=action.team,
-            slug="custom-action-health-check",
-            event_data={"action_id": action.id, "status": action.health_status},
-            permissions=["custom_actions.change_customaction"],
-        )
+        custom_action_health_check_failure_notification(action, failure_reason)

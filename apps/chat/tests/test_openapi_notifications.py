@@ -19,7 +19,7 @@ def _test_tool_call_with_custom_action(spec_dict, call_args: dict, custom_action
     return tool.run(call_args, tool_call_id="123")
 
 
-@patch("apps.chat.agent.openapi_tool.create_notification")
+@patch("apps.ocs_notifications.notifications.create_notification")
 def test_openapi_tool_creates_error_notification_on_failure(mock_create_notification, httpx_mock):
     """Test that error notifications are created when API calls fail."""
     # Create a custom action using the factory (build to avoid DB persistence)
@@ -47,7 +47,7 @@ def test_openapi_tool_creates_error_notification_on_failure(mock_create_notifica
     assert call_args[1]["event_data"]["exception_type"] == "ToolException"
 
 
-@patch("apps.chat.agent.openapi_tool.create_notification")
+@patch("apps.ocs_notifications.notifications.create_notification")
 def test_openapi_tool_no_notifications_without_custom_action(mock_create_notification, httpx_mock):
     """Test that no notifications are created when custom_action is not provided."""
     spec = _make_openapi_schema({})
@@ -64,7 +64,7 @@ def test_openapi_tool_no_notifications_without_custom_action(mock_create_notific
     mock_create_notification.assert_not_called()
 
 
-@patch("apps.chat.agent.openapi_tool.create_notification")
+@patch("apps.ocs_notifications.notifications.create_notification")
 def test_openapi_tool_creates_unexpected_error_notification(mock_create_notification):
     """Test that error notifications are created for unexpected exceptions."""
     custom_action = CustomActionFactory.build()

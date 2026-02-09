@@ -45,8 +45,11 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.files.models import File, FilePurpose
-from apps.ocs_notifications.models import LevelChoices
-from apps.ocs_notifications.utils import create_notification
+from apps.ocs_notifications.notifications import (
+    audio_synthesis_failure_notification,
+    audio_transcription_failure_notification,
+    file_delivery_failure_notification,
+)
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
@@ -547,15 +550,7 @@ class ChannelBase(ABC):
                     self._send_text_to_user_with_notification(urls_to_append)
             except AudioSynthesizeException:
                 logger.exception("Error generating voice response")
-                create_notification(
-                    title="Audio Synthesis Failed",
-                    message="An error occurred while synthesizing a voice response",
-                    level=LevelChoices.ERROR,
-                    slug="audio-synthesis-failed",
-                    team=self.experiment.team,
-                    permissions=["experiments.view_experimentsession"],
-                    event_data={"bot_id": self.experiment.id},
-                )
+                audio_synthesis_failure_notification(self.experiment)
                 self._bot_message_is_voice = False
                 bot_message = f"{bot_message}\n\n{urls_to_append}"
                 self._send_text_to_user_with_notification(bot_message)
@@ -645,18 +640,11 @@ class ChannelBase(ABC):
             except Exception as e:
                 logger.exception(e)
                 platform_title = self.experiment_channel.platform_enum.title()
-                create_notification(
-                    title="Message Delivery Failed",
-                    message=f"An error occurred while delivering a file attachment to the user via {platform_title}",
-                    level=LevelChoices.ERROR,
-                    slug="file-delivery-failed",
-                    team=self.experiment.team,
-                    permissions=["experiments.view_experimentsession"],
-                    event_data={
-                        "bot_id": self.experiment.id,
-                        "platform": self.experiment_channel.platform,
-                        "content_type": file.content_type,
-                    },
+                file_delivery_failure_notification(
+                    self.experiment,
+                    platform=self.experiment_channel.platform,
+                    platform_title=platform_title,
+                    content_type=file.content_type,
                 )
                 download_link = file.download_link(self.experiment_session.id)
                 self._send_text_to_user_with_notification(download_link)
@@ -711,15 +699,7 @@ class ChannelBase(ABC):
             audio_file = self.get_message_audio()
             transcript = self._transcribe_audio(audio_file)
         except Exception as e:
-            create_notification(
-                title="Audio Transcription Failed",
-                message="An error occurred while transcribing a voice message",
-                level=LevelChoices.ERROR,
-                slug="audio-transcription-failed",
-                team=self.experiment.team,
-                permissions=["experiments.view_experimentsession"],
-                event_data={"bot_id": self.experiment.id, "platform": self.experiment_channel.platform},
-            )
+            audio_transcription_failure_notification(self.experiment, platform=self.experiment_channel.platform)
             raise e
 
         if self.experiment.echo_transcript:

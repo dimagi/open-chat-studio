@@ -17,8 +17,10 @@ from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field, create_model
 
-from apps.ocs_notifications.models import LevelChoices
-from apps.ocs_notifications.utils import create_notification
+from apps.ocs_notifications.notifications import (
+    custom_action_api_failure_notification,
+    custom_action_unexpected_error_notification,
+)
 from apps.service_providers.auth_service import AuthService
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
@@ -115,40 +117,11 @@ class OpenAPIOperationExecutor:
             return result
 
         except ToolException as e:
-            self._create_api_failure_notification(e)
+            custom_action_api_failure_notification(self.custom_action, self.function_def, e)
             raise
         except Exception as e:
-            self._create_unexpected_error_notification(e)
+            custom_action_unexpected_error_notification(self.custom_action, self.function_def, e)
             raise
-
-    def _create_api_failure_notification(self, exception: Exception) -> None:
-        """Create notification for API failures."""
-        method = self.function_def.method.upper()
-        operation = self.function_def.name
-        create_notification(
-            title=f"Custom Action '{self.custom_action.name}' failed",
-            message=f"{method} '{operation}' API call failed: {exception}",
-            level=LevelChoices.ERROR,
-            team=self.custom_action.team,
-            permissions=["custom_actions.view_customaction"],
-            slug="custom-action-api-failure",
-            event_data={"action_id": self.custom_action.id, "exception_type": type(exception).__name__},
-        )
-
-    def _create_unexpected_error_notification(self, exception: Exception) -> None:
-        """Create notification for unexpected errors."""
-        method = self.function_def.method.upper()
-        operation = self.function_def.name
-
-        create_notification(
-            title=f"Custom Action '{self.custom_action.name}' encountered an error",
-            message=f"{method} '{operation}' failed with an unexpected error: {exception}",
-            level=LevelChoices.ERROR,
-            team=self.custom_action.team,
-            permissions=["custom_actions.view_customaction"],
-            slug="custom-action-unexpected-error",
-            event_data={"action_id": self.custom_action.id, "exception_type": type(exception).__name__},
-        )
 
     def _make_request(
         self, http_client: httpx.Client, url: str, method: str, **kwargs

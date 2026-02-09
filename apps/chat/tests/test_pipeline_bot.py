@@ -45,7 +45,7 @@ def test_save_participant_data():
     participant_data.save.assert_called()
 
 
-@patch("apps.chat.bots.create_notification")
+@patch("apps.ocs_notifications.notifications.create_notification")
 def test_pipeline_execution_failure_creates_notification(mock_create_notification):
     """Test that pipeline execution exception triggers a notification."""
     # Set up mocks
@@ -55,11 +55,11 @@ def test_pipeline_execution_failure_creates_notification(mock_create_notificatio
     experiment.name = "Test Experiment"
     experiment.id = 123
     team = mock.Mock()
+    experiment.team = team
     trace_service = mock.Mock()
     experiment.is_working_version = False
 
     bot = PipelineBot(session, experiment, trace_service)
-    bot.team = team
 
     # Mock the pipeline runner to raise an exception
     with patch("apps.chat.bots.DjangoLangGraphRunner") as mock_runner:
