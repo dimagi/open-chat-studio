@@ -95,6 +95,17 @@ class _wait_from_response_header(tenacity.wait.wait_base):
 class RestrictedHttpClient:
     """HTTP client available inside the restricted Python sandbox."""
 
+    # Expose exception classes as attributes so sandbox code can catch them
+    # without imports: ``except http.TimeoutError: ...``
+    Error = HttpError
+    TimeoutError = HttpTimeoutError
+    ConnectionError = HttpConnectionError
+    InvalidURL = HttpInvalidURL
+    RequestLimitExceeded = HttpRequestLimitExceeded
+    RequestTooLarge = HttpRequestTooLarge
+    ResponseTooLarge = HttpResponseTooLarge
+    AuthProviderError = HttpAuthProviderError
+
     def __init__(self, team=None):
         self._team = team
         self._request_count = 0
