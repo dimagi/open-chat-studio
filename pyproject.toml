@@ -137,7 +137,6 @@ fixture-parentheses = true
 
 [dependency-groups]
 dev = [
-    "pre-commit",
     "ruff",
     "mock",
     "invoke",
@@ -152,6 +151,7 @@ dev = [
     "pytest-xdist",
     "django-debug-toolbar>=5.2.0",
     "djlint>=1.36.4",
+    "prek>=0.3.2",
 ]
 docs = [
     "mkdocs-material>=9.6.12",

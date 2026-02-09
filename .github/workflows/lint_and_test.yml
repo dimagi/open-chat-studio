@@ -88,9 +88,9 @@ jobs:
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
       - name: Run pre-commit hooks
-        uses: pre-commit/action@v3.0.1
+        uses: j178/prek-action@v1
         with:
-          extra_args: --files ${{ steps.file_changes.outputs.files }}
+          extra-args: --files ${{ steps.file_changes.outputs.files }}
 
   check-uv-lock:
     runs-on: ubuntu-latest

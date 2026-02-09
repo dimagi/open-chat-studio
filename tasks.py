@@ -101,7 +101,7 @@ def setup_dev_env(c: Context, step=False):
     if not step or _confirm("\tOK?", _exit=False):
         docker(c, command="up")
 
-    _run_with_confirm(c, "Install pre-commit hooks", "pre-commit install --install-hooks", step)
+    _run_with_confirm(c, "Install pre-commit hooks", "prek install -f", step)
 
     if not Path(".env").exists():
         cprint("\nCreating .env file", "green")
