@@ -51,10 +51,12 @@ def check_single_custom_action_health(action_id: int):
             logger.info(f"Health check passed for {action.name}: {response.status_code}")
         else:
             new_status = HealthCheckStatus.DOWN
+            failure_reason = f"HTTP {response.status_code}"
             logger.warning(f"Health check failed for {action.name}: {response.status_code}")
 
     except httpx.RequestError as e:
         new_status = HealthCheckStatus.DOWN
+        failure_reason = str(e)
         logger.warning(f"Health check error for {action.name}: {str(e)}")
 
     # Notify team members if status changed to DOWN from a non-DOWN state
@@ -69,7 +71,7 @@ def check_single_custom_action_health(action_id: int):
     if should_notify:
         create_notification(
             title="Custom Action is down",
-            message=f"The custom action '{action.name}' is currently unreachable at its health endpoint.",
+            message=f"The custom action '{action.name}' health check failed: {failure_reason}.",
             level=LevelChoices.ERROR,
             team=action.team,
             slug="custom-action-health-check",

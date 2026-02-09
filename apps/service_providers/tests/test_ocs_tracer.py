@@ -166,8 +166,16 @@ class TestOCSCallbackHandler:
         tracer = OCSTracer(experiment_id=456, team_id=team.id)
         tracer.trace_id = str(uuid4())
 
-        # Create callback handler
+        # Set up a session with a participant so the notification includes context
+        participant = Mock()
+        participant.identifier = "user@example.com"
+        session = Mock()
+        session.participant = participant
+        tracer.session = session
+
+        # Create callback handler and mock _get_bot_name to avoid DB hit
         callback_handler = OCSCallbackHandler(tracer=tracer)
+        callback_handler._get_bot_name = Mock(return_value="My Bot")
 
         # Trigger LLM error
         error_message = "Connection timeout to OpenAI API"
@@ -177,14 +185,16 @@ class TestOCSCallbackHandler:
         mock_get_team.assert_called_once_with(id=team.id)
 
         # Verify notification was created with correct parameters
-        mock_create_notification.assert_called_once_with(
-            title="LLM Error Detected",
-            message=error_message,
-            level=LevelChoices.ERROR,
-            team=team,
-            slug="llm-error",
-            event_data={"bot_id": 456, "error_message": error_message},
+        mock_create_notification.assert_called_once()
+        call_kwargs = mock_create_notification.call_args[1]
+        assert call_kwargs["title"] == "LLM Error Detected"
+        assert call_kwargs["message"] == (
+            f"An LLM error occurred for bot 'My Bot' and participant 'user@example.com': {error_message}"
         )
+        assert call_kwargs["level"] == LevelChoices.ERROR
+        assert call_kwargs["team"] == team
+        assert call_kwargs["slug"] == "llm-error"
+        assert call_kwargs["event_data"] == {"bot_id": 456, "error_message": error_message}
 
         # Verify tracer state is updated
         assert tracer.error_detected is True

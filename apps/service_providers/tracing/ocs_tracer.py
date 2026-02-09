@@ -219,14 +219,36 @@ class OCSCallbackHandler(BaseCallbackHandler):
 
         # Create notification for LLM error
         team = Team.objects.get(id=self.tracer.team_id)
+        bot_name = self._get_bot_name()
+
+        if participant_identifier := self._get_participant_identifier():
+            message = f"An LLM error occurred for participant '{participant_identifier}': {error_message}"
+        else:
+            message = f"An LLM error occurred: {error_message}"
         create_notification(
-            title="LLM Error Detected",
-            message=error_message,
+            title=f"LLM Error Detected for '{bot_name}'",
+            message=message,
             level=LevelChoices.ERROR,
             team=team,
             slug="llm-error",
             event_data={"bot_id": self.tracer.experiment_id, "error_message": error_message},
         )
+
+    def _get_bot_name(self) -> str:
+        """Get the experiment/bot name if available."""
+        from apps.experiments.models import Experiment
+
+        try:
+            return Experiment.objects.values_list("name", flat=True).get(id=self.tracer.experiment_id)
+        except Experiment.DoesNotExist:
+            return ""
+
+    def _get_participant_identifier(self) -> str:
+        """Get the participant identifier from the current session if available."""
+        session = self.tracer.session
+        if session and session.participant:
+            return session.participant.identifier
+        return ""
 
     def on_chain_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True

@@ -49,7 +49,8 @@ def test_save_participant_data():
 def test_pipeline_execution_failure_creates_notification(mock_create_notification):
     """Test that pipeline execution exception triggers a notification."""
     # Set up mocks
-    session = mock.Mock()
+    participant = mock.Mock(identifier="user123")
+    session = mock.Mock(participant=participant)
     experiment = mock.Mock()
     experiment.name = "Test Experiment"
     experiment.id = 123
@@ -73,7 +74,7 @@ def test_pipeline_execution_failure_creates_notification(mock_create_notificatio
     # Verify notification was created with correct parameters
     mock_create_notification.assert_called_once_with(
         title=f"Pipeline execution failed for {experiment}",
-        message="Generating a response to the user's message failed due to an error in the pipeline execution",
+        message="Generating a response for user 'user123' failed due to an error in the pipeline execution",
         level=LevelChoices.ERROR,
         team=team,
         slug="pipeline-execution-failed",

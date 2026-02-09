@@ -146,10 +146,13 @@ class PipelineBot:
         except Exception as e:
             # Notify experiment admins of pipeline execution failure, only for non-working versions
             if not self.experiment.is_working_version:
+                identifier = self.session.participant.identifier
+
                 create_notification(
                     title=f"Pipeline execution failed for {self.experiment}",
                     message=(
-                        "Generating a response to the user's message failed due to an error in the pipeline execution"
+                        f"Generating a response for user '{identifier}' failed due to an error in the pipeline "
+                        "execution"
                     ),
                     level=LevelChoices.ERROR,
                     team=self.team,
