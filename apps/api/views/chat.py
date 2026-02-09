@@ -414,7 +414,7 @@ def chat_poll_task_response(request, session_id, task_id):
         return Response({"status": "processing"}, status=status.HTTP_200_OK)
 
     if not task_details["complete"]:
-        message = get_progress_message(experiment.name, experiment.description)
+        message = get_progress_message(experiment.name, experiment.description, throttle_key=task_id)
         data = {"message": message, "status": "processing"}
         return Response(data, status=status.HTTP_200_OK)
 
@@ -495,8 +495,18 @@ def chat_poll_response(request, session_id):
     return Response(ChatPollResponse(response_data).data, status=status.HTTP_200_OK)
 
 
-def get_progress_message(chatbot_name, chatbot_description) -> str | None:
-    """Get the next progress message. This will generate new messages if there are no more messages."""
+def get_progress_message(chatbot_name, chatbot_description, throttle_key=None) -> str | None:
+    """Get the next progress message. This will generate new messages if there are no more messages.
+
+    If throttle_key is provided, a new message is only returned once every 5 seconds.
+    Within the 5-second window the same message is returned.
+    """
+    last_key = f"progress_last:{throttle_key}" if throttle_key else None
+    if last_key:
+        last = cache.get(last_key)
+        if last:
+            return last
+
     key_hash = hashlib.sha1(f"{chatbot_name}:{chatbot_description}".encode())
     key = f"progress_messages:{key_hash.hexdigest()}"
     messages = cache.get(key)
@@ -511,6 +521,10 @@ def get_progress_message(chatbot_name, chatbot_description) -> str | None:
         cache.set(key, remainder, 24 * 3600)
     else:
         cache.delete(key)
+
+    if last_key:
+        cache.set(last_key, message, 5)
+
     return message
 
 
