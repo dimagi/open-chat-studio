@@ -1,8 +1,7 @@
 from django import forms
-from django.db.models import Q, Subquery
 
 from apps.events.models import TimePeriod
-from apps.experiments.models import Experiment, ExperimentRoute
+from apps.experiments.models import Experiment
 from apps.generics.type_select_form import TypeSelectForm
 from apps.pipelines.models import Pipeline, PipelineEventInputs
 
@@ -73,12 +72,7 @@ class ScheduledMessageConfigForm(forms.Form):
         super().__init__(*args, **kwargs)
 
         field = self.fields["experiment_id"]
-        children_subquery = Subquery(
-            ExperimentRoute.objects.filter(parent__id=experiment_id).values_list("child", flat=True)
-        )
-        experiments = Experiment.objects.filter(Q(id=experiment_id) | Q(id__in=children_subquery)).values_list(
-            "id", "name"
-        )
+        experiments = Experiment.objects.filter(id=experiment_id).values_list("id", "name")
         field.choices = experiments
         if not kwargs.get("initial") and len(experiments) == 1:
             field.initial = experiment_id
