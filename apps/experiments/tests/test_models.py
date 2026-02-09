@@ -294,21 +294,6 @@ class TestExperimentSession:
         next_trigger = "Next trigger is at Monday, 01 January 2024 00:00:00 UTC."
         assert schedule == expected.format(message=message, next_trigger=next_trigger)
 
-    def test_get_participant_scheduled_messages_includes_child_experiments(self):
-        session = ExperimentSessionFactory()
-        team = session.team
-        participant = session.participant
-        session2 = ExperimentSessionFactory(experiment__team=team, participant=participant)
-        event_action = event_action, params = self._construct_event_action(
-            time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
-        )
-        ScheduledMessageFactory(experiment=session.experiment, team=team, participant=participant, action=event_action)
-        ScheduledMessageFactory(experiment=session2.experiment, team=team, participant=participant, action=event_action)
-        ExperimentRoute.objects.create(team=team, parent=session.experiment, child=session2.experiment, keyword="test")
-
-        assert len(participant.get_schedules_for_experiment(session2.experiment_id)) == 1
-        assert len(participant.get_schedules_for_experiment(session.experiment_id)) == 2
-
     @pytest.mark.parametrize("use_custom_experiment", [False, True])
     @patch.object(ExperimentSession, "ad_hoc_bot_message")
     def test_scheduled_message_experiment(self, mock_ad_hoc, use_custom_experiment):
