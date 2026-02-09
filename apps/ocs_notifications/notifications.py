@@ -14,6 +14,7 @@ def custom_action_health_check_failure_notification(action, failure_reason: str)
         slug="custom-action-health-check",
         event_data={"action_id": action.id, "status": action.health_status},
         permissions=["custom_actions.change_customaction"],
+        links={"View Action": action.get_absolute_url()},
     )
 
 
