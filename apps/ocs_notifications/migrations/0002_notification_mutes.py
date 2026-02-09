@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('notification_type', models.CharField(blank=True, help_text='Notification slug/type to mute. Leave empty to mute all.', max_length=255, null=True)),
+                ('notification_type', models.CharField(blank=True, default='', help_text='Notification slug/type to mute. Leave empty to mute all.', max_length=255)),
                 ('muted_until', models.DateTimeField(blank=True, help_text='When the mute expires. NULL means forever.', null=True)),
                 ('team', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='teams.team', verbose_name='Team')),
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='notification_mutes', to=settings.AUTH_USER_MODEL)),

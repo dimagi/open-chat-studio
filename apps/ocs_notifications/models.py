@@ -83,7 +83,12 @@ class NotificationMute(BaseTeamModel):
 
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE, related_name="notification_mutes")
     # If notification_type is None, all notifications are muted
-    notification_type = models.CharField(max_length=255, null=True, blank=True, help_text="Notification slug/type to mute. Leave empty to mute all.")
+    notification_type = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Notification slug/type to mute. Leave empty to mute all.",
+    )
     muted_until = models.DateTimeField(null=True, blank=True, help_text="When the mute expires. NULL means forever.")
 
     class Meta:

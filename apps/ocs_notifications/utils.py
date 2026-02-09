@@ -71,7 +71,7 @@ def create_notification(
             if is_notification_muted(user, team, slug):
                 # Skip creating/updating UserNotification for muted users
                 continue
-            
+
             user_notification, created = UserNotification.objects.get_or_create(
                 team=team, notification=notification, user=user
             )
@@ -231,41 +231,36 @@ def is_notification_muted(user, team: Team, notification_slug: str) -> bool:
     Returns:
         bool: True if notifications are muted, False otherwise
     """
-    now = timezone.now()
-    
     # Check for specific notification type mute
     specific_mutes = NotificationMute.objects.filter(
         user=user,
         team=team,
         notification_type=notification_slug,
     )
-    
-    for mute in specific_mutes:
-        if mute.is_active():
-            return True
-    
-    # Check for all notifications mute
+
+    if any(mute.is_active() for mute in specific_mutes):
+        return True
+
+    # Check for all notifications mute (empty string means all)
     all_mutes = NotificationMute.objects.filter(
         user=user,
         team=team,
-        notification_type__isnull=True,
+        notification_type="",
     )
-    
-    for mute in all_mutes:
-        if mute.is_active():
-            return True
-    
-    return False
+
+    return any(mute.is_active() for mute in all_mutes)
 
 
-def create_or_update_mute(user, team: Team, notification_type: str | None, duration_hours: int | None) -> NotificationMute:
+def create_or_update_mute(
+    user, team: Team, notification_type: str | None, duration_hours: int | None
+) -> NotificationMute:
     """
     Create or update a notification mute for a user.
 
     Args:
         user: The user creating the mute
         team: The team context
-        notification_type: The notification slug to mute, or None to mute all
+        notification_type: The notification slug to mute, or None/empty string to mute all
         duration_hours: Hours until mute expires, or None for permanent mute
 
     Returns:
@@ -274,14 +269,17 @@ def create_or_update_mute(user, team: Team, notification_type: str | None, durat
     muted_until = None
     if duration_hours is not None:
         muted_until = timezone.now() + timezone.timedelta(hours=duration_hours)
-    
+
+    # Convert None to empty string for CharField
+    mute_type = notification_type or ""
+
     mute, created = NotificationMute.objects.update_or_create(
         user=user,
         team=team,
-        notification_type=notification_type,
+        notification_type=mute_type,
         defaults={"muted_until": muted_until},
     )
-    
+
     return mute
 
 
@@ -292,10 +290,13 @@ def delete_mute(user, team: Team, notification_type: str | None) -> None:
     Args:
         user: The user deleting the mute
         team: The team context
-        notification_type: The notification slug to unmute, or None for all notifications
+        notification_type: The notification slug to unmute, or None/empty string for all notifications
     """
+    # Convert None to empty string for CharField
+    mute_type = notification_type or ""
+
     NotificationMute.objects.filter(
         user=user,
         team=team,
-        notification_type=notification_type,
+        notification_type=mute_type,
     ).delete()
