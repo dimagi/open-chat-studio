@@ -12,22 +12,9 @@ from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 logger = logging.getLogger("restricted_http")
 
-# --- Resource Limits (overridable via Django settings) ---
-
-MAX_REQUESTS = 10
-DEFAULT_TIMEOUT = 5  # seconds
-MAX_TIMEOUT = 30  # seconds
-MAX_RESPONSE_BYTES = 1_048_576  # 1 MB
-MAX_REQUEST_BYTES = 524_288  # 512 KB
-MAX_FILE_UPLOAD_BYTES = 26_214_400  # 25 MB
-
 BLOCKED_HEADERS = {"host", "transfer-encoding"}
 
 SENSITIVE_LOG_HEADERS = {"authorization", "x-api-key", "cookie"}
-
-
-def _get_setting(name, default):
-    return getattr(settings, name, default)
 
 
 # --- Exceptions ---
@@ -142,9 +129,8 @@ class RestrictedHttpClient:
     def _request(
         self, method, url, *, params=None, headers=None, auth=None, json=None, data=None, files=None, timeout=None
     ):
-        max_requests = _get_setting("RESTRICTED_HTTP_MAX_REQUESTS", MAX_REQUESTS)
-        if self._request_count >= max_requests:
-            raise HttpRequestLimitExceeded(f"Request limit of {max_requests} exceeded")
+        if self._request_count >= settings.RESTRICTED_HTTP_MAX_REQUESTS:
+            raise HttpRequestLimitExceeded(f"Request limit of {settings.RESTRICTED_HTTP_MAX_REQUESTS} exceeded")
 
         # Validate URL (SSRF prevention) — cached per (hostname, port)
         self._validate_url(url)
@@ -165,11 +151,9 @@ class RestrictedHttpClient:
         resolved_files, opened_handles = self._resolve_files(files)
 
         # Clamp timeout
-        default_timeout = _get_setting("RESTRICTED_HTTP_DEFAULT_TIMEOUT", DEFAULT_TIMEOUT)
-        max_timeout = _get_setting("RESTRICTED_HTTP_MAX_TIMEOUT", MAX_TIMEOUT)
         if timeout is None:
-            timeout = default_timeout
-        timeout = min(max(float(timeout), 1), max_timeout)
+            timeout = settings.RESTRICTED_HTTP_DEFAULT_TIMEOUT
+        timeout = min(max(float(timeout), 1), settings.RESTRICTED_HTTP_MAX_TIMEOUT)
 
         # Build httpx kwargs
         httpx_kwargs = {
@@ -230,9 +214,10 @@ class RestrictedHttpClient:
         try:
             for attempt in retry_controller:
                 with attempt:
-                    max_requests = _get_setting("RESTRICTED_HTTP_MAX_REQUESTS", MAX_REQUESTS)
-                    if self._request_count >= max_requests:
-                        raise HttpRequestLimitExceeded(f"Request limit of {max_requests} exceeded")
+                    if self._request_count >= settings.RESTRICTED_HTTP_MAX_REQUESTS:
+                        raise HttpRequestLimitExceeded(
+                            f"Request limit of {settings.RESTRICTED_HTTP_MAX_REQUESTS} exceeded"
+                        )
                     self._request_count += 1
                     result = self._do_request(httpx_kwargs)
                     return result
@@ -245,7 +230,7 @@ class RestrictedHttpClient:
             raise HttpTimeoutError(f"Request timed out: {exc}") from exc
 
     def _do_request(self, httpx_kwargs):
-        max_response_bytes = _get_setting("RESTRICTED_HTTP_MAX_RESPONSE_BYTES", MAX_RESPONSE_BYTES)
+        max_response_bytes = settings.RESTRICTED_HTTP_MAX_RESPONSE_BYTES
         method = httpx_kwargs["method"]
         url = httpx_kwargs["url"]
 
@@ -345,7 +330,7 @@ class RestrictedHttpClient:
         return auth_headers
 
     def _check_body_size(self, json=None, data=None):
-        max_request_bytes = _get_setting("RESTRICTED_HTTP_MAX_REQUEST_BYTES", MAX_REQUEST_BYTES)
+        max_request_bytes = settings.RESTRICTED_HTTP_MAX_REQUEST_BYTES
 
         if json is not None:
             size = len(json_module.dumps(json).encode("utf-8"))
@@ -374,7 +359,7 @@ class RestrictedHttpClient:
         if files is None:
             return None, []
 
-        max_file_bytes = _get_setting("RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES", MAX_FILE_UPLOAD_BYTES)
+        max_file_bytes = settings.RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES
         opened_handles = []
         total_size = 0
 

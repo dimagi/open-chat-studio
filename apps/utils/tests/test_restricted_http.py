@@ -144,9 +144,8 @@ class TestBlockedHeaders:
 
 
 class TestRequestCountLimit:
-    @patch("apps.utils.restricted_http._get_setting")
-    def test_request_limit_exceeded(self, mock_setting, client, mock_validate_url, httpx_mock):
-        mock_setting.side_effect = lambda name, default: 2 if name == "RESTRICTED_HTTP_MAX_REQUESTS" else default
+    def test_request_limit_exceeded(self, client, mock_validate_url, httpx_mock, settings):
+        settings.RESTRICTED_HTTP_MAX_REQUESTS = 2
         httpx_mock.add_response(text="ok")
         httpx_mock.add_response(text="ok")
         client.get("https://api.example.com/1")
@@ -168,9 +167,8 @@ class TestRequestCountLimit:
 
 
 class TestResponseSizeLimit:
-    @patch("apps.utils.restricted_http._get_setting")
-    def test_response_too_large(self, mock_setting, client, mock_validate_url, httpx_mock):
-        mock_setting.side_effect = lambda name, default: 10 if name == "RESTRICTED_HTTP_MAX_RESPONSE_BYTES" else default
+    def test_response_too_large(self, client, mock_validate_url, httpx_mock, settings):
+        settings.RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 10
         httpx_mock.add_response(content=b"x" * 100)
         with pytest.raises(HttpResponseTooLarge, match="exceeds 10 bytes"):
             client.get("https://api.example.com/large")
@@ -180,15 +178,13 @@ class TestResponseSizeLimit:
 
 
 class TestRequestBodySizeLimit:
-    @patch("apps.utils.restricted_http._get_setting")
-    def test_json_body_too_large(self, mock_setting, client, mock_validate_url):
-        mock_setting.side_effect = lambda name, default: 10 if name == "RESTRICTED_HTTP_MAX_REQUEST_BYTES" else default
+    def test_json_body_too_large(self, client, mock_validate_url, settings):
+        settings.RESTRICTED_HTTP_MAX_REQUEST_BYTES = 10
         with pytest.raises(HttpRequestTooLarge, match="exceeds 10 bytes"):
             client.post("https://api.example.com/data", json={"key": "a" * 100})
 
-    @patch("apps.utils.restricted_http._get_setting")
-    def test_data_body_too_large(self, mock_setting, client, mock_validate_url):
-        mock_setting.side_effect = lambda name, default: 10 if name == "RESTRICTED_HTTP_MAX_REQUEST_BYTES" else default
+    def test_data_body_too_large(self, client, mock_validate_url, settings):
+        settings.RESTRICTED_HTTP_MAX_REQUEST_BYTES = 10
         with pytest.raises(HttpRequestTooLarge, match="exceeds 10 bytes"):
             client.post("https://api.example.com/data", data=b"x" * 100)
 
@@ -257,20 +253,17 @@ class TestRetryBehavior:
         assert response["json"] == {"error": "rate limited"}
         assert client._request_count == 3  # 1 initial + 2 retries
 
-    def test_retries_count_toward_limit(self, client, mock_validate_url, httpx_mock):
+    def test_retries_count_toward_limit(self, client, mock_validate_url, httpx_mock, settings):
         """Each retry counts as a request toward the limit."""
+        settings.RESTRICTED_HTTP_MAX_REQUESTS = 5
         # First call: 3 attempts (all 429, retries exhausted). Second call: 2 attempts then limit hit.
         for _ in range(5):
             httpx_mock.add_response(status_code=429)
-        with patch(
-            "apps.utils.restricted_http._get_setting",
-            side_effect=lambda name, default: 5 if name == "RESTRICTED_HTTP_MAX_REQUESTS" else default,
-        ):
-            client.get("https://api.example.com/1")  # uses 3 (retries exhausted)
-            assert client._request_count == 3
-            # Second call: gets 2 more attempts (4, 5) then hits limit on 3rd retry attempt
-            with pytest.raises(HttpRequestLimitExceeded):
-                client.get("https://api.example.com/2")
+        client.get("https://api.example.com/1")  # uses 3 (retries exhausted)
+        assert client._request_count == 3
+        # Second call: gets 2 more attempts (4, 5) then hits limit on 3rd retry attempt
+        with pytest.raises(HttpRequestLimitExceeded):
+            client.get("https://api.example.com/2")
 
     def test_connection_error_retried_then_raised(self, client, mock_validate_url, httpx_mock):
         for _ in range(3):
@@ -403,11 +396,8 @@ class TestFileUpload:
         )
         assert response["status_code"] == 200
 
-    @patch("apps.utils.restricted_http._get_setting")
-    def test_file_size_limit(self, mock_setting, client, mock_validate_url):
-        mock_setting.side_effect = (
-            lambda name, default: 10 if name == "RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES" else default
-        )
+    def test_file_size_limit(self, client, mock_validate_url, settings):
+        settings.RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES = 10
         with pytest.raises(HttpRequestTooLarge, match="File upload exceeds"):
             client.post(
                 "https://api.example.com/upload",

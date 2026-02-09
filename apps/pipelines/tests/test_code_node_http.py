@@ -128,12 +128,9 @@ def main(input, **kwargs):
 @pytest.mark.django_db()
 class TestCodeNodeHttpLimits:
     @patch("apps.utils.restricted_http.validate_user_input_url")
-    @patch(
-        "apps.utils.restricted_http._get_setting",
-        side_effect=lambda name, default: 2 if name == "RESTRICTED_HTTP_MAX_REQUESTS" else default,
-    )
-    def test_request_limit_error_in_code_node(self, mock_setting, mock_validate, httpx_mock):
+    def test_request_limit_error_in_code_node(self, mock_validate, httpx_mock, settings):
         """Request limit exceeded surfaces as CodeNodeRunError."""
+        settings.RESTRICTED_HTTP_MAX_REQUESTS = 2
         code = """
 def main(input, **kwargs):
     http.get("https://api.example.com/1")

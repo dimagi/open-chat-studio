@@ -60,6 +60,7 @@ from apps.service_providers.llm_service.runnables import (
 )
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
+from apps.utils.restricted_http import RestrictedHttpClient
 
 from .mixins import (
     ExtractStructuredDataNodeMixin,
@@ -853,8 +854,6 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
         session = state.get("experiment_session")
         team = session.team if session else None
-
-        from apps.utils.restricted_http import RestrictedHttpClient
 
         http_client = RestrictedHttpClient(team=team)
 
