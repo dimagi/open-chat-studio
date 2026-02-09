@@ -116,8 +116,8 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
             team__slug=team_slug,
         )
 
-        # Get the notification slug from the notification identifier
-        notification_slug = user_notification.notification.identifier
+        # Get the notification identifier
+        notification_identifier = user_notification.notification.identifier
 
         # Get duration from POST data (in hours)
         duration_param = request.POST.get("duration")
@@ -126,10 +126,10 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
         duration_hours = DURATION_MAP.get(duration_param)
 
         # Determine what to mute
-        mute_slug = None if notification_type == NOTIFICATION_TYPE_ALL else notification_slug
+        mute_identifier = None if notification_type == NOTIFICATION_TYPE_ALL else notification_identifier
 
         create_or_update_mute(
-            user=request.user, team=request.team, notification_type=mute_slug, duration_hours=duration_hours
+            user=request.user, team=request.team, notification_type=mute_identifier, duration_hours=duration_hours
         )
 
         message = (
@@ -151,13 +151,13 @@ class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
             team__slug=team_slug,
         )
 
-        # Get the notification slug from the notification identifier
-        notification_slug = user_notification.notification.identifier
+        # Get the notification identifier
+        notification_identifier = user_notification.notification.identifier
         notification_type = request.POST.get("notification_type")  # 'specific' or 'all'
 
         # Determine what to unmute
-        mute_slug = None if notification_type == NOTIFICATION_TYPE_ALL else notification_slug
+        mute_identifier = None if notification_type == NOTIFICATION_TYPE_ALL else notification_identifier
 
-        delete_mute(user=request.user, team=request.team, notification_type=mute_slug)
+        delete_mute(user=request.user, team=request.team, notification_type=mute_identifier)
 
         return JsonResponse({"success": True, "message": "Notifications unmuted"})

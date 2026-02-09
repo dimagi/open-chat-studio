@@ -219,14 +219,14 @@ def toggle_notification_read(user, user_notification: UserNotification, read: bo
     bust_unread_notification_cache(user.id, team_slug=user_notification.team.slug)
 
 
-def is_notification_muted(user, team: Team, notification_slug: str) -> bool:
+def is_notification_muted(user, team: Team, notification_identifier: str) -> bool:
     """
     Check if a user has muted a specific notification type or all notifications.
 
     Args:
         user: The user to check mute status for
         team: The team context
-        notification_slug: The notification type slug to check
+        notification_identifier: The notification identifier/slug to check
 
     Returns:
         bool: True if notifications are muted, False otherwise
@@ -241,7 +241,8 @@ def is_notification_muted(user, team: Team, notification_slug: str) -> bool:
     # 2. It hasn't expired yet (muted_until > now)
     active_mute_exists = (
         NotificationMute.objects.filter(
-            Q(user=user, team=team, notification_type=notification_slug) | Q(user=user, team=team, notification_type="")
+            Q(user=user, team=team, notification_type=notification_identifier)
+            | Q(user=user, team=team, notification_type="")
         )
         .filter(Q(muted_until__isnull=True) | Q(muted_until__gt=now))
         .exists()
