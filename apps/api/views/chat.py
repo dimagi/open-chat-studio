@@ -544,7 +544,7 @@ def get_progress_messages(chatbot_name, chatbot_description) -> list[str]:
         if chatbot_description:
             message += f"\nDescription: '{chatbot_description}'"
         result = agent.invoke({"messages": [{"role": "user", "content": message}]})
-        return result["structured_response"].messages
+        return result["structured_response"].messages or []
     except Exception:
         logger.exception("Failed to generate progress messages for chatbot '%s'", chatbot_name)
         return []

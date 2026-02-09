@@ -3,7 +3,6 @@ import logging
 import textwrap
 
 import pydantic
-from anthropic import AnthropicError
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -24,7 +23,7 @@ def pipeline_generate_code(request, team_slug: str):
     current_code = body["context"]
     try:
         completion = code_completion(user_query, current_code)
-    except (ValueError, TypeError, AnthropicError):
+    except Exception:
         logger.exception("An error occurred while generating code.")
         return JsonResponse({"error": "An error occurred while generating code."})
     return JsonResponse({"response": completion})
@@ -158,18 +157,20 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
 
     system_prompt = system_prompt.format(**prompt_context).strip()
 
+    system_prompt += (
+        "\n\nIMPORTANT: Start your response with exactly"
+        " `def main(input: str, **kwargs) -> str:` and nothing else before it."
+    )
     agent = build_system_agent("high", system_prompt)
-    output_starter = "def main(input: str, **kwargs) -> str:"
     response = agent.invoke(
         {
             "messages": [
                 {"role": "user", "content": user_query},
-                {"role": "assistant", "content": output_starter},
             ]
         }
     )
 
-    response_code = f"{output_starter}{response['messages'][-1].text}"
+    response_code = response["messages"][-1].text
 
     from apps.pipelines.nodes.nodes import CodeNode
 

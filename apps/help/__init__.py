@@ -28,7 +28,10 @@ class SystemAgentModel(BaseModel):
 def get_system_agent_models(models, api_keys):
     result = []
     for model in models:
-        provider, name = model.split(":", 1)
+        parts = model.split(":", 1)
+        if len(parts) != 2:
+            raise ValueError(f"Invalid system agent model format: '{model}'. Expected 'provider:model_name'.")
+        provider, name = parts
         key = api_keys.get(provider, None)
         if not key:
             raise Exception(f"System agent API Key not found: {provider}. Update `SYSTEM_AGENT_API_KEYS`.")
