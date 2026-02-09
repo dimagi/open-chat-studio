@@ -12,4 +12,14 @@ urlpatterns = [
         views.ToggleNotificationReadView.as_view(),
         name="toggle_notification_read",
     ),
+    path(
+        "notification/<int:notification_id>/mute/",
+        views.MuteNotificationView.as_view(),
+        name="mute_notification",
+    ),
+    path(
+        "notification/<int:notification_id>/unmute/",
+        views.UnmuteNotificationView.as_view(),
+        name="unmute_notification",
+    ),
 ]

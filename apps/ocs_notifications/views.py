@@ -1,3 +1,4 @@
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.generic import TemplateView, View
@@ -9,7 +10,7 @@ from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
 from apps.ocs_notifications.models import UserNotification
 from apps.ocs_notifications.tables import UserNotificationTable
-from apps.ocs_notifications.utils import toggle_notification_read
+from apps.ocs_notifications.utils import create_or_update_mute, delete_mute, toggle_notification_read
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -83,3 +84,78 @@ class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
 
         # Return the updated filtered table
         return render_table_row(request, UserNotificationTable, user_notification)
+
+
+class MuteNotificationView(LoginAndTeamRequiredMixin, View):
+    """Mute a specific notification type or all notifications"""
+    
+    def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
+        user_notification = get_object_or_404(
+            UserNotification,
+            id=notification_id,
+            user=self.request.user,
+            team__slug=team_slug,
+        )
+        
+        # Get the notification slug from the notification
+        notification_slug = user_notification.notification.identifier[:40]  # Use identifier as slug
+        
+        # Get duration from POST data (in hours)
+        duration_param = request.POST.get('duration')
+        notification_type = request.POST.get('notification_type')  # 'specific' or 'all'
+        
+        # Map duration string to hours
+        duration_map = {
+            '8h': 8,
+            '1d': 24,
+            '1w': 168,  # 7 * 24
+            '1m': 720,  # 30 * 24
+            'forever': None,
+        }
+        
+        duration_hours = duration_map.get(duration_param)
+        
+        # Determine what to mute
+        mute_slug = None if notification_type == 'all' else notification_slug
+        
+        create_or_update_mute(
+            user=request.user,
+            team=request.team,
+            notification_type=mute_slug,
+            duration_hours=duration_hours
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Notifications muted for {duration_param}' if duration_param != 'forever' else 'Notifications muted permanently'
+        })
+
+
+class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
+    """Unmute a specific notification type or all notifications"""
+    
+    def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
+        user_notification = get_object_or_404(
+            UserNotification,
+            id=notification_id,
+            user=self.request.user,
+            team__slug=team_slug,
+        )
+        
+        # Get the notification slug from the notification
+        notification_slug = user_notification.notification.identifier[:40]
+        notification_type = request.POST.get('notification_type')  # 'specific' or 'all'
+        
+        # Determine what to unmute
+        mute_slug = None if notification_type == 'all' else notification_slug
+        
+        delete_mute(
+            user=request.user,
+            team=request.team,
+            notification_type=mute_slug
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Notifications unmuted'
+        })

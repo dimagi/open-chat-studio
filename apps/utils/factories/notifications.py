@@ -1,7 +1,7 @@
 import factory
 from django.utils import timezone
 
-from apps.ocs_notifications.models import LevelChoices, Notification, UserNotification
+from apps.ocs_notifications.models import LevelChoices, Notification, NotificationMute, UserNotification
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -29,3 +29,14 @@ class UserNotificationFactory(factory.django.DjangoModelFactory):
     user = factory.SubFactory(UserFactory)
     read = False
     read_at = None
+
+
+class NotificationMuteFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = NotificationMute
+        skip_postgeneration_save = True
+
+    team = factory.SubFactory(TeamFactory)
+    user = factory.SubFactory(UserFactory)
+    notification_type = factory.Sequence(lambda n: f"notification_type_{n}")
+    muted_until = None  # Default to permanent mute

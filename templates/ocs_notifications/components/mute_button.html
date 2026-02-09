@@ -1,0 +1,63 @@
+<div class="dropdown dropdown-end">
+  <button tabindex="0" class="btn btn-sm btn-ghost" title="Mute notifications">
+    <i class="fa fa-bell-slash"></i>
+  </button>
+  <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-64">
+    <li class="menu-title">
+      <span>Mute this notification type</span>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"
+         hx-vals='{"duration": "8h", "notification_type": "specific"}'
+         hx-swap="none">8 hours</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"
+         hx-vals='{"duration": "1d", "notification_type": "specific"}'
+         hx-swap="none">1 day</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"
+         hx-vals='{"duration": "1w", "notification_type": "specific"}'
+         hx-swap="none">1 week</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"
+         hx-vals='{"duration": "1m", "notification_type": "specific"}'
+         hx-swap="none">1 month</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"
+         hx-vals='{"duration": "forever", "notification_type": "specific"}'
+         hx-swap="none">Forever</a>
+    </li>
+    <li class="menu-title mt-2">
+      <span>Mute all notifications</span>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"
+         hx-vals='{"duration": "8h", "notification_type": "all"}'
+         hx-swap="none">8 hours</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"
+         hx-vals='{"duration": "1d", "notification_type": "all"}'
+         hx-swap="none">1 day</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"
+         hx-vals='{"duration": "1w", "notification_type": "all"}'
+         hx-swap="none">1 week</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"
+         hx-vals='{"duration": "1m", "notification_type": "all"}'
+         hx-swap="none">1 month</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"
+         hx-vals='{"duration": "forever", "notification_type": "all"}'
+         hx-swap="none">Forever</a>
+    </li>
+  </ul>
+</div>

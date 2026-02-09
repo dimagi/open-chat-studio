@@ -11,7 +11,7 @@ from django.utils import timezone
 from apps.teams.models import Team
 from apps.web.meta import absolute_url
 
-from .models import LevelChoices, Notification, UserNotification, UserNotificationPreferences
+from .models import LevelChoices, Notification, NotificationMute, UserNotification, UserNotificationPreferences
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -67,6 +67,11 @@ def create_notification(
             },
         )
         for user in users:
+            # Check if user has muted this notification type
+            if is_notification_muted(user, team, slug):
+                # Skip creating/updating UserNotification for muted users
+                continue
+            
             user_notification, created = UserNotification.objects.get_or_create(
                 team=team, notification=notification, user=user
             )
@@ -212,3 +217,85 @@ def toggle_notification_read(user, user_notification: UserNotification, read: bo
         user_notification.read_at = None
     user_notification.save()
     bust_unread_notification_cache(user.id, team_slug=user_notification.team.slug)
+
+
+def is_notification_muted(user, team: Team, notification_slug: str) -> bool:
+    """
+    Check if a user has muted a specific notification type or all notifications.
+
+    Args:
+        user: The user to check mute status for
+        team: The team context
+        notification_slug: The notification type slug to check
+
+    Returns:
+        bool: True if notifications are muted, False otherwise
+    """
+    now = timezone.now()
+    
+    # Check for specific notification type mute
+    specific_mutes = NotificationMute.objects.filter(
+        user=user,
+        team=team,
+        notification_type=notification_slug,
+    )
+    
+    for mute in specific_mutes:
+        if mute.is_active():
+            return True
+    
+    # Check for all notifications mute
+    all_mutes = NotificationMute.objects.filter(
+        user=user,
+        team=team,
+        notification_type__isnull=True,
+    )
+    
+    for mute in all_mutes:
+        if mute.is_active():
+            return True
+    
+    return False
+
+
+def create_or_update_mute(user, team: Team, notification_type: str | None, duration_hours: int | None) -> NotificationMute:
+    """
+    Create or update a notification mute for a user.
+
+    Args:
+        user: The user creating the mute
+        team: The team context
+        notification_type: The notification slug to mute, or None to mute all
+        duration_hours: Hours until mute expires, or None for permanent mute
+
+    Returns:
+        NotificationMute: The created or updated mute
+    """
+    muted_until = None
+    if duration_hours is not None:
+        muted_until = timezone.now() + timezone.timedelta(hours=duration_hours)
+    
+    mute, created = NotificationMute.objects.update_or_create(
+        user=user,
+        team=team,
+        notification_type=notification_type,
+        defaults={"muted_until": muted_until},
+    )
+    
+    return mute
+
+
+def delete_mute(user, team: Team, notification_type: str | None) -> None:
+    """
+    Delete a notification mute for a user.
+
+    Args:
+        user: The user deleting the mute
+        team: The team context
+        notification_type: The notification slug to unmute, or None for all notifications
+    """
+    NotificationMute.objects.filter(
+        user=user,
+        team=team,
+        notification_type=notification_type,
+    ).delete()

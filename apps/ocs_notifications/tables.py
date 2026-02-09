@@ -25,6 +25,11 @@ class UserNotificationTable(tables.Table):
         accessor="notification__last_event_at",
         orderable=True,
     )
+    mute = columns.TemplateColumn(
+        template_name="ocs_notifications/components/mute_button.html",
+        verbose_name="Mute",
+        orderable=False,
+    )
 
     class Meta:
         model = UserNotification
@@ -33,6 +38,7 @@ class UserNotificationTable(tables.Table):
             "level",
             "read",
             "timestamp",
+            "mute",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
