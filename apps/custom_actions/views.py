@@ -3,12 +3,13 @@ import json
 import httpx
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 
 from apps.custom_actions.forms import CustomActionForm
 from apps.custom_actions.models import CustomAction, HealthCheckStatus
@@ -121,6 +122,11 @@ class CustomActionEndpointTester(LoginAndTeamRequiredMixin, PermissionRequiredMi
 
     template_name = "custom_actions/endpoint_tester.html"
     permission_required = "custom_actions.view_customaction"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not flag_is_active(request, "flag_custom_actions_test_endpoints"):
+            raise Http404
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         return CustomAction.objects.filter(team=self.request.team)
