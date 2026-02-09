@@ -1,11 +1,9 @@
 from django.conf import settings
-from django.urls import reverse
 from django_tables2 import columns, tables
 
 from apps.experiments.models import (
     ConsentForm,
     Experiment,
-    ExperimentRoute,
     SourceMaterial,
     Survey,
 )
@@ -104,52 +102,3 @@ class ExperimentVersionsTable(tables.Table):
 
     def render_created_at(self, record):
         return record.created_at if record.working_version_id else ""
-
-
-def _get_route_url(url_name, request, record, value):
-    return reverse(url_name, args=[request.team.slug, record.parent_id, record.pk])
-
-
-class ChildExperimentRoutesTable(tables.Table):
-    child = actions.chip_column(orderable=True)
-    actions = actions.ActionsColumn(
-        actions=[
-            actions.edit_action(
-                url_name="experiments:experiment_route_edit",
-                url_factory=_get_route_url,
-            ),
-            actions.delete_action(
-                url_name="experiments:experiment_route_delete",
-                url_factory=_get_route_url,
-            ),
-        ]
-    )
-
-    class Meta:
-        model = ExperimentRoute
-        fields = ["child", "keyword", "is_default", "actions"]
-        orderable = False
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        empty_text = "No routes yet!"
-
-
-class TerminalBotsTable(ChildExperimentRoutesTable):
-    child = actions.chip_column(orderable=True)
-
-    class Meta:
-        model = ExperimentRoute
-        fields = ["child", "is_default", "actions"]
-        orderable = False
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        empty_text = "No terminal bots yet!"
-
-
-class ParentExperimentRoutesTable(tables.Table):
-    parent = actions.chip_column(orderable=True)
-
-    class Meta:
-        model = ExperimentRoute
-        fields = ["parent", "keyword", "is_default"]
-        orderable = False
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        empty_text = "No routes yet!"

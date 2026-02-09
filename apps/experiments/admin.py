@@ -103,18 +103,6 @@ class ExperimentAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     search_fields = ("public_id", "name")
 
 
-@admin.register(models.ExperimentRoute)
-class ExperimentRouteAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
-    list_display = (
-        "parent",
-        "child",
-        "keyword",
-        "is_default",
-        "version_family",
-        "is_archived",
-    )
-
-
 @admin.register(models.ExperimentSession)
 class ExperimentSessionAdmin(admin.ModelAdmin):
     list_display = (
