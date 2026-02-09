@@ -151,7 +151,9 @@ class CustomActionEndpointTester(LoginAndTeamRequiredMixin, PermissionRequiredMi
                         param_values[param.name] = 0.0
                     elif param.schema_type == "array":
                         param_values[param.name] = []
-                    else:  # string, object, and others
+                    elif param.schema_type == "object":
+                        param_values[param.name] = {}
+                    else:
                         param_values[param.name] = ""
             operations_data[operation.operation_id] = param_values
 
