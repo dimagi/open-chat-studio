@@ -226,7 +226,10 @@ class TestCustomActionEndpoint(LoginAndTeamRequiredMixin, PermissionRequiredMixi
 
                 # Update health status if this was a health endpoint and server was down but is healthy now
             is_health_endpoint = operation.path == custom_action.healthcheck_path
-            server_was_down_previously = custom_action.health_status == HealthCheckStatus.DOWN
+            server_was_down_previously = custom_action.health_status in [
+                HealthCheckStatus.DOWN,
+                HealthCheckStatus.UNKNOWN,
+            ]
             server_is_healthy_now = response.status_code >= 200 and response.status_code < 300
             if is_health_endpoint and server_was_down_previously and server_is_healthy_now:
                 custom_action.health_status = HealthCheckStatus.UP
