@@ -375,6 +375,12 @@ class AnthropicLlmService(LlmService):
                 "type": "enabled",
                 "budget_tokens": budget_tokens,
             }
+        elif kwargs.pop("adaptive_thinking", False):
+            kwargs["thinking"] = {
+                "type": "adaptive",
+            }
+        if effort := kwargs.pop("effort", None):
+            kwargs["model_kwargs"] = {"output_config": {"effort": effort}}
 
         return kwargs
 

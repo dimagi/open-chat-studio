@@ -291,11 +291,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         if tag := self.tags.filter(category=TagCategories.BOT_RESPONSE).first():
             return tag.name
 
-    def get_safety_layer_tag_name(self) -> str | None:
-        """Returns the name of the safety layer tag, if there is one"""
-        if tag := self.tags.filter(category=TagCategories.SAFETY_LAYER_RESPONSE).first():
-            return tag.name
-
     def get_absolute_url(self):
         if not self.chat_id or not self.chat.team_id:
             return None
