@@ -180,10 +180,6 @@ class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
     pass
 
 
-class SafetyLayerObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    pass
-
-
 class ConsentFormObjectManager(VersionsObjectManagerMixin, AuditingManager):
     pass
 
@@ -245,54 +241,6 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
                 VersionField(name="topic", raw_value=self.topic),
                 VersionField(name="description", raw_value=self.description),
                 VersionField(name="material", raw_value=self.material),
-            ],
-        )
-
-
-class SafetyLayer(BaseTeamModel, VersionsMixin):
-    name = models.CharField(max_length=128)
-    prompt_text = models.TextField()
-    messages_to_review = models.CharField(
-        choices=ChatMessageType.safety_layer_choices,
-        default=ChatMessageType.HUMAN,
-        help_text="Whether the prompt should be applied to human or AI messages",
-        max_length=10,
-    )
-    default_response_to_user = models.TextField(
-        blank=True,
-        default="",
-        help_text="If specified, the message that will be sent to the user instead of the filtered message.",
-    )
-    prompt_to_bot = models.TextField(
-        blank=True,
-        default="",
-        help_text="If specified, the message that will be sent to the bot instead of the filtered message.",
-    )
-    working_version = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="versions",
-    )
-    is_archived = models.BooleanField(default=False)
-    objects = SafetyLayerObjectManager()
-
-    def __str__(self):
-        return self.name
-
-    def get_absolute_url(self):
-        return reverse("experiments:safety_edit", args=[get_slug_for_team(self.team_id), self.id])
-
-    def _get_version_details(self) -> VersionDetails:
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(name="name", raw_value=self.name),
-                VersionField(name="prompt_text", raw_value=self.prompt_text),
-                VersionField(name="messages_to_review", raw_value=self.messages_to_review),
-                VersionField(name="default_response_to_user", raw_value=self.default_response_to_user),
-                VersionField(name="prompt_to_bot", raw_value=self.prompt_to_bot),
             ],
         )
 
