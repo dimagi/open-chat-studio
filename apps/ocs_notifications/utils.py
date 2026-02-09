@@ -231,24 +231,23 @@ def is_notification_muted(user, team: Team, notification_slug: str) -> bool:
     Returns:
         bool: True if notifications are muted, False otherwise
     """
-    # Check for specific notification type mute
-    specific_mutes = NotificationMute.objects.filter(
-        user=user,
-        team=team,
-        notification_type=notification_slug,
+    from django.db.models import Q
+
+    now = timezone.now()
+
+    # Check for specific notification type mute or all notifications mute
+    # A mute is active if:
+    # 1. It's permanent (muted_until is NULL), OR
+    # 2. It hasn't expired yet (muted_until > now)
+    active_mute_exists = (
+        NotificationMute.objects.filter(
+            Q(user=user, team=team, notification_type=notification_slug) | Q(user=user, team=team, notification_type="")
+        )
+        .filter(Q(muted_until__isnull=True) | Q(muted_until__gt=now))
+        .exists()
     )
 
-    if any(mute.is_active() for mute in specific_mutes):
-        return True
-
-    # Check for all notifications mute (empty string means all)
-    all_mutes = NotificationMute.objects.filter(
-        user=user,
-        team=team,
-        notification_type="",
-    )
-
-    return any(mute.is_active() for mute in all_mutes)
+    return active_mute_exists
 
 
 def create_or_update_mute(

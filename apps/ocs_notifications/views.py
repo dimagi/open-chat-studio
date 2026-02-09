@@ -89,6 +89,16 @@ class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
 class MuteNotificationView(LoginAndTeamRequiredMixin, View):
     """Mute a specific notification type or all notifications"""
 
+    # Duration constants (in hours)
+    DURATION_8H = 8
+    DURATION_1D = 24
+    DURATION_1W = 168  # 7 * 24
+    DURATION_1M = 720  # 30 * 24
+
+    # Notification type constants
+    NOTIFICATION_TYPE_ALL = "all"
+    NOTIFICATION_TYPE_SPECIFIC = "specific"
+
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
         user_notification = get_object_or_404(
             UserNotification,
@@ -97,8 +107,8 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
             team__slug=team_slug,
         )
 
-        # Get the notification slug from the notification
-        notification_slug = user_notification.notification.identifier[:40]  # Use identifier as slug
+        # Get the notification slug from the notification identifier
+        notification_slug = user_notification.notification.identifier
 
         # Get duration from POST data (in hours)
         duration_param = request.POST.get("duration")
@@ -106,17 +116,17 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
 
         # Map duration string to hours
         duration_map = {
-            "8h": 8,
-            "1d": 24,
-            "1w": 168,  # 7 * 24
-            "1m": 720,  # 30 * 24
+            "8h": self.DURATION_8H,
+            "1d": self.DURATION_1D,
+            "1w": self.DURATION_1W,
+            "1m": self.DURATION_1M,
             "forever": None,
         }
 
         duration_hours = duration_map.get(duration_param)
 
         # Determine what to mute
-        mute_slug = None if notification_type == "all" else notification_slug
+        mute_slug = None if notification_type == self.NOTIFICATION_TYPE_ALL else notification_slug
 
         create_or_update_mute(
             user=request.user, team=request.team, notification_type=mute_slug, duration_hours=duration_hours
@@ -133,6 +143,10 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
 class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
     """Unmute a specific notification type or all notifications"""
 
+    # Notification type constants - reuse from MuteNotificationView
+    NOTIFICATION_TYPE_ALL = "all"
+    NOTIFICATION_TYPE_SPECIFIC = "specific"
+
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
         user_notification = get_object_or_404(
             UserNotification,
@@ -141,12 +155,12 @@ class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
             team__slug=team_slug,
         )
 
-        # Get the notification slug from the notification
-        notification_slug = user_notification.notification.identifier[:40]
+        # Get the notification slug from the notification identifier
+        notification_slug = user_notification.notification.identifier
         notification_type = request.POST.get("notification_type")  # 'specific' or 'all'
 
         # Determine what to unmute
-        mute_slug = None if notification_type == "all" else notification_slug
+        mute_slug = None if notification_type == self.NOTIFICATION_TYPE_ALL else notification_slug
 
         delete_mute(user=request.user, team=request.team, notification_type=mute_slug)
 
