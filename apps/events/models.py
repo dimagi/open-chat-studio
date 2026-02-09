@@ -526,19 +526,12 @@ class ScheduledMessage(BaseTeamModel):
 
     def _get_experiment_to_generate_response(self) -> Experiment:
         """
-        - If no child bot was specified to generate the response, use the default experiment version
-        - If a child bot was specified to generate the response, we must find the version of the child bot that is
-            linked to the default router.
+        - If no experiment was specified to generate the response, use the default experiment version
+        - If an experiment was specified, use that experiment
         """
         default_router_experiment = self.experiment.default_version
         experiment_id = self.params.get("experiment_id")
         if experiment_id and int(experiment_id) != self.experiment.id:
-            if default_router_experiment.is_a_version and default_router_experiment.child_links.count() > 0:
-                # Find the child of this version that has the specified experiment as its working version
-                return (
-                    default_router_experiment.child_links.filter(child__working_version_id=experiment_id).first().child
-                )
-
             return Experiment.objects.get(id=experiment_id)
 
         return default_router_experiment

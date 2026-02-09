@@ -92,36 +92,6 @@ class VersionFieldDisplayFormatters:
         return "; ".join(result_strings) if result_strings else "No triggers found"
 
     @staticmethod
-    def format_route(route) -> str:
-        if isinstance(route, VersionField):
-            route = route.raw_value
-        if isinstance(route, list):
-            formatted_routes = []
-            for r in route:
-                if isinstance(r, VersionField):
-                    r = r.raw_value
-                if isinstance(r, ExperimentRoute):
-                    formatted_routes.append(VersionFieldDisplayFormatters._format_single_route(r))
-            return "\n".join(formatted_routes) if formatted_routes else "Invalid route data"
-        if isinstance(route, ExperimentRoute):
-            return VersionFieldDisplayFormatters._format_single_route(route)
-        return "Invalid route data"
-
-    @staticmethod
-    def _format_single_route(route) -> str:
-        """Formats a single ExperimentRoute"""
-        if route.type == ExperimentRouteType.PROCESSOR:
-            string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
-            if route.is_default:
-                string = f"{string} (default)"
-            return string
-        elif route.type == ExperimentRouteType.TERMINAL:
-            string = f"Use {route.child} as the terminal bot"
-        else:
-            string = "Unknown route type"
-        return string
-
-    @staticmethod
     def format_custom_action_operation(op) -> str:
         action = op.custom_action
         op_details = action.get_operations_by_id().get(op.operation_id)
@@ -645,9 +615,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         default=VoiceResponseBehaviours.RECIPROCAL,
         help_text="This tells the bot when to reply with voice messages",
     )
-    children = models.ManyToManyField(
-        "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
-    )
     tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
     echo_transcript = models.BooleanField(
         default=True,
@@ -893,8 +860,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         if not is_copy:
             self.version_number = version_number + 1
             self.save(update_fields=["version_number"])
-        elif self.child_links.exists():
-            raise ValueError("Failed to create copy of chatbot")
 
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.
@@ -921,9 +886,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             self._copy_attr_to_new_version("consent_form", new_version)
             self._copy_attr_to_new_version("pre_survey", new_version)
             self._copy_attr_to_new_version("post_survey", new_version)
-
-            # not supported for copying
-            self._copy_routes_to_new_version(new_version)
 
         self._copy_trigger_to_new_version(
             trigger_queryset=self.static_triggers, new_version=new_version, is_copy=is_copy
@@ -996,14 +958,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             setattr(new_version, attr_name, latest_attr_version)
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
-
-    def _copy_routes_to_new_version(self, new_version: Experiment):
-        """
-        This copies the experiment routes where this experiment is the parent and sets the new parent to the new
-        version.
-        """
-        for route in self.child_links.all():
-            route.create_new_version(new_version)
 
     def _copy_trigger_to_new_version(self, trigger_queryset, new_version, is_copy: bool = False):
         for trigger in trigger_queryset.all():
@@ -1120,19 +1074,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                         name="custom_actions",
                         queryset=self.get_custom_action_operations(),
                         to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
-                    ),
-                    # Routing
-                    VersionField(
-                        group_name="Routing",
-                        name="routes",
-                        queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
-                        to_display=VersionFieldDisplayFormatters.format_route,
-                    ),
-                    VersionField(
-                        group_name="Routing",
-                        name="terminal_bot",
-                        queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
-                        to_display=VersionFieldDisplayFormatters.format_route,
                     ),
                 ]
             )
@@ -1405,8 +1346,7 @@ class Participant(BaseTeamModel):
         self, experiment_id, as_dict=False, as_timezone: str | None = None, include_inactive=False
     ):
         """
-        Returns all scheduled messages for the associated participant for this session's experiment as well as
-        any child experiments in the case where the experiment is a parent
+        Returns all scheduled messages for the associated participant for this session's experiment
 
         Parameters:
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
@@ -1414,10 +1354,9 @@ class Participant(BaseTeamModel):
         """
         from apps.events.models import ScheduledMessage
 
-        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent_id=experiment_id).values("child")
         messages = (
             ScheduledMessage.objects.filter(
-                Q(experiment_id=experiment_id) | Q(experiment__in=models.Subquery(child_experiments)),
+                experiment_id=experiment_id,
                 participant=self,
                 team=self.team,
             )
