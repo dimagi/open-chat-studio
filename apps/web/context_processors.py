@@ -53,7 +53,7 @@ def unread_notifications_count(request):
     """
     count = 0
     team = getattr(request, 'team', None)
-    if request.user.is_authenticated and team:
+    if hasattr(request, "user") and request.user.is_authenticated and team:
         count = request.user.unread_notifications_count(team=team)
     return {
         "unread_notifications_count": count,
