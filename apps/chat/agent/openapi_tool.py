@@ -5,7 +5,7 @@ import tempfile
 import uuid
 from collections import defaultdict
 from email.message import Message
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin
 
 import httpx
@@ -17,8 +17,13 @@ from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field, create_model
 
+from apps.ocs_notifications.models import LevelChoices
+from apps.ocs_notifications.utils import create_notification
 from apps.service_providers.auth_service import AuthService
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
+
+if TYPE_CHECKING:
+    from apps.custom_actions.models import CustomAction
 
 logger = logging.getLogger("ocs.tools")
 
@@ -46,22 +51,24 @@ class FunctionDef(BaseModel):
     url: str
     args_schema: type[BaseModel]
 
-    def build_tool(self, auth_service) -> BaseTool:
-        executor = OpenAPIOperationExecutor(auth_service, self)
+    def build_tool(self, auth_service: AuthService, custom_action: "CustomAction" = None) -> BaseTool:
+        executor = OpenAPIOperationExecutor(auth_service, self, custom_action)
+        func = executor.call_api_with_notifications if custom_action else executor.call_api
         return StructuredTool(
             name=self.name,
             description=self.description,
             args_schema=self.args_schema,
             handle_tool_error=True,
-            func=executor.call_api,
+            func=func,
             response_format="content_and_artifact",
         )
 
 
 class OpenAPIOperationExecutor:
-    def __init__(self, auth_service: AuthService, function_def: FunctionDef):
+    def __init__(self, auth_service: AuthService, function_def: FunctionDef, custom_action: "CustomAction" = None):
         self.auth_service = auth_service
         self.function_def = function_def
+        self.custom_action = custom_action
 
     def call_api(self, **kwargs) -> Any:
         """Make an HTTP request to an external service. The exact inputs to this function are the
@@ -95,6 +102,53 @@ class OpenAPIOperationExecutor:
                 raise ToolException(f"Error making request: {str(e)}") from None
             except httpx.HTTPError as e:
                 raise ToolException(f"Error making request: {str(e)}") from None
+
+    def call_api_with_notifications(self, **kwargs) -> Any:
+        """Wrapper around call_api that creates notifications for monitoring custom action health.
+
+        This wrapper tracks:
+        - ERROR: API failures, timeouts, bad responses
+        """
+
+        try:
+            result = self.call_api(**kwargs)
+            return result
+
+        except ToolException as e:
+            self._create_api_failure_notification(e)
+            raise
+        except Exception as e:
+            self._create_unexpected_error_notification(e)
+            raise
+
+    def _create_api_failure_notification(self, exception: Exception) -> None:
+        """Create notification for API failures."""
+        method = self.function_def.method.upper()
+        operation = self.function_def.name
+        create_notification(
+            title=f"Custom Action '{self.custom_action.name}' failed",
+            message=f"{method} '{operation}' API call failed: {exception}",
+            level=LevelChoices.ERROR,
+            team=self.custom_action.team,
+            permissions=["custom_actions.view_customaction"],
+            slug="custom-action-api-failure",
+            event_data={"action_id": self.custom_action.id, "exception_type": type(exception).__name__},
+        )
+
+    def _create_unexpected_error_notification(self, exception: Exception) -> None:
+        """Create notification for unexpected errors."""
+        method = self.function_def.method.upper()
+        operation = self.function_def.name
+
+        create_notification(
+            title=f"Custom Action '{self.custom_action.name}' encountered an error",
+            message=f"{method} '{operation}' failed with an unexpected error: {exception}",
+            level=LevelChoices.ERROR,
+            team=self.custom_action.team,
+            permissions=["custom_actions.view_customaction"],
+            slug="custom-action-unexpected-error",
+            event_data={"action_id": self.custom_action.id, "exception_type": type(exception).__name__},
+        )
 
     def _make_request(
         self, http_client: httpx.Client, url: str, method: str, **kwargs
