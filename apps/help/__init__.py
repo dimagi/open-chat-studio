@@ -7,7 +7,6 @@ class SystemAgentModel(BaseModel):
     provider: Literal["openai", "anthropic"]
     model: str
     key: str
-    url: str | None = None
 
     def init_model(self):
         from langchain.chat_models import init_chat_model
@@ -15,10 +14,24 @@ class SystemAgentModel(BaseModel):
         return init_chat_model(self.model, model_provider=self.provider, **self.model_kwargs)
 
     @property
-    def model_kwargs(self):
-        match self.provider:
-            case "openai":
-                return {"openai_api_key": self.key, "openai_api_base": self.url}
-            case "anthropic":
-                return {"anthropic_api_key": self.key, "anthropic_api_url": self.url}
-        raise Exception(f"Unknown provider: {self.provider}")
+    def model_kwargs(self) -> dict:
+        config_key = {
+            "openai": "openai_api_key",
+            "anthropic": "anthropic_api_key",
+        }.get(self.provider)
+
+        if not config_key:
+            raise Exception(f"Unknown provider: {self.provider}")
+        return {config_key: self.key}
+
+
+def get_system_agent_models(models, api_keys):
+    result = []
+    for model in models:
+        provider, name = model.split(":", 1)
+        key = api_keys.get(provider, None)
+        if not key:
+            raise Exception(f"System agent API Key not found: {provider}. Update `SYSTEM_AGENT_API_KEYS`.")
+
+        result.append(SystemAgentModel(provider=provider, model=name, key=key))
+    return result
