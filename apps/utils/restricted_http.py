@@ -317,7 +317,7 @@ class RestrictedHttpClient:
         from apps.service_providers.models import AuthProvider
 
         try:
-            provider = AuthProvider.objects.get(team=self._team, name=auth_name)
+            provider = AuthProvider.objects.get(team=self._team, name__iexact=auth_name)
         except AuthProvider.DoesNotExist:
             available = list(AuthProvider.objects.filter(team=self._team).values_list("name", flat=True))
             raise HttpAuthProviderError(
