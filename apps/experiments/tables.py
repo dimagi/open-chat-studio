@@ -6,31 +6,10 @@ from apps.experiments.models import (
     ConsentForm,
     Experiment,
     ExperimentRoute,
-    SafetyLayer,
     SourceMaterial,
     Survey,
 )
 from apps.generics import actions
-
-
-class SafetyLayerTable(tables.Table):
-    actions = actions.ActionsColumn(
-        actions=[
-            actions.edit_action(url_name="experiments:safety_edit"),
-            actions.delete_action(url_name="experiments:safety_delete"),
-        ]
-    )
-
-    class Meta:
-        model = SafetyLayer
-        fields = (
-            "name",
-            "messages_to_review",
-            "actions",
-        )
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        orderable = False
-        empty_text = "No safety layers found."
 
 
 class SourceMaterialTable(tables.Table):

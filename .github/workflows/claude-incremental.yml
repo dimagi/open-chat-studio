@@ -1,0 +1,180 @@
+name: Claude Incremental Worker
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2am UTC
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Specific issue number to work on (optional)'
+        required: false
+        type: string
+
+# Prevent concurrent runs to avoid duplicate PRs
+concurrency:
+  group: claude-incremental
+  cancel-in-progress: false
+
+# Restrict default permissions - jobs override as needed
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  check-pending-pr:
+    runs-on: ubuntu-latest
+    outputs:
+      has_open_pr: ${{ steps.check.outputs.has_open_pr }}
+      pr_number: ${{ steps.check.outputs.pr_number }}
+    steps:
+      - name: Check for open PRs with label
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR=$(gh pr list --repo ${{ github.repository }} --label "claude-incremental" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$PR" ]; then
+            echo "has_open_pr=true" >> $GITHUB_OUTPUT
+            echo "pr_number=$PR" >> $GITHUB_OUTPUT
+            echo "::notice::Waiting for PR #$PR to be reviewed"
+          else
+            echo "has_open_pr=false" >> $GITHUB_OUTPUT
+          fi
+
+  find-work:
+    needs: check-pending-pr
+    if: needs.check-pending-pr.outputs.has_open_pr != 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.find.outputs.issue_number }}
+      issue_body: ${{ steps.find.outputs.issue_body }}
+      issue_title: ${{ steps.find.outputs.issue_title }}
+    steps:
+      - name: Find oldest labeled issue
+        id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Use specific issue if provided, otherwise find oldest open issue with the label
+          if [ -n "${{ inputs.issue_number }}" ]; then
+            ISSUE_NUMBER="${{ inputs.issue_number }}"
+          else
+            ISSUE_NUMBER=$(gh issue list --repo ${{ github.repository }} --label "claude-incremental" --state open --json number,createdAt --jq 'sort_by(.createdAt) | .[0].number // empty')
+          fi
+
+          if [ -z "$ISSUE_NUMBER" ]; then
+            echo "::notice::No open issues found with the claude-incremental label"
+            exit 0
+          fi
+
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+
+          # Fetch issue details
+          ISSUE_DATA=$(gh issue view "$ISSUE_NUMBER" --repo ${{ github.repository }} --json title,body)
+          ISSUE_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title')
+          ISSUE_BODY=$(echo "$ISSUE_DATA" | jq -r '.body')
+
+          echo "issue_title<<EOF" >> $GITHUB_OUTPUT
+          echo "$ISSUE_TITLE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "issue_body<<EOF" >> $GITHUB_OUTPUT
+          echo "$ISSUE_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  execute:
+    needs: find-work
+    if: needs.find-work.outputs.issue_number != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    env:
+      DJANGO_DATABASE_USER: postgres
+      DJANGO_DATABASE_PASSWORD: postgres_password
+      SECRET_KEY: secret-test-key
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python dependencies
+        run: |
+          uv venv
+          uv sync --locked --dev
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      - name: Create branch
+        id: branch
+        run: |
+          BRANCH_NAME="claude-incremental/${{ needs.find-work.outputs.issue_number }}-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH_NAME"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are working on an incremental project tracked in issue #${{ needs.find-work.outputs.issue_number }}.
+
+            ## Issue Title
+            ${{ needs.find-work.outputs.issue_title }}
+
+            ## Issue Content
+            ${{ needs.find-work.outputs.issue_body }}
+
+            ## Instructions
+            1. Read the issue and identify the first unchecked task (- [ ]) that is not marked as blocked
+            2. Implement that task, making git commits as you go
+            3. Run lint and tests, fix any issues:
+               - Python: ruff check --fix && ruff format
+               - JS/TS: npm run lint
+               - Python test: pytest path/to/file.py -v
+            4. Push the changes you've made to GitHub and create a PR with the 'claude-incremental' label.
+            5. After completing the task, update the issue using gh issue edit to:
+               - Check off the completed task (change - [ ] to - [x])
+               - Add any learnings to the ## Learnings section (create if needed)
+            5. If you cannot complete the task, mark it as blocked (add "blocked:" prefix to the task)
+            6. Add a comment to the issue summarizing what you did
+
+            If all tasks are complete or blocked, comment on the issue explaining the status.
+          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Read,Write,Edit"'

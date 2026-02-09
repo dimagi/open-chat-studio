@@ -12,6 +12,7 @@ from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import PipelineRouterNode
 from apps.pipelines.nodes.nodes import CodeNode, EndNode, StartNode
+from apps.service_providers.llm_service.retry import get_retry_policy
 
 
 class Node(pydantic.BaseModel):
@@ -190,6 +191,8 @@ class PipelineGraph(pydantic.BaseModel):
                 node_id=self.end_node.id,
             )
 
+        retry_policy = get_retry_policy()
+
         for node in nodes:
             try:
                 node_instance = node.pipeline_node_instance
@@ -197,12 +200,13 @@ class PipelineGraph(pydantic.BaseModel):
                 if isinstance(node_instance, PipelineRouterNode):
                     edge_map = self.conditional_edge_map[node.id]
                     router_function = node_instance.build_router_function(edge_map, incoming_nodes)
-                    state_graph.add_node(node.id, router_function)
+                    state_graph.add_node(node.id, router_function, retry_policy=retry_policy)
                 else:
                     outgoing_nodes = [edge.target for edge in self.edges if edge.source == node.id]
                     state_graph.add_node(
                         node.id,
                         partial(node_instance.process, incoming_nodes, outgoing_nodes),
+                        retry_policy=retry_policy,
                     )
             except ValidationError as ex:
                 raise PipelineNodeBuildError(ex) from ex

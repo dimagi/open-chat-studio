@@ -42,6 +42,7 @@ from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import BasicParameters
+from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 
@@ -351,7 +352,8 @@ class ExtractStructuredDataNodeMixin:
         )
 
     def extraction_chain(self, tool_class, reference_data):
-        return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(tool_class)
+        structured_output = super().get_chat_model().with_structured_output(tool_class)
+        return self._prompt_chain(reference_data) | with_llm_retry(structured_output)
 
     def _process(self, state: PipelineState) -> PipelineState:
         ToolClass = self.get_tool_class(json.loads(self.data_schema))
