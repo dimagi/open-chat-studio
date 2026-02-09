@@ -30,7 +30,7 @@ from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached
 from apps.chat.channels import ApiChannel
-from apps.chat.models import Chat, ChatAttachment
+from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
@@ -414,7 +414,10 @@ def chat_poll_task_response(request, session_id, task_id):
         return Response({"status": "processing"}, status=status.HTTP_200_OK)
 
     if not task_details["complete"]:
-        message = get_progress_message(experiment.name, experiment.description, throttle_key=task_id)
+        message_text = get_progress_message(experiment.name, experiment.description, throttle_key=task_id)
+        message = None
+        if message_text:
+            message = MessageSerializer(ChatMessage(content=message_text, message_type=ChatMessageType.AI)).data
         data = {"message": message, "status": "processing"}
         return Response(data, status=status.HTTP_200_OK)
 

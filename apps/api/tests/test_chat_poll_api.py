@@ -101,4 +101,5 @@ def test_chat_poll_task_response_processing_with_progress(mock_progress, api_cli
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "processing"
-    assert data["message"] == "Thinking..."
+    assert data["message"]["content"] == "Thinking..."
+    assert data["message"]["role"] == "assistant"
