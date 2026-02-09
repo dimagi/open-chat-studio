@@ -27,7 +27,8 @@ def create_notification(
     team: Team,
     slug: str,
     event_data: dict | None = None,
-    permissions=None,
+    permissions: list[str] | None = None,
+    links: dict | None = None,
 ):
     """
     Create a notification and associate it with the given users.
@@ -44,6 +45,7 @@ def create_notification(
         Notification: The created Notification instance, or None if creation failed.
     """
     notification = None
+    links = links or {}
 
     def _can_receive_notification(member):
         if not permissions:
@@ -65,6 +67,7 @@ def create_notification(
             "level": level,
             "last_event_at": timezone.now(),
             "event_data": event_data,
+            "links": links,
         },
     )
     for user in users:
