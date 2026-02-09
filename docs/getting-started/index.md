@@ -52,7 +52,7 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
         #### Install the pre-commit hooks
 
         ```shell
-        pre-commit install --install-hooks
+        prek install --install-hooks
         ```
         
         #### Set up database
