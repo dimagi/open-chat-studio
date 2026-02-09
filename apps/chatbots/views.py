@@ -309,7 +309,6 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "platforms": available_platforms,
         "channels": channels,
         "deployed_version": deployed_version,
-        "allow_copy": not experiment.child_links.exists(),
         **_get_events_context(experiment, team_slug, request.origin),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
