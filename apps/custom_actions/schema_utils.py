@@ -129,15 +129,13 @@ def get_operations_from_spec(spec, spec_dict=None) -> list[APIOperationDetails]:
                     description=op.description,
                     path=path,
                     method=method,
-                    parameters=_extract_parameters(op, spec_dict, path, method),
+                    parameters=_extract_parameters(op),
                 )
             )
     return operations
 
 
-def _extract_parameters(
-    operation: APIOperation, spec_dict=None, path: str = "", method: str = ""
-) -> list[ParameterDetail]:
+def _extract_parameters(operation: APIOperation) -> list[ParameterDetail]:
     """Extract parameter details from OpenAPI spec.
 
     Extracts both query/path parameters and request body parameters.
