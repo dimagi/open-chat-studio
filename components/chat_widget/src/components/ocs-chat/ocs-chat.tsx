@@ -226,7 +226,6 @@ export class OcsChat {
         this.sessionId = sessionId;
         this.messages = messages;
       }
-      this.restoreVisibleState();
     }
     this.parseWelcomeMessages();
     this.parseStarterQuestions();
@@ -244,8 +243,14 @@ export class OcsChat {
     // Initialize button position from computed styles
     this.initializeButtonPosition();
 
-    // Defer position initialization to avoid state changes during componentDidLoad
+    // Defer state changes to avoid triggering them during componentDidLoad
     setTimeout(() => {
+      // Restore visible state after dimensions are read so initializePosition
+      // uses the correct CSS-derived chatWindowWidth/chatWindowHeight.
+      if (this.persistentSession && this.isLocalStorageAvailable()) {
+        this.restoreVisibleState();
+      }
+
       if (this.visible) {
         this.initializePosition();
       }
