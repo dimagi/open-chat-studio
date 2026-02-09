@@ -104,35 +104,35 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
         def get_all_routes() -> dict:
             Returns a dictionary containing all routing decisions in the pipeline.
             The keys are the node names and the values are the routes chosen by each node.
-            
+
         def add_message_tag(tag_name: str):
             Adds a tag to the output message.
-            
+
         def add_session_tag(tag_name: str):
             Adds the tag to the chat session.
-            
+
         def get_node_output(node_name: str) -> Any:
             Returns the output of the specified node if it has been executed.
             If the node has not been executed, it returns `None`.
-            
+
         def abort_pipeline(message, tag_name: str = None) -> None:
             Calling this will terminate the pipeline execution. No further nodes will get executed in
             any branch of the pipeline graph.
-            
+
             The message provided will be used to notify the user about the reason for the termination.
             If a tag name is provided, it will be used to tag the output message.
-            
+
         def require_node_outputs(*node_names):
             This function is used to ensure that the specified nodes have been executed and their outputs
             are available in the pipeline's state. If any of the specified nodes have not been executed,
             the node will not execute and the pipeline will wait for the required nodes to complete.
-            
+
             This should be called at the start of the main function.
-            
+
         def wait_for_next_input():
-            Advanced utility that will abort the current execution. This is similar to `require_node_outputs` but 
+            Advanced utility that will abort the current execution. This is similar to `require_node_outputs` but
             used where some node outputs may be optional.
-            
+
             Example:
             def main(input, **kwargs):
                 a = get_node_output("a")
@@ -140,6 +140,39 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
                 if a is None and b is None:
                     wait_for_next_input()
                 # do something with a or b
+        ```
+
+        HTTP Client:
+        An `http` global variable is available for making secure HTTP requests to external APIs. It has
+        built-in security features including SSRF prevention (blocks private IPs and localhost), size limits,
+        timeout clamping, and automatic retries with exponential backoff.
+
+        Available methods (all accept parameters compatible with the `requests` library such as `headers`,
+        `params`, `json`, `data`, `timeout`, `files`, and `auth`):
+        ```
+        http.get(url, **kwargs) -> dict
+        http.post(url, **kwargs) -> dict
+        http.put(url, **kwargs) -> dict
+        http.patch(url, **kwargs) -> dict
+        http.delete(url, **kwargs) -> dict
+        ```
+
+        All methods return a dictionary with the following keys:
+        - `status_code`: The HTTP status code.
+        - `headers`: The response headers.
+        - `text`: The response body as text (always present).
+        - `json`: The parsed JSON response body, or `None` if the response is not JSON.
+        - `is_success`: `True` if the status code is in the 200-299 range.
+        - `is_error`: `True` if the status code is 400 or above.
+
+        The HTTP client never raises exceptions. All error information is contained in the response dict.
+        Always check `response["status_code"]` or the `is_success` / `is_error` keys before processing
+        the response.
+
+        Authentication credentials can be injected automatically from team Authentication Providers via the
+        `auth` parameter. The value must be the name of the authentication provider. Example:
+        ```
+        response = http.get("https://api.example.com/data", auth="my_provider")
         ```
 
         Return only the Python code and nothing else. Do not enclose it in triple quotes or have any other
