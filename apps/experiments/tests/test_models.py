@@ -16,7 +16,6 @@ from apps.experiments.models import (
     Experiment,
     ExperimentRoute,
     ExperimentSession,
-    SafetyLayer,
     SyntheticVoice,
 )
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
@@ -533,22 +532,6 @@ class TestExperimentSession:
 
         with pytest.raises(ValueError, match="Commit must be True when trigger_type is specified"):
             session.end(commit=False, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT)
-
-
-@pytest.mark.django_db()
-class TestSafetyLayerVersioning:
-    def test_create_new_safety_layer_version(self):
-        original = SafetyLayer.objects.create(
-            prompt_text="Is this message safe?", team=TeamFactory(), prompt_to_bot="Unsafe reply"
-        )
-        new_version = original.create_new_version()
-        original.refresh_from_db()
-        assert original.working_version is None
-        assert new_version != original
-        assert new_version.working_version == original
-        assert new_version.prompt_text == original.prompt_text
-        assert new_version.prompt_to_bot == original.prompt_to_bot
-        assert new_version.team == original.team
 
 
 @pytest.mark.django_db()

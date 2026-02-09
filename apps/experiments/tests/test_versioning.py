@@ -1,7 +1,7 @@
 import pytest
 
 from apps.custom_actions.models import CustomActionOperation
-from apps.experiments.models import Experiment, SafetyLayer
+from apps.experiments.models import Experiment
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
 from apps.files.models import File
 from apps.utils.factories.custom_actions import CustomActionFactory
