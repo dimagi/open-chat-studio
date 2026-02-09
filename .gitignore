@@ -39,3 +39,5 @@ tsconfig.tsbuildinfo
 
 # Code review artifacts
 CODE_REVIEW.md
+.env.test
+=*
