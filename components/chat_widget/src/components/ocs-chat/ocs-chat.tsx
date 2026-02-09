@@ -243,8 +243,14 @@ export class OcsChat {
     // Initialize button position from computed styles
     this.initializeButtonPosition();
 
-    // Defer position initialization to avoid state changes during componentDidLoad
+    // Defer state changes to avoid triggering them during componentDidLoad
     setTimeout(() => {
+      // Restore visible state after dimensions are read so initializePosition
+      // uses the correct CSS-derived chatWindowWidth/chatWindowHeight.
+      if (this.persistentSession && this.isLocalStorageAvailable()) {
+        this.restoreVisibleState();
+      }
+
       if (this.visible) {
         this.initializePosition();
       }
@@ -613,6 +619,8 @@ export class OcsChat {
    */
   @Watch('visible')
   async visibilityHandler(visible: boolean) {
+    this.saveVisibleState(visible);
+
     if (this.isButtonDragging) {
       this.isButtonDragging = false;
       this.buttonWasDragged = false;
@@ -1272,7 +1280,8 @@ export class OcsChat {
     return {
       sessionId: `ocs-chat-session-${this.chatbotId}`,
       messages: `ocs-chat-messages-${this.chatbotId}`,
-      lastActivity: `ocs-chat-activity-${this.chatbotId}`
+      lastActivity: `ocs-chat-activity-${this.chatbotId}`,
+      visible: `ocs-chat-visible-${this.chatbotId}`
     };
   }
 
@@ -1357,12 +1366,35 @@ export class OcsChat {
     return newUserId;
   }
 
+  private saveVisibleState(visible: boolean): void {
+    if (!this.persistentSession) return;
+    try {
+      const keys = this.getStorageKeys();
+      localStorage.setItem(keys.visible, visible ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }
+
+  private restoreVisibleState(): void {
+    try {
+      const keys = this.getStorageKeys();
+      const stored = localStorage.getItem(keys.visible);
+      if (stored === '1') {
+        this.visible = true;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   private clearSessionStorage(): void {
     const keys = this.getStorageKeys();
     try {
       localStorage.removeItem(keys.sessionId);
       localStorage.removeItem(keys.messages);
       localStorage.removeItem(keys.lastActivity);
+      localStorage.removeItem(keys.visible);
     } catch (error) {
       console.warn('Failed to clear chat session from localStorage:', error);
     }
