@@ -452,12 +452,12 @@ Expected Context Variables:
               );
 
               let data;
+              const raw = await response.text();
               try {
-                data = await response.json();
+                data = JSON.parse(raw);
               } catch (e) {
-                // If response is not JSON (e.g., HTML error page), get the text
-                const text = await response.text();
-                throw new Error(`Server error: ${response.status} - ${text.substring(0, 200)}`);
+                // If response is not JSON (e.g., HTML error page), use the raw text
+                throw new Error(`Server error: ${response.status} - ${raw.substring(0, 200)}`);
               }
 
               if (!response.ok) {
