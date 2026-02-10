@@ -23,18 +23,35 @@ The workflow runs daily at 2am UTC and can be triggered manually.
 ## Goal
 Brief description of what the project aims to achieve.
 
-## Tasks
-- [ ] First task to complete
-- [ ] Second task to complete
-- [x] Already completed task
-- [ ] blocked: Task that can't be done yet - explain why
-
 ## Context
 Optional background info the AI should know about.
+
+## Tasks
+
+### Task 1: Short description
+- [ ] Task 1
+
+Detailed context for this task. Include relevant file paths, expected
+behavior, edge cases, or links to related code. This helps the AI
+understand scope and intent beyond the one-line summary.
+
+### Task 2: Short description
+- [ ] Task 2
+
+More context here. The more specific you are about what "done" looks
+like, the better the result.
+
+### Task 3: Already completed
+- [x] Task 3
+
+### Task 4: Blocked task
+- [ ] blocked: Task 4 - explain why
 
 ## Learnings
 <!-- AI updates this section with discoveries -->
 ```
+
+Each task gets its own section with a checkbox and a context block. The checkbox is what the workflow uses to track progress — keep it on its own line. The surrounding text provides the AI with the detail it needs to implement the task correctly.
 
 ## How It Works
 

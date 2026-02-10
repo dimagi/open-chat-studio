@@ -68,7 +68,7 @@ nav:
     - Overview: architecture/index.md
   - Developer Guides:
     - Processes:
-      - Igor (Incremental Worker): developer_guides/claude_incremental_worker.md
+      - Igor (Incremental Worker): developer_guides/igor.md
       - User Docs: developer_guides/user_docs.md
       - Deployment: developer_guides/deployment.md
       - AI Development: developer_guides/ai_development.md
