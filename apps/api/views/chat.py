@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import pathlib
 
@@ -44,6 +43,25 @@ MAX_TOTAL_SIZE_MB = 50
 SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["collections"]
 
 logger = logging.getLogger("ocs.api_chat")
+
+PROGRESS_MESSAGE_PROMPT = """\
+You will be generating progress update messages that are displayed to users while they \
+wait for a chatbot to respond. These messages should keep users engaged and informed \
+during the wait time.
+
+Here are the guidelines for creating effective progress messages:
+
+- Keep messages SHORT - aim for 2-4 words maximum
+- Use an encouraging, friendly, and slightly playful tone
+- Messages should feel dynamic and suggest active work is happening
+- Vary the style and wording across different messages
+- Focus on the process (e.g., "thinking", "analyzing", "processing") rather than making promises about results
+- Avoid technical jargon or overly complex language
+- Don't make specific claims about what the answer will contain
+- Don't apologize for wait times or sound negative
+
+Generate message options that could be rotated or randomly displayed to users.
+Each message should feel fresh and distinct from the others."""
 
 
 def validate_file_upload(file):
@@ -414,7 +432,7 @@ def chat_poll_task_response(request, session_id, task_id):
         return Response({"status": "processing"}, status=status.HTTP_200_OK)
 
     if not task_details["complete"]:
-        message_text = get_progress_message(experiment.name, experiment.description, throttle_key=task_id)
+        message_text = get_progress_message(session_id, experiment.name, experiment.description, throttle_key=task_id)
         message = None
         if message_text:
             message = MessageSerializer(ChatMessage(content=message_text, message_type=ChatMessageType.AI)).data
@@ -498,7 +516,7 @@ def chat_poll_response(request, session_id):
     return Response(ChatPollResponse(response_data).data, status=status.HTTP_200_OK)
 
 
-def get_progress_message(chatbot_name, chatbot_description, throttle_key=None) -> str | None:
+def get_progress_message(session_id, chatbot_name, chatbot_description, throttle_key=None) -> str | None:
     """Get the next progress message. This will generate new messages if there are no more messages.
 
     If throttle_key is provided, a new message is only returned once every 5 seconds.
@@ -510,8 +528,7 @@ def get_progress_message(chatbot_name, chatbot_description, throttle_key=None) -
         if last:
             return last
 
-    key_hash = hashlib.sha1(f"{chatbot_name}:{chatbot_description}".encode())
-    key = f"progress_messages:{key_hash.hexdigest()}"
+    key = f"progress_messages:{session_id}"
     messages = cache.get(key)
     if not messages:
         messages = get_progress_messages(chatbot_name, chatbot_description)
@@ -548,23 +565,3 @@ def get_progress_messages(chatbot_name, chatbot_description) -> list[str]:
     except Exception:
         logger.exception("Failed to generate progress messages for chatbot '%s'", chatbot_name)
         return []
-
-
-PROGRESS_MESSAGE_PROMPT = """\
-You will be generating progress update messages that are displayed to users while they \
-wait for a chatbot to respond. These messages should keep users engaged and informed \
-during the wait time.
-
-Here are the guidelines for creating effective progress messages:
-
-- Keep messages SHORT - aim for 2-4 words maximum
-- Use an encouraging, friendly, and slightly playful tone
-- Messages should feel dynamic and suggest active work is happening
-- Vary the style and wording across different messages
-- Focus on the process (e.g., "thinking", "analyzing", "processing") rather than making promises about results
-- Avoid technical jargon or overly complex language
-- Don't make specific claims about what the answer will contain
-- Don't apologize for wait times or sound negative
-
-Generate message options that could be rotated or randomly displayed to users.
-Each message should feel fresh and distinct from the others."""

@@ -69,12 +69,12 @@ class TestGetProgressMessage:
     def test_returns_first_message_and_caches_remainder(self, mock_get_messages):
         mock_get_messages.return_value = ["First", "Second", "Third"]
 
-        result = get_progress_message("TestBot", "desc")
+        result = get_progress_message("session-1", "TestBot", "desc")
 
         assert result == "First"
         # Second call should use cache, not call get_progress_messages again
         mock_get_messages.reset_mock()
-        result2 = get_progress_message("TestBot", "desc")
+        result2 = get_progress_message("session-1", "TestBot", "desc")
         assert result2 == "Second"
         mock_get_messages.assert_not_called()
 
@@ -82,7 +82,7 @@ class TestGetProgressMessage:
     def test_returns_none_when_no_messages(self, mock_get_messages):
         mock_get_messages.return_value = []
 
-        result = get_progress_message("TestBot", "desc")
+        result = get_progress_message("session-1", "TestBot", "desc")
 
         assert result is None
 
@@ -90,10 +90,10 @@ class TestGetProgressMessage:
     def test_deletes_cache_when_last_message_consumed(self, mock_get_messages):
         mock_get_messages.return_value = ["Only one"]
 
-        result = get_progress_message("TestBot", "desc")
+        result = get_progress_message("session-1", "TestBot", "desc")
 
         assert result == "Only one"
         # Next call should try to generate again since cache was deleted
         mock_get_messages.return_value = ["Fresh message"]
-        result2 = get_progress_message("TestBot", "desc")
+        result2 = get_progress_message("session-1", "TestBot", "desc")
         assert result2 == "Fresh message"
