@@ -1,4 +1,4 @@
-# Claude Incremental Worker
+# Igor
 
 A GitHub Action that automatically makes incremental progress on large projects by working through tracking issues with task checklists.
 
@@ -38,15 +38,17 @@ Optional background info the AI should know about.
 
 ## How It Works
 
-1. Checks for open PRs with `claude-incremental` label (waits if one exists)
-2. Finds the oldest issue with the label that's "In Progress" in the project
+1. Finds the oldest issue with the `claude-incremental` label
+2. Skips any issue that already has an open PR (one PR per issue at a time)
 3. Claude reads the issue and implements the first unchecked, non-blocked task
 4. Claude updates the issue (checks off task, adds learnings)
 5. Creates a PR linking to the tracking issue
 
+Multiple issues can have open PRs simultaneously — the constraint is one open PR per issue, not one globally.
+
 ## Manual Trigger
 
-Run on a specific issue via Actions > Claude Incremental Worker > Run workflow, then enter the issue number.
+Run on a specific issue via Actions > Igor > Run workflow, then enter the issue number.
 
 ## Files
 
