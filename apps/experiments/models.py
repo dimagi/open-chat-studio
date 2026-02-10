@@ -1362,7 +1362,7 @@ class Participant(BaseTeamModel):
             )
             .select_related("action")
             .prefetch_related("attempts")
-            .order_by("created_at")
+            .order_by("created_at", "id")
         )
         if not include_inactive:
             messages = messages.filter(is_complete=False, cancelled_at=None)
