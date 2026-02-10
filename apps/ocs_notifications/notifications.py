@@ -115,7 +115,7 @@ def file_delivery_failure_notification(
         title="File Delivery Failed",
         message=(
             "An error occurred while delivering a file attachment to the user via "
-            f"{platform_title} for '{experiment.name}'",
+            f"{platform_title} for '{experiment.name}'"
         ),
         level=LevelChoices.ERROR,
         slug="file-delivery-failed",
