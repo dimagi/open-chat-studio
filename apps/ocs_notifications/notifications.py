@@ -144,9 +144,7 @@ def audio_transcription_failure_notification(experiment, platform: str) -> None:
     )
 
 
-def message_delivery_failure_notification(
-    experiment, session, platform_title: str, context: str, trace_info: dict | None = None
-) -> None:
+def message_delivery_failure_notification(experiment, session, platform_title: str, context: str) -> None:
     """Create notification when message delivery fails."""
     identifier = session.participant.identifier
     create_notification(
