@@ -24,12 +24,11 @@ def notify_on_delivery_failure(context: str):
                 return method(self, *args, **kwargs)
             except Exception as e:
                 logger.exception(e)
-                platform_title = self.experiment_channel.platform_enum.title()
+
                 message_delivery_failure_notification(
                     self.experiment,
                     session=self._experiment_session,
-                    platform=self.experiment_channel.platform,
-                    platform_title=platform_title,
+                    platform_title=self.experiment_channel.platform_enum.title(),
                     context=context,
                 )
                 raise

@@ -144,32 +144,35 @@ def audio_transcription_failure_notification(experiment, platform: str) -> None:
     )
 
 
-def message_delivery_failure_notification(experiment, platform: str, platform_title: str, context: str) -> None:
+def message_delivery_failure_notification(
+    experiment, session, platform_title: str, context: str, trace_info: dict | None = None
+) -> None:
     """Create notification when message delivery fails."""
+    identifier = session.participant.identifier
     create_notification(
         title=f"Message Delivery Failed for {experiment.name}",
-        message=f"An error occurred while delivering a {context} to the user via {platform_title}",
+        message=f"An error occurred while delivering a {context} to {identifier} via {platform_title}",
         level=LevelChoices.ERROR,
         slug="message-delivery-failed",
         team=experiment.team,
         permissions=["experiments.view_experimentsession"],
         event_data={
             "bot_id": experiment.id,
-            "platform": platform,
+            "platform": platform_title,
             "context": context,
         },
-        links={"View Bot": experiment.get_absolute_url()},
+        links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
     )
 
 
-def tool_error_notification(team, tool_name: str, error_message: str, experiment_session=None) -> None:
+def tool_error_notification(team, tool_name: str, error_message: str, session=None) -> None:
     """Create notification when a tool execution fails."""
     event_data = {"tool_name": tool_name, "error_message": error_message}
     links = {}
 
-    if experiment_session:
-        links["View Bot"] = experiment_session.experiment.get_absolute_url()
-        links["View Session"] = experiment_session.get_absolute_url()
+    if session:
+        links["View Bot"] = session.experiment.get_absolute_url()
+        links["View Session"] = session.get_absolute_url()
 
     create_notification(
         title="Tool Error Detected",
