@@ -16,26 +16,26 @@ class TestNotificationMute:
     def test_create_permanent_mute_for_specific_type(self, team_with_users):
         """Test creating a permanent mute for a specific notification type"""
         user = team_with_users.members.first()
-        notification_type = "test-notification"
+        notification_identifier = "test-notification"
 
         mute = create_or_update_mute(
-            user=user, team=team_with_users, notification_type=notification_type, duration_hours=None
+            user=user, team=team_with_users, notification_identifier=notification_identifier, duration_hours=None
         )
 
-        assert mute.notification_type == notification_type
+        assert mute.notification_identifier == notification_identifier
         assert mute.muted_until is None
         assert mute.is_active() is True
 
     def test_create_temporary_mute_for_specific_type(self, team_with_users):
         """Test creating a temporary mute for a specific notification type"""
         user = team_with_users.members.first()
-        notification_type = "test-notification"
+        notification_identifier = "test-notification"
 
         mute = create_or_update_mute(
-            user=user, team=team_with_users, notification_type=notification_type, duration_hours=24
+            user=user, team=team_with_users, notification_identifier=notification_identifier, duration_hours=24
         )
 
-        assert mute.notification_type == notification_type
+        assert mute.notification_identifier == notification_identifier
         assert mute.muted_until is not None
         assert mute.is_active() is True
 
@@ -47,24 +47,26 @@ class TestNotificationMute:
         """Test creating a permanent mute for all notifications"""
         user = team_with_users.members.first()
 
-        mute = create_or_update_mute(user=user, team=team_with_users, notification_type=None, duration_hours=None)
+        mute = create_or_update_mute(user=user, team=team_with_users, notification_identifier=None, duration_hours=None)
 
-        assert mute.notification_type == ""
+        assert mute.notification_identifier == ""
         assert mute.muted_until is None
         assert mute.is_active() is True
 
     def test_is_notification_muted_specific_type(self, team_with_users):
         """Test checking if a specific notification type is muted"""
         user = team_with_users.members.first()
-        notification_type = "test-notification"
+        notification_identifier = "test-notification"
 
         # Before muting
-        assert is_notification_muted(user, team_with_users, notification_type) is False
+        assert is_notification_muted(user, team_with_users, notification_identifier) is False
 
         # After muting
-        create_or_update_mute(user=user, team=team_with_users, notification_type=notification_type, duration_hours=None)
+        create_or_update_mute(
+            user=user, team=team_with_users, notification_identifier=notification_identifier, duration_hours=None
+        )
 
-        assert is_notification_muted(user, team_with_users, notification_type) is True
+        assert is_notification_muted(user, team_with_users, notification_identifier) is True
         assert is_notification_muted(user, team_with_users, "other-notification") is False
 
     def test_is_notification_muted_all_types(self, team_with_users):
@@ -72,7 +74,7 @@ class TestNotificationMute:
         user = team_with_users.members.first()
 
         # Mute all notifications
-        create_or_update_mute(user=user, team=team_with_users, notification_type=None, duration_hours=None)
+        create_or_update_mute(user=user, team=team_with_users, notification_identifier=None, duration_hours=None)
 
         # All notification types should be muted
         assert is_notification_muted(user, team_with_users, "any-notification") is True
@@ -84,7 +86,9 @@ class TestNotificationMute:
         notification_slug = "test-notification"
 
         # Mute the notification type
-        create_or_update_mute(user=user, team=team_with_users, notification_type=notification_slug, duration_hours=None)
+        create_or_update_mute(
+            user=user, team=team_with_users, notification_identifier=notification_slug, duration_hours=None
+        )
 
         # Create a notification
         create_notification(
@@ -103,7 +107,7 @@ class TestNotificationMute:
         user = team_with_users.members.first()
 
         # Mute all notifications
-        create_or_update_mute(user=user, team=team_with_users, notification_type=None, duration_hours=None)
+        create_or_update_mute(user=user, team=team_with_users, notification_identifier=None, duration_hours=None)
 
         # Create a notification
         create_notification(
@@ -120,49 +124,51 @@ class TestNotificationMute:
     def test_delete_mute(self, team_with_users):
         """Test deleting a notification mute"""
         user = team_with_users.members.first()
-        notification_type = "test-notification"
+        notification_identifier = "test-notification"
 
         # Create a mute
-        create_or_update_mute(user=user, team=team_with_users, notification_type=notification_type, duration_hours=None)
+        create_or_update_mute(
+            user=user, team=team_with_users, notification_identifier=notification_identifier, duration_hours=None
+        )
 
-        assert is_notification_muted(user, team_with_users, notification_type) is True
+        assert is_notification_muted(user, team_with_users, notification_identifier) is True
 
         # Delete the mute
-        delete_mute(user, team_with_users, notification_type)
+        delete_mute(user, team_with_users, notification_identifier)
 
-        assert is_notification_muted(user, team_with_users, notification_type) is False
+        assert is_notification_muted(user, team_with_users, notification_identifier) is False
 
     def test_expired_mute_not_active(self, team_with_users):
         """Test that expired mutes are not active"""
         user = team_with_users.members.first()
-        notification_type = "test-notification"
+        notification_identifier = "test-notification"
 
         # Create a mute that expired 1 hour ago
         mute = NotificationMuteFactory.create(
             user=user,
             team=team_with_users,
-            notification_type=notification_type,
+            notification_identifier=notification_identifier,
             muted_until=timezone.now() - timezone.timedelta(hours=1),
         )
 
         assert mute.is_active() is False
-        assert is_notification_muted(user, team_with_users, notification_type) is False
+        assert is_notification_muted(user, team_with_users, notification_identifier) is False
 
     def test_update_existing_mute(self, team_with_users):
         """Test updating an existing mute changes the duration"""
         user = team_with_users.members.first()
-        notification_type = "test-notification"
+        notification_identifier = "test-notification"
 
         # Create a permanent mute
         mute1 = create_or_update_mute(
-            user=user, team=team_with_users, notification_type=notification_type, duration_hours=None
+            user=user, team=team_with_users, notification_identifier=notification_identifier, duration_hours=None
         )
 
         assert mute1.muted_until is None
 
         # Update to temporary mute
         mute2 = create_or_update_mute(
-            user=user, team=team_with_users, notification_type=notification_type, duration_hours=24
+            user=user, team=team_with_users, notification_identifier=notification_identifier, duration_hours=24
         )
 
         # Should be the same object (updated)
@@ -172,7 +178,7 @@ class TestNotificationMute:
         # Should only have one mute record
         assert (
             NotificationMute.objects.filter(
-                user=user, team=team_with_users, notification_type=notification_type
+                user=user, team=team_with_users, notification_identifier=notification_identifier
             ).count()
             == 1
         )
@@ -182,18 +188,18 @@ class TestNotificationMute:
         Membership = team_with_users.members.through
         user1 = Membership.objects.first().user
         user2 = Membership.objects.last().user
-        notification_type = "test-notification"
+        notification_identifier = "test-notification"
 
         # Mute for user1 only
         create_or_update_mute(
-            user=user1, team=team_with_users, notification_type=notification_type, duration_hours=None
+            user=user1, team=team_with_users, notification_identifier=notification_identifier, duration_hours=None
         )
 
         # user1 should be muted
-        assert is_notification_muted(user1, team_with_users, notification_type) is True
+        assert is_notification_muted(user1, team_with_users, notification_identifier) is True
 
         # user2 should not be muted
-        assert is_notification_muted(user2, team_with_users, notification_type) is False
+        assert is_notification_muted(user2, team_with_users, notification_identifier) is False
 
         # Create notification
         create_notification(
@@ -201,7 +207,7 @@ class TestNotificationMute:
             message="Test message",
             level=LevelChoices.INFO,
             team=team_with_users,
-            slug=notification_type,
+            slug=notification_identifier,
         )
 
         # user1 should not receive notification

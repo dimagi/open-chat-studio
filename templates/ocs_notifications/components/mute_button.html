@@ -4,7 +4,7 @@
   </button>
   <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-64">
     <li class="menu-title">
-      <span>Mute this notification type</span>
+      <span>Mute this notification</span>
     </li>
     <li>
       <a hx-post="{% url 'ocs_notifications:mute_notification' record.team.slug record.id %}"

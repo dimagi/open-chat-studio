@@ -221,12 +221,12 @@ def toggle_notification_read(user, user_notification: UserNotification, read: bo
 
 def is_notification_muted(user, team: Team, notification_identifier: str) -> bool:
     """
-    Check if a user has muted a specific notification type or all notifications.
+    Check if a user has muted a specific notification identifier or all notifications.
 
     Args:
         user: The user to check mute status for
         team: The team context
-        notification_identifier: The notification identifier/slug to check
+        notification_identifier: The notification identifier to check
 
     Returns:
         bool: True if notifications are muted, False otherwise
@@ -235,14 +235,14 @@ def is_notification_muted(user, team: Team, notification_identifier: str) -> boo
 
     now = timezone.now()
 
-    # Check for specific notification type mute or all notifications mute
+    # Check for specific notification identifier mute or all notifications mute
     # A mute is active if:
     # 1. It's permanent (muted_until is NULL), OR
     # 2. It hasn't expired yet (muted_until > now)
     active_mute_exists = (
         NotificationMute.objects.filter(
-            Q(user=user, team=team, notification_type=notification_identifier)
-            | Q(user=user, team=team, notification_type="")
+            Q(user=user, team=team, notification_identifier=notification_identifier)
+            | Q(user=user, team=team, notification_identifier="")
         )
         .filter(Q(muted_until__isnull=True) | Q(muted_until__gt=now))
         .exists()
@@ -252,7 +252,7 @@ def is_notification_muted(user, team: Team, notification_identifier: str) -> boo
 
 
 def create_or_update_mute(
-    user, team: Team, notification_type: str | None, duration_hours: int | None
+    user, team: Team, notification_identifier: str | None, duration_hours: int | None
 ) -> NotificationMute:
     """
     Create or update a notification mute for a user.
@@ -260,7 +260,7 @@ def create_or_update_mute(
     Args:
         user: The user creating the mute
         team: The team context
-        notification_type: The notification slug to mute, or None/empty string to mute all
+        notification_identifier: The notification identifier to mute, or None/empty string to mute all
         duration_hours: Hours until mute expires, or None for permanent mute
 
     Returns:
@@ -271,32 +271,32 @@ def create_or_update_mute(
         muted_until = timezone.now() + timezone.timedelta(hours=duration_hours)
 
     # Convert None to empty string for CharField
-    mute_type = notification_type or ""
+    mute_identifier = notification_identifier or ""
 
     mute, created = NotificationMute.objects.update_or_create(
         user=user,
         team=team,
-        notification_type=mute_type,
+        notification_identifier=mute_identifier,
         defaults={"muted_until": muted_until},
     )
 
     return mute
 
 
-def delete_mute(user, team: Team, notification_type: str | None) -> None:
+def delete_mute(user, team: Team, notification_identifier: str | None) -> None:
     """
     Delete a notification mute for a user.
 
     Args:
         user: The user deleting the mute
         team: The team context
-        notification_type: The notification slug to unmute, or None/empty string for all notifications
+        notification_identifier: The notification identifier to unmute, or None/empty string for all notifications
     """
     # Convert None to empty string for CharField
-    mute_type = notification_type or ""
+    mute_identifier = notification_identifier or ""
 
     NotificationMute.objects.filter(
         user=user,
         team=team,
-        notification_type=mute_type,
+        notification_identifier=mute_identifier,
     ).delete()

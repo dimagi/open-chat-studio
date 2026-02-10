@@ -106,7 +106,7 @@ class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
 
 
 class MuteNotificationView(LoginAndTeamRequiredMixin, View):
-    """Mute a specific notification type or all notifications"""
+    """Mute a specific notification identifier or all notifications"""
 
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
         user_notification = get_object_or_404(
@@ -129,7 +129,7 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
         mute_identifier = None if notification_type == NOTIFICATION_TYPE_ALL else notification_identifier
 
         create_or_update_mute(
-            user=request.user, team=request.team, notification_type=mute_identifier, duration_hours=duration_hours
+            user=request.user, team=request.team, notification_identifier=mute_identifier, duration_hours=duration_hours
         )
 
         message = (
@@ -141,7 +141,7 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
 
 
 class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
-    """Unmute a specific notification type or all notifications"""
+    """Unmute a specific notification identifier or all notifications"""
 
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
         user_notification = get_object_or_404(
@@ -158,6 +158,6 @@ class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
         # Determine what to unmute
         mute_identifier = None if notification_type == NOTIFICATION_TYPE_ALL else notification_identifier
 
-        delete_mute(user=request.user, team=request.team, notification_type=mute_identifier)
+        delete_mute(user=request.user, team=request.team, notification_identifier=mute_identifier)
 
         return JsonResponse({"success": True, "message": "Notifications unmuted"})

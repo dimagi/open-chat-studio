@@ -82,27 +82,27 @@ class NotificationMute(BaseTeamModel):
     """Store user mute settings for notifications"""
 
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE, related_name="notification_mutes")
-    # If notification_type is None, all notifications are muted
-    notification_type = models.CharField(
+    # If notification_identifier is empty, all notifications are muted
+    notification_identifier = models.CharField(
         max_length=255,
         blank=True,
         default="",
-        help_text="Notification slug/type to mute. Leave empty to mute all.",
+        help_text="Notification identifier to mute. Leave empty to mute all.",
     )
     muted_until = models.DateTimeField(null=True, blank=True, help_text="When the mute expires. NULL means forever.")
 
     class Meta:
         verbose_name_plural = "Notification Mutes"
-        unique_together = ("user", "team", "notification_type")
+        unique_together = ("user", "team", "notification_identifier")
         indexes = [
             models.Index(fields=["user", "team", "muted_until"]),
         ]
 
     def __str__(self):
-        mute_type = self.notification_type or "all notifications"
+        mute_identifier = self.notification_identifier or "all notifications"
         if self.muted_until:
-            return f"{self.user} muted {mute_type} until {self.muted_until}"
-        return f"{self.user} muted {mute_type} forever"
+            return f"{self.user} muted {mute_identifier} until {self.muted_until}"
+        return f"{self.user} muted {mute_identifier} forever"
 
     def is_active(self):
         """Check if this mute is currently active"""

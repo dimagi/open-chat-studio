@@ -26,9 +26,9 @@ class UserNotificationPreferencesAdmin(admin.ModelAdmin):
 
 @admin.register(NotificationMute)
 class NotificationMuteAdmin(admin.ModelAdmin):
-    list_display = ("user", "team", "notification_type", "muted_until", "is_active")
+    list_display = ("user", "team", "notification_identifier", "muted_until", "is_active")
     list_filter = ("team", "muted_until")
-    search_fields = ("user__email", "notification_type")
+    search_fields = ("user__email", "notification_identifier")
 
     def is_active(self, obj):
         return obj.is_active()

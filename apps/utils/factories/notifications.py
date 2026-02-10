@@ -38,5 +38,5 @@ class NotificationMuteFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     user = factory.SubFactory(UserFactory)
-    notification_type = factory.Sequence(lambda n: f"notification_type_{n}")
+    notification_identifier = factory.Sequence(lambda n: f"notification_identifier_{n}")
     muted_until = None  # Default to permanent mute
