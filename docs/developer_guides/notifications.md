@@ -92,6 +92,9 @@ create_notification(
     event_data={"action_id": 123},
 )
 ```
+### Where to Add Notification Methods
+
+For better code organization and maintainability, **preferably add your notification helper functions in `apps/ocs_notifications/notifications.py`**.
 
 ### Required Parameters
 
