@@ -33,15 +33,16 @@ jobs:
         id: find
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
           REPO="${{ github.repository }}"
 
           # Get head branch names of all open PRs with the label
           OPEN_PR_BRANCHES=$(gh pr list --repo "$REPO" --label "claude-incremental" --state open --json headRefName --jq '.[].headRefName')
 
-          if [ -n "${{ inputs.issue_number }}" ]; then
+          if [ -n "$INPUT_ISSUE_NUMBER" ]; then
             # Manual dispatch: use the specified issue but check for existing PR
-            ISSUE_NUMBER="${{ inputs.issue_number }}"
+            ISSUE_NUMBER="$INPUT_ISSUE_NUMBER"
             if echo "$OPEN_PR_BRANCHES" | grep -q "^claude-incremental/${ISSUE_NUMBER}-"; then
               echo "::notice::Issue #$ISSUE_NUMBER already has an open PR, skipping"
               exit 0
