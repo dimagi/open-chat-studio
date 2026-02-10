@@ -30,10 +30,6 @@ DURATION_MAP = {
     "forever": None,
 }
 
-# Notification type constants
-NOTIFICATION_TYPE_ALL = "all"
-NOTIFICATION_TYPE_SPECIFIC = "specific"
-
 
 class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
@@ -131,12 +127,11 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
 
         # Get duration from POST data (in hours)
         duration_param = request.POST.get("duration")
-        notification_type = request.POST.get("notification_type")  # 'specific' or 'all'
 
         duration_hours = DURATION_MAP.get(duration_param)
 
-        # Determine what to mute
-        mute_identifier = None if notification_type == NOTIFICATION_TYPE_ALL else notification_identifier
+        # Mute the specific notification identifier
+        mute_identifier = notification_identifier
 
         create_or_update_mute(
             user=request.user, team=request.team, notification_identifier=mute_identifier, duration_hours=duration_hours
@@ -163,10 +158,9 @@ class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
 
         # Get the notification identifier
         notification_identifier = user_notification.notification.identifier
-        notification_type = request.POST.get("notification_type")  # 'specific' or 'all'
 
-        # Determine what to unmute
-        mute_identifier = None if notification_type == NOTIFICATION_TYPE_ALL else notification_identifier
+        # Unmute the specific notification identifier
+        mute_identifier = notification_identifier
 
         delete_mute(user=request.user, team=request.team, notification_identifier=mute_identifier)
 

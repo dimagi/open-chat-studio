@@ -1,0 +1,38 @@
+<div class="dropdown dropdown-end">
+  <button tabindex="0" class="btn btn-sm btn-ghost" title="{{ button_title }}">
+    <i class="fa fa-bell-slash"></i>
+    {% if button_text %}
+      <span class="ml-1">{{ button_text }}</span>
+    {% endif %}
+  </button>
+  <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
+    <li class="menu-title">
+      <span>Mute for</span>
+    </li>
+    <li>
+      <a hx-post="{{ mute_url }}"
+         hx-vals='{"duration": "8h"}'
+         hx-swap="none">8 hours</a>
+    </li>
+    <li>
+      <a hx-post="{{ mute_url }}"
+         hx-vals='{"duration": "1d"}'
+         hx-swap="none">1 day</a>
+    </li>
+    <li>
+      <a hx-post="{{ mute_url }}"
+         hx-vals='{"duration": "1w"}'
+         hx-swap="none">1 week</a>
+    </li>
+    <li>
+      <a hx-post="{{ mute_url }}"
+         hx-vals='{"duration": "1m"}'
+         hx-swap="none">1 month</a>
+    </li>
+    <li>
+      <a hx-post="{{ mute_url }}"
+         hx-vals='{"duration": "forever"}'
+         hx-swap="none">Forever</a>
+    </li>
+  </ul>
+</div>

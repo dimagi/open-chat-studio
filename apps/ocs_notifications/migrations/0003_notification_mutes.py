@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('ocs_notifications', '0001_initial'),
+        ('ocs_notifications', '0002_notification_links'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ('teams', '0008_drop_unused_waffle_tables'),
     ]
