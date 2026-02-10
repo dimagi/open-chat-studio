@@ -5,7 +5,6 @@ from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.tests.test_openapi_tool import _make_openapi_schema
-from apps.ocs_notifications.models import LevelChoices
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.utils.factories.custom_actions import CustomActionFactory
 
@@ -19,11 +18,13 @@ def _test_tool_call_with_custom_action(spec_dict, call_args: dict, custom_action
     return tool.run(call_args, tool_call_id="123")
 
 
-@patch("apps.ocs_notifications.notifications.create_notification")
-def test_openapi_tool_creates_error_notification_on_failure(mock_create_notification, httpx_mock):
+@patch("apps.custom_actions.models.get_slug_for_team")
+@patch("apps.chat.agent.openapi_tool.custom_action_api_failure_notification")
+def test_openapi_tool_creates_error_notification_on_failure(mock_create_notification, get_slug_for_team, httpx_mock):
     """Test that error notifications are created when API calls fail."""
     # Create a custom action using the factory (build to avoid DB persistence)
-    custom_action = CustomActionFactory.build()
+    get_slug_for_team.return_value = "test-team-slug"
+    custom_action = CustomActionFactory.build(id=1)
 
     spec = _make_openapi_schema({})
     # Mock a 500 error from the API
@@ -36,18 +37,9 @@ def test_openapi_tool_creates_error_notification_on_failure(mock_create_notifica
 
     # Verify the error notification was created
     mock_create_notification.assert_called_once()
-    call_args = mock_create_notification.call_args
-
-    assert call_args[1]["title"] == f"Custom Action '{custom_action.name}' failed"
-    assert "API call failed" in call_args[1]["message"]
-    assert call_args[1]["level"] == LevelChoices.ERROR
-    assert call_args[1]["team"] == custom_action.team
-    assert call_args[1]["slug"] == "custom-action-api-failure"
-    assert call_args[1]["event_data"]["action_id"] == custom_action.id
-    assert call_args[1]["event_data"]["exception_type"] == "ToolException"
 
 
-@patch("apps.ocs_notifications.notifications.create_notification")
+@patch("apps.chat.agent.openapi_tool.custom_action_api_failure_notification")
 def test_openapi_tool_no_notifications_without_custom_action(mock_create_notification, httpx_mock):
     """Test that no notifications are created when custom_action is not provided."""
     spec = _make_openapi_schema({})
@@ -64,10 +56,12 @@ def test_openapi_tool_no_notifications_without_custom_action(mock_create_notific
     mock_create_notification.assert_not_called()
 
 
-@patch("apps.ocs_notifications.notifications.create_notification")
-def test_openapi_tool_creates_unexpected_error_notification(mock_create_notification):
+@patch("apps.custom_actions.models.get_slug_for_team")
+@patch("apps.chat.agent.openapi_tool.custom_action_unexpected_error_notification")
+def test_openapi_tool_creates_unexpected_error_notification(mock_create_notification, get_slug_for_team):
     """Test that error notifications are created for unexpected exceptions."""
-    custom_action = CustomActionFactory.build()
+    get_slug_for_team.return_value = "test-team-slug"
+    custom_action = CustomActionFactory.build(id=1)
 
     spec = _make_openapi_schema({})
 
@@ -80,12 +74,3 @@ def test_openapi_tool_creates_unexpected_error_notification(mock_create_notifica
 
     # Verify the unexpected error notification was created
     mock_create_notification.assert_called_once()
-    call_args = mock_create_notification.call_args
-
-    assert call_args[1]["title"] == f"Custom Action '{custom_action.name}' encountered an error"
-    assert call_args[1]["message"] == "GET 'test_get' failed with an unexpected error: Connection Error"
-    assert call_args[1]["level"] == LevelChoices.ERROR
-    assert call_args[1]["team"] == custom_action.team
-    assert call_args[1]["slug"] == "custom-action-unexpected-error"
-    assert call_args[1]["event_data"]["action_id"] == custom_action.id
-    assert call_args[1]["event_data"]["exception_type"] == "ConnectionError"

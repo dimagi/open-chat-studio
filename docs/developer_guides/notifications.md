@@ -117,6 +117,13 @@ create_notification(
   - Permissions are checked per-team (combines Django perms + team membership)
   - Default: None (notify all team members in the team)
 
+- **`links`** (dict): A dictionary of label → URL pairs to attach to the notification
+  - These are rendered as clickable chips/buttons in the notification UI
+  - Use for: linking to the relevant bot, session, or admin page
+  - Example: `{"View Bot": "/experiments/123/", "View Session": "/sessions/456/"}`
+  - Default: empty dict
+  
+
 ## When & Where to Call create_notification()
 
 The best place to call `create_notification()` depends on your use case. All contexts are safe:
