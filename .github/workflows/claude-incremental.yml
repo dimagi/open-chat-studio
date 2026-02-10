@@ -22,56 +22,53 @@ permissions:
   pull-requests: read
 
 jobs:
-  check-pending-pr:
-    runs-on: ubuntu-latest
-    outputs:
-      has_open_pr: ${{ steps.check.outputs.has_open_pr }}
-      pr_number: ${{ steps.check.outputs.pr_number }}
-    steps:
-      - name: Check for open PRs with label
-        id: check
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR=$(gh pr list --repo ${{ github.repository }} --label "claude-incremental" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$PR" ]; then
-            echo "has_open_pr=true" >> $GITHUB_OUTPUT
-            echo "pr_number=$PR" >> $GITHUB_OUTPUT
-            echo "::notice::Waiting for PR #$PR to be reviewed"
-          else
-            echo "has_open_pr=false" >> $GITHUB_OUTPUT
-          fi
-
   find-work:
-    needs: check-pending-pr
-    if: needs.check-pending-pr.outputs.has_open_pr != 'true'
     runs-on: ubuntu-latest
     outputs:
       issue_number: ${{ steps.find.outputs.issue_number }}
       issue_body: ${{ steps.find.outputs.issue_body }}
       issue_title: ${{ steps.find.outputs.issue_title }}
     steps:
-      - name: Find oldest labeled issue
+      - name: Find oldest labeled issue without an open PR
         id: find
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Use specific issue if provided, otherwise find oldest open issue with the label
+          REPO="${{ github.repository }}"
+
+          # Get head branch names of all open PRs with the label
+          OPEN_PR_BRANCHES=$(gh pr list --repo "$REPO" --label "claude-incremental" --state open --json headRefName --jq '.[].headRefName')
+
           if [ -n "${{ inputs.issue_number }}" ]; then
+            # Manual dispatch: use the specified issue but check for existing PR
             ISSUE_NUMBER="${{ inputs.issue_number }}"
+            if echo "$OPEN_PR_BRANCHES" | grep -q "^claude-incremental/${ISSUE_NUMBER}-"; then
+              echo "::notice::Issue #$ISSUE_NUMBER already has an open PR, skipping"
+              exit 0
+            fi
           else
-            ISSUE_NUMBER=$(gh issue list --repo ${{ github.repository }} --label "claude-incremental" --state open --json number,createdAt --jq 'sort_by(.createdAt) | .[0].number // empty')
+            # Scheduled: find the oldest issue that doesn't already have an open PR
+            ISSUES=$(gh issue list --repo "$REPO" --label "claude-incremental" --state open --json number,createdAt --jq 'sort_by(.createdAt) | .[].number')
+
+            ISSUE_NUMBER=""
+            for CANDIDATE in $ISSUES; do
+              if ! echo "$OPEN_PR_BRANCHES" | grep -q "^claude-incremental/${CANDIDATE}-"; then
+                ISSUE_NUMBER="$CANDIDATE"
+                break
+              fi
+              echo "::notice::Issue #$CANDIDATE already has an open PR, skipping"
+            done
           fi
 
           if [ -z "$ISSUE_NUMBER" ]; then
-            echo "::notice::No open issues found with the claude-incremental label"
+            echo "::notice::No eligible issues found"
             exit 0
           fi
 
           echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
 
           # Fetch issue details
-          ISSUE_DATA=$(gh issue view "$ISSUE_NUMBER" --repo ${{ github.repository }} --json title,body)
+          ISSUE_DATA=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json title,body)
           ISSUE_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title')
           ISSUE_BODY=$(echo "$ISSUE_DATA" | jq -r '.body')
 
