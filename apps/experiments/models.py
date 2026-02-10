@@ -116,10 +116,6 @@ class PromptObjectManager(AuditingManager):
     pass
 
 
-class ExperimentRouteObjectManager(VersionsObjectManagerMixin, models.Manager):
-    pass
-
-
 class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
     def get_default_or_working(self, family_member: Experiment):
         """
@@ -1109,117 +1105,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return None
 
 
-class ExperimentRouteType(models.TextChoices):
-    PROCESSOR = "processor"
-    TERMINAL = "terminal"
-
-
-class ExperimentRoute(BaseTeamModel, VersionsMixin):
-    """
-    Through model for Experiment.children routes.
-    """
-
-    parent = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="child_links")
-    child = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="parent_links")
-    keyword = models.SlugField(max_length=128)
-    is_default = models.BooleanField(default=False)
-    type = models.CharField(choices=ExperimentRouteType.choices, max_length=64, default=ExperimentRouteType.PROCESSOR)
-    condition = models.CharField(max_length=64, blank=True)
-    working_version = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="versions",
-    )
-    is_archived = models.BooleanField(default=False)
-    objects = ExperimentRouteObjectManager()
-
-    @classmethod
-    def eligible_children(cls, team: Team, parent: Experiment | None = None):
-        """
-        Returns a list of experiments that fit the following criteria:
-        - They are not the same as the parent
-        - they are not parents
-        - they are not not children of the current experiment
-        - they are not part of the current experiment's version family
-        """
-        parent_ids = cls.objects.filter(team=team).values_list("parent_id", flat=True).distinct()
-
-        if parent:
-            child_ids = cls.objects.filter(parent=parent).values_list("child_id", flat=True)
-            eligible_experiments = (
-                Experiment.objects.filter(team=team)
-                .exclude(id__in=child_ids)
-                .exclude(id__in=parent_ids)
-                .exclude(id=parent.id)
-                .exclude(working_version_id=parent.id)
-            )
-        else:
-            eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
-
-        return eligible_experiments.filter(working_version_id=None)
-
-    @transaction.atomic()
-    def create_new_version(self, new_parent: Experiment) -> ExperimentRoute:
-        """
-        Strategy:
-        - If the current child doesn't have any versions, create a new child version for the new route version
-        - If the current child have versions and there are changes between the current child and its latest version,
-            a new child version should be created for the new route version
-        - Alternatively, if there are were changes made since the last child version were made, use the latest version
-            for the new route version
-        """
-
-        new_route = super().create_new_version(save=False)
-        new_route.parent = new_parent
-        new_route.child = None
-        working_child = self.child
-
-        if latest_child_version := working_child.latest_version:
-            # Compare experimens using their `version` instances for a comprehensive comparison
-            current_version_details: VersionDetails = working_child.version_details
-            current_version_details.compare(latest_child_version.version_details)
-
-            if current_version_details.fields_changed:
-                fields_changed = [f.name for f in current_version_details.fields if f.changed]
-                description = self._generate_version_description(fields_changed)
-                new_route.child = working_child.create_new_version(version_description=description)
-            else:
-                new_route.child = latest_child_version
-        else:
-            new_route.child = working_child.create_new_version()
-
-        new_route.save()
-        return new_route
-
-    def _generate_version_description(self, changed_fields: set | None = None) -> str:
-        description = "Auto created when the parent experiment was versioned"
-        if changed_fields:
-            changed_fields = ",".join(changed_fields)
-            description = f"{description} since {changed_fields} changed."
-        return description
-
-    def _get_version_details(self) -> VersionDetails:
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(group_name=self.keyword, name="keyword", raw_value=self.keyword),
-                VersionField(group_name=self.keyword, name="child", raw_value=self.child),
-            ],
-        )
-
-    class Meta:
-        constraints = [
-            UniqueConstraint(fields=["parent", "child"], condition=Q(is_archived=False), name="unique_parent_child"),
-            UniqueConstraint(
-                fields=["parent", "keyword", "condition"],
-                condition=Q(is_archived=False),
-                name="unique_parent_keyword_condition",
-            ),
-        ]
-
-
 class Participant(BaseTeamModel):
     name = models.CharField(max_length=320, blank=True)
     identifier = models.CharField(max_length=320, blank=True)  # max email length
@@ -1362,7 +1247,7 @@ class Participant(BaseTeamModel):
             )
             .select_related("action")
             .prefetch_related("attempts")
-            .order_by("created_at")
+            .order_by("created_at", "id")
         )
         if not include_inactive:
             messages = messages.filter(is_complete=False, cancelled_at=None)
