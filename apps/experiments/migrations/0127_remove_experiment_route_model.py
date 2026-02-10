@@ -10,8 +10,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql='DROP TABLE IF EXISTS experiments_experimentroute CASCADE;',
-            reverse_sql=migrations.RunSQL.noop,
+        migrations.DeleteModel(
+            name='ExperimentRoute',
         ),
     ]
