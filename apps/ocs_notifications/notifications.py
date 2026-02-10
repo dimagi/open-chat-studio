@@ -116,12 +116,10 @@ def audio_synthesis_failure_notification(experiment, session: ExperimentSession 
 
 @make_safe(logger, log_message="Failed to create file delivery failure notification")
 def file_delivery_failure_notification(
-    experiment, platform_title: str, content_type: str, session: ExperimentSession = None
+    experiment, platform_title: str, content_type: str, session: ExperimentSession
 ) -> None:
     """Create notification when file delivery to user fails."""
-    links = {"View Bot": experiment.get_absolute_url()}
-    if session:
-        links["View Session"] = session.get_absolute_url()
+    links = {"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()}
 
     create_notification(
         title="File Delivery Failed",
