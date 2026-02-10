@@ -1,7 +1,7 @@
 from functools import wraps
 
 
-def make_safe(logger=None, log_message: str | None = None):
+def silence_exceptions(logger=None, log_message: str | None = None):
     def decorate(f):
         """Decorator to make a function safe by catching exceptions and logging them."""
 

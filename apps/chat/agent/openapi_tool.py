@@ -53,15 +53,14 @@ class FunctionDef(BaseModel):
     url: str
     args_schema: type[BaseModel]
 
-    def build_tool(self, auth_service: AuthService, custom_action: "CustomAction" = None) -> BaseTool:
+    def build_tool(self, auth_service: AuthService, custom_action: "CustomAction") -> BaseTool:
         executor = OpenAPIOperationExecutor(auth_service, self, custom_action)
-        func = executor.call_api_with_notifications if custom_action else executor.call_api
         return StructuredTool(
             name=self.name,
             description=self.description,
             args_schema=self.args_schema,
             handle_tool_error=True,
-            func=func,
+            func=executor.call_api_with_notifications,
             response_format="content_and_artifact",
         )
 
