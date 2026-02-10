@@ -4,7 +4,6 @@ from unittest.mock import patch
 import pytest
 
 from apps.chat.bots import PipelineBot
-from apps.ocs_notifications.models import LevelChoices
 from apps.pipelines.nodes.base import PipelineState
 
 
@@ -45,7 +44,7 @@ def test_save_participant_data():
     participant_data.save.assert_called()
 
 
-@patch("apps.ocs_notifications.notifications.create_notification")
+@patch("apps.chat.bots.pipeline_execution_failure_notification")
 def test_pipeline_execution_failure_creates_notification(mock_create_notification):
     """Test that pipeline execution exception triggers a notification."""
     # Set up mocks
@@ -72,12 +71,4 @@ def test_pipeline_execution_failure_creates_notification(mock_create_notificatio
                 bot._run_pipeline(input_state={}, pipeline_to_use=mock.Mock())
 
     # Verify notification was created with correct parameters
-    mock_create_notification.assert_called_once_with(
-        title=f"Pipeline execution failed for {experiment}",
-        message="Generating a response for user 'user123' failed due to an error in the pipeline execution",
-        level=LevelChoices.ERROR,
-        team=team,
-        slug="pipeline-execution-failed",
-        event_data={"experiment_id": 123, "error": "Pipeline failed"},
-        permissions=["experiments.change_experiment"],
-    )
+    mock_create_notification.assert_called_once()

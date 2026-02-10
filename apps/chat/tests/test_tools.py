@@ -29,7 +29,6 @@ from apps.chat.models import ChatAttachment
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
 from apps.files.models import FileChunkEmbedding
-from apps.ocs_notifications.models import LevelChoices
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.teams.utils import set_current_team
 from apps.utils.factories.documents import CollectionFactory
@@ -635,14 +634,12 @@ class TestNotificationOnToolError:
 
         tool = CustomBaseTool()
 
-        with mock.patch("apps.ocs_notifications.notifications.create_notification") as mock_create_notification:
+        with mock.patch("apps.chat.agent.tools.tool_error_notification") as mock_create_notification:
             tool.run(tool_input="tool_input")
 
             mock_create_notification.assert_called_once_with(
-                title="Tool Error Detected",
-                message="Test error",
-                level=LevelChoices.ERROR,
                 team=team,
-                slug="tool-error",
-                event_data={"tool_name": "Test Tool", "error_message": "Test error"},
+                tool_name="Test Tool",
+                error_message="Test error",
+                experiment_session=None,
             )
