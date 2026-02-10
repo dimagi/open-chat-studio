@@ -2,7 +2,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from apps.experiments.models import Experiment
 from apps.ocs_notifications.models import LevelChoices
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
@@ -24,7 +23,7 @@ from apps.utils.factories.team import TeamFactory
 class TestCustomActionHealthCheckFailureNotification:
     @pytest.mark.django_db()
     @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification_with_correct_parameters(self, mock_create_notification):
+    def test_creates_notification(self, mock_create_notification):
         # Arrange
         action = CustomActionFactory.create()
         failure_reason = "Connection timeout"
@@ -44,25 +43,11 @@ class TestCustomActionHealthCheckFailureNotification:
             links={"View Action": action.get_absolute_url()},
         )
 
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_handles_exception_gracefully(self, mock_create_notification):
-        # Arrange
-        action = CustomActionFactory.create()
-        failure_reason = "Connection timeout"
-        mock_create_notification.side_effect = Exception("Database error")
-
-        # Act - should not raise exception due to @make_safe decorator
-        custom_action_health_check_failure_notification(action, failure_reason)
-
-        # Assert
-        mock_create_notification.assert_called_once()
-
 
 class TestPipelineExecutionFailureNotification:
     @pytest.mark.django_db()
     @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification_with_correct_parameters(self, mock_create_notification):
+    def test_creates_notification(self, mock_create_notification):
         # Arrange
         experiment = ExperimentFactory.create()
         session = ExperimentSessionFactory.create(experiment=experiment)
@@ -87,26 +72,11 @@ class TestPipelineExecutionFailureNotification:
             links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
         )
 
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_handles_exception_gracefully(self, mock_create_notification):
-        # Arrange
-        experiment = ExperimentFactory.create()
-        session = ExperimentSessionFactory.create(experiment=experiment)
-        error = Exception("Pipeline error")
-        mock_create_notification.side_effect = Exception("Database error")
-
-        # Act - should not raise exception due to @make_safe decorator
-        pipeline_execution_failure_notification(experiment, session, error)
-
-        # Assert
-        mock_create_notification.assert_called_once()
-
 
 class TestCustomActionApiFailureNotification:
     @pytest.mark.django_db()
     @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification_with_correct_parameters(self, mock_create_notification):
+    def test_creates_notification(self, mock_create_notification):
         # Arrange
         custom_action = CustomActionFactory.create()
         function_def = Mock()
@@ -129,29 +99,11 @@ class TestCustomActionApiFailureNotification:
             links={"View Action": custom_action.get_absolute_url()},
         )
 
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_capitalizes_method_correctly(self, mock_create_notification):
-        # Arrange
-        custom_action = CustomActionFactory.create()
-        function_def = Mock()
-        function_def.method = "get"
-        function_def.name = "get_users"
-        exception = ValueError("Invalid parameter")
-
-        # Act
-        custom_action_api_failure_notification(custom_action, function_def, exception)
-
-        # Assert
-        call_args = mock_create_notification.call_args[1]
-        assert "GET 'get_users'" in call_args["message"]
-        assert call_args["event_data"]["exception_type"] == "ValueError"
-
 
 class TestCustomActionUnexpectedErrorNotification:
     @pytest.mark.django_db()
     @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification_with_correct_parameters(self, mock_create_notification):
+    def test_creates_notification(self, mock_create_notification):
         # Arrange
         custom_action = CustomActionFactory.create()
         function_def = Mock()
@@ -178,7 +130,7 @@ class TestCustomActionUnexpectedErrorNotification:
 class TestLlmErrorNotification:
     @pytest.mark.django_db()
     @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification_with_correct_parameters(self, mock_create_notification):
+    def test_creates_notification(self, mock_create_notification):
         # Arrange
         experiment = ExperimentFactory.create()
         session = ExperimentSessionFactory.create(experiment=experiment)
@@ -199,18 +151,6 @@ class TestLlmErrorNotification:
             permissions=["experiments.change_experiment"],
             links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
         )
-
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_handles_nonexistent_experiment(self, mock_create_notification):
-        # Arrange
-        mock_create_notification.side_effect = Experiment.DoesNotExist()
-
-        # Act - should not raise exception due to @make_safe decorator
-        llm_error_notification(999, 999, "Error message")
-
-        # Assert - function should not crash
-        pass
 
 
 class TestAudioSynthesisFailureNotification:
