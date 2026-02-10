@@ -276,14 +276,18 @@ class RestrictedHttpClient:
 
                 return self._build_response_dict(response, body=body)
 
+    _TEXT_CONTENT_TYPES = ("text/", "json", "xml", "javascript", "yaml", "csv", "html")
+
     def _build_response_dict(self, response, body=b""):
-        text = body.decode("utf-8", errors="replace")
         content_type = response.headers.get("content-type", "")
+        is_text = any(t in content_type for t in self._TEXT_CONTENT_TYPES) or not content_type
+
+        text = body.decode("utf-8", errors="replace") if is_text else ""
 
         json_body = None
         if "application/json" in content_type:
             with contextlib.suppress(json_module.JSONDecodeError, ValueError):
-                json_body = json_module.loads(text)
+                json_body = json_module.loads(body)
 
         return {
             "status_code": response.status_code,

@@ -87,7 +87,13 @@ class TestBasicRequests:
         response = client.get("https://api.example.com/image.png")
         assert response["content"] == raw_bytes
         assert isinstance(response["content"], bytes)
-        assert response["text"] == raw_bytes.decode("utf-8", errors="replace")
+        assert response["text"] == ""
+
+    def test_text_decoded_for_text_content_types(self, client, mock_validate_url, httpx_mock):
+        httpx_mock.add_response(content=b"hello world", headers={"content-type": "text/plain"})
+        response = client.get("https://api.example.com/text")
+        assert response["text"] == "hello world"
+        assert response["content"] == b"hello world"
 
     def test_error_response_not_raised(self, client, mock_validate_url, httpx_mock):
         """Non-2xx responses (except retryable ones) are returned, not raised."""
