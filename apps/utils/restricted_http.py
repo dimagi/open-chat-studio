@@ -328,12 +328,15 @@ class RestrictedHttpClient:
         from apps.service_providers.models import AuthProvider
 
         try:
-            provider = AuthProvider.objects.get(team=self._team, name__iexact=auth_name)
+            provider = AuthProvider.objects.get(team=self._team, name=auth_name)
         except AuthProvider.DoesNotExist:
-            available = list(AuthProvider.objects.filter(team=self._team).values_list("name", flat=True))
-            raise HttpAuthProviderError(
-                f"Auth provider '{auth_name}' not found. Available providers: {', '.join(available) or 'none'}"
-            ) from None
+            try:
+                provider = AuthProvider.objects.get(team=self._team, name__iexact=auth_name)
+            except (AuthProvider.DoesNotExist, AuthProvider.MultipleObjectsReturned):
+                available = list(AuthProvider.objects.filter(team=self._team).values_list("name", flat=True))
+                raise HttpAuthProviderError(
+                    f"Auth provider '{auth_name}' not found. Available providers: {', '.join(available) or 'none'}"
+                ) from None
 
         auth_service = provider.get_auth_service()
         auth_headers = auth_service.get_auth_headers()
