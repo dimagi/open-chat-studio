@@ -214,6 +214,8 @@ class OCSCallbackHandler(BaseCallbackHandler):
         if not self.tracer.error_message:
             if _error := kwargs.get("error") or (args[0] if args else None):
                 self.tracer.error_message = error_message = str(_error)
+        else:
+            error_message = self.tracer.error_message
 
         llm_error_notification(
             experiment_id=self.tracer.experiment_id, session_id=self.tracer.session.id, error_message=error_message
