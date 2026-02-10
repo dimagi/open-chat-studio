@@ -72,7 +72,7 @@ def add_file_attachment(filename: str, content: bytes, content_type: str = None)
         content: The file content as bytes
         content_type: Optional MIME type. Auto-detected from filename if not provided.
 
-    Requires an active session. Raises an error if content is not bytes.
+    Raises an error if content is not bytes.
 
 def add_message_tag(tag_name: str):
     Adds a tag to the output message.
