@@ -11,7 +11,7 @@ def _remove_sessions_with_missing_participants(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0126_remove_experiment_children_field'),
+        ('experiments', '0127_remove_experiment_route_model'),
     ]
 
     operations = [

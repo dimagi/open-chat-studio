@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0127_remove_sessions_with_missing_participants'),
+        ('experiments', '0128_remove_sessions_with_missing_participants'),
     ]
 
     operations = [
