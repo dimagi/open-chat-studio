@@ -3,12 +3,11 @@ import logging
 from pathlib import Path
 
 import pydantic
-from anthropic import Anthropic, AnthropicError
-from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+from apps.help.agent import build_system_agent
 from apps.pipelines.nodes.nodes import DEFAULT_FUNCTION
 from apps.teams.decorators import login_and_team_required
 
@@ -34,7 +33,7 @@ def pipeline_generate_code(request, team_slug: str):
     current_code = body["context"]
     try:
         completion = code_completion(user_query, current_code)
-    except (ValueError, TypeError, AnthropicError):
+    except Exception:
         logger.exception("An error occurred while generating code.")
         return JsonResponse({"error": "An error occurred while generating code."})
     return JsonResponse({"response": completion})
@@ -57,17 +56,20 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
 
     system_prompt = system_prompt.format(**prompt_context).strip()
 
-    client = Anthropic(api_key=settings.AI_HELPER_API_KEY)
-    messages = [
-        {"role": "user", "content": user_query},
-        {"role": "assistant", "content": "def main(input: str, **kwargs) -> str:"},
-    ]
-
-    response = client.messages.create(
-        system=system_prompt, model=settings.AI_HELPER_API_MODEL, messages=messages, max_tokens=1000
+    system_prompt += (
+        "\n\nIMPORTANT: Start your response with exactly"
+        " `def main(input: str, **kwargs) -> str:` and nothing else before it."
+    )
+    agent = build_system_agent("high", system_prompt)
+    response = agent.invoke(
+        {
+            "messages": [
+                {"role": "user", "content": user_query},
+            ]
+        }
     )
 
-    response_code = f"def main(input: str, **kwargs) -> str:{response.content[0].text}"
+    response_code = response["messages"][-1].text
 
     from apps.pipelines.nodes.nodes import CodeNode
 
