@@ -18,8 +18,9 @@ def custom_action_health_check_failure_notification(action, failure_reason: str)
     )
 
 
-def pipeline_execution_failure_notification(experiment, participant_identifier: str, error: Exception) -> None:
+def pipeline_execution_failure_notification(experiment, session: ExperimentSession, error: Exception) -> None:
     """Create notification when pipeline execution fails."""
+    participant_identifier = session.participant.identifier
     create_notification(
         title=f"Pipeline execution failed for {experiment}",
         message=(
@@ -31,6 +32,7 @@ def pipeline_execution_failure_notification(experiment, participant_identifier: 
         slug="pipeline-execution-failed",
         event_data={"experiment_id": experiment.id, "error": str(error)},
         permissions=["experiments.change_experiment"],
+        links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
     )
 
 
@@ -46,6 +48,7 @@ def custom_action_api_failure_notification(custom_action, function_def, exceptio
         permissions=["custom_actions.view_customaction"],
         slug="custom-action-api-failure",
         event_data={"action_id": custom_action.id, "exception_type": type(exception).__name__},
+        links={"View Action": custom_action.get_absolute_url()},
     )
 
 
@@ -62,6 +65,7 @@ def custom_action_unexpected_error_notification(custom_action, function_def, exc
         permissions=["custom_actions.view_customaction"],
         slug="custom-action-unexpected-error",
         event_data={"action_id": custom_action.id, "exception_type": type(exception).__name__},
+        links={"View Action": custom_action.get_absolute_url()},
     )
 
 
@@ -76,27 +80,43 @@ def llm_error_notification(experiment_id: int, session_id: int, error_message: s
         team=experiment.team,
         slug="llm-error",
         event_data={"bot_id": experiment_id, "error_message": error_message},
+        permissions=["experiments.change_experiment"],
+        links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
     )
 
 
-def audio_synthesis_failure_notification(experiment) -> None:
+def audio_synthesis_failure_notification(experiment, session: ExperimentSession = None) -> None:
     """Create notification when audio synthesis fails."""
+    links = {"View Bot": experiment.get_absolute_url()}
+    if session:
+        links["View Session"] = session.get_absolute_url()
+
     create_notification(
         title="Audio Synthesis Failed",
-        message="An error occurred while synthesizing a voice response",
+        message=f"An error occurred while synthesizing a voice response for '{experiment.name}'",
         level=LevelChoices.ERROR,
         slug="audio-synthesis-failed",
         team=experiment.team,
         permissions=["experiments.view_experimentsession"],
         event_data={"bot_id": experiment.id},
+        links=links,
     )
 
 
-def file_delivery_failure_notification(experiment, platform: str, platform_title: str, content_type: str) -> None:
+def file_delivery_failure_notification(
+    experiment, platform: str, platform_title: str, content_type: str, session: ExperimentSession = None
+) -> None:
     """Create notification when file delivery to user fails."""
+    links = {"View Bot": experiment.get_absolute_url()}
+    if session:
+        links["View Session"] = session.get_absolute_url()
+
     create_notification(
-        title="Message Delivery Failed",
-        message=f"An error occurred while delivering a file attachment to the user via {platform_title}",
+        title="File Delivery Failed",
+        message=(
+            "An error occurred while delivering a file attachment to the user via "
+            f"{platform_title} for '{experiment.name}'",
+        ),
         level=LevelChoices.ERROR,
         slug="file-delivery-failed",
         team=experiment.team,
@@ -106,6 +126,7 @@ def file_delivery_failure_notification(experiment, platform: str, platform_title
             "platform": platform,
             "content_type": content_type,
         },
+        links=links,
     )
 
 
@@ -113,12 +134,13 @@ def audio_transcription_failure_notification(experiment, platform: str) -> None:
     """Create notification when audio transcription fails."""
     create_notification(
         title="Audio Transcription Failed",
-        message="An error occurred while transcribing a voice message",
+        message=f"An error occurred while transcribing a voice message for '{experiment.name}'",
         level=LevelChoices.ERROR,
         slug="audio-transcription-failed",
         team=experiment.team,
         permissions=["experiments.view_experimentsession"],
         event_data={"bot_id": experiment.id, "platform": platform},
+        links={"View Bot": experiment.get_absolute_url()},
     )
 
 
@@ -136,16 +158,25 @@ def message_delivery_failure_notification(experiment, platform: str, platform_ti
             "platform": platform,
             "context": context,
         },
+        links={"View Bot": experiment.get_absolute_url()},
     )
 
 
-def tool_error_notification(team, tool_name: str, error_message: str) -> None:
+def tool_error_notification(team, tool_name: str, error_message: str, experiment_session=None) -> None:
     """Create notification when a tool execution fails."""
+    event_data = {"tool_name": tool_name, "error_message": error_message}
+    links = {}
+
+    if experiment_session:
+        links["View Bot"] = experiment_session.experiment.get_absolute_url()
+        links["View Session"] = experiment_session.get_absolute_url()
+
     create_notification(
         title="Tool Error Detected",
         message=error_message,
         level=LevelChoices.ERROR,
         team=team,
         slug="tool-error",
-        event_data={"tool_name": tool_name, "error_message": error_message},
+        event_data=event_data,
+        links=links,
     )

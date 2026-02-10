@@ -145,8 +145,7 @@ class PipelineBot:
         except Exception as e:
             # Notify experiment admins of pipeline execution failure, only for non-working versions
             if not self.experiment.is_working_version:
-                identifier = self.session.participant.identifier
-                pipeline_execution_failure_notification(self.experiment, identifier, e)
+                pipeline_execution_failure_notification(self.experiment, self.session, e)
             raise
         output = PipelineState(**raw_output).json_safe()
         return output

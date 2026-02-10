@@ -209,6 +209,7 @@ class CustomBaseTool(BaseTool):
                 team=get_current_team(),
                 tool_name=self.name,
                 error_message=str(e),
+                experiment_session=self.experiment_session,
             )
 
             return "Something went wrong"

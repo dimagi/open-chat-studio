@@ -550,7 +550,7 @@ class ChannelBase(ABC):
                     self._send_text_to_user_with_notification(urls_to_append)
             except AudioSynthesizeException:
                 logger.exception("Error generating voice response")
-                audio_synthesis_failure_notification(self.experiment)
+                audio_synthesis_failure_notification(self.experiment, session=self.experiment_session)
                 self._bot_message_is_voice = False
                 bot_message = f"{bot_message}\n\n{urls_to_append}"
                 self._send_text_to_user_with_notification(bot_message)
@@ -645,6 +645,7 @@ class ChannelBase(ABC):
                     platform=self.experiment_channel.platform,
                     platform_title=platform_title,
                     content_type=file.content_type,
+                    session=self.experiment_session,
                 )
                 download_link = file.download_link(self.experiment_session.id)
                 self._send_text_to_user_with_notification(download_link)

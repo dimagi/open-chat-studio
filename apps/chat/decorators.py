@@ -27,6 +27,7 @@ def notify_on_delivery_failure(context: str):
                 platform_title = self.experiment_channel.platform_enum.title()
                 message_delivery_failure_notification(
                     self.experiment,
+                    session=self._experiment_session,
                     platform=self.experiment_channel.platform,
                     platform_title=platform_title,
                     context=context,
