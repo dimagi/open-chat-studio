@@ -9,7 +9,6 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.teams.models import Team
-from apps.utils.decorators import make_safe
 from apps.web.meta import absolute_url
 
 from .models import LevelChoices, Notification, UserNotification, UserNotificationPreferences
@@ -19,7 +18,6 @@ logger = logging.getLogger("ocs.notifications")
 CACHE_KEY_FORMAT = "{user_id}-{team_slug}-unread-notifications-count"
 
 
-@make_safe(logger, log_message="Failed to create notification")
 def create_notification(
     title: str,
     message: str,

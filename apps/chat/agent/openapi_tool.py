@@ -113,9 +113,7 @@ class OpenAPIOperationExecutor:
         """
 
         try:
-            result = self.call_api(**kwargs)
-            return result
-
+            return self.call_api(**kwargs)
         except ToolException as e:
             custom_action_api_failure_notification(self.custom_action, self.function_def, e)
             raise

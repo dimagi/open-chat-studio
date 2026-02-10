@@ -1,9 +1,15 @@
+import logging
+
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.utils.decorators import make_safe
 
 from .models import LevelChoices
 from .utils import create_notification
 
+logger = logging.getLogger("ocs.notifications")
 
+
+@make_safe(logger, log_message="Failed to create notification")
 def custom_action_health_check_failure_notification(action, failure_reason: str) -> None:
     """Create notification when custom action health check fails."""
     create_notification(
@@ -18,6 +24,7 @@ def custom_action_health_check_failure_notification(action, failure_reason: str)
     )
 
 
+@make_safe(logger, log_message="Failed to create notification")
 def pipeline_execution_failure_notification(experiment, session: ExperimentSession, error: Exception) -> None:
     """Create notification when pipeline execution fails."""
     participant_identifier = session.participant.identifier
@@ -36,6 +43,7 @@ def pipeline_execution_failure_notification(experiment, session: ExperimentSessi
     )
 
 
+@make_safe(logger, log_message="Failed to create notification")
 def custom_action_api_failure_notification(custom_action, function_def, exception: Exception) -> None:
     """Create notification for API failures."""
     method = function_def.method.upper()
@@ -52,6 +60,7 @@ def custom_action_api_failure_notification(custom_action, function_def, exceptio
     )
 
 
+@make_safe(logger, log_message="Failed to create notification")
 def custom_action_unexpected_error_notification(custom_action, function_def, exception: Exception) -> None:
     """Create notification for unexpected errors."""
     method = function_def.method.upper()
@@ -69,6 +78,7 @@ def custom_action_unexpected_error_notification(custom_action, function_def, exc
     )
 
 
+@make_safe(logger, log_message="Failed to create notification")
 def llm_error_notification(experiment_id: int, session_id: int, error_message: str):
     experiment = Experiment.objects.get(id=experiment_id)
     session = ExperimentSession.objects.get(id=session_id)
@@ -85,6 +95,7 @@ def llm_error_notification(experiment_id: int, session_id: int, error_message: s
     )
 
 
+@make_safe(logger, log_message="Failed to create notification")
 def audio_synthesis_failure_notification(experiment, session: ExperimentSession = None) -> None:
     """Create notification when audio synthesis fails."""
     links = {"View Bot": experiment.get_absolute_url()}
@@ -103,6 +114,7 @@ def audio_synthesis_failure_notification(experiment, session: ExperimentSession 
     )
 
 
+@make_safe(logger, log_message="Failed to create notification")
 def file_delivery_failure_notification(
     experiment, platform_title: str, content_type: str, session: ExperimentSession = None
 ) -> None:
@@ -130,6 +142,7 @@ def file_delivery_failure_notification(
     )
 
 
+@make_safe(logger, log_message="Failed to create notification")
 def audio_transcription_failure_notification(experiment, platform: str) -> None:
     """Create notification when audio transcription fails."""
     create_notification(
@@ -144,6 +157,7 @@ def audio_transcription_failure_notification(experiment, platform: str) -> None:
     )
 
 
+@make_safe(logger, log_message="Failed to create notification")
 def message_delivery_failure_notification(experiment, session, platform_title: str, context: str) -> None:
     """Create notification when message delivery fails."""
     identifier = session.participant.identifier
@@ -163,6 +177,7 @@ def message_delivery_failure_notification(experiment, session, platform_title: s
     )
 
 
+@make_safe(logger, log_message="Failed to create notification")
 def tool_error_notification(team, tool_name: str, error_message: str, session=None) -> None:
     """Create notification when a tool execution fails."""
     event_data = {"tool_name": tool_name, "error_message": error_message}
