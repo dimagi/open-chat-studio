@@ -1,4 +1,4 @@
-# Claude Incremental Worker
+# Igor
 
 A GitHub Action that automatically makes incremental progress on large projects by working through tracking issues with task checklists.
 
@@ -48,7 +48,7 @@ Multiple issues can have open PRs simultaneously — the constraint is one open 
 
 ## Manual Trigger
 
-Run on a specific issue via Actions > Claude Incremental Worker > Run workflow, then enter the issue number.
+Run on a specific issue via Actions > Igor > Run workflow, then enter the issue number.
 
 ## Files
 

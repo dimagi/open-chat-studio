@@ -1,4 +1,4 @@
-name: Claude Incremental Worker
+name: Igor
 
 on:
   schedule:
