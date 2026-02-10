@@ -147,8 +147,8 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
         built-in security features including SSRF prevention (blocks private IPs and localhost), size limits,
         timeout clamping, and automatic retries with exponential backoff.
 
-        Available methods (all accept parameters compatible with the `requests` library such as `headers`,
-        `params`, `json`, `data`, `timeout`, `files`, and `auth`):
+        Available methods (all accept keyword arguments such as `headers`, `params`, `json`, `data`,
+        `timeout`, and `files`):
         ```
         http.get(url, **kwargs) -> dict
         http.post(url, **kwargs) -> dict
@@ -165,9 +165,9 @@ def code_completion(user_query, current_code, error=None, iteration_count=0) -> 
         - `is_success`: `True` if the status code is in the 200-299 range.
         - `is_error`: `True` if the status code is 400 or above.
 
-        The HTTP client never raises exceptions. All error information is contained in the response dict.
-        Always check `response["status_code"]` or the `is_success` / `is_error` keys before processing
-        the response.
+        On success, always check `response["status_code"]` or the `is_success` / `is_error` keys before
+        processing the response. The HTTP client may raise exceptions for invalid URLs, connection errors,
+        timeouts, request size limits, and auth provider errors. Wrap calls in try/except to handle these.
 
         Authentication credentials can be injected automatically from team Authentication Providers via the
         `auth` parameter. The value must be the name of the authentication provider. Example:
