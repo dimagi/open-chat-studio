@@ -165,6 +165,7 @@ export class OcsChat {
   @State() sessionId?: string;
   @State() isLoading: boolean = false;
   @State() isTyping: boolean = false;
+  @State() typingProgressMessage: string = '';
   @State() messageInput: string = "";
   @State() currentPollTaskId: string = "";
   @State() isDragging: boolean = false;
@@ -657,10 +658,14 @@ export class OcsChat {
         this.saveSessionToStorage();
         this.scrollToBottom();
         this.isTyping = false;
+        this.typingProgressMessage = '';
         this.currentPollTaskId = '';
         this.taskPollingHandle = undefined;
         this.startMessagePolling();
         this.focusInput();
+      },
+      onProgress: (message) => {
+        this.typingProgressMessage = message;
       },
       onTimeout: () => {
         const timeoutMessage: ChatMessage = {
@@ -673,12 +678,14 @@ export class OcsChat {
         this.saveSessionToStorage();
         this.scrollToBottom();
         this.isTyping = false;
+        this.typingProgressMessage = '';
         this.currentPollTaskId = '';
         this.taskPollingHandle = undefined;
         this.startMessagePolling();
         this.focusInput();
       },
       onError: (error) => {
+        this.typingProgressMessage = '';
         this.handleError(error.message);
         this.taskPollingHandle = undefined;
         this.startMessagePolling();
@@ -1613,7 +1620,7 @@ export class OcsChat {
                         <div class="typing-progress"></div>
                       </div>
                       <div class="typing-text">
-                        <span>{this.translationManager.get('status.typing', this.typingIndicatorText)}</span>
+                        <span>{this.typingProgressMessage || this.translationManager.get('status.typing', this.typingIndicatorText)}</span>
                         <span class="typing-dots loading"></span>
                       </div>
                     </div>
