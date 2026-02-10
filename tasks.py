@@ -235,6 +235,51 @@ def npm(c: Context, watch=False, install=False):
     c.run(f"npm run {cmd}", echo=True, pty=True)
 
 
+@task(
+    help={
+        "branch": "Branch name to check out (created if it doesn't exist)",
+        "path": "Worktree directory (default: ../open-chat-studio-<branch>)",
+    }
+)
+def worktree(c: Context, branch, path=None):
+    """Create a git worktree and bootstrap it for development."""
+    repo_dir = Path.cwd()
+    safe_branch = branch.replace("/", "-")
+    worktree_path = Path(path) if path else repo_dir.parent / f"open-chat-studio-{safe_branch}"
+    worktree_path = worktree_path.resolve()
+
+    if worktree_path.exists():
+        raise Exit(f"Directory already exists: {worktree_path}", -1)
+
+    # Create worktree
+    branch_exists = c.run(f"git show-ref --verify --quiet refs/heads/{branch}", warn=True, hide=True)
+    if branch_exists.ok:
+        cprint(f"Creating worktree for existing branch '{branch}'", "green")
+        c.run(f"git worktree add {worktree_path} {branch}", echo=True)
+    else:
+        cprint(f"Creating worktree with new branch '{branch}'", "green")
+        c.run(f"git worktree add {worktree_path} -b {branch}", echo=True)
+
+    # Copy gitignored config files needed for development
+    import shutil
+
+    for name in [".env", ".envrc", ".python-version"]:
+        src = repo_dir / name
+        if src.exists():
+            shutil.copy2(src, worktree_path / name)
+            cprint(f"Copied {name}", "green")
+        elif name == ".env":
+            cprint(".env not found in current directory; skipping", "yellow")
+
+    # Bootstrap
+    cprint(f"\nBootstrapping {worktree_path} ...", "green")
+    with c.cd(str(worktree_path)):
+        c.run("bash scripts/bootstrap.sh --force -y", echo=True, pty=True)
+
+    cprint(f"\nWorktree ready at {worktree_path}", "green")
+    cprint(f"  cd {worktree_path}", "cyan")
+
+
 def _confirm(message, _exit=True, exit_message="Done"):
     response = input(f"{message} (y/n): ")
     confirmed = response.lower() == "y"
