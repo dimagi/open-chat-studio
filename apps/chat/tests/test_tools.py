@@ -30,6 +30,7 @@ from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
 from apps.files.models import FileChunkEmbedding
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.teams.utils import set_current_team
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -616,3 +617,29 @@ class TestAttachMediaTool(BaseTestAgentTool):
         assert chat_attachment.files.count() == 3
         assert all(str(file.id) in response for file in files)
         print(response)
+
+
+@pytest.mark.django_db()
+class TestNotificationOnToolError:
+    def test_tool_error_triggers_notification(self, team):
+        set_current_team(team)
+
+        class CustomBaseTool(tools.CustomBaseTool):
+            name: str = "Test Tool"
+            description: str = "A testing tool that raises an error when run"
+            requires_callbacks: bool = False
+
+            def action(self, *args, **kwargs):
+                raise Exception("Test error")
+
+        tool = CustomBaseTool()
+
+        with mock.patch("apps.chat.agent.tools.tool_error_notification") as mock_create_notification:
+            tool.run(tool_input="tool_input")
+
+            mock_create_notification.assert_called_once_with(
+                team=team,
+                tool_name="Test Tool",
+                error_message="Test error",
+                experiment_session=None,
+            )

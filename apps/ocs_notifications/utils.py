@@ -25,7 +25,8 @@ def create_notification(
     team: Team,
     slug: str,
     event_data: dict | None = None,
-    permissions=None,
+    permissions: list[str] | None = None,
+    links: dict | None = None,
 ):
     """
     Create a notification and associate it with the given users.
@@ -42,6 +43,7 @@ def create_notification(
         Notification: The created Notification instance, or None if creation failed.
     """
     notification = None
+    links = links or {}
 
     def _can_receive_notification(member):
         if not permissions:
@@ -52,43 +54,39 @@ def create_notification(
         member.user for member in team.membership_set.select_related("user").all() if _can_receive_notification(member)
     ]
 
-    try:
-        event_data = event_data or {}
-        identifier = create_identifier(slug, event_data)
-        notification, created = Notification.objects.update_or_create(
-            team=team,
-            identifier=identifier,
-            defaults={
-                "title": title,
-                "message": message,
-                "level": level,
-                "last_event_at": timezone.now(),
-                "event_data": event_data,
-            },
+    event_data = event_data or {}
+    identifier = create_identifier(slug, event_data)
+    notification, created = Notification.objects.update_or_create(
+        team=team,
+        identifier=identifier,
+        defaults={
+            "title": title,
+            "message": message,
+            "level": level,
+            "last_event_at": timezone.now(),
+            "event_data": event_data,
+            "links": links,
+        },
+    )
+    for user in users:
+        if is_notification_muted(user, team, slug):
+            # Skip creating/updating UserNotification for muted users
+            continue
+
+        user_notification, created = UserNotification.objects.get_or_create(
+            team=team, notification=notification, user=user
         )
-        for user in users:
-            # Check if user has muted this notification type
-            if is_notification_muted(user, team, slug):
-                # Skip creating/updating UserNotification for muted users
-                continue
+        # Uuser will only be notified when notification is created or if the notification was previously read
+        user_should_be_notified = created or user_notification.read is True
+        if user_notification.read is True:
+            user_notification.read = False
+            user_notification.read_at = None
+            user_notification.save()
 
-            user_notification, created = UserNotification.objects.get_or_create(
-                team=team, notification=notification, user=user
-            )
-            # Uuser will only be notified when notification is created or if the notification was previously read
-            user_should_be_notified = created or user_notification.read is True
-            if user_notification.read is True:
-                user_notification.read = False
-                user_notification.read_at = None
-                user_notification.save()
-
-            # Bust cache when notification is created or when marking previously read notification as unread
-            if user_should_be_notified:
-                bust_unread_notification_cache(user.id, team_slug=team.slug)
-                send_notification_email(user_notification)
-
-    except Exception:
-        logger.exception("Failed to create notification")
+        # Bust cache when notification is created or when marking previously read notification as unread
+        if user_should_be_notified:
+            bust_unread_notification_cache(user.id, team_slug=team.slug)
+            send_notification_email(user_notification)
 
 
 def get_user_notification_cache_value(user_id: int, team_slug: str) -> int | None:

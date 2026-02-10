@@ -25,11 +25,12 @@ from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.files.models import FileChunkEmbedding
+from apps.ocs_notifications.notifications import tool_error_notification
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
-from apps.teams.utils import get_slug_for_team
+from apps.teams.utils import get_current_team, get_slug_for_team
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
@@ -115,8 +116,7 @@ def _perform_collection_search(
 
     # Get embeddings for this collection
     embeddings = list(
-        FileChunkEmbedding.objects
-        .annotate(distance=CosineDistance("embedding", query_vector))
+        FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
         .filter(collection_id=collection.id)
         .order_by("distance")
         .select_related("file")
@@ -133,16 +133,18 @@ def _perform_collection_search(
 
     # Format results
     if include_collection_info:
-        retrieved_chunks = "\n".join([
-            _format_result_with_collection(embedding, collection) for embedding in embeddings
-        ])
+        retrieved_chunks = "\n".join(
+            [_format_result_with_collection(embedding, collection) for embedding in embeddings]
+        )
     else:
-        retrieved_chunks = "\n".join([
-            CHUNK_TEMPLATE.format(
-                file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
-            ).strip()
-            for embedding in embeddings
-        ])
+        retrieved_chunks = "\n".join(
+            [
+                CHUNK_TEMPLATE.format(
+                    file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+                ).strip()
+                for embedding in embeddings
+            ]
+        )
 
     response_template = """
 {header}
@@ -201,8 +203,15 @@ class CustomBaseTool(BaseTool):
             return "I am unable to do this"
         try:
             return self.action(*args, **kwargs)
-        except Exception:
+        except Exception as e:
             logger.exception("Error executing tool: %s", self.name)
+            tool_error_notification(
+                team=get_current_team(),
+                tool_name=self.name,
+                error_message=str(e),
+                experiment_session=self.experiment_session,
+            )
+
             return "Something went wrong"
 
     async def _arun(self, *args, **kwargs) -> str:
@@ -714,7 +723,7 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     path = list(spec.paths)[0]
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
-    return function_def.build_tool(auth_service)
+    return function_def.build_tool(auth_service, custom_action)
 
 
 def _convert_to_sync_tool(tool: StructuredTool) -> StructuredTool:

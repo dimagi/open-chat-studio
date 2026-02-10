@@ -1,9 +1,10 @@
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pytest
 
 from apps.service_providers.tracing.base import TraceContext
-from apps.service_providers.tracing.ocs_tracer import OCSTracer
+from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
 from apps.trace.models import Span, Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
@@ -148,3 +149,38 @@ class TestOCSTracer:
         trace = Trace.objects.get(trace_id=trace_context.id)
         assert trace.status == "error"
         assert trace.error == error_message
+
+
+class TestOCSCallbackHandler:
+    @patch("apps.service_providers.tracing.ocs_tracer.llm_error_notification")
+    def test_on_llm_error_creates_notification(self, mock_llm_error_notification):
+        """Test that LLM error handler creates a notification."""
+        # Set up tracer
+        tracer = OCSTracer(experiment_id=456, team_id=123)
+        tracer.trace_id = str(uuid4())
+
+        # Set up a session with a participant so the notification includes context
+        participant = Mock()
+        participant.identifier = "user@example.com"
+        session = Mock()
+        session.id = 789
+        session.participant = participant
+        tracer.session = session
+
+        # Create callback handler
+        callback_handler = OCSCallbackHandler(tracer=tracer)
+
+        # Trigger LLM error
+        error_message = "Connection timeout to OpenAI API"
+        callback_handler.on_llm_error(error=Exception(error_message))
+
+        # Verify llm_error_notification was called with correct parameters
+        mock_llm_error_notification.assert_called_once_with(
+            experiment_id=456,
+            session_id=789,
+            error_message=error_message,
+        )
+
+        # Verify tracer state is updated
+        assert tracer.error_detected is True
+        assert tracer.error_message == error_message

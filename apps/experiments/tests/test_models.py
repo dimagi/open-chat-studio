@@ -717,12 +717,6 @@ class TestExperimentModel:
         experiment.consent_form = ConsentForm.get_default(team)
 
         # Setup Safety Layers
-        layer1 = SafetyLayer.objects.create(
-            prompt_text="Is this message safe?", team=team, prompt_to_bot="Unsafe reply"
-        )
-        layer2 = SafetyLayer.objects.create(prompt_text="What about this one?", team=team, prompt_to_bot="Unsafe reply")
-        experiment.safety_layers.set([layer1, layer2])
-
         # Setup Source material
         experiment.source_material = SourceMaterialFactory(team=team, material="material science is interesting")
         experiment.save()
@@ -790,11 +784,9 @@ class TestExperimentModel:
                 "pre_survey",
                 "post_survey",
                 "version_description",
-                "safety_layers",
                 "pipeline",
             ],
         )
-        self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_routes_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
@@ -855,11 +847,6 @@ class TestExperimentModel:
         assert original_related_instance.versions.count() == 2
         assert experiment_version3.source_material != experiment_version2.source_material
         assert experiment_version3.source_material.working_version == original_experiment.source_material
-
-    def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
-        for layer in original_experiment.safety_layers.all():
-            assert layer.working_version is None
-            assert new_version.safety_layers.filter(working_version=layer).exists()
 
     def _assert_source_material_is_duplicated(self, original_experiment, new_version):
         assert new_version.source_material != original_experiment.source_material
