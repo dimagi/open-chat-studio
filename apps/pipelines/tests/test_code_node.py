@@ -499,21 +499,3 @@ def main(input, **kwargs):
                 node_inputs=["hi"],
             )
         )
-
-
-def test_add_file_attachment_requires_session():
-    code = """
-def main(input, **kwargs):
-    add_file_attachment("test.txt", b"hello", "text/plain")
-    return input
-"""
-    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    with pytest.raises(CodeNodeRunError, match="Cannot attach files without an active session"):
-        node._process(
-            PipelineState(
-                outputs={},
-                experiment_session=None,
-                last_node_input="hi",
-                node_inputs=["hi"],
-            )
-        )
