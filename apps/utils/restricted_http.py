@@ -288,6 +288,7 @@ class RestrictedHttpClient:
         return {
             "status_code": response.status_code,
             "headers": dict(response.headers),
+            "content": body,
             "text": text,
             "json": json_body,
             "is_success": 200 <= response.status_code < 300,

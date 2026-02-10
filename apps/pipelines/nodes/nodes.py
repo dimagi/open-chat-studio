@@ -872,6 +872,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "get_selected_route": pipeline_state.get_selected_route,
             "get_node_path": pipeline_state.get_node_path,
             "get_all_routes": pipeline_state.get_all_routes,
+            "add_file_attachment": self._add_file_attachment(state, output_state),
             "add_message_tag": output_state.add_message_tag,
             "add_session_tag": output_state.add_session_tag,
             "get_node_output": pipeline_state.get_node_output_by_name,
@@ -880,6 +881,43 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "require_node_outputs": self._require_node_outputs(state),
             "wait_for_next_input": self.wait_for_next_input,
         }
+
+    def _add_file_attachment(self, state: PipelineState, output_state: PipelineState):
+        def add_file_attachment(filename: str, content: bytes, content_type: str = None):
+            """Attach a file to the AI response message.
+
+            Args:
+                filename: The name of the file (e.g. "report.pdf")
+                content: The file content as bytes
+                content_type: Optional MIME type. Auto-detected from filename if not provided.
+            """
+            from io import BytesIO
+
+            from apps.files.models import File, FilePurpose
+
+            if not isinstance(content, bytes):
+                raise CodeNodeRunError("'content' must be bytes")
+
+            session = state.get("experiment_session")
+            if not session:
+                raise CodeNodeRunError("Cannot attach files without an active session")
+
+            file_obj = BytesIO(content)
+            file = File.create(
+                filename=filename,
+                file_obj=file_obj,
+                team_id=session.team_id,
+                content_type=content_type,
+                purpose=FilePurpose.MESSAGE_MEDIA,
+            )
+
+            session.chat.attach_files(attachment_type="code_interpreter", files=[file])
+
+            metadata = output_state.setdefault("output_message_metadata", {})
+            generated_files = metadata.setdefault("generated_files", [])
+            generated_files.append(file.id)
+
+        return add_file_attachment
 
     def _abort_pipeline(self):
         def abort_pipeline(message, tag_name: str = None):

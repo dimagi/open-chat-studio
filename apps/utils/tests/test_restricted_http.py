@@ -70,15 +70,24 @@ class TestBasicRequests:
     def test_response_dict_shape(self, client, mock_validate_url, httpx_mock):
         httpx_mock.add_response(json={"data": 1}, headers={"x-custom": "val"})
         response = client.get("https://api.example.com/data")
-        assert set(response.keys()) == {"status_code", "headers", "text", "json", "is_success", "is_error"}
+        assert set(response.keys()) == {"status_code", "headers", "content", "text", "json", "is_success", "is_error"}
         assert isinstance(response["headers"], dict)
         assert isinstance(response["text"], str)
+        assert isinstance(response["content"], bytes)
 
     def test_non_json_response(self, client, mock_validate_url, httpx_mock):
         httpx_mock.add_response(content=b"plain text", headers={"content-type": "text/plain"})
         response = client.get("https://api.example.com/text")
         assert response["json"] is None
         assert response["text"] == "plain text"
+
+    def test_content_returns_raw_bytes(self, client, mock_validate_url, httpx_mock):
+        raw_bytes = b"\x89PNG\r\n\x1a\n\x00\x00"
+        httpx_mock.add_response(content=raw_bytes, headers={"content-type": "image/png"})
+        response = client.get("https://api.example.com/image.png")
+        assert response["content"] == raw_bytes
+        assert isinstance(response["content"], bytes)
+        assert response["text"] == raw_bytes.decode("utf-8", errors="replace")
 
     def test_error_response_not_raised(self, client, mock_validate_url, httpx_mock):
         """Non-2xx responses (except retryable ones) are returned, not raised."""
