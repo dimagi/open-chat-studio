@@ -1,0 +1,36 @@
+<div class="dropdown dropdown-end">
+  <button tabindex="0" class="btn btn-sm btn-ghost" title="Mute all notifications">
+    <i class="fa fa-bell-slash"></i>
+    <span class="ml-1">Mute All</span>
+  </button>
+  <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
+    <li class="menu-title">
+      <span>Mute for</span>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_all_notifications' request.team.slug %}"
+         hx-vals='{"duration": "8h"}'
+         hx-swap="none">8 hours</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_all_notifications' request.team.slug %}"
+         hx-vals='{"duration": "1d"}'
+         hx-swap="none">1 day</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_all_notifications' request.team.slug %}"
+         hx-vals='{"duration": "1w"}'
+         hx-swap="none">1 week</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_all_notifications' request.team.slug %}"
+         hx-vals='{"duration": "1m"}'
+         hx-swap="none">1 month</a>
+    </li>
+    <li>
+      <a hx-post="{% url 'ocs_notifications:mute_all_notifications' request.team.slug %}"
+         hx-vals='{"duration": "forever"}'
+         hx-swap="none">Forever</a>
+    </li>
+  </ul>
+</div>

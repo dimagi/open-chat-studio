@@ -22,4 +22,9 @@ urlpatterns = [
         views.UnmuteNotificationView.as_view(),
         name="unmute_notification",
     ),
+    path(
+        "mute-all/",
+        views.MuteAllNotificationsView.as_view(),
+        name="mute_all_notifications",
+    ),
 ]

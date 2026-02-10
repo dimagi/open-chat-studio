@@ -47,11 +47,19 @@ class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
             "enable_search": False,
             "actions": [
                 actions.Action(
+                    url_name="ocs_notifications:mute_all_notifications",
+                    url_factory=lambda url_name, _request, _record, _value: reverse(
+                        url_name, args=[_request.team.slug]
+                    ),
+                    label="",
+                    template="ocs_notifications/components/mute_all_button.html",
+                ),
+                actions.Action(
                     url_name="users:user_profile",
                     url_factory=lambda url_name, _request, _record, _value: reverse(url_name),
                     label="Preferences",
                     icon_class="fa fa-cog",
-                )
+                ),
             ],
         }
 
@@ -161,3 +169,24 @@ class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
         delete_mute(user=request.user, team=request.team, notification_identifier=mute_identifier)
 
         return JsonResponse({"success": True, "message": "Notifications unmuted"})
+
+
+class MuteAllNotificationsView(LoginAndTeamRequiredMixin, View):
+    """Mute all notifications for the current user"""
+
+    def post(self, request, team_slug: str, *args, **kwargs):
+        # Get duration from POST data (in hours)
+        duration_param = request.POST.get("duration")
+        duration_hours = DURATION_MAP.get(duration_param)
+
+        # Mute all notifications (empty identifier)
+        create_or_update_mute(
+            user=request.user, team=request.team, notification_identifier=None, duration_hours=duration_hours
+        )
+
+        message = (
+            f"All notifications muted for {duration_param}"
+            if duration_param != "forever"
+            else "All notifications muted permanently"
+        )
+        return JsonResponse({"success": True, "message": message})
