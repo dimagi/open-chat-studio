@@ -642,7 +642,6 @@ class ChannelBase(ABC):
                 platform_title = self.experiment_channel.platform_enum.title()
                 file_delivery_failure_notification(
                     self.experiment,
-                    platform=self.experiment_channel.platform,
                     platform_title=platform_title,
                     content_type=file.content_type,
                     session=self.experiment_session,

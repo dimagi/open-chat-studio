@@ -104,7 +104,7 @@ def audio_synthesis_failure_notification(experiment, session: ExperimentSession 
 
 
 def file_delivery_failure_notification(
-    experiment, platform: str, platform_title: str, content_type: str, session: ExperimentSession = None
+    experiment, platform_title: str, content_type: str, session: ExperimentSession = None
 ) -> None:
     """Create notification when file delivery to user fails."""
     links = {"View Bot": experiment.get_absolute_url()}
@@ -123,7 +123,7 @@ def file_delivery_failure_notification(
         permissions=["experiments.view_experimentsession"],
         event_data={
             "bot_id": experiment.id,
-            "platform": platform,
+            "platform": platform_title,
             "content_type": content_type,
         },
         links=links,
