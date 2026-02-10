@@ -15,10 +15,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
-            model_name='experimentsession',
-            name='participant',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='experiments.participant'),
-        ),
         migrations.RunPython(_remove_sessions_with_missing_participants, reverse_code=migrations.RunPython.noop),
     ]
