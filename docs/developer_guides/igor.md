@@ -1,4 +1,4 @@
-# Claude Incremental Worker
+# Igor
 
 A GitHub Action that automatically makes incremental progress on large projects by working through tracking issues with task checklists.
 
@@ -23,30 +23,49 @@ The workflow runs daily at 2am UTC and can be triggered manually.
 ## Goal
 Brief description of what the project aims to achieve.
 
-## Tasks
-- [ ] First task to complete
-- [ ] Second task to complete
-- [x] Already completed task
-- [ ] blocked: Task that can't be done yet - explain why
-
 ## Context
 Optional background info the AI should know about.
+
+## Tasks
+
+### Task 1: Short description
+- [ ] Task 1
+
+Detailed context for this task. Include relevant file paths, expected
+behavior, edge cases, or links to related code. This helps the AI
+understand scope and intent beyond the one-line summary.
+
+### Task 2: Short description
+- [ ] Task 2
+
+More context here. The more specific you are about what "done" looks
+like, the better the result.
+
+### Task 3: Already completed
+- [x] Task 3
+
+### Task 4: Blocked task
+- [ ] blocked: Task 4 - explain why
 
 ## Learnings
 <!-- AI updates this section with discoveries -->
 ```
 
+Each task gets its own section with a checkbox and a context block. The checkbox is what the workflow uses to track progress — keep it on its own line. The surrounding text provides the AI with the detail it needs to implement the task correctly.
+
 ## How It Works
 
-1. Checks for open PRs with `claude-incremental` label (waits if one exists)
-2. Finds the oldest issue with the label that's "In Progress" in the project
+1. Finds the oldest issue with the `claude-incremental` label
+2. Skips any issue that already has an open PR (one PR per issue at a time)
 3. Claude reads the issue and implements the first unchecked, non-blocked task
 4. Claude updates the issue (checks off task, adds learnings)
 5. Creates a PR linking to the tracking issue
 
+Multiple issues can have open PRs simultaneously — the constraint is one open PR per issue, not one globally.
+
 ## Manual Trigger
 
-Run on a specific issue via Actions > Claude Incremental Worker > Run workflow, then enter the issue number.
+Run on a specific issue via Actions > Igor > Run workflow, then enter the issue number.
 
 ## Files
 

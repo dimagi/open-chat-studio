@@ -52,6 +52,7 @@ export interface ChatSessionServiceOptions {
 
 export interface TaskPollingCallbacks {
   onMessage: (message: ChatMessage) => void;
+  onProgress?: (message: string) => void;
   onTimeout?: () => void;
   onError?: (error: Error) => void;
 }
@@ -156,6 +157,10 @@ export class ChatSessionService {
         if (data.status === 'complete' && data.message) {
           callbacks.onMessage(data.message);
           return;
+        }
+
+        if (data.status === 'processing' && data.message?.content && callbacks.onProgress) {
+          callbacks.onProgress(data.message.content);
         }
 
         attempts += 1;

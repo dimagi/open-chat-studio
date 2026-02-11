@@ -1,9 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python manage.py check:*)",
-      "Bash(python manage.py migrate:*)",
-      "Bash(python manage.py makemigrations:*)",
+      "Bash(python manage.py:*)",
       "Bash(pytest:*)",
       "Bash(uv run pytest:*)",
       "Bash(inv ruff:*)",
@@ -13,7 +11,12 @@
       "Bash(uv pip list:*)",
       "Bash(grep:*)",
       "Bash(find:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npx stencil test:*)",
+      "WebFetch(domain:docs.openchatstudio.com)",
+      "Bash(npm run lint:*)"
     ]
   },
   "enableAllProjectMcpServers": false,

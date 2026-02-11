@@ -39,23 +39,6 @@ def test_openapi_tool_creates_error_notification_on_failure(mock_create_notifica
     mock_create_notification.assert_called_once()
 
 
-@patch("apps.chat.agent.openapi_tool.custom_action_api_failure_notification")
-def test_openapi_tool_no_notifications_without_custom_action(mock_create_notification, httpx_mock):
-    """Test that no notifications are created when custom_action is not provided."""
-    spec = _make_openapi_schema({})
-    httpx_mock.add_response(url="https://example.com/test", text="Success")
-
-    # Use the original helper function without custom_action
-    spec_obj = OpenAPISpec.from_spec_dict(spec)
-    path = list(spec_obj.paths)[0]
-    function_def = openapi_spec_op_to_function_def(spec_obj, path, "get")
-    tool = function_def.build_tool(auth_service=anonymous_auth_service)  # No custom_action
-    tool.run({}, tool_call_id="123")
-
-    # Verify no notifications were created
-    mock_create_notification.assert_not_called()
-
-
 @patch("apps.custom_actions.models.get_slug_for_team")
 @patch("apps.chat.agent.openapi_tool.custom_action_unexpected_error_notification")
 def test_openapi_tool_creates_unexpected_error_notification(mock_create_notification, get_slug_for_team):

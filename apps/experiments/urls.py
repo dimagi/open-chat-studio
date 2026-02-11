@@ -1,7 +1,6 @@
 from django.urls import include, path
 from django.views.generic import RedirectView
 
-from apps.experiments.views.experiment_routes import CreateExperimentRoute, DeleteExperimentRoute, EditExperimentRoute
 from apps.generics.urls import make_crud_urls
 
 from . import views
@@ -130,22 +129,6 @@ urlpatterns = [
     # public link
     path("e/<uuid:experiment_id>/start/", views.start_session_public, name="start_session_public"),
     path("e/<uuid:experiment_id>/embed/start/", views.start_session_public_embed, name="start_session_public_embed"),
-    # Experiment Routes
-    path(
-        "e/<int:experiment_id>/experiment_routes/<str:type>/new",
-        CreateExperimentRoute.as_view(),
-        name="experiment_route_new",
-    ),
-    path(
-        "e/<int:experiment_id>/experiment_routes/<int:pk>/edit",
-        EditExperimentRoute.as_view(),
-        name="experiment_route_edit",
-    ),
-    path(
-        "e/<int:experiment_id>/experiment_routes/<int:pk>/delete",
-        DeleteExperimentRoute.as_view(),
-        name="experiment_route_delete",
-    ),
     path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
     path("<int:session_id>/image/<int:pk>/html/", views.get_image_html, name="get_image_html"),
     path(

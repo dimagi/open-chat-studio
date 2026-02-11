@@ -8,7 +8,8 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.teams.models import Team
+from apps.teams.flags import Flags
+from apps.teams.models import Flag, Team
 from apps.web.meta import absolute_url
 
 from .models import LevelChoices, Notification, NotificationMute, UserNotification, UserNotificationPreferences
@@ -42,6 +43,8 @@ def create_notification(
     Returns:
         Notification: The created Notification instance, or None if creation failed.
     """
+    if not _notifications_flag_is_active(team):
+        return
     notification = None
     links = links or {}
 
@@ -87,6 +90,11 @@ def create_notification(
         if user_should_be_notified:
             bust_unread_notification_cache(user.id, team_slug=team.slug)
             send_notification_email(user_notification)
+
+
+def _notifications_flag_is_active(team: Team) -> bool:
+    flag = Flag.objects.filter(name=Flags.NOTIFICATIONS.slug).first()
+    return bool(flag and flag.is_active_for_team(team))
 
 
 def get_user_notification_cache_value(user_id: int, team_slug: str) -> int | None:

@@ -62,12 +62,13 @@ nav:
   - Contributing:
     - Guidelines: contributing/index.md
     - Pull Requests: contributing/pull_requests.md
-  - Getting Started: 
+  - Getting Started:
     - Overview: getting-started/index.md
   - Architecture:
     - Overview: architecture/index.md
   - Developer Guides:
     - Processes:
+      - Igor (Incremental Worker): developer_guides/igor.md
       - User Docs: developer_guides/user_docs.md
       - Deployment: developer_guides/deployment.md
       - AI Development: developer_guides/ai_development.md

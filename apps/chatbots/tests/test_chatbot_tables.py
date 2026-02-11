@@ -1,3 +1,6 @@
+from unittest.mock import Mock
+from uuid import uuid4
+
 import pytest
 from django.urls import reverse
 
@@ -21,19 +24,19 @@ def test_chatbot_table_redirect_url(team_with_users):
     assert row_attrs["data-redirect-url"] == expected_url
 
 
-@pytest.mark.django_db()
-def test_chatbot_chip_action(team_with_users):
-    team = team_with_users
-    user = team.members.first()
-    experiment = Experiment.objects.create(
+def test_chatbot_chip_action():
+    team = Mock(slug="test-team")
+    experiment = Mock(
+        spec=Experiment,
         name="Test Experiment",
         description="Test description",
-        owner=user,
         team=team,
+        public_id=str(uuid4()),
     )
-    session = ExperimentSession.objects.create(
+    session = Mock(
+        spec=ExperimentSession,
         experiment=experiment,
-        external_id="session1",
+        external_id=str(uuid4()),
         created_at="2025-03-01T10:00:00Z",
         team=team,
     )

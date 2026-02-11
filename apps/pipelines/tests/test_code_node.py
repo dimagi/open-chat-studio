@@ -5,6 +5,7 @@ from django.core.files.base import ContentFile
 from pydantic import ValidationError
 
 from apps.channels.datamodels import Attachment
+from apps.chat.models import ChatAttachment
 from apps.files.models import File
 from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
@@ -227,11 +228,13 @@ def main(input, **kwargs):
     ]
     assert create_runnable(pipeline, nodes).invoke(
         PipelineState(experiment_session=experiment_session, messages=[input])
-    )["messages"][-1] == str({
-        "start": input,
-        "passthrough": input,
-        "template": f"<b>The input is: {input}</b>",
-    })
+    )["messages"][-1] == str(
+        {
+            "start": input,
+            "passthrough": input,
+            "template": f"<b>The input is: {input}</b>",
+        }
+    )
 
 
 def test_temp_state_set_outputs():
@@ -445,3 +448,54 @@ def test_code_node_reserved_session_state_keys(key_name, should_raise):
     else:
         node = CodeNode(name="test", node_id="123", django_node=None, code=code)
         assert node is not None
+
+
+@pytest.mark.django_db()
+def test_add_file_attachment(experiment_session):
+    code = """
+def main(input, **kwargs):
+    add_file_attachment("test.txt", b"hello world", "text/plain")
+    return input
+"""
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(
+        messages=["hi"],
+        outputs={},
+        experiment_session=experiment_session,
+        temp_state={},
+    )
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+
+    # Verify file was created
+    file = File.objects.latest("id")
+    assert file.name == "test.txt"
+    assert file.content_type == "text/plain"
+    assert file.file.read() == b"hello world"
+
+    # Verify file ID tracked in output metadata
+    generated_files = node_output.update["output_message_metadata"]["generated_files"]
+    assert file.id in generated_files
+
+    # Verify ChatAttachment was created
+    attachment = ChatAttachment.objects.get(chat=experiment_session.chat)
+    assert attachment.tool_type == "code_interpreter"
+    assert file in attachment.files.all()
+
+
+@pytest.mark.django_db()
+def test_add_file_attachment_requires_bytes(experiment_session):
+    code = """
+def main(input, **kwargs):
+    add_file_attachment("test.txt", "not bytes", "text/plain")
+    return input
+"""
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    with pytest.raises(CodeNodeRunError, match="'content' must be bytes"):
+        node._process(
+            PipelineState(
+                outputs={},
+                experiment_session=experiment_session,
+                last_node_input="hi",
+                node_inputs=["hi"],
+            )
+        )
