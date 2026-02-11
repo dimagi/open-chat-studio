@@ -201,71 +201,8 @@
   </div>
   <div id="update_dataset_modal"></div>
 </div>
-{{ llm_provider_models_dict|json_script:"provider-models-dict" }}
-{{ default_translation_models_by_providers|json_script:"default-translation-models-dict" }}
 
 <script>
-  window.hasMissingTranslations = {{ has_missing_translations|yesno:"true,false" }};
-  if (!window.providerModels) {
-    window.providerModels = JSON.parse(
-      document.getElementById("provider-models-dict").textContent
-    );
-  }
-
-  if (!window.defaultTranslationModels) {
-    window.defaultTranslationModels = JSON.parse(
-      document.getElementById("default-translation-models-dict").textContent
-    );
-  }
-
-  function setupTranslationFormBehavior(providerSelectId, modelSelectId) {
-    const providerSelect = document.getElementById(providerSelectId);
-    const modelSelect = document.getElementById(modelSelectId);
-    if (!providerSelect || !modelSelect) {
-      console.error(`Elements not found for ${providerSelectId} or ${modelSelectId}`);
-      return;
-    }
-    providerSelect.addEventListener("change", function () {
-      const providerText = this.options[this.selectedIndex].text;
-      const providerType = providerText.split(":")[0].trim();
-
-      const models = window.providerModels[providerType] || [];
-
-      // Clear and rebuild model options
-      modelSelect.innerHTML = "";
-
-      const defaultOption = document.createElement("option");
-      defaultOption.value = "";
-      defaultOption.textContent = "Choose a model for translation";
-      modelSelect.appendChild(defaultOption);
-
-      models.forEach(modelName => {
-        const option = document.createElement("option");
-        option.value = modelName;
-        option.textContent = modelName;
-        modelSelect.appendChild(option);
-      });
-
-      // Select default model for provider if available
-      const defaultModel = window.defaultTranslationModels[providerType];
-      if (defaultModel) {
-        const defaultOption = [...modelSelect.options].find(
-          option => option.text === defaultModel
-        );
-        if (defaultOption) {
-          modelSelect.value = defaultOption.value;
-        }
-      }
-    });
-  }
-
-  function initializeTranslationForms() {
-    setupTranslationFormBehavior("translation-provider-all", "translation-provider-model-all");
-    if(hasMissingTranslations) {
-      setupTranslationFormBehavior("translation-provider-remaining", "translation-provider-model-remaining");
-    }
-  }
-
   {% if highlight_message_id %}
   function scrollToMessage() {
     const element = document.getElementById("{{ highlight_message_id }}");
@@ -278,10 +215,4 @@
   }
   document.addEventListener('htmx:afterSettle', scrollToMessage);
   {% endif %}
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeTranslationForms);
-  } else {
-    initializeTranslationForms();
-  }
 </script>

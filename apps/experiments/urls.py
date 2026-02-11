@@ -147,11 +147,6 @@ urlpatterns = [
         name="get_release_status_badge",
     ),
     path(
-        "experiment/<uuid:experiment_id>/session/<str:session_id>/translate-messages/",
-        views.translate_messages_view,
-        name="translate_messages",
-    ),
-    path(
         "experiment/<int:experiment_id>/versions",
         views.get_experiment_version_names,
         name="get_experiment_version_names",

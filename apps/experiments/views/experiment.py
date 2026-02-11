@@ -60,7 +60,6 @@ from apps.experiments.email import send_chat_link_email
 from apps.experiments.forms import (
     ConsentForm,
     SurveyCompletedForm,
-    TranslateMessagesForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
@@ -78,9 +77,6 @@ from apps.experiments.tasks import (
     get_response_for_webchat_task,
 )
 from apps.files.models import File
-from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
-from apps.service_providers.models import LlmProvider, LlmProviderModel
-from apps.service_providers.utils import get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.waf import WafRule, waf_allow
@@ -601,12 +597,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     )
     available_languages, translatable_languages = _get_languages_for_chat(session)
     has_missing_translations = False
-    translate_form_all = TranslateMessagesForm(
-        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
-    )
-    translate_form_remaining = TranslateMessagesForm(
-        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
-    )
     default_message = "(message generated after last translation)"
 
     messages_queryset = (
@@ -671,11 +661,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
         "has_missing_translations": has_missing_translations,
         "show_original_translation": show_original_translation,
-        "translate_form_all": translate_form_all,
-        "translate_form_remaining": translate_form_remaining,
         "default_message": default_message,
-        "default_translation_models_by_providers": get_default_translation_models_by_provider(),
-        "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
         "all_tags": all_tags,
         "highlight_message_id": highlight_message_id,
     }
@@ -685,55 +671,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "experiments/components/session_messages.html",
         context,
     )
-
-
-@experiment_session_view()
-@verify_session_access_cookie
-def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    from apps.analysis.translation import translate_messages_with_llm
-
-    session = request.experiment_session
-    provider_id = request.POST.get("llm_provider", "")
-    model_id = request.POST.get("llm_provider_model", "")
-    valid_languages = [choice[0] for choice in LANGUAGE_CHOICES if choice[0]]
-    translate_all = request.POST.get("translate_all", "false") == "true"
-    if translate_all:
-        language = request.POST.get("target_language")
-    else:
-        language = request.POST.get("language")
-
-    if not language or language not in valid_languages:
-        messages.error(request, "No language selected for translation.")
-        return redirect_to_messages_view(request, session)
-    if not provider_id or not model_id:
-        messages.error(request, "No LLM provider model selected.")
-        return redirect_to_messages_view(request, session)
-    try:
-        try:
-            llm_provider = LlmProvider.objects.get(id=provider_id, team=request.team)
-            llm_provider_model = LlmProviderModel.objects.get(id=model_id)
-        except (LlmProvider.DoesNotExist, LlmProviderModel.DoesNotExist):
-            messages.error(request, "Selected provider or model not found.")
-            return redirect_to_messages_view(request, session)
-
-        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(
-            **{f"translations__{language}__isnull": False}
-        )
-        if not messages_to_translate.exists():
-            messages.info(request, "All messages already have translations for this language.")
-            return redirect_to_messages_view(request, session)
-        translate_messages_with_llm(
-            messages=list(messages_to_translate),
-            target_language=language,
-            llm_provider=llm_provider,
-            llm_provider_model=llm_provider_model,
-        )
-    except Exception as e:
-        logging.exception("Error translating messages")
-        messages.error(request, f"Translation failed: {str(e)}")
-        return redirect_to_messages_view(request, session)
-
-    return redirect_to_messages_view(request, session)
 
 
 def redirect_to_messages_view(request, session):

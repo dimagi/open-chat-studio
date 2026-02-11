@@ -31,8 +31,6 @@
             </div>
             {% endif %}
 
-            <button class="btn btn-sm btn-primary" type="button" onclick="translateModal.showModal()">Translate Messages</button>
-
             {% if language %}
               <div class="flex items-center gap-2">
                 <div class="tooltip" data-tip="Messages translated from original language">
@@ -54,43 +52,6 @@
                       <span class="loading loading-spinner loading-sm htmx-indicator"></span>
                   </label>
                 </div>
-
-                {% if has_missing_translations %}
-                  <label for="translate-remaining-messages-modal" class="btn btn-outline btn-secondary btn-sm">
-                    Translate Remaining Messages
-                  </label>
-
-                  <input type="checkbox" id="translate-remaining-messages-modal" class="modal-toggle" />
-                  <div class="modal">
-                    <div class="modal-box">
-                      <h3 class="font-bold text-lg">Translate Remaining Messages?</h3>
-                      <p class="py-4">
-                        This will translate all messages that don't currently have translations for:
-                        <strong>{% for lang_code, lang_name in available_languages %}
-                          {% if lang_code == language %}{{ lang_name }}{% endif %}
-                        {% endfor %}</strong>
-                      </p>
-
-                      {% render_form_fields translate_form_remaining "llm_provider" "llm_provider_model" %}
-                      <p class="pb-4">This action may take a few moments to complete.</p>
-                      <div class="modal-action">
-                        <button
-                          type="button"
-                          data-action="translate-remaining-messages"
-                          class="btn btn-primary"
-                          hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
-                          hx-vals='{"language": "{{ language }}"}'
-                          hx-include="#control-panel, #translation-provider-remaining, #translation-provider-model-remaining"
-                          hx-target="#messages-container"
-                          hx-indicator=".translation-loading-spinner"
-                          onclick="document.getElementById('translate-remaining-messages-modal').checked = false;"
-                        >Translate Messages
-                        </button>
-                        <label for="translate-remaining-messages-modal" class="btn">Cancel</label>
-                      </div>
-                    </div>
-                  </div>
-                {% endif %}
               </div>
             {% endif %}
           </div>
@@ -152,35 +113,3 @@
       </div>
     </div>
   </form>
-
-{% if not hide_translation %}
-  <!-- Translation Modal -->
-  <dialog id="translateModal" class="modal">
-      <div class="modal-box" x-data="{createNew: true}">
-          <h3 class="font-bold text-lg"></h3>
-          <p class="py-4">
-          This will translate all messages in this session. Select the target language:
-          </p>
-          {% render_form_fields translate_form_all %}
-          <p class="pb-4">This action may take a few moments to complete.</p>
-          <div class="modal-action">
-          <button
-              type="button"
-              data-action="translate-all-messages"
-              class="btn btn-primary"
-              hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
-              hx-vals='{"translate_all": "true"}'
-              hx-include="#control-panel, #translation-provider-all, [name='target_language'], #translation-provider-model-all"
-              hx-target="#messages-container"
-              hx-indicator=".translation-loading-spinner"
-              onclick="translateModal.close()"
-          >Translate All Messages
-          </button>
-          <button class="btn" type="button" onclick="translateModal.close()">Cancel</button>
-          </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-          <button>close</button>
-      </form>
-  </dialog>
-{% endif %}
