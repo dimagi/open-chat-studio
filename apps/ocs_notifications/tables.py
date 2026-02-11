@@ -36,9 +36,9 @@ class UserNotificationTable(tables.Table):
         fields = (
             "notification_content",
             "level",
-            "read",
             "timestamp",
             "mute",
+            "read",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False

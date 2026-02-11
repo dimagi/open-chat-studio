@@ -3,7 +3,7 @@
 {% url "ocs_notifications:mute_notification" record.team.slug record.id as url_for_mute %}
 <div id="btn-mute-{{ record.id }}" class="text-center">
     {% if notification_is_muted or record.notification_is_muted %}
-        <div class="flex flex-col items-center gap-1 tooltip" data-tip="{% if record.muted_until %}Automatically Unmutes {{ record.muted_until|naturaltime }}{% else %}Muted Forever{% endif %}">
+        <div class="flex flex-col items-center gap-1 tooltip" data-tip="{% if record.muted_until %}Automatically unmutes {{ record.muted_until|naturaltime }}{% else %}Muted Forever{% endif %}">
             <button id="btn-mute-{{ record.id }}"
                     class="btn btn-sm btn-ghost"
                     hx-post="{% url 'ocs_notifications:unmute_notification' record.team.slug record.id %}"
@@ -14,12 +14,13 @@
             </button>
         </div>
     {% else %}
-        <details class="dropdown">
-            <summary class="btn btn-sm m-1">
+
+        <div class="dropdown">
+            <div tabindex="0" role="button" title="Turn Do Not Disturb On" class="btn btn-sm m-1">
                 <i class="fa fa-bell-slash"></i>
                 <span class="ml-1">Mute</span>
-            </summary>
-            <ul class="menu dropdown-content bg-base-100 rounded-box w-52 p-2 shadow-sm z-50">
+            </div>
+            <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
                 <li class="menu-title">
                     <span>Mute for</span>
                 </li>
@@ -54,6 +55,6 @@
                         hx-target="#btn-mute-{{ record.id }}">Forever</a>
                 </li>
             </ul>
-        </details>
+        </div>
     {% endif %}
 </div>
