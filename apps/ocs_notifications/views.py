@@ -56,8 +56,10 @@ class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        queryset = UserNotification.objects.filter(user=self.request.user, team=self.request.team).select_related(
-            "notification"
+        queryset = (
+            UserNotification.objects.filter(user=self.request.user, team=self.request.team)
+            .select_related("notification")
+            .order_by("-notification__last_event_at")
         )
 
         # Apply filters
