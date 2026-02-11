@@ -1391,7 +1391,7 @@ class ExperimentSession(BaseTeamModel):
 
     objects = ExperimentSessionObjectManager()
     external_id = models.CharField(max_length=255, default=uuid.uuid4, unique=True)
-    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, null=True, blank=True)
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True, help_text="When the experiment (chat) ended.")
