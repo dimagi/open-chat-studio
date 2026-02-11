@@ -1,12 +1,22 @@
+import datetime
 from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import Group
+from django.utils import timezone
+from time_machine import travel
 
-from apps.ocs_notifications.models import LevelChoices, UserNotification, UserNotificationPreferences
+from apps.ocs_notifications.models import (
+    LevelChoices,
+    Notification,
+    UserNotification,
+    UserNotificationPreferences,
+)
 from apps.ocs_notifications.utils import (
     create_identifier,
     create_notification,
+    is_notification_muted,
+    mute_notification,
     send_notification_email,
     toggle_notification_read,
 )
@@ -209,3 +219,101 @@ class TestCreateNotification:
         # # Verify that only the user with permission received the notification
         assert UserNotification.objects.filter(user_id=user_with_perm.user_id).count() == 1
         assert UserNotification.objects.filter(user_id=user_without_perm.user_id).count() == 0
+
+    @patch("apps.ocs_notifications.utils.create_identifier")
+    def test_user_notification_not_created_when_muted(self, create_identifier, team_with_users):
+        """
+        Ensure that when a notification is muted for a user, creating a notification with the same identifier
+        does not create a UserNotification for that user.
+        """
+        user = team_with_users.members.first()
+        identifiers = ["muted-notification", "unmuted-notification"]
+        create_identifier.side_effect = identifiers
+
+        mute_notification(
+            user=user,
+            team=team_with_users,
+            notification_identifier="muted-notification",
+            duration_hours=8,
+        )
+
+        create_notification(
+            title="Muted Notification",
+            message="This is not an important message.",
+            level=LevelChoices.INFO,
+            team=team_with_users,
+            slug="slug",
+            event_data={},
+        )
+
+        create_notification(
+            title="Non-muted Notification",
+            message="This is an important message.",
+            level=LevelChoices.INFO,
+            team=team_with_users,
+            slug="slug",
+            event_data={},
+        )
+
+        # Both notifications should have been created
+        assert Notification.objects.filter(identifier__in=identifiers).count() == 2
+
+        # Only the unmuted notification should have a UserNotification record for the user. Let's see..
+        assert UserNotification.objects.filter(user=user).count() == 1
+        user_notification = UserNotification.objects.filter(user=user).first()
+        assert user_notification.notification.identifier == "unmuted-notification"
+
+
+@pytest.mark.django_db()
+class TestNotificationMuting:
+    @pytest.mark.parametrize("dnd_on", [True, False])
+    def test_is_notification_muted_with_do_not_disturb(self, dnd_on, team_with_users):
+        """
+        Ensure that the is_notification_muted utility correctly identifies when a notification is muted based on the
+        user's do not disturb preferences.
+        """
+        user = team_with_users.members.first()
+        notification_identifier = "dnd-test"
+
+        UserNotificationPreferences.objects.create(
+            team=team_with_users,
+            user=user,
+            do_not_disturb_until=timezone.now() + datetime.timedelta(hours=1) if dnd_on else None,
+        )
+
+        assert is_notification_muted(user, team_with_users, notification_identifier) is dnd_on
+
+    def test_mute_notification_for_8h(self, team_with_users):
+        """
+        Ensure that muting a notification for 8 hours correctly mutes it and then unmutes it after the duration has
+        passed.
+        """
+        user = team_with_users.members.first()
+
+        with travel(timezone.now(), tick=False) as freezer:
+            mute_notification(
+                user=user,
+                team=team_with_users,
+                notification_identifier="mute-8h-test",
+                duration_hours=8,
+            )
+            assert is_notification_muted(user, team_with_users, "mute-8h-test") is True
+
+            freezer.shift(datetime.timedelta(hours=8, minutes=1))
+            assert is_notification_muted(user, team_with_users, "mute-8h-test") is False
+
+    def test_mute_notification_forever(self, team_with_users):
+        """Ensure that muting a notification indefinitely correctly mutes it"""
+        user = team_with_users.members.first()
+
+        with travel(timezone.now(), tick=False) as freezer:
+            mute_notification(
+                user=user,
+                team=team_with_users,
+                notification_identifier="mute-forever-test",
+                duration_hours=None,
+            )
+            assert is_notification_muted(user, team_with_users, "mute-forever-test") is True
+
+            freezer.shift(datetime.timedelta(days=365 * 10))
+            assert is_notification_muted(user, team_with_users, "mute-forever-test") is True

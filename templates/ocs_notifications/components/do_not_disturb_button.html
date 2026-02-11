@@ -1,0 +1,57 @@
+{% load humanize %}
+{% url "ocs_notifications:toggle_do_not_disturb" request.team.slug as toggle_mute_url %}
+<div id="btn-do-not-disturb">
+    {% if is_activated %}
+        <button
+            class="btn btn-sm btn-ghost"
+            title="Turn Do Not Disturb Off"
+            hx-post="{{ toggle_mute_url }}"
+            hx-vals='{"duration": ""}'
+            hx-target="#btn-do-not-disturb"
+            hx-swap="outerHTML">
+            <i class="fa fa-bell"></i> ({{ end_datetime|naturaltime }})
+        </button>
+    {% else %}
+    <details class="dropdown dropdown-end">
+        <summary class="btn btn-ghost btn-sm" title="Turn Do Not Disturb On">
+            <i class="fa fa-bell-slash"></i>
+        </summary>
+
+        <ul class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
+            <li class="menu-title">Turn of after</li>
+            <li>
+            <a hx-post="{{ toggle_mute_url }}"
+                hx-vals='{"duration": "8h"}'
+                hx-target="#btn-do-not-disturb"
+                hx-swap="outerHTML">
+                8 hours
+            </a>
+            </li>
+            <li>
+            <a hx-post="{{ toggle_mute_url }}"
+                hx-vals='{"duration": "1d"}'
+                hx-target="#btn-do-not-disturb"
+                hx-swap="outerHTML">
+                1 day
+            </a>
+            </li>
+            <li>
+            <a hx-post="{{ toggle_mute_url }}"
+                hx-vals='{"duration": "1w"}'
+                hx-target="#btn-do-not-disturb"
+                hx-swap="outerHTML">
+                1 week
+            </a>
+            </li>
+            <li>
+            <a hx-post="{{ toggle_mute_url }}"
+                hx-vals='{"duration": "1m"}'
+                hx-target="#btn-do-not-disturb"
+                hx-swap="outerHTML">
+                1 month
+            </a>
+            </li>
+        </ul>
+    </details>
+    {% endif %}
+</div>

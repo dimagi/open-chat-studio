@@ -661,7 +661,7 @@ DJANGO_TABLES2_TABLE_ATTRS = {
     "class": "w-full table table-zebra",
     "thead": {"class": "bg-base-200 base-content text-sm leading-normal"},
     "th": {"class": "py-3 px-3 text-left"},
-    "td": {"class": "py-3 px-3 text-left overflow-hidden"},
+    "td": {"class": "py-3 px-3 text-left"},
 }
 # text-neutral text-error (pipeline run table styles here for tailwind build)
 DJANGO_TABLES2_ROW_ATTRS = {

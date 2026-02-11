@@ -4,15 +4,21 @@ import logging
 
 from django.core.cache import cache
 from django.core.mail import send_mail
+from django.db.models import Q
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.ocs_notifications.models import (
+    LevelChoices,
+    Notification,
+    NotificationMute,
+    UserNotification,
+    UserNotificationPreferences,
+)
 from apps.teams.flags import Flags
 from apps.teams.models import Flag, Team
 from apps.web.meta import absolute_url
-
-from .models import LevelChoices, Notification, NotificationMute, UserNotification, UserNotificationPreferences
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -72,8 +78,7 @@ def create_notification(
         },
     )
     for user in users:
-        if is_notification_muted(user, team, slug):
-            # Skip creating/updating UserNotification for muted users
+        if is_notification_muted(user, team, identifier):
             continue
 
         user_notification, created = UserNotification.objects.get_or_create(
@@ -237,72 +242,39 @@ def is_notification_muted(user, team: Team, notification_identifier: str) -> boo
     Returns:
         bool: True if notifications are muted, False otherwise
     """
-    from django.db.models import Q
-
     now = timezone.now()
 
-    # Check for specific notification identifier mute or all notifications mute
-    # A mute is active if:
-    # 1. It's permanent (muted_until is NULL), OR
-    # 2. It hasn't expired yet (muted_until > now)
-    active_mute_exists = (
-        NotificationMute.objects.filter(
-            Q(user=user, team=team, notification_identifier=notification_identifier)
-            | Q(user=user, team=team, notification_identifier="")
-        )
-        .filter(Q(muted_until__isnull=True) | Q(muted_until__gt=now))
-        .exists()
-    )
+    if UserNotificationPreferences.objects.filter(user=user, team=team, do_not_disturb_until__gt=now).exists():
+        return True
 
-    return active_mute_exists
+    return NotificationMute.objects.filter(
+        Q(muted_until__gt=now) | Q(muted_until__isnull=True),
+        user=user,
+        team=team,
+        notification_identifier=notification_identifier,
+    ).exists()
 
 
-def create_or_update_mute(
-    user, team: Team, notification_identifier: str | None, duration_hours: int | None
-) -> NotificationMute:
-    """
-    Create or update a notification mute for a user.
-
-    Args:
-        user: The user creating the mute
-        team: The team context
-        notification_identifier: The notification identifier to mute, or None/empty string to mute all
-        duration_hours: Hours until mute expires, or None for permanent mute
-
-    Returns:
-        NotificationMute: The created or updated mute
-    """
+def mute_notification(user, team: Team, notification_identifier: str, duration_hours: int | None) -> NotificationMute:
+    """Create or update a notification mute for a user"""
     muted_until = None
-    if duration_hours is not None:
+    if isinstance(duration_hours, int):
         muted_until = timezone.now() + timezone.timedelta(hours=duration_hours)
-
-    # Convert None to empty string for CharField
-    mute_identifier = notification_identifier or ""
 
     mute, created = NotificationMute.objects.update_or_create(
         user=user,
         team=team,
-        notification_identifier=mute_identifier,
+        notification_identifier=notification_identifier,
         defaults={"muted_until": muted_until},
     )
 
     return mute
 
 
-def delete_mute(user, team: Team, notification_identifier: str | None) -> None:
-    """
-    Delete a notification mute for a user.
-
-    Args:
-        user: The user deleting the mute
-        team: The team context
-        notification_identifier: The notification identifier to unmute, or None/empty string for all notifications
-    """
-    # Convert None to empty string for CharField
-    mute_identifier = notification_identifier or ""
-
+def unmute_notification(user, team: Team, notification_identifier: str) -> None:
+    """Delete a notification mute for a user"""
     NotificationMute.objects.filter(
         user=user,
         team=team,
-        notification_identifier=mute_identifier,
+        notification_identifier=notification_identifier,
     ).delete()

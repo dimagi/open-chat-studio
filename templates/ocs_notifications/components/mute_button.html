@@ -1,2 +1,59 @@
+{% load humanize %}
+
 {% url "ocs_notifications:mute_notification" record.team.slug record.id as url_for_mute %}
-{% include "ocs_notifications/components/mute_dropdown.html" with mute_url=url_for_mute button_title="Mute this notification" %}
+<div id="btn-mute-{{ record.id }}" class="text-center">
+    {% if notification_is_muted or record.notification_is_muted %}
+        <div class="flex flex-col items-center gap-1 tooltip" data-tip="{% if record.muted_until %}Automatically Unmutes {{ record.muted_until|naturaltime }}{% else %}Muted Forever{% endif %}">
+            <button id="btn-mute-{{ record.id }}"
+                    class="btn btn-sm btn-ghost"
+                    hx-post="{% url 'ocs_notifications:unmute_notification' record.team.slug record.id %}"
+                    hx-swap="outerHTML"
+                    hx-target="this">
+                <i class="fa fa-bell"></i>
+                <span class="ml-1">Unmute Now</span>
+            </button>
+        </div>
+    {% else %}
+        <details class="dropdown">
+            <summary class="btn btn-sm m-1">
+                <i class="fa fa-bell-slash"></i>
+                <span class="ml-1">Mute</span>
+            </summary>
+            <ul class="menu dropdown-content bg-base-100 rounded-box w-52 p-2 shadow-sm z-50">
+                <li class="menu-title">
+                    <span>Mute for</span>
+                </li>
+                <li>
+                    <a hx-post="{{ url_for_mute }}"
+                        hx-vals='{"duration": "8h"}'
+                        hx-swap="outerHTML"
+                        hx-target="#btn-mute-{{ record.id }}">8 hours</a>
+                </li>
+                <li>
+                    <a hx-post="{{ url_for_mute }}"
+                        hx-vals='{"duration": "1d"}'
+                        hx-swap="outerHTML"
+                        hx-target="#btn-mute-{{ record.id }}">1 day</a>
+                </li>
+                <li>
+                    <a hx-post="{{ url_for_mute }}"
+                        hx-vals='{"duration": "1w"}'
+                        hx-swap="outerHTML"
+                        hx-target="#btn-mute-{{ record.id }}">1 week</a>
+                </li>
+                <li>
+                    <a hx-post="{{ url_for_mute }}"
+                        hx-vals='{"duration": "1m"}'
+                        hx-swap="outerHTML"
+                        hx-target="#btn-mute-{{ record.id }}">1 month</a>
+                </li>
+                <li>
+                    <a hx-post="{{ url_for_mute }}"
+                        hx-vals='{"duration": "forever"}'
+                        hx-swap="outerHTML"
+                        hx-target="#btn-mute-{{ record.id }}">Forever</a>
+                </li>
+            </ul>
+        </details>
+    {% endif %}
+</div>
