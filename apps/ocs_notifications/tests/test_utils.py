@@ -12,9 +12,8 @@ from apps.ocs_notifications.utils import (
 )
 from apps.utils.factories.notifications import UserNotificationFactory
 
-pytest.fixture(autouse=True, scope="function")
 
-
+@pytest.fixture(autouse=True)
 def enable_flag_for_notifications():
     with patch("apps.ocs_notifications.utils._notifications_flag_is_active", return_value=True):
         yield
