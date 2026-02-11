@@ -64,6 +64,16 @@ def get_all_routes() -> dict:
     Returns a dictionary containing all routing decisions in the pipeline.
     The keys are the node names and the values are the routes chosen by each node.
 
+def add_file_attachment(filename: str, content: bytes, content_type: str = None):
+    Attach a file to the AI response message. The file will be stored and linked to the chat.
+
+    Args:
+        filename: The name of the file (e.g. "report.pdf")
+        content: The file content as bytes
+        content_type: Optional MIME type. Auto-detected from filename if not provided.
+
+    Raises an error if content is not bytes.
+
 def add_message_tag(tag_name: str):
     Adds a tag to the output message.
 
@@ -119,7 +129,8 @@ http.delete(url, **kwargs) -> dict
 All methods return a dictionary with the following keys:
 - `status_code`: The HTTP status code.
 - `headers`: The response headers.
-- `text`: The response body as text (always present).
+- `content`: The raw response body as bytes.
+- `text`: The response body decoded as text. Present for text-based content types (text/*, JSON, XML, etc.). Empty string for binary content types (images, PDFs, etc.).
 - `json`: The parsed JSON response body, or `None` if the response is not JSON.
 - `is_success`: `True` if the status code is in the 200-299 range.
 - `is_error`: `True` if the status code is 400 or above.

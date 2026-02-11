@@ -53,6 +53,7 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 * Always lint, test, and typecheck updated files. Use project-wide build sparingly
 * When adding new features: write or update unit tests first, then code to green
 * For regressions: add a failing test that reproduces the bug, then fix to green
+* Always use .github/pull_request_template.md as the template for pull request descriptions
 
 ## Don't
 * Use local imports for any reason other than to avoid circular imports or as a means to reduce startup time (reserved for specific imports)

@@ -153,6 +153,14 @@ export function CodeNodeEditor(
       section: "Node Outputs"
     }),
 
+    add_file_attachment: snip("add_file_attachment(\"${filename}\", ${content})", {
+      label: "add_file_attachment",
+      type: "function",
+      detail: "Attach a file to the AI response message. Content must be bytes.",
+      boost: 1,
+      section: "Files",
+    }),
+
     add_message_tag: snip("add_message_tag(\"${tag_name}\")", {
       label: "add_message_tag",
       type: "function",
