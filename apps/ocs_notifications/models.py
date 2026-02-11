@@ -1,5 +1,4 @@
 from django.db import models
-from django.utils import timezone
 
 from apps.teams.models import BaseTeamModel
 from apps.utils.fields import SanitizedJSONField
@@ -70,6 +69,7 @@ class UserNotificationPreferences(BaseTeamModel):
         choices=LevelChoices.choices,
         default=LevelChoices.WARNING,
     )
+    do_not_disturb_until = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name_plural = "User Notification Preferences"
@@ -83,14 +83,8 @@ class NotificationMute(BaseTeamModel):
     """Store user mute settings for notifications"""
 
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE, related_name="notification_mutes")
-    # If notification_identifier is empty, all notifications are muted
-    notification_identifier = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        help_text="Notification identifier to mute. Leave empty to mute all.",
-    )
-    muted_until = models.DateTimeField(null=True, blank=True, help_text="When the mute expires. NULL means forever.")
+    notification_identifier = models.CharField(max_length=255, help_text="Notification identifier to mute")
+    muted_until = models.DateTimeField(null=True, help_text="When the mute expires")
 
     class Meta:
         verbose_name_plural = "Notification Mutes"
@@ -100,13 +94,4 @@ class NotificationMute(BaseTeamModel):
         ]
 
     def __str__(self):
-        mute_identifier = self.notification_identifier or "all notifications"
-        if self.muted_until:
-            return f"{self.user} muted {mute_identifier} until {self.muted_until}"
-        return f"{self.user} muted {mute_identifier} forever"
-
-    def is_active(self):
-        """Check if this mute is currently active"""
-        if self.muted_until is None:
-            return True  # Forever mute
-        return timezone.now() < self.muted_until
+        return f"{self.user} muted {self.notification_identifier} until {self.muted_until}"
