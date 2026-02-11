@@ -10,12 +10,17 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name="experiment",
-            name="llm_provider",
-        ),
-        migrations.RemoveField(
-            model_name="experiment",
-            name="llm_provider_model",
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.RemoveField(
+                    model_name="experiment",
+                    name="llm_provider",
+                ),
+                migrations.RemoveField(
+                    model_name="experiment",
+                    name="llm_provider_model",
+                ),
+            ],
+            database_operations=[],
         ),
     ]
