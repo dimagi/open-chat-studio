@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from django.contrib.auth.models import Group
 
@@ -10,13 +12,20 @@ from apps.ocs_notifications.utils import (
 )
 from apps.utils.factories.notifications import UserNotificationFactory
 
+pytest.fixture(autouse=True, scope="function")
+
+
+def enable_flag_for_notifications():
+    with patch("apps.ocs_notifications.utils._notifications_flag_is_active", return_value=True):
+        yield
+
 
 @pytest.mark.django_db()
-def test_email_not_sent_when_preference_doesnt_exist(team_with_flag, mailoutbox):
+def test_email_not_sent_when_preference_doesnt_exist(team_with_users, mailoutbox):
     """
     Test that email is not sent when user notification preferences don't exist.
     """
-    user = team_with_flag.members.first()
+    user = team_with_users.members.first()
     user_notification = UserNotificationFactory.create(user=user, notification__level=LevelChoices.ERROR)
 
     send_notification_email(user_notification)
@@ -36,7 +45,7 @@ def test_email_not_sent_when_preference_doesnt_exist(team_with_flag, mailoutbox)
     ],
 )
 def test_send_notification_email_respects_levels(
-    team_with_flag, notification_level, email_preference_level, should_send, mailoutbox
+    team_with_users, notification_level, email_preference_level, should_send, mailoutbox
 ):
     """
     Test that email notifications respect user notification level preferences.
@@ -44,7 +53,7 @@ def test_send_notification_email_respects_levels(
     Verifies that emails are sent only when the notification level meets or exceeds
     the user's email notification threshold level.
     """
-    user = team_with_flag.members.first()
+    user = team_with_users.members.first()
     user_notification = UserNotificationFactory.create(user=user, notification__level=notification_level)
 
     # Create user preferences with email level threshold
@@ -65,7 +74,7 @@ def test_send_notification_email_respects_levels(
 
 @pytest.mark.django_db()
 class TestCreateNotification:
-    def test_creating_notification_stores_event_data(self, team_with_flag):
+    def test_creating_notification_stores_event_data(self, team_with_users):
         """
         Test that creating a notification stores the event data correctly.
 
@@ -78,15 +87,15 @@ class TestCreateNotification:
             title="Event Data Test",
             message="Testing event data storage.",
             level=LevelChoices.INFO,
-            team=team_with_flag,
+            team=team_with_users,
             slug="event-data-test",
             event_data=event_data,
         )
 
-        notification = UserNotification.objects.filter(user=team_with_flag.members.first()).first().notification
+        notification = UserNotification.objects.filter(user=team_with_users.members.first()).first().notification
         assert notification.event_data == event_data, "Event data should be stored correctly in the Notification model."
 
-    def test_create_notification_notifies_user_when_notification_created(self, team_with_flag):
+    def test_create_notification_notifies_user_when_notification_created(self, team_with_users):
         """
         Test that creating a new notification notifies the recipient user.
 
@@ -94,20 +103,20 @@ class TestCreateNotification:
         1. A UserNotification entry is created for the specified user
         2. The user's unread notification cache is invalidated
         """
-        user = team_with_flag.members.first()
+        user = team_with_users.members.first()
         assert UserNotification.objects.filter(user=user).count() == 0
 
         create_notification(
             title="Test Notification",
             message="Test message",
             level=LevelChoices.INFO,
-            team=team_with_flag,
+            team=team_with_users,
             slug="test-notification",
         )
 
         assert UserNotification.objects.filter(user=user).count() == 1
 
-    def test_user_is_notified_again(self, team_with_flag):
+    def test_user_is_notified_again(self, team_with_users):
         """
         Test that reading a notification allows the user to be renotified.
 
@@ -116,38 +125,38 @@ class TestCreateNotification:
         2. After marking a notification as read, creating the same notification
            again resets it to unread
         """
-        user = team_with_flag.members.first()
+        user = team_with_users.members.first()
 
         # Create initial notification
         create_notification(
             title="Test Notification",
             message="Test message",
             level=LevelChoices.ERROR,
-            team=team_with_flag,
+            team=team_with_users,
             slug="test-notification",
         )
 
         # Verify notification was created
-        assert user.unread_notifications_count(team_with_flag) == 1
+        assert user.unread_notifications_count(team_with_users) == 1
 
         # Mark it as read to retrigger it when the same notification is created again
         user_notification = UserNotification.objects.get(user=user)
         toggle_notification_read(user, user_notification=user_notification, read=True)
 
         # Verify it's now marked as read
-        assert user.unread_notifications_count(team_with_flag) == 0
+        assert user.unread_notifications_count(team_with_users) == 0
 
         # Create another notification with same identifier
         create_notification(
             title="Test Notification",
             message="Test message",
             level=LevelChoices.ERROR,
-            team=team_with_flag,
+            team=team_with_users,
             slug="test-notification",
         )
 
         # Should be renotified (unread again)
-        assert user.unread_notifications_count(team_with_flag) == 1
+        assert user.unread_notifications_count(team_with_users) == 1
         user_notification.refresh_from_db()
         assert user_notification.read is False, "UserNotification should be marked as unread again"
 
@@ -172,7 +181,7 @@ class TestCreateNotification:
         # Different slugs should produce different identifiers even with same data
         assert create_identifier("slug-1", {"action": "test"}) != create_identifier("slug-2", {"action": "test"})
 
-    def test_permissions_dictate_which_members_receive_notification(self, team_with_flag):
+    def test_permissions_dictate_which_members_receive_notification(self, team_with_users):
         """
         Test that only team members with the required permissions receive the notification.
 
@@ -180,7 +189,7 @@ class TestCreateNotification:
         1. Only users with the specified permissions receive the notification.
         2. Users without the required permissions do not receive the notification.
         """
-        Membership = team_with_flag.members.through
+        Membership = team_with_users.members.through
         user_with_perm = Membership.objects.first()
         user_with_perm.groups.add(Group.objects.get(name="Team Admin"))
         user_without_perm = Membership.objects.last()
@@ -193,7 +202,7 @@ class TestCreateNotification:
             title="Permission Test Notification",
             message="This is a test message for permissions.",
             level=LevelChoices.INFO,
-            team=team_with_flag,
+            team=team_with_users,
             slug="permission-test",
             permissions=["custom_actions.change_customaction"],
         )
