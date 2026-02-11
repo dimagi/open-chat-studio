@@ -8,7 +8,8 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.teams.models import Team
+from apps.teams.flags import Flags
+from apps.teams.models import Flag, Team
 from apps.web.meta import absolute_url
 
 from .models import LevelChoices, Notification, UserNotification, UserNotificationPreferences
@@ -42,6 +43,9 @@ def create_notification(
     Returns:
         Notification: The created Notification instance, or None if creation failed.
     """
+    flag = Flag.objects.filter(name=Flags.NOTIFICATIONS.slug).first()
+    if not (flag and flag.is_active_for_team(team)):
+        return
     notification = None
     links = links or {}
 
