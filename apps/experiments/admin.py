@@ -92,8 +92,6 @@ class ExperimentAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
         "team",
         "owner",
         "source_material",
-        "llm_provider",
-        "llm_provider_model",
         "version_family",
         "version_number",
         "is_archived",

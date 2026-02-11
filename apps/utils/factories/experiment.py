@@ -59,12 +59,6 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     owner = factory.SubFactory(UserFactory)
     name = factory.Sequence(lambda n: f"Test Experiment {n}")
-    llm_provider = factory.SubFactory(
-        "apps.utils.factories.service_provider_factories.LlmProviderFactory", team=factory.SelfAttribute("..team")
-    )
-    llm_provider_model = factory.SubFactory(
-        "apps.utils.factories.service_provider_factories.LlmProviderModelFactory", team=factory.SelfAttribute("..team")
-    )
     pipeline = factory.SubFactory(
         "apps.utils.factories.pipelines.PipelineFactory", team=factory.SelfAttribute("..team")
     )

@@ -369,10 +369,6 @@ class EventBot:
 
     @property
     def llm_provider(self):
-        if self.experiment.llm_provider:
-            return self.experiment.llm_provider
-
-        # If no LLM provider is set, use the first one in the team
         return self.experiment.team.llmprovider_set.first()
 
     @property

@@ -4,7 +4,6 @@ from field_audit.models import AuditEvent
 
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.assistants import OpenAiAssistantFactory
-from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -52,18 +51,15 @@ def test_delete_with_auditing(obj_name, delete_events, update_events, expected_s
 def test_deleting_a_team_does_not_remove_llm_providers_from_other_teams():
     """
     There was an issue where if you remove a team that has an LLMProvider, it would clear the LLMProvider FKs from
-    some experiments and assistants that were associated with other teams. This test ensures that this issue is fixed.
+    some assistants that were associated with other teams. This test ensures that this issue is fixed.
     """
     with enable_audit():
         team = TeamFactory()
-        experiment = ExperimentFactory(llm_provider=LlmProviderFactory(team=team), team=team)
         assistant = OpenAiAssistantFactory(llm_provider=LlmProviderFactory(team=team), team=team)
 
         team_to_delete = TeamFactory()
         LlmProviderFactory(team=team_to_delete)
 
         delete_object_with_auditing_of_related_objects(team_to_delete)
-        experiment.refresh_from_db()
         assistant.refresh_from_db()
-        assert experiment.llm_provider is not None
         assert assistant.llm_provider is not None

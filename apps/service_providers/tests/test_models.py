@@ -3,7 +3,6 @@ from django.core.exceptions import ValidationError
 
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.assistants import OpenAiAssistantFactory
-from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.pytest import django_db_with_data
@@ -25,26 +24,23 @@ def assistant():
 
 
 @pytest.fixture()
-def experiment(llm_provider_model):
-    return ExperimentFactory(team=llm_provider_model.team, llm_provider_model=llm_provider_model)
-
-
-@pytest.fixture()
 def pipeline(llm_provider, llm_provider_model):
     pipeline = PipelineFactory()
-    pipeline.data["nodes"].append({
-        "id": "1",
-        "data": {
+    pipeline.data["nodes"].append(
+        {
             "id": "1",
-            "label": "LLM",
-            "type": "LLMResponseWithPrompt",
-            "params": {
-                "llm_provider_id": str(llm_provider.id),
-                "llm_provider_model_id": str(llm_provider_model.id),
-                "prompt": "You are a helpful assistant",
+            "data": {
+                "id": "1",
+                "label": "LLM",
+                "type": "LLMResponseWithPrompt",
+                "params": {
+                    "llm_provider_id": str(llm_provider.id),
+                    "llm_provider_model_id": str(llm_provider_model.id),
+                    "prompt": "You are a helpful assistant",
+                },
             },
-        },
-    })
+        }
+    )
     pipeline.update_nodes_from_data()
     pipeline.save()
     return pipeline
@@ -67,12 +63,10 @@ class TestServiceProviderModel:
         assert len(global_models) == len(team_models) - 1
         assert all(not m.is_custom() for m in global_models)
 
-    @pytest.mark.parametrize("fixture_name", ["experiment", "assistant"])
     @django_db_with_data()
-    def test_cannot_delete_provider_models_with_associated_models(self, request, fixture_name):
-        associated_object = request.getfixturevalue(fixture_name)
+    def test_cannot_delete_provider_models_with_associated_models(self, assistant):
         # llm provider models that are associated with another model cannot be deleted
-        provider_model = associated_object.llm_provider_model
+        provider_model = assistant.llm_provider_model
         with pytest.raises(ValidationError):
             provider_model.delete()
 

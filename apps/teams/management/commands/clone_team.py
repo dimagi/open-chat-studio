@@ -428,29 +428,7 @@ class Command(BaseCommand):
             new_exp.team = ctx.target_team
             new_exp.owner = ctx.user
 
-            # Remap FK relationships - error if mapping not found (allow global providers)
-            if experiment.llm_provider_id:
-                if experiment.llm_provider_id in ctx.llm_providers:
-                    new_exp.llm_provider = ctx.llm_providers[experiment.llm_provider_id]
-                elif not LlmProvider.objects.filter(id=experiment.llm_provider_id, team__isnull=True).exists():
-                    raise CommandError(
-                        f"Experiment '{experiment.name}' references llm_provider_id={experiment.llm_provider_id} "
-                        f"not found in source team."
-                    )
-                # else: global provider, leave as-is
-
-            if experiment.llm_provider_model_id:
-                if experiment.llm_provider_model_id in ctx.llm_provider_models:
-                    new_exp.llm_provider_model = ctx.llm_provider_models[experiment.llm_provider_model_id]
-                elif not LlmProviderModel.objects.filter(
-                    id=experiment.llm_provider_model_id, team__isnull=True
-                ).exists():
-                    raise CommandError(
-                        f"Experiment '{experiment.name}' references llm_provider_model_id="
-                        f"{experiment.llm_provider_model_id} not found in source team."
-                    )
-                # else: global model, leave as-is
-
+            # Remap FK relationships - error if mapping not found
             if experiment.source_material_id:
                 if experiment.source_material_id not in ctx.source_materials:
                     raise CommandError(
