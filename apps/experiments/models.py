@@ -723,22 +723,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         url = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
         return Chip(label=label, url=url)
 
-    def get_llm_provider_model_name(self, raises=True):
-        if not self.pipeline_id:
-            return None
-        from apps.pipelines.models import Node
-        from apps.service_providers.models import LlmProviderModel
-
-        node = Node.objects.filter(pipeline_id=self.pipeline_id).exclude(params__llm_provider_model_id=None).first()
-        if node:
-            model_id = node.params.get("llm_provider_model_id")
-            if model_id:
-                try:
-                    return LlmProviderModel.objects.get(id=int(model_id)).name
-                except LlmProviderModel.DoesNotExist:
-                    pass
-        return None
-
     def get_trend_data(self) -> tuple[list, list]:
         """
         Get the error/success trends across all versions in this experiment's version family.
