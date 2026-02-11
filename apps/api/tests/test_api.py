@@ -19,6 +19,7 @@ from apps.experiments.models import ExperimentSession, Participant, ParticipantD
 from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.langchain import mock_llm
 from apps.utils.tests.clients import ApiTestClient
@@ -26,7 +27,9 @@ from apps.utils.tests.clients import ApiTestClient
 
 @pytest.fixture()
 def experiment(db):
-    return ExperimentFactory(team=TeamWithUsersFactory())
+    exp = ExperimentFactory(team=TeamWithUsersFactory())
+    LlmProviderFactory(team=exp.team)
+    return exp
 
 
 @pytest.mark.django_db()

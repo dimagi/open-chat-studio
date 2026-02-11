@@ -57,8 +57,6 @@ def source_team(django_db_blocker):
             team=team,
             owner=owner,
             name="Test Experiment",
-            llm_provider=llm_provider,
-            llm_provider_model=llm_model,
             source_material=source_material,
             consent_form=consent_form,
             pre_survey=survey,
@@ -230,11 +228,6 @@ def test_clone_team_clones_experiments_with_remapped_fks(source_team):
     assert target_exp.name == source_exp.name
 
     # Verify FKs remapped to new team's objects
-    if source_exp.llm_provider:
-        assert target_exp.llm_provider is not None
-        assert target_exp.llm_provider.team == target
-        assert target_exp.llm_provider.id != source_exp.llm_provider.id
-
     if source_exp.source_material:
         assert target_exp.source_material is not None
         assert target_exp.source_material.team == target
