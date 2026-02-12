@@ -63,11 +63,27 @@ Each task gets its own section with a checkbox and a context block. The checkbox
 
 Multiple issues can have open PRs simultaneously — the constraint is one open PR per issue, not one globally.
 
+## Automatic Follow-up
+
+After Igor creates a PR, the **Igor Followup** workflow automatically runs one round of fixes when CI completes:
+
+1. Waits for the "Lint and Test" workflow to complete (success or failure)
+2. Checks for the `igor-is-done` label — if present, skips (one-round limit)
+3. Reads CI failure logs and CodeRabbit review comments
+4. Fixes lint, type, test, and lockfile issues
+5. Addresses actionable review feedback
+6. Verifies fixes locally before pushing
+7. Comments on the PR with a summary of changes
+8. Adds the `igor-is-done` label to prevent re-runs
+
+This gives Igor one chance to fix common issues like formatting, type errors, and test failures before human review.
+
 ## Manual Trigger
 
 Run on a specific issue via Actions > Igor > Run workflow, then enter the issue number.
 
 ## Files
 
-- `.github/workflows/claude-incremental.yml` - The workflow
+- `.github/workflows/claude-incremental.yml` - The main Igor workflow
+- `.github/workflows/claude-incremental-followup.yml` - The automatic follow-up workflow
 - `docs/plans/2026-02-04-claude-incremental-design.md` - Detailed design document
