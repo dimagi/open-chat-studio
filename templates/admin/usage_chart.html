@@ -15,7 +15,11 @@
 </div>
 
 {% comment %} Team Activity {% endcomment %}
-<div class="pg-subtitle">{% translate "Team Activity" %}</div>
+<div class="pg-subtitle flex items-center gap-1">
+  {% translate "Team Activity" %}
+  {% blocktranslate asvar active_help %}A team is considered active if it has at least one chat message in the selected date range.{% endblocktranslate %}
+  {% include "generic/help.html" with help_content=active_help %}
+</div>
 <div class="mb-6">
   <p class="text-sm">
     <span class="font-semibold">{{ team_activity.active_count }}</span> active /
