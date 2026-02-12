@@ -86,4 +86,3 @@ Run on a specific issue via Actions > Igor > Run workflow, then enter the issue 
 
 - `.github/workflows/claude-incremental.yml` - The main Igor workflow
 - `.github/workflows/claude-incremental-followup.yml` - The automatic follow-up workflow
-- `docs/plans/2026-02-04-claude-incremental-design.md` - Detailed design document
