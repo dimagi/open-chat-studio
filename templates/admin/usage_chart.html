@@ -1,5 +1,45 @@
 {% load form_tags i18n static %}
 
+{% comment %} Growth Metrics {% endcomment %}
+<div class="pg-subtitle">{% translate "Growth Metrics" %}</div>
+<div class="flex flex-wrap gap-4 mb-6">
+  {% for metric in growth_metrics %}
+  <div class="stat bg-base-200 rounded-box flex-1 min-w-[180px]">
+    <div class="stat-title">{{ metric.label }}</div>
+    <div class="stat-value text-2xl">{{ metric.current }}</div>
+    <div class="stat-desc {% if metric.pct_change > 0 %}text-success{% elif metric.pct_change < 0 %}text-error{% endif %}">
+      {% if metric.pct_change > 0 %}+{% endif %}{{ metric.pct_change }}% from previous period ({{ metric.previous }})
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% comment %} Team Activity {% endcomment %}
+<div class="pg-subtitle">{% translate "Team Activity" %}</div>
+<div class="mb-6">
+  <p class="text-sm">
+    <span class="font-semibold">{{ team_activity.active_count }}</span> active /
+    <span class="font-semibold">{{ team_activity.total_count }}</span> total teams
+  </p>
+  {% if team_activity.inactive_teams %}
+  <details class="mt-2">
+    <summary class="cursor-pointer text-sm opacity-70">
+      {% blocktranslate count count=team_activity.inactive_teams|length %}
+        {{ count }} inactive team
+      {% plural %}
+        {{ count }} inactive teams
+      {% endblocktranslate %}
+    </summary>
+    <ul class="text-sm opacity-60 mt-1 ml-4 list-disc">
+      {% for name in team_activity.inactive_teams %}
+      <li>{{ name }}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</div>
+
+{% comment %} Existing charts {% endcomment %}
 <div class="pg-subtitle">{% translate "Chat Messages" %}</div>
 <div class="w-full h-48 relative">
   <canvas id="message-chart" class="mt-2"></canvas>
@@ -9,6 +49,96 @@
   <canvas id="participant-chart" class="mt-2"></canvas>
 </div>
 
+{% comment %} Top Teams {% endcomment %}
+<div class="pg-subtitle">{% translate "Top Teams" %}</div>
+{% if top_teams %}
+<div class="overflow-x-auto mb-6">
+  <table class="table table-zebra table-sm">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>{% translate "Team" %}</th>
+        <th>{% translate "Messages" %}</th>
+        <th>{% translate "Sessions" %}</th>
+        <th>{% translate "Participants" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in top_teams %}
+      <tr>
+        <td>{{ forloop.counter }}</td>
+        <td>{{ row.team }}</td>
+        <td>{{ row.msg_count }}</td>
+        <td>{{ row.session_count }}</td>
+        <td>{{ row.participant_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-sm opacity-60 mb-6">{% translate "No data for the selected date range." %}</p>
+{% endif %}
+
+{% comment %} Platform Breakdown {% endcomment %}
+<div class="pg-subtitle">{% translate "Platform Breakdown" %}</div>
+{% if platform_breakdown %}
+<div class="overflow-x-auto mb-6">
+  <table class="table table-zebra table-sm">
+    <thead>
+      <tr>
+        <th>{% translate "Platform" %}</th>
+        <th>{% translate "Sessions" %}</th>
+        <th>{% translate "Messages" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in platform_breakdown %}
+      <tr>
+        <td>{{ row.platform }}</td>
+        <td>{{ row.session_count }}</td>
+        <td>{{ row.msg_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-sm opacity-60 mb-6">{% translate "No data for the selected date range." %}</p>
+{% endif %}
+
+{% comment %} Top Experiments {% endcomment %}
+<div class="pg-subtitle">{% translate "Top Experiments" %}</div>
+{% if top_experiments %}
+<div class="overflow-x-auto mb-6">
+  <table class="table table-zebra table-sm">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>{% translate "Team" %}</th>
+        <th>{% translate "Experiment" %}</th>
+        <th>{% translate "Messages" %}</th>
+        <th>{% translate "Sessions" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in top_experiments %}
+      <tr>
+        <td>{{ forloop.counter }}</td>
+        <td>{{ row.team }}</td>
+        <td>{{ row.experiment }}</td>
+        <td>{{ row.msg_count }}</td>
+        <td>{{ row.session_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-sm opacity-60 mb-6">{% translate "No data for the selected date range." %}</p>
+{% endif %}
+
+{% comment %} WhatsApp Messages by Channel {% endcomment %}
 <div class="pg-subtitle">{% translate "WhatsApp Messages by Channel" %}</div>
 {% if whatsapp_stats %}
 <div class="overflow-x-auto">
@@ -39,7 +169,7 @@
 <p class="text-sm opacity-60">{% translate "No data for the selected date range." %}</p>
 {% endif %}
 
-<div class="flex space-x-3">
+<div class="flex flex-wrap gap-3 mt-4">
   <a class="btn" href="{% url "ocs_admin:export_usage" %}{% querystring %}">
     <i class="fa-solid fa-download"></i>
     Usage Data
@@ -51,6 +181,14 @@
   <a class="btn" href="{% url "ocs_admin:export_whatsapp_stats" %}{% querystring %}">
     <i class="fa-solid fa-download"></i>
     WhatsApp Message Stats
+  </a>
+  <a class="btn" href="{% url "ocs_admin:export_top_teams" %}{% querystring %}">
+    <i class="fa-solid fa-download"></i>
+    Top Teams
+  </a>
+  <a class="btn" href="{% url "ocs_admin:export_top_experiments" %}{% querystring %}">
+    <i class="fa-solid fa-download"></i>
+    Top Experiments
   </a>
 </div>
 {{ chart_data|json_script:'chart_data' }}

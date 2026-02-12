@@ -20,8 +20,15 @@ from apps.admin.models import OcsConfiguration
 from apps.admin.queries import (
     get_message_stats,
     get_participant_stats,
+    get_period_totals,
+    get_platform_breakdown,
+    get_team_activity_summary,
+    get_top_experiments,
+    get_top_teams,
     get_whatsapp_message_stats,
     get_whatsapp_numbers,
+    top_experiments_to_csv,
+    top_teams_to_csv,
     usage_to_csv,
     whatsapp_message_stats_to_csv,
 )
@@ -60,6 +67,21 @@ def _get_form(request):
     return DateRangeForm(initial={"range_type": DateRanges.LAST_30_DAYS, "start": start, "end": end})
 
 
+def _compute_growth(current, previous):
+    metrics = []
+    for key, label in [("messages", "Messages"), ("participants", "Participants"), ("sessions", "Sessions")]:
+        cur = current[key]
+        prev = previous[key]
+        if prev > 0:
+            pct = round((cur - prev) / prev * 100, 1)
+        elif cur > 0:
+            pct = 100.0
+        else:
+            pct = 0.0
+        metrics.append({"label": label, "current": cur, "previous": prev, "pct_change": pct})
+    return metrics
+
+
 @is_staff
 def usage_chart(request):
     form = _get_form(request)
@@ -71,6 +93,22 @@ def usage_chart(request):
     usage_data = StatsSerializer(get_message_stats(start, end_timestamp), many=True)
     participant_data = StatsSerializer(get_participant_stats(start, end_timestamp), many=True)
     whatsapp_stats = get_whatsapp_message_stats(start, end_timestamp)
+
+    period_length = end - start
+    prev_end = start
+    prev_start = prev_end - period_length
+    prev_start_timestamp = datetime.combine(prev_start, time.min)
+    prev_end_timestamp = datetime.combine(prev_end, time.max)
+
+    current_totals = get_period_totals(start, end_timestamp)
+    previous_totals = get_period_totals(prev_start_timestamp, prev_end_timestamp)
+    growth_metrics = _compute_growth(current_totals, previous_totals)
+
+    top_teams = get_top_teams(start, end_timestamp)
+    platform_breakdown = get_platform_breakdown(start, end_timestamp)
+    team_activity = get_team_activity_summary(start, end_timestamp)
+    top_experiments = get_top_experiments(start, end_timestamp)
+
     url = reverse("ocs_admin:home")
     query_data = {
         "start": start,
@@ -91,6 +129,11 @@ def usage_chart(request):
                 "end": end.isoformat(),
             },
             "whatsapp_stats": whatsapp_stats,
+            "growth_metrics": growth_metrics,
+            "top_teams": top_teams,
+            "platform_breakdown": platform_breakdown,
+            "team_activity": team_activity,
+            "top_experiments": top_experiments,
         },
     )
     return push_url(response, f"{url}?{urlencode(query_data)}")
@@ -129,6 +172,36 @@ def export_whatsapp_stats(request):
 
     response = HttpResponse(whatsapp_message_stats_to_csv(start, end_timestamp), content_type="text/csv")
     export_filename = f"whatsapp_stats_{start.isoformat()}_{end.isoformat()}.csv"
+    response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
+    return response
+
+
+@is_staff
+def export_top_teams(request):
+    form = _get_form(request)
+    if not form.is_valid():
+        return redirect("ocs_admin:home")
+
+    start, end = form.get_date_range()
+    end_timestamp = datetime.combine(end, time.max)
+
+    response = HttpResponse(top_teams_to_csv(start, end_timestamp), content_type="text/csv")
+    export_filename = f"top_teams_{start.isoformat()}_{end.isoformat()}.csv"
+    response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
+    return response
+
+
+@is_staff
+def export_top_experiments(request):
+    form = _get_form(request)
+    if not form.is_valid():
+        return redirect("ocs_admin:home")
+
+    start, end = form.get_date_range()
+    end_timestamp = datetime.combine(end, time.max)
+
+    response = HttpResponse(top_experiments_to_csv(start, end_timestamp), content_type="text/csv")
+    export_filename = f"top_experiments_{start.isoformat()}_{end.isoformat()}.csv"
     response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
     return response
 
