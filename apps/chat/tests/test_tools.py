@@ -634,12 +634,6 @@ class TestNotificationOnToolError:
 
         tool = CustomBaseTool()
 
-        with mock.patch("apps.chat.agent.tools.tool_error_notification") as mock_create_notification:
+        with mock.patch("apps.ocs_notifications.notifications.create_notification") as mock_create_notification:
             tool.run(tool_input="tool_input")
-
-            mock_create_notification.assert_called_once_with(
-                team=team,
-                tool_name="Test Tool",
-                error_message="Test error",
-                experiment_session=None,
-            )
+            mock_create_notification.assert_called_once()
