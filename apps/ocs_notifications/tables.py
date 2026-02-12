@@ -50,3 +50,4 @@ class UserNotificationTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No notifications found."
+        attrs = {"td": {"class": "overflow-visible"}}
