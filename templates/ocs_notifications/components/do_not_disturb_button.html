@@ -1,7 +1,7 @@
 {% load humanize %}
 {% url "ocs_notifications:toggle_do_not_disturb" request.team.slug as toggle_mute_url %}
 <div id="btn-do-not-disturb">
-    {% if is_activated %}
+    {% if end_datetime is not None %}
         <button
             class="btn btn-sm tooltip"
             data-tip="Automatically unmutes {{ end_datetime|naturaltime }}"

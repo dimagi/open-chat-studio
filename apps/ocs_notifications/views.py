@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.db.models import F
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -121,7 +122,6 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
 
         # Get duration from POST data (in hours)
         duration_param = request.POST.get("duration")
-
         notification_mute = mute_notification(
             user=request.user,
             team=request.team,
@@ -166,17 +166,23 @@ class ToggleDoNotDisturbView(LoginAndTeamRequiredMixin, View):
         user_preferences, _created = UserNotificationPreferences.objects.get_or_create(
             user=request.user, team=request.team
         )
-        until = None
-        if duration_param and duration_param in TIMEDELTA_MAP and duration_param != "forever":
-            # Do not disturb cannot be on forever
-            timedelta = TIMEDELTA_MAP.get(duration_param)
-            until = timezone.now() + timedelta.value
 
-        user_preferences.do_not_disturb_until = until
-        user_preferences.save(update_fields=["do_not_disturb_until"])
+        update = True
+        if duration_param is None:
+            # Reset do not disturb
+            user_preferences.do_not_disturb_until = None
+        elif duration_param in TIMEDELTA_MAP and duration_param != "forever":
+            timedelta = TIMEDELTA_MAP.get(duration_param)
+            user_preferences.do_not_disturb_until = timezone.now() + timedelta.value
+        else:
+            update = False
+            messages.error(request, "Invalid duration for Do Not Disturb")
+
+        if update:
+            user_preferences.save(update_fields=["do_not_disturb_until"])
 
         return render(
             request,
             "ocs_notifications/components/do_not_disturb_button.html",
-            context={"is_activated": bool(until), "end_datetime": user_preferences.do_not_disturb_until},
+            context={"end_datetime": user_preferences.do_not_disturb_until},
         )
