@@ -1,4 +1,4 @@
-from django.db.models import Exists, F, OuterRef, Subquery
+from django.db.models import Exists, F, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -94,10 +94,10 @@ class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
 
     def get_queryset(self):
         subquery = NotificationMute.objects.filter(
+            Q(muted_until__gt=timezone.now()) | Q(muted_until__isnull=True),
             user_id=self.request.user.id,
             team_id=self.request.team.id,
             notification_identifier=OuterRef("notification__identifier"),
-            muted_until__gt=timezone.now(),
         )
 
         queryset = (
@@ -128,7 +128,6 @@ class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
             user=request.user, user_notification=user_notification, read=not user_notification.read
         )
 
-        # Return the updated filtered table
         return render_table_row(request, UserNotificationTable, user_notification)
 
 
