@@ -13,6 +13,7 @@ from apps.ocs_notifications.models import (
     UserNotificationPreferences,
 )
 from apps.ocs_notifications.utils import (
+    DurationTimeDelta,
     create_identifier,
     create_notification,
     is_notification_muted,
@@ -236,7 +237,7 @@ class TestCreateNotification:
             user=user,
             team=team_with_users,
             notification_identifier="muted-notification",
-            duration_hours=8,
+            timedelta=DurationTimeDelta.DURATION_8H,
         )
 
         create_notification(
@@ -305,7 +306,7 @@ class TestNotificationMuting:
                 user=user,
                 team=team_with_users,
                 notification_identifier=notification_id,
-                duration_hours=8,
+                timedelta=DurationTimeDelta.DURATION_8H,
             )
 
             # Verify team-specific muting
@@ -328,7 +329,7 @@ class TestNotificationMuting:
                 user=user,
                 team=team_with_users,
                 notification_identifier=notification_id,
-                duration_hours=None,
+                timedelta=DurationTimeDelta.FOREVER,
             )
 
             # Verify team-specific muting

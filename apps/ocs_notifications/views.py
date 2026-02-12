@@ -1,4 +1,4 @@
-from django.db.models import Exists, F, OuterRef, Q, Subquery
+from django.db.models import F
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -9,27 +9,12 @@ from apps.experiments.filters import get_filter_context_data
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
-from apps.ocs_notifications.models import NotificationMute, UserNotification, UserNotificationPreferences
+from apps.ocs_notifications.models import UserNotification, UserNotificationPreferences
 from apps.ocs_notifications.tables import UserNotificationTable
-from apps.ocs_notifications.utils import mute_notification, toggle_notification_read, unmute_notification
+from apps.ocs_notifications.utils import TIMEDELTA_MAP, mute_notification, toggle_notification_read, unmute_notification
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
-
-# Duration constants (in hours)
-DURATION_8H = 8
-DURATION_1D = 24
-DURATION_1W = 168  # 7 * 24
-DURATION_1M = 720  # 30 * 24
-
-# Map duration parameter values to hours
-DURATION_MAP = {
-    "8h": DURATION_8H,
-    "1d": DURATION_1D,
-    "1w": DURATION_1W,
-    "1m": DURATION_1M,
-    "forever": None,  # Special case for muting indefinitely
-}
 
 
 class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -93,16 +78,8 @@ class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        subquery = NotificationMute.objects.filter(
-            Q(muted_until__gt=timezone.now()) | Q(muted_until__isnull=True),
-            user_id=self.request.user.id,
-            team_id=self.request.team.id,
-            notification_identifier=OuterRef("notification__identifier"),
-        )
-
         queryset = (
-            UserNotification.objects.filter(user=self.request.user, team=self.request.team)
-            .annotate(notification_is_muted=Exists(subquery), muted_until=Subquery(subquery.values("muted_until")[:1]))
+            UserNotification.objects.with_mute_info(user=self.request.user, team=self.request.team)
             .select_related("notification")
             .order_by("-notification__last_event_at")
         )
@@ -118,7 +95,7 @@ class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
 class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
         user_notification = get_object_or_404(
-            UserNotification,
+            UserNotification.objects.with_mute_info(user=self.request.user, team=self.request.team),
             id=notification_id,
             user=self.request.user,
             team__slug=team_slug,
@@ -144,13 +121,12 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
 
         # Get duration from POST data (in hours)
         duration_param = request.POST.get("duration")
-        duration_hours = DURATION_MAP.get(duration_param)
 
         notification_mute = mute_notification(
             user=request.user,
             team=request.team,
             notification_identifier=user_notification.identifier,
-            duration_hours=duration_hours,
+            timedelta=TIMEDELTA_MAP.get(duration_param),
         )
 
         return render(
@@ -191,10 +167,10 @@ class ToggleDoNotDisturbView(LoginAndTeamRequiredMixin, View):
             user=request.user, team=request.team
         )
         until = None
-        if duration_param and duration_param in DURATION_MAP and duration_param != "forever":
+        if duration_param and duration_param in TIMEDELTA_MAP and duration_param != "forever":
             # Do not disturb cannot be on forever
-            duration_hours = DURATION_MAP.get(duration_param)
-            until = timezone.now() + timezone.timedelta(hours=duration_hours)
+            timedelta = TIMEDELTA_MAP.get(duration_param)
+            until = timezone.now() + timedelta.value
 
         user_preferences.do_not_disturb_until = until
         user_preferences.save(update_fields=["do_not_disturb_until"])

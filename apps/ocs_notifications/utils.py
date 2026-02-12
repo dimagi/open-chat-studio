@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+from enum import Enum
 
 from django.core.cache import cache
 from django.core.mail import send_mail
@@ -23,6 +24,24 @@ from apps.web.meta import absolute_url
 logger = logging.getLogger("ocs.notifications")
 
 CACHE_KEY_FORMAT = "{user_id}-{team_slug}-unread-notifications-count"
+
+
+class DurationTimeDelta(Enum):
+    DURATION_8H = timezone.timedelta(hours=8)
+    DURATION_1D = timezone.timedelta(days=1)
+    DURATION_1W = timezone.timedelta(weeks=1)
+    DURATION_1M = timezone.timedelta(weeks=4)
+    FOREVER = None
+
+
+# Map duration parameter values to hours
+TIMEDELTA_MAP = {
+    "8h": DurationTimeDelta.DURATION_8H,
+    "1d": DurationTimeDelta.DURATION_1D,
+    "1w": DurationTimeDelta.DURATION_1W,
+    "1m": DurationTimeDelta.DURATION_1M,
+    "forever": DurationTimeDelta.FOREVER,
+}
 
 
 def create_notification(
@@ -232,7 +251,7 @@ def toggle_notification_read(user, user_notification: UserNotification, read: bo
 
 def is_notification_muted(user, team: Team, notification_identifier: str) -> bool:
     """
-    Check if a user has muted a specific notification identifier or all notifications.
+    Check if a user has muted a specific notification. This also returns True is the user enabled Do Not Disturb.
 
     Args:
         user: The user to check mute status for
@@ -255,11 +274,11 @@ def is_notification_muted(user, team: Team, notification_identifier: str) -> boo
     ).exists()
 
 
-def mute_notification(user, team: Team, notification_identifier: str, duration_hours: int | None) -> NotificationMute:
+def mute_notification(user, team: Team, notification_identifier: str, timedelta: DurationTimeDelta) -> NotificationMute:
     """Create or update a notification mute for a user"""
     muted_until = None
-    if isinstance(duration_hours, int):
-        muted_until = timezone.now() + timezone.timedelta(hours=duration_hours)
+    if timedelta.value:
+        muted_until = timezone.now() + timedelta.value
 
     mute, created = NotificationMute.objects.update_or_create(
         user=user,

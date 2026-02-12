@@ -38,11 +38,30 @@ class Notification(BaseTeamModel):
         super().save(*args, **kwargs)
 
 
+class UserNotificationObjectManager(models.Manager):
+    def with_mute_info(self, user, team):
+        subquery = NotificationMute.objects.filter(
+            models.Q(muted_until__gt=models.functions.Now()) | models.Q(muted_until__isnull=True),
+            user_id=user.id,
+            team_id=team.id,
+            notification_identifier=models.OuterRef("notification__identifier"),
+        )
+        return (
+            self.get_queryset()
+            .filter(user=user, team=team)
+            .annotate(
+                notification_is_muted=models.Exists(subquery),
+                muted_until=models.Subquery(subquery.values("muted_until")[:1]),
+            )
+        )
+
+
 class UserNotification(BaseTeamModel):
     notification = models.ForeignKey(Notification, on_delete=models.CASCADE)
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
     read = models.BooleanField(default=False, db_index=True)
     read_at = models.DateTimeField(null=True)
+    objects = UserNotificationObjectManager()
 
     class Meta:
         unique_together = ("notification", "user")
@@ -92,11 +111,3 @@ class NotificationMute(BaseTeamModel):
         indexes = [
             models.Index(fields=["user", "team", "muted_until"]),
         ]
-
-    def __str__(self):
-        text = f"{self.user} muted {self.notification_identifier}"
-        if self.muted_until:
-            text = f"{text} forever"
-        else:
-            text = f"{text} until {self.muted_until}"
-        return text
