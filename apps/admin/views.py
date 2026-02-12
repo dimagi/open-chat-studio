@@ -98,7 +98,7 @@ def usage_chart(request):
     prev_end = start
     prev_start = prev_end - period_length
     prev_start_timestamp = datetime.combine(prev_start, time.min)
-    prev_end_timestamp = datetime.combine(prev_end, time.max)
+    prev_end_timestamp = datetime.combine(prev_end, time.min)
 
     current_totals = get_period_totals(start, end_timestamp)
     previous_totals = get_period_totals(prev_start_timestamp, prev_end_timestamp)

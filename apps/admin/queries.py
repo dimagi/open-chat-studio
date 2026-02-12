@@ -142,7 +142,7 @@ def get_whatsapp_message_stats(start: datetime, end: datetime):
 def get_top_teams(start: datetime, end: datetime):
     msg_data = (
         ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
-        .values("chat__team__name")
+        .values("chat__team_id", "chat__team__name")
         .annotate(
             msg_count=Count("id"),
             session_count=Count("chat__experiment_session", distinct=True),
@@ -152,17 +152,17 @@ def get_top_teams(start: datetime, end: datetime):
 
     participant_data = (
         ExperimentSession.objects.filter(created_at__gte=start, created_at__lt=end)
-        .values("team__name")
+        .values("team_id")
         .annotate(participant_count=Count("participant", distinct=True))
     )
-    participant_map = {row["team__name"]: row["participant_count"] for row in participant_data}
+    participant_map = {row["team_id"]: row["participant_count"] for row in participant_data}
 
     return [
         {
             "team": row["chat__team__name"],
             "msg_count": row["msg_count"],
             "session_count": row["session_count"],
-            "participant_count": participant_map.get(row["chat__team__name"], 0),
+            "participant_count": participant_map.get(row["chat__team_id"], 0),
         }
         for row in msg_data
     ]
@@ -175,7 +175,10 @@ def get_platform_breakdown(start: datetime, end: datetime):
         .values("platform")
         .annotate(
             session_count=Count("id"),
-            msg_count=Count("chat__messages"),
+            msg_count=Count(
+                "chat__messages",
+                filter=Q(chat__messages__created_at__gte=start, chat__messages__created_at__lt=end),
+            ),
         )
         .order_by("-session_count")
     )
