@@ -357,7 +357,6 @@ def test_delete():
         delay=10 * 60,
     )
     request = RequestFactory().get("/")
-    request.origin = "chatbots"
     _delete_event_view(
         trigger_type="timeout",
         request=request,
