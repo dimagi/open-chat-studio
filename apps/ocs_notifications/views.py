@@ -191,7 +191,8 @@ class ToggleDoNotDisturbView(LoginAndTeamRequiredMixin, View):
             user=request.user, team=request.team
         )
         until = None
-        if duration_param:
+        if duration_param and duration_param in DURATION_MAP and duration_param != "forever":
+            # Do not disturb cannot be on forever
             duration_hours = DURATION_MAP.get(duration_param)
             until = timezone.now() + timezone.timedelta(hours=duration_hours)
 

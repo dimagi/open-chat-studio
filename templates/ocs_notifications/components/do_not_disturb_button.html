@@ -9,7 +9,7 @@
             hx-vals='{"duration": ""}'
             hx-target="#btn-do-not-disturb"
             hx-swap="outerHTML">
-            <i class="fa fa-bell"></i> Turn on
+            <i class="fa fa-bell"></i> Turn off DND
         </button>
     {% else %}
         <div class="dropdown">
@@ -17,7 +17,7 @@
                 <i class="fa fa-bell-slash"></i> Silence
             </div>
             <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
-                <li class="menu-title">Turn of after</li>
+                <li class="menu-title">Turn off after</li>
                 <li>
                     <a hx-post="{{ toggle_mute_url }}"
                         hx-vals='{"duration": "8h"}'
