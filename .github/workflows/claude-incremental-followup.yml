@@ -1,3 +1,4 @@
+# Documentation: docs/developer_guides/igor.md
 name: Igor Followup
 
 on:
@@ -20,6 +21,7 @@ permissions:
 jobs:
   check-and-fix:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
@@ -191,8 +193,8 @@ jobs:
             1. Comment on the PR noting that no changes were needed
           claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(npm run dev:*),Bash(npm ci:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ruff:*),Bash(uv lock:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh run download:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Read,Write,Edit"'
 
-      - name: Add followup label
-        if: always() && steps.check.outputs.skip != 'true'
+      - name: Add 'done' label
+        if: always() && steps.check.outputs.skip != 'true' && steps.check.outputs.pr_number != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
