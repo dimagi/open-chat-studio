@@ -1,6 +1,7 @@
 import csv
 import hashlib
 import io
+from collections import defaultdict
 from datetime import datetime
 
 from django.db.models import Count, Sum, Value
@@ -95,6 +96,52 @@ def get_whatsapp_number_data():
             account,
             channel["extra_data"].get("number", "---"),
         )
+
+
+def get_whatsapp_message_stats(start: datetime, end: datetime):
+    rows = (
+        ChatMessage.objects.filter(
+            created_at__gte=start,
+            created_at__lt=end,
+            chat__experiment_session__experiment_channel__platform=ChannelPlatform.WHATSAPP,
+            message_type__in=["human", "ai"],
+        )
+        .values(
+            "chat__team__name",
+            "chat__experiment_session__experiment__name",
+            "chat__experiment_session__experiment_channel__extra_data",
+            "message_type",
+        )
+        .annotate(count=Count("id"))
+        .order_by("chat__team__name", "chat__experiment_session__experiment__name")
+    )
+
+    # Pivot into (team, experiment, number, human_count, ai_count)
+    pivot = defaultdict(lambda: {"human": 0, "ai": 0})
+    for row in rows:
+        team = row["chat__team__name"]
+        experiment = row["chat__experiment_session__experiment__name"]
+        extra_data = row["chat__experiment_session__experiment_channel__extra_data"] or {}
+        number = extra_data.get("number", "---")
+        key = (team, experiment, number)
+        pivot[key][row["message_type"]] = row["count"]
+
+    return [
+        {
+            "team": team,
+            "experiment": experiment,
+            "number": number,
+            "human_count": counts["human"],
+            "ai_count": counts["ai"],
+        }
+        for (team, experiment, number), counts in sorted(pivot.items())
+    ]
+
+
+def whatsapp_message_stats_to_csv(start: datetime, end: datetime):
+    stats = get_whatsapp_message_stats(start, end)
+    rows = ((s["team"], s["experiment"], s["number"], s["human_count"], s["ai_count"]) for s in stats)
+    return _write_data_to_csv(["Team", "Experiment", "Channel Number", "Human Messages", "AI Messages"], rows)
 
 
 def _write_data_to_csv(headers, rows):

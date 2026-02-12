@@ -10,6 +10,7 @@ urlpatterns = [
     path("usage/", views.usage_chart, name="usage_chart"),
     path("export/usage/", views.export_usage, name="export_usage"),
     path("export/whatsapp/", views.export_whatsapp, name="export_whatsapp"),
+    path("export/whatsapp-stats/", views.export_whatsapp_stats, name="export_whatsapp_stats"),
     # Feature Flags
     path("flags/", views.flags_home, name="flags_home"),
     path("flags/<str:flag_name>/", views.flag_detail, name="flag_detail"),

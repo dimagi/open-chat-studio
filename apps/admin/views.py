@@ -17,7 +17,14 @@ from field_audit.models import AuditEvent
 
 from apps.admin.forms import DateRangeForm, DateRanges, FlagUpdateForm, OcsConfigurationForm
 from apps.admin.models import OcsConfiguration
-from apps.admin.queries import get_message_stats, get_participant_stats, get_whatsapp_numbers, usage_to_csv
+from apps.admin.queries import (
+    get_message_stats,
+    get_participant_stats,
+    get_whatsapp_message_stats,
+    get_whatsapp_numbers,
+    usage_to_csv,
+    whatsapp_message_stats_to_csv,
+)
 from apps.admin.serializers import StatsSerializer
 from apps.experiments.models import Participant
 from apps.teams.flags import get_all_flag_info
@@ -63,6 +70,7 @@ def usage_chart(request):
     end_timestamp = datetime.combine(end, time.max)
     usage_data = StatsSerializer(get_message_stats(start, end_timestamp), many=True)
     participant_data = StatsSerializer(get_participant_stats(start, end_timestamp), many=True)
+    whatsapp_stats = get_whatsapp_message_stats(start, end_timestamp)
     url = reverse("ocs_admin:home")
     query_data = {
         "start": start,
@@ -82,6 +90,7 @@ def usage_chart(request):
                 "start": start.isoformat(),
                 "end": end.isoformat(),
             },
+            "whatsapp_stats": whatsapp_stats,
         },
     )
     return push_url(response, f"{url}?{urlencode(query_data)}")
@@ -106,6 +115,21 @@ def export_usage(request):
 def export_whatsapp(request):
     response = HttpResponse(get_whatsapp_numbers(), content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="whatsapp_numbers.csv"'
+    return response
+
+
+@is_staff
+def export_whatsapp_stats(request):
+    form = _get_form(request)
+    if not form.is_valid():
+        return redirect("ocs_admin:home")
+
+    start, end = form.get_date_range()
+    end_timestamp = datetime.combine(end, time.max)
+
+    response = HttpResponse(whatsapp_message_stats_to_csv(start, end_timestamp), content_type="text/csv")
+    export_filename = f"whatsapp_stats_{start.isoformat()}_{end.isoformat()}.csv"
+    response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
     return response
 
 

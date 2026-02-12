@@ -8,6 +8,37 @@
 <div class="w-full h-48 relative">
   <canvas id="participant-chart" class="mt-2"></canvas>
 </div>
+
+<div class="pg-subtitle">{% translate "WhatsApp Messages by Channel" %}</div>
+{% if whatsapp_stats %}
+<div class="overflow-x-auto">
+  <table class="table table-zebra table-sm">
+    <thead>
+      <tr>
+        <th>{% translate "Team" %}</th>
+        <th>{% translate "Experiment" %}</th>
+        <th>{% translate "Channel Number" %}</th>
+        <th>{% translate "Human Messages" %}</th>
+        <th>{% translate "AI Messages" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in whatsapp_stats %}
+      <tr>
+        <td>{{ row.team }}</td>
+        <td>{{ row.experiment }}</td>
+        <td>{{ row.number }}</td>
+        <td>{{ row.human_count }}</td>
+        <td>{{ row.ai_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-sm opacity-60">{% translate "No data for the selected date range." %}</p>
+{% endif %}
+
 <div class="flex space-x-3">
   <a class="btn" href="{% url "ocs_admin:export_usage" %}{% querystring %}">
     <i class="fa-solid fa-download"></i>
@@ -16,6 +47,10 @@
   <a class="btn" href="{% url "ocs_admin:export_whatsapp" %}">
     <i class="fa-solid fa-download"></i>
     WhatsApp Numbers
+  </a>
+  <a class="btn" href="{% url "ocs_admin:export_whatsapp_stats" %}{% querystring %}">
+    <i class="fa-solid fa-download"></i>
+    WhatsApp Message Stats
   </a>
 </div>
 {{ chart_data|json_script:'chart_data' }}
