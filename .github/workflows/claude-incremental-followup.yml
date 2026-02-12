@@ -79,10 +79,10 @@ jobs:
           echo "PR number: $PR_NUMBER"
 
           # Check if the followup label is already applied
-          HAS_LABEL=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name' | grep -c '^igor-followup-applied$' || true)
+          HAS_LABEL=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name' | grep -c '^igor-is-done$' || true)
 
           if [ "$HAS_LABEL" -gt 0 ]; then
-            echo "::notice::PR #$PR_NUMBER already has igor-followup-applied label, skipping"
+            echo "::notice::PR #$PR_NUMBER already has igor-is-done label, skipping"
             echo "skip=true" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -198,4 +198,4 @@ jobs:
         run: |
           gh pr edit "${{ steps.check.outputs.pr_number }}" \
             --repo "${{ github.repository }}" \
-            --add-label "igor-followup-applied"
+            --add-label "igor-is-done"
