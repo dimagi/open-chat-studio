@@ -20,7 +20,9 @@ from apps.ocs_notifications.utils import (
     send_notification_email,
     toggle_notification_read,
 )
+from apps.teams.backends import add_user_to_team
 from apps.utils.factories.notifications import UserNotificationFactory
+from apps.utils.factories.team import TeamFactory
 
 
 @pytest.fixture(autouse=True)
@@ -275,6 +277,11 @@ class TestNotificationMuting:
         user = team_with_users.members.first()
         notification_identifier = "dnd-test"
 
+        team2 = TeamFactory()
+        add_user_to_team(
+            team2, user
+        )  # Add the same user to another team to ensure team-specific muting works as expected
+
         UserNotificationPreferences.objects.create(
             team=team_with_users,
             user=user,
@@ -282,38 +289,52 @@ class TestNotificationMuting:
         )
 
         assert is_notification_muted(user, team_with_users, notification_identifier) is dnd_on
+        assert is_notification_muted(user, team2, notification_identifier) is False, (
+            "Do Not Disturb should be team-specific and not affect other teams"
+        )
 
     def test_mute_notification_for_8h(self, team_with_users):
-        """
-        Ensure that muting a notification for 8 hours correctly mutes it and then unmutes it after the duration has
-        passed.
-        """
+        """Ensure that muting for 8 hours is team-specific and expires correctly."""
         user = team_with_users.members.first()
+        team2 = TeamFactory()
+        add_user_to_team(team2, user)
+        notification_id = "mute-8h-test"
 
         with travel(timezone.now(), tick=False) as freezer:
             mute_notification(
                 user=user,
                 team=team_with_users,
-                notification_identifier="mute-8h-test",
+                notification_identifier=notification_id,
                 duration_hours=8,
             )
-            assert is_notification_muted(user, team_with_users, "mute-8h-test") is True
 
+            # Verify team-specific muting
+            assert is_notification_muted(user, team_with_users, notification_id) is True
+            assert is_notification_muted(user, team2, notification_id) is False, "Mute should not leak to other teams"
+
+            # Verify expiration
             freezer.shift(datetime.timedelta(hours=8, minutes=1))
-            assert is_notification_muted(user, team_with_users, "mute-8h-test") is False
+            assert is_notification_muted(user, team_with_users, notification_id) is False
 
     def test_mute_notification_forever(self, team_with_users):
-        """Ensure that muting a notification indefinitely correctly mutes it"""
+        """Ensure that muting indefinitely is team-specific and persists."""
         user = team_with_users.members.first()
+        team2 = TeamFactory()
+        add_user_to_team(team2, user)
+        notification_id = "mute-forever-test"
 
         with travel(timezone.now(), tick=False) as freezer:
             mute_notification(
                 user=user,
                 team=team_with_users,
-                notification_identifier="mute-forever-test",
+                notification_identifier=notification_id,
                 duration_hours=None,
             )
-            assert is_notification_muted(user, team_with_users, "mute-forever-test") is True
 
+            # Verify team-specific muting
+            assert is_notification_muted(user, team_with_users, notification_id) is True
+            assert is_notification_muted(user, team2, notification_id) is False, "Mute should not leak to other teams"
+
+            # Verify it stays muted long-term
             freezer.shift(datetime.timedelta(days=365 * 10))
-            assert is_notification_muted(user, team_with_users, "mute-forever-test") is True
+            assert is_notification_muted(user, team_with_users, notification_id) is True
