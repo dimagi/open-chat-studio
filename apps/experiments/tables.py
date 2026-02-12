@@ -78,7 +78,6 @@ class ConsentFormTable(tables.Table):
 
 
 class ExperimentVersionsTable(tables.Table):
-    origin = "experiments"
     version_number = columns.TemplateColumn(
         template_name="experiments/components/experiment_version_cell.html", verbose_name="Version Number"
     )
