@@ -84,7 +84,7 @@ class NotificationMute(BaseTeamModel):
 
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE, related_name="notification_mutes")
     notification_identifier = models.CharField(max_length=255, help_text="Notification identifier to mute")
-    muted_until = models.DateTimeField(null=True, help_text="When the mute expires")
+    muted_until = models.DateTimeField(null=True, help_text="When the mute expires. Null means permanent mute.")
 
     class Meta:
         verbose_name_plural = "Notification Mutes"
@@ -94,4 +94,9 @@ class NotificationMute(BaseTeamModel):
         ]
 
     def __str__(self):
-        return f"{self.user} muted {self.notification_identifier} until {self.muted_until}"
+        text = f"{self.user} muted {self.notification_identifier}"
+        if self.muted_until:
+            text = f"{text} forever"
+        else:
+            text = f"{text} until {self.muted_until}"
+        return text
