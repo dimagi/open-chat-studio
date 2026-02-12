@@ -92,7 +92,6 @@ def test_delete():
         type=StaticTriggerType.LAST_TIMEOUT,
     )
     request = RequestFactory().get("/")
-    request.origin = "chatbots"
 
     _delete_event_view(
         trigger_type="static",

@@ -157,7 +157,6 @@ MIDDLEWARE = list(
             "silk.middleware.SilkyMiddleware",
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
-            "apps.generics.middleware.OriginDetectionMiddleware",
             "apps.web.request_logging_middleware.RequestLoggingMiddleware",
             "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],

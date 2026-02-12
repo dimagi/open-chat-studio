@@ -10,12 +10,11 @@ from apps.utils.time import seconds_to_human
 
 
 class ActionsColumn(tables.Column):
-    def __init__(self, origin=None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.origin = origin
 
     def render(self, value, record):
-        namespace = "chatbots" if self.origin == "chatbots" else "experiments"
+        namespace = "chatbots"
         trigger_type = "timeout" if record["type"] == "__timeout__" else "static"
         view_log_url = reverse(
             f"{namespace}:events:{trigger_type}_logs_view",
@@ -75,8 +74,8 @@ class EventsTable(tables.Table):
     error_count = tables.Column(accessor="failure_count", verbose_name="Error Count")
     action = None
 
-    def __init__(self, *args, origin=None, **kwargs):
-        self.base_columns["actions"] = ActionsColumn(origin=origin, empty_values=())
+    def __init__(self, *args, **kwargs):
+        self.base_columns["actions"] = ActionsColumn(empty_values=())
         super().__init__(*args, **kwargs)
 
     def render_type(self, value, record):
