@@ -168,7 +168,7 @@ class ToggleDoNotDisturbView(LoginAndTeamRequiredMixin, View):
         )
 
         update = True
-        if duration_param is None:
+        if duration_param == "":
             # Reset do not disturb
             user_preferences.do_not_disturb_until = None
         elif duration_param in TIMEDELTA_MAP and duration_param != "forever":
