@@ -2,8 +2,8 @@
 
 {% url "ocs_notifications:mute_notification" record.team.slug record.id as url_for_mute %}
 <div id="btn-mute-{{ record.id }}" class="text-center">
-    {% if notification_is_muted or record.notification_is_muted %}
-        <div class="flex flex-col items-center gap-1 tooltip" data-tip="{% if record.muted_until %}Automatically unmutes {{ record.muted_until|naturaltime }}{% else %}Muted Forever{% endif %}">
+    {% if notification_is_muted %}
+        <div class="flex flex-col items-center gap-1 tooltip" data-tip="{% if muted_until %}Automatically unmutes {{ muted_until|naturaltime }}{% else %}Muted Forever{% endif %}">
             <button id="btn-mute-{{ record.id }}"
                     class="btn btn-sm btn-ghost"
                     hx-post="{% url 'ocs_notifications:unmute_notification' record.team.slug record.id %}"

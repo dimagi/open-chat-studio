@@ -154,11 +154,14 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
             duration_hours=duration_hours,
         )
 
-        user_notification.muted_until = notification_mute.muted_until
         return render(
             request,
             "ocs_notifications/components/mute_button.html",
-            context={"record": user_notification, "notification_is_muted": True},
+            context={
+                "record": user_notification,
+                "notification_is_muted": True,
+                "muted_until": notification_mute.muted_until,
+            },
         )
 
 
@@ -178,7 +181,7 @@ class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
         return render(
             request,
             "ocs_notifications/components/mute_button.html",
-            context={"record": user_notification, "notification_is_muted": False},
+            context={"record": user_notification, "notification_is_muted": False, "muted_until": None},
         )
 
 

@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.template.loader import get_template
 from django_tables2 import columns, tables
 
 from apps.generics.tables import TimeAgoColumn
@@ -30,6 +31,12 @@ class UserNotificationTable(tables.Table):
         verbose_name="Mute",
         orderable=False,
     )
+
+    def render_mute(self, record, bound_column, *args, **kwargs):
+        template = get_template(bound_column.column.template_name)
+        return template.render(
+            {"record": record, "notification_is_muted": record.notification_is_muted, "muted_until": record.muted_until}
+        )
 
     class Meta:
         model = UserNotification
