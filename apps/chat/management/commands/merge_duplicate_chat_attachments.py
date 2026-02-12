@@ -41,7 +41,7 @@ class Command(IdempotentCommand):
                 keeper.files.add(*other.files.all())
 
                 # Merge extra JSON (keeper values take precedence)
-                merged_extra = {**other.extra, **keeper.extra}
+                merged_extra = {**(other.extra or {}), **(keeper.extra or {})}
                 if merged_extra != keeper.extra:
                     keeper.extra = merged_extra
                     keeper.save(update_fields=["extra"])
