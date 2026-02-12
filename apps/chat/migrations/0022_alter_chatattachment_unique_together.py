@@ -2,14 +2,18 @@
 
 from django.db import migrations
 
+from apps.data_migrations.utils.migrations import RunDataMigration
+
 
 class Migration(migrations.Migration):
 
     dependencies = [
         ('chat', '0021_alter_chatmessage_created_at'),
+        ('data_migrations', '0001_initial'),
     ]
 
     operations = [
+        RunDataMigration("merge_duplicate_chat_attachments"),
         migrations.AlterUniqueTogether(
             name='chatattachment',
             unique_together={('chat', 'tool_type')},
