@@ -25,7 +25,6 @@ from django.db.models import (
     Prefetch,
     Q,
     Subquery,
-    UniqueConstraint,
     When,
     functions,
 )
@@ -532,17 +531,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
-    llm_provider = models.ForeignKey(
-        "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
-    )
-    llm_provider_model = models.ForeignKey(
-        "service_providers.LlmProviderModel",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="The LLM model to use",
-        verbose_name="LLM Model",
-    )
     pipeline = models.ForeignKey(
         "pipelines.Pipeline",
         on_delete=models.SET_NULL,
@@ -734,30 +722,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             label = f"{label} (archived)"
         url = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
         return Chip(label=label, url=url)
-
-    def get_chat_model(self):
-        from apps.service_providers.llm_service.default_models import get_model_parameters
-
-        service = self.get_llm_service()
-        provider_model_name = self.get_llm_provider_model_name(raises=False)
-        if service and provider_model_name:
-            params = get_model_parameters(provider_model_name, temperature=self.temperature)
-            return service.get_chat_model(provider_model_name, **params)
-        return None
-
-    def get_llm_service(self):
-        if self.llm_provider:
-            return self.llm_provider.get_llm_service()
-        return None
-
-    def get_llm_provider_model_name(self, raises=True):
-        if self.llm_provider:
-            if not self.llm_provider_model:
-                if raises:
-                    raise ValueError("llm_provider_model is not set for this Experiment")
-                return None
-            return self.llm_provider_model.name
-        return None
 
     def get_trend_data(self) -> tuple[list, list]:
         """
@@ -1037,41 +1001,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     raw_value=self.pipeline,
                     to_display=VersionFieldDisplayFormatters.format_pipeline,
                 ),
-            )
-        else:
-            fields.extend(
-                [
-                    VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
-                    VersionField(
-                        group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model
-                    ),
-                    VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
-                    VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
-                    VersionField(
-                        group_name="Safety",
-                        name="input_formatter",
-                        raw_value=self.input_formatter,
-                    ),
-                    # Source material
-                    VersionField(
-                        group_name="Source Material",
-                        name="source_material",
-                        raw_value=self.source_material,
-                    ),
-                    # Tools
-                    VersionField(
-                        group_name="Tools",
-                        name="tools",
-                        raw_value=set(self.tools),
-                        to_display=VersionFieldDisplayFormatters.format_tools,
-                    ),
-                    VersionField(
-                        group_name="Tools",
-                        name="custom_actions",
-                        queryset=self.get_custom_action_operations(),
-                        to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
-                    ),
-                ]
             )
         return VersionDetails(
             instance=self,

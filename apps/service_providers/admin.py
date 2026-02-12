@@ -3,7 +3,6 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from apps.assistants.models import OpenAiAssistant
-from apps.experiments.models import Experiment
 from apps.pipelines.models import Node
 
 from .models import (
@@ -22,30 +21,11 @@ class ServiceConfigAdmin(admin.ModelAdmin):
     list_filter = ("team", "type")
 
 
-class ExperimentInline(admin.TabularInline):
-    model = Experiment
-    extra = 0
-    fields = ("name", "llm_provider")
-    readonly_fields = ("name", "llm_provider")
-    can_delete = False
-
-
 @admin.register(LlmProviderModel)
 class LlmProviderModelAdmin(admin.ModelAdmin):
     list_display = ("name", "type", "max_token_limit", "team")
     list_filter = ("team", "type", "name")
-    inlines = [ExperimentInline]
-    readonly_fields = ["related_experiments", "related_assistants", "related_nodes"]
-
-    def related_experiments(self, obj):
-        experiments = Experiment.objects.filter(llm_provider_model_id=str(obj.id))
-        experiment_urls = [
-            f"<a href={reverse('admin:experiments_experiment_change', args=[experiment.id])} >{str(experiment)}</a>"
-            for experiment in experiments
-        ]
-        return format_html("<br>".join(experiment_urls))
-
-    related_experiments.short_description = "Experiment Usage"
+    readonly_fields = ["related_assistants", "related_nodes"]
 
     def related_assistants(self, obj):
         assistants = OpenAiAssistant.objects.filter(llm_provider_model_id=str(obj.id))
