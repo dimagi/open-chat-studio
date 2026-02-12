@@ -25,6 +25,24 @@ class ReadFilter(ChoiceColumnFilter):
         return [val.lower() == "true" for val in values]
 
 
+class MuteFilter(ChoiceColumnFilter):
+    query_param: str = "muted"
+    # The column is annotated on the queryset in the view, so we can filter on it directly
+    column: str = "notification_is_muted"
+    label: str = "Muted"
+    options: list[dict[str, Any]] = [
+        {"id": "true", "label": "Muted"},
+        {"id": "false", "label": "Not Muted"},
+    ]
+
+    def parse_query_value(self, query_value) -> list[bool] | None:
+        """Convert string values 'true'/'false' to boolean."""
+        values = self.values_list(query_value)
+        if not values:
+            return None
+        return [val.lower() == "true" for val in values]
+
+
 class SeverityLevelFilter(ChoiceColumnFilter):
     """Filter notifications by level/level."""
 
@@ -41,4 +59,5 @@ class UserNotificationFilter(MultiColumnFilter):
         ReadFilter(),
         TimestampFilter(label="Notification Date", column="created_at", query_param="notification_date"),
         SeverityLevelFilter(),
+        MuteFilter(),
     ]

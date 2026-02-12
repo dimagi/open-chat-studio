@@ -41,9 +41,9 @@ class UserNotificationTable(tables.Table):
     class Meta:
         model = UserNotification
         fields = (
+            "timestamp",
             "notification_content",
             "level",
-            "timestamp",
             "mute",
             "read",
         )
