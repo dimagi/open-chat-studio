@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -196,14 +196,17 @@ class SubmitAnnotation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
         form = FormClass(request.POST)
 
         if form.is_valid():
-            Annotation.objects.create(
-                item=item,
-                team=request.team,
-                reviewer=request.user,
-                data=form.cleaned_data,
-                status=AnnotationStatus.SUBMITTED,
-            )
-            messages.success(request, "Annotation submitted.")
+            try:
+                Annotation.objects.create(
+                    item=item,
+                    team=request.team,
+                    reviewer=request.user,
+                    data=form.cleaned_data,
+                    status=AnnotationStatus.SUBMITTED,
+                )
+                messages.success(request, "Annotation submitted.")
+            except IntegrityError:
+                messages.warning(request, "You've already annotated this item.")
         else:
             messages.error(request, "Invalid annotation data. Please check the form.")
             item_content = _get_item_display_content(item)
@@ -256,10 +259,12 @@ class UnflagItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
 
     def post(self, request, team_slug: str, pk: int, item_pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
-        item.flags = []
-        item.save(update_fields=["flags"])
-        item.update_status()
+        with transaction.atomic():
+            item = AnnotationItem.objects.select_for_update().get(id=item_pk, queue=queue)
+            item.flags = []
+            item.status = AnnotationItemStatus.PENDING  # Reset from FLAGGED so update_status recalculates
+            item.save(update_fields=["flags", "status"])
+            item.update_status()
         messages.info(request, "Item unflagged.")
         redirect_url = redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
         if request.headers.get("HX-Request"):

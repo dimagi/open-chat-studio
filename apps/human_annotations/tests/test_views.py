@@ -1,4 +1,5 @@
 import json
+from io import BytesIO
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -225,8 +226,6 @@ def test_manage_assignees_post(client, team_with_users, queue, user):
 
 @pytest.mark.django_db()
 def test_import_csv_post(client, team_with_users, queue):
-    from io import BytesIO
-
     csv_content = b"name,value\nAlice,10\nBob,20"
     csv_file = BytesIO(csv_content)
     csv_file.name = "test.csv"
@@ -373,7 +372,7 @@ def test_annotate_item_non_assignee_can_view(client, team_with_users, queue):
 
 
 @pytest.mark.django_db()
-def test_flag_item_with_reason(client, team_with_users, queue):
+def test_flag_item_with_reason(client, team_with_users, queue, user):
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
     url = reverse(
         "human_annotations:flag_item",
@@ -385,7 +384,8 @@ def test_flag_item_with_reason(client, team_with_users, queue):
     assert item.status == AnnotationItemStatus.FLAGGED
     assert len(item.flags) == 1
     assert item.flags[0]["reason"] == "Content seems wrong"
-    assert item.flags[0]["user_id"] == client.session["_auth_user_id"] or item.flags[0]["user"] != ""
+    assert item.flags[0]["user_id"] == user.pk
+    assert item.flags[0]["user"] != ""
 
 
 @pytest.mark.django_db()

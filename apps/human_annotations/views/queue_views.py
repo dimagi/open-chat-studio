@@ -1,10 +1,12 @@
 import csv as csv_module
 import io
 import json
+import re
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db.models import Count, Prefetch, Q, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -19,6 +21,11 @@ from ..models import Annotation, AnnotationItem, AnnotationItemStatus, Annotatio
 from ..tables import AnnotationItemTable, AnnotationQueueTable
 
 User = get_user_model()
+
+
+def _safe_filename(name: str) -> str:
+    """Sanitize a string for use in Content-Disposition filename."""
+    return re.sub(r"[^\w\s\-.]", "_", name).strip()
 
 
 class AnnotationQueueHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -42,8 +49,6 @@ class AnnotationQueueTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        from django.db.models import Count, Q, Sum
-
         return AnnotationQueue.objects.filter(team=self.request.team).annotate(
             _total_items=Count("items"),
             _completed_items=Count("items", filter=Q(items__status=AnnotationItemStatus.COMPLETED)),
@@ -137,10 +142,6 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        from django.db.models import Prefetch
-
-        from ..models import Annotation
-
         return (
             AnnotationItem.objects.filter(
                 queue_id=self.kwargs["pk"],
@@ -305,7 +306,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
 
     def _export_csv(self, queue, annotations):
         response = HttpResponse(content_type="text/csv")
-        response["Content-Disposition"] = f'attachment; filename="{queue.name}_annotations.csv"'
+        response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.csv"'
 
         schema_fields = list(queue.schema.schema.keys())
         fieldnames = ["item_id", "item_type", "reviewer", "annotated_at"] + schema_fields
@@ -342,5 +343,5 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
 
         content = "\n".join(lines)
         response = HttpResponse(content, content_type="application/jsonl")
-        response["Content-Disposition"] = f'attachment; filename="{queue.name}_annotations.jsonl"'
+        response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.jsonl"'
         return response

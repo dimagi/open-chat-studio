@@ -41,7 +41,7 @@
                           {% endif %}
                           <div class="grow min-w-0">
                             <div class="message-contents">
-                              <p>{{ msg.content|render_markdown }}</p>
+                              {{ msg.content|render_markdown }}
                             </div>
                             <div class="mt-2 pg-text-muted">
                               <i class="fa-solid fa-clock mr-1"></i>

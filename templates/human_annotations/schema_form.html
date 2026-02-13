@@ -25,7 +25,7 @@
       </p>
 
       <div class="space-y-4">
-        <template x-for="(field, index) in fields" :key="index">
+        <template x-for="(field, index) in fields" :key="field._id">
           <div class="card bg-base-200 p-4">
             <div class="mb-2">
               <label class="label text-sm">
@@ -173,6 +173,7 @@
           if (el) {
             const existing = JSON.parse(el.textContent);
             this.fields = Object.entries(existing).map(([name, def]) => ({
+              _id: Date.now() + Math.random(),
               name: name,
               type: def.type || 'string',
               description: def.description || '',
@@ -189,6 +190,7 @@
 
         addField() {
           this.fields.push({
+            _id: Date.now() + Math.random(),
             name: '',
             type: 'string',
             description: '',

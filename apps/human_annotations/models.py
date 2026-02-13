@@ -1,5 +1,6 @@
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
+from django.db.models import Sum
 from django.urls import reverse
 from pydantic import TypeAdapter
 
@@ -86,8 +87,6 @@ class AnnotationQueue(BaseTeamModel):
 
     def get_progress(self):
         """Return progress stats including review-level progress for multi-review queues."""
-        from django.db.models import Sum
-
         total_items = self.items.count()
         completed_items = self.items.filter(status=AnnotationItemStatus.COMPLETED).count()
         flagged_items = self.items.filter(status=AnnotationItemStatus.FLAGGED).count()
@@ -177,7 +176,10 @@ class AnnotationItem(BaseTeamModel):
         return f"External item {self.id}"
 
     def update_status(self):
-        """Update item status based on review count vs queue requirement."""
+        """Update item status based on review count vs queue requirement.
+        Preserves FLAGGED status — only explicit unflagging clears it."""
+        if self.status == AnnotationItemStatus.FLAGGED:
+            return
         if self.review_count >= self.queue.num_reviews_required:
             self.status = AnnotationItemStatus.COMPLETED
         elif self.review_count > 0:
@@ -223,11 +225,15 @@ class Annotation(BaseTeamModel):
 
     def _update_item_review_count(self):
         """Increment item review count and update status."""
-        from django.db import transaction
-
         with transaction.atomic():
             item = AnnotationItem.objects.select_for_update().get(pk=self.item_id)
             count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
             item.review_count = count
-            item.save(update_fields=["review_count"])
-            item.update_status()
+            if item.status != AnnotationItemStatus.FLAGGED:
+                if count >= item.queue.num_reviews_required:
+                    item.status = AnnotationItemStatus.COMPLETED
+                elif count > 0:
+                    item.status = AnnotationItemStatus.IN_PROGRESS
+                else:
+                    item.status = AnnotationItemStatus.PENDING
+            item.save(update_fields=["review_count", "status"])
