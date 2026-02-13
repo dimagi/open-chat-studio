@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
@@ -15,22 +16,24 @@ from ..models import (
 )
 
 
-def _get_next_item(queue, user):
+def _get_next_item(queue, user, skip_item_id=None):
     """Get the next item for this user to annotate: oldest pending/in-progress not already reviewed by user."""
     already_annotated = Annotation.objects.filter(
         item__queue=queue,
         reviewer=user,
     ).values_list("item_id", flat=True)
 
-    return (
+    qs = (
         AnnotationItem.objects.filter(
             queue=queue,
             status__in=[AnnotationItemStatus.PENDING, AnnotationItemStatus.IN_PROGRESS],
         )
         .exclude(id__in=already_annotated)
         .order_by("created_at")
-        .first()
     )
+    if skip_item_id:
+        qs = qs.exclude(id=skip_item_id)
+    return qs.first()
 
 
 def _get_progress_for_user(queue, user):
@@ -71,11 +74,12 @@ class AnnotateQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
 
     def get(self, request, team_slug: str, pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        item = _get_next_item(queue, request.user)
+        skip_item_id = request.GET.get("skip")
+        item = _get_next_item(queue, request.user, skip_item_id=skip_item_id)
 
         if item is None:
             messages.info(request, "No more items to annotate in this queue.")
-            return redirect("human_annotations:queue_home", team_slug=team_slug)
+            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
         FormClass = build_annotation_form(queue.schema)
         form = FormClass()
@@ -148,4 +152,9 @@ class FlagItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         item.status = AnnotationItemStatus.FLAGGED
         item.save(update_fields=["status"])
         messages.info(request, "Item flagged for review.")
-        return redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)
+        redirect_url = redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)
+        if request.headers.get("HX-Request"):
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = redirect_url.url
+            return response
+        return redirect_url

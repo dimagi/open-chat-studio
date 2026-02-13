@@ -1,15 +1,23 @@
 import django_tables2 as tables
 
+from apps.generics import actions
+
 from .models import AnnotationItem, AnnotationQueue, AnnotationSchema
 
 
 class AnnotationSchemaTable(tables.Table):
-    name = tables.Column(linkify=True)
+    name = tables.Column(linkify=True, attrs={"a": {"class": "link"}})
     field_count = tables.Column(verbose_name="Fields", empty_values=(), orderable=False)
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="human_annotations:schema_edit"),
+            actions.delete_action(url_name="human_annotations:schema_delete"),
+        ]
+    )
 
     class Meta:
         model = AnnotationSchema
-        fields = ["name", "description", "field_count", "created_at"]
+        fields = ["name", "description", "field_count", "created_at", "actions"]
         attrs = {"class": "table"}
 
     def render_field_count(self, record):
@@ -17,12 +25,18 @@ class AnnotationSchemaTable(tables.Table):
 
 
 class AnnotationQueueTable(tables.Table):
-    name = tables.Column(linkify=True)
+    name = tables.Column(linkify=True, attrs={"a": {"class": "link"}})
     progress = tables.Column(verbose_name="Progress", empty_values=(), orderable=False)
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(url_name="human_annotations:queue_edit"),
+            actions.delete_action(url_name="human_annotations:queue_delete"),
+        ]
+    )
 
     class Meta:
         model = AnnotationQueue
-        fields = ["name", "schema", "status", "num_reviews_required", "progress", "created_at"]
+        fields = ["name", "schema", "status", "num_reviews_required", "progress", "created_at", "actions"]
         attrs = {"class": "table"}
 
     def render_progress(self, record):

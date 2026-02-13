@@ -275,6 +275,28 @@ def test_submit_annotation_duplicate(client, team_with_users, queue, user):
 
 
 @pytest.mark.django_db()
+def test_skip_item(client, team_with_users, queue):
+    item1 = AnnotationItemFactory(queue=queue, team=team_with_users)
+    item2 = AnnotationItemFactory(
+        queue=queue,
+        team=team_with_users,
+        item_type="external",
+        session=None,
+        external_data={"key": "value"},
+    )
+    # Without skip, should get item1 (oldest)
+    url = reverse("human_annotations:annotate_queue", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert response.context["item"].pk == item1.pk
+
+    # With skip=item1, should get item2
+    response = client.get(url, {"skip": item1.pk})
+    assert response.status_code == 200
+    assert response.context["item"].pk == item2.pk
+
+
+@pytest.mark.django_db()
 def test_flag_item(client, team_with_users, queue):
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
     url = reverse(
@@ -283,6 +305,20 @@ def test_flag_item(client, team_with_users, queue):
     )
     response = client.post(url)
     assert response.status_code == 302
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.FLAGGED
+
+
+@pytest.mark.django_db()
+def test_flag_item_htmx(client, team_with_users, queue):
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    url = reverse(
+        "human_annotations:flag_item",
+        args=[team_with_users.slug, queue.pk, item.pk],
+    )
+    response = client.post(url, HTTP_HX_REQUEST="true")
+    assert response.status_code == 204
+    assert "HX-Redirect" in response
     item.refresh_from_db()
     assert item.status == AnnotationItemStatus.FLAGGED
 

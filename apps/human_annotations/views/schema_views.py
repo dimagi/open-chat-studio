@@ -42,7 +42,7 @@ class CreateAnnotationSchema(LoginAndTeamRequiredMixin, CreateView, PermissionRe
     permission_required = "human_annotations.add_annotationschema"
     model = AnnotationSchema
     form_class = AnnotationSchemaForm
-    template_name = "generic/object_form.html"
+    template_name = "human_annotations/schema_form.html"
     extra_context = {
         "title": "Create Annotation Schema",
         "button_text": "Create",
@@ -61,7 +61,7 @@ class EditAnnotationSchema(LoginAndTeamRequiredMixin, UpdateView, PermissionRequ
     permission_required = "human_annotations.change_annotationschema"
     model = AnnotationSchema
     form_class = AnnotationSchemaForm
-    template_name = "generic/object_form.html"
+    template_name = "human_annotations/schema_form.html"
     extra_context = {
         "title": "Edit Annotation Schema",
         "button_text": "Update",
@@ -70,6 +70,11 @@ class EditAnnotationSchema(LoginAndTeamRequiredMixin, UpdateView, PermissionRequ
 
     def get_queryset(self):
         return AnnotationSchema.objects.filter(team=self.request.team)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["existing_schema"] = self.object.schema
+        return context
 
     def get_success_url(self):
         return reverse("human_annotations:schema_home", args=[self.request.team.slug])

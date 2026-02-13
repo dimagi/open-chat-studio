@@ -17,19 +17,22 @@ from .models import AnnotationQueue, AnnotationSchema
 
 class AnnotationSchemaForm(forms.ModelForm):
     schema = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 10, "class": "textarea textarea-bordered font-mono text-sm"}),
-        help_text=(
-            "JSON dict of field_name -> FieldDefinition. "
-            'Example: {"score": {"type": "int", "description": "Score 1-5", "ge": 1, "le": 5}}'
-        ),
+        widget=forms.HiddenInput(),
+        required=False,
     )
 
     class Meta:
         model = AnnotationSchema
         fields = ["name", "description", "schema"]
+        widgets = {
+            "description": forms.TextInput(attrs={"placeholder": "Optional description"}),
+        }
 
     def clean_schema(self):
         raw = self.cleaned_data["schema"]
+        if not raw:
+            raise ValidationError("Schema must have at least one field")
+
         if isinstance(raw, dict):
             data = raw
         else:
@@ -59,6 +62,7 @@ class AnnotationQueueForm(forms.ModelForm):
         model = AnnotationQueue
         fields = ["name", "description", "schema", "num_reviews_required"]
         widgets = {
+            "description": forms.TextInput(attrs={"placeholder": "Optional description"}),
             "num_reviews_required": forms.NumberInput(attrs={"min": 1, "max": 10}),
         }
 

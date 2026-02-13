@@ -1,5 +1,15 @@
 {% extends "web/app/app_base.html" %}
 
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'human_annotations:queue_home' request.team.slug %}">Annotation Queues</a></li>
+      <li><a href="{% url 'human_annotations:queue_detail' request.team.slug queue.pk %}">{{ queue.name }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">Annotate</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
 {% block app %}
 <div class="flex flex-col gap-4 max-w-4xl mx-auto">
   <div class="flex justify-between items-center">
@@ -60,7 +70,7 @@
           {% endfor %}
           <div class="flex gap-2 mt-4">
             <button type="submit" class="btn btn-primary btn-sm">Submit</button>
-            <a href="{% url 'human_annotations:annotate_queue' team_slug=request.team.slug pk=queue.pk %}"
+            <a href="{% url 'human_annotations:annotate_queue' request.team.slug queue.pk %}?skip={{ item.pk }}"
                class="btn btn-ghost btn-sm">Skip</a>
             <button type="button"
                     class="btn btn-warning btn-sm btn-outline"
