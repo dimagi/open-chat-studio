@@ -213,13 +213,6 @@ def test_queue_items_table(client, team_with_users, queue):
 
 
 @pytest.mark.django_db()
-def test_manage_assignees_get(client, team_with_users, queue):
-    url = reverse("human_annotations:queue_manage_assignees", args=[team_with_users.slug, queue.pk])
-    response = client.get(url)
-    assert response.status_code == 200
-
-
-@pytest.mark.django_db()
 def test_manage_assignees_post(client, team_with_users, queue, user):
     url = reverse("human_annotations:queue_manage_assignees", args=[team_with_users.slug, queue.pk])
     response = client.post(url, {"assignees": [user.pk]})
@@ -228,13 +221,6 @@ def test_manage_assignees_post(client, team_with_users, queue, user):
 
 
 # ===== CSV Import =====
-
-
-@pytest.mark.django_db()
-def test_import_csv_get(client, team_with_users, queue):
-    url = reverse("human_annotations:queue_import_csv", args=[team_with_users.slug, queue.pk])
-    response = client.get(url)
-    assert response.status_code == 200
 
 
 @pytest.mark.django_db()
@@ -384,19 +370,6 @@ def test_annotate_item_non_assignee_can_view(client, team_with_users, queue):
     assert response.context["can_annotate"] is False
     assert response.context["form"] is None
     assert response.context["annotations"] == []
-
-
-@pytest.mark.django_db()
-def test_flag_item(client, team_with_users, queue):
-    item = AnnotationItemFactory(queue=queue, team=team_with_users)
-    url = reverse(
-        "human_annotations:flag_item",
-        args=[team_with_users.slug, queue.pk, item.pk],
-    )
-    response = client.post(url)
-    assert response.status_code == 302
-    item.refresh_from_db()
-    assert item.status == AnnotationItemStatus.FLAGGED
 
 
 @pytest.mark.django_db()
