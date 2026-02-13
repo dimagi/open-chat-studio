@@ -2,6 +2,7 @@ import django.db
 import pytest
 
 from apps.human_annotations.models import (
+    Annotation,
     AnnotationItem,
     AnnotationItemStatus,
     AnnotationItemType,
@@ -150,3 +151,81 @@ def test_item_prevents_duplicate_session_in_queue(team):
             item_type=AnnotationItemType.SESSION,
             session=session,
         )
+
+
+@pytest.mark.django_db()
+def test_create_annotation(team):
+    user = team.members.first()
+    schema = AnnotationSchema.objects.create(
+        team=team,
+        name="Test",
+        schema={"score": {"type": "int", "description": "Score", "ge": 1, "le": 5}},
+    )
+    queue = AnnotationQueue.objects.create(
+        team=team,
+        name="Q",
+        schema=schema,
+        created_by=user,
+        num_reviews_required=2,
+    )
+    session = ExperimentSessionFactory(team=team, chat__team=team)
+    item = AnnotationItem.objects.create(
+        queue=queue,
+        team=team,
+        item_type=AnnotationItemType.SESSION,
+        session=session,
+    )
+
+    Annotation.objects.create(item=item, team=team, reviewer=user, data={"score": 4})
+    item.refresh_from_db()
+    assert item.review_count == 1
+    assert item.status == AnnotationItemStatus.IN_PROGRESS
+
+
+@pytest.mark.django_db()
+def test_annotation_completes_item_when_reviews_met(team):
+    user1 = team.members.first()
+    user2 = team.members.last()
+    schema = AnnotationSchema.objects.create(
+        team=team,
+        name="Test",
+        schema={"score": {"type": "int", "description": "Score", "ge": 1, "le": 5}},
+    )
+    queue = AnnotationQueue.objects.create(
+        team=team,
+        name="Q",
+        schema=schema,
+        created_by=user1,
+        num_reviews_required=2,
+    )
+    session = ExperimentSessionFactory(team=team, chat__team=team)
+    item = AnnotationItem.objects.create(
+        queue=queue,
+        team=team,
+        item_type=AnnotationItemType.SESSION,
+        session=session,
+    )
+
+    Annotation.objects.create(item=item, team=team, reviewer=user1, data={"score": 4})
+    Annotation.objects.create(item=item, team=team, reviewer=user2, data={"score": 3})
+    item.refresh_from_db()
+    assert item.review_count == 2
+    assert item.status == AnnotationItemStatus.COMPLETED
+
+
+@pytest.mark.django_db()
+def test_annotation_prevents_duplicate_reviewer(team):
+    user = team.members.first()
+    schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema=schema, created_by=user)
+    session = ExperimentSessionFactory(team=team, chat__team=team)
+    item = AnnotationItem.objects.create(
+        queue=queue,
+        team=team,
+        item_type=AnnotationItemType.SESSION,
+        session=session,
+    )
+
+    Annotation.objects.create(item=item, team=team, reviewer=user, data={})
+    with pytest.raises(django.db.IntegrityError):
+        Annotation.objects.create(item=item, team=team, reviewer=user, data={})

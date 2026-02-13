@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AnnotationItem, AnnotationQueue, AnnotationSchema
+from .models import Annotation, AnnotationItem, AnnotationQueue, AnnotationSchema
 
 
 @admin.register(AnnotationSchema)
@@ -21,3 +21,9 @@ class AnnotationQueueAdmin(admin.ModelAdmin):
 class AnnotationItemAdmin(admin.ModelAdmin):
     list_display = ("id", "queue", "item_type", "status", "review_count", "created_at")
     list_filter = ("status", "item_type")
+
+
+@admin.register(Annotation)
+class AnnotationAdmin(admin.ModelAdmin):
+    list_display = ("id", "item", "reviewer", "status", "created_at")
+    list_filter = ("status",)

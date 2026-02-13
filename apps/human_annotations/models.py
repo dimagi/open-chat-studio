@@ -150,3 +150,45 @@ class AnnotationItem(BaseTeamModel):
         elif self.review_count > 0:
             self.status = AnnotationItemStatus.IN_PROGRESS
         self.save(update_fields=["status"])
+
+
+class AnnotationStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+
+
+class Annotation(BaseTeamModel):
+    """A single review/annotation submitted by a reviewer for an item."""
+
+    item = models.ForeignKey(AnnotationItem, on_delete=models.CASCADE, related_name="annotations")
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="annotations",
+    )
+    data = SanitizedJSONField(default=dict, help_text="Annotation data matching the queue's schema")
+    status = models.CharField(
+        max_length=20,
+        choices=AnnotationStatus.choices,
+        default=AnnotationStatus.SUBMITTED,
+    )
+
+    class Meta:
+        unique_together = ("item", "reviewer")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Annotation by {self.reviewer} on item {self.item_id}"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and self.status == AnnotationStatus.SUBMITTED:
+            self._update_item_review_count()
+
+    def _update_item_review_count(self):
+        """Increment item review count and update status."""
+        count = self.item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
+        self.item.review_count = count
+        self.item.save(update_fields=["review_count"])
+        self.item.update_status()
