@@ -76,3 +76,77 @@ class AnnotationQueue(BaseTeamModel):
         completed = self.items.filter(status=AnnotationItemStatus.COMPLETED).count()
         percent = round((completed / total) * 100) if total > 0 else 0
         return {"total": total, "completed": completed, "percent": percent}
+
+
+class AnnotationItemType(models.TextChoices):
+    SESSION = "session", "Session"
+    MESSAGE = "message", "Message"
+    EXTERNAL = "external", "External Data"
+
+
+class AnnotationItem(BaseTeamModel):
+    """A single item in an annotation queue to be reviewed."""
+
+    queue = models.ForeignKey(AnnotationQueue, on_delete=models.CASCADE, related_name="items")
+    item_type = models.CharField(max_length=20, choices=AnnotationItemType.choices)
+    status = models.CharField(
+        max_length=20,
+        choices=AnnotationItemStatus.choices,
+        default=AnnotationItemStatus.PENDING,
+    )
+
+    # Linked objects (nullable depending on item_type)
+    session = models.ForeignKey(
+        "experiments.ExperimentSession",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="annotation_items",
+    )
+    message = models.ForeignKey(
+        "chat.ChatMessage",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="annotation_items",
+    )
+
+    # For external/CSV data
+    external_data = SanitizedJSONField(default=dict, blank=True)
+
+    # Denormalized review count for efficient querying
+    review_count = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["queue", "status"]),
+            models.Index(fields=["queue", "created_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["queue", "session"],
+                condition=models.Q(session__isnull=False),
+                name="unique_session_per_queue",
+            ),
+            models.UniqueConstraint(
+                fields=["queue", "message"],
+                condition=models.Q(message__isnull=False),
+                name="unique_message_per_queue",
+            ),
+        ]
+
+    def __str__(self):
+        if self.session_id:
+            return f"Session {self.session.external_id}"
+        if self.message_id:
+            return f"Message {self.message_id}"
+        return f"External item {self.id}"
+
+    def update_status(self):
+        """Update item status based on review count vs queue requirement."""
+        if self.review_count >= self.queue.num_reviews_required:
+            self.status = AnnotationItemStatus.COMPLETED
+        elif self.review_count > 0:
+            self.status = AnnotationItemStatus.IN_PROGRESS
+        self.save(update_fields=["status"])

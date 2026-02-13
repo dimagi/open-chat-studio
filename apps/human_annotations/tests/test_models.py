@@ -1,7 +1,15 @@
 import django.db
 import pytest
 
-from apps.human_annotations.models import AnnotationQueue, AnnotationSchema, QueueStatus
+from apps.human_annotations.models import (
+    AnnotationItem,
+    AnnotationItemStatus,
+    AnnotationItemType,
+    AnnotationQueue,
+    AnnotationSchema,
+    QueueStatus,
+)
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -73,7 +81,6 @@ def test_create_annotation_queue(team):
 
 
 @pytest.mark.django_db()
-@pytest.mark.xfail(reason="AnnotationItem model not yet created")
 def test_queue_progress_empty(team):
     schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
     user = team.members.first()
@@ -87,3 +94,59 @@ def test_queue_progress_empty(team):
     assert progress["total"] == 0
     assert progress["completed"] == 0
     assert progress["percent"] == 0
+
+
+@pytest.mark.django_db()
+def test_create_item_from_session(team):
+    schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
+    user = team.members.first()
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema=schema, created_by=user)
+    session = ExperimentSessionFactory(team=team, chat__team=team)
+
+    item = AnnotationItem.objects.create(
+        queue=queue,
+        team=team,
+        item_type=AnnotationItemType.SESSION,
+        session=session,
+    )
+    assert item.status == AnnotationItemStatus.PENDING
+    assert item.session == session
+    assert item.review_count == 0
+
+
+@pytest.mark.django_db()
+def test_create_item_from_external_data(team):
+    schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
+    user = team.members.first()
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema=schema, created_by=user)
+
+    item = AnnotationItem.objects.create(
+        queue=queue,
+        team=team,
+        item_type=AnnotationItemType.EXTERNAL,
+        external_data={"input": "Hello", "output": "Hi there!", "context": "greeting"},
+    )
+    assert item.item_type == AnnotationItemType.EXTERNAL
+    assert item.external_data["input"] == "Hello"
+
+
+@pytest.mark.django_db()
+def test_item_prevents_duplicate_session_in_queue(team):
+    schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
+    user = team.members.first()
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema=schema, created_by=user)
+    session = ExperimentSessionFactory(team=team, chat__team=team)
+
+    AnnotationItem.objects.create(
+        queue=queue,
+        team=team,
+        item_type=AnnotationItemType.SESSION,
+        session=session,
+    )
+    with pytest.raises(django.db.IntegrityError):
+        AnnotationItem.objects.create(
+            queue=queue,
+            team=team,
+            item_type=AnnotationItemType.SESSION,
+            session=session,
+        )
