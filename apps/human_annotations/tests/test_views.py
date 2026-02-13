@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.test import Client
 from django.urls import reverse
 
@@ -19,6 +20,8 @@ from apps.utils.factories.human_annotations import (
     AnnotationSchemaFactory,
 )
 from apps.utils.factories.team import TeamWithUsersFactory
+
+User = get_user_model()
 
 
 @pytest.fixture()
@@ -359,7 +362,28 @@ def test_annotate_item_already_annotated(client, team_with_users, queue, user):
         args=[team_with_users.slug, queue.pk, item.pk],
     )
     response = client.get(url)
-    assert response.status_code == 302
+    assert response.status_code == 200
+    assert response.context["can_annotate"] is False
+    assert response.context["form"] is None
+    assert len(response.context["annotations"]) == 1
+    assert response.context["annotations"][0]["reviewer"] == user
+
+
+@pytest.mark.django_db()
+def test_annotate_item_non_assignee_can_view(client, team_with_users, queue):
+    """Non-assignees can view item content but not the annotation form."""
+    other_user = User.objects.create_user(username="other", password="test")
+    queue.assignees.add(other_user)
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    url = reverse(
+        "human_annotations:annotate_item",
+        args=[team_with_users.slug, queue.pk, item.pk],
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    assert response.context["can_annotate"] is False
+    assert response.context["form"] is None
+    assert response.context["annotations"] == []
 
 
 @pytest.mark.django_db()

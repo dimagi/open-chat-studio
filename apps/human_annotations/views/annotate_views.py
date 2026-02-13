@@ -113,6 +113,7 @@ class AnnotateQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 "queue": queue,
                 "item": item,
                 "form": form,
+                "can_annotate": True,
                 "progress": progress,
                 "item_content": item_content,
                 "active_tab": "annotation_queues",
@@ -127,9 +128,6 @@ class AnnotateItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
 
     def get(self, request, team_slug: str, pk: int, item_pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        if not _check_assignee_access(queue, request.user):
-            messages.error(request, "You are not assigned to this queue.")
-            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
         item = get_object_or_404(
             AnnotationItem.objects.select_related(
                 "session__chat", "session__participant", "session__experiment", "message"
@@ -138,13 +136,29 @@ class AnnotateItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             queue=queue,
         )
 
+        can_annotate = _check_assignee_access(queue, request.user)
         already_annotated = Annotation.objects.filter(item=item, reviewer=request.user).exists()
         if already_annotated:
-            messages.info(request, "You've already annotated this item.")
-            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
+            can_annotate = False
 
-        FormClass = build_annotation_form(queue.schema)
-        form = FormClass()
+        form = None
+        annotations = []
+        schema_fields = list(queue.schema.schema.keys())
+        if can_annotate:
+            FormClass = build_annotation_form(queue.schema)
+            form = FormClass()
+        else:
+            annotations = [
+                {
+                    "reviewer": ann.reviewer,
+                    "created_at": ann.created_at,
+                    "fields": [(name, ann.data.get(name, "")) for name in schema_fields],
+                }
+                for ann in item.annotations.filter(status=AnnotationStatus.SUBMITTED)
+                .select_related("reviewer")
+                .order_by("created_at")
+            ]
+
         progress = _get_progress_for_user(queue, request.user)
         item_content = _get_item_display_content(item)
 
@@ -155,6 +169,8 @@ class AnnotateItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 "queue": queue,
                 "item": item,
                 "form": form,
+                "can_annotate": can_annotate,
+                "annotations": annotations,
                 "progress": progress,
                 "item_content": item_content,
                 "active_tab": "annotation_queues",
@@ -199,6 +215,7 @@ class SubmitAnnotation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
                     "queue": queue,
                     "item": item,
                     "form": form,
+                    "can_annotate": True,
                     "progress": progress,
                     "item_content": item_content,
                     "active_tab": "annotation_queues",
