@@ -83,7 +83,7 @@ def create_notification(
     event_data = event_data or {}
     identifier = create_identifier(slug, event_data)
     event_type, _created = EventType.objects.get_or_create(
-        team=team, identifier=identifier, event_data=event_data, level=level
+        team=team, identifier=identifier, defaults={"event_data": event_data, "level": level}
     )
 
     notification_event = NotificationEvent.objects.create(
