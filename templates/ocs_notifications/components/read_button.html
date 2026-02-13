@@ -1,5 +1,5 @@
 <button
-  class="btn btn-ghost btn-sm"
+  class="btn {% if record.read %}btn-ghost{% endif %} btn-sm"
   hx-post="{% url 'ocs_notifications:toggle_notification_read' record.team.slug record.id %}"
   hx-swap="outerHTML"
   hx-target="#record-{{ record.id }}"
