@@ -7,7 +7,7 @@ The `ocs_notifications` app provides a **team-scoped notification system** for O
 This system is designed to:
 
 - **Alert team members** about important events (custom action health checks, evaluations, data syncs, etc.)
-- **Create notifications without per-user bookkeeping** (read/unread, mute, do-not-disturb)
+- **Handle per-user bookkeeping automatically** (read/unread, mute, do-not-disturb)
 - **Support multi-channel delivery** with granular user preferences (in-app, email, level thresholds)
 - **Reduce notification fatigue** through deduplication, muting, and severity filtering
 - **Persist notifications** so users can view, filter, and manage them later
