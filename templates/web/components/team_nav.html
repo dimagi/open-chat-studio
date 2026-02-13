@@ -146,4 +146,22 @@
       </ul>
     </li>
   {% endflag %}
+  {% flag "flag_human_annotations" %}
+    <li>
+      <a href="{% url 'human_annotations:queue_home' request.team.slug %}"
+         {% if active_tab == 'annotation_queues' %}class="menu-active"{% endif %}>
+        <i class="fa-solid fa-pen-to-square"></i>
+        {% translate "Annotations" %}
+      </a>
+      <ul>
+        <li>
+          <a href="{% url 'human_annotations:schema_home' request.team.slug %}"
+             {% if active_tab == 'annotation_schemas' %}class="menu-active"{% endif %}>
+            <i class="fa-solid fa-list-check"></i>
+            {% translate "Schemas" %}
+          </a>
+        </li>
+      </ul>
+    </li>
+  {% endflag %}
 {% endif %}
