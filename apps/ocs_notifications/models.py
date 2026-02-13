@@ -88,7 +88,17 @@ class EventUserQuerySet(models.QuerySet):
 
 class EventUserManager(models.Manager.from_queryset(EventUserQuerySet)):
     def get_queryset(self) -> models.QuerySet:
-        return super().get_queryset().annotate(is_muted=models.Q(muted_until__gt=timezone.now()))
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                is_muted=models.Case(
+                    models.When(muted_until__gt=timezone.now(), then=True),
+                    default=False,
+                    output_field=models.BooleanField(),
+                )
+            )
+        )
 
 
 class EventUser(BaseTeamModel):
