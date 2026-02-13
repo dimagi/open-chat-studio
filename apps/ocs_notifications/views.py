@@ -121,11 +121,22 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
 
         # Get duration from POST data (in hours)
         duration_param = request.POST.get("duration")
+        if duration_param not in TIMEDELTA_MAP:
+            messages.error(request, "Invalid duration for muting notifications.")
+            return render(
+                request,
+                "ocs_notifications/components/mute_button.html",
+                context={
+                    "record": event_user,
+                    "is_muted": event_user.is_muted,
+                    "muted_until": event_user.muted_until,
+                },
+            )
         event_user = mute_notification(
             user=request.user,
             team=request.team,
             event_type=event_user.event_type,
-            timedelta=TIMEDELTA_MAP.get(duration_param),
+            timedelta=TIMEDELTA_MAP[duration_param],
         )
 
         return render(
