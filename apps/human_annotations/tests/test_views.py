@@ -404,3 +404,105 @@ def test_export_jsonl(client, team_with_users, queue, user):
     assert response["Content-Type"] == "application/jsonl"
     record = json.loads(response.content.decode().strip())
     assert record["annotation"]["quality_score"] == 5
+
+
+# ===== Multi-Review =====
+
+
+@pytest.mark.django_db()
+def test_multi_review_second_user_can_annotate(team_with_users, schema):
+    """After user1 annotates all items, user2 should still see them when num_reviews_required > 1."""
+    user1 = team_with_users.members.first()
+    user2 = team_with_users.members.last()
+    assert user1 != user2
+
+    queue = AnnotationQueueFactory(team=team_with_users, schema=schema, created_by=user1, num_reviews_required=2)
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+
+    # User 1 submits annotation
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user1,
+        data={"quality_score": 4, "notes": "Good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    item.refresh_from_db()
+    assert item.review_count == 1
+    assert item.status == AnnotationItemStatus.IN_PROGRESS
+
+    # User 2 should be able to see and annotate the item
+    client2 = Client()
+    client2.force_login(user2)
+    url = reverse("human_annotations:annotate_queue", args=[team_with_users.slug, queue.pk])
+    response = client2.get(url)
+    assert response.status_code == 200
+    assert response.context["item"].pk == item.pk
+
+
+@pytest.mark.django_db()
+def test_multi_review_item_completed_after_enough_reviews(team_with_users, schema):
+    """Item should only be COMPLETED after reaching num_reviews_required."""
+    user1 = team_with_users.members.first()
+    user2 = team_with_users.members.last()
+
+    queue = AnnotationQueueFactory(team=team_with_users, schema=schema, created_by=user1, num_reviews_required=2)
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+
+    # First review
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user1,
+        data={"quality_score": 4, "notes": "OK"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.IN_PROGRESS
+
+    # Second review - should complete
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user2,
+        data={"quality_score": 5, "notes": "Great"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    item.refresh_from_db()
+    assert item.review_count == 2
+    assert item.status == AnnotationItemStatus.COMPLETED
+
+
+@pytest.mark.django_db()
+def test_progress_accounts_for_multiple_reviews(team_with_users, schema):
+    """Progress should reflect review-level progress, not just item completion."""
+    user1 = team_with_users.members.first()
+
+    queue = AnnotationQueueFactory(team=team_with_users, schema=schema, created_by=user1, num_reviews_required=2)
+    AnnotationItemFactory(queue=queue, team=team_with_users)
+    item2 = AnnotationItemFactory(
+        queue=queue,
+        team=team_with_users,
+        item_type="external",
+        session=None,
+        external_data={"k": "v"},
+    )
+
+    # No reviews yet
+    progress = queue.get_progress()
+    assert progress["total_items"] == 2
+    assert progress["total_reviews_needed"] == 4
+    assert progress["reviews_done"] == 0
+    assert progress["percent"] == 0
+
+    # One review on item2
+    Annotation.objects.create(
+        item=item2,
+        team=team_with_users,
+        reviewer=user1,
+        data={"quality_score": 3, "notes": "OK"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    progress = queue.get_progress()
+    assert progress["reviews_done"] == 1
+    assert progress["percent"] == 25

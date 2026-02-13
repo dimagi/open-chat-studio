@@ -92,8 +92,8 @@ def test_queue_progress_empty(team):
         created_by=user,
     )
     progress = queue.get_progress()
-    assert progress["total"] == 0
-    assert progress["completed"] == 0
+    assert progress["total_items"] == 0
+    assert progress["completed_items"] == 0
     assert progress["percent"] == 0
 
 

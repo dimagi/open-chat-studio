@@ -79,11 +79,25 @@ class AnnotationQueue(BaseTeamModel):
         return reverse("human_annotations:queue_detail", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_progress(self):
-        """Return progress stats: total items, completed, percent."""
-        total = self.items.count()
-        completed = self.items.filter(status=AnnotationItemStatus.COMPLETED).count()
-        percent = round((completed / total) * 100) if total > 0 else 0
-        return {"total": total, "completed": completed, "percent": percent}
+        """Return progress stats including review-level progress for multi-review queues."""
+        from django.db.models import Sum
+
+        total_items = self.items.count()
+        completed_items = self.items.filter(status=AnnotationItemStatus.COMPLETED).count()
+        flagged_items = self.items.filter(status=AnnotationItemStatus.FLAGGED).count()
+
+        total_reviews_needed = total_items * self.num_reviews_required
+        reviews_done = self.items.aggregate(total=Sum("review_count"))["total"] or 0
+        review_percent = round((reviews_done / total_reviews_needed) * 100) if total_reviews_needed > 0 else 0
+
+        return {
+            "total_items": total_items,
+            "completed_items": completed_items,
+            "flagged_items": flagged_items,
+            "total_reviews_needed": total_reviews_needed,
+            "reviews_done": reviews_done,
+            "percent": review_percent,
+        }
 
 
 class AnnotationItemType(models.TextChoices):

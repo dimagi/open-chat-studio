@@ -40,10 +40,13 @@
     <div class="card-body">
       <h3 class="card-title text-sm">Progress</h3>
       <progress class="progress progress-primary w-full" value="{{ progress.percent }}" max="100"></progress>
-      <p class="text-sm text-gray-500">
-        {{ progress.completed }} of {{ progress.total }} items completed ({{ progress.percent }}%)
-      </p>
-      <p class="text-sm text-gray-500">Reviews required per item: {{ object.num_reviews_required }}</p>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500 mt-1">
+        <span>{{ progress.reviews_done }}/{{ progress.total_reviews_needed }} reviews ({{ progress.percent }}%)</span>
+        <span>{{ progress.completed_items }}/{{ progress.total_items }} items completed</span>
+        {% if progress.flagged_items %}
+          <span class="text-warning">{{ progress.flagged_items }} flagged</span>
+        {% endif %}
+      </div>
     </div>
   </div>
 

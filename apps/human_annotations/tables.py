@@ -79,7 +79,7 @@ class AnnotationQueueTable(tables.Table):
 
     def render_progress(self, record):
         progress = record.get_progress()
-        return f"{progress['completed']}/{progress['total']} ({progress['percent']}%)"
+        return f"{progress['reviews_done']}/{progress['total_reviews_needed']} reviews ({progress['percent']}%)"
 
 
 class AnnotationItemTable(tables.Table):
@@ -95,7 +95,7 @@ class AnnotationItemTable(tables.Table):
         verbose_name="Item",
     )
     item_type = tables.Column(verbose_name="Type")
-    status = tables.Column()
+    status = tables.Column(empty_values=())
     review_count = tables.Column(verbose_name="Reviews")
     annotations_summary = tables.Column(verbose_name="Annotations", empty_values=(), orderable=False)
 
@@ -103,6 +103,25 @@ class AnnotationItemTable(tables.Table):
         model = AnnotationItem
         fields = ["description", "item_type", "status", "review_count", "annotations_summary", "created_at"]
         attrs = {"class": "table"}
+
+    _STATUS_BADGE = {
+        "pending": "badge-ghost",
+        "in_progress": "badge-info",
+        "completed": "badge-success",
+        "flagged": "badge-warning",
+    }
+
+    def render_status(self, record):
+        badge_class = self._STATUS_BADGE.get(record.status, "badge-ghost")
+        label = record.get_status_display()
+        if record.status == "flagged" and record.flag_reason:
+            return format_html(
+                '<span class="badge badge-soft {} tooltip tooltip-bottom" data-tip="{}">{}</span>',
+                badge_class,
+                record.flag_reason,
+                label,
+            )
+        return format_html('<span class="badge badge-soft {}">{}</span>', badge_class, label)
 
     def render_review_count(self, record):
         return f"{record.review_count}/{record.queue.num_reviews_required}"
