@@ -390,6 +390,50 @@ def test_flag_item_with_reason(client, team_with_users, queue):
 
 
 @pytest.mark.django_db()
+def test_unflag_item(client, team_with_users, queue):
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    item.status = AnnotationItemStatus.FLAGGED
+    item.flag_reason = "Bad data"
+    item.save(update_fields=["status", "flag_reason"])
+
+    url = reverse(
+        "human_annotations:unflag_item",
+        args=[team_with_users.slug, queue.pk, item.pk],
+    )
+    response = client.post(url)
+    assert response.status_code == 302
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.PENDING
+    assert item.flag_reason == ""
+
+
+@pytest.mark.django_db()
+def test_unflag_item_with_reviews(client, team_with_users, queue, user):
+    """Unflagging an item with existing reviews should set status to IN_PROGRESS."""
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 3, "notes": "OK"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    item.status = AnnotationItemStatus.FLAGGED
+    item.flag_reason = "Needs check"
+    item.save(update_fields=["status", "flag_reason"])
+
+    url = reverse(
+        "human_annotations:unflag_item",
+        args=[team_with_users.slug, queue.pk, item.pk],
+    )
+    response = client.post(url)
+    assert response.status_code == 302
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.COMPLETED  # num_reviews_required=1
+    assert item.flag_reason == ""
+
+
+@pytest.mark.django_db()
 def test_flag_item_htmx(client, team_with_users, queue):
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
     url = reverse(

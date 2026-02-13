@@ -174,6 +174,8 @@ class AnnotationItem(BaseTeamModel):
             self.status = AnnotationItemStatus.COMPLETED
         elif self.review_count > 0:
             self.status = AnnotationItemStatus.IN_PROGRESS
+        else:
+            self.status = AnnotationItemStatus.PENDING
         self.save(update_fields=["status"])
 
 

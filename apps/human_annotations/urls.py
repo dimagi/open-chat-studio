@@ -22,6 +22,7 @@ urlpatterns = [
         name="submit_annotation",
     ),
     path("queue/<int:pk>/item/<int:item_pk>/flag/", annotate_views.FlagItem.as_view(), name="flag_item"),
+    path("queue/<int:pk>/item/<int:item_pk>/unflag/", annotate_views.UnflagItem.as_view(), name="unflag_item"),
 ]
 
 # CRUD views for schemas and queues

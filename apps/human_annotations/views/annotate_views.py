@@ -192,3 +192,21 @@ class FlagItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
             response["HX-Redirect"] = redirect_url.url
             return response
         return redirect_url
+
+
+class UnflagItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "human_annotations.change_annotationitem"
+
+    def post(self, request, team_slug: str, pk: int, item_pk: int):
+        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
+        item.flag_reason = ""
+        item.save(update_fields=["flag_reason"])
+        item.update_status()
+        messages.info(request, "Item unflagged.")
+        redirect_url = redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
+        if request.headers.get("HX-Request"):
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = redirect_url.url
+            return response
+        return redirect_url

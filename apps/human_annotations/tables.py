@@ -1,4 +1,5 @@
 import django_tables2 as tables
+from django.middleware.csrf import get_token
 from django.urls import reverse
 from django.utils.html import format_html
 
@@ -114,12 +115,30 @@ class AnnotationItemTable(tables.Table):
     def render_status(self, record):
         badge_class = self._STATUS_BADGE.get(record.status, "badge-ghost")
         label = record.get_status_display()
-        if record.status == "flagged" and record.flag_reason:
+        if record.status == "flagged":
+            if record.flag_reason:
+                badge = format_html(
+                    '<span class="badge badge-soft {} tooltip tooltip-bottom" data-tip="{}">{}</span>',
+                    badge_class,
+                    record.flag_reason,
+                    label,
+                )
+            else:
+                badge = format_html('<span class="badge badge-soft {}">{}</span>', badge_class, label)
+            unflag_url = reverse(
+                "human_annotations:unflag_item",
+                args=[self.request.team.slug, record.queue_id, record.pk],
+            )
+            csrf = get_token(self.request)
             return format_html(
-                '<span class="badge badge-soft {} tooltip tooltip-bottom" data-tip="{}">{}</span>',
-                badge_class,
-                record.flag_reason,
-                label,
+                '<div class="flex items-center gap-1">{}'
+                '<form method="post" action="{}" class="inline">'
+                '<input type="hidden" name="csrfmiddlewaretoken" value="{}">'
+                '<button type="submit" class="btn btn-ghost btn-xs">unflag</button>'
+                "</form></div>",
+                badge,
+                unflag_url,
+                csrf,
             )
         return format_html('<span class="badge badge-soft {}">{}</span>', badge_class, label)
 
