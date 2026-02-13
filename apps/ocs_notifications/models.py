@@ -111,3 +111,30 @@ class NotificationMute(BaseTeamModel):
         indexes = [
             models.Index(fields=["user", "team", "muted_until"]),
         ]
+
+
+class EventType(BaseTeamModel):
+    identifier = models.CharField(max_length=40, unique=True)
+    event_data = SanitizedJSONField(default=dict, blank=True)
+    level = models.PositiveSmallIntegerField(choices=LevelChoices.choices, db_index=True)
+
+
+class NotificationEvent(BaseTeamModel):
+    # TODO: rate limiting?
+    # Notification cleanup after a certain period of time?
+    event_type = models.ForeignKey(EventType, on_delete=models.CASCADE)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    links = models.JSONField(null=True)
+
+
+class EventUser(BaseTeamModel):
+    event_type = models.ForeignKey(EventType, on_delete=models.CASCADE)
+    user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
+    read = models.BooleanField(default=False, db_index=True)
+    read_at = models.DateTimeField(null=True)
+    objects = UserNotificationObjectManager()
+    muted_until = models.DateTimeField(null=True, help_text="When the mute expires. Null means permanent mute.")
+
+    class Meta:
+        unique_together = ("event_type", "user")
