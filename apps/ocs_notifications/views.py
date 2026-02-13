@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.db.models import F
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -10,7 +9,7 @@ from apps.experiments.filters import get_filter_context_data
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
-from apps.ocs_notifications.models import UserNotification, UserNotificationPreferences
+from apps.ocs_notifications.models import EventUser, UserNotificationPreferences
 from apps.ocs_notifications.tables import UserNotificationTable
 from apps.ocs_notifications.utils import TIMEDELTA_MAP, mute_notification, toggle_notification_read, unmute_notification
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -74,15 +73,17 @@ class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
 
 
 class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
-    model = UserNotification
+    model = EventUser
     table_class = UserNotificationTable
     template_name = "table/single_table.html"
 
     def get_queryset(self):
         queryset = (
-            UserNotification.objects.with_mute_info(user=self.request.user, team=self.request.team)
-            .select_related("notification")
-            .order_by("-notification__last_event_at")
+            EventUser.objects.with_latest_event()
+            .filter(user=self.request.user, team=self.request.team)
+            .select_related("event_type")
+            .filter(last_event_at__isnull=False)
+            .order_by("-last_event_at")
         )
 
         # Apply filters
@@ -95,26 +96,24 @@ class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
 
 class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
-        user_notification = get_object_or_404(
-            UserNotification.objects.with_mute_info(user=self.request.user, team=self.request.team),
+        event_user = get_object_or_404(
+            EventUser.objects.with_latest_event(),
             id=notification_id,
             user=self.request.user,
             team__slug=team_slug,
         )
 
-        toggle_notification_read(
-            user=request.user, user_notification=user_notification, read=not user_notification.read
-        )
+        toggle_notification_read(user=request.user, event_user=event_user, read=not event_user.read)
 
-        return render_table_row(request, UserNotificationTable, user_notification)
+        return render_table_row(request, UserNotificationTable, event_user)
 
 
 class MuteNotificationView(LoginAndTeamRequiredMixin, View):
     """Mute a specific notification identifier or all notifications"""
 
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
-        user_notification = get_object_or_404(
-            UserNotification.objects.annotate(identifier=F("notification__identifier")),
+        event_user = get_object_or_404(
+            EventUser.objects.select_related("event_type"),
             id=notification_id,
             user=self.request.user,
             team__slug=team_slug,
@@ -122,10 +121,10 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
 
         # Get duration from POST data (in hours)
         duration_param = request.POST.get("duration")
-        notification_mute = mute_notification(
+        event_user = mute_notification(
             user=request.user,
             team=request.team,
-            notification_identifier=user_notification.identifier,
+            event_type=event_user.event_type,
             timedelta=TIMEDELTA_MAP.get(duration_param),
         )
 
@@ -133,9 +132,9 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
             request,
             "ocs_notifications/components/mute_button.html",
             context={
-                "record": user_notification,
-                "notification_is_muted": True,
-                "muted_until": notification_mute.muted_until,
+                "record": event_user,
+                "is_muted": True,
+                "muted_until": event_user.muted_until,
             },
         )
 
@@ -145,13 +144,13 @@ class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
 
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
         user_notification = get_object_or_404(
-            UserNotification.objects.annotate(identifier=F("notification__identifier")),
+            EventUser.objects.select_related("event_type"),
             id=notification_id,
             user=self.request.user,
             team__slug=team_slug,
         )
 
-        unmute_notification(user=request.user, team=request.team, notification_identifier=user_notification.identifier)
+        unmute_notification(user=request.user, team=request.team, event_type=user_notification.event_type)
 
         return render(
             request,

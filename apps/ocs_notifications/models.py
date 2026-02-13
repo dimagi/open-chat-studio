@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from apps.teams.models import BaseTeamModel
 from apps.utils.fields import SanitizedJSONField
@@ -11,6 +12,7 @@ class LevelChoices(models.IntegerChoices):
 
 
 class Notification(BaseTeamModel):
+    # TODO: Remove
     title = models.CharField(max_length=255)
     message = models.TextField()
     level = models.PositiveSmallIntegerField(choices=LevelChoices.choices, db_index=True)
@@ -39,13 +41,9 @@ class Notification(BaseTeamModel):
 
 
 class UserNotificationObjectManager(models.Manager):
+    # TODO: Remove
     def with_mute_info(self, user, team):
-        subquery = NotificationMute.objects.filter(
-            models.Q(muted_until__gt=models.functions.Now()) | models.Q(muted_until__isnull=True),
-            user_id=user.id,
-            team_id=team.id,
-            notification_identifier=models.OuterRef("notification__identifier"),
-        )
+        subquery = ...
         return (
             self.get_queryset()
             .filter(user=user, team=team)
@@ -57,6 +55,7 @@ class UserNotificationObjectManager(models.Manager):
 
 
 class UserNotification(BaseTeamModel):
+    # TODO: Remove
     notification = models.ForeignKey(Notification, on_delete=models.CASCADE)
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
     read = models.BooleanField(default=False, db_index=True)
@@ -98,25 +97,27 @@ class UserNotificationPreferences(BaseTeamModel):
         return f"Notification preferences for {self.user}"
 
 
-class NotificationMute(BaseTeamModel):
-    """Store user mute settings for notifications"""
-
-    user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE, related_name="notification_mutes")
-    notification_identifier = models.CharField(max_length=255, help_text="Notification identifier to mute")
-    muted_until = models.DateTimeField(null=True, help_text="When the mute expires. Null means permanent mute.")
-
-    class Meta:
-        verbose_name_plural = "Notification Mutes"
-        unique_together = ("user", "team", "notification_identifier")
-        indexes = [
-            models.Index(fields=["user", "team", "muted_until"]),
-        ]
-
-
 class EventType(BaseTeamModel):
-    identifier = models.CharField(max_length=40, unique=True)
+    """
+    When a notification is created, we should get or create an EventType with the same identifier.
+    A NotificationEvent should be created also, each time, regardless if the EventType is new or not.
+    For each user to be notified, we get or create an EventUser with the same event_type and user.
+    This allows the user to manage an event (mark as read, mute, etc.) without affecting other users that should also be
+    notified about the same event.
+    """
+
+    identifier = models.CharField(max_length=40)
     event_data = SanitizedJSONField(default=dict, blank=True)
     level = models.PositiveSmallIntegerField(choices=LevelChoices.choices, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "identifier"],
+                condition=~models.Q(identifier=""),
+                name="unique_event_type_per_team_and_identifier",
+            ),
+        ]
 
 
 class NotificationEvent(BaseTeamModel):
@@ -128,13 +129,32 @@ class NotificationEvent(BaseTeamModel):
     links = models.JSONField(null=True)
 
 
+class EventUserQuerySet(models.QuerySet):
+    def with_latest_event(self):
+        latest_event = NotificationEvent.objects.filter(
+            event_type=models.OuterRef("event_type"),
+            team=models.OuterRef("team"),
+        ).order_by("-created_at")
+        return self.annotate(
+            latest_event_title=models.Subquery(latest_event.values("title")[:1]),
+            latest_event_message=models.Subquery(latest_event.values("message")[:1]),
+            latest_event_links=models.Subquery(latest_event.values("links")[:1]),
+            last_event_at=models.Subquery(latest_event.values("created_at")[:1]),
+        )
+
+
+class EventUserManager(models.Manager.from_queryset(EventUserQuerySet)):
+    def get_queryset(self) -> models.QuerySet:
+        return super().get_queryset().annotate(is_muted=models.Q(muted_until__gt=timezone.now()))
+
+
 class EventUser(BaseTeamModel):
     event_type = models.ForeignKey(EventType, on_delete=models.CASCADE)
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
     read = models.BooleanField(default=False, db_index=True)
     read_at = models.DateTimeField(null=True)
-    objects = UserNotificationObjectManager()
-    muted_until = models.DateTimeField(null=True, help_text="When the mute expires. Null means permanent mute.")
+    objects = EventUserManager()
+    muted_until = models.DateTimeField(null=True, help_text="When the mute expires")
 
     class Meta:
         unique_together = ("event_type", "user")

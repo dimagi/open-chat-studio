@@ -3,10 +3,11 @@ from django.template.loader import get_template
 from django_tables2 import columns, tables
 
 from apps.generics.tables import TimeAgoColumn
-from apps.ocs_notifications.models import UserNotification
+from apps.ocs_notifications.models import EventUser
 
 
 class UserNotificationTable(tables.Table):
+    # TODO: Rename table
     notification_content = columns.TemplateColumn(
         template_name="ocs_notifications/components/notification_content.html",
         verbose_name="Notification",
@@ -14,7 +15,6 @@ class UserNotificationTable(tables.Table):
     )
     level = columns.TemplateColumn(
         template_name="ocs_notifications/components/level_badge.html",
-        accessor="notification__level",
         verbose_name="Level",
         orderable=False,
     )
@@ -23,7 +23,7 @@ class UserNotificationTable(tables.Table):
     )
     timestamp = TimeAgoColumn(
         verbose_name="Timestamp",
-        accessor="notification__last_event_at",
+        accessor="last_event_at",
         orderable=True,
     )
     mute = columns.TemplateColumn(
@@ -34,12 +34,10 @@ class UserNotificationTable(tables.Table):
 
     def render_mute(self, record, bound_column, *args, **kwargs):
         template = get_template(bound_column.column.template_name)
-        return template.render(
-            {"record": record, "notification_is_muted": record.notification_is_muted, "muted_until": record.muted_until}
-        )
+        return template.render({"record": record, "is_muted": record.is_muted, "muted_until": record.muted_until})
 
     class Meta:
-        model = UserNotification
+        model = EventUser
         fields = (
             "timestamp",
             "notification_content",

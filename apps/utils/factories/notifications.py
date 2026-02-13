@@ -1,42 +1,41 @@
 import factory
-from django.utils import timezone
 
-from apps.ocs_notifications.models import LevelChoices, Notification, NotificationMute, UserNotification
+from apps.ocs_notifications.models import EventType, EventUser, LevelChoices, NotificationEvent
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
 
-class NotificationFactory(factory.django.DjangoModelFactory):
+class EventTypeFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = Notification
+        model = EventType
         skip_postgeneration_save = True
 
     team = factory.SubFactory(TeamFactory)
+    identifier = factory.Sequence(lambda n: f"event_type_{n}")
+    event_data = factory.LazyFunction(dict)
+    level = LevelChoices.INFO
+
+
+class NotificationEventFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = NotificationEvent
+        skip_postgeneration_save = True
+
+    team = factory.SubFactory(TeamFactory)
+    event_type = factory.SubFactory(EventTypeFactory, team=factory.SelfAttribute("..team"))
     title = factory.Faker("sentence", nb_words=4)
     message = factory.Faker("paragraph")
-    level = LevelChoices.INFO
-    last_event_at = factory.LazyFunction(timezone.now)
-    identifier = factory.Sequence(lambda n: f"notification_{n}")
+    links = None
 
 
-class UserNotificationFactory(factory.django.DjangoModelFactory):
+class EventUserFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = UserNotification
+        model = EventUser
         skip_postgeneration_save = True
 
     team = factory.SubFactory(TeamFactory)
-    notification = factory.SubFactory(NotificationFactory, team=factory.SelfAttribute("..team"))
+    event_type = factory.SubFactory(EventTypeFactory, team=factory.SelfAttribute("..team"))
     user = factory.SubFactory(UserFactory)
     read = False
     read_at = None
-
-
-class NotificationMuteFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = NotificationMute
-        skip_postgeneration_save = True
-
-    team = factory.SubFactory(TeamFactory)
-    user = factory.SubFactory(UserFactory)
-    notification_identifier = factory.Sequence(lambda n: f"notification_identifier_{n}")
-    muted_until = None  # Default to permanent mute
+    muted_until = None

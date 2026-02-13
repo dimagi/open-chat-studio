@@ -11,10 +11,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.ocs_notifications.models import (
+    EventType,
+    EventUser,
     LevelChoices,
-    Notification,
-    NotificationMute,
-    UserNotification,
+    NotificationEvent,
     UserNotificationPreferences,
 )
 from apps.teams.flags import Flags
@@ -31,7 +31,7 @@ class DurationTimeDelta(Enum):
     DURATION_1D = timezone.timedelta(days=1)
     DURATION_1W = timezone.timedelta(weeks=1)
     DURATION_1M = timezone.timedelta(weeks=4)
-    FOREVER = None
+    FOREVER = timezone.timedelta(weeks=10400)  # ~200 years, effectively forever
 
 
 # Map duration parameter values to hours
@@ -55,22 +55,21 @@ def create_notification(
     links: dict | None = None,
 ):
     """
-    Create a notification and associate it with the given users.
+    Create a notification event and associate it with the given users.
 
     Args:
         title (str): The title of the notification.
         message (str): The message content of the notification.
         level (str): The level of the notification (info, warning, error).
         team (Team, optional): A team whose members will be associated with the notification.
-        slug (str): A slug to identify the notification type. Used with event_data for uniqueness.
-        event_data (dict, optional): Additional data to store with the notification. Combined with slug for uniqueness.
+        slug (str): A slug to identify the event type. Used with event_data for uniqueness.
+        event_data (dict, optional): Additional data to store with the event type. Combined with slug for uniqueness.
 
     Returns:
-        Notification: The created Notification instance, or None if creation failed.
+        NotificationEvent: The created NotificationEvent instance, or None if creation failed.
     """
     if not _notifications_flag_is_active(team):
         return
-    notification = None
     links = links or {}
 
     def _can_receive_notification(member):
@@ -84,36 +83,36 @@ def create_notification(
 
     event_data = event_data or {}
     identifier = create_identifier(slug, event_data)
-    notification, created = Notification.objects.update_or_create(
+    event_type, _created = EventType.objects.get_or_create(
+        team=team, identifier=identifier, event_data=event_data, level=level
+    )
+
+    notification_event = NotificationEvent.objects.create(
         team=team,
-        identifier=identifier,
-        defaults={
-            "title": title,
-            "message": message,
-            "level": level,
-            "last_event_at": timezone.now(),
-            "event_data": event_data,
-            "links": links,
-        },
+        event_type=event_type,
+        title=title,
+        message=message,
+        links=links,
     )
     for user in users:
-        if is_notification_muted(user, team, identifier):
+        if is_notification_muted(user, team, event_type):
             continue
 
-        user_notification, created = UserNotification.objects.get_or_create(
-            team=team, notification=notification, user=user
-        )
-        # Uuser will only be notified when notification is created or if the notification was previously read
-        user_should_be_notified = created or user_notification.read is True
-        if user_notification.read is True:
-            user_notification.read = False
-            user_notification.read_at = None
-            user_notification.save()
+        event_user, created = EventUser.objects.get_or_create(team=team, event_type=event_type, user=user)
 
-        # Bust cache when notification is created or when marking previously read notification as unread
+        # User will only be notified when first created or when a previously read event is new again.
+        user_should_be_notified = created or event_user.read is True
+        if event_user.read is True:
+            event_user.read = False
+            event_user.read_at = None
+            event_user.save(update_fields=["read", "read_at"])
+
+        # Bust cache when notification is created or when marking previously read notification as unread.
         if user_should_be_notified:
             bust_unread_notification_cache(user.id, team_slug=team.slug)
-            send_notification_email(user_notification)
+            send_notification_email(event_user, notification_event)
+
+    return notification_event
 
 
 def _notifications_flag_is_active(team: Team) -> bool:
@@ -152,7 +151,7 @@ def bust_unread_notification_cache(user_id: int, team_slug: str):
     cache.delete(CACHE_KEY_FORMAT.format(user_id=user_id, team_slug=team_slug))
 
 
-def send_notification_email(user_notification: UserNotification):
+def send_notification_email(event_user: EventUser, notification_event: NotificationEvent):
     """
     Send an email notification to the user.
 
@@ -160,32 +159,32 @@ def send_notification_email(user_notification: UserNotification):
         user: The user to send the email to
         notification: The notification object containing title, message, and level
     """
-    user = user_notification.user
-    notification = user_notification.notification
+    user = event_user.user
+    event_type = event_user.event_type
 
     # Check if user has email notifications enabled and meets minimum level threshold
     try:
-        preferences = UserNotificationPreferences.objects.get(user=user, team=user_notification.team)
+        preferences = UserNotificationPreferences.objects.get(user=user, team=event_user.team)
         if not preferences.email_enabled:
             return
         # Ignore if notification level is lower than the user's preference
-        if notification.level < preferences.email_level:
+        if event_type.level < preferences.email_level:
             return
 
     except UserNotificationPreferences.DoesNotExist:
         return
 
-    subject = f"Notification: {notification.title}"
+    subject = f"Notification: {notification_event.title}"
 
     # Build absolute URL for user profile
     profile_url = absolute_url(reverse("users:user_profile"))
 
     context = {
         "user": user,
-        "notification": notification,
-        "title": notification.title,
-        "message": notification.message,
-        "level": notification.get_level_display(),
+        "notification": notification_event,
+        "title": notification_event.title,
+        "message": notification_event.message,
+        "level": event_type.get_level_display(),
         "profile_url": profile_url,
     }
 
@@ -202,7 +201,7 @@ def send_notification_email(user_notification: UserNotification):
     except Exception:
         logger.exception("Failed to render email template")
         # Fallback to plain text email
-        message = f"{notification.title}\n\n{notification.message}"
+        message = f"{notification_event.title}\n\n{notification_event.message}"
         send_mail(
             subject=subject,
             message=message,
@@ -227,7 +226,7 @@ def create_identifier(slug: str, data: dict) -> str:
     return hashlib.sha1(json_data.encode("utf-8")).hexdigest()
 
 
-def toggle_notification_read(user, user_notification: UserNotification, read: bool) -> None:
+def toggle_notification_read(user, event_user: EventUser, read: bool) -> None:
     """
     Mark a specific notification as read for a user.
 
@@ -236,27 +235,27 @@ def toggle_notification_read(user, user_notification: UserNotification, read: bo
         notification_id (int): The ID of the notification to mark as read.
     """
 
-    if user_notification.read == read:
+    if event_user.read == read:
         return  # No change needed
 
     if read:
-        user_notification.read = True
-        user_notification.read_at = timezone.now()
+        event_user.read = True
+        event_user.read_at = timezone.now()
     else:
-        user_notification.read = False
-        user_notification.read_at = None
-    user_notification.save()
-    bust_unread_notification_cache(user.id, team_slug=user_notification.team.slug)
+        event_user.read = False
+        event_user.read_at = None
+    event_user.save()
+    bust_unread_notification_cache(user.id, team_slug=event_user.team.slug)
 
 
-def is_notification_muted(user, team: Team, notification_identifier: str) -> bool:
+def is_notification_muted(user, team: Team, event_type: EventType) -> bool:
     """
-    Check if a user has muted a specific notification. This also returns True is the user enabled Do Not Disturb.
+    Check if a user has muted a specific event type. This also returns True if the user enabled Do Not Disturb.
 
     Args:
         user: The user to check mute status for
         team: The team context
-        notification_identifier: The notification identifier to check
+        event_type: The event type to check
 
     Returns:
         bool: True if notifications are muted, False otherwise
@@ -266,34 +265,35 @@ def is_notification_muted(user, team: Team, notification_identifier: str) -> boo
     if UserNotificationPreferences.objects.filter(user=user, team=team, do_not_disturb_until__gt=now).exists():
         return True
 
-    return NotificationMute.objects.filter(
+    return EventUser.objects.filter(
         Q(muted_until__gt=now) | Q(muted_until__isnull=True),
         user=user,
         team=team,
-        notification_identifier=notification_identifier,
+        event_type=event_type,
     ).exists()
 
 
-def mute_notification(user, team: Team, notification_identifier: str, timedelta: DurationTimeDelta) -> NotificationMute:
+def mute_notification(user, team: Team, event_type: EventType, timedelta: DurationTimeDelta) -> EventUser:
     """Create or update a notification mute for a user"""
     muted_until = None
     if timedelta.value:
         muted_until = timezone.now() + timedelta.value
 
-    mute, created = NotificationMute.objects.update_or_create(
+    event_user = EventUser.objects.get(
         user=user,
         team=team,
-        notification_identifier=notification_identifier,
-        defaults={"muted_until": muted_until},
+        event_type=event_type,
     )
+    event_user.muted_until = muted_until
+    event_user.save(update_fields=["muted_until"])
 
-    return mute
+    return event_user
 
 
-def unmute_notification(user, team: Team, notification_identifier: str) -> None:
-    """Delete a notification mute for a user"""
-    NotificationMute.objects.filter(
+def unmute_notification(user, team: Team, event_type: EventType) -> None:
+    """Clear a notification mute for a user"""
+    EventUser.objects.filter(
         user=user,
         team=team,
-        notification_identifier=notification_identifier,
-    ).delete()
+        event_type=event_type,
+    ).update(muted_until=None)

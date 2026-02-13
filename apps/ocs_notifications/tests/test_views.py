@@ -6,7 +6,7 @@ from django.utils import timezone
 from time_machine import travel
 
 from apps.ocs_notifications.models import UserNotificationPreferences
-from apps.utils.factories.notifications import UserNotificationFactory
+from apps.utils.factories.notifications import EventUserFactory
 
 
 @pytest.mark.django_db()
@@ -27,7 +27,7 @@ class TestToggleNotificationReadView:
         """
         # Setup
         user = team_with_users.members.first()
-        user_notification = UserNotificationFactory.create(
+        user_notification = EventUserFactory.create(
             user=user,
             team=team_with_users,
             read=False,
