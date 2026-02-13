@@ -57,6 +57,7 @@ team_urlpatterns = [
     path("traces/", include("apps.trace.urls")),
     path("filters/", include("apps.filters.urls")),
     path("notifications/", include("apps.ocs_notifications.urls")),
+    path("human-annotations/", include("apps.human_annotations.urls")),
 ]
 urlpatterns = [
     path("favicon.ico", RedirectView.as_view(url=static_url("images/favicons/favicon-96x96.png"), permanent=True)),
