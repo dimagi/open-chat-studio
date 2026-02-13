@@ -3,7 +3,7 @@ from django.template.loader import get_template
 from django_tables2 import columns, tables
 
 from apps.generics.tables import TimeAgoColumn
-from apps.ocs_notifications.models import EventUser
+from apps.ocs_notifications.models import EventUser, NotificationEvent
 
 
 class UserNotificationTable(tables.Table):
@@ -44,6 +44,36 @@ class UserNotificationTable(tables.Table):
             "level",
             "mute",
             "read",
+        )
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No notifications found."
+        attrs = {"td": {"class": "overflow-visible"}}
+
+
+class NotificationEventTable(tables.Table):
+    notification_content = columns.TemplateColumn(
+        template_name="ocs_notifications/components/notification_event_content.html",
+        verbose_name="Notification",
+        orderable=False,
+    )
+    level = columns.TemplateColumn(
+        template_name="ocs_notifications/components/level_badge.html",
+        verbose_name="Level",
+        orderable=False,
+    )
+    timestamp = TimeAgoColumn(
+        verbose_name="Timestamp",
+        accessor="created_at",
+        orderable=True,
+    )
+
+    class Meta:
+        model = NotificationEvent
+        fields = (
+            "timestamp",
+            "notification_content",
+            "level",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False

@@ -9,8 +9,8 @@ from apps.experiments.filters import get_filter_context_data
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
-from apps.ocs_notifications.models import EventUser, UserNotificationPreferences
-from apps.ocs_notifications.tables import UserNotificationTable
+from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent, UserNotificationPreferences
+from apps.ocs_notifications.tables import NotificationEventTable, UserNotificationTable
 from apps.ocs_notifications.utils import TIMEDELTA_MAP, mute_notification, toggle_notification_read, unmute_notification
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
@@ -184,4 +184,35 @@ class ToggleDoNotDisturbView(LoginAndTeamRequiredMixin, View):
             request,
             "ocs_notifications/components/do_not_disturb_button.html",
             context={"end_datetime": user_preferences.do_not_disturb_until},
+        )
+
+
+class NotificationEventHome(LoginAndTeamRequiredMixin, TemplateView):
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, **kwargs):
+        event_type = get_object_or_404(EventType, team=self.request.team, id=self.kwargs["event_type_id"])
+        table_url = reverse("ocs_notifications:notification_event_table", args=[self.request.team.slug, event_type.id])
+
+        context = {
+            "active_tab": "notifications",
+            "title": "Notifications",
+            "subtitle": event_type.notificationevent_set.first().title,
+            "table_url": table_url,
+            "enable_search": False,
+        }
+
+        return context
+
+
+class NotificationEventTableView(LoginAndTeamRequiredMixin, SingleTableView):
+    model = NotificationEvent
+    table_class = NotificationEventTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        return (
+            NotificationEvent.objects.filter(team=self.request.team, event_type_id=self.kwargs["event_type_id"])
+            .select_related("event_type")
+            .order_by("-created_at")
         )

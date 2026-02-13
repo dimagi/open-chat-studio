@@ -1,4 +1,5 @@
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.teams.models import BaseTeamModel
@@ -100,3 +101,9 @@ class EventUser(BaseTeamModel):
 
     class Meta:
         unique_together = ("event_type", "user")
+
+    def get_absolute_url(self):
+        return reverse(
+            "ocs_notifications:notification_event_home",
+            args=[self.team.slug, self.event_type_id],
+        )

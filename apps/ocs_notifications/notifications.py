@@ -84,7 +84,7 @@ def llm_error_notification(experiment_id: int, session_id: int, error_message: s
     session = ExperimentSession.objects.get(id=session_id)
     message = f"An LLM error occurred for participant '{session.participant.identifier}': {error_message}"
     create_notification(
-        title=f"LLM Error Detected for '{experiment.name}'",
+        title=f"LLM Error Detected for '{experiment}'",
         message=message,
         level=LevelChoices.ERROR,
         team=experiment.team,

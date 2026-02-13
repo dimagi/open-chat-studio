@@ -142,7 +142,7 @@ class TestLlmErrorNotification:
         # Assert
         expected_message = f"An LLM error occurred for participant '{session.participant.identifier}': {error_message}"
         mock_create_notification.assert_called_once_with(
-            title=f"LLM Error Detected for '{experiment.name}'",
+            title=f"LLM Error Detected for '{experiment}'",
             message=expected_message,
             level=LevelChoices.ERROR,
             team=experiment.team,
