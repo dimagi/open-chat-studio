@@ -37,7 +37,6 @@ from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
@@ -89,12 +88,6 @@ class VersionFieldDisplayFormatters:
             trigger_action = static_trigger.action.get_action_type_display().lower()
             result_strings.append(f"{string} then {trigger_action}")
         return "; ".join(result_strings) if result_strings else "No triggers found"
-
-    @staticmethod
-    def format_custom_action_operation(op) -> str:
-        action = op.custom_action
-        op_details = action.get_operations_by_id().get(op.operation_id)
-        return f"{action.name}: {op_details}"
 
     @staticmethod
     def format_pipeline(pipeline) -> str:
@@ -518,7 +511,7 @@ class AgentTools(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
-class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
+class Experiment(BaseTeamModel, VersionsMixin):
     """
     An experiment combines a chatbot prompt, a safety prompt, and source material.
     Each experiment can be run as a chatbot.
@@ -681,10 +674,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         elif working_version.version_number == version:
             return working_version
         return working_version.versions.get(version_number=version)
-
-    @property
-    def tools_enabled(self):
-        return len(self.tools) > 0 or self.custom_action_operations.exists()
 
     @property
     def event_triggers(self):
@@ -854,7 +843,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             trigger_queryset=self.timeout_triggers, new_version=new_version, is_copy=is_copy
         )
         self._copy_pipeline_to_new_version(new_version, is_copy)
-        self._copy_custom_action_operations_to_new_version(new_experiment=new_version, is_copy=is_copy)
 
         return new_version
 
