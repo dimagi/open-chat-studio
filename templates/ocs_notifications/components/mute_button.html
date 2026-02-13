@@ -4,7 +4,7 @@
 <div id="btn-mute-{{ record.id }}" class="text-center">
     {% if is_muted %}
         <div class="flex flex-col items-center gap-1 tooltip" data-tip="{% if muted_until %}Automatically unmutes {{ muted_until|naturaltime }}{% else %}Muted Forever{% endif %}">
-            <button class="btn btn-sm btn-ghost"
+            <button class="btn btn-sm"
                     hx-post="{% url 'ocs_notifications:unmute_notification' record.team.slug record.id %}"
                     hx-swap="outerHTML"
                     hx-target="this">
