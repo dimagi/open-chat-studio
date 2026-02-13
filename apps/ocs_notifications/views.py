@@ -166,7 +166,7 @@ class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
         return render(
             request,
             "ocs_notifications/components/mute_button.html",
-            context={"record": user_notification, "notification_is_muted": False, "muted_until": None},
+            context={"record": user_notification, "is_muted": False, "muted_until": None},
         )
 
 

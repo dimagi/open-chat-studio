@@ -7,15 +7,14 @@
             <button class="btn btn-sm"
                     hx-post="{% url 'ocs_notifications:unmute_notification' record.team.slug record.id %}"
                     hx-swap="outerHTML"
-                    hx-target="this">
+                    hx-target="#btn-mute-{{ record.id }}">
                 <i class="fa fa-bell"></i>
                 <span class="ml-1">Unmute Now</span>
             </button>
         </div>
     {% else %}
-
         <div class="dropdown">
-            <div tabindex="0" role="button" title="Turn Do Not Disturb On" class="btn btn-ghost btn-sm m-1">
+            <div tabindex="0" role="button" title="Mute" class="btn btn-ghost btn-sm m-1">
                 <i class="fa fa-bell-slash"></i>
                 <span class="ml-1">Mute</span>
             </div>
