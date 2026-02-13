@@ -70,6 +70,12 @@ class AnnotationQueueForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["schema"].queryset = AnnotationSchema.objects.filter(team=team)
 
+        if self.instance.pk and self.instance.items.filter(review_count__gt=0).exists():
+            self.fields["schema"].disabled = True
+            self.fields["schema"].help_text = "Cannot change after annotations have started."
+            self.fields["num_reviews_required"].disabled = True
+            self.fields["num_reviews_required"].help_text = "Cannot change after annotations have started."
+
     def clean_num_reviews_required(self):
         value = self.cleaned_data["num_reviews_required"]
         if not (1 <= value <= 10):

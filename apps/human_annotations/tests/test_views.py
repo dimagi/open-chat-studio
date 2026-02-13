@@ -155,6 +155,42 @@ def test_create_queue(client, team_with_users, schema):
 
 
 @pytest.mark.django_db()
+def test_edit_queue_locks_fields_after_annotations(client, team_with_users, queue, user, schema):
+    """Schema and num_reviews_required should be disabled after annotations have started."""
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 4, "notes": "OK"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    form = response.context["form"]
+    assert form.fields["schema"].disabled is True
+    assert form.fields["num_reviews_required"].disabled is True
+
+    # Attempting to change schema via POST should be ignored (disabled fields use initial value)
+    other_schema = AnnotationSchemaFactory(team=team_with_users, name="Other Schema")
+    response = client.post(
+        url,
+        {
+            "name": queue.name,
+            "description": queue.description,
+            "schema": other_schema.pk,
+            "num_reviews_required": 5,
+        },
+    )
+    assert response.status_code == 302
+    queue.refresh_from_db()
+    assert queue.schema == schema
+    assert queue.num_reviews_required == 1
+
+
+@pytest.mark.django_db()
 def test_queue_detail(client, team_with_users, queue):
     url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
     response = client.get(url)
