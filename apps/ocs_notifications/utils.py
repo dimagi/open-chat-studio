@@ -5,7 +5,6 @@ from enum import Enum
 
 from django.core.cache import cache
 from django.core.mail import send_mail
-from django.db.models import Q
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -94,6 +93,7 @@ def create_notification(
         message=message,
         links=links,
     )
+
     for user in users:
         if is_notification_muted(user, team, event_type):
             continue
@@ -266,7 +266,7 @@ def is_notification_muted(user, team: Team, event_type: EventType) -> bool:
         return True
 
     return EventUser.objects.filter(
-        Q(muted_until__gt=now) | Q(muted_until__isnull=True),
+        muted_until__gt=now,
         user=user,
         team=team,
         event_type=event_type,
@@ -279,7 +279,7 @@ def mute_notification(user, team: Team, event_type: EventType, timedelta: Durati
     if timedelta.value:
         muted_until = timezone.now() + timedelta.value
 
-    event_user = EventUser.objects.get(
+    event_user, _ = EventUser.objects.get_or_create(
         user=user,
         team=team,
         event_type=event_type,

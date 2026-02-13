@@ -137,7 +137,15 @@ class TestCreateNotification:
         2. After marking a notification as read, creating the same notification
            again resets it to unread
         """
+        team_with_users.members.last().delete()
         user = team_with_users.members.first()
+
+        # Ensure user has in-app notifications enabled
+        UserNotificationPreferences.objects.update_or_create(
+            team=team_with_users,
+            user=user,
+            defaults={"in_app_enabled": True, "in_app_level": 0},
+        )
 
         # Create initial notification
         create_notification(
