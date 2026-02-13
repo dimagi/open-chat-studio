@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -30,6 +31,7 @@ def _get_next_item(queue, user, skip_item_id=None):
             status__in=[AnnotationItemStatus.PENDING, AnnotationItemStatus.IN_PROGRESS],
         )
         .exclude(id__in=already_annotated)
+        .select_related("session__chat", "session__participant", "session__experiment", "message")
         .order_by("created_at")
     )
     if skip_item_id:
@@ -77,11 +79,21 @@ def _get_item_display_content(item):
         }
 
 
-class AnnotateQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+def _check_assignee_access(queue, user):
+    """Return True if user is allowed to annotate in this queue."""
+    if not queue.assignees.exists():
+        return True
+    return queue.assignees.filter(id=user.id).exists()
+
+
+class AnnotateQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.add_annotation"
 
     def get(self, request, team_slug: str, pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        if not _check_assignee_access(queue, request.user):
+            messages.error(request, "You are not assigned to this queue.")
+            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
         skip_item_id = request.GET.get("skip")
         item = _get_next_item(queue, request.user, skip_item_id=skip_item_id)
 
@@ -108,14 +120,23 @@ class AnnotateQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         )
 
 
-class AnnotateItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class AnnotateItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     """Show annotation form for a specific item (accessed from the items table)."""
 
     permission_required = "human_annotations.add_annotation"
 
     def get(self, request, team_slug: str, pk: int, item_pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
+        if not _check_assignee_access(queue, request.user):
+            messages.error(request, "You are not assigned to this queue.")
+            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
+        item = get_object_or_404(
+            AnnotationItem.objects.select_related(
+                "session__chat", "session__participant", "session__experiment", "message"
+            ),
+            id=item_pk,
+            queue=queue,
+        )
 
         already_annotated = Annotation.objects.filter(item=item, reviewer=request.user).exists()
         if already_annotated:
@@ -141,11 +162,14 @@ class AnnotateItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         )
 
 
-class SubmitAnnotation(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class SubmitAnnotation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.add_annotation"
 
     def post(self, request, team_slug: str, pk: int, item_pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        if not _check_assignee_access(queue, request.user):
+            messages.error(request, "You are not assigned to this queue.")
+            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
         item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
 
         if Annotation.objects.filter(item=item, reviewer=request.user).exists():
@@ -184,22 +208,23 @@ class SubmitAnnotation(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin)
         return redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)
 
 
-class FlagItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class FlagItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.change_annotationitem"
 
     def post(self, request, team_slug: str, pk: int, item_pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
-        item.status = AnnotationItemStatus.FLAGGED
-        item.flags.append(
-            {
-                "user": request.user.get_display_name(),
-                "user_id": request.user.id,
-                "reason": request.POST.get("flag_reason", ""),
-                "timestamp": timezone.now().isoformat(),
-            }
-        )
-        item.save(update_fields=["status", "flags"])
+        with transaction.atomic():
+            item = AnnotationItem.objects.select_for_update().get(id=item_pk, queue=queue)
+            item.status = AnnotationItemStatus.FLAGGED
+            item.flags.append(
+                {
+                    "user": request.user.get_display_name(),
+                    "user_id": request.user.id,
+                    "reason": request.POST.get("flag_reason", ""),
+                    "timestamp": timezone.now().isoformat(),
+                }
+            )
+            item.save(update_fields=["status", "flags"])
         messages.info(request, "Item flagged for review.")
         redirect_url = redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)
         if request.headers.get("HX-Request"):
@@ -209,7 +234,7 @@ class FlagItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return redirect_url
 
 
-class UnflagItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class UnflagItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.change_annotationitem"
 
     def post(self, request, team_slug: str, pk: int, item_pk: int):

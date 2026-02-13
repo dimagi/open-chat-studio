@@ -79,6 +79,13 @@ class AnnotationQueueTable(tables.Table):
         attrs = {"class": "table"}
 
     def render_progress(self, record):
+        # Use annotated fields from queryset if available, otherwise fall back to get_progress()
+        if hasattr(record, "_total_items"):
+            total_items = record._total_items
+            reviews_done = record._reviews_done or 0
+            total_needed = total_items * record.num_reviews_required
+            percent = round((reviews_done / total_needed) * 100) if total_needed > 0 else 0
+            return f"{reviews_done}/{total_needed} reviews ({percent}%)"
         progress = record.get_progress()
         return f"{progress['reviews_done']}/{progress['total_reviews_needed']} reviews ({progress['percent']}%)"
 
@@ -153,8 +160,12 @@ class AnnotationItemTable(tables.Table):
         return f"{record.review_count}/{record.queue.num_reviews_required}"
 
     def render_annotations_summary(self, record):
-        submitted = record.annotations.filter(status="submitted").select_related("reviewer")
-        if not submitted.exists():
+        # Use prefetched submitted_annotations if available
+        submitted = getattr(record, "submitted_annotations", None)
+        if submitted is None:
+            submitted = list(record.annotations.filter(status="submitted").select_related("reviewer"))
+
+        if not submitted:
             return format_html('<span class="text-gray-400 text-xs">{}</span>', "No annotations")
 
         parts = []
@@ -168,6 +179,6 @@ class AnnotationItemTable(tables.Table):
                     data_preview,
                 )
             )
-        if submitted.count() > 3:
-            parts.append(format_html('<div class="text-xs text-gray-400">+{} more</div>', submitted.count() - 3))
+        if len(submitted) > 3:
+            parts.append(format_html('<div class="text-xs text-gray-400">+{} more</div>', len(submitted) - 3))
         return format_html("".join(str(p) for p in parts))

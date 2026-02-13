@@ -14,7 +14,7 @@ from ..models import AnnotationSchema
 from ..tables import AnnotationSchemaTable
 
 
-class AnnotationSchemaHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class AnnotationSchemaHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "human_annotations.view_annotationschema"
 
@@ -28,7 +28,7 @@ class AnnotationSchemaHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         }
 
 
-class AnnotationSchemaTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class AnnotationSchemaTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = AnnotationSchema
     table_class = AnnotationSchemaTable
     template_name = "table/single_table.html"
@@ -38,7 +38,7 @@ class AnnotationSchemaTableView(LoginAndTeamRequiredMixin, SingleTableView, Perm
         return AnnotationSchema.objects.filter(team=self.request.team)
 
 
-class CreateAnnotationSchema(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateAnnotationSchema(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "human_annotations.add_annotationschema"
     model = AnnotationSchema
     form_class = AnnotationSchemaForm
@@ -57,7 +57,7 @@ class CreateAnnotationSchema(LoginAndTeamRequiredMixin, CreateView, PermissionRe
         return super().form_valid(form)
 
 
-class EditAnnotationSchema(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+class EditAnnotationSchema(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "human_annotations.change_annotationschema"
     model = AnnotationSchema
     form_class = AnnotationSchemaForm
@@ -80,7 +80,7 @@ class EditAnnotationSchema(LoginAndTeamRequiredMixin, UpdateView, PermissionRequ
         return reverse("human_annotations:schema_home", args=[self.request.team.slug])
 
 
-class DeleteAnnotationSchema(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class DeleteAnnotationSchema(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.delete_annotationschema"
 
     def delete(self, request, team_slug: str, pk: int):

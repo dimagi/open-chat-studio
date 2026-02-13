@@ -71,6 +71,12 @@ class AnnotationQueue(BaseTeamModel):
     class Meta:
         unique_together = ("team", "name")
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(num_reviews_required__gte=1, num_reviews_required__lte=10),
+                name="num_reviews_required_range",
+            ),
+        ]
 
     def __str__(self):
         return self.name
@@ -163,7 +169,9 @@ class AnnotationItem(BaseTeamModel):
 
     def __str__(self):
         if self.session_id:
-            return f"Session {self.session.external_id}"
+            if self.__class__.session.is_cached(self):
+                return f"Session {self.session.external_id}"
+            return f"Session #{self.session_id}"
         if self.message_id:
             return f"Message {self.message_id}"
         return f"External item {self.id}"
@@ -215,7 +223,11 @@ class Annotation(BaseTeamModel):
 
     def _update_item_review_count(self):
         """Increment item review count and update status."""
-        count = self.item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
-        self.item.review_count = count
-        self.item.save(update_fields=["review_count"])
-        self.item.update_status()
+        from django.db import transaction
+
+        with transaction.atomic():
+            item = AnnotationItem.objects.select_for_update().get(pk=self.item_id)
+            count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
+            item.review_count = count
+            item.save(update_fields=["review_count"])
+            item.update_status()

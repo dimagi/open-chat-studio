@@ -15,13 +15,13 @@ from django_tables2 import SingleTableView
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..forms import AnnotationQueueForm
-from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue
+from ..models import Annotation, AnnotationItem, AnnotationItemStatus, AnnotationItemType, AnnotationQueue
 from ..tables import AnnotationItemTable, AnnotationQueueTable
 
 User = get_user_model()
 
 
-class AnnotationQueueHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class AnnotationQueueHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "human_annotations.view_annotationqueue"
 
@@ -35,17 +35,24 @@ class AnnotationQueueHome(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
         }
 
 
-class AnnotationQueueTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class AnnotationQueueTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = AnnotationQueue
     table_class = AnnotationQueueTable
     template_name = "table/single_table.html"
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        return AnnotationQueue.objects.filter(team=self.request.team)
+        from django.db.models import Count, Q, Sum
+
+        return AnnotationQueue.objects.filter(team=self.request.team).annotate(
+            _total_items=Count("items"),
+            _completed_items=Count("items", filter=Q(items__status=AnnotationItemStatus.COMPLETED)),
+            _flagged_items=Count("items", filter=Q(items__status=AnnotationItemStatus.FLAGGED)),
+            _reviews_done=Sum("items__review_count"),
+        )
 
 
-class CreateAnnotationQueue(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "human_annotations.add_annotationqueue"
     model = AnnotationQueue
     form_class = AnnotationQueueForm
@@ -70,7 +77,7 @@ class CreateAnnotationQueue(LoginAndTeamRequiredMixin, CreateView, PermissionReq
         return super().form_valid(form)
 
 
-class EditAnnotationQueue(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+class EditAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "human_annotations.change_annotationqueue"
     model = AnnotationQueue
     form_class = AnnotationQueueForm
@@ -93,7 +100,7 @@ class EditAnnotationQueue(LoginAndTeamRequiredMixin, UpdateView, PermissionRequi
         return reverse("human_annotations:queue_home", args=[self.request.team.slug])
 
 
-class DeleteAnnotationQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class DeleteAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.delete_annotationqueue"
 
     def delete(self, request, team_slug: str, pk: int):
@@ -103,7 +110,7 @@ class DeleteAnnotationQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredM
         return HttpResponse()
 
 
-class AnnotationQueueDetail(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
+class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DetailView):
     model = AnnotationQueue
     template_name = "human_annotations/queue_detail.html"
     permission_required = "human_annotations.view_annotationqueue"
@@ -123,20 +130,34 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, DetailView, PermissionReq
         return context
 
 
-class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = AnnotationItem
     table_class = AnnotationItemTable
     template_name = "table/single_table.html"
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        return AnnotationItem.objects.filter(
-            queue_id=self.kwargs["pk"],
-            queue__team=self.request.team,
-        ).select_related("session", "message", "queue")
+        from django.db.models import Prefetch
+
+        from ..models import Annotation
+
+        return (
+            AnnotationItem.objects.filter(
+                queue_id=self.kwargs["pk"],
+                queue__team=self.request.team,
+            )
+            .select_related("session", "message", "queue")
+            .prefetch_related(
+                Prefetch(
+                    "annotations",
+                    queryset=Annotation.objects.filter(status="submitted").select_related("reviewer"),
+                    to_attr="submitted_annotations",
+                ),
+            )
+        )
 
 
-class AddSessionsToQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.add_annotationitem"
 
     def get(self, request, team_slug: str, pk: int):
@@ -168,7 +189,7 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixi
             messages.error(request, "No sessions selected.")
             return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
-        sessions = ExperimentSession.objects.filter(id__in=session_ids, team=request.team)
+        sessions = list(ExperimentSession.objects.filter(id__in=session_ids, team=request.team))
         existing_session_ids = set(
             AnnotationItem.objects.filter(
                 queue=queue,
@@ -187,7 +208,7 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixi
             if session.id not in existing_session_ids
         ]
         created = AnnotationItem.objects.bulk_create(items_to_create)
-        skipped = len(list(sessions)) - len(created)
+        skipped = len(sessions) - len(created)
 
         msg = f"Added {len(created)} items to queue."
         if skipped:
@@ -196,7 +217,7 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixi
         return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
 
-class ImportCSVToQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class ImportCSVToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.add_annotationitem"
 
     def get(self, request, team_slug: str, pk: int):
@@ -218,25 +239,29 @@ class ImportCSVToQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin)
             messages.error(request, "No file uploaded.")
             return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
+        max_rows = 10_000
         decoded = csv_file.read().decode("utf-8-sig")
         reader = csv_module.DictReader(io.StringIO(decoded))
-        rows = list(reader)
 
-        items = [
-            AnnotationItem(
-                queue=queue,
-                team=request.team,
-                item_type=AnnotationItemType.EXTERNAL,
-                external_data=dict(row),
+        items = []
+        for i, row in enumerate(reader):
+            if i >= max_rows:
+                messages.warning(request, f"Only the first {max_rows} rows were imported.")
+                break
+            items.append(
+                AnnotationItem(
+                    queue=queue,
+                    team=request.team,
+                    item_type=AnnotationItemType.EXTERNAL,
+                    external_data=dict(row),
+                )
             )
-            for row in rows
-        ]
         AnnotationItem.objects.bulk_create(items)
         messages.success(request, f"Imported {len(items)} items from CSV.")
         return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
 
-class ManageAssignees(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class ManageAssignees(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.change_annotationqueue"
 
     def get(self, request, team_slug: str, pk: int):
@@ -263,7 +288,7 @@ class ManageAssignees(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
 
-class ExportAnnotations(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.view_annotation"
 
     def get(self, request, team_slug: str, pk: int):
