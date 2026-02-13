@@ -297,6 +297,36 @@ def test_skip_item(client, team_with_users, queue):
 
 
 @pytest.mark.django_db()
+def test_annotate_item_specific(client, team_with_users, queue):
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    url = reverse(
+        "human_annotations:annotate_item",
+        args=[team_with_users.slug, queue.pk, item.pk],
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    assert response.context["item"].pk == item.pk
+
+
+@pytest.mark.django_db()
+def test_annotate_item_already_annotated(client, team_with_users, queue, user):
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 3},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    url = reverse(
+        "human_annotations:annotate_item",
+        args=[team_with_users.slug, queue.pk, item.pk],
+    )
+    response = client.get(url)
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db()
 def test_flag_item(client, team_with_users, queue):
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
     url = reverse(
@@ -307,6 +337,20 @@ def test_flag_item(client, team_with_users, queue):
     assert response.status_code == 302
     item.refresh_from_db()
     assert item.status == AnnotationItemStatus.FLAGGED
+
+
+@pytest.mark.django_db()
+def test_flag_item_with_reason(client, team_with_users, queue):
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    url = reverse(
+        "human_annotations:flag_item",
+        args=[team_with_users.slug, queue.pk, item.pk],
+    )
+    response = client.post(url, {"flag_reason": "Content seems wrong"})
+    assert response.status_code == 302
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.FLAGGED
+    assert item.flag_reason == "Content seems wrong"
 
 
 @pytest.mark.django_db()

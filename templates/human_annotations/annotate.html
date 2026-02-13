@@ -74,10 +74,31 @@
                class="btn btn-ghost btn-sm">Skip</a>
             <button type="button"
                     class="btn btn-warning btn-sm btn-outline"
-                    hx-post="{% url 'human_annotations:flag_item' request.team.slug queue.pk item.pk %}"
-                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>Flag</button>
+                    onclick="document.getElementById('flag-dialog').showModal()">Flag</button>
           </div>
         </form>
+
+        <dialog id="flag-dialog" class="modal">
+          <div class="modal-box">
+            <h3 class="text-lg font-bold">Flag Item</h3>
+            <p class="py-2 text-sm text-gray-500">Provide a reason for flagging this item (optional).</p>
+            <form method="post"
+                  action="{% url 'human_annotations:flag_item' request.team.slug queue.pk item.pk %}">
+              {% csrf_token %}
+              <textarea name="flag_reason"
+                        class="textarea textarea-bordered w-full"
+                        rows="3"
+                        placeholder="Reason for flagging..."></textarea>
+              <div class="modal-action">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('flag-dialog').close()">Cancel</button>
+                <button type="submit" class="btn btn-warning btn-sm">Flag Item</button>
+              </div>
+            </form>
+          </div>
+          <form method="dialog" class="modal-backdrop">
+            <button>close</button>
+          </form>
+        </dialog>
       </div>
     </div>
   </div>

@@ -15,6 +15,7 @@ urlpatterns = [
     path("queue/<int:pk>/export/", queue_views.ExportAnnotations.as_view(), name="queue_export"),
     # Annotation
     path("queue/<int:pk>/annotate/", annotate_views.AnnotateQueue.as_view(), name="annotate_queue"),
+    path("queue/<int:pk>/item/<int:item_pk>/", annotate_views.AnnotateItem.as_view(), name="annotate_item"),
     path(
         "queue/<int:pk>/item/<int:item_pk>/submit/",
         annotate_views.SubmitAnnotation.as_view(),

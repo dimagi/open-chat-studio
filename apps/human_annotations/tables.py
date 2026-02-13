@@ -1,12 +1,40 @@
 import django_tables2 as tables
+from django.urls import reverse
+from django.utils.html import format_html
 
 from apps.generics import actions
+from apps.generics.actions import chip_action
 
 from .models import AnnotationItem, AnnotationQueue, AnnotationSchema
 
 
+def _schema_chip_url(_, __, record, ___):
+    return record.get_absolute_url()
+
+
+def _queue_chip_url(_, __, record, ___):
+    return record.get_absolute_url()
+
+
+def _item_chip_url(_, request, record, ___):
+    return reverse(
+        "human_annotations:annotate_item",
+        args=[request.team.slug, record.queue_id, record.pk],
+    )
+
+
 class AnnotationSchemaTable(tables.Table):
-    name = tables.Column(linkify=True, attrs={"a": {"class": "link"}})
+    name = actions.ActionsColumn(
+        actions=[
+            chip_action(
+                label_factory=lambda record, _: record.name,
+                url_factory=_schema_chip_url,
+                button_style="btn-soft btn-primary",
+            ),
+        ],
+        align="left",
+        orderable=True,
+    )
     field_count = tables.Column(verbose_name="Fields", empty_values=(), orderable=False)
     actions = actions.ActionsColumn(
         actions=[
@@ -25,7 +53,17 @@ class AnnotationSchemaTable(tables.Table):
 
 
 class AnnotationQueueTable(tables.Table):
-    name = tables.Column(linkify=True, attrs={"a": {"class": "link"}})
+    name = actions.ActionsColumn(
+        actions=[
+            chip_action(
+                label_factory=lambda record, _: record.name,
+                url_factory=_queue_chip_url,
+                button_style="btn-soft btn-primary",
+            ),
+        ],
+        align="left",
+        orderable=True,
+    )
     progress = tables.Column(verbose_name="Progress", empty_values=(), orderable=False)
     actions = actions.ActionsColumn(
         actions=[
@@ -45,18 +83,46 @@ class AnnotationQueueTable(tables.Table):
 
 
 class AnnotationItemTable(tables.Table):
+    description = actions.ActionsColumn(
+        actions=[
+            chip_action(
+                label_factory=lambda record, _: str(record),
+                url_factory=_item_chip_url,
+                button_style="btn-soft btn-secondary",
+            ),
+        ],
+        align="left",
+        verbose_name="Item",
+    )
     item_type = tables.Column(verbose_name="Type")
-    description = tables.Column(verbose_name="Description", empty_values=(), orderable=False)
     status = tables.Column()
     review_count = tables.Column(verbose_name="Reviews")
+    annotations_summary = tables.Column(verbose_name="Annotations", empty_values=(), orderable=False)
 
     class Meta:
         model = AnnotationItem
-        fields = ["item_type", "description", "status", "review_count", "created_at"]
+        fields = ["description", "item_type", "status", "review_count", "annotations_summary", "created_at"]
         attrs = {"class": "table"}
-
-    def render_description(self, record):
-        return str(record)
 
     def render_review_count(self, record):
         return f"{record.review_count}/{record.queue.num_reviews_required}"
+
+    def render_annotations_summary(self, record):
+        submitted = record.annotations.filter(status="submitted").select_related("reviewer")
+        if not submitted.exists():
+            return format_html('<span class="text-gray-400 text-xs">{}</span>', "No annotations")
+
+        parts = []
+        for ann in submitted[:3]:
+            reviewer_name = ann.reviewer.get_full_name() or ann.reviewer.username
+            data_preview = ", ".join(f"{k}: {v}" for k, v in list(ann.data.items())[:3])
+            parts.append(
+                format_html(
+                    '<div class="text-xs"><span class="font-medium">{}</span>: {}</div>',
+                    reviewer_name,
+                    data_preview,
+                )
+            )
+        if submitted.count() > 3:
+            parts.append(format_html('<div class="text-xs text-gray-400">+{} more</div>', submitted.count() - 3))
+        return format_html("".join(str(p) for p in parts))

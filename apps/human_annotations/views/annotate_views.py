@@ -100,6 +100,39 @@ class AnnotateQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         )
 
 
+class AnnotateItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    """Show annotation form for a specific item (accessed from the items table)."""
+
+    permission_required = "human_annotations.add_annotation"
+
+    def get(self, request, team_slug: str, pk: int, item_pk: int):
+        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
+
+        already_annotated = Annotation.objects.filter(item=item, reviewer=request.user).exists()
+        if already_annotated:
+            messages.info(request, "You've already annotated this item.")
+            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
+
+        FormClass = build_annotation_form(queue.schema)
+        form = FormClass()
+        progress = _get_progress_for_user(queue, request.user)
+        item_content = _get_item_display_content(item)
+
+        return render(
+            request,
+            "human_annotations/annotate.html",
+            {
+                "queue": queue,
+                "item": item,
+                "form": form,
+                "progress": progress,
+                "item_content": item_content,
+                "active_tab": "annotation_queues",
+            },
+        )
+
+
 class SubmitAnnotation(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
     permission_required = "human_annotations.add_annotation"
 
@@ -150,7 +183,8 @@ class FlagItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
         item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
         item.status = AnnotationItemStatus.FLAGGED
-        item.save(update_fields=["status"])
+        item.flag_reason = request.POST.get("flag_reason", "")
+        item.save(update_fields=["status", "flag_reason"])
         messages.info(request, "Item flagged for review.")
         redirect_url = redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)
         if request.headers.get("HX-Request"):
