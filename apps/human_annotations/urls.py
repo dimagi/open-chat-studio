@@ -1,3 +1,28 @@
+from django.urls import path
+
+from apps.generics.urls import make_crud_urls
+from apps.human_annotations.views import annotate_views, queue_views, schema_views
+
 app_name = "human_annotations"
 
-urlpatterns = []
+urlpatterns = [
+    # Queue detail & management
+    path("queue/<int:pk>/detail/", queue_views.AnnotationQueueDetail.as_view(), name="queue_detail"),
+    path("queue/<int:pk>/items-table/", queue_views.AnnotationQueueItemsTableView.as_view(), name="queue_items_table"),
+    path("queue/<int:pk>/add-sessions/", queue_views.AddSessionsToQueue.as_view(), name="queue_add_sessions"),
+    path("queue/<int:pk>/import-csv/", queue_views.ImportCSVToQueue.as_view(), name="queue_import_csv"),
+    path("queue/<int:pk>/assignees/", queue_views.ManageAssignees.as_view(), name="queue_manage_assignees"),
+    path("queue/<int:pk>/export/", queue_views.ExportAnnotations.as_view(), name="queue_export"),
+    # Annotation
+    path("queue/<int:pk>/annotate/", annotate_views.AnnotateQueue.as_view(), name="annotate_queue"),
+    path(
+        "queue/<int:pk>/item/<int:item_pk>/submit/",
+        annotate_views.SubmitAnnotation.as_view(),
+        name="submit_annotation",
+    ),
+    path("queue/<int:pk>/item/<int:item_pk>/flag/", annotate_views.FlagItem.as_view(), name="flag_item"),
+]
+
+# CRUD views for schemas and queues
+urlpatterns.extend(make_crud_urls(schema_views, "AnnotationSchema", "schema"))
+urlpatterns.extend(make_crud_urls(queue_views, "AnnotationQueue", "queue"))

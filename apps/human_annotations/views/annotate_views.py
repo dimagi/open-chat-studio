@@ -1,0 +1,151 @@
+from django.contrib import messages
+from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views import View
+
+from apps.teams.mixins import LoginAndTeamRequiredMixin
+
+from ..forms import build_annotation_form
+from ..models import (
+    Annotation,
+    AnnotationItem,
+    AnnotationItemStatus,
+    AnnotationQueue,
+    AnnotationStatus,
+)
+
+
+def _get_next_item(queue, user):
+    """Get the next item for this user to annotate: oldest pending/in-progress not already reviewed by user."""
+    already_annotated = Annotation.objects.filter(
+        item__queue=queue,
+        reviewer=user,
+    ).values_list("item_id", flat=True)
+
+    return (
+        AnnotationItem.objects.filter(
+            queue=queue,
+            status__in=[AnnotationItemStatus.PENDING, AnnotationItemStatus.IN_PROGRESS],
+        )
+        .exclude(id__in=already_annotated)
+        .order_by("created_at")
+        .first()
+    )
+
+
+def _get_progress_for_user(queue, user):
+    """Get progress info for the current annotator."""
+    total = queue.items.count()
+    reviewed_by_user = Annotation.objects.filter(item__queue=queue, reviewer=user).count()
+    return {"total": total, "reviewed": reviewed_by_user}
+
+
+def _get_item_display_content(item):
+    """Build display content dict for the annotation UI."""
+    if item.session_id:
+        chat_messages = item.session.chat.messages.order_by("created_at").values_list(
+            "message_type",
+            "content",
+        )
+        return {
+            "type": "session",
+            "messages": [{"role": role, "content": content} for role, content in chat_messages],
+            "participant": item.session.participant.identifier,
+        }
+    elif item.message_id:
+        msg = item.message
+        return {
+            "type": "message",
+            "role": msg.message_type,
+            "content": msg.content,
+        }
+    else:
+        return {
+            "type": "external",
+            "data": item.external_data,
+        }
+
+
+class AnnotateQueue(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "human_annotations.add_annotation"
+
+    def get(self, request, team_slug: str, pk: int):
+        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        item = _get_next_item(queue, request.user)
+
+        if item is None:
+            messages.info(request, "No more items to annotate in this queue.")
+            return redirect("human_annotations:queue_home", team_slug=team_slug)
+
+        FormClass = build_annotation_form(queue.schema)
+        form = FormClass()
+        progress = _get_progress_for_user(queue, request.user)
+        item_content = _get_item_display_content(item)
+
+        return render(
+            request,
+            "human_annotations/annotate.html",
+            {
+                "queue": queue,
+                "item": item,
+                "form": form,
+                "progress": progress,
+                "item_content": item_content,
+                "active_tab": "annotation_queues",
+            },
+        )
+
+
+class SubmitAnnotation(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "human_annotations.add_annotation"
+
+    def post(self, request, team_slug: str, pk: int, item_pk: int):
+        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
+
+        if Annotation.objects.filter(item=item, reviewer=request.user).exists():
+            messages.warning(request, "You've already annotated this item.")
+            return redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)
+
+        FormClass = build_annotation_form(queue.schema)
+        form = FormClass(request.POST)
+
+        if form.is_valid():
+            Annotation.objects.create(
+                item=item,
+                team=request.team,
+                reviewer=request.user,
+                data=form.cleaned_data,
+                status=AnnotationStatus.SUBMITTED,
+            )
+            messages.success(request, "Annotation submitted.")
+        else:
+            messages.error(request, "Invalid annotation data. Please check the form.")
+            item_content = _get_item_display_content(item)
+            progress = _get_progress_for_user(queue, request.user)
+            return render(
+                request,
+                "human_annotations/annotate.html",
+                {
+                    "queue": queue,
+                    "item": item,
+                    "form": form,
+                    "progress": progress,
+                    "item_content": item_content,
+                    "active_tab": "annotation_queues",
+                },
+            )
+
+        return redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)
+
+
+class FlagItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+    permission_required = "human_annotations.change_annotationitem"
+
+    def post(self, request, team_slug: str, pk: int, item_pk: int):
+        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
+        item.status = AnnotationItemStatus.FLAGGED
+        item.save(update_fields=["status"])
+        messages.info(request, "Item flagged for review.")
+        return redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)

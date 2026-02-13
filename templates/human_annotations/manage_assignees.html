@@ -1,0 +1,33 @@
+{% extends "web/app/app_base.html" %}
+
+{% block app %}
+<div class="flex flex-col gap-4 max-w-lg">
+  <h2 class="text-xl font-bold">Manage Assignees for "{{ queue.name }}"</h2>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-control">
+      <label class="label">
+        <span class="label-text">Select team members:</span>
+      </label>
+      <div class="max-h-64 overflow-y-auto border rounded p-2">
+        {% for member in team_members %}
+          <label class="flex items-center gap-2 py-1 cursor-pointer">
+            <input type="checkbox"
+                   name="assignees"
+                   value="{{ member.id }}"
+                   class="checkbox checkbox-sm"
+                   {% if member.id in current_assignees %}checked{% endif %}>
+            <span class="text-sm">{{ member.get_full_name|default:member.username }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="mt-4 flex gap-2">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a href="{% url 'human_annotations:queue_detail' team_slug=request.team.slug pk=queue.pk %}"
+         class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock app %}

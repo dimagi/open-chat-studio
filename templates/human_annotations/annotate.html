@@ -1,0 +1,75 @@
+{% extends "web/app/app_base.html" %}
+
+{% block app %}
+<div class="flex flex-col gap-4 max-w-4xl mx-auto">
+  <div class="flex justify-between items-center">
+    <h2 class="text-xl font-bold">{{ queue.name }}</h2>
+    <span class="badge badge-lg">{{ progress.reviewed }} of {{ progress.total }} reviewed</span>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h3 class="card-title text-sm">Item Content</h3>
+        {% if item_content.type == "session" %}
+          <p class="text-xs text-gray-500 mb-2">Participant: {{ item_content.participant }}</p>
+          <div class="flex flex-col gap-2 max-h-96 overflow-y-auto">
+            {% for msg in item_content.messages %}
+              <div class="chat {% if msg.role == 'human' %}chat-end{% else %}chat-start{% endif %}">
+                <div class="chat-bubble {% if msg.role == 'human' %}chat-bubble-primary{% else %}chat-bubble-secondary{% endif %} text-sm">
+                  {{ msg.content }}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% elif item_content.type == "message" %}
+          <div class="prose text-sm">
+            <strong>{{ item_content.role }}:</strong> {{ item_content.content }}
+          </div>
+        {% elif item_content.type == "external" %}
+          <div class="overflow-x-auto">
+            <table class="table table-sm">
+              {% for key, value in item_content.data.items %}
+                <tr>
+                  <td class="font-medium">{{ key }}</td>
+                  <td>{{ value }}</td>
+                </tr>
+              {% endfor %}
+            </table>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h3 class="card-title text-sm">Annotation</h3>
+        <form method="post"
+              action="{% url 'human_annotations:submit_annotation' request.team.slug queue.pk item.pk %}">
+          {% csrf_token %}
+          {% for field in form %}
+            <div class="form-control mb-3">
+              <label class="label">
+                <span class="label-text">{{ field.label }}</span>
+              </label>
+              {{ field }}
+              {% if field.errors %}
+                <span class="text-error text-xs">{{ field.errors.0 }}</span>
+              {% endif %}
+            </div>
+          {% endfor %}
+          <div class="flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary btn-sm">Submit</button>
+            <a href="{% url 'human_annotations:annotate_queue' team_slug=request.team.slug pk=queue.pk %}"
+               class="btn btn-ghost btn-sm">Skip</a>
+            <button type="button"
+                    class="btn btn-warning btn-sm btn-outline"
+                    hx-post="{% url 'human_annotations:flag_item' request.team.slug queue.pk item.pk %}"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>Flag</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock app %}

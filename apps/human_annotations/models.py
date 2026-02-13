@@ -1,9 +1,11 @@
 from django.conf import settings
 from django.db import models
+from django.urls import reverse
 from pydantic import TypeAdapter
 
 from apps.evaluations.field_definitions import FieldDefinition
 from apps.teams.models import BaseTeamModel
+from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 
 
@@ -38,6 +40,9 @@ class AnnotationSchema(BaseTeamModel):
     def __str__(self):
         return self.name
 
+    def get_absolute_url(self):
+        return reverse("human_annotations:schema_edit", args=[get_slug_for_team(self.team_id), self.id])
+
     def get_field_definitions(self) -> dict[str, FieldDefinition]:
         """Parse the raw JSON schema into typed FieldDefinition objects."""
         adapter = TypeAdapter(FieldDefinition)
@@ -69,6 +74,9 @@ class AnnotationQueue(BaseTeamModel):
 
     def __str__(self):
         return self.name
+
+    def get_absolute_url(self):
+        return reverse("human_annotations:queue_detail", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_progress(self):
         """Return progress stats: total items, completed, percent."""

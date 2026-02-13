@@ -1,0 +1,36 @@
+{% extends "web/app/app_base.html" %}
+
+{% block app %}
+<div class="flex flex-col gap-4 max-w-2xl">
+  <h2 class="text-xl font-bold">Add Sessions to "{{ queue.name }}"</h2>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-control">
+      <label class="label">
+        <span class="label-text">Select sessions to add:</span>
+      </label>
+      <div class="max-h-96 overflow-y-auto border rounded p-2">
+        {% for session in sessions %}
+          <label class="flex items-center gap-2 py-1 cursor-pointer">
+            <input type="checkbox" name="sessions" value="{{ session.id }}" class="checkbox checkbox-sm">
+            <span class="text-sm">
+              {{ session.experiment.name }} - {{ session.participant.identifier }}
+              {% if session.last_activity_at %}
+                ({{ session.last_activity_at|timesince }} ago)
+              {% endif %}
+            </span>
+          </label>
+        {% empty %}
+          <span class="text-gray-400 text-sm">No sessions found</span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="mt-4 flex gap-2">
+      <button type="submit" class="btn btn-primary">Add to Queue</button>
+      <a href="{% url 'human_annotations:queue_detail' team_slug=request.team.slug pk=queue.pk %}"
+         class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock app %}

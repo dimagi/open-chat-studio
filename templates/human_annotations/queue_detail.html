@@ -1,0 +1,66 @@
+{% extends "web/app/app_base.html" %}
+
+{% block app %}
+<div class="flex flex-col gap-4">
+  <div class="flex justify-between items-center">
+    <div>
+      <h2 class="text-xl font-bold">{{ object.name }}</h2>
+      {% if object.description %}
+        <p class="text-gray-500">{{ object.description }}</p>
+      {% endif %}
+    </div>
+    <span class="badge badge-outline">{{ object.get_status_display }}</span>
+  </div>
+
+  <div class="flex flex-wrap gap-2">
+    <a href="{% url 'human_annotations:annotate_queue' team_slug=request.team.slug pk=object.pk %}"
+       class="btn btn-primary btn-sm">Start Annotating</a>
+    <a href="{% url 'human_annotations:queue_add_sessions' team_slug=request.team.slug pk=object.pk %}"
+       class="btn btn-outline btn-sm">Add Sessions</a>
+    <a href="{% url 'human_annotations:queue_import_csv' team_slug=request.team.slug pk=object.pk %}"
+       class="btn btn-outline btn-sm">Import CSV</a>
+    <a href="{% url 'human_annotations:queue_export' team_slug=request.team.slug pk=object.pk %}?format=csv"
+       class="btn btn-outline btn-sm">Export CSV</a>
+    <a href="{% url 'human_annotations:queue_export' team_slug=request.team.slug pk=object.pk %}?format=jsonl"
+       class="btn btn-outline btn-sm">Export JSONL</a>
+    <a href="{% url 'human_annotations:queue_manage_assignees' team_slug=request.team.slug pk=object.pk %}"
+       class="btn btn-outline btn-sm">Manage Assignees</a>
+  </div>
+
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body">
+      <h3 class="card-title text-sm">Progress</h3>
+      <progress class="progress progress-primary w-full" value="{{ progress.percent }}" max="100"></progress>
+      <p class="text-sm text-gray-500">
+        {{ progress.completed }} of {{ progress.total }} items completed ({{ progress.percent }}%)
+      </p>
+      <p class="text-sm text-gray-500">Reviews required per item: {{ object.num_reviews_required }}</p>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body">
+      <h3 class="card-title text-sm">Assignees</h3>
+      <div class="flex flex-wrap gap-2">
+        {% for user in object.assignees.all %}
+          <span class="badge badge-neutral">{{ user.get_full_name|default:user.username }}</span>
+        {% empty %}
+          <span class="text-gray-400 text-sm">No assignees</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body">
+      <h3 class="card-title text-sm">Items</h3>
+      <div id="items-table"
+           hx-get="{{ items_table_url }}"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <span class="loading loading-spinner loading-md"></span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock app %}
