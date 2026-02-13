@@ -1,7 +1,7 @@
 import django.db
 import pytest
 
-from apps.human_annotations.models import AnnotationSchema
+from apps.human_annotations.models import AnnotationQueue, AnnotationSchema, QueueStatus
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -52,3 +52,38 @@ def test_annotation_schema_get_field_definitions(team):
     assert field_defs["score"].type == "int"
     assert field_defs["score"].ge == 1
     assert field_defs["score"].le == 5
+
+
+@pytest.mark.django_db()
+def test_create_annotation_queue(team):
+    schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
+    user = team.members.first()
+    queue = AnnotationQueue.objects.create(
+        team=team,
+        name="Quality Audit Q1",
+        schema=schema,
+        created_by=user,
+        num_reviews_required=3,
+    )
+    queue.assignees.add(user)
+    assert queue.id is not None
+    assert queue.status == QueueStatus.ACTIVE
+    assert queue.num_reviews_required == 3
+    assert queue.assignees.count() == 1
+
+
+@pytest.mark.django_db()
+@pytest.mark.xfail(reason="AnnotationItem model not yet created")
+def test_queue_progress_empty(team):
+    schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
+    user = team.members.first()
+    queue = AnnotationQueue.objects.create(
+        team=team,
+        name="Empty Queue",
+        schema=schema,
+        created_by=user,
+    )
+    progress = queue.get_progress()
+    assert progress["total"] == 0
+    assert progress["completed"] == 0
+    assert progress["percent"] == 0

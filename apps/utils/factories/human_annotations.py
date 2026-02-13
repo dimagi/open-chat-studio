@@ -1,6 +1,6 @@
 import factory
 
-from apps.human_annotations.models import AnnotationSchema
+from apps.human_annotations.models import AnnotationQueue, AnnotationSchema
 from apps.utils.factories.team import TeamFactory
 
 
@@ -16,3 +16,14 @@ class AnnotationSchemaFactory(factory.django.DjangoModelFactory):
             "notes": {"type": "string", "description": "Additional notes"},
         }
     )
+
+
+class AnnotationQueueFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AnnotationQueue
+
+    team = factory.SubFactory(TeamFactory)
+    name = factory.Sequence(lambda n: f"Queue {n}")
+    schema = factory.SubFactory(AnnotationSchemaFactory, team=factory.SelfAttribute("..team"))
+    created_by = factory.LazyAttribute(lambda obj: obj.team.members.first())
+    num_reviews_required = 1
