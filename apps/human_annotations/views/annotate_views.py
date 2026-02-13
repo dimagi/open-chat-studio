@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views import View
 
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -49,11 +50,18 @@ def _get_item_display_content(item):
         chat_messages = item.session.chat.messages.order_by("created_at").values_list(
             "message_type",
             "content",
+            "created_at",
         )
+        session = item.session
         return {
             "type": "session",
-            "messages": [{"role": role, "content": content} for role, content in chat_messages],
-            "participant": item.session.participant.identifier,
+            "messages": [
+                {"role": role, "content": content, "created_at": created_at}
+                for role, content, created_at in chat_messages
+            ],
+            "participant": session.participant.identifier,
+            "participant_data": session.participant_data_from_experiment,
+            "session_state": session.state,
         }
     elif item.message_id:
         msg = item.message
@@ -183,8 +191,15 @@ class FlagItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
         item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
         item.status = AnnotationItemStatus.FLAGGED
-        item.flag_reason = request.POST.get("flag_reason", "")
-        item.save(update_fields=["status", "flag_reason"])
+        item.flags.append(
+            {
+                "user": request.user.get_display_name(),
+                "user_id": request.user.id,
+                "reason": request.POST.get("flag_reason", ""),
+                "timestamp": timezone.now().isoformat(),
+            }
+        )
+        item.save(update_fields=["status", "flags"])
         messages.info(request, "Item flagged for review.")
         redirect_url = redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)
         if request.headers.get("HX-Request"):
@@ -200,8 +215,8 @@ class UnflagItem(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
     def post(self, request, team_slug: str, pk: int, item_pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
         item = get_object_or_404(AnnotationItem, id=item_pk, queue=queue)
-        item.flag_reason = ""
-        item.save(update_fields=["flag_reason"])
+        item.flags = []
+        item.save(update_fields=["flags"])
         item.update_status()
         messages.info(request, "Item unflagged.")
         redirect_url = redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)

@@ -90,7 +90,7 @@ def build_annotation_form(schema_instance):
 
     for name, defn in field_defs.items():
         if isinstance(defn, IntFieldDefinition):
-            kwargs = {"label": defn.description, "required": True}
+            kwargs = {"label": name, "help_text": defn.description, "required": True}
             if defn.ge is not None:
                 kwargs["min_value"] = defn.ge
             if defn.le is not None:
@@ -98,7 +98,7 @@ def build_annotation_form(schema_instance):
             form_fields[name] = forms.IntegerField(**kwargs)
 
         elif isinstance(defn, FloatFieldDefinition):
-            kwargs = {"label": defn.description, "required": True}
+            kwargs = {"label": name, "help_text": defn.description, "required": True}
             if defn.ge is not None:
                 kwargs["min_value"] = defn.ge
             if defn.le is not None:
@@ -108,13 +108,14 @@ def build_annotation_form(schema_instance):
         elif isinstance(defn, ChoiceFieldDefinition):
             choices = [("", "---")] + [(c, c) for c in defn.choices]
             form_fields[name] = forms.ChoiceField(
-                label=defn.description,
+                label=name,
+                help_text=defn.description,
                 choices=choices,
                 required=True,
             )
 
         elif isinstance(defn, StringFieldDefinition):
-            kwargs = {"label": defn.description, "required": True}
+            kwargs = {"label": name, "help_text": defn.description, "required": True}
             if defn.max_length:
                 kwargs["max_length"] = defn.max_length
             form_fields[name] = forms.CharField(

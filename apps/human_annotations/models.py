@@ -139,8 +139,8 @@ class AnnotationItem(BaseTeamModel):
     # Denormalized review count for efficient querying
     review_count = models.PositiveSmallIntegerField(default=0)
 
-    # Flag reason (populated when status is FLAGGED)
-    flag_reason = models.TextField(blank=True, default="")
+    # Append-only list of flags: [{"user": "<name>", "user_id": <id>, "reason": "...", "timestamp": "..."}]
+    flags = SanitizedJSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["created_at"]

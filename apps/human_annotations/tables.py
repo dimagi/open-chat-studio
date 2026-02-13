@@ -116,11 +116,18 @@ class AnnotationItemTable(tables.Table):
         badge_class = self._STATUS_BADGE.get(record.status, "badge-ghost")
         label = record.get_status_display()
         if record.status == "flagged":
-            if record.flag_reason:
+            flags = record.flags or []
+            tip_lines = []
+            for flag in flags:
+                line = flag.get("user", "Unknown")
+                if flag.get("reason"):
+                    line += f": {flag['reason']}"
+                tip_lines.append(line)
+            if tip_lines:
                 badge = format_html(
                     '<span class="badge badge-soft {} tooltip tooltip-bottom" data-tip="{}">{}</span>',
                     badge_class,
-                    record.flag_reason,
+                    " / ".join(tip_lines),
                     label,
                 )
             else:

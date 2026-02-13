@@ -386,15 +386,17 @@ def test_flag_item_with_reason(client, team_with_users, queue):
     assert response.status_code == 302
     item.refresh_from_db()
     assert item.status == AnnotationItemStatus.FLAGGED
-    assert item.flag_reason == "Content seems wrong"
+    assert len(item.flags) == 1
+    assert item.flags[0]["reason"] == "Content seems wrong"
+    assert item.flags[0]["user_id"] == client.session["_auth_user_id"] or item.flags[0]["user"] != ""
 
 
 @pytest.mark.django_db()
 def test_unflag_item(client, team_with_users, queue):
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
     item.status = AnnotationItemStatus.FLAGGED
-    item.flag_reason = "Bad data"
-    item.save(update_fields=["status", "flag_reason"])
+    item.flags = [{"user": "Test", "user_id": 1, "reason": "Bad data", "timestamp": "2024-01-01T00:00:00"}]
+    item.save(update_fields=["status", "flags"])
 
     url = reverse(
         "human_annotations:unflag_item",
@@ -404,7 +406,7 @@ def test_unflag_item(client, team_with_users, queue):
     assert response.status_code == 302
     item.refresh_from_db()
     assert item.status == AnnotationItemStatus.PENDING
-    assert item.flag_reason == ""
+    assert item.flags == []
 
 
 @pytest.mark.django_db()
@@ -419,8 +421,8 @@ def test_unflag_item_with_reviews(client, team_with_users, queue, user):
         status=AnnotationStatus.SUBMITTED,
     )
     item.status = AnnotationItemStatus.FLAGGED
-    item.flag_reason = "Needs check"
-    item.save(update_fields=["status", "flag_reason"])
+    item.flags = [{"user": "Test", "user_id": 1, "reason": "Needs check", "timestamp": "2024-01-01T00:00:00"}]
+    item.save(update_fields=["status", "flags"])
 
     url = reverse(
         "human_annotations:unflag_item",
@@ -430,7 +432,7 @@ def test_unflag_item_with_reviews(client, team_with_users, queue, user):
     assert response.status_code == 302
     item.refresh_from_db()
     assert item.status == AnnotationItemStatus.COMPLETED  # num_reviews_required=1
-    assert item.flag_reason == ""
+    assert item.flags == []
 
 
 @pytest.mark.django_db()
