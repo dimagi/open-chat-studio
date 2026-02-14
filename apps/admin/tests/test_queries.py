@@ -24,8 +24,9 @@ from apps.utils.factories.team import TeamFactory
 @pytest.fixture()
 def date_range():
     today = timezone.now().date()
-    start = today - timedelta(days=30)
-    end = datetime.combine(today, time.max, tzinfo=timezone.get_current_timezone())
+    tz = timezone.get_current_timezone()
+    start = datetime.combine(today - timedelta(days=30), time.min, tzinfo=tz)
+    end = datetime.combine(today, time.max, tzinfo=tz)
     return start, end
 
 
