@@ -2,12 +2,9 @@ from django.db.models import F, QuerySet
 
 
 class CustomActionOperationMixin:
-    def _copy_custom_action_operations_to_new_version(
-        self, new_experiment=None, new_assistant=None, new_node=None, is_copy: bool = False
-    ):
+    def _copy_custom_action_operations_to_new_version(self, new_assistant=None, new_node=None, is_copy: bool = False):
         for operation in self.get_custom_action_operations():
             operation.create_new_version(
-                new_experiment=new_experiment,
                 new_assistant=new_assistant,
                 new_node=new_node,
                 is_copy=is_copy,

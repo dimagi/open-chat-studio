@@ -136,13 +136,6 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
-    experiment = models.ForeignKey(
-        "experiments.Experiment",
-        on_delete=models.CASCADE,
-        related_name="custom_action_operations",
-        null=True,
-        blank=True,
-    )
     assistant = models.ForeignKey(
         "assistants.OpenAiAssistant",
         on_delete=models.CASCADE,
@@ -167,13 +160,8 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         ordering = ("operation_id",)
         constraints = [
             models.CheckConstraint(
-                check=Q(experiment__isnull=False) | Q(assistant__isnull=False) | Q(node__isnull=False),
-                name="experiment_or_assistant_or_node_required",
-            ),
-            models.UniqueConstraint(
-                fields=["experiment", "custom_action", "operation_id"],
-                condition=Q(experiment__isnull=False),
-                name="unique_experiment_custom_action_operation",
+                check=Q(assistant__isnull=False) | Q(node__isnull=False),
+                name="assistant_or_node_required",
             ),
             models.UniqueConstraint(
                 fields=["assistant", "custom_action", "operation_id"],
@@ -201,19 +189,18 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         self._operation_schema = spec
 
     def get_model_id(self, with_holder=True):
-        holder_id = self.experiment_id if self.experiment_id else self.assistant_id
+        holder_id = self.assistant_id if self.assistant_id else self.node_id
         holder_id = holder_id if with_holder else ""
         return make_model_id(holder_id, self.custom_action_id, self.operation_id)
 
     @transaction.atomic()
-    def create_new_version(self, new_experiment=None, new_assistant=None, new_node=None, is_copy=False):
-        action_holders = [new_experiment, new_assistant, new_node]
-        if not action_holders:
-            raise ValueError("Either new_experiment or new_assistant must be provided")
+    def create_new_version(self, new_assistant=None, new_node=None, is_copy=False):
+        action_holders = [new_assistant, new_node]
+        if not any(action_holders):
+            raise ValueError("Either new_assistant or new_node must be provided")
         if len([holder for holder in action_holders if holder is not None]) > 1:
-            raise ValueError("Only one of new_experiment or new_assistant can be provided")
+            raise ValueError("Only one of new_assistant or new_node can be provided")
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
-        new_instance.experiment = new_experiment
         new_instance.assistant = new_assistant
         new_instance.node = new_node
         if not is_copy:
