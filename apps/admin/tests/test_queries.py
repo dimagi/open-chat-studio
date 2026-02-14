@@ -112,9 +112,10 @@ class TestGetTeamActivitySummary:
         result = get_team_activity_summary(start, end)
         assert result["active_count"] == 2
         assert result["total_count"] >= 3
-        assert "Inactive 1" in result["inactive_teams"]
-        assert "Active 1" not in result["inactive_teams"]
-        assert "Active 2" not in result["inactive_teams"]
+        inactive_names = [t["name"] for t in result["inactive_teams"]]
+        assert "Inactive 1" in inactive_names
+        assert "Active 1" not in inactive_names
+        assert "Active 2" not in inactive_names
 
 
 @pytest.mark.django_db()
