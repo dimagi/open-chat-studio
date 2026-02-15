@@ -21,6 +21,7 @@ from apps.chat.channels import (
 from apps.chat.models import ChatMessage
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.models import MessagingProviderType
+from apps.teams.utils import current_team
 from apps.utils.taskbadger import update_taskbadger_data
 
 log = get_task_logger("ocs.channels")
@@ -33,17 +34,18 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
         log.info(f"No experiment channel found for external_id: {channel_external_id}")
         return
 
-    update = types.Update.de_json(message_data)
-    if update.my_chat_member:
-        # This is a chat member update that we don't care about.
-        # See https://core.telegram.org/bots/api-changelog#march-9-2021
-        return
+    with current_team(experiment_channel.team):
+        update = types.Update.de_json(message_data)
+        if update.my_chat_member:
+            # This is a chat member update that we don't care about.
+            # See https://core.telegram.org/bots/api-changelog#march-9-2021
+            return
 
-    message = TelegramMessage.parse(update)
-    message_handler = TelegramChannel(experiment_channel.experiment.default_version, experiment_channel)
-    update_taskbadger_data(self, message_handler, message)
+        message = TelegramMessage.parse(update)
+        message_handler = TelegramChannel(experiment_channel.experiment.default_version, experiment_channel)
+        update_taskbadger_data(self, message_handler, message)
 
-    message_handler.new_user_message(message)
+        message_handler.new_user_message(message)
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
@@ -61,10 +63,13 @@ def handle_twilio_message(self, message_data: dict):
         log.info(f"No experiment channel found for {channel_id_key}: {message.to}")
         return
 
-    message_handler = ChannelClass(experiment_channel.experiment.default_version, experiment_channel=experiment_channel)
-    update_taskbadger_data(self, message_handler, message)
+    with current_team(experiment_channel.team):
+        message_handler = ChannelClass(
+            experiment_channel.experiment.default_version, experiment_channel=experiment_channel
+        )
+        update_taskbadger_data(self, message_handler, message)
 
-    message_handler.new_user_message(message)
+        message_handler.new_user_message(message)
 
 
 def get_twilio_channel_class_and_key(message):
@@ -101,9 +106,10 @@ def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dic
     if not experiment_channel:
         log.info(f"No experiment channel found for SureAdhere tenant ID: {sureadhere_tenant_id}")
         return
-    channel = SureAdhereChannel(experiment_channel.experiment.default_version, experiment_channel)
-    update_taskbadger_data(self, channel, message)
-    channel.new_user_message(message)
+    with current_team(experiment_channel.team):
+        channel = SureAdhereChannel(experiment_channel.experiment.default_version, experiment_channel)
+        update_taskbadger_data(self, channel, message)
+        channel.new_user_message(message)
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
@@ -117,9 +123,10 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     if not experiment_channel:
         log.info(f"No experiment channel found for experiment_id: {experiment_id}")
         return
-    channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
-    update_taskbadger_data(self, channel, message)
-    channel.new_user_message(message)
+    with current_team(experiment_channel.team):
+        channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
+        update_taskbadger_data(self, channel, message)
+        channel.new_user_message(message)
 
 
 def handle_api_message(
@@ -155,21 +162,24 @@ def handle_commcare_connect_message(self, experiment_id: int, participant_data_i
         log.info(f"No experiment channel found for experiment_id: {experiment_id}")
         return
 
-    messages.sort(key=lambda x: x["timestamp"])
+    with current_team(experiment_channel.team):
+        messages.sort(key=lambda x: x["timestamp"])
 
-    connect_client = CommCareConnectClient()
-    decrypted_messages = connect_client.decrypt_messages(participant_data.get_encryption_key_bytes(), messages=messages)
+        connect_client = CommCareConnectClient()
+        decrypted_messages = connect_client.decrypt_messages(
+            participant_data.get_encryption_key_bytes(), messages=messages
+        )
 
-    # If the user sent multiple messages, we should append it together instead of the bot replying to each one
-    user_message = "\n\n".join(decrypted_messages)
+        # If the user sent multiple messages, we should append it together instead of the bot replying to each one
+        user_message = "\n\n".join(decrypted_messages)
 
-    message = BaseMessage(participant_id=participant_data.participant.identifier, message_text=user_message)
-    channel = CommCareConnectChannel(
-        experiment=experiment_channel.experiment.default_version, experiment_channel=experiment_channel
-    )
+        message = BaseMessage(participant_id=participant_data.participant.identifier, message_text=user_message)
+        channel = CommCareConnectChannel(
+            experiment=experiment_channel.experiment.default_version, experiment_channel=experiment_channel
+        )
 
-    update_taskbadger_data(self, channel, message)
-    channel.new_user_message(message)
+        update_taskbadger_data(self, channel, message)
+        channel.new_user_message(message)
 
 
 def get_experiment_channel(platform, **query_kwargs):
