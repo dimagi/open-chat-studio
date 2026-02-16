@@ -109,6 +109,8 @@ def get_whatsapp_message_stats(start: datetime, end: datetime):
         )
         .values(
             "chat__team__name",
+            "chat__team__slug",
+            "chat__experiment_session__experiment__id",
             "chat__experiment_session__experiment__name",
             "chat__experiment_session__experiment_channel__extra_data",
             "message_type",
@@ -119,35 +121,45 @@ def get_whatsapp_message_stats(start: datetime, end: datetime):
 
     # Pivot into (team, experiment, number, human_count, ai_count)
     pivot = defaultdict(lambda: {"human": 0, "ai": 0})
+    key_metadata = {}
     for row in rows:
-        team = row["chat__team__name"]
-        experiment = row["chat__experiment_session__experiment__name"]
+        team_slug = row["chat__team__slug"]
+        experiment_id = row["chat__experiment_session__experiment__id"]
         extra_data = row["chat__experiment_session__experiment_channel__extra_data"] or {}
         number = extra_data.get("number", "---")
-        key = (team, experiment, number)
-        pivot[key][row["message_type"]] = row["count"]
+        key = (team_slug, experiment_id, number)
+        pivot[key][row["message_type"]] += row["count"]
+        key_metadata[key] = {
+            "team_name": row["chat__team__name"],
+            "experiment_name": row["chat__experiment_session__experiment__name"],
+        }
 
-    return [
+    results = [
         {
-            "team": team,
-            "experiment": experiment,
+            "team": key_metadata[key]["team_name"],
+            "team_slug": team_slug,
+            "experiment": key_metadata[key]["experiment_name"],
+            "experiment_id": experiment_id,
             "number": number,
             "human_count": counts["human"],
             "ai_count": counts["ai"],
         }
-        for (team, experiment, number), counts in sorted(pivot.items())
+        for key, counts in pivot.items()
+        for (team_slug, experiment_id, number) in [key]
     ]
+    results.sort(key=lambda r: r["human_count"], reverse=True)
+    return results
 
 
-def get_top_teams(start: datetime, end: datetime):
+def get_top_teams(start: datetime, end: datetime, limit: int = 10):
     msg_data = (
         ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
-        .values("chat__team_id", "chat__team__name")
+        .values("chat__team_id", "chat__team__name", "chat__team__slug")
         .annotate(
             msg_count=Count("id"),
             session_count=Count("chat__experiment_session", distinct=True),
         )
-        .order_by("-msg_count")
+        .order_by("-msg_count")[:limit]
     )
 
     participant_data = (
@@ -160,6 +172,7 @@ def get_top_teams(start: datetime, end: datetime):
     return [
         {
             "team": row["chat__team__name"],
+            "team_slug": row["chat__team__slug"],
             "msg_count": row["msg_count"],
             "session_count": row["session_count"],
             "participant_count": participant_map.get(row["chat__team_id"], 0),
@@ -204,8 +217,11 @@ def get_team_activity_summary(start: datetime, end: datetime):
         .values_list("chat__team_id", flat=True)
         .distinct()
     )
-    all_teams = list(Team.objects.values_list("id", "name"))
-    inactive_teams = sorted(name for tid, name in all_teams if tid not in active_team_ids)
+    all_teams = list(Team.objects.values_list("id", "name", "slug"))
+    inactive_teams = sorted(
+        ({"name": name, "slug": slug} for tid, name, slug in all_teams if tid not in active_team_ids),
+        key=lambda t: t["name"],
+    )
     return {
         "active_count": len(active_team_ids),
         "total_count": len(all_teams),
@@ -225,8 +241,10 @@ def get_top_experiments(start: datetime, end: datetime, limit: int = 10):
     rows = (
         ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
         .values(
+            "chat__experiment_session__experiment__id",
             "chat__experiment_session__experiment__name",
             "chat__experiment_session__experiment__team__name",
+            "chat__experiment_session__experiment__team__slug",
         )
         .annotate(
             msg_count=Count("id"),
@@ -237,7 +255,9 @@ def get_top_experiments(start: datetime, end: datetime, limit: int = 10):
     return [
         {
             "team": row["chat__experiment_session__experiment__team__name"],
+            "team_slug": row["chat__experiment_session__experiment__team__slug"],
             "experiment": row["chat__experiment_session__experiment__name"],
+            "experiment_id": row["chat__experiment_session__experiment__id"],
             "msg_count": row["msg_count"],
             "session_count": row["session_count"],
         }

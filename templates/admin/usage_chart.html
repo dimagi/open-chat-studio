@@ -35,8 +35,8 @@
       {% endblocktranslate %}
     </summary>
     <ul class="text-sm opacity-60 mt-1 ml-4 list-disc">
-      {% for name in team_activity.inactive_teams %}
-      <li>{{ name }}</li>
+      {% for team in team_activity.inactive_teams %}
+      <li><a href="{% url 'web_team:home' team.slug %}" class="link">{{ team.name }}</a></li>
       {% endfor %}
     </ul>
   </details>
@@ -71,7 +71,7 @@
       {% for row in top_teams %}
       <tr>
         <td>{{ forloop.counter }}</td>
-        <td>{{ row.team }}</td>
+        <td><a href="{% url 'web_team:home' row.team_slug %}" class="link">{{ row.team }}</a></td>
         <td>{{ row.msg_count }}</td>
         <td>{{ row.session_count }}</td>
         <td>{{ row.participant_count }}</td>
@@ -129,8 +129,8 @@
       {% for row in top_experiments %}
       <tr>
         <td>{{ forloop.counter }}</td>
-        <td>{{ row.team }}</td>
-        <td>{{ row.experiment }}</td>
+        <td><a href="{% url 'web_team:home' row.team_slug %}" class="link">{{ row.team }}</a></td>
+        <td><a href="{% url 'chatbots:single_chatbot_home' row.team_slug row.experiment_id %}" class="link">{{ row.experiment }}</a></td>
         <td>{{ row.msg_count }}</td>
         <td>{{ row.session_count }}</td>
       </tr>
@@ -159,8 +159,8 @@
     <tbody>
       {% for row in whatsapp_stats %}
       <tr>
-        <td>{{ row.team }}</td>
-        <td>{{ row.experiment }}</td>
+        <td><a href="{% url 'web_team:home' row.team_slug %}" class="link">{{ row.team }}</a></td>
+        <td><a href="{% url 'chatbots:single_chatbot_home' row.team_slug row.experiment_id %}" class="link">{{ row.experiment }}</a></td>
         <td>{{ row.number }}</td>
         <td>{{ row.human_count }}</td>
         <td>{{ row.ai_count }}</td>

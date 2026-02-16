@@ -57,6 +57,15 @@ def admin_home(request):
     )
 
 
+def _make_aware_range(start_date, end_date):
+    """Convert date objects to timezone-aware datetimes spanning the full day range."""
+    tz = timezone.get_current_timezone()
+    return (
+        datetime.combine(start_date, time.min, tzinfo=tz),
+        datetime.combine(end_date, time.max, tzinfo=tz),
+    )
+
+
 def _get_form(request):
     data = {field_name: request.GET.get(field_name) for field_name in DateRangeForm.declared_fields}
     if all(data.values()):
@@ -89,25 +98,24 @@ def usage_chart(request):
         return redirect("ocs_admin:home")
 
     start, end = form.get_date_range()
-    end_timestamp = datetime.combine(end, time.max)
-    usage_data = StatsSerializer(get_message_stats(start, end_timestamp), many=True)
-    participant_data = StatsSerializer(get_participant_stats(start, end_timestamp), many=True)
-    whatsapp_stats = get_whatsapp_message_stats(start, end_timestamp)
+    start_timestamp, end_timestamp = _make_aware_range(start, end)
+    usage_data = StatsSerializer(get_message_stats(start_timestamp, end_timestamp), many=True)
+    participant_data = StatsSerializer(get_participant_stats(start_timestamp, end_timestamp), many=True)
+    whatsapp_stats = get_whatsapp_message_stats(start_timestamp, end_timestamp)
 
     period_length = end - start
     prev_end = start
     prev_start = prev_end - period_length
-    prev_start_timestamp = datetime.combine(prev_start, time.min)
-    prev_end_timestamp = datetime.combine(prev_end, time.min)
+    prev_start_timestamp, prev_end_timestamp = _make_aware_range(prev_start, prev_end)
 
-    current_totals = get_period_totals(start, end_timestamp)
+    current_totals = get_period_totals(start_timestamp, end_timestamp)
     previous_totals = get_period_totals(prev_start_timestamp, prev_end_timestamp)
     growth_metrics = _compute_growth(current_totals, previous_totals)
 
-    top_teams = get_top_teams(start, end_timestamp)
-    platform_breakdown = get_platform_breakdown(start, end_timestamp)
-    team_activity = get_team_activity_summary(start, end_timestamp)
-    top_experiments = get_top_experiments(start, end_timestamp)
+    top_teams = get_top_teams(start_timestamp, end_timestamp)
+    platform_breakdown = get_platform_breakdown(start_timestamp, end_timestamp)
+    team_activity = get_team_activity_summary(start_timestamp, end_timestamp)
+    top_experiments = get_top_experiments(start_timestamp, end_timestamp)
 
     url = reverse("ocs_admin:home")
     query_data = {
@@ -123,7 +131,7 @@ def usage_chart(request):
                 "message_data": usage_data.data,
                 "participant_data": {
                     "data": participant_data.data,
-                    "start_value": Participant.objects.filter(created_at__lt=start).count(),
+                    "start_value": Participant.objects.filter(created_at__lt=start_timestamp).count(),
                 },
                 "start": start.isoformat(),
                 "end": end.isoformat(),
@@ -146,9 +154,9 @@ def export_usage(request):
         return redirect("ocs_admin:home")
 
     start, end = form.get_date_range()
-    end_timestamp = datetime.combine(end, time.max)
+    start_timestamp, end_timestamp = _make_aware_range(start, end)
 
-    response = HttpResponse(usage_to_csv(start, end_timestamp), content_type="text/csv")
+    response = HttpResponse(usage_to_csv(start_timestamp, end_timestamp), content_type="text/csv")
     export_filename = f"usage_{start.isoformat()}_{end.isoformat()}.csv"
     response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
     return response
@@ -168,9 +176,9 @@ def export_whatsapp_stats(request):
         return redirect("ocs_admin:home")
 
     start, end = form.get_date_range()
-    end_timestamp = datetime.combine(end, time.max)
+    start_timestamp, end_timestamp = _make_aware_range(start, end)
 
-    response = HttpResponse(whatsapp_message_stats_to_csv(start, end_timestamp), content_type="text/csv")
+    response = HttpResponse(whatsapp_message_stats_to_csv(start_timestamp, end_timestamp), content_type="text/csv")
     export_filename = f"whatsapp_stats_{start.isoformat()}_{end.isoformat()}.csv"
     response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
     return response
@@ -183,9 +191,9 @@ def export_top_teams(request):
         return redirect("ocs_admin:home")
 
     start, end = form.get_date_range()
-    end_timestamp = datetime.combine(end, time.max)
+    start_timestamp, end_timestamp = _make_aware_range(start, end)
 
-    response = HttpResponse(top_teams_to_csv(start, end_timestamp), content_type="text/csv")
+    response = HttpResponse(top_teams_to_csv(start_timestamp, end_timestamp), content_type="text/csv")
     export_filename = f"top_teams_{start.isoformat()}_{end.isoformat()}.csv"
     response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
     return response
@@ -198,9 +206,9 @@ def export_top_experiments(request):
         return redirect("ocs_admin:home")
 
     start, end = form.get_date_range()
-    end_timestamp = datetime.combine(end, time.max)
+    start_timestamp, end_timestamp = _make_aware_range(start, end)
 
-    response = HttpResponse(top_experiments_to_csv(start, end_timestamp), content_type="text/csv")
+    response = HttpResponse(top_experiments_to_csv(start_timestamp, end_timestamp), content_type="text/csv")
     export_filename = f"top_experiments_{start.isoformat()}_{end.isoformat()}.csv"
     response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
     return response

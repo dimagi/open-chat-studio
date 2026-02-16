@@ -24,8 +24,9 @@ from apps.utils.factories.team import TeamFactory
 @pytest.fixture()
 def date_range():
     today = timezone.now().date()
-    start = today - timedelta(days=30)
-    end = datetime.combine(today, time.max, tzinfo=timezone.get_current_timezone())
+    tz = timezone.get_current_timezone()
+    start = datetime.combine(today - timedelta(days=30), time.min, tzinfo=tz)
+    end = datetime.combine(today, time.max, tzinfo=tz)
     return start, end
 
 
@@ -112,9 +113,10 @@ class TestGetTeamActivitySummary:
         result = get_team_activity_summary(start, end)
         assert result["active_count"] == 2
         assert result["total_count"] >= 3
-        assert "Inactive 1" in result["inactive_teams"]
-        assert "Active 1" not in result["inactive_teams"]
-        assert "Active 2" not in result["inactive_teams"]
+        inactive_names = [t["name"] for t in result["inactive_teams"]]
+        assert "Inactive 1" in inactive_names
+        assert "Active 1" not in inactive_names
+        assert "Active 2" not in inactive_names
 
 
 @pytest.mark.django_db()
