@@ -1,4 +1,5 @@
 import django_tables2 as tables
+from django.conf import settings
 from django.urls import reverse
 
 from apps.generics import actions
@@ -37,6 +38,7 @@ class AnnotationSchemaTable(tables.Table):
         model = AnnotationSchema
         fields = ["name", "description", "field_count", "created_at", "actions"]
         attrs = {"class": "table"}
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
 
     def render_field_count(self, record):
         return len(record.schema)
@@ -65,6 +67,7 @@ class AnnotationQueueTable(tables.Table):
         model = AnnotationQueue
         fields = ["name", "schema", "status", "num_reviews_required", "progress", "created_at", "actions"]
         attrs = {"class": "table"}
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
 
     def render_progress(self, record):
         # Use annotated fields from queryset if available, otherwise fall back to get_progress()
@@ -107,6 +110,7 @@ class AnnotationItemTable(tables.Table):
         model = AnnotationItem
         fields = ["description", "item_type", "status", "review_count", "annotations_summary", "created_at"]
         attrs = {"class": "table"}
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
 
     def render_review_count(self, record):
         return f"{record.review_count}/{record.queue.num_reviews_required}"
