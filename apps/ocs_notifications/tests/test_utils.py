@@ -11,9 +11,11 @@ from apps.ocs_notifications.utils import (
     DurationTimeDelta,
     create_identifier,
     create_notification,
+    get_users_to_be_notified,
     is_notification_muted,
     mute_notification,
-    send_notification_email,
+    send_notification_email_async,
+    should_send_email,
     toggle_notification_read,
 )
 from apps.teams.backends import add_user_to_team
@@ -28,59 +30,60 @@ def enable_flag_for_notifications():
 
 
 @pytest.mark.django_db()
-def test_email_not_sent_when_preference_doesnt_exist(team_with_users, mailoutbox):
-    """
-    Test that email is not sent when user notification preferences don't exist.
-    """
-    user = team_with_users.members.first()
-    event_type = EventTypeFactory.create(team=team_with_users, level=LevelChoices.ERROR)
-    event_user = EventUserFactory.create(user=user, team=team_with_users, event_type=event_type)
-    notification_event = NotificationEventFactory.create(team=team_with_users, event_type=event_type)
+class TestSendNotificationEmail:
+    def test_email_not_sent_when_preference_doesnt_exist(self, team_with_users, mailoutbox):
+        """
+        Test that email is not sent when user notification preferences don't exist.
+        """
+        user = team_with_users.members.first()
+        event_type = EventTypeFactory.create(team=team_with_users, level=LevelChoices.ERROR)
+        event_user = EventUserFactory.create(user=user, team=team_with_users, event_type=event_type)
+        notification_event = NotificationEventFactory.create(team=team_with_users, event_type=event_type)
 
-    send_notification_email(event_user, notification_event)
-    assert len(mailoutbox) == 0
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("notification_level", "email_preference_level", "should_send"),
-    [
-        # When preference is INFO, send all types
-        (LevelChoices.WARNING, LevelChoices.INFO, True),
-        # When preference is WARNING, only send WARNING and ERROR
-        (LevelChoices.INFO, LevelChoices.WARNING, False),
-        # When preference is ERROR, only send ERROR
-        (LevelChoices.ERROR, LevelChoices.ERROR, True),
-    ],
-)
-def test_send_notification_email_respects_levels(
-    team_with_users, notification_level, email_preference_level, should_send, mailoutbox
-):
-    """
-    Test that email notifications respect user notification level preferences.
-
-    Verifies that emails are sent only when the notification level meets or exceeds
-    the user's email notification threshold level.
-    """
-    user = team_with_users.members.first()
-    event_type = EventTypeFactory.create(team=team_with_users, level=notification_level)
-    event_user = EventUserFactory.create(user=user, team=team_with_users, event_type=event_type)
-    notification_event = NotificationEventFactory.create(team=team_with_users, event_type=event_type)
-
-    # Create user preferences with email level threshold
-    UserNotificationPreferences.objects.create(
-        team=event_user.team,
-        user=user,
-        email_enabled=True,
-        email_level=email_preference_level,
-    )
-
-    send_notification_email(event_user, notification_event)
-
-    if should_send:
-        assert len(mailoutbox) == 1
-    else:
+        send_notification_email_async(event_user, notification_event)
         assert len(mailoutbox) == 0
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("notification_level", "email_preference_level", "should_send"),
+        [
+            # When preference is INFO, send all types
+            (LevelChoices.WARNING, LevelChoices.INFO, True),
+            # When preference is WARNING, only send WARNING and ERROR
+            (LevelChoices.INFO, LevelChoices.WARNING, False),
+            # When preference is ERROR, only send ERROR
+            (LevelChoices.ERROR, LevelChoices.ERROR, True),
+        ],
+    )
+    def test_send_notification_email_respects_levels(
+        self, team_with_users, notification_level, email_preference_level, should_send, mailoutbox
+    ):
+        """
+        Test that email notifications respect user notification level preferences using get_users_to_be_notified and
+        should_send_email.
+
+        Verifies that emails are sent only when the notification level meets or exceeds
+        the user's email notification threshold level.
+        """
+        user = team_with_users.members.first()
+        event_type = EventTypeFactory.create(team=team_with_users, level=notification_level)
+        NotificationEventFactory.create(team=team_with_users, event_type=event_type)
+
+        # Create user preferences with email level threshold
+        UserNotificationPreferences.objects.create(
+            team=team_with_users,
+            user=user,
+            email_enabled=True,
+            email_level=email_preference_level,
+        )
+
+        # get_users_to_be_notified returns EventUser objects
+        user_info = get_users_to_be_notified(team_with_users, permissions=[])
+        assert user in user_info, "User should be included in the notification recipients"
+
+        # should_send_email determines if email should be sent for this user/event
+        user_email_info = user_info[user]
+        assert should_send_email(user_email_info, event_level=notification_level) == should_send
 
 
 @pytest.mark.django_db()

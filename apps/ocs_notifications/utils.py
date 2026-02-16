@@ -4,9 +4,7 @@ import logging
 from enum import Enum
 
 from django.core.cache import cache
-from django.core.mail import send_mail
-from django.template.loader import render_to_string
-from django.urls import reverse
+from django.db.models import Exists, OuterRef, Subquery
 from django.utils import timezone
 
 from apps.ocs_notifications.models import (
@@ -16,9 +14,9 @@ from apps.ocs_notifications.models import (
     NotificationEvent,
     UserNotificationPreferences,
 )
+from apps.ocs_notifications.tasks import send_notification_email_async
 from apps.teams.flags import Flags
 from apps.teams.models import Flag, Team
-from apps.web.meta import absolute_url
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -69,16 +67,11 @@ def create_notification(
     """
     if not _notifications_flag_is_active(team):
         return
+
     links = links or {}
 
-    def _can_receive_notification(member):
-        if not permissions:
-            return True
-        return member.has_perms(permissions)
-
-    users = [
-        member.user for member in team.membership_set.select_related("user").all() if _can_receive_notification(member)
-    ]
+    user_info = get_users_to_be_notified(team, permissions)
+    users = list(user_info.keys())
 
     event_data = event_data or {}
     identifier = create_identifier(slug, event_data)
@@ -109,10 +102,60 @@ def create_notification(
 
         # Bust cache when notification is created or when marking previously read notification as unread.
         if user_should_be_notified:
+            # Busting the cache so that the UI can show the updated unread notifications count immediately
             bust_unread_notification_cache(user.id, team_slug=team.slug)
-            send_notification_email(event_user, notification_event)
+            if should_send_email(user_info[user], event_level=level):
+                send_notification_email_async.delay(event_user.id, notification_event_id=notification_event.id)
 
     return notification_event
+
+
+def get_users_to_be_notified(team: Team, permissions: list[str]) -> dict:
+    def _is_notification_target(member):
+        if not permissions:
+            return True
+        return member.has_perms(permissions)
+
+    now = timezone.now()
+
+    # Subquery to check if the user has Do Not Disturb enabled for this team and time
+    do_not_disturb_subquery = UserNotificationPreferences.objects.filter(
+        user=OuterRef("user_id"), team=team, do_not_disturb_until__gt=now
+    )
+
+    # Subquery to get the user's email_enabled preference for this team
+    email_enabled_subquery = UserNotificationPreferences.objects.filter(user=OuterRef("user_id"), team=team).values(
+        "email_enabled"
+    )[:1]
+
+    # Subquery to get the user's email_level preference for this team
+    email_level_subquery = UserNotificationPreferences.objects.filter(user=OuterRef("user_id"), team=team).values(
+        "email_level"
+    )[:1]
+
+    # Only include members who do NOT have DND enabled (do_not_disturb=False)
+    members_qs = (
+        team.membership_set.select_related("user")
+        .annotate(
+            do_not_disturb=Exists(do_not_disturb_subquery),
+            email_enabled=Subquery(email_enabled_subquery),
+            email_level=Subquery(email_level_subquery),
+        )
+        .filter(do_not_disturb=False)
+    )
+
+    return {
+        member.user: {
+            "email_enabled": member.email_enabled,
+            "email_level": member.email_level,
+        }
+        for member in members_qs
+        if _is_notification_target(member)
+    }
+
+
+def should_send_email(user_email_info: dict, event_level) -> bool:
+    return user_email_info["email_enabled"] and event_level >= user_email_info["email_level"]
 
 
 def _notifications_flag_is_active(team: Team) -> bool:
@@ -149,65 +192,6 @@ def bust_unread_notification_cache(user_id: int, team_slug: str):
         user_id (int): The ID of the user whose cache should be busted.
     """
     cache.delete(CACHE_KEY_FORMAT.format(user_id=user_id, team_slug=team_slug))
-
-
-def send_notification_email(event_user: EventUser, notification_event: NotificationEvent):
-    """
-    Send an email notification to the user.
-
-    Args:
-        user: The user to send the email to
-        notification: The notification object containing title, message, and level
-    """
-    user = event_user.user
-    event_type = event_user.event_type
-
-    # Check if user has email notifications enabled and meets minimum level threshold
-    try:
-        preferences = UserNotificationPreferences.objects.get(user=user, team=event_user.team)
-        if not preferences.email_enabled:
-            return
-        # Ignore if notification level is lower than the user's preference
-        if event_type.level < preferences.email_level:
-            return
-
-    except UserNotificationPreferences.DoesNotExist:
-        return
-
-    subject = f"Notification: {notification_event.title}"
-
-    # Build absolute URL for user profile
-    profile_url = absolute_url(reverse("users:user_profile"))
-
-    context = {
-        "user": user,
-        "notification": notification_event,
-        "title": notification_event.title,
-        "message": notification_event.message,
-        "level": event_type.get_level_display(),
-        "profile_url": profile_url,
-    }
-
-    # Try to render a template if it exists, otherwise use plain text
-    try:
-        message = render_to_string("ocs_notifications/email/notification.html", context)
-        send_mail(
-            subject=subject,
-            message="",
-            from_email=None,  # Uses DEFAULT_FROM_EMAIL from settings
-            recipient_list=[user.email],
-            html_message=message,
-        )
-    except Exception:
-        logger.exception("Failed to render email template")
-        # Fallback to plain text email
-        message = f"{notification_event.title}\n\n{notification_event.message}"
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=None,
-            recipient_list=[user.email],
-        )
 
 
 def create_identifier(slug: str, data: dict) -> str:
