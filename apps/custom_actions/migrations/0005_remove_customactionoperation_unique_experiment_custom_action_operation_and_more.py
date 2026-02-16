@@ -3,6 +3,15 @@
 from django.db import migrations, models
 
 
+def delete_orphaned_operations(apps, schema_editor):
+    """Delete CustomActionOperation rows that have no assistant or node.
+
+    These rows only had an experiment association which is being removed.
+    """
+    CustomActionOperation = apps.get_model("custom_actions", "CustomActionOperation")
+    CustomActionOperation.objects.filter(assistant__isnull=True, node__isnull=True).delete()
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -20,6 +29,7 @@ class Migration(migrations.Migration):
             model_name='customactionoperation',
             name='experiment_or_assistant_or_node_required',
         ),
+        migrations.RunPython(delete_orphaned_operations, migrations.RunPython.noop),
         migrations.RemoveField(
             model_name='customactionoperation',
             name='experiment',
