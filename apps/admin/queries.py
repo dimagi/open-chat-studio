@@ -123,27 +123,29 @@ def get_whatsapp_message_stats(start: datetime, end: datetime):
     pivot = defaultdict(lambda: {"human": 0, "ai": 0})
     key_metadata = {}
     for row in rows:
-        team = row["chat__team__name"]
         team_slug = row["chat__team__slug"]
-        experiment = row["chat__experiment_session__experiment__name"]
         experiment_id = row["chat__experiment_session__experiment__id"]
         extra_data = row["chat__experiment_session__experiment_channel__extra_data"] or {}
         number = extra_data.get("number", "---")
-        key = (team, experiment, number)
-        pivot[key][row["message_type"]] = row["count"]
-        key_metadata[key] = {"team_slug": team_slug, "experiment_id": experiment_id}
+        key = (team_slug, experiment_id, number)
+        pivot[key][row["message_type"]] += row["count"]
+        key_metadata[key] = {
+            "team_name": row["chat__team__name"],
+            "experiment_name": row["chat__experiment_session__experiment__name"],
+        }
 
     results = [
         {
-            "team": team,
-            "team_slug": key_metadata[(team, experiment, number)]["team_slug"],
-            "experiment": experiment,
-            "experiment_id": key_metadata[(team, experiment, number)]["experiment_id"],
+            "team": key_metadata[key]["team_name"],
+            "team_slug": team_slug,
+            "experiment": key_metadata[key]["experiment_name"],
+            "experiment_id": experiment_id,
             "number": number,
             "human_count": counts["human"],
             "ai_count": counts["ai"],
         }
-        for (team, experiment, number), counts in pivot.items()
+        for key, counts in pivot.items()
+        for (team_slug, experiment_id, number) in [key]
     ]
     results.sort(key=lambda r: r["human_count"], reverse=True)
     return results
