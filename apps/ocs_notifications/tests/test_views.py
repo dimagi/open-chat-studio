@@ -190,7 +190,7 @@ class TestToggleDoNotDisturbView:
         session["team"] = team_with_users.id
         session.save()
 
-        with travel("2025-01-01 10:00:00", tick=False):
+        with travel("2025-01-01 10:00:00+00:00", tick=False):
             url = reverse("ocs_notifications:toggle_do_not_disturb", args=[team_with_users.slug])
             response = client.post(url, data={"duration": "8h"})
             assert response.status_code == 200
