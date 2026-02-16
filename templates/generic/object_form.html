@@ -15,14 +15,15 @@
     <div>
       {% block pre_form %}
       {% endblock pre_form %}
-      <form method="post" class="my-2" {% include "generic/attrs.html" with attrs=form_attrs %}>
+      <form method="post" class="my-2" {% include "generic/attrs.html" with attrs=form_attrs %}
+            x-data="{ submitted: false }" @submit="submitted = true">
         {% csrf_token %}
         {% block form %}
           {{ form.non_field_errors }}
           {% render_form_fields form %}
         {% endblock form %}
         {% block form_actions %}
-          <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
+          <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}" :disabled="submitted">
         {% endblock form_actions %}
       </form>
       {% block post_form %}
