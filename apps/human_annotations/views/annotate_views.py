@@ -98,7 +98,7 @@ class AnnotateQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             messages.info(request, "No more items to annotate in this queue.")
             return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
-        FormClass = build_annotation_form(queue.schema)
+        FormClass = build_annotation_form(queue)
         form = FormClass()
         progress = _get_progress_for_user(queue, request.user)
         item_content = _get_item_display_content(item)
@@ -141,10 +141,10 @@ class AnnotateItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         form = None
         annotations = []
         if can_annotate:
-            FormClass = build_annotation_form(queue.schema)
+            FormClass = build_annotation_form(queue)
             form = FormClass()
         else:
-            schema_fields = list(queue.schema.schema.keys())
+            schema_fields = list(queue.schema.keys())
             annotations = [
                 {
                     "reviewer": ann.reviewer,
@@ -189,7 +189,7 @@ class SubmitAnnotation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
             messages.warning(request, "You've already annotated this item.")
             return redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)
 
-        FormClass = build_annotation_form(queue.schema)
+        FormClass = build_annotation_form(queue)
         form = FormClass(request.POST)
 
         if form.is_valid():

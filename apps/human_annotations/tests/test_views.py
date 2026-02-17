@@ -9,13 +9,11 @@ from apps.human_annotations.models import (
     Annotation,
     AnnotationItemStatus,
     AnnotationQueue,
-    AnnotationSchema,
     AnnotationStatus,
 )
 from apps.utils.factories.human_annotations import (
     AnnotationItemFactory,
     AnnotationQueueFactory,
-    AnnotationSchemaFactory,
 )
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -40,87 +38,8 @@ def client(user):
 
 
 @pytest.fixture()
-def schema(team_with_users):
-    return AnnotationSchemaFactory(team=team_with_users)
-
-
-@pytest.fixture()
-def queue(team_with_users, schema, user):
-    return AnnotationQueueFactory(team=team_with_users, schema=schema, created_by=user)
-
-
-# ===== Schema CRUD =====
-
-
-@pytest.mark.django_db()
-def test_schema_home(client, team_with_users):
-    url = reverse("human_annotations:schema_home", args=[team_with_users.slug])
-    response = client.get(url)
-    assert response.status_code == 200
-
-
-@pytest.mark.django_db()
-def test_schema_table(client, team_with_users, schema):
-    url = reverse("human_annotations:schema_table", args=[team_with_users.slug])
-    response = client.get(url)
-    assert response.status_code == 200
-    assert schema.name in response.content.decode()
-
-
-@pytest.mark.django_db()
-def test_create_schema(client, team_with_users):
-    url = reverse("human_annotations:schema_new", args=[team_with_users.slug])
-    data = {
-        "name": "Test Schema",
-        "description": "A test",
-        "schema": json.dumps({"score": {"type": "int", "description": "Score", "ge": 1, "le": 5}}),
-    }
-    response = client.post(url, data)
-    assert response.status_code == 302
-    assert AnnotationSchema.objects.filter(name="Test Schema", team=team_with_users).exists()
-
-
-@pytest.mark.django_db()
-def test_create_schema_invalid_json(client, team_with_users):
-    url = reverse("human_annotations:schema_new", args=[team_with_users.slug])
-    data = {
-        "name": "Bad Schema",
-        "schema": "not json",
-    }
-    response = client.post(url, data)
-    assert response.status_code == 200  # re-renders form with errors
-    assert not AnnotationSchema.objects.filter(name="Bad Schema").exists()
-
-
-@pytest.mark.django_db()
-def test_edit_schema(client, team_with_users, schema):
-    url = reverse("human_annotations:schema_edit", args=[team_with_users.slug, schema.pk])
-    data = {
-        "name": "Updated Schema",
-        "description": schema.description,
-        "schema": json.dumps(schema.schema),
-    }
-    response = client.post(url, data)
-    assert response.status_code == 302
-    schema.refresh_from_db()
-    assert schema.name == "Updated Schema"
-
-
-@pytest.mark.django_db()
-def test_delete_schema_no_queues(client, team_with_users):
-    schema = AnnotationSchemaFactory(team=team_with_users)
-    url = reverse("human_annotations:schema_delete", args=[team_with_users.slug, schema.pk])
-    response = client.delete(url)
-    assert response.status_code == 200
-    assert not AnnotationSchema.objects.filter(pk=schema.pk).exists()
-
-
-@pytest.mark.django_db()
-def test_delete_schema_with_queues(client, team_with_users, schema, queue):
-    url = reverse("human_annotations:schema_delete", args=[team_with_users.slug, schema.pk])
-    response = client.delete(url)
-    assert response.status_code == 400
-    assert AnnotationSchema.objects.filter(pk=schema.pk).exists()
+def queue(team_with_users, user):
+    return AnnotationQueueFactory(team=team_with_users, created_by=user)
 
 
 # ===== Queue CRUD =====
@@ -142,12 +61,12 @@ def test_queue_table(client, team_with_users, queue):
 
 
 @pytest.mark.django_db()
-def test_create_queue(client, team_with_users, schema):
+def test_create_queue(client, team_with_users):
     url = reverse("human_annotations:queue_new", args=[team_with_users.slug])
     data = {
         "name": "New Queue",
         "description": "A test queue",
-        "schema": schema.pk,
+        "schema": json.dumps({"score": {"type": "int", "description": "Score", "ge": 1, "le": 5}}),
         "num_reviews_required": 2,
     }
     response = client.post(url, data)
@@ -156,7 +75,7 @@ def test_create_queue(client, team_with_users, schema):
 
 
 @pytest.mark.django_db()
-def test_edit_queue_locks_fields_after_annotations(client, team_with_users, queue, user, schema):
+def test_edit_queue_locks_fields_after_annotations(client, team_with_users, queue, user):
     """Schema and num_reviews_required should be disabled after annotations have started."""
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
     Annotation.objects.create(
@@ -173,22 +92,6 @@ def test_edit_queue_locks_fields_after_annotations(client, team_with_users, queu
     form = response.context["form"]
     assert form.fields["schema"].disabled is True
     assert form.fields["num_reviews_required"].disabled is True
-
-    # Attempting to change schema via POST should be ignored (disabled fields use initial value)
-    other_schema = AnnotationSchemaFactory(team=team_with_users, name="Other Schema")
-    response = client.post(
-        url,
-        {
-            "name": queue.name,
-            "description": queue.description,
-            "schema": other_schema.pk,
-            "num_reviews_required": 5,
-        },
-    )
-    assert response.status_code == 302
-    queue.refresh_from_db()
-    assert queue.schema == schema
-    assert queue.num_reviews_required == 1
 
 
 @pytest.mark.django_db()
@@ -462,13 +365,13 @@ def test_export_jsonl(client, team_with_users, queue, user):
 
 
 @pytest.mark.django_db()
-def test_multi_review_second_user_can_annotate(team_with_users, schema):
+def test_multi_review_second_user_can_annotate(team_with_users):
     """After user1 annotates all items, user2 should still see them when num_reviews_required > 1."""
     user1 = team_with_users.members.first()
     user2 = team_with_users.members.last()
     assert user1 != user2
 
-    queue = AnnotationQueueFactory(team=team_with_users, schema=schema, created_by=user1, num_reviews_required=2)
+    queue = AnnotationQueueFactory(team=team_with_users, created_by=user1, num_reviews_required=2)
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
 
     # User 1 submits annotation
@@ -493,12 +396,12 @@ def test_multi_review_second_user_can_annotate(team_with_users, schema):
 
 
 @pytest.mark.django_db()
-def test_multi_review_item_completed_after_enough_reviews(team_with_users, schema):
+def test_multi_review_item_completed_after_enough_reviews(team_with_users):
     """Item should only be COMPLETED after reaching num_reviews_required."""
     user1 = team_with_users.members.first()
     user2 = team_with_users.members.last()
 
-    queue = AnnotationQueueFactory(team=team_with_users, schema=schema, created_by=user1, num_reviews_required=2)
+    queue = AnnotationQueueFactory(team=team_with_users, created_by=user1, num_reviews_required=2)
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
 
     # First review
@@ -526,11 +429,11 @@ def test_multi_review_item_completed_after_enough_reviews(team_with_users, schem
 
 
 @pytest.mark.django_db()
-def test_progress_accounts_for_multiple_reviews(team_with_users, schema):
+def test_progress_accounts_for_multiple_reviews(team_with_users):
     """Progress should reflect review-level progress, not just item completion."""
     user1 = team_with_users.members.first()
 
-    queue = AnnotationQueueFactory(team=team_with_users, schema=schema, created_by=user1, num_reviews_required=2)
+    queue = AnnotationQueueFactory(team=team_with_users, created_by=user1, num_reviews_required=2)
     AnnotationItemFactory(queue=queue, team=team_with_users)
     item2 = AnnotationItemFactory(queue=queue, team=team_with_users)
 

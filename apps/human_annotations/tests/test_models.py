@@ -6,7 +6,6 @@ from apps.human_annotations.models import (
     AnnotationItem,
     AnnotationItemType,
     AnnotationQueue,
-    AnnotationSchema,
 )
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -18,22 +17,17 @@ def team():
 
 
 @pytest.mark.django_db()
-def test_annotation_schema_unique_name_per_team(team):
-    AnnotationSchema.objects.create(team=team, name="Test Schema", schema={})
-    with pytest.raises(django.db.IntegrityError):
-        AnnotationSchema.objects.create(team=team, name="Test Schema", schema={})
-
-
-@pytest.mark.django_db()
-def test_annotation_schema_get_field_definitions(team):
-    schema = AnnotationSchema.objects.create(
+def test_queue_get_field_definitions(team):
+    user = team.members.first()
+    queue = AnnotationQueue.objects.create(
         team=team,
         name="Test",
         schema={
             "score": {"type": "int", "description": "Score", "ge": 1, "le": 5},
         },
+        created_by=user,
     )
-    field_defs = schema.get_field_definitions()
+    field_defs = queue.get_field_definitions()
     assert "score" in field_defs
     assert field_defs["score"].type == "int"
     assert field_defs["score"].ge == 1
@@ -42,12 +36,11 @@ def test_annotation_schema_get_field_definitions(team):
 
 @pytest.mark.django_db()
 def test_queue_progress_empty(team):
-    schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
     user = team.members.first()
     queue = AnnotationQueue.objects.create(
         team=team,
         name="Empty Queue",
-        schema=schema,
+        schema={},
         created_by=user,
     )
     progress = queue.get_progress()
@@ -58,9 +51,8 @@ def test_queue_progress_empty(team):
 
 @pytest.mark.django_db()
 def test_item_prevents_duplicate_session_in_queue(team):
-    schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
     user = team.members.first()
-    queue = AnnotationQueue.objects.create(team=team, name="Q", schema=schema, created_by=user)
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema={}, created_by=user)
     session = ExperimentSessionFactory(team=team, chat__team=team)
 
     AnnotationItem.objects.create(
@@ -81,8 +73,7 @@ def test_item_prevents_duplicate_session_in_queue(team):
 @pytest.mark.django_db()
 def test_annotation_prevents_duplicate_reviewer(team):
     user = team.members.first()
-    schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
-    queue = AnnotationQueue.objects.create(team=team, name="Q", schema=schema, created_by=user)
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema={}, created_by=user)
     session = ExperimentSessionFactory(team=team, chat__team=team)
     item = AnnotationItem.objects.create(
         queue=queue,

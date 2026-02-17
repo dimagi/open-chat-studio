@@ -12,21 +12,31 @@ from apps.evaluations.field_definitions import (
     StringFieldDefinition,
 )
 
-from .models import AnnotationQueue, AnnotationSchema
+from .models import AnnotationQueue
 
 
-class AnnotationSchemaForm(forms.ModelForm):
+class AnnotationQueueForm(forms.ModelForm):
     schema = forms.CharField(
         widget=forms.HiddenInput(),
         required=False,
     )
 
     class Meta:
-        model = AnnotationSchema
-        fields = ["name", "description", "schema"]
+        model = AnnotationQueue
+        fields = ["name", "description", "schema", "num_reviews_required"]
         widgets = {
             "description": forms.TextInput(attrs={"placeholder": "Optional description"}),
+            "num_reviews_required": forms.NumberInput(attrs={"min": 1, "max": 10}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.instance.pk and self.instance.items.filter(review_count__gt=0).exists():
+            self.fields["schema"].disabled = True
+            self.fields["schema"].help_text = "Cannot change after annotations have started."
+            self.fields["num_reviews_required"].disabled = True
+            self.fields["num_reviews_required"].help_text = "Cannot change after annotations have started."
 
     def clean_schema(self):
         raw = self.cleaned_data["schema"]
@@ -56,26 +66,6 @@ class AnnotationSchemaForm(forms.ModelForm):
 
         return data
 
-
-class AnnotationQueueForm(forms.ModelForm):
-    class Meta:
-        model = AnnotationQueue
-        fields = ["name", "description", "schema", "num_reviews_required"]
-        widgets = {
-            "description": forms.TextInput(attrs={"placeholder": "Optional description"}),
-            "num_reviews_required": forms.NumberInput(attrs={"min": 1, "max": 10}),
-        }
-
-    def __init__(self, team, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["schema"].queryset = AnnotationSchema.objects.filter(team=team)
-
-        if self.instance.pk and self.instance.items.filter(review_count__gt=0).exists():
-            self.fields["schema"].disabled = True
-            self.fields["schema"].help_text = "Cannot change after annotations have started."
-            self.fields["num_reviews_required"].disabled = True
-            self.fields["num_reviews_required"].help_text = "Cannot change after annotations have started."
-
     def clean_num_reviews_required(self):
         value = self.cleaned_data["num_reviews_required"]
         if not (1 <= value <= 10):
@@ -83,9 +73,9 @@ class AnnotationQueueForm(forms.ModelForm):
         return value
 
 
-def build_annotation_form(schema_instance):
-    """Dynamically build a Django form from an AnnotationSchema's field definitions."""
-    field_defs = schema_instance.get_field_definitions()
+def build_annotation_form(queue):
+    """Dynamically build a Django form from an AnnotationQueue's field definitions."""
+    field_defs = queue.get_field_definitions()
     form_fields = {}
 
     for name, defn in field_defs.items():

@@ -24,8 +24,8 @@ class AnnotationItemStatus(models.TextChoices):
     FLAGGED = "flagged", "Flagged"
 
 
-class AnnotationSchema(BaseTeamModel):
-    """Defines the fields annotators will fill out. Reuses FieldDefinition from evaluations."""
+class AnnotationQueue(BaseTeamModel):
+    """A queue of items to be annotated by assigned reviewers."""
 
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
@@ -33,29 +33,6 @@ class AnnotationSchema(BaseTeamModel):
         default=dict,
         help_text="Dict of field_name -> FieldDefinition JSON (same format as evaluator output_schema)",
     )
-
-    class Meta:
-        unique_together = ("team", "name")
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
-
-    def get_absolute_url(self):
-        return reverse("human_annotations:schema_edit", args=[get_slug_for_team(self.team_id), self.id])
-
-    def get_field_definitions(self) -> dict[str, FieldDefinition]:
-        """Parse the raw JSON schema into typed FieldDefinition objects."""
-        adapter = TypeAdapter(FieldDefinition)
-        return {name: adapter.validate_python(defn) for name, defn in self.schema.items()}
-
-
-class AnnotationQueue(BaseTeamModel):
-    """A queue of items to be annotated by assigned reviewers."""
-
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, default="")
-    schema = models.ForeignKey(AnnotationSchema, on_delete=models.PROTECT, related_name="queues")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -84,6 +61,11 @@ class AnnotationQueue(BaseTeamModel):
 
     def get_absolute_url(self):
         return reverse("human_annotations:queue_detail", args=[get_slug_for_team(self.team_id), self.id])
+
+    def get_field_definitions(self) -> dict[str, FieldDefinition]:
+        """Parse the raw JSON schema into typed FieldDefinition objects."""
+        adapter = TypeAdapter(FieldDefinition)
+        return {name: adapter.validate_python(defn) for name, defn in self.schema.items()}
 
     def get_progress(self):
         """Return progress stats including review-level progress for multi-review queues."""

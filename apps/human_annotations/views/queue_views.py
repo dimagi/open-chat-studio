@@ -59,17 +59,12 @@ class CreateAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
     permission_required = "human_annotations.add_annotationqueue"
     model = AnnotationQueue
     form_class = AnnotationQueueForm
-    template_name = "generic/object_form.html"
+    template_name = "human_annotations/queue_form.html"
     extra_context = {
         "title": "Create Annotation Queue",
         "button_text": "Create",
         "active_tab": "annotation_queues",
     }
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["team"] = self.request.team
-        return kwargs
 
     def get_success_url(self):
         return reverse("human_annotations:queue_home", args=[self.request.team.slug])
@@ -84,20 +79,20 @@ class EditAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Up
     permission_required = "human_annotations.change_annotationqueue"
     model = AnnotationQueue
     form_class = AnnotationQueueForm
-    template_name = "generic/object_form.html"
+    template_name = "human_annotations/queue_form.html"
     extra_context = {
         "title": "Edit Annotation Queue",
         "button_text": "Update",
         "active_tab": "annotation_queues",
     }
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["team"] = self.request.team
-        return kwargs
-
     def get_queryset(self):
         return AnnotationQueue.objects.filter(team=self.request.team)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["existing_schema"] = self.object.schema
+        return context
 
     def get_success_url(self):
         return reverse("human_annotations:queue_home", args=[self.request.team.slug])
@@ -258,7 +253,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.csv"'
 
-        schema_fields = list(queue.schema.schema.keys())
+        schema_fields = list(queue.schema.keys())
         fieldnames = ["item_id", "item_type", "reviewer", "annotated_at"] + schema_fields
 
         writer = csv.DictWriter(response, fieldnames=fieldnames)

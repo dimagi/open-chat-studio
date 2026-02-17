@@ -1,7 +1,7 @@
 from django.urls import path
 
 from apps.generics.urls import make_crud_urls
-from apps.human_annotations.views import annotate_views, queue_views, schema_views
+from apps.human_annotations.views import annotate_views, queue_views
 
 app_name = "human_annotations"
 
@@ -24,6 +24,5 @@ urlpatterns = [
     path("queue/<int:pk>/item/<int:item_pk>/unflag/", annotate_views.UnflagItem.as_view(), name="unflag_item"),
 ]
 
-# CRUD views for schemas and queues
-urlpatterns.extend(make_crud_urls(schema_views, "AnnotationSchema", "schema"))
+# CRUD views for queues
 urlpatterns.extend(make_crud_urls(queue_views, "AnnotationQueue", "queue"))
