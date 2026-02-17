@@ -5,6 +5,7 @@ from enum import Enum
 
 from django.core.cache import cache
 from django.db.models import Exists, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.ocs_notifications.models import (
@@ -154,8 +155,8 @@ def get_users_to_be_notified(team: Team, permissions: list[str]) -> dict:
         team.membership_set.select_related("user")
         .annotate(
             do_not_disturb=Exists(do_not_disturb_subquery),
-            email_enabled=Subquery(email_enabled_subquery),
-            email_level=Subquery(email_level_subquery),
+            email_enabled=Coalesce(Subquery(email_enabled_subquery), False),
+            email_level=Coalesce(Subquery(email_level_subquery), LevelChoices.INFO.value),
         )
         .filter(do_not_disturb=False)
     )
@@ -175,8 +176,13 @@ def should_send_email(user_email_info: dict, event_level) -> bool:
 
 
 def _notifications_flag_is_active(team: Team) -> bool:
-    flag = Flag.objects.filter(name=Flags.NOTIFICATIONS.slug).first()
-    return bool(flag and flag.is_active_for_team(team))
+    key = f"notifications_flag_{team.id}"
+    is_active = cache.get(key, default=None)
+    if is_active is None:
+        flag = Flag.objects.filter(name=Flags.NOTIFICATIONS.slug).first()
+        is_active = bool(flag and flag.is_active_for_team(team))
+        cache.set(key, is_active, 30)  # Cache the flag status for 30 seconds
+    return is_active
 
 
 def get_user_notification_cache_value(user_id: int, team_slug: str) -> int | None:
