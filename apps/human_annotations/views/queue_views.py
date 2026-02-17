@@ -3,6 +3,7 @@ import io
 import json
 import re
 
+from bs4 import UnicodeDammit
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -241,11 +242,15 @@ class ImportCSVToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
             return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
         max_rows = 10_000
+        content = csv_file.read()
         try:
-            decoded = csv_file.read().decode("utf-8-sig")
+            decoded = content.decode("utf-8-sig")
         except UnicodeDecodeError:
-            messages.error(request, "File encoding is not supported. Please upload a UTF-8 encoded CSV file.")
-            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
+            detected = UnicodeDammit(content).unicode_markup
+            if detected is None:
+                messages.error(request, "Unable to detect file encoding. Please upload a UTF-8 encoded CSV file.")
+                return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
+            decoded = detected
         reader = csv_module.DictReader(io.StringIO(decoded))
 
         items = []
