@@ -13,6 +13,7 @@ from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.ocs_notifications.notifications import pipeline_execution_failure_notification
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
@@ -139,7 +140,13 @@ class PipelineBot:
         )
         runnable = graph.build_runnable()
         runner = DjangoLangGraphRunner(DjangoSafeContextThreadPoolExecutor)
-        raw_output = runner.invoke(runnable, input_state, config)
+        try:
+            raw_output = runner.invoke(runnable, input_state, config)
+        except Exception as e:
+            # Notify experiment admins of pipeline execution failure, only for non-working versions
+            if not self.experiment.is_working_version:
+                pipeline_execution_failure_notification(self.experiment, self.session, e)
+            raise
         output = PipelineState(**raw_output).json_safe()
         return output
 
@@ -369,10 +376,6 @@ class EventBot:
 
     @property
     def llm_provider(self):
-        if self.experiment.llm_provider:
-            return self.experiment.llm_provider
-
-        # If no LLM provider is set, use the first one in the team
         return self.experiment.team.llmprovider_set.first()
 
     @property

@@ -2,10 +2,12 @@ import logging
 import pathlib
 
 from django.conf import settings
+from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, inline_serializer
+from pydantic import BaseModel
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
@@ -27,7 +29,7 @@ from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached
 from apps.chat.channels import ApiChannel
-from apps.chat.models import Chat, ChatAttachment
+from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
@@ -41,6 +43,25 @@ MAX_TOTAL_SIZE_MB = 50
 SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["collections"]
 
 logger = logging.getLogger("ocs.api_chat")
+
+PROGRESS_MESSAGE_PROMPT = """\
+You will be generating progress update messages that are displayed to users while they \
+wait for a chatbot to respond. These messages should keep users engaged and informed \
+during the wait time.
+
+Here are the guidelines for creating effective progress messages:
+
+- Keep messages SHORT - aim for 2-4 words maximum
+- Use an encouraging, friendly, and slightly playful tone
+- Messages should feel dynamic and suggest active work is happening
+- Vary the style and wording across different messages
+- Focus on the process (e.g., "thinking", "analyzing", "processing") rather than making promises about results
+- Avoid technical jargon or overly complex language
+- Don't make specific claims about what the answer will contain
+- Don't apologize for wait times or sound negative
+
+Generate message options that could be rotated or randomly displayed to users.
+Each message should feel fresh and distinct from the others."""
 
 
 def validate_file_upload(file):
@@ -405,9 +426,17 @@ def chat_poll_task_response(request, session_id, task_id):
     if not session:
         return NotFound()
 
-    task_details = get_message_task_response(session.experiment, task_id)
+    experiment = session.experiment
+    task_details = get_message_task_response(experiment, task_id)
+    if not task_details:
+        return Response({"status": "processing"}, status=status.HTTP_200_OK)
+
     if not task_details["complete"]:
-        data = {"message": None, "status": "processing"}
+        message_text = get_progress_message(session_id, experiment.name, experiment.description, throttle_key=task_id)
+        message = None
+        if message_text:
+            message = MessageSerializer(ChatMessage(content=message_text, message_type=ChatMessageType.AI)).data
+        data = {"message": message, "status": "processing"}
         return Response(data, status=status.HTTP_200_OK)
 
     if error := task_details["error_msg"]:
@@ -485,3 +514,54 @@ def chat_poll_response(request, session_id):
     session_status = "ended" if session.is_complete else "active"
     response_data = {"messages": messages, "has_more": has_more, "session_status": session_status}
     return Response(ChatPollResponse(response_data).data, status=status.HTTP_200_OK)
+
+
+def get_progress_message(session_id, chatbot_name, chatbot_description, throttle_key=None) -> str | None:
+    """Get the next progress message. This will generate new messages if there are no more messages.
+
+    If throttle_key is provided, a new message is only returned once every 5 seconds.
+    Within the 5-second window the same message is returned.
+    """
+    last_key = f"progress_last:{throttle_key}" if throttle_key else None
+    if last_key:
+        last = cache.get(last_key)
+        if last:
+            return last
+
+    key = f"progress_messages:{session_id}"
+    messages = cache.get(key)
+    if not messages:
+        messages = get_progress_messages(chatbot_name, chatbot_description)
+
+    if not messages:
+        return None
+
+    message, *remainder = messages
+    if remainder:
+        cache.set(key, remainder, 24 * 3600)
+    else:
+        cache.delete(key)
+
+    if last_key:
+        cache.set(last_key, message, 5)
+
+    return message
+
+
+class ProgressMessagesSchema(BaseModel):
+    messages: list[str]
+
+
+def get_progress_messages(chatbot_name, chatbot_description) -> list[str]:
+    from apps.help.agent import build_system_agent
+
+    try:
+        agent = build_system_agent("low", PROGRESS_MESSAGE_PROMPT, response_format=ProgressMessagesSchema)
+        message = f"Please generate 30 progress messages for this chatbot:\nName: '{chatbot_name}'"
+        if chatbot_description:
+            message += f"\nDescription: '{chatbot_description}'"
+        result = agent.invoke({"messages": [{"role": "user", "content": message}]})
+        return result["structured_response"].messages or []
+    except Exception:
+        logger.exception("Failed to generate progress messages for chatbot '%s'", chatbot_name)
+        return []

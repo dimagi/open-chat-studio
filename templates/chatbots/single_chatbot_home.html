@@ -121,10 +121,10 @@
         </div>
         {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
         {% if experiment.is_public %}
-          {% include "experiments/share/dialog.html" with origin="chatbots" %}
+          {% include "experiments/share/dialog.html" %}
         {% endif %}
         <div id="dynamic-channels" class="inline">
-          {% include "chatbots/components/channel_buttons.html" with origin="chatbots" %}
+          {% include "chatbots/components/channel_buttons.html" %}
         </div>
         <div id="channel_create_edit_modal_placeholder"></div>
       </div>

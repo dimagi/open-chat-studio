@@ -22,7 +22,12 @@
         </div>
       </div>
     </form>
-    <div class="mt-4" id="charts"></div>
+    <div class="mt-4" id="charts">
+      <div class="flex items-center justify-center py-12">
+        <span class="loading loading-spinner loading-lg"></span>
+        <span class="ml-3 text-sm opacity-70">{% translate "Loading dashboard data..." %}</span>
+      </div>
+    </div>
   </section>
 {% endblock app %}
 
@@ -31,7 +36,7 @@
   <script>
     let messageChart;
     let participantChart;
-    htmx.onLoad(() => {
+    document.body.addEventListener('htmx:load', function() {
       const element = document.getElementById('chart_data');
       if (!element) {
         return;
@@ -51,6 +56,6 @@
       messageChart = SiteJS.adminDashboard.barChartWithDates(messageChartCtx, start, end, chartData.message_data, "Chat Messages");
       let participantData = chartData.participant_data;
       participantChart = SiteJS.adminDashboard.cumulativeChartWithDates(participantChartCtx, start, end, participantData.data, "Participants", participantData.start_value);
-    })
+    });
   </script>
 {% endblock page_js %}

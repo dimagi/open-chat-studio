@@ -53,28 +53,30 @@ def test_end_conversation_runs_pipeline(session, pipeline):
     assert log.status == "success"
 
     output_message = f"human: {input}"
-    assert log.log == str({
-        "messages": [
-            output_message,  # output of pipeline
-            output_message,  # output of first node / input to the second node
-            output_message,  # input to pipeline
-        ],
-        "outputs": {
-            "start": {"message": f"human: {input}", "node_id": "start"},
-            "end": {"message": f"human: {input}", "node_id": "end"},
-        },
-        "experiment_session": session.id,
-        "temp_state": {
-            "user_input": output_message,
-            "attachments": [],
-            "outputs": {"start": output_message, "end": output_message},
-        },
-        "input_message_metadata": {},
-        "output_message_metadata": {},
-        "output_message_tags": [],
-        "session_tags": [],
-        "path": [(None, "start", ["end"]), ("start", "end", [])],
-        "intents": [],
-        "participant_data": session.participant.global_data,
-        "session_state": {},
-    })
+    assert log.log == str(
+        {
+            "messages": [
+                output_message,  # output of pipeline
+                output_message,  # output of first node / input to the second node
+                output_message,  # input to pipeline
+            ],
+            "outputs": {
+                "start": {"message": f"human: {input}", "node_id": "start"},
+                "end": {"message": f"human: {input}", "node_id": "end"},
+            },
+            "experiment_session": session.id,
+            "temp_state": {
+                "user_input": output_message,
+                "attachments": [],
+                "outputs": {"start": output_message, "end": output_message},
+            },
+            "input_message_metadata": {},
+            "output_message_metadata": {},
+            "output_message_tags": [],
+            "session_tags": [],
+            "path": [(None, "start", ["end"]), ("start", "end", [])],
+            "intents": [],
+            "participant_data": session.participant.global_data,
+            "session_state": {},
+        }
+    )

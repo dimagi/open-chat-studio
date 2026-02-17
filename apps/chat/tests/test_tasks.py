@@ -6,7 +6,7 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.channels import _start_experiment_session
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
-from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider
+from apps.service_providers.models import LlmProvider, TraceProvider
 from apps.service_providers.tests.mock_tracer import MockTracer
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import Team
@@ -20,6 +20,14 @@ class TasksTest(TestCase):
         self.telegram_chat_id = 1234567891
         self.team = Team.objects.create(name="test-team")
         self.user = CustomUser.objects.create_user(username="testuser")
+        LlmProvider.objects.create(
+            name="test",
+            type="openai",
+            team=self.team,
+            config={
+                "openai_api_key": "123123123",
+            },
+        )
         self.experiment = Experiment.objects.create(
             team=self.team,
             owner=self.user,
@@ -27,19 +35,6 @@ class TasksTest(TestCase):
             description="test",
             prompt_text="You are a helpful assistant",
             consent_form=ConsentForm.get_default(self.team),
-            llm_provider=LlmProvider.objects.create(
-                name="test",
-                type="openai",
-                team=self.team,
-                config={
-                    "openai_api_key": "123123123",
-                },
-            ),
-            llm_provider_model=LlmProviderModel.objects.create(
-                team=self.team,
-                type="openai",
-                name="gpt-4",
-            ),
         )
         self.experiment_channel = ExperimentChannel.objects.create(
             name="TestChannel",

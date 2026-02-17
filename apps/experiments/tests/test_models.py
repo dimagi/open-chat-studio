@@ -14,9 +14,7 @@ from apps.events.models import EventActionType, ScheduledMessage, StaticTriggerT
 from apps.experiments.models import (
     ConsentForm,
     Experiment,
-    ExperimentRoute,
     ExperimentSession,
-    SafetyLayer,
     SyntheticVoice,
 )
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
@@ -295,21 +293,6 @@ class TestExperimentSession:
         next_trigger = "Next trigger is at Monday, 01 January 2024 00:00:00 UTC."
         assert schedule == expected.format(message=message, next_trigger=next_trigger)
 
-    def test_get_participant_scheduled_messages_includes_child_experiments(self):
-        session = ExperimentSessionFactory()
-        team = session.team
-        participant = session.participant
-        session2 = ExperimentSessionFactory(experiment__team=team, participant=participant)
-        event_action = event_action, params = self._construct_event_action(
-            time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
-        )
-        ScheduledMessageFactory(experiment=session.experiment, team=team, participant=participant, action=event_action)
-        ScheduledMessageFactory(experiment=session2.experiment, team=team, participant=participant, action=event_action)
-        ExperimentRoute.objects.create(team=team, parent=session.experiment, child=session2.experiment, keyword="test")
-
-        assert len(participant.get_schedules_for_experiment(session2.experiment_id)) == 1
-        assert len(participant.get_schedules_for_experiment(session.experiment_id)) == 2
-
     @pytest.mark.parametrize("use_custom_experiment", [False, True])
     @patch.object(ExperimentSession, "ad_hoc_bot_message")
     def test_scheduled_message_experiment(self, mock_ad_hoc, use_custom_experiment):
@@ -536,22 +519,6 @@ class TestExperimentSession:
 
 
 @pytest.mark.django_db()
-class TestSafetyLayerVersioning:
-    def test_create_new_safety_layer_version(self):
-        original = SafetyLayer.objects.create(
-            prompt_text="Is this message safe?", team=TeamFactory(), prompt_to_bot="Unsafe reply"
-        )
-        new_version = original.create_new_version()
-        original.refresh_from_db()
-        assert original.working_version is None
-        assert new_version != original
-        assert new_version.working_version == original
-        assert new_version.prompt_text == original.prompt_text
-        assert new_version.prompt_to_bot == original.prompt_to_bot
-        assert new_version.team == original.team
-
-
-@pytest.mark.django_db()
 class TestSourceMaterialVersioning:
     def test_create_new_source_material_version(self):
         original = SourceMaterialFactory()
@@ -559,125 +526,6 @@ class TestSourceMaterialVersioning:
         original.refresh_from_db()
         assert original.working_version is None
         _compare_models(original, new_version, expected_changed_fields=["id", "working_version_id"])
-
-
-@pytest.mark.django_db()
-class TestExperimentRouteVersioning:
-    def _setup_route(self):
-        parent_exp = ExperimentFactory(pipeline=None, prompt_text="You are a helpful assistant")
-        team = parent_exp.team
-        child_exp = ExperimentFactory(team=team, pipeline=None, prompt_text="You are a helpful assistant")
-        exp_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_exp, keyword="testing")
-        return child_exp, exp_route
-
-    def test_child_without_versions(self):
-        """
-        When the child doesn't have a version then we expect a new version to be created for the new route version.
-        """
-        child_exp, exp_route = self._setup_route()
-        new_parent = ExperimentFactory(team=exp_route.team, pipeline=None, prompt_text="You are a helpful assistant")
-        route_version = exp_route.create_new_version(new_parent=new_parent)
-
-        assert route_version.child == child_exp.latest_version
-
-    def test_child_with_changes_since_latest_version(self):
-        """
-        When the child have a version, but also changed since the latest version, then we expect a new version to be
-        created for the new route version.
-        """
-        child_exp, exp_route = self._setup_route()
-
-        # Create a version of the child
-        first_child_version = child_exp.create_new_version()
-        # Changes since the last version
-        child_exp.prompt_text = "New prompt"
-
-        # This should create a new version of the child as well
-        new_parent = ExperimentFactory(team=exp_route.team, pipeline=None, prompt_text="You are a helpful assistant")
-        route_version = exp_route.create_new_version(new_parent=new_parent)
-        assert child_exp.latest_version != first_child_version
-        assert route_version.child == child_exp.latest_version
-
-    def test_child_with_no_changes_since_latest_version(self):
-        """When the child has a version and there are no changes between that version and the working version, then the
-        latest version should be used for the new route version.
-        """
-        child_exp, exp_route = self._setup_route()
-        # First create a version of the child
-        child_version = child_exp.create_new_version()
-        new_parent = ExperimentFactory(team=exp_route.team, pipeline=None, prompt_text="You are a helpful assistant")
-        route_version = exp_route.create_new_version(new_parent=new_parent)
-        assert route_version.child == child_version
-
-
-@pytest.mark.django_db()
-class TestExperimentRoute:
-    def test_eligible_children(self):
-        parent = ExperimentFactory()
-        experiment_version = parent.create_new_version()
-        experiment1 = ExperimentFactory(team=parent.team)
-        experiment2 = ExperimentFactory(team=parent.team)
-
-        queryset = ExperimentRoute.eligible_children(team=parent.team, parent=parent)
-        assert parent not in queryset
-        assert experiment_version not in queryset
-        assert experiment1 in queryset
-        assert experiment2 in queryset
-        assert len(queryset) == 2
-
-        queryset = ExperimentRoute.eligible_children(team=parent.team)
-        assert len(queryset) == 3
-
-    def test_compare_with_model_testcase_4(self):
-        """
-        The children are experiments of different families.
-        """
-        parent = ExperimentFactory()
-        versioned_parent = parent.create_new_version()
-        child1 = ExperimentFactory(team=parent.team)
-        child2 = ExperimentFactory(team=parent.team)
-        route = ExperimentRoute.objects.create(parent=parent, child=child1, keyword="test", team=parent.team)
-        route2 = ExperimentRoute.objects.create(
-            parent=versioned_parent, child=child2, keyword="test", team=parent.team, working_version=route
-        )
-        route1_version = route.version_details
-        route1_version.compare(route2.version_details)
-        changed_fields = [field.name for field in route1_version.fields if field.changed]
-        assert changed_fields == ["child"]
-
-    def _setup_route(self, keyword: str):
-        parent = ExperimentFactory()
-        team = parent.team
-        child = ExperimentFactory(team=team)
-        return ExperimentRoute.objects.create(parent=parent, child=child, keyword=keyword, team=team)
-
-    def test_unique_parent_child_constraint_enforced(self):
-        route = self._setup_route(keyword="test")
-        with pytest.raises(IntegrityError, match=r'.*violates unique constraint "unique_parent_child".*'):
-            ExperimentRoute.objects.create(parent=route.parent, child=route.child, keyword="testing", team=route.team)
-
-    def test_unique_parent_child_constraint_not_enforced(self):
-        """Tests the conditional unique constraint is not enforced when the previous instance is archived"""
-        route = self._setup_route(keyword="test")
-        parent = route.parent
-        route.archive()
-        ExperimentRoute.objects.create(parent=route.parent, child=route.child, keyword="testing", team=route.team)
-        assert parent.child_links.count() == 1
-
-    def test_unique_parent_keyword_condition_enforced(self):
-        route = self._setup_route(keyword="test")
-        other_child = ExperimentFactory(team=route.team)
-        with pytest.raises(IntegrityError, match=r'.*violates unique constraint "unique_parent_keyword_condition".*'):
-            ExperimentRoute.objects.create(parent=route.parent, child=other_child, keyword="test", team=route.team)
-
-    def test_unique_parent_keyword_condition_not_enforced(self):
-        """Tests the conditional unique constraint is not enforced when the previous instance is archived"""
-        route = self._setup_route(keyword="test")
-        parent = route.parent
-        other_child = ExperimentFactory(team=route.team)
-        route.archive()
-        ExperimentRoute.objects.create(parent=route.parent, child=other_child, keyword="test", team=route.team)
-        assert parent.child_links.count() == 1
 
 
 @pytest.mark.django_db()
@@ -720,14 +568,6 @@ class TestExperimentModel:
         # Setup Source material
         experiment.source_material = SourceMaterialFactory(team=team, material="material science is interesting")
         experiment.save()
-
-        # Setup Routes - There will be versioned and working children
-        versioned_child = ExperimentFactory(
-            team=team, version_number=1, working_version=ExperimentFactory(version_number=2)
-        )
-        ExperimentRoute(team=team, parent=experiment, child=versioned_child, keyword="versioned")
-        working_child = ExperimentFactory(team=team)
-        ExperimentRoute(team=team, parent=experiment, child=working_child, keyword="working")
 
         # Setup Static Trigger
         StaticTriggerFactory(experiment=experiment)
@@ -788,7 +628,6 @@ class TestExperimentModel:
             ],
         )
         self._assert_source_material_is_duplicated(original_experiment, new_version)
-        self._assert_routes_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
         self._assert_attribute_duplicated("source_material", original_experiment, new_version)
@@ -852,12 +691,6 @@ class TestExperimentModel:
         assert new_version.source_material != original_experiment.source_material
         assert new_version.source_material.working_version == original_experiment.source_material
         assert new_version.source_material.material == original_experiment.source_material.material
-
-    def _assert_routes_are_duplicated(self, original_experiment, new_version):
-        for route in new_version.child_links.all():
-            assert route.parent.working_version == original_experiment
-            assert route.working_version.parent == original_experiment
-            assert route.child.is_a_version is True
 
     def _assert_triggers_are_duplicated(self, trigger_type, original_experiment, new_version):
         assert trigger_type in ["static", "timeout"], "Unknown trigger type"

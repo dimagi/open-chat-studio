@@ -92,8 +92,6 @@ class ExperimentAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
         "team",
         "owner",
         "source_material",
-        "llm_provider",
-        "llm_provider_model",
         "version_family",
         "version_number",
         "is_archived",
@@ -101,18 +99,6 @@ class ExperimentAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     list_filter = ("team", "owner", "source_material")
     readonly_fields = ("public_id",)
     search_fields = ("public_id", "name")
-
-
-@admin.register(models.ExperimentRoute)
-class ExperimentRouteAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
-    list_display = (
-        "parent",
-        "child",
-        "keyword",
-        "is_default",
-        "version_family",
-        "is_archived",
-    )
 
 
 @admin.register(models.ExperimentSession)

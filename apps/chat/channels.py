@@ -24,6 +24,7 @@ from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
+from apps.chat.decorators import notify_on_delivery_failure
 from apps.chat.exceptions import (
     AudioSynthesizeException,
     ChannelException,
@@ -44,6 +45,11 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.files.models import File, FilePurpose
+from apps.ocs_notifications.notifications import (
+    audio_synthesis_failure_notification,
+    audio_transcription_failure_notification,
+    file_delivery_failure_notification,
+)
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
@@ -236,10 +242,20 @@ class ChannelBase(ABC):
             experiment = self.experiment.working_version
         return experiment.participantdata_set.defer("data").get(participant__identifier=self.participant_identifier)
 
+    @notify_on_delivery_failure(context="voice message")
+    def _send_voice_to_user_with_notification(self, synthetic_voice: SynthesizedAudio):
+        """Private method that delivers voice with error notification. Calls the subclass implementation."""
+        self.send_voice_to_user(synthetic_voice)
+
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         raise NotImplementedError(
             "Voice replies are supported but the method reply (`send_voice_to_user`) is not implemented"
         )
+
+    @notify_on_delivery_failure(context="text message")
+    def _send_text_to_user_with_notification(self, text: str):
+        """Private method that delivers text with error notification. Calls the subclass implementation."""
+        self.send_text_to_user(text)
 
     @abstractmethod
     def send_text_to_user(self, text: str):
@@ -466,7 +482,7 @@ class ChannelBase(ABC):
         confirmation_text = self.experiment.consent_form.confirmation_text
         bot_message = f"{consent_text}\n\n{confirmation_text}"
         self._add_message_to_history(bot_message, ChatMessageType.AI)
-        self.send_text_to_user(bot_message)
+        self._send_text_to_user_with_notification(bot_message)
         return bot_message
 
     def _ask_user_to_take_survey(self):
@@ -474,7 +490,7 @@ class ChannelBase(ABC):
         confirmation_text = self.experiment.pre_survey.confirmation_text
         bot_message = confirmation_text.format(survey_link=pre_survey_link)
         self._add_message_to_history(bot_message, ChatMessageType.AI)
-        self.send_text_to_user(bot_message)
+        self._send_text_to_user_with_notification(bot_message)
         return bot_message
 
     def _should_handle_pre_conversation_requirements(self):
@@ -522,7 +538,7 @@ class ChannelBase(ABC):
             unsupported_files = [file for file in unsupported_files if file in uncited_files]
 
             bot_message = self.append_attachment_links(bot_message, linkify_files=unsupported_files)
-            self.send_text_to_user(bot_message)
+            self._send_text_to_user_with_notification(bot_message)
         else:
             bot_message, extracted_urls = strip_urls_and_emojis(bot_message)
             urls_to_append = "\n".join(extracted_urls)
@@ -531,12 +547,13 @@ class ChannelBase(ABC):
             try:
                 self._reply_voice_message(bot_message)
                 if urls_to_append:
-                    self.send_text_to_user(urls_to_append)
+                    self._send_text_to_user_with_notification(urls_to_append)
             except AudioSynthesizeException:
                 logger.exception("Error generating voice response")
+                audio_synthesis_failure_notification(self.experiment, session=self.experiment_session)
                 self._bot_message_is_voice = False
                 bot_message = f"{bot_message}\n\n{urls_to_append}"
-                self.send_text_to_user(bot_message)
+                self._send_text_to_user_with_notification(bot_message)
 
         # Finally send the attachments that are supported by the channel
         if supported_files:
@@ -622,8 +639,15 @@ class ChannelBase(ABC):
                 self.send_file_to_user(file)
             except Exception as e:
                 logger.exception(e)
+                platform_title = self.experiment_channel.platform_enum.title()
+                file_delivery_failure_notification(
+                    self.experiment,
+                    platform_title=platform_title,
+                    content_type=file.content_type,
+                    session=self.experiment_session,
+                )
                 download_link = file.download_link(self.experiment_session.id)
-                self.send_text_to_user(download_link)
+                self._send_text_to_user_with_notification(download_link)
 
     def _handle_supported_message(self, human_message):
         with self.trace_service.span("Process Message", inputs={"input": human_message.content}) as span:
@@ -652,7 +676,7 @@ class ChannelBase(ABC):
 
     def _handle_unsupported_message(self) -> str:
         response = self._unsupported_message_type_response()
-        self.send_text_to_user(response)
+        self._send_text_to_user_with_notification(response)
         return response
 
     def _reply_voice_message(self, text: str):
@@ -666,14 +690,18 @@ class ChannelBase(ABC):
         speech_service = voice_provider.get_speech_service()
         synthetic_voice_audio = speech_service.synthesize_voice(text, synthetic_voice)
         self._synthesized_voice_audio = synthetic_voice_audio
-        self.send_voice_to_user(synthetic_voice_audio)
+        self._send_voice_to_user_with_notification(synthetic_voice_audio)
 
     def _get_voice_transcript(self) -> str:
         # Indicate to the user that the bot is busy processing the message
         self.transcription_started()
+        try:
+            audio_file = self.get_message_audio()
+            transcript = self._transcribe_audio(audio_file)
+        except Exception as e:
+            audio_transcription_failure_notification(self.experiment, platform=self.experiment_channel.platform)
+            raise e
 
-        audio_file = self.get_message_audio()
-        transcript = self._transcribe_audio(audio_file)
         if self.experiment.echo_transcript:
             self.echo_transcript(transcript)
         return transcript
@@ -1116,7 +1144,7 @@ class WhatsappChannel(ChannelBase):
         return self.messaging_service.supported_message_types
 
     def echo_transcript(self, transcript: str):
-        self.send_text_to_user(f'I heard: "{transcript}"')
+        self._send_text_to_user_with_notification(f'I heard: "{transcript}"')
 
     def send_text_to_user(self, text: str):
         from_number = self.experiment_channel.extra_data["number"]
@@ -1178,7 +1206,7 @@ class FacebookMessengerChannel(ChannelBase):
         return self.messaging_service.supported_message_types
 
     def echo_transcript(self, transcript: str):
-        self.send_text_to_user(f'I heard: "{transcript}"')
+        self._send_text_to_user_with_notification(f'I heard: "{transcript}"')
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         """

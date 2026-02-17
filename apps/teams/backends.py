@@ -65,12 +65,10 @@ CONTENT_TYPES = {
     "experiments": [
         "consentform",
         "experiment",
-        "experimentroute",
         "experimentsession",
         "participant",
         "participantdata",
         "promptbuilderhistory",
-        "safetylayer",
         "sourcematerial",
         "survey",
         "syntheticvoice",

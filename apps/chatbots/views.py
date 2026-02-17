@@ -309,8 +309,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "platforms": available_platforms,
         "channels": channels,
         "deployed_version": deployed_version,
-        "allow_copy": not experiment.child_links.exists(),
-        **_get_events_context(experiment, team_slug, request.origin),
+        **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
 
@@ -872,7 +871,7 @@ def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session
     )
 
 
-def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
+def _get_events_context(experiment: Experiment, team_slug: str):
     combined_events = []
     static_events = (
         StaticTrigger.objects.filter(experiment=experiment)
@@ -907,4 +906,4 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
         combined_events.append({**event, "team_slug": team_slug})
     for event in timeout_events:
         combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
-    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events, origin=origin)}
+    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}

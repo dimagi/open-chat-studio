@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 
+from apps.ocs_notifications.notifications import llm_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.trace.models import Trace, TraceStatus
 
@@ -209,9 +210,16 @@ class OCSCallbackHandler(BaseCallbackHandler):
 
     def on_llm_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True
+        error_message = "LLM error occurred"
         if not self.tracer.error_message:
-            error = kwargs.get("error") or (args[0] if args else None)
-            self.tracer.error_message = str(error) if error else "LLM error occurred"
+            if _error := kwargs.get("error") or (args[0] if args else None):
+                self.tracer.error_message = error_message = str(_error)
+        else:
+            error_message = self.tracer.error_message
+
+        llm_error_notification(
+            experiment_id=self.tracer.experiment_id, session_id=self.tracer.session.id, error_message=error_message
+        )
 
     def on_chain_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True

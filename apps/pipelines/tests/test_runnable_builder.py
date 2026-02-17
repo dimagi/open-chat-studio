@@ -855,7 +855,7 @@ class TestDataExtraction:
         assert extracted_data == '{"name": "james"}'
 
     @django_db_with_data()
-    def test_extract_participant_data(self, provider, pipeline):
+    def test_extract_participant_data(self, provider, provider_model, pipeline):
         """Test the pipeline to extract and update participant data. First we run it when no data is linked to the
         participant to make sure it creates data. Then we run it again a few times to test that it updates the data
         correctly.
@@ -866,6 +866,7 @@ class TestDataExtraction:
         data = self._run_data_extract_and_update_pipeline(
             session,
             provider=provider,
+            provider_model=provider_model,
             pipeline=pipeline,
             schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
             extracted_data={"name": "Johnny", "last_name": None},
@@ -879,6 +880,7 @@ class TestDataExtraction:
         data = self._run_data_extract_and_update_pipeline(
             session,
             provider=provider,
+            provider_model=provider_model,
             pipeline=pipeline,
             schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
             extracted_data={"name": "John", "last_name": "Wick"},
@@ -891,6 +893,7 @@ class TestDataExtraction:
         data = self._run_data_extract_and_update_pipeline(
             session,
             provider=provider,
+            provider_model=provider_model,
             pipeline=pipeline,
             schema='{"has_pets": "whether or not the user has pets"}',
             extracted_data={"has_pets": "false"},
@@ -903,7 +906,15 @@ class TestDataExtraction:
         }
 
     def _run_data_extract_and_update_pipeline(
-        self, session, provider, pipeline, extracted_data: dict, schema: str, key_name: str, initial_data: dict
+        self,
+        session,
+        provider,
+        provider_model,
+        pipeline,
+        extracted_data: dict,
+        schema: str,
+        key_name: str,
+        initial_data: dict,
     ):
         tool_call = AIMessage(tool_calls=[ToolCall(name="CustomModel", args=extracted_data, id="123")], content="Hi")
         service = build_fake_llm_service(responses=[tool_call], token_counts=[0])
@@ -917,7 +928,7 @@ class TestDataExtraction:
                 start_node(),
                 extract_participant_data_node(
                     str(provider.id),
-                    str(session.experiment.llm_provider_model.id),
+                    str(provider_model.id),
                     schema,
                     key_name,
                 ),

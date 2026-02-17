@@ -325,3 +325,6 @@ class ChatAttachment(BaseModel):
 
     def __str__(self):
         return f"Tool Resources for chat {self.chat.id}: {self.tool_type}"
+
+    class Meta:
+        unique_together = ("chat", "tool_type")

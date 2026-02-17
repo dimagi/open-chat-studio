@@ -169,7 +169,7 @@ def _chat_completions(request, experiment_id: uuid.UUID, version=None):
             }
         ],
         "created": int(time.time()),
-        "model": session.experiment.get_llm_provider_model_name() or "",
+        "model": "",
         "object": "chat.completion",
     }
     return Response(data=completion)

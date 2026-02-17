@@ -1,14 +1,16 @@
 import csv
 import hashlib
 import io
+from collections import defaultdict
 from datetime import datetime
 
-from django.db.models import Count, Sum, Value
+from django.db.models import Count, Q, Sum, Value
 from django.db.models.functions import Coalesce, Length, TruncDate
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
-from apps.experiments.models import Participant
+from apps.experiments.models import ExperimentSession, Participant
+from apps.teams.models import Team
 
 
 def get_message_stats(start: datetime, end: datetime):
@@ -95,6 +97,190 @@ def get_whatsapp_number_data():
             account,
             channel["extra_data"].get("number", "---"),
         )
+
+
+def get_whatsapp_message_stats(start: datetime, end: datetime):
+    rows = (
+        ChatMessage.objects.filter(
+            created_at__gte=start,
+            created_at__lt=end,
+            chat__experiment_session__experiment_channel__platform=ChannelPlatform.WHATSAPP,
+            message_type__in=["human", "ai"],
+        )
+        .values(
+            "chat__team__name",
+            "chat__team__slug",
+            "chat__experiment_session__experiment__id",
+            "chat__experiment_session__experiment__name",
+            "chat__experiment_session__experiment_channel__extra_data",
+            "message_type",
+        )
+        .annotate(count=Count("id"))
+        .order_by("chat__team__name", "chat__experiment_session__experiment__name")
+    )
+
+    # Pivot into (team, experiment, number, human_count, ai_count)
+    pivot = defaultdict(lambda: {"human": 0, "ai": 0})
+    key_metadata = {}
+    for row in rows:
+        team_slug = row["chat__team__slug"]
+        experiment_id = row["chat__experiment_session__experiment__id"]
+        extra_data = row["chat__experiment_session__experiment_channel__extra_data"] or {}
+        number = extra_data.get("number", "---")
+        key = (team_slug, experiment_id, number)
+        pivot[key][row["message_type"]] += row["count"]
+        key_metadata[key] = {
+            "team_name": row["chat__team__name"],
+            "experiment_name": row["chat__experiment_session__experiment__name"],
+        }
+
+    results = [
+        {
+            "team": key_metadata[key]["team_name"],
+            "team_slug": team_slug,
+            "experiment": key_metadata[key]["experiment_name"],
+            "experiment_id": experiment_id,
+            "number": number,
+            "human_count": counts["human"],
+            "ai_count": counts["ai"],
+        }
+        for key, counts in pivot.items()
+        for (team_slug, experiment_id, number) in [key]
+    ]
+    results.sort(key=lambda r: r["human_count"], reverse=True)
+    return results
+
+
+def get_top_teams(start: datetime, end: datetime, limit: int = 10):
+    msg_data = (
+        ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
+        .values("chat__team_id", "chat__team__name", "chat__team__slug")
+        .annotate(
+            msg_count=Count("id"),
+            session_count=Count("chat__experiment_session", distinct=True),
+        )
+        .order_by("-msg_count")[:limit]
+    )
+
+    participant_data = (
+        ExperimentSession.objects.filter(created_at__gte=start, created_at__lt=end)
+        .values("team_id")
+        .annotate(participant_count=Count("participant", distinct=True))
+    )
+    participant_map = {row["team_id"]: row["participant_count"] for row in participant_data}
+
+    return [
+        {
+            "team": row["chat__team__name"],
+            "team_slug": row["chat__team__slug"],
+            "msg_count": row["msg_count"],
+            "session_count": row["session_count"],
+            "participant_count": participant_map.get(row["chat__team_id"], 0),
+        }
+        for row in msg_data
+    ]
+
+
+def get_platform_breakdown(start: datetime, end: datetime):
+    rows = (
+        ExperimentSession.objects.filter(created_at__gte=start, created_at__lt=end)
+        .exclude(Q(platform=ChannelPlatform.EVALUATIONS) | Q(platform__isnull=True) | Q(platform=""))
+        .values("platform")
+        .annotate(
+            session_count=Count("id"),
+            msg_count=Count(
+                "chat__messages",
+                filter=Q(chat__messages__created_at__gte=start, chat__messages__created_at__lt=end),
+            ),
+        )
+        .order_by("-session_count")
+    )
+    result = []
+    for row in rows:
+        try:
+            label = ChannelPlatform(row["platform"]).label
+        except ValueError:
+            label = row["platform"]
+        result.append(
+            {
+                "platform": label,
+                "session_count": row["session_count"],
+                "msg_count": row["msg_count"],
+            }
+        )
+    return result
+
+
+def get_team_activity_summary(start: datetime, end: datetime):
+    active_team_ids = set(
+        ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
+        .values_list("chat__team_id", flat=True)
+        .distinct()
+    )
+    all_teams = list(Team.objects.values_list("id", "name", "slug"))
+    inactive_teams = sorted(
+        ({"name": name, "slug": slug} for tid, name, slug in all_teams if tid not in active_team_ids),
+        key=lambda t: t["name"],
+    )
+    return {
+        "active_count": len(active_team_ids),
+        "total_count": len(all_teams),
+        "inactive_teams": inactive_teams,
+    }
+
+
+def get_period_totals(start: datetime, end: datetime):
+    return {
+        "messages": ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end).count(),
+        "participants": Participant.objects.filter(created_at__gte=start, created_at__lt=end).count(),
+        "sessions": ExperimentSession.objects.filter(created_at__gte=start, created_at__lt=end).count(),
+    }
+
+
+def get_top_experiments(start: datetime, end: datetime, limit: int = 10):
+    rows = (
+        ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
+        .values(
+            "chat__experiment_session__experiment__id",
+            "chat__experiment_session__experiment__name",
+            "chat__experiment_session__experiment__team__name",
+            "chat__experiment_session__experiment__team__slug",
+        )
+        .annotate(
+            msg_count=Count("id"),
+            session_count=Count("chat__experiment_session", distinct=True),
+        )
+        .order_by("-msg_count")[:limit]
+    )
+    return [
+        {
+            "team": row["chat__experiment_session__experiment__team__name"],
+            "team_slug": row["chat__experiment_session__experiment__team__slug"],
+            "experiment": row["chat__experiment_session__experiment__name"],
+            "experiment_id": row["chat__experiment_session__experiment__id"],
+            "msg_count": row["msg_count"],
+            "session_count": row["session_count"],
+        }
+        for row in rows
+    ]
+
+
+def top_teams_to_csv(start: datetime, end: datetime):
+    data = get_top_teams(start, end)
+    rows = ((d["team"], d["msg_count"], d["session_count"], d["participant_count"]) for d in data)
+    return _write_data_to_csv(["Team", "Messages", "Sessions", "Participants"], rows)
+
+
+def top_experiments_to_csv(start: datetime, end: datetime):
+    data = get_top_experiments(start, end)
+    rows = ((d["team"], d["experiment"], d["msg_count"], d["session_count"]) for d in data)
+    return _write_data_to_csv(["Team", "Experiment", "Messages", "Sessions"], rows)
+
+
+def whatsapp_message_stats_to_csv(start: datetime, end: datetime):
+    stats = get_whatsapp_message_stats(start, end)
+    rows = ((s["team"], s["experiment"], s["number"], s["human_count"], s["ai_count"]) for s in stats)
+    return _write_data_to_csv(["Team", "Experiment", "Channel Number", "Human Messages", "AI Messages"], rows)
 
 
 def _write_data_to_csv(headers, rows):

@@ -157,7 +157,6 @@ MIDDLEWARE = list(
             "silk.middleware.SilkyMiddleware",
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
-            "apps.generics.middleware.OriginDetectionMiddleware",
             "apps.web.request_logging_middleware.RequestLoggingMiddleware",
             "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],
@@ -783,10 +782,18 @@ COMMCARE_CONNECT_ENABLED = COMMCARE_CONNECT_SERVER_SECRET and COMMCARE_CONNECT_S
 COMMCARE_CONNECT_SERVER_URL = env("COMMCARE_CONNECT_SERVER_URL", default="https://connectid.dimagi.com")
 COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo/"
 
+### System Agent
+# Models for use by the system agent. Separate multiple models (for fallback) using the ',' character.
+# openai:gpt5-2,anthropic:claude-4.5-opus
+from apps.help import get_system_agent_models  # noqa: E402
 
-# AI helper
-AI_HELPER_API_KEY = env("AI_HELPER_API_KEY", default="")
-AI_HELPER_API_MODEL = env("AI_HELPER_API_MODEL", default="claude-sonnet-4-20250514")
+agent_api_keys = env.dict("SYSTEM_AGENT_API_KEYS", default={})
+agent_models_high = env.list("SYSTEM_AGENT_MODELS_HIGH", default=[])
+agent_models_low = env.list("SYSTEM_AGENT_MODELS_LOW", default=[])
+# 'high' models used for complex tasks
+SYSTEM_AGENT_MODELS_HIGH = get_system_agent_models(agent_models_high, agent_api_keys)
+# 'low' models used for simple tasks
+SYSTEM_AGENT_MODELS_LOW = get_system_agent_models(agent_models_low, agent_api_keys)
 
 
 # Document Management
@@ -906,3 +913,11 @@ OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth.OAuth2RefreshToken"
 
 # Pipeline settings
 RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_context"}
+
+# Restricted HTTP client settings (used by RestrictedHttpClient in the Python sandbox)
+RESTRICTED_HTTP_MAX_REQUESTS = 10
+RESTRICTED_HTTP_DEFAULT_TIMEOUT = 5  # seconds
+RESTRICTED_HTTP_MAX_TIMEOUT = 30  # seconds
+RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 1_048_576  # 1 MB
+RESTRICTED_HTTP_MAX_REQUEST_BYTES = 524_288  # 512 KB
+RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES = 26_214_400  # 25 MB

@@ -1,10 +1,6 @@
 <dialog id="sharing_modal" class="modal">
   <div class="modal-box" x-data="{ tab: 'tab-link' }">
-    {% if origin == "chatbots" %}
-      {% url 'chatbots:start_session_public' team.slug experiment.public_id as public_link %}
-    {% else %}
-      {% url 'experiments:start_session_public' team.slug experiment.public_id as public_link %}
-    {% endif %}
+    {% url 'chatbots:start_session_public' team.slug experiment.public_id as public_link %}
     <div class="w-full my-4">
       <p class="my-4">Share this link with participants:</p>
       <pre

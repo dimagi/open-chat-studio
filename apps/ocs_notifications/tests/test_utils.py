@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from django.contrib.auth.models import Group
 
@@ -9,6 +11,12 @@ from apps.ocs_notifications.utils import (
     toggle_notification_read,
 )
 from apps.utils.factories.notifications import UserNotificationFactory
+
+
+@pytest.fixture(autouse=True)
+def enable_flag_for_notifications():
+    with patch("apps.ocs_notifications.utils._notifications_flag_is_active", return_value=True):
+        yield
 
 
 @pytest.mark.django_db()

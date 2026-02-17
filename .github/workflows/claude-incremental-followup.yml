@@ -1,0 +1,203 @@
+# Documentation: docs/developer_guides/igor.md
+name: Igor Followup
+
+on:
+  workflow_run:
+    workflows: ["Lint and Test"]
+    types: [completed]
+    branches:
+      - 'claude-incremental/**'
+
+concurrency:
+  group: claude-incremental-followup-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+# Restrict default permissions - job overrides as needed
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  check-and-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+      id-token: write
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    env:
+      DJANGO_DATABASE_USER: postgres
+      DJANGO_DATABASE_PASSWORD: postgres_password
+      SECRET_KEY: secret-test-key
+    steps:
+      - name: Find PR and check for followup label
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          RUN_CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+
+          echo "Head branch: $HEAD_BRANCH"
+          echo "Run ID: $RUN_ID"
+          echo "Run conclusion: $RUN_CONCLUSION"
+
+          # Find the PR for this branch
+          PR_NUMBER=$(gh pr list --repo "$REPO" --head "$HEAD_BRANCH" --state open --json number --jq '.[0].number')
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::notice::No open PR found for branch $HEAD_BRANCH"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "PR number: $PR_NUMBER"
+
+          # Check if the followup label is already applied
+          HAS_LABEL=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name' | grep -c '^igor-is-done$' || true)
+
+          if [ "$HAS_LABEL" -gt 0 ]; then
+            echo "::notice::PR #$PR_NUMBER already has igor-is-done label, skipping"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "skip=false" >> $GITHUB_OUTPUT
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "run_conclusion=$RUN_CONCLUSION" >> $GITHUB_OUTPUT
+          echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Checkout PR branch
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.check.outputs.head_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Set up uv
+        if: steps.check.outputs.skip != 'true'
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python dependencies
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          uv venv
+          uv sync --locked --dev
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      - name: Set up Node.js
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+
+      - name: Install Node dependencies
+        if: steps.check.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Run Claude Code
+        if: steps.check.outputs.skip != 'true'
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are following up on PR #${{ steps.check.outputs.pr_number }} to fix CI failures and address review feedback.
+
+            ## CI Run Information
+            - Run ID: ${{ steps.check.outputs.run_id }}
+            - Conclusion: ${{ steps.check.outputs.run_conclusion }}
+
+            ## Instructions
+
+            ### Step 1: Gather feedback
+
+            First, collect all feedback that needs to be addressed:
+
+            **CI failures** (if conclusion is "failure"):
+            Run `gh run view ${{ steps.check.outputs.run_id }} --log-failed` to see what failed.
+
+            **PR review comments**:
+            Run `gh pr view ${{ steps.check.outputs.pr_number }} --json reviews,comments` to see review-level comments.
+            Run `gh api repos/${{ github.repository }}/pulls/${{ steps.check.outputs.pr_number }}/comments` to see inline code review comments.
+
+            ### Step 2: Fix issues
+
+            Address all actionable feedback:
+
+            **For CI failures:**
+            - Lint errors: run `ruff check --fix` and `ruff format` to fix Python issues
+            - JS/TS lint: run `npm run lint` to check, fix issues manually
+            - Type errors: run `npm run type-check` to check, fix issues manually
+            - Test failures: read the failing test, understand the failure, fix the code or test
+            - Lock file issues: run `uv lock` to regenerate
+
+            **For review comments:**
+            - Address actionable code review suggestions
+            - Skip comments that are purely informational or questions
+            - If a suggestion conflicts with project conventions, skip it
+
+            ### Step 3: Verify fixes locally
+
+            Run the checks locally to verify your fixes:
+            - `ruff check && ruff format --check` (Python lint)
+            - `npm run build` (frontend build)
+            - `npm run type-check` (TypeScript types)
+            - `pytest path/to/relevant/tests.py -v` (relevant tests)
+
+            ### Step 4: Push and comment
+
+            If you made changes:
+            1. Commit with a clear message describing what was fixed
+            2. Push to the branch
+            3. Comment on the PR summarizing what was fixed
+
+            If CI passed and there are no actionable review comments:
+            1. Comment on the PR noting that no changes were needed
+          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(npm run dev:*),Bash(npm ci:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ruff:*),Bash(uv lock:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh run download:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Read,Write,Edit"'
+
+      - name: Add 'done' label
+        if: always() && steps.check.outputs.skip != 'true' && steps.check.outputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr edit "${{ steps.check.outputs.pr_number }}" \
+            --repo "${{ github.repository }}" \
+            --add-label "igor-is-done"

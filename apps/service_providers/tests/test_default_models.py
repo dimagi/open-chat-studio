@@ -9,7 +9,6 @@ from apps.service_providers.llm_service.default_models import (
     update_llm_provider_models,
 )
 from apps.service_providers.models import LlmProviderModel
-from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 
@@ -57,28 +56,6 @@ def test_old_models_are_not_removed():
 
 
 @pytest.mark.django_db()
-def test_replaces_custom_models_with_global_models():
-    experiment = ExperimentFactory()
-    old_custom_model = experiment.llm_provider_model
-    assert old_custom_model.team is not None  # Ensure it's a custom model
-
-    # no global model should exist
-    assert not LlmProviderModel.objects.filter(
-        team=None, type=old_custom_model.type, name=old_custom_model.name
-    ).exists()
-
-    defaults = {old_custom_model.type: [Model(old_custom_model.name, old_custom_model.max_token_limit)]}
-    with patch("apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS", defaults):
-        update_llm_provider_models()
-
-    new_global_model = LlmProviderModel.objects.get(team=None, type=old_custom_model.type, name=old_custom_model.name)
-    # custom model should now point to the global model
-    assert not LlmProviderModel.objects.filter(id=old_custom_model.id).exists()
-    experiment.refresh_from_db()
-    assert experiment.llm_provider_model_id == new_global_model.id
-
-
-@pytest.mark.django_db()
 def test_converts_custom_models_to_global_models_pipelines():
     custom_model = LlmProviderModelFactory()
     pipeline = get_pipeline(custom_model)
@@ -104,18 +81,20 @@ def test_converts_custom_models_to_global_models_pipelines():
 
 def get_pipeline(llm_provider_model):
     pipeline = PipelineFactory()
-    pipeline.data["nodes"].append({
-        "id": "1",
-        "data": {
+    pipeline.data["nodes"].append(
+        {
             "id": "1",
-            "label": "LLM",
-            "type": "LLMResponseWithPrompt",
-            "params": {
-                "llm_provider_model_id": str(llm_provider_model.id),
-                "prompt": "You are a helpful assistant",
+            "data": {
+                "id": "1",
+                "label": "LLM",
+                "type": "LLMResponseWithPrompt",
+                "params": {
+                    "llm_provider_model_id": str(llm_provider_model.id),
+                    "prompt": "You are a helpful assistant",
+                },
             },
-        },
-    })
+        }
+    )
     pipeline.update_nodes_from_data()
     pipeline.save()
     return pipeline

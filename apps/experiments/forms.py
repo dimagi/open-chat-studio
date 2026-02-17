@@ -3,8 +3,6 @@ from django.core import validators
 from django.utils.translation import gettext_lazy
 
 from apps.experiments.models import (
-    ExperimentRoute,
-    ExperimentRouteType,
     Survey,
 )
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
@@ -65,30 +63,6 @@ class ExperimentInvitationForm(forms.Form):
     experiment_id = forms.IntegerField(widget=forms.HiddenInput())
     email = forms.EmailField(required=True, label="Participant Email")
     invite_now = forms.BooleanField(label="Send Participant Invitation Immediately?", required=False)
-
-
-class ProcessorBotForm(forms.ModelForm):
-    class Meta:
-        model = ExperimentRoute
-        fields = ["child", "keyword", "is_default"]
-
-
-class TerminalBotForm(forms.ModelForm):
-    def __init__(self, *args, **kwargs):
-        kwargs["initial"] = {**kwargs.get("initial", {}), "is_default": True}
-        super().__init__(*args, **kwargs)
-
-    class Meta:
-        model = ExperimentRoute
-        fields = ["child", "is_default"]
-        labels = {"child": "Terminal bot"}
-        widgets = {"is_default": forms.HiddenInput()}
-
-
-EXPERIMENT_ROUTE_TYPE_FORMS = {
-    ExperimentRouteType.PROCESSOR.value: ProcessorBotForm,
-    ExperimentRouteType.TERMINAL.value: TerminalBotForm,
-}
 
 
 class ExperimentVersionForm(forms.Form):

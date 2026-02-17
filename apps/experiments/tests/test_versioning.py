@@ -1,10 +1,8 @@
 import pytest
 
-from apps.custom_actions.models import CustomActionOperation
-from apps.experiments.models import Experiment, SafetyLayer
+from apps.experiments.models import Experiment
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
 from apps.files.models import File
-from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory, TimeoutTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, SourceMaterialFactory
 from apps.utils.factories.files import FileFactory
@@ -323,22 +321,6 @@ class TestCopyExperiment:
         assert timeout_trigger_copy != timeout_trigger
         assert timeout_trigger_copy.is_working_version
         assert timeout_trigger_copy.action != timeout_trigger.action
-
-    def test_custom_action_operations(self):
-        experiment = ExperimentFactory()
-        custom_action = CustomActionFactory(team=experiment.team)
-        weather_get = CustomActionOperation.objects.create(
-            custom_action=custom_action, experiment=experiment, operation_id="weather_get"
-        )
-
-        experiment_copy = experiment.create_new_version(is_copy=True)
-        assert experiment_copy.custom_action_operations.count() == 1
-        operation_copy = experiment_copy.custom_action_operations.first()
-        assert operation_copy != weather_get
-        assert operation_copy.is_working_version
-        assert operation_copy.operation_id == weather_get.operation_id
-        assert operation_copy.custom_action == custom_action
-        assert operation_copy._operation_schema == {}
 
     def test_copy_pipeline(self):
         pipeline_data = {
