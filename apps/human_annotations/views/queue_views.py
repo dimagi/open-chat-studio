@@ -208,7 +208,7 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
             for session in sessions
             if session.id not in existing_session_ids
         ]
-        created = AnnotationItem.objects.bulk_create(items_to_create)
+        created = AnnotationItem.objects.bulk_create(items_to_create, ignore_conflicts=True)
         skipped = len(sessions) - len(created)
 
         msg = f"Added {len(created)} items to queue."
@@ -241,7 +241,11 @@ class ImportCSVToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
             return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
         max_rows = 10_000
-        decoded = csv_file.read().decode("utf-8-sig")
+        try:
+            decoded = csv_file.read().decode("utf-8-sig")
+        except UnicodeDecodeError:
+            messages.error(request, "File encoding is not supported. Please upload a UTF-8 encoded CSV file.")
+            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
         reader = csv_module.DictReader(io.StringIO(decoded))
 
         items = []
