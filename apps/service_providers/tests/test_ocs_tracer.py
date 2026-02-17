@@ -159,6 +159,11 @@ class TestOCSCallbackHandler:
         tracer = OCSTracer(experiment_id=456, team_id=123)
         tracer.trace_id = str(uuid4())
 
+        # Set up experiment mock
+        experiment = Mock()
+        experiment.id = 456
+        tracer.experiment = experiment
+
         # Set up a session with a participant so the notification includes context
         participant = Mock()
         participant.identifier = "user@example.com"
@@ -176,8 +181,8 @@ class TestOCSCallbackHandler:
 
         # Verify llm_error_notification was called with correct parameters
         mock_llm_error_notification.assert_called_once_with(
-            experiment_id=456,
-            session_id=789,
+            experiment=experiment,
+            session=session,
             error_message=error_message,
         )
 
