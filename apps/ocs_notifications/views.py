@@ -209,7 +209,7 @@ class NotificationEventHome(LoginAndTeamRequiredMixin, TemplateView):
         context = {
             "active_tab": "notifications",
             "title": "Notifications",
-            "subtitle": event_type.notificationevent_set.first().title,
+            "subtitle": event_type.notificationevent_set.order_by("-created_at").first().title,
             "table_url": table_url,
             "enable_search": False,
         }
