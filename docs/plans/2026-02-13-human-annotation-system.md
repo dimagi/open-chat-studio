@@ -4,9 +4,9 @@
 
 **Goal:** Build a human annotation system that lets teams create annotation queues with customizable schemas, assign reviewers, and collect structured feedback on chat sessions/messages.
 
-**Architecture:** New Django app `human_annotations` (since `annotations` is already taken by the tagging system) with models for schemas, queues, items, and annotations. Reuses the existing `FieldDefinition` pattern from evaluations for schema definitions. Team-scoped via `BaseTeamModel`. HTMX-powered UI following existing patterns. Gated behind a Waffle feature flag.
+**Architecture:** New Django app `human_annotations` (since `annotations` is already taken by the tagging system) with models for queues, items, and annotations. The annotation schema (field definitions) is stored as a JSON field directly on `AnnotationQueue`, reusing the `FieldDefinition` pattern from evaluations. Team-scoped via `BaseTeamModel`. HTMX-powered UI following existing patterns. Gated behind a Waffle feature flag.
 
-**Tech Stack:** Django 5.x, PostgreSQL, HTMX, Alpine.js, django-tables2, DaisyUI/TailwindCSS, Celery (for CSV import/export)
+**Tech Stack:** Django 5.x, PostgreSQL, HTMX, Alpine.js, django-tables2, DaisyUI/TailwindCSS
 
 **Scope:** This plan covers Phase 1 (core features: items 1-6 from the ticket). Phase 2+ features (quality control, evaluation integration, session UI integration, automation, notifications) are out of scope and will be planned separately after Phase 1 ships.
 
@@ -14,12 +14,17 @@
 
 ---
 
+## Changelog
+
+- **2026-02-17:** Merged `AnnotationSchema` model into `AnnotationQueue`. The schema JSON field and `get_field_definitions()` now live directly on the queue. Removed all schema CRUD views, URLs, templates, and nav entries. The queue create/edit form includes an inline Alpine.js schema field builder. Also removed CSV import feature and `external_data` field from `AnnotationItem`.
+
+---
+
 ## Phase 1 Overview
 
 Phase 1 delivers:
-- **Annotation Schemas** - reusable field definitions for what data to collect
-- **Annotation Queues** - assignable queues with configurable N-reviews-per-item
-- **Annotation Items** - items linked to sessions, messages, or external CSV data
+- **Annotation Queues** - assignable queues with inline schema, configurable N-reviews-per-item
+- **Annotation Items** - items linked to sessions or messages
 - **Annotations** - submitted reviews with validated data
 - **Admin Dashboard** - create/manage queues, bulk add items, view progress, export
 - **Annotator UI** - focused one-at-a-time annotation interface
