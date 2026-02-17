@@ -124,20 +124,18 @@ class EventUserQuerySet(models.QuerySet):
             last_event_at=models.Subquery(latest_event.values("created_at")[:1]),
         )
 
-
-class EventUserManager(models.Manager.from_queryset(EventUserQuerySet)):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_muted=models.Case(
-                    models.When(muted_until__gt=timezone.now(), then=True),
-                    default=False,
-                    output_field=models.BooleanField(),
-                )
+    def with_mute_status(self) -> models.QuerySet:
+        return self.annotate(
+            is_muted=models.Case(
+                models.When(muted_until__gt=timezone.now(), then=True),
+                default=False,
+                output_field=models.BooleanField(),
             )
         )
+
+
+class EventUserManager(models.Manager.from_queryset(EventUserQuerySet)):
+    pass
 
 
 class EventUser(BaseTeamModel):

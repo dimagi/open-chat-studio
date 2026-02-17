@@ -80,6 +80,7 @@ class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
     def get_queryset(self):
         queryset = (
             EventUser.objects.with_latest_event()
+            .with_mute_status()
             .filter(user=self.request.user, team=self.request.team)
             .select_related("event_type")
             .filter(last_event_at__isnull=False)
@@ -97,7 +98,7 @@ class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
 class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
         event_user = get_object_or_404(
-            EventUser.objects.with_latest_event(),
+            EventUser.objects.with_latest_event().with_mute_status(),
             id=notification_id,
             user=self.request.user,
             team__slug=team_slug,
