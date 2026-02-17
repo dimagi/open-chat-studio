@@ -1,3 +1,4 @@
+from apps.help.registry import AGENT_REGISTRY, register_agent
 from apps.help.utils import extract_function_signature, get_python_node_coder_prompt
 
 
@@ -48,3 +49,32 @@ class TestExtractFunctionSignature:
     def test_non_callable_object_returns_none(self):
         result = extract_function_signature("not_callable", "string")
         assert result is None
+
+
+class TestAgentRegistry:
+    def test_register_agent_adds_to_registry(self):
+        # Use a throwaway class to avoid polluting the registry
+        original_registry = AGENT_REGISTRY.copy()
+        try:
+
+            @register_agent
+            class FakeAgent:
+                name = "test_fake"
+
+            assert AGENT_REGISTRY["test_fake"] is FakeAgent
+        finally:
+            AGENT_REGISTRY.clear()
+            AGENT_REGISTRY.update(original_registry)
+
+    def test_register_agent_returns_class_unchanged(self):
+        original_registry = AGENT_REGISTRY.copy()
+        try:
+
+            @register_agent
+            class AnotherFake:
+                name = "test_another"
+
+            assert AnotherFake.name == "test_another"
+        finally:
+            AGENT_REGISTRY.clear()
+            AGENT_REGISTRY.update(original_registry)
