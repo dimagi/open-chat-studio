@@ -169,9 +169,9 @@ class AnnotationItem(BaseTeamModel):
             return f"Session #{self.session_id}"
         if self.message_id:
             return f"Message {self.message_id}"
-        return f"External item {self.id}"
+        return f"Item {self.id}"
 
-    def update_status(self):
+    def update_status(self, save=True):
         """Update item status based on review count vs queue requirement.
         Preserves FLAGGED status — only explicit unflagging clears it."""
         if self.status == AnnotationItemStatus.FLAGGED:
@@ -182,7 +182,8 @@ class AnnotationItem(BaseTeamModel):
             self.status = AnnotationItemStatus.IN_PROGRESS
         else:
             self.status = AnnotationItemStatus.PENDING
-        self.save(update_fields=["status"])
+        if save:
+            self.save(update_fields=["status"])
 
 
 class AnnotationStatus(models.TextChoices):
@@ -223,13 +224,6 @@ class Annotation(BaseTeamModel):
         """Increment item review count and update status."""
         with transaction.atomic():
             item = AnnotationItem.objects.select_for_update().get(pk=self.item_id)
-            count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
-            item.review_count = count
-            if item.status != AnnotationItemStatus.FLAGGED:
-                if count >= item.queue.num_reviews_required:
-                    item.status = AnnotationItemStatus.COMPLETED
-                elif count > 0:
-                    item.status = AnnotationItemStatus.IN_PROGRESS
-                else:
-                    item.status = AnnotationItemStatus.PENDING
+            item.review_count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
+            item.update_status(save=False)
             item.save(update_fields=["review_count", "status"])

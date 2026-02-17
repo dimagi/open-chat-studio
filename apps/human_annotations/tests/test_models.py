@@ -2,6 +2,7 @@ import django.db
 import pytest
 
 from apps.human_annotations.models import (
+    Annotation,
     AnnotationItem,
     AnnotationItemType,
     AnnotationQueue,
@@ -79,8 +80,6 @@ def test_item_prevents_duplicate_session_in_queue(team):
 
 @pytest.mark.django_db()
 def test_annotation_prevents_duplicate_reviewer(team):
-    from apps.human_annotations.models import Annotation
-
     user = team.members.first()
     schema = AnnotationSchema.objects.create(team=team, name="Test", schema={})
     queue = AnnotationQueue.objects.create(team=team, name="Q", schema=schema, created_by=user)

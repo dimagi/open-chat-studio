@@ -73,7 +73,7 @@ def _get_item_display_content(item):
             "content": msg.content,
         }
     else:
-        return {}
+        raise ValueError(f"AnnotationItem {item.id} has no linked session or message")
 
 
 def _check_assignee_access(queue, user):
@@ -140,11 +140,11 @@ class AnnotateItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
 
         form = None
         annotations = []
-        schema_fields = list(queue.schema.schema.keys())
         if can_annotate:
             FormClass = build_annotation_form(queue.schema)
             form = FormClass()
         else:
+            schema_fields = list(queue.schema.schema.keys())
             annotations = [
                 {
                     "reviewer": ann.reviewer,
@@ -260,8 +260,8 @@ class UnflagItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             item = AnnotationItem.objects.select_for_update().get(id=item_pk, queue=queue)
             item.flags = []
             item.status = AnnotationItemStatus.PENDING  # Reset from FLAGGED so update_status recalculates
+            item.update_status(save=False)
             item.save(update_fields=["flags", "status"])
-            item.update_status()
         messages.info(request, "Item unflagged.")
         redirect_url = redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
         if request.headers.get("HX-Request"):

@@ -1,4 +1,4 @@
-import csv as csv_module
+import csv
 import json
 import re
 
@@ -13,10 +13,11 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.experiments.models import ExperimentSession
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..forms import AnnotationQueueForm
-from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue
+from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue, AnnotationStatus
 from ..tables import AnnotationItemTable, AnnotationQueueTable
 
 User = get_user_model()
@@ -148,7 +149,7 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
             .prefetch_related(
                 Prefetch(
                     "annotations",
-                    queryset=Annotation.objects.filter(status="submitted").select_related("reviewer"),
+                    queryset=Annotation.objects.filter(status=AnnotationStatus.SUBMITTED).select_related("reviewer"),
                     to_attr="submitted_annotations",
                 ),
             )
@@ -159,8 +160,6 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
     permission_required = "human_annotations.add_annotationitem"
 
     def get(self, request, team_slug: str, pk: int):
-        from apps.experiments.models import ExperimentSession
-
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
         sessions = (
             ExperimentSession.objects.filter(team=request.team)
@@ -178,8 +177,6 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
         )
 
     def post(self, request, team_slug: str, pk: int):
-        from apps.experiments.models import ExperimentSession
-
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
         session_ids = request.POST.getlist("sessions")
 
@@ -250,7 +247,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         export_format = request.GET.get("format", "csv")
         annotations = Annotation.objects.filter(
             item__queue=queue,
-            status="submitted",
+            status=AnnotationStatus.SUBMITTED,
         ).select_related("item", "item__session", "item__message", "reviewer")
 
         if export_format == "jsonl":
@@ -264,7 +261,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         schema_fields = list(queue.schema.schema.keys())
         fieldnames = ["item_id", "item_type", "reviewer", "annotated_at"] + schema_fields
 
-        writer = csv_module.DictWriter(response, fieldnames=fieldnames)
+        writer = csv.DictWriter(response, fieldnames=fieldnames)
         writer.writeheader()
 
         for ann in annotations:
