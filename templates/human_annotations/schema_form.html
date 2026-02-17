@@ -33,7 +33,6 @@
               </label>
               <input type="text"
                      x-model="field.name"
-                     @input="syncToHidden()"
                      placeholder="{% translate "e.g., 'accuracy', 'score'" %}"
                      class="input input-bordered w-full input-sm"
                      required>
@@ -59,7 +58,6 @@
               </label>
               <input type="text"
                      x-model="field.description"
-                     @input="syncToHidden()"
                      placeholder="{% translate "Description shown to annotators" %}"
                      class="input input-bordered w-full input-sm">
             </div>
@@ -73,7 +71,6 @@
                   </label>
                   <input type="number"
                          x-model="field.ge"
-                         @input="syncToHidden()"
                          :step="field.type === 'float' ? 'any' : '1'"
                          placeholder="{% translate "Min (inclusive)" %}"
                          class="input input-bordered w-full input-sm">
@@ -84,7 +81,6 @@
                   </label>
                   <input type="number"
                          x-model="field.le"
-                         @input="syncToHidden()"
                          :step="field.type === 'float' ? 'any' : '1'"
                          placeholder="{% translate "Max (inclusive)" %}"
                          class="input input-bordered w-full input-sm">
@@ -101,7 +97,6 @@
                   </label>
                   <input type="number"
                          x-model="field.max_length"
-                         @input="syncToHidden()"
                          min="1"
                          placeholder="{% translate "Optional" %}"
                          class="input input-bordered w-full input-sm">
@@ -120,18 +115,17 @@
                     <div class="flex gap-2 items-center">
                       <input type="text"
                              x-model="field.choices[choiceIndex]"
-                             @input="syncToHidden()"
                              placeholder="{% translate "Choice value" %}"
                              class="input input-bordered w-full input-sm">
                       <button type="button"
-                              @click="field.choices.splice(choiceIndex, 1); syncToHidden()"
+                              @click="field.choices.splice(choiceIndex, 1)"
                               class="btn btn-outline btn-xs btn-error">
                         <i class="fa fa-trash"></i>
                       </button>
                     </div>
                   </template>
                   <button type="button"
-                          @click="if (!field.choices) field.choices = []; field.choices.push(''); syncToHidden()"
+                          @click="if (!field.choices) field.choices = []; field.choices.push('')"
                           class="btn btn-outline btn-primary btn-xs mt-1">
                     <i class="fa fa-plus"></i> {% translate "Add Choice" %}
                   </button>
@@ -203,7 +197,6 @@
 
         removeField(index) {
           this.fields.splice(index, 1);
-          this.syncToHidden();
         },
 
         onTypeChange(field) {
@@ -215,11 +208,6 @@
           if (field.type === 'choice') {
             field.choices = [''];
           }
-          this.syncToHidden();
-        },
-
-        syncToHidden() {
-          // No-op - schemaJson getter handles this reactively
         },
 
         get schemaJson() {
