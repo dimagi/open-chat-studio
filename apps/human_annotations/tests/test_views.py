@@ -280,13 +280,7 @@ def test_submit_annotation_duplicate(client, team_with_users, queue, user):
 @pytest.mark.django_db()
 def test_skip_item(client, team_with_users, queue):
     item1 = AnnotationItemFactory(queue=queue, team=team_with_users)
-    item2 = AnnotationItemFactory(
-        queue=queue,
-        team=team_with_users,
-        item_type="external",
-        session=None,
-        external_data={"key": "value"},
-    )
+    item2 = AnnotationItemFactory(queue=queue, team=team_with_users)
     # Without skip, should get item1 (oldest)
     url = reverse("human_annotations:annotate_queue", args=[team_with_users.slug, queue.pk])
     response = client.get(url)
@@ -538,13 +532,7 @@ def test_progress_accounts_for_multiple_reviews(team_with_users, schema):
 
     queue = AnnotationQueueFactory(team=team_with_users, schema=schema, created_by=user1, num_reviews_required=2)
     AnnotationItemFactory(queue=queue, team=team_with_users)
-    item2 = AnnotationItemFactory(
-        queue=queue,
-        team=team_with_users,
-        item_type="external",
-        session=None,
-        external_data={"k": "v"},
-    )
+    item2 = AnnotationItemFactory(queue=queue, team=team_with_users)
 
     # No reviews yet
     progress = queue.get_progress()

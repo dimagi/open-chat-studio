@@ -73,10 +73,7 @@ def _get_item_display_content(item):
             "content": msg.content,
         }
     else:
-        return {
-            "type": "external",
-            "data": item.external_data,
-        }
+        return {}
 
 
 def _check_assignee_access(queue, user):

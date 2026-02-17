@@ -290,8 +290,6 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
                 "annotated_at": ann.created_at.isoformat(),
                 "annotation": ann.data,
             }
-            if ann.item.external_data:
-                record["external_data"] = ann.item.external_data
             lines.append(json.dumps(record))
 
         content = "\n".join(lines)

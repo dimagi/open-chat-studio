@@ -108,7 +108,6 @@ class AnnotationQueue(BaseTeamModel):
 class AnnotationItemType(models.TextChoices):
     SESSION = "session", "Session"
     MESSAGE = "message", "Message"
-    EXTERNAL = "external", "External Data"
 
 
 class AnnotationItem(BaseTeamModel):
@@ -137,9 +136,6 @@ class AnnotationItem(BaseTeamModel):
         blank=True,
         related_name="annotation_items",
     )
-
-    # For external/CSV data
-    external_data = SanitizedJSONField(default=dict, blank=True)
 
     # Denormalized review count for efficient querying
     review_count = models.PositiveSmallIntegerField(default=0)
