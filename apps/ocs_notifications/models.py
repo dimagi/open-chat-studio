@@ -13,6 +13,7 @@ class LevelChoices(models.IntegerChoices):
 
 
 class Notification(BaseTeamModel):
+    # TODO: Remove model
     title = models.CharField(max_length=255)
     message = models.TextField()
     level = models.PositiveSmallIntegerField(choices=LevelChoices.choices, db_index=True)
@@ -41,6 +42,7 @@ class Notification(BaseTeamModel):
 
 
 class UserNotification(BaseTeamModel):
+    # TODO: Remove model
     notification = models.ForeignKey(Notification, on_delete=models.CASCADE)
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
     read = models.BooleanField(default=False, db_index=True)
@@ -75,7 +77,12 @@ class UserNotificationPreferences(BaseTeamModel):
 
     class Meta:
         verbose_name_plural = "User Notification Preferences"
-        unique_together = ("user", "team")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "team"],
+                name="unique_notification_preferences_per_user_and_team",
+            ),
+        ]
 
     def __str__(self):
         return f"Notification preferences for {self.user}"
