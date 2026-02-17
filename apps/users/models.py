@@ -69,8 +69,9 @@ class CustomUser(AbstractUser):
         if count is not None:
             return count
 
-        preferences, _created = UserNotificationPreferences.objects.get_or_create(user=self, team=team)
-        if preferences.in_app_enabled:
+        preferences = UserNotificationPreferences.objects.filter(user=self, team=team).first()
+        in_app_enabled = preferences.in_app_enabled if preferences else True
+        if in_app_enabled:
             level = preferences.in_app_level
             count = EventUser.objects.filter(
                 team__slug=team.slug,
