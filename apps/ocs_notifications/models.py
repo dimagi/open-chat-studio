@@ -110,7 +110,7 @@ class NotificationEvent(BaseTeamModel):
     event_type = models.ForeignKey(EventType, on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
     message = models.TextField()
-    links = models.JSONField(null=True)
+    links = SanitizedJSONField(null=True)
 
 
 class EventUserQuerySet(models.QuerySet):
