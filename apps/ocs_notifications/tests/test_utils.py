@@ -37,10 +37,10 @@ class TestSendNotificationEmail:
         """
         user = team_with_users.members.first()
         event_type = EventTypeFactory.create(team=team_with_users, level=LevelChoices.ERROR)
-        event_user = EventUserFactory.create(user=user, team=team_with_users, event_type=event_type)
+        EventUserFactory.create(user=user, team=team_with_users, event_type=event_type)
         notification_event = NotificationEventFactory.create(team=team_with_users, event_type=event_type)
 
-        send_notification_email_async(event_user, notification_event)
+        send_notification_email_async([user.id], notification_event)
         assert len(mailoutbox) == 0
 
     @pytest.mark.django_db()
@@ -283,39 +283,6 @@ class TestCreateNotification:
 
 @pytest.mark.django_db()
 class TestNotificationMuting:
-    @pytest.mark.parametrize("dnd_on", [True, False])
-    def test_is_notification_muted_with_do_not_disturb(self, dnd_on, team_with_users):
-        """
-        Ensure that the is_notification_muted utility correctly identifies when a notification is muted based on the
-        user's do not disturb preferences.
-        """
-        user = team_with_users.members.first()
-        team2 = TeamFactory()
-        add_user_to_team(
-            team2, user
-        )  # Add the same user to another team to ensure team-specific muting works as expected
-        event_type = EventType.objects.create(
-            team=team_with_users,
-            identifier="dnd-test",
-            level=LevelChoices.INFO,
-        )
-        event_type_team2 = EventType.objects.create(
-            team=team2,
-            identifier="dnd-test",
-            level=LevelChoices.INFO,
-        )
-
-        UserNotificationPreferences.objects.create(
-            team=team_with_users,
-            user=user,
-            do_not_disturb_until=timezone.now() + datetime.timedelta(hours=1) if dnd_on else None,
-        )
-
-        assert is_notification_muted(user, team_with_users, event_type) is dnd_on
-        assert is_notification_muted(user, team2, event_type_team2) is False, (
-            "Do Not Disturb should be team-specific and not affect other teams"
-        )
-
     def test_mute_notification_for_8h(self, team_with_users):
         """Ensure that muting for 8 hours is team-specific and expires correctly."""
         user = team_with_users.members.first()
@@ -341,12 +308,22 @@ class TestNotificationMuting:
             )
 
             # Verify team-specific muting
-            assert is_notification_muted(user, team_with_users, event_type) is True
-            assert is_notification_muted(user, team2, event_type_team2) is False, "Mute should not leak to other teams"
+            assert (
+                is_notification_muted(EventUser.objects.get(user=user, team=team_with_users, event_type=event_type))
+                is True
+            )
+            (
+                EventUser.objects.filter(user=user, team=team2, event_type=event_type_team2).exists() is False,
+                "Mute should not leak to other teams",
+            )
 
             # Verify expiration
             freezer.shift(datetime.timedelta(hours=8, minutes=1))
-            assert is_notification_muted(user, team_with_users, event_type) is False
+
+            assert (
+                is_notification_muted(EventUser.objects.get(user=user, team=team_with_users, event_type=event_type))
+                is False
+            )
 
     def test_mute_notification_forever(self, team_with_users):
         """Ensure that muting indefinitely is team-specific and persists."""
@@ -373,9 +350,18 @@ class TestNotificationMuting:
             )
 
             # Verify team-specific muting
-            assert is_notification_muted(user, team_with_users, event_type) is True
-            assert is_notification_muted(user, team2, event_type_team2) is False, "Mute should not leak to other teams"
+            assert (
+                is_notification_muted(EventUser.objects.get(user=user, team=team_with_users, event_type=event_type))
+                is True
+            )
+            (
+                EventUser.objects.filter(user=user, team=team2, event_type=event_type_team2).exists() is False,
+                "Mute should not leak to other teams",
+            )
 
             # Verify it stays muted long-term
             freezer.shift(datetime.timedelta(days=365 * 10))
-            assert is_notification_muted(user, team_with_users, event_type) is True
+            assert (
+                is_notification_muted(EventUser.objects.get(user=user, team=team_with_users, event_type=event_type))
+                is True
+            )

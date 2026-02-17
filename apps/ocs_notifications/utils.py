@@ -87,26 +87,42 @@ def create_notification(
         links=links,
     )
 
+    existing_event_users = {
+        eu.user: eu for eu in EventUser.objects.filter(team=team, event_type=event_type, user__in=users)
+    }
+    event_users_to_create = []
+    event_users_to_update = []
+    users_to_email = []
+
     for user in users:
-        if is_notification_muted(user, team, event_type):
+        event_user = existing_event_users.get(user)
+        if is_notification_muted(event_user):
             continue
 
-        event_user, created = EventUser.objects.get_or_create(team=team, event_type=event_type, user=user)
-
-        # User will only be notified when first created or when a previously read event is new again.
-        user_should_be_notified = created or event_user.read is True
-        if event_user.read is True:
-            event_user.read = False
-            event_user.read_at = None
-            event_user.save(update_fields=["read", "read_at"])
+        should_notify_user = True
+        if event_user:
+            # User will only be notified when first created or when a previously read event is detected again.
+            if event_user.read is True:
+                event_user.read = False
+                event_user.read_at = None
+                event_users_to_update.append(event_user)
+            else:
+                should_notify_user = False
+        else:
+            event_user = EventUser(team=team, event_type=event_type, user=user)
+            event_users_to_create.append(event_user)
 
         # Bust cache when notification is created or when marking previously read notification as unread.
-        if user_should_be_notified:
+        if should_notify_user:
             # Busting the cache so that the UI can show the updated unread notifications count immediately
             bust_unread_notification_cache(user.id, team_slug=team.slug)
             if should_send_email(user_info[user], event_level=level):
-                send_notification_email_async.delay(event_user.id, notification_event_id=notification_event.id)
+                users_to_email.append(user.id)
 
+    EventUser.objects.bulk_create(event_users_to_create)
+    EventUser.objects.bulk_update(event_users_to_update, fields=["read", "read_at"])
+
+    send_notification_email_async.delay(users_to_email, notification_event_id=notification_event.id)
     return notification_event
 
 
@@ -232,9 +248,9 @@ def toggle_notification_read(user, event_user: EventUser, read: bool) -> None:
     bust_unread_notification_cache(user.id, team_slug=event_user.team.slug)
 
 
-def is_notification_muted(user, team: Team, event_type: EventType) -> bool:
+def is_notification_muted(event_user: EventUser | None) -> bool:
     """
-    Check if a user has muted a specific event type. This also returns True if the user enabled Do Not Disturb.
+    Check if a user has muted a specific event type.
 
     Args:
         user: The user to check mute status for
@@ -244,17 +260,7 @@ def is_notification_muted(user, team: Team, event_type: EventType) -> bool:
     Returns:
         bool: True if notifications are muted, False otherwise
     """
-    now = timezone.now()
-
-    if UserNotificationPreferences.objects.filter(user=user, team=team, do_not_disturb_until__gt=now).exists():
-        return True
-
-    return EventUser.objects.filter(
-        muted_until__gt=now,
-        user=user,
-        team=team,
-        event_type=event_type,
-    ).exists()
+    return event_user and event_user.muted_until is not None and event_user.muted_until > timezone.now()
 
 
 def mute_notification(user, team: Team, event_type: EventType, timedelta: DurationTimeDelta) -> EventUser:
