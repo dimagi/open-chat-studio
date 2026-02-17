@@ -105,8 +105,6 @@ class EventType(BaseTeamModel):
 
 
 class NotificationEvent(BaseTeamModel):
-    # TODO: rate limiting?
-    # Notification cleanup after a certain period of time?
     event_type = models.ForeignKey(EventType, on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
     message = models.TextField()
