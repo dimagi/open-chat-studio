@@ -7,7 +7,7 @@ from bs4 import UnicodeDammit
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, Prefetch, Q, Sum
+from django.db.models import Count, Prefetch, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -18,7 +18,7 @@ from django_tables2 import SingleTableView
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..forms import AnnotationQueueForm
-from ..models import Annotation, AnnotationItem, AnnotationItemStatus, AnnotationItemType, AnnotationQueue
+from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue
 from ..tables import AnnotationItemTable, AnnotationQueueTable
 
 User = get_user_model()
@@ -52,8 +52,6 @@ class AnnotationQueueTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     def get_queryset(self):
         return AnnotationQueue.objects.filter(team=self.request.team).annotate(
             _total_items=Count("items"),
-            _completed_items=Count("items", filter=Q(items__status=AnnotationItemStatus.COMPLETED)),
-            _flagged_items=Count("items", filter=Q(items__status=AnnotationItemStatus.FLAGGED)),
             _reviews_done=Sum("items__review_count"),
         )
 
