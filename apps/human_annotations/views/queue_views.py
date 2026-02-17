@@ -1,9 +1,7 @@
 import csv as csv_module
-import io
 import json
 import re
 
-from bs4 import UnicodeDammit
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -214,58 +212,6 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
         if skipped:
             msg += f" Skipped {skipped} duplicates."
         messages.success(request, msg)
-        return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
-
-
-class ImportCSVToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
-    permission_required = "human_annotations.add_annotationitem"
-
-    def get(self, request, team_slug: str, pk: int):
-        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        return render(
-            request,
-            "human_annotations/import_csv.html",
-            {
-                "queue": queue,
-                "active_tab": "annotation_queues",
-            },
-        )
-
-    def post(self, request, team_slug: str, pk: int):
-        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        csv_file = request.FILES.get("csv_file")
-
-        if not csv_file:
-            messages.error(request, "No file uploaded.")
-            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
-
-        max_rows = 10_000
-        content = csv_file.read()
-        try:
-            decoded = content.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            detected = UnicodeDammit(content).unicode_markup
-            if detected is None:
-                messages.error(request, "Unable to detect file encoding. Please upload a UTF-8 encoded CSV file.")
-                return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
-            decoded = detected
-        reader = csv_module.DictReader(io.StringIO(decoded))
-
-        items = []
-        for i, row in enumerate(reader):
-            if i >= max_rows:
-                messages.warning(request, f"Only the first {max_rows} rows were imported.")
-                break
-            items.append(
-                AnnotationItem(
-                    queue=queue,
-                    team=request.team,
-                    item_type=AnnotationItemType.EXTERNAL,
-                    external_data=dict(row),
-                )
-            )
-        AnnotationItem.objects.bulk_create(items)
-        messages.success(request, f"Imported {len(items)} items from CSV.")
         return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
 

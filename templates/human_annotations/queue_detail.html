@@ -26,8 +26,6 @@
        class="btn btn-primary btn-sm">Start Annotating</a>
     <a href="{% url 'human_annotations:queue_add_sessions' team_slug=request.team.slug pk=object.pk %}"
        class="btn btn-outline btn-sm">Add Sessions</a>
-    <a href="{% url 'human_annotations:queue_import_csv' team_slug=request.team.slug pk=object.pk %}"
-       class="btn btn-outline btn-sm">Import CSV</a>
     <a href="{% url 'human_annotations:queue_export' team_slug=request.team.slug pk=object.pk %}?format=csv"
        class="btn btn-outline btn-sm">Export CSV</a>
     <a href="{% url 'human_annotations:queue_export' team_slug=request.team.slug pk=object.pk %}?format=jsonl"

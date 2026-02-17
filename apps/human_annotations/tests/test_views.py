@@ -1,5 +1,4 @@
 import json
-from io import BytesIO
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -8,9 +7,7 @@ from django.urls import reverse
 
 from apps.human_annotations.models import (
     Annotation,
-    AnnotationItem,
     AnnotationItemStatus,
-    AnnotationItemType,
     AnnotationQueue,
     AnnotationSchema,
     AnnotationStatus,
@@ -219,24 +216,6 @@ def test_manage_assignees_post(client, team_with_users, queue, user):
     response = client.post(url, {"assignees": [user.pk]})
     assert response.status_code == 302
     assert user in queue.assignees.all()
-
-
-# ===== CSV Import =====
-
-
-@pytest.mark.django_db()
-def test_import_csv_post(client, team_with_users, queue):
-    csv_content = b"name,value\nAlice,10\nBob,20"
-    csv_file = BytesIO(csv_content)
-    csv_file.name = "test.csv"
-
-    url = reverse("human_annotations:queue_import_csv", args=[team_with_users.slug, queue.pk])
-    response = client.post(url, {"csv_file": csv_file})
-    assert response.status_code == 302
-
-    items = AnnotationItem.objects.filter(queue=queue, item_type=AnnotationItemType.EXTERNAL)
-    assert items.count() == 2
-    assert items.first().external_data["name"] == "Alice"
 
 
 # ===== Annotator UI =====
