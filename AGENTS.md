@@ -4,7 +4,7 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Project Overview
 
-Open Chat Studio is a comprehensive platform for building, deploying, and evaluating AI-powered chat applications. It provides tools for working with various LLMs, creating chatbots, managing conversations, and integrating with different messaging platforms.
+Open Chat Studio is a comprehensive platform for building, deploying, and evaluating AI-powered chat applications. It provides tools for working with various LLMs, creating chatbots, managing conversations, and integrating with different messaging platforms. Python 3.13+ required. Django project with Docker dev environment (`docker-compose-dev.yml`).
 
 ## Core Concepts
 
@@ -48,6 +48,9 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 * Build JS & CSS: `npm run dev`
 * Lint JS: `npm run lint path/to/file.js`
 * TypeScript type checking: `npm run type-check path/to/file.ts`
+* Dev environment: `docker compose -f docker-compose-dev.yml up`
+* Django migrations: `python manage.py migrate`
+* Create migration: `python manage.py makemigrations <app_name>`
 
 ## Do
 * Always lint, test, and typecheck updated files. Use project-wide build sparingly
@@ -60,9 +63,9 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 
 ## Additional notes
 
-docs/agents/
-  |- django_model_auditing.md
-  |- django_model_versioning.md
-  |- django_performance.md
-  |- django_view_security.md
-  |- multi_tenancy.md
+Consult these guides when working in the relevant area:
+* `docs/agents/django_model_auditing.md` — when adding or modifying audit logging on models
+* `docs/agents/django_model_versioning.md` — when modifying versioned models (Experiment, Assistant, Pipeline)
+* `docs/agents/django_performance.md` — when optimizing queries or addressing N+1 issues
+* `docs/agents/django_view_security.md` — when adding or modifying views (permissions, auth)
+* `docs/agents/multi_tenancy.md` — when adding new models or querysets (team scoping)
