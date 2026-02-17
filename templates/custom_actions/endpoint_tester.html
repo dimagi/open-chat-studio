@@ -67,41 +67,81 @@ Expected Context Variables:
 
               <!-- Parameters Section -->
               <div class="divider my-2"></div>
-              
+
               {% if operation.parameters %}
                 <div class="mb-4">
-                  <!-- Parameters Info -->
-                  <div class="mb-4 p-3 bg-base-200 rounded-lg">
-                    <p class="font-semibold mb-2">Expected Parameters:</p>
-                    <div class="space-y-2">
-                      {% for param in operation.parameters %}
-                        <div class="text-sm">
-                          <span class="font-mono text-base-content">{{ param.name }}</span>
-                          <span class="text-base-content/70">
-                            (
-                            {% if param.required %}required{% if param.schema_type %}, {% endif %}{% endif %}
-                            {% if param.schema_type %}{{ param.schema_type }}{% endif %}
-                            )
-                          </span>
-                          {% if param.description %}
-                            <p class="text-base-content/70 text-xs mt-1">{{ param.description }}</p>
-                          {% endif %}
+                  <!-- Path Parameters Section -->
+                  {% with path_params=operation.parameters|selectattr:"param_in","equalto","path"|list %}
+                    {% if path_params %}
+                      <div class="mb-4">
+                        <label class="label font-bold">
+                          <span>Path Parameters</span>
+                        </label>
+                        <div class="space-y-3">
+                          {% for param in path_params %}
+                            <div>
+                              <label class="label">
+                                <span class="label-text">
+                                  {{ param.name }}
+                                  {% if param.required %}<span class="text-error">*</span>{% endif %}
+                                  <span class="text-base-content/70 text-xs">
+                                    ({{ param.schema_type }})
+                                  </span>
+                                </span>
+                              </label>
+                              <input type="text"
+                                     class="input input-bordered w-full"
+                                     placeholder="{{ param.name }}"
+                                     x-model="operations['{{ operation.operation_id }}'].pathParams['{{ param.name }}']"
+                                     {% if param.description %}title="{{ param.description }}"{% endif %} />
+                              {% if param.description %}
+                                <p class="text-xs text-base-content/70 mt-1">{{ param.description }}</p>
+                              {% endif %}
+                            </div>
+                          {% endfor %}
                         </div>
-                      {% endfor %}
-                    </div>
-                  </div>
-                  
-                  <!-- JSON Editor -->
-                  <label class="label font-bold">
-                    <span>Request Body (JSON)</span>
-                  </label>
-                  <textarea class="textarea textarea-bordered mt-1 block w-full h-48"
-                            id="param_{{ operation.operation_id }}_json"
-                            name="param_{{ operation.operation_id }}_json"
-                            x-model="operations['{{ operation.operation_id }}'].jsonInput"
-                            @change="updateJsonInput('{{ operation.operation_id }}', $event.target.value)"
-                            placeholder='Enter JSON data, e.g., {"key": "value"}'></textarea>
-                  <div class="json-editor w-full" data-target-field="textarea[name='param_{{ operation.operation_id }}_json']" data-disable-elt="button[data-test-endpoint-id='{{ operation.operation_id }}']"></div>
+                      </div>
+                    {% endif %}
+                  {% endwith %}
+
+                  <!-- Query/Body Parameters Section -->
+                  {% with non_path_params=operation.parameters|rejectattr:"param_in","equalto","path"|list %}
+                    {% if non_path_params %}
+                      <!-- Parameters Info -->
+                      <div class="mb-4 p-3 bg-base-200 rounded-lg">
+                        <p class="font-semibold mb-2">Expected Parameters:</p>
+                        <div class="space-y-2">
+                          {% for param in non_path_params %}
+                            <div class="text-sm">
+                              <span class="font-mono text-base-content">{{ param.name }}</span>
+                              <span class="text-base-content/70">
+                                (
+                                {% if param.param_in %}{{ param.param_in }}{% if param.required or param.schema_type %}, {% endif %}{% endif %}
+                                {% if param.required %}required{% if param.schema_type %}, {% endif %}{% endif %}
+                                {% if param.schema_type %}{{ param.schema_type }}{% endif %}
+                                )
+                              </span>
+                              {% if param.description %}
+                                <p class="text-base-content/70 text-xs mt-1">{{ param.description }}</p>
+                              {% endif %}
+                            </div>
+                          {% endfor %}
+                        </div>
+                      </div>
+
+                      <!-- JSON Editor -->
+                      <label class="label font-bold">
+                        <span>Request Parameters (JSON)</span>
+                      </label>
+                      <textarea class="textarea textarea-bordered mt-1 block w-full h-48"
+                                id="param_{{ operation.operation_id }}_json"
+                                name="param_{{ operation.operation_id }}_json"
+                                x-model="operations['{{ operation.operation_id }}'].jsonInput"
+                                @change="updateJsonInput('{{ operation.operation_id }}', $event.target.value)"
+                                placeholder='Enter JSON data, e.g., {"key": "value"}'></textarea>
+                      <div class="json-editor w-full" data-target-field="textarea[name='param_{{ operation.operation_id }}_json']" data-disable-elt="button[data-test-endpoint-id='{{ operation.operation_id }}']"></div>
+                    {% endif %}
+                  {% endwith %}
                 </div>
               {% else %}
                 <div class="alert alert-info mb-4">
@@ -326,17 +366,18 @@ Expected Context Variables:
         init() {
           const operationsData = JSON.parse(document.getElementById('operations-data').textContent);
           // Transform the JSON data into the format needed for Alpine.js
-          for (const [operationId, params] of Object.entries(operationsData)) {
+          for (const [operationId, data] of Object.entries(operationsData)) {
             this.operations[operationId] = {
-              paramValues: params,
-              jsonInput: JSON.stringify(params, null, 2),
+              paramValues: data.params || {},
+              pathParams: data.pathParams || {},
+              jsonInput: JSON.stringify(data.params || {}, null, 2),
               response: null,
               error: null,
               loading: false,
               viewAs: 'json',
             };
           }
-          
+
           // Initialize JSON editors after Alpine is ready
           this.$nextTick(() => {
             const container = document.getElementById('endpoint-tester');
@@ -434,6 +475,9 @@ Expected Context Variables:
                 throw new Error(jsonError.message);
               }
 
+              // Get path parameters
+              const pathParams = opState.pathParams || {};
+
               // Make request to server
               const response = await fetch(
                 "{% url 'custom_actions:test_endpoint' custom_action.team.slug custom_action.id %}",
@@ -441,12 +485,13 @@ Expected Context Variables:
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
                                    document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '',
                   },
                   body: JSON.stringify({
                     operation_id: operationId,
                     params: params,
+                    path_params: pathParams,
                   }),
                 }
               );

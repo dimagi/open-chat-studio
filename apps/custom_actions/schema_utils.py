@@ -100,6 +100,7 @@ class ParameterDetail(BaseModel):
     required: bool = False
     schema_type: str = Field(default="string")
     default: Any = None
+    param_in: str = Field(default="query")  # where the parameter is used: "path", "query", "header", "cookie"
 
 
 class APIOperationDetails(BaseModel):
@@ -129,19 +130,31 @@ def get_operations_from_spec(spec, spec_dict=None) -> list[APIOperationDetails]:
                     description=op.description,
                     path=path,
                     method=method,
-                    parameters=_extract_parameters(op),
+                    parameters=_extract_parameters(op, spec_dict, path, method),
                 )
             )
     return operations
 
 
-def _extract_parameters(operation: APIOperation) -> list[ParameterDetail]:
+def _extract_parameters(operation: APIOperation, spec_dict=None, path: str = "", method: str = "") -> list[ParameterDetail]:
     """Extract parameter details from OpenAPI spec.
 
     Extracts both query/path parameters and request body parameters.
+    Looks up parameter location (path, query, etc.) from the spec_dict.
     """
+    # Build a map of parameter name -> param_in from the spec_dict
+    param_in_map = {}
+    if spec_dict and path and method:
+        operation_spec = spec_dict.get("paths", {}).get(path, {}).get(method, {})
+        for param_spec in operation_spec.get("parameters", []):
+            param_name = param_spec.get("name")
+            param_in = param_spec.get("in", "query")
+            if param_name:
+                param_in_map[param_name] = param_in
+
     parameters = []
     for property in operation.properties:
+        param_in = param_in_map.get(property.name, "query")
         parameters.append(
             ParameterDetail(
                 name=property.name,
@@ -149,10 +162,11 @@ def _extract_parameters(operation: APIOperation) -> list[ParameterDetail]:
                 schema_type=property.type,
                 description=property.description,
                 default=property.default,
+                param_in=param_in,
             )
         )
 
-    # Extract request body parameters
+    # Extract request body parameters (these are always in the body)
     if operation.request_body:
         for param in operation.request_body.properties:
             params = param.dict()
@@ -162,6 +176,7 @@ def _extract_parameters(operation: APIOperation) -> list[ParameterDetail]:
                 # See langchain_community/tools/openapi/utils/api_models.py:315
             elif param.type.startswith("Array<"):
                 params["schema_type"] = DataType.ARRAY.value
+            params["param_in"] = "body"
             parameters.append(ParameterDetail.model_validate(params))
 
     return parameters

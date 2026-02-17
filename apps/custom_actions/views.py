@@ -137,25 +137,35 @@ class CustomActionEndpointTester(LoginAndTeamRequiredMixin, PermissionRequiredMi
         operations_data = {}
         for operation in custom_action.operations:
             param_values = {}
+            path_param_values = {}
             for param in operation.parameters:
-                # Use the explicit default if set, otherwise provide sensible defaults based on schema type
-                if param.default is not None:
-                    param_values[param.name] = param.default
-                else:
+                # Get default value
+                default_value = param.default
+                if default_value is None:
                     # Provide sensible defaults based on parameter type
                     if param.schema_type == "boolean":
-                        param_values[param.name] = False
+                        default_value = False
                     elif param.schema_type == "integer":
-                        param_values[param.name] = 0
+                        default_value = 0
                     elif param.schema_type == "number":
-                        param_values[param.name] = 0.0
+                        default_value = 0.0
                     elif param.schema_type == "array":
-                        param_values[param.name] = []
+                        default_value = []
                     elif param.schema_type == "object":
-                        param_values[param.name] = {}
+                        default_value = {}
                     else:
-                        param_values[param.name] = ""
-            operations_data[operation.operation_id] = param_values
+                        default_value = ""
+
+                # Separate path parameters from other parameters
+                if param.param_in == "path":
+                    path_param_values[param.name] = default_value
+                else:
+                    param_values[param.name] = default_value
+
+            operations_data[operation.operation_id] = {
+                "params": param_values,
+                "pathParams": path_param_values,
+            }
 
         return {
             "custom_action": custom_action,
@@ -177,6 +187,7 @@ class TestCustomActionEndpoint(LoginAndTeamRequiredMixin, PermissionRequiredMixi
             body = json.loads(request.body)
             operation_id = body.get("operation_id")
             params = body.get("params", {})
+            path_params = body.get("path_params", {})
         except (json.JSONDecodeError, TypeError):
             return JsonResponse(
                 {"error": "Invalid request body"},
@@ -194,7 +205,13 @@ class TestCustomActionEndpoint(LoginAndTeamRequiredMixin, PermissionRequiredMixi
             )
 
         try:
-            url = custom_action.server_url.rstrip("/") + operation.path
+            # Build URL with path parameters substituted
+            url_path = operation.path
+            for param_name, param_value in path_params.items():
+                # Replace {param_name} with the actual value
+                url_path = url_path.replace(f"{{{param_name}}}", str(param_value))
+
+            url = custom_action.server_url.rstrip("/") + url_path
 
             auth_service = custom_action.get_auth_service()
             headers = {}
