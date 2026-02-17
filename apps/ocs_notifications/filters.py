@@ -57,7 +57,7 @@ class UserNotificationFilter(MultiColumnFilter):
 
     filters: ClassVar[Sequence] = [
         ReadFilter(),
-        TimestampFilter(label="Notification Date", column="last_event_at", query_param="notification_date"),
+        TimestampFilter(label="Notification Date", column="latest_event__created_at", query_param="notification_date"),
         SeverityLevelFilter(),
         MuteFilter(),
     ]

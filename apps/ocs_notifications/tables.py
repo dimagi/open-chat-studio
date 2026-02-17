@@ -2,7 +2,7 @@ from django.conf import settings
 from django.template.loader import get_template
 from django_tables2 import columns, tables
 
-from apps.generics.tables import TimeAgoColumn
+from apps.generics.tables import ISOTimeAgoColumn, TimeAgoColumn
 from apps.ocs_notifications.models import EventUser, NotificationEvent
 
 
@@ -21,11 +21,12 @@ class UserNotificationTable(tables.Table):
     read = columns.TemplateColumn(
         template_name="ocs_notifications/components/read_button.html", verbose_name="Read Status", orderable=True
     )
-    timestamp = TimeAgoColumn(
+    timestamp = ISOTimeAgoColumn(
         verbose_name="Timestamp",
-        accessor="last_event_at",
+        accessor="latest_event__created_at",
         orderable=True,
     )
+
     mute = columns.TemplateColumn(
         template_name="ocs_notifications/components/mute_button.html",
         verbose_name="Mute",

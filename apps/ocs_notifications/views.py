@@ -83,8 +83,8 @@ class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
             .with_mute_status()
             .filter(user=self.request.user, team=self.request.team)
             .select_related("event_type")
-            .filter(last_event_at__isnull=False)
-            .order_by("-last_event_at")
+            .filter(latest_event__created_at__isnull=False)
+            .order_by("-latest_event__created_at")
         )
 
         # Apply filters
@@ -114,7 +114,7 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
 
     def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
         event_user = get_object_or_404(
-            EventUser.objects.select_related("event_type"),
+            EventUser.objects.with_mute_status().select_related("event_type"),
             id=notification_id,
             user=self.request.user,
             team__slug=team_slug,

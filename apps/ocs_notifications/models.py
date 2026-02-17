@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models.functions import JSONObject
 from django.urls import reverse
 from django.utils import timezone
 
@@ -120,15 +121,19 @@ class NotificationEvent(BaseTeamModel):
 
 class EventUserQuerySet(models.QuerySet):
     def with_latest_event(self):
-        latest_event = NotificationEvent.objects.filter(
+        latest_event_subquery = NotificationEvent.objects.filter(
             event_type=models.OuterRef("event_type"),
             team=models.OuterRef("team"),
         ).order_by("-created_at")
         return self.annotate(
-            latest_event_title=models.Subquery(latest_event.values("title")[:1]),
-            latest_event_message=models.Subquery(latest_event.values("message")[:1]),
-            latest_event_links=models.Subquery(latest_event.values("links")[:1]),
-            last_event_at=models.Subquery(latest_event.values("created_at")[:1]),
+            latest_event=models.Subquery(
+                latest_event_subquery.values(
+                    data=JSONObject(
+                        title="title",
+                        created_at=models.F("created_at"),
+                    )
+                )
+            )
         )
 
     def with_mute_status(self) -> models.QuerySet:
