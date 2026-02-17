@@ -55,7 +55,9 @@ class ISOTimeAgoColumn(TimeAgoColumn):
     """A TimeAgoColumn that parses ISO datetime strings before rendering."""
 
     def render(self, value, **kwargs):
-        return super().render(value=parse_datetime(value), **kwargs)
+        if isinstance(value, str):
+            value = parse_datetime(value)
+        return super().render(value=value, **kwargs)
 
 
 class ArrayColumn(tables.Column):

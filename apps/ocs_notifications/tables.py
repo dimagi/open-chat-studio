@@ -7,7 +7,6 @@ from apps.ocs_notifications.models import EventUser, NotificationEvent
 
 
 class UserNotificationTable(tables.Table):
-    # TODO: Rename table
     notification_content = columns.TemplateColumn(
         template_name="ocs_notifications/components/notification_content.html",
         verbose_name="Notification",
