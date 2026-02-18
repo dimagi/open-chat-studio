@@ -92,7 +92,7 @@ class TestDeleteCollection:
             openai_vector_store_id="store-123",
         )
         collection.files.add(file)
-        return collection
+        return collection  # ty: ignore[invalid-return-type]
 
     @pytest.mark.usefixtures("remote_index_manager_mock")
     @pytest.mark.parametrize("is_index", [True, False])

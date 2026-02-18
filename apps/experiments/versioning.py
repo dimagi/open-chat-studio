@@ -223,7 +223,7 @@ class VersionDetails:
         for version_field in self.fields:
             self._fields_dict[version_field.name] = version_field
 
-    def get_field(self, field_name: str) -> VersionField:
+    def get_field(self, field_name: str) -> VersionField | None:
         return self._fields_dict.get(field_name)
 
     @property

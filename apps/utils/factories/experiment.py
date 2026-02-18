@@ -1,4 +1,5 @@
 import factory
+import factory.django
 
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments import models

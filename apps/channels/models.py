@@ -66,7 +66,7 @@ class ChannelPlatform(models.TextChoices):
         for platform in used_platforms:
             platform_availability.pop(platform)
 
-        return platform_availability
+        return platform_availability  # ty: ignore[invalid-return-type]
 
     def form(self, experiment: Experiment):
         from apps.channels.forms import ChannelForm
@@ -234,7 +234,7 @@ class ExperimentChannel(BaseTeamModel):
         from apps.service_providers.models import MessagingProviderType
 
         if not self.messaging_provider:
-            return
+            return ""
         uri = ""
         provider_type = self.messaging_provider.type
         if provider_type == MessagingProviderType.twilio:

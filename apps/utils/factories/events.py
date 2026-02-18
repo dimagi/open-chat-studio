@@ -1,4 +1,5 @@
 import factory
+import factory.django
 
 from apps.events.models import (
     EventAction,

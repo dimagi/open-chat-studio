@@ -146,7 +146,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     if node.disabled_tools:
         # Model builtin tools doesn't have a name attribute and are dicts
         return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
-    return tools
+    return tools  # ty: ignore[invalid-return-type]
 
 
 def _get_search_tool(node):

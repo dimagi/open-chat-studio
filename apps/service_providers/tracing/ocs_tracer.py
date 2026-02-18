@@ -158,7 +158,7 @@ class OCSTracer(Tracer):
                 if not self.error_message:
                     self.error_message = str(error_to_record)
 
-    def get_langchain_callback(self) -> None:
+    def get_langchain_callback(self) -> BaseCallbackHandler:
         """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
         return OCSCallbackHandler(tracer=self)
 
@@ -177,7 +177,7 @@ class OCSTracer(Tracer):
 
     def get_trace_metadata(self) -> dict[str, Any]:
         if not self.ready:
-            return
+            return {}
 
         return {
             "trace_id": self.trace_record.id,

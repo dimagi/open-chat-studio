@@ -266,7 +266,7 @@ def is_notification_muted(event_user: EventUser | None) -> bool:
     Returns:
         bool: True if notifications are muted, False otherwise
     """
-    return event_user and event_user.muted_until is not None and event_user.muted_until > timezone.now()
+    return bool(event_user and event_user.muted_until is not None and event_user.muted_until > timezone.now())
 
 
 def mute_notification(user, team: Team, event_type: EventType, timedelta: DurationTimeDelta) -> EventUser:

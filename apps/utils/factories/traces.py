@@ -1,4 +1,5 @@
 import factory
+import factory.django
 
 from apps.trace.models import Span, Trace
 

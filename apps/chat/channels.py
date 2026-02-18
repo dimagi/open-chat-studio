@@ -132,7 +132,7 @@ class ChannelBase(ABC):
     """
 
     voice_replies_supported: ClassVar[bool] = False
-    supported_message_types: ClassVar[str] = []
+    supported_message_types: ClassVar[list[MESSAGE_TYPES]] = []
     supports_conversational_consent_flow: ClassVar[bool] = True
 
     def __init__(
@@ -182,7 +182,7 @@ class ChannelBase(ABC):
 
     @property
     def experiment_session(self) -> ExperimentSession:
-        return self._experiment_session
+        return self._experiment_session  # ty: ignore[invalid-return-type]
 
     @experiment_session.setter
     def experiment_session(self, value: ExperimentSession):
@@ -228,7 +228,7 @@ class ChannelBase(ABC):
         elif self.message:
             self._participant_identifier = self.message.participant_id
 
-        return self._participant_identifier
+        return self._participant_identifier  # ty: ignore[invalid-return-type]
 
     @property
     def participant_user(self):
@@ -505,7 +505,7 @@ class ChannelBase(ABC):
         ]
 
     def _user_gave_consent(self) -> bool:
-        return (
+        return bool(
             self.message
             and self.message.content_type == MESSAGE_TYPES.TEXT
             and self.message.message_text.strip() == USER_CONSENT_TEXT
@@ -867,7 +867,7 @@ class ChannelBase(ABC):
         )
 
     def is_message_type_supported(self) -> bool:
-        return self.message and self.message.content_type in self.supported_message_types
+        return bool(self.message) and self.message.content_type in self.supported_message_types
 
     def _unsupported_message_type_response(self) -> str:
         """Generates a suitable response to the user when they send unsupported messages"""

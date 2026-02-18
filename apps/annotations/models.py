@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import FieldDoesNotExist
 from django.db import models, transaction
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -175,9 +176,12 @@ class UserComment(BaseTeamModel):
 
     @transaction.atomic()
     @staticmethod
-    def add_for_model(model, comment: str, added_by: CustomUser, team: Team) -> "UserComment":
-        if model._meta.get_field("comments"):
-            UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
+    def add_for_model(model, comment: str, added_by: CustomUser, team: Team) -> "UserComment | None":
+        try:
+            model._meta.get_field("comments")
+        except FieldDoesNotExist:
+            return None
+        return UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
 
     def __str__(self):
         return f'<{self.user.username}>: "{self.comment}"'

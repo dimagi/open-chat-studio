@@ -499,7 +499,7 @@ class AgentTools(models.TextChoices):
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
-        return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
+        return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]  # ty: ignore[invalid-return-type]
 
     @staticmethod
     def user_tool_choices(include_end_session: bool = True) -> list[tuple]:

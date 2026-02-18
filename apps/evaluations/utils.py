@@ -111,7 +111,7 @@ def get_evaluator_type_display(evaluator_type: str) -> dict[str, str]:
         Dict with label and icon for the evaluator type
     """
     evaluator_type_info = get_evaluator_type_info()
-    return evaluator_type_info.get(evaluator_type, {"label": evaluator_type, "icon": None})
+    return evaluator_type_info.get(evaluator_type, {"label": evaluator_type, "icon": None})  # ty: ignore[invalid-return-type]
 
 
 def parse_history_text(history_text: str) -> list:
@@ -147,7 +147,7 @@ def parse_history_text(history_text: str) -> list:
             }
         elif current_message:
             # Continuation of current message content
-            current_message["content"] += "\n" + line_stripped
+            current_message["content"] += "\n" + line_stripped  # ty: ignore[unsupported-operator]
 
     if current_message:
         history.append(current_message)

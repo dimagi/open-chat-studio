@@ -37,7 +37,7 @@ class LlmChatResponse(BaseModel):
         1
         """
         if not isinstance(other, LlmChatResponse):
-            return Exception("Cannot add LlmChatResponse with non-LlmChatResponse type.")
+            return NotImplemented
 
         return LlmChatResponse(
             text="".join([self.text, other.text]),

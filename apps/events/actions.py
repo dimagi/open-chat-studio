@@ -28,6 +28,7 @@ class LogAction(EventActionHandlerBase):
         last_message = session.chat.messages.last()
         if last_message:
             return last_message.content
+        return ""
 
 
 class EndConversationAction(EventActionHandlerBase):
