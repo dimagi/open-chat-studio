@@ -5,6 +5,11 @@ import pytest
 from pydantic import BaseModel
 
 from apps.help.agents.code_generate import CodeGenerateAgent, CodeGenerateInput, CodeGenerateOutput
+from apps.help.agents.progress_messages import (
+    ProgressMessagesAgent,
+    ProgressMessagesInput,
+    ProgressMessagesOutput,
+)
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import AGENT_REGISTRY, register_agent
 from apps.help.utils import extract_function_signature, get_python_node_coder_prompt
@@ -189,3 +194,62 @@ class TestCodeGenerateAgent:
     def test_input_context_defaults_to_empty(self):
         inp = CodeGenerateInput(query="hello")
         assert inp.context == ""
+
+
+class TestProgressMessagesAgent:
+    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    def test_run_returns_messages(self, mock_build):
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=["Thinking...", "Almost there..."])}
+        mock_build.return_value = mock_agent
+
+        agent = ProgressMessagesAgent(
+            input=ProgressMessagesInput(chatbot_name="TestBot", chatbot_description="A test bot")
+        )
+        result = agent.run()
+
+        assert result == ProgressMessagesOutput(messages=["Thinking...", "Almost there..."])
+        mock_build.assert_called_once()
+        # Verify response_format was passed
+        call_kwargs = mock_build.call_args
+        assert call_kwargs.kwargs["response_format"] is ProgressMessagesOutput
+
+    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    def test_user_message_includes_name_and_description(self, mock_build):
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=["Working..."])}
+        mock_build.return_value = mock_agent
+
+        agent = ProgressMessagesAgent(
+            input=ProgressMessagesInput(chatbot_name="MyBot", chatbot_description="Helps with tasks")
+        )
+        agent.run()
+
+        call_args = mock_agent.invoke.call_args[0][0]
+        user_message = call_args["messages"][0]["content"]
+        assert "MyBot" in user_message
+        assert "Helps with tasks" in user_message
+
+    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    def test_user_message_excludes_empty_description(self, mock_build):
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=["Working..."])}
+        mock_build.return_value = mock_agent
+
+        agent = ProgressMessagesAgent(input=ProgressMessagesInput(chatbot_name="MyBot"))
+        agent.run()
+
+        call_args = mock_agent.invoke.call_args[0][0]
+        user_message = call_args["messages"][0]["content"]
+        assert "Description:" not in user_message
+
+    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    def test_run_returns_empty_list_when_none(self, mock_build):
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=None)}
+        mock_build.return_value = mock_agent
+
+        agent = ProgressMessagesAgent(input=ProgressMessagesInput(chatbot_name="TestBot"))
+        result = agent.run()
+
+        assert result == ProgressMessagesOutput(messages=[])
