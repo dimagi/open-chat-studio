@@ -62,6 +62,3 @@ class ProgressMessagesAgent(BaseHelpAgent[ProgressMessagesInput, ProgressMessage
         result = agent.invoke({"messages": [{"role": "user", "content": self.get_user_message(self.input)}]})
         messages = result["structured_response"].messages or []
         return ProgressMessagesOutput(messages=messages)
-
-    def parse_response(self, response) -> ProgressMessagesOutput:
-        raise NotImplementedError("ProgressMessagesAgent uses custom run()")

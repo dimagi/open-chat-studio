@@ -33,6 +33,7 @@ from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.models import File
+from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
 SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, LegacySessionAccessPermission]
@@ -529,8 +530,6 @@ def get_progress_message(session_id, chatbot_name, chatbot_description, throttle
 
 
 def get_progress_messages(chatbot_name, chatbot_description) -> list[str]:
-    from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
-
     try:
         agent = ProgressMessagesAgent(
             input=ProgressMessagesInput(chatbot_name=chatbot_name, chatbot_description=chatbot_description)

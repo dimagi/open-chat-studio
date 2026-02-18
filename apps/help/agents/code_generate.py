@@ -14,7 +14,6 @@ from apps.help.registry import register_agent
 logger = logging.getLogger("ocs.help")
 
 _system_prompt = None
-CodeNode = None
 
 
 def _get_system_prompt():
@@ -22,15 +21,6 @@ def _get_system_prompt():
     if _system_prompt is None:
         _system_prompt = (Path(__file__).parent.parent / "code_generate_system_prompt.md").read_text()
     return _system_prompt
-
-
-def _load_code_node():
-    global CodeNode
-    if CodeNode is None:
-        from apps.pipelines.nodes.nodes import CodeNode as _CodeNode
-
-        CodeNode = _CodeNode
-    return CodeNode
 
 
 class CodeGenerateInput(BaseModel):
@@ -47,10 +37,6 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
     name: ClassVar[str] = "code_generate"
     mode: ClassVar[Literal["high", "low"]] = "high"
     max_retries: ClassVar[int] = 3
-
-    @classmethod
-    def get_system_prompt(cls, input: CodeGenerateInput) -> str:
-        raise NotImplementedError("Use _build_system_prompt instead")
 
     @classmethod
     def get_user_message(cls, input: CodeGenerateInput) -> str:
@@ -76,7 +62,7 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
 
         response_code = response["messages"][-1].text
 
-        _load_code_node()
+        from apps.pipelines.nodes.nodes import CodeNode
 
         try:
             CodeNode.model_validate({"code": response_code, "name": "code", "node_id": "code", "django_node": None})
@@ -100,6 +86,3 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
             " `def main(input: str, **kwargs) -> str:` and nothing else before it."
         )
         return system_prompt
-
-    def parse_response(self, response) -> CodeGenerateOutput:
-        raise NotImplementedError("CodeGenerateAgent uses custom run()")

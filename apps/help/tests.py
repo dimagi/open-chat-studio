@@ -143,7 +143,7 @@ class TestCodeGenerateAgent:
         mock_agent.invoke.return_value = {"messages": [mock.Mock(text=valid_code)]}
         mock_build.return_value = mock_agent
 
-        with mock.patch("apps.help.agents.code_generate.CodeNode"):
+        with mock.patch("apps.pipelines.nodes.nodes.CodeNode"):
             agent = CodeGenerateAgent(input=CodeGenerateInput(query="write hello world"))
             result = agent.run()
 
@@ -161,7 +161,7 @@ class TestCodeGenerateAgent:
         ]
         mock_build.return_value = mock_agent
 
-        with mock.patch("apps.help.agents.code_generate.CodeNode") as mock_code_node:
+        with mock.patch("apps.pipelines.nodes.nodes.CodeNode") as mock_code_node:
             mock_code_node.model_validate.side_effect = [
                 pydantic_module.ValidationError.from_exception_data("CodeNode", []),
                 None,
@@ -179,7 +179,7 @@ class TestCodeGenerateAgent:
         mock_agent.invoke.return_value = {"messages": [mock.Mock(text=bad_code)]}
         mock_build.return_value = mock_agent
 
-        with mock.patch("apps.help.agents.code_generate.CodeNode") as mock_code_node:
+        with mock.patch("apps.pipelines.nodes.nodes.CodeNode") as mock_code_node:
             mock_code_node.model_validate.side_effect = pydantic_module.ValidationError.from_exception_data(
                 "CodeNode", []
             )
@@ -289,7 +289,7 @@ class TestRunAgentView:
         mock_agent.invoke.return_value = {"messages": [mock.Mock(text=valid_code)]}
         mock_build.return_value = mock_agent
 
-        with mock.patch("apps.help.agents.code_generate.CodeNode"):
+        with mock.patch("apps.pipelines.nodes.nodes.CodeNode"):
             response = self._make_request("code_generate", {"query": "write code"})
 
         assert response.status_code == 200

@@ -91,6 +91,9 @@ class ApiClient {
           : await client.post<T>(url, data);
     } catch (error) {
       console.error(error);
+      if (axios.isAxiosError(error) && error.response) {
+        return Promise.reject(error.response.data);
+      }
       return Promise.reject();
     }
     if (response.status !== 200) {

@@ -13,9 +13,13 @@ class BaseHelpAgent[TInput: BaseModel, TOutput: BaseModel](BaseModel):
     Subclasses must define:
     - name: ClassVar[str] — registry key and URL slug
     - mode: ClassVar[Literal["high", "low"]] — model tier
+
+    Subclasses that use the default run() must also define:
     - get_system_prompt(input) — build the system prompt
     - get_user_message(input) — build the user message
     - parse_response(response) — extract TOutput from agent response
+
+    Subclasses may override run() entirely for custom execution logic.
     """
 
     name: ClassVar[str]

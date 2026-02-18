@@ -489,9 +489,9 @@ function GenerateCodeSection({
         setGenerated(generatedCode.response.code);
         setShowGenerate(false);
       }
-    }).catch(() => {
+    }).catch((errorData) => {
       setGenerating(false);
-      setError("An error occurred while generating code. Please try again.");
+      setError(errorData?.error || "An error occurred while generating code. Please try again.");
     });
   }
 
