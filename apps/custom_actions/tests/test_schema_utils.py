@@ -181,6 +181,44 @@ class TestGetOperationsFromSpecDict:
             operation=update_user, param_name="profile_updated", schema_type="boolean", required=False
         )
 
+    def test_enum_query_parameter_does_not_raise(self):
+        """Test that query parameters with enum values are handled correctly (type resolves to string)."""
+        spec = {
+            "openapi": "3.1.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+            "servers": [{"url": "https://api.example.com"}],
+            "paths": {
+                "/items/{category}": {
+                    "get": {
+                        "summary": "Get items",
+                        "operationId": "getItems",
+                        "description": "Get items by category",
+                        "parameters": [
+                            {
+                                "name": "category",
+                                "in": "path",
+                                "required": True,
+                                "schema": {"type": "string"},
+                            },
+                            {
+                                "name": "sort",
+                                "in": "query",
+                                "required": False,
+                                "schema": {"type": "string", "enum": ["asc", "desc"], "default": "asc"},
+                            },
+                        ],
+                        "responses": {"200": {"description": "OK"}},
+                    }
+                }
+            },
+        }
+        operations = get_operations_from_spec_dict(spec)
+        assert len(operations) == 1
+        op = operations[0]
+        sort_param = self._get_parameter(op, "sort")
+        assert sort_param is not None
+        assert sort_param.schema_type == "string"
+
     def _test_delete_user(self, operations: list[APIOperationDetails]):
         """Test DELETE /users/{user_id} operation."""
         delete_user = self._get_operation_by_id(operations, "deleteUser")

@@ -44,7 +44,7 @@ Expected Context Variables:
       </div>
     {% else %}
       <div class="space-y-6" x-data="endpointTester()">
-        
+
         {% for operation in operations %}
           <div class="card bg-base-100 shadow-md border border-base-300"
                x-data="{ opId: '{{ operation.operation_id }}' }">
@@ -71,41 +71,39 @@ Expected Context Variables:
               {% if operation.parameters %}
                 <div class="mb-4">
                   <!-- Path Parameters Section -->
-                  {% with path_params=operation.parameters|selectattr:"param_in","equalto","path"|list %}
-                    {% if path_params %}
-                      <div class="mb-4">
-                        <label class="label font-bold">
-                          <span>Path Parameters</span>
-                        </label>
-                        <div class="space-y-3">
-                          {% for param in path_params %}
-                            <div>
-                              <label class="label">
-                                <span class="label-text">
-                                  {{ param.name }}
-                                  {% if param.required %}<span class="text-error">*</span>{% endif %}
-                                  <span class="text-base-content/70 text-xs">
-                                    ({{ param.schema_type }})
-                                  </span>
+                  {% if operation.path_parameters %}
+                    <div class="mb-4">
+                      <label class="label font-bold">
+                        <span>Path Parameters</span>
+                      </label>
+                      <div class="space-y-3">
+                        {% for param in operation.path_parameters %}
+                          <div>
+                            <label class="label">
+                              <span class="label-text">
+                                {{ param.name }}
+                                {% if param.required %}<span class="text-error">*</span>{% endif %}
+                                <span class="text-base-content/70 text-xs">
+                                  ({{ param.schema_type }})
                                 </span>
-                              </label>
-                              <input type="text"
-                                     class="input input-bordered w-full"
-                                     placeholder="{{ param.name }}"
-                                     x-model="operations['{{ operation.operation_id }}'].pathParams['{{ param.name }}']"
-                                     {% if param.description %}title="{{ param.description }}"{% endif %} />
-                              {% if param.description %}
-                                <p class="text-xs text-base-content/70 mt-1">{{ param.description }}</p>
-                              {% endif %}
-                            </div>
-                          {% endfor %}
-                        </div>
+                              </span>
+                            </label>
+                            <input type="text"
+                                   class="input input-bordered w-full"
+                                   placeholder="{{ param.name }}"
+                                   x-model="operations['{{ operation.operation_id }}'].pathParams['{{ param.name }}']"
+                                   {% if param.description %}title="{{ param.description }}"{% endif %} />
+                            {% if param.description %}
+                              <p class="text-xs text-base-content/70 mt-1">{{ param.description }}</p>
+                            {% endif %}
+                          </div>
+                        {% endfor %}
                       </div>
-                    {% endif %}
-                  {% endwith %}
+                    </div>
+                  {% endif %}
 
                   <!-- Query/Body Parameters Section -->
-                  {% with non_path_params=operation.parameters|rejectattr:"param_in","equalto","path"|list %}
+                  {% with non_path_params=operation.non_path_parameters %}
                     {% if non_path_params %}
                       <!-- Parameters Info -->
                       <div class="mb-4 p-3 bg-base-200 rounded-lg">
@@ -169,9 +167,9 @@ Expected Context Variables:
               <template x-if="getOperationState('{{ operation.operation_id }}').response">
                 <div>
                   <div class="divider my-2"></div>
-                  
+
                   <div class="bg-base-200 rounded-lg p-4"
-                       x-data="{ 
+                       x-data="{
                          responseKeys: getResponseTableKeys(getOperationState('{{ operation.operation_id }}').response.body),
                          isUniformList: isUniformObjectList(getOperationState('{{ operation.operation_id }}').response.body),
                          isFullscreen: false
@@ -351,7 +349,7 @@ Expected Context Variables:
     document.addEventListener('alpine:init', () => {
       Alpine.data('endpointTester', () => ({
         operations: {},
-        
+
         // HTTP status code ranges for badge styling
         HTTP_STATUS: {
           SUCCESS_MIN: 200,
@@ -362,7 +360,7 @@ Expected Context Variables:
           CLIENT_ERROR_MAX: 499,
           SERVER_ERROR_MIN: 500,
         },
-        
+
         init() {
           const operationsData = JSON.parse(document.getElementById('operations-data').textContent);
           // Transform the JSON data into the format needed for Alpine.js
@@ -384,7 +382,7 @@ Expected Context Variables:
             window.SiteJS.editors.initJsonEditors(container);
           });
         },
-        
+
         /**
          * Safely access operation state by ID
          */
@@ -420,7 +418,7 @@ Expected Context Variables:
             if (value === '' || value === null || value === undefined) {
               return '';
             }
-            
+
             // Parse as JSON
             try {
               return JSON.parse(value);
@@ -436,7 +434,7 @@ Expected Context Variables:
         buildParamsFromJson(operationId) {
           const opState = this.operations[operationId];
           const jsonInput = opState.jsonInput || '{}';
-          
+
           try {
             return JSON.parse(jsonInput);
           } catch (e) {
@@ -451,12 +449,12 @@ Expected Context Variables:
             if (!Array.isArray(responseBody) || responseBody.length === 0) {
               return [];
             }
-            
+
             const firstItem = responseBody[0];
             if (typeof firstItem !== 'object' || firstItem === null || Array.isArray(firstItem)) {
               return [];
             }
-            
+
             return Object.keys(firstItem);
           },
 
@@ -564,7 +562,7 @@ Expected Context Variables:
 
             // Get keys from first object
             const firstKeys = Object.keys(data[0]).sort();
-            
+
             // Check if all objects have the same keys
             return data.every(item => {
               if (typeof item !== 'object' || item === null || Array.isArray(item)) {

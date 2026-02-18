@@ -110,6 +110,14 @@ class APIOperationDetails(BaseModel):
     method: str
     parameters: list[ParameterDetail] = []
 
+    @property
+    def path_parameters(self) -> list["ParameterDetail"]:
+        return [p for p in self.parameters if p.param_in == "path"]
+
+    @property
+    def non_path_parameters(self) -> list["ParameterDetail"]:
+        return [p for p in self.parameters if p.param_in != "path"]
+
     def __str__(self):
         return f"{self.method.upper()}: {self.description}"
 
@@ -136,7 +144,9 @@ def get_operations_from_spec(spec, spec_dict=None) -> list[APIOperationDetails]:
     return operations
 
 
-def _extract_parameters(operation: APIOperation, spec_dict=None, path: str = "", method: str = "") -> list[ParameterDetail]:
+def _extract_parameters(
+    operation: APIOperation, spec_dict=None, path: str = "", method: str = ""
+) -> list[ParameterDetail]:
     """Extract parameter details from OpenAPI spec.
 
     Extracts both query/path parameters and request body parameters.
@@ -155,11 +165,15 @@ def _extract_parameters(operation: APIOperation, spec_dict=None, path: str = "",
     parameters = []
     for property in operation.properties:
         param_in = param_in_map.get(property.name, "query")
+        schema_type = property.type
+        if not isinstance(schema_type, str):
+            # property.type can be a DataType enum or a dynamically created enum class
+            schema_type = schema_type.value if isinstance(schema_type, DataType) else "string"
         parameters.append(
             ParameterDetail(
                 name=property.name,
                 required=property.required,
-                schema_type=property.type,
+                schema_type=schema_type,
                 description=property.description,
                 default=property.default,
                 param_in=param_in,
