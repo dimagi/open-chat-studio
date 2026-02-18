@@ -60,12 +60,6 @@ match EMAIL_BACKEND:
 SERVER_EMAIL = env("DJANGO_SERVER_EMAIL", default="noreply@dimagi.com")
 DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL", default="noreply@dimagi.com")
 
-# Mailchimp setup
-
-# set these values if you want to subscribe people to a mailchimp list after they sign up.
-MAILCHIMP_API_KEY = env("MAILCHIMP_API_KEY", default=None)
-MAILCHIMP_LIST_ID = env("MAILCHIMP_LIST_ID", default=None)
-
 # Allow unacknowledged tasks to be rescheduled after 5 minutes
 # (the default is 1 hour). If this number is too low, a task may
 # get executed more than once at a time. The higher the number,
