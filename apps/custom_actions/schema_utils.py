@@ -1,9 +1,11 @@
 from copy import deepcopy
+from typing import Any, Literal
 
 from django.core.exceptions import ValidationError
 from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
-from pydantic import BaseModel
+from openapi_pydantic import DataType
+from pydantic import BaseModel, Field
 
 
 def get_standalone_schema_for_action_operation(action_operation):
@@ -90,27 +92,125 @@ def resolve_references(openapi_spec: dict) -> dict:
     return resolve_ref(deepcopy(openapi_spec), "")
 
 
+class ParameterDetail(BaseModel):
+    """Represents a single parameter in an API operation."""
+
+    name: str
+    description: str | None = None
+    required: bool = False
+    schema_type: str = Field(default="string")
+    default: Any = None
+    # "body" is a synthetic value used internally for request body parameters;
+    # it does not correspond to an OpenAPI 3.x "in" value.
+    param_in: Literal["path", "query", "body", "header", "cookie"] = "query"
+
+    def get_default_value(self) -> Any:
+        """Return the default value for this parameter, with type-appropriate fallbacks."""
+        if self.default is not None:
+            return self.default
+        return {
+            "boolean": False,
+            "integer": 0,
+            "number": 0.0,
+            "array": [],
+            "object": {},
+        }.get(self.schema_type, "")
+
+
 class APIOperationDetails(BaseModel):
     operation_id: str
-    description: str
+    description: str | None = None
     path: str
     method: str
+    parameters: list[ParameterDetail] = []
+
+    @property
+    def path_parameters(self) -> list["ParameterDetail"]:
+        return [p for p in self.parameters if p.param_in == "path"]
+
+    @property
+    def query_parameters(self) -> list["ParameterDetail"]:
+        return [p for p in self.parameters if p.param_in == "query"]
+
+    @property
+    def body_parameters(self) -> list["ParameterDetail"]:
+        return [p for p in self.parameters if p.param_in == "body"]
 
     def __str__(self):
-        return f"{self.method.upper()}: {self.description}"
+        return f"{self.method.upper()}: {self.description or self.operation_id}"
 
 
 def get_operations_from_spec_dict(spec_dict) -> list[APIOperationDetails]:
     spec = OpenAPISpec.from_spec_dict(spec_dict)
-    return get_operations_from_spec(spec)
+    return get_operations_from_spec(spec, spec_dict)
 
 
-def get_operations_from_spec(spec) -> list[APIOperationDetails]:
+def get_operations_from_spec(spec, spec_dict=None) -> list[APIOperationDetails]:
+    # When spec_dict is None, parameter locations (path/query/etc.) cannot be resolved;
+    # all non-body parameters will default to param_in="query".
     operations = []
     for path in spec.paths:
         for method in spec.get_methods_for_path(path):
             op = APIOperation.from_openapi_spec(spec, path, method)
             operations.append(
-                APIOperationDetails(operation_id=op.operation_id, description=op.description, path=path, method=method)
+                APIOperationDetails(
+                    operation_id=op.operation_id,
+                    description=op.description,
+                    path=path,
+                    method=method,
+                    parameters=_extract_parameters(op, spec_dict, path, method),
+                )
             )
     return operations
+
+
+def _extract_parameters(
+    operation: APIOperation, spec_dict=None, path: str = "", method: str = ""
+) -> list[ParameterDetail]:
+    """Extract parameter details from OpenAPI spec.
+
+    Extracts both query/path parameters and request body parameters.
+    Looks up parameter location (path, query, etc.) from the spec_dict.
+    """
+    # Build a map of parameter name -> param_in from the spec_dict
+    param_in_map = {}
+    if spec_dict and path and method:
+        operation_spec = spec_dict.get("paths", {}).get(path, {}).get(method, {})
+        for param_spec in operation_spec.get("parameters", []):
+            param_name = param_spec.get("name")
+            param_in = param_spec.get("in", "query")
+            if param_name:
+                param_in_map[param_name] = param_in
+
+    parameters = []
+    for prop in operation.properties:
+        param_in = param_in_map.get(prop.name, "query")
+        schema_type = prop.type
+        if not isinstance(schema_type, str):
+            # prop.type can be a DataType enum or a dynamically created enum class
+            schema_type = schema_type.value if isinstance(schema_type, DataType) else "string"
+        parameters.append(
+            ParameterDetail(
+                name=prop.name,
+                required=prop.required,
+                schema_type=schema_type,
+                description=prop.description,
+                default=prop.default,
+                param_in=param_in,
+            )
+        )
+
+    # Extract request body parameters (these are always in the body)
+    if operation.request_body:
+        for param in operation.request_body.properties:
+            params = param.model_dump()
+            if isinstance(param.type, DataType):
+                params["schema_type"] = param.type.value
+                # UGLY HACK! DataType.Array is converted into a string like "Array<DataType.STRING>"
+                # See langchain_community/tools/openapi/utils/api_models.py:315
+            elif param.type.startswith("Array<"):
+                params["schema_type"] = DataType.ARRAY.value
+            params["param_in"] = "body"
+            parameters.append(ParameterDetail.model_validate(params))
+
+    return parameters

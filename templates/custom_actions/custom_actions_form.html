@@ -1,7 +1,17 @@
 {% extends "generic/object_form.html" %}
+{% load waffle_tags %}
 
 {% block pre_form %}
     {% if form.instance.id %}
         {% include "custom_actions/health_status_column.html" with record=form.instance %}
+        {% flag "flag_custom_actions_test_endpoints" %}
+            <div class="mt-4">
+                <a href="{% url 'custom_actions:test_endpoints' form.instance.team.slug form.instance.id %}" 
+                   class="btn btn-outline btn-sm">
+                    <i class="fa-solid fa-flask"></i>
+                    Test Endpoints
+                </a>
+            </div>
+        {% endflag %}
     {% endif %}
 {% endblock pre_form %}

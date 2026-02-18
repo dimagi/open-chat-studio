@@ -50,6 +50,11 @@ class Flags(FlagInfo, Enum):
     NOTIFICATIONS = ("flag_notifications", "User notifications")
 
     CHAT_WIDGET = ("flag_chat_widget", "Use embedded chat widget instead of full-page chat UI (POC)")
+    
+    TESTING_CUSTOM_ACTIONS = (
+        "flag_custom_actions_test_endpoints",
+        "Testing endpoints for custom actions (internal use only)",
+    )
 
     HUMAN_ANNOTATIONS = ("flag_human_annotations", "Human annotation queues for labeling and review", "", [], True)
 
