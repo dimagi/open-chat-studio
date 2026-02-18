@@ -1,0 +1,34 @@
+{% load static %}
+<dialog id="sync_logs_modal_{{ document_source.id }}" class="modal">
+  <div class="modal-box max-w-4xl">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <h3 class="font-bold text-lg mb-4">
+      <i class="{{ document_source.source_type_enum.css_logo }}"></i>
+      Sync Logs: {{ document_source.source_config }}
+    </h3>
+
+    <div class="mb-4">
+      <label class="label cursor-pointer justify-start gap-2">
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          {% if show_errors_only %}checked{% endif %}
+          hx-get="{% url 'documents:document_source_sync_logs' team.slug collection.id document_source.id %}"
+          hx-target="#sync_logs_content_{{ document_source.id }}"
+          hx-swap="innerHTML"
+          hx-vals='{"errors_only": this.checked ? "true" : "false"}'
+        >
+        <span class="label-text">Show errors only</span>
+      </label>
+    </div>
+
+    <div id="sync_logs_content_{{ document_source.id }}">
+      {% include "documents/partials/sync_logs_list.html" %}
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

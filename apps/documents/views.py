@@ -33,6 +33,7 @@ from apps.documents.models import (
     Collection,
     CollectionFile,
     DocumentSource,
+    DocumentSourceSyncLog,
     FileStatus,
     SourceType,
 )
@@ -295,6 +296,45 @@ def sync_document_source(request, team_slug: str, collection_id: int, pk: int):
             "document_source": document_source,
         },
     )
+
+
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def document_source_sync_logs(request, team_slug: str, collection_id: int, pk: int):
+    """View sync logs for a document source"""
+    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
+
+    sync_logs = DocumentSourceSyncLog.objects.filter(document_source=document_source)
+
+    # Filter by errors only if requested
+    show_errors_only = request.GET.get("errors_only") == "true"
+    if show_errors_only:
+        sync_logs = sync_logs.filter(status="failed")
+
+    # Paginate logs
+    page = request.GET.get("page", 1)
+    paginator = Paginator(sync_logs, 10)
+    try:
+        paginated_logs = paginator.page(page)
+    except PageNotAnInteger:
+        paginated_logs = paginator.page(1)
+    except EmptyPage:
+        paginated_logs = paginator.page(paginator.num_pages)
+
+    context = {
+        "document_source": document_source,
+        "sync_logs": paginated_logs,
+        "show_errors_only": show_errors_only,
+        "collection": document_source.collection,
+        "team": request.team,
+    }
+
+    # For HTMX requests (pagination/filtering), return only the list
+    if request.htmx:
+        return render(request, "documents/partials/sync_logs_list.html", context)
+
+    # Otherwise, return the full modal
+    return render(request, "documents/partials/sync_logs_modal.html", context)
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)

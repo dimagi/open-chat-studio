@@ -5,6 +5,14 @@
   <div class="join">
     <a
         class="btn btn-ghost btn-sm join-item"
+        hx-get="{% url "documents:document_source_sync_logs" team.slug collection.id document_source.id %}"
+        hx-target="#sync_logs_modal_container_{{ document_source.id }}"
+        hx-swap="innerHTML"
+        onclick="setTimeout(() => sync_logs_modal_{{ document_source.id }}.showModal(), 100)"
+        title="View Sync Logs"
+    ><i class="fa-solid fa-list"></i></a>
+    <a
+        class="btn btn-ghost btn-sm join-item"
         hx-get="{% url "documents:edit_document_source" team.slug collection.id document_source.id %}"
         hx-target="#document_source_modal"
         hx-swap="innerHTML"
@@ -40,6 +48,9 @@
     {% if document_source.sync_task_id %}
       <div aria-label="Syncing" class="status status-accent animate-ping"></div>
       <span>Syncing. Previous Sync: </span>
+    {% elif document_source.has_sync_errors %}
+      <div aria-label="Error" class="status status-error"></div>
+      <span>Last Sync (with errors): </span>
     {% else %}
       <div aria-label="Success" class="status status-success"></div>
       <span>Last Sync: </span>
@@ -60,3 +71,4 @@
     {% endif %}
   {% endif %}
 </div>
+<div id="sync_logs_modal_container_{{ document_source.id }}"></div>

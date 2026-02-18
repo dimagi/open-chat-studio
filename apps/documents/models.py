@@ -437,6 +437,11 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
         if delete_files:
             delete_document_source_task.delay(self.id)
 
+    def has_sync_errors(self) -> bool:
+        """Check if the last sync had errors"""
+        last_log = self.sync_logs.first()
+        return last_log and last_log.status == SyncStatus.FAILED
+
 
 class DocumentSourceSyncLog(models.Model):
     document_source = models.ForeignKey(
