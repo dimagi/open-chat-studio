@@ -5,5 +5,5 @@ from apps.help import views
 app_name = "help"
 
 urlpatterns = [
-    path("generate_code/", views.pipeline_generate_code, name="pipeline_generate_code"),
+    path("<str:agent_name>/", views.run_agent, name="run_agent"),
 ]
