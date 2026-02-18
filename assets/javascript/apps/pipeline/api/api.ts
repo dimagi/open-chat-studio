@@ -94,7 +94,7 @@ class ApiClient {
       if (axios.isAxiosError(error) && error.response) {
         return Promise.reject(error.response.data);
       }
-      return Promise.reject();
+      return Promise.reject({error: String(error)});
     }
     if (response.status !== 200) {
       console.error(response);

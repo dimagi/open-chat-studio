@@ -53,6 +53,7 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
 
     def _run_with_retry(self, current_code: str, error: str | None, iteration: int) -> CodeGenerateOutput:
         if iteration > self.max_retries:
+            logger.warning("Code generation failed after %d retries, returning last attempt.", self.max_retries)
             return CodeGenerateOutput(code=current_code)
 
         system_prompt = self._build_system_prompt(current_code, error)
