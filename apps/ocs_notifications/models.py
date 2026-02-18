@@ -81,7 +81,7 @@ class EventUserQuerySet(models.QuerySet):
         latest_event_subquery = NotificationEvent.objects.filter(
             event_type=models.OuterRef("event_type"),
             team=models.OuterRef("team"),
-        ).order_by("-created_at")
+        ).order_by("-created_at")[:1]
         return self.annotate(
             latest_event=models.Subquery(
                 latest_event_subquery.values(
