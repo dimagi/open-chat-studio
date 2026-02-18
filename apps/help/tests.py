@@ -1,7 +1,10 @@
 from unittest import mock
 
+import pydantic as pydantic_module
+import pytest
 from pydantic import BaseModel
 
+from apps.help.agents.code_generate import CodeGenerateAgent, CodeGenerateInput, CodeGenerateOutput
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import AGENT_REGISTRY, register_agent
 from apps.help.utils import extract_function_signature, get_python_node_coder_prompt
@@ -122,3 +125,67 @@ class TestBaseHelpAgent:
         assert result == StubOutput(result="hello")
         mock_build.assert_called_once_with("low", "You are a stub.")
         mock_agent.invoke.assert_called_once_with({"messages": [{"role": "user", "content": "say hi"}]})
+
+
+class TestCodeGenerateAgent:
+    @mock.patch("apps.help.agents.code_generate.build_system_agent")
+    def test_run_returns_valid_code(self, mock_build):
+        valid_code = "def main(input: str, **kwargs) -> str:\n    return input"
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"messages": [mock.Mock(text=valid_code)]}
+        mock_build.return_value = mock_agent
+
+        with mock.patch("apps.help.agents.code_generate.CodeNode"):
+            agent = CodeGenerateAgent(input=CodeGenerateInput(query="write hello world"))
+            result = agent.run()
+
+        assert result == CodeGenerateOutput(code=valid_code)
+
+    @mock.patch("apps.help.agents.code_generate.build_system_agent")
+    def test_run_retries_on_validation_error(self, mock_build):
+        bad_code = "not valid python"
+        good_code = "def main(input: str, **kwargs) -> str:\n    return input"
+
+        mock_agent = mock.Mock()
+        mock_agent.invoke.side_effect = [
+            {"messages": [mock.Mock(text=bad_code)]},
+            {"messages": [mock.Mock(text=good_code)]},
+        ]
+        mock_build.return_value = mock_agent
+
+        with mock.patch("apps.help.agents.code_generate.CodeNode") as mock_code_node:
+            mock_code_node.model_validate.side_effect = [
+                pydantic_module.ValidationError.from_exception_data("CodeNode", []),
+                None,
+            ]
+            agent = CodeGenerateAgent(input=CodeGenerateInput(query="fix this"))
+            result = agent.run()
+
+        assert result == CodeGenerateOutput(code=good_code)
+        assert mock_agent.invoke.call_count == 2
+
+    @mock.patch("apps.help.agents.code_generate.build_system_agent")
+    def test_run_returns_last_code_after_max_retries(self, mock_build):
+        bad_code = "still broken"
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"messages": [mock.Mock(text=bad_code)]}
+        mock_build.return_value = mock_agent
+
+        with mock.patch("apps.help.agents.code_generate.CodeNode") as mock_code_node:
+            mock_code_node.model_validate.side_effect = pydantic_module.ValidationError.from_exception_data(
+                "CodeNode", []
+            )
+            agent = CodeGenerateAgent(input=CodeGenerateInput(query="fix this"))
+            result = agent.run()
+
+        assert result == CodeGenerateOutput(code=bad_code)
+        # 1 initial + 3 retries = 4 total
+        assert mock_agent.invoke.call_count == 4
+
+    def test_input_validates_query_required(self):
+        with pytest.raises(pydantic_module.ValidationError):
+            CodeGenerateInput()
+
+    def test_input_context_defaults_to_empty(self):
+        inp = CodeGenerateInput(query="hello")
+        assert inp.context == ""
