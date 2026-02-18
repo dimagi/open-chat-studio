@@ -161,6 +161,7 @@ class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
         experiment = get_object_or_404(Experiment, team__slug=team_slug, id=experiment_id)
         participant = get_object_or_404(Participant, team__slug=team_slug, id=participant_id)
         error = ""
+        new_data = None
         raw_data = request.POST["participant-data"]
         try:
             new_data = json.loads(raw_data)

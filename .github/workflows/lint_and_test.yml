@@ -93,6 +93,26 @@ jobs:
         with:
           extra-args: --files ${{ steps.file_changes.outputs.files }}
 
+  type-check:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv sync --locked --dev
+      - name: Run ty type checker
+        run: uv run ty check apps/
+
   check-uv-lock:
     runs-on: ubuntu-latest
     steps:

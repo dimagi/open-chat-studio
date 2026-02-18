@@ -65,7 +65,7 @@ def get_slack_app():
     return app
 
 
-app: App = SimpleLazyObject(get_slack_app)  # type: ignore
+app: App = SimpleLazyObject(get_slack_app)
 handler = SimpleLazyObject(lambda: SlackRequestHandler(app=app))
 
 

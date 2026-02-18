@@ -92,9 +92,11 @@ class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
 
     def _wait_for_run(self, run_id: str, thread_id: str, progress_states=("in_progress", "queued")) -> Any:
         in_progress = True
+        run = None
         while in_progress:
             run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
             in_progress = run.status in progress_states
             if in_progress:
                 sleep(self.check_every_ms / 1000)
+        assert run is not None  # Loop always executes at least once since in_progress starts True
         return run

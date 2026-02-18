@@ -45,6 +45,7 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 * Run python tests: `pytest path/to/test.py -v` (all tests in a file)
 * Lint python: `ruff check path/to/file.py --fix`
 * Format python: `ruff format path/to/file.py`
+* Type check python: `ty check apps/`
 * Build JS & CSS: `npm run dev`
 * Lint JS: `npm run lint path/to/file.js`
 * TypeScript type checking: `npm run type-check path/to/file.ts`

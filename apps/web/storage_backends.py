@@ -1,4 +1,4 @@
-from django.core.files.storage import storages
+from django.core.files.storage import storages  # ty: ignore[unresolved-import]
 from storages.backends.s3 import S3Storage
 
 
