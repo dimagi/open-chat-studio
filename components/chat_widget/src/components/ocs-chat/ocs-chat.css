@@ -262,7 +262,7 @@
     --selected-files-border-color: var(--header-border-color); /* #f3f4f6 */
 
     /* Selected file item variables */
-    --selected-file-bg-color: var(--message-system-bg-color); /* #f3f4f6 */
+    --selected-file-bg-color: #f3f4f6; /* Light gray - neutral color */
 
     /* Selected file text variables */
     --selected-file-font-size: var(--chat-window-font-size-sm);
