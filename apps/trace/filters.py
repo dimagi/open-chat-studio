@@ -93,7 +93,7 @@ class ExperimentVersionsFilter(ChoiceColumnFilter):
     def values_list(self, json_value: str) -> list[int]:
         values = super().values_list(json_value)
         # versions are returned as strings like "v1", "v2", so we need to strip the "v" and convert to int
-        return [int(v[1]) for v in values if "v" in v]
+        return [int(v[1:]) for v in values if "v" in v]
 
     def prepare(self, team, **kwargs):
         self.options = Experiment.objects.get_version_names(team)
