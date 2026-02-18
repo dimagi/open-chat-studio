@@ -36,6 +36,7 @@ class Command(IdempotentCommand):
         self.stdout.write(f"Found {total} sessions that need processing")
 
         # Process collected sessions in a batch
+        total_updated = 0
         for i in range(0, total, batch_size):
             batch_ids = all_session_ids[i : i + batch_size]
 

@@ -693,13 +693,14 @@ class TestExperimentModel:
         assert new_version.source_material.material == original_experiment.source_material.material
 
     def _assert_triggers_are_duplicated(self, trigger_type, original_experiment, new_version):
-        assert trigger_type in ["static", "timeout"], "Unknown trigger type"
         if trigger_type == "static":
             original_triggers = original_experiment.static_triggers.all()
             copied_triggers = new_version.static_triggers.all()
         elif trigger_type == "timeout":
             original_triggers = original_experiment.timeout_triggers.all()
             copied_triggers = new_version.timeout_triggers.all()
+        else:
+            raise ValueError(f"Unknown trigger type: {trigger_type}")
 
         assert len(copied_triggers) == len(original_triggers)
 

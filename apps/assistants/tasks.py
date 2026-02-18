@@ -53,4 +53,6 @@ def delete_openai_assistant_task(self, assistant_id: int):
             raise cause from None
         if isinstance(cause, APIError):
             raise self.retry(exc=cause) from None
-        raise cause from None
+        if cause is not None:
+            raise cause from None
+        raise
