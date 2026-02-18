@@ -219,6 +219,61 @@ class TestGetOperationsFromSpecDict:
         assert sort_param is not None
         assert sort_param.schema_type == "string"
 
+    def test_query_parameters_property(self):
+        """Test that query_parameters returns only params with param_in == 'query'."""
+        spec = load_test_data("users_api_spec.json")
+        operations = get_operations_from_spec_dict(spec)
+
+        # createUser has both query and body params
+        create_user = self._get_operation_by_id(operations, "createUser")
+        assert create_user is not None
+        query_params = create_user.query_parameters
+        assert all(p.param_in == "query" for p in query_params)
+        assert {p.name for p in query_params} == {"score"}
+
+    def test_body_parameters_property(self):
+        """Test that body_parameters returns only params with param_in == 'body'."""
+        spec = load_test_data("users_api_spec.json")
+        operations = get_operations_from_spec_dict(spec)
+
+        create_user = self._get_operation_by_id(operations, "createUser")
+        assert create_user is not None
+        body_params = create_user.body_parameters
+        assert all(p.param_in == "body" for p in body_params)
+        assert {p.name for p in body_params} == {
+            "username",
+            "email",
+            "age",
+            "is_admin",
+            "tags",
+            "rating",
+            "metadata",
+            "notes",
+        }
+
+    def test_path_parameters_property(self):
+        """Test that path_parameters returns only params with param_in == 'path'."""
+        spec = load_test_data("users_api_spec.json")
+        operations = get_operations_from_spec_dict(spec)
+
+        get_user = self._get_operation_by_id(operations, "getUser")
+        assert get_user is not None
+        path_params = get_user.path_parameters
+        assert all(p.param_in == "path" for p in path_params)
+        assert {p.name for p in path_params} == {"user_id"}
+
+    def test_empty_query_and_body_parameters(self):
+        """Test that operations with no query/body params return empty lists."""
+        spec = load_test_data("users_api_spec.json")
+        operations = get_operations_from_spec_dict(spec)
+
+        # deleteUser has only a path parameter
+        delete_user = self._get_operation_by_id(operations, "deleteUser")
+        assert delete_user is not None
+        assert delete_user.query_parameters == []
+        assert delete_user.body_parameters == []
+        assert len(delete_user.path_parameters) == 1
+
     def _test_delete_user(self, operations: list[APIOperationDetails]):
         """Test DELETE /users/{user_id} operation."""
         delete_user = self._get_operation_by_id(operations, "deleteUser")

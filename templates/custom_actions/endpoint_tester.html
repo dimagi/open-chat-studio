@@ -103,28 +103,50 @@ Expected Context Variables:
                   {% endif %}
 
                   <!-- Query/Body Parameters Section -->
-                  {% with non_path_params=operation.non_path_parameters %}
-                    {% if non_path_params %}
+                  {% with query_params=operation.query_parameters body_params=operation.body_parameters %}
+                    {% if query_params or body_params %}
                       <!-- Parameters Info -->
                       <div class="mb-4 p-3 bg-base-200 rounded-lg">
-                        <p class="font-semibold mb-2">Expected Parameters:</p>
-                        <div class="space-y-2">
-                          {% for param in non_path_params %}
-                            <div class="text-sm">
-                              <span class="font-mono text-base-content">{{ param.name }}</span>
-                              <span class="text-base-content/70">
-                                (
-                                {% if param.param_in %}{{ param.param_in }}{% if param.required or param.schema_type %}, {% endif %}{% endif %}
-                                {% if param.required %}required{% if param.schema_type %}, {% endif %}{% endif %}
-                                {% if param.schema_type %}{{ param.schema_type }}{% endif %}
-                                )
-                              </span>
-                              {% if param.description %}
-                                <p class="text-base-content/70 text-xs mt-1">{{ param.description }}</p>
-                              {% endif %}
-                            </div>
-                          {% endfor %}
-                        </div>
+                        {% if query_params %}
+                          <p class="font-semibold mb-2">Query Parameters:</p>
+                          <div class="space-y-2 mb-3">
+                            {% for param in query_params %}
+                              <div class="text-sm">
+                                <span class="font-mono text-base-content">{{ param.name }}</span>
+                                <span class="text-base-content/70">
+                                  (
+                                  {% if param.param_in %}{{ param.param_in }}{% if param.required or param.schema_type %}, {% endif %}{% endif %}
+                                  {% if param.required %}required{% if param.schema_type %}, {% endif %}{% endif %}
+                                  {% if param.schema_type %}{{ param.schema_type }}{% endif %}
+                                  )
+                                </span>
+                                {% if param.description %}
+                                  <p class="text-base-content/70 text-xs mt-1">{{ param.description }}</p>
+                                {% endif %}
+                              </div>
+                            {% endfor %}
+                          </div>
+                        {% endif %}
+                        {% if body_params %}
+                          <p class="font-semibold mb-2">Body Parameters:</p>
+                          <div class="space-y-2">
+                            {% for param in body_params %}
+                              <div class="text-sm">
+                                <span class="font-mono text-base-content">{{ param.name }}</span>
+                                <span class="text-base-content/70">
+                                  (
+                                  {% if param.param_in %}{{ param.param_in }}{% if param.required or param.schema_type %}, {% endif %}{% endif %}
+                                  {% if param.required %}required{% if param.schema_type %}, {% endif %}{% endif %}
+                                  {% if param.schema_type %}{{ param.schema_type }}{% endif %}
+                                  )
+                                </span>
+                                {% if param.description %}
+                                  <p class="text-base-content/70 text-xs mt-1">{{ param.description }}</p>
+                                {% endif %}
+                              </div>
+                            {% endfor %}
+                          </div>
+                        {% endif %}
                       </div>
 
                       <!-- JSON Editor -->

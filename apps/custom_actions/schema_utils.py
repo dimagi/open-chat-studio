@@ -100,7 +100,7 @@ class ParameterDetail(BaseModel):
     required: bool = False
     schema_type: str = Field(default="string")
     default: Any = None
-    param_in: str = Field(default="query")  # where the parameter is used: "path", "query", "header", "cookie"
+    param_in: str = Field(default="query")  # where the parameter is used: "path", "query", "body", "header", "cookie"
 
 
 class APIOperationDetails(BaseModel):
@@ -115,8 +115,12 @@ class APIOperationDetails(BaseModel):
         return [p for p in self.parameters if p.param_in == "path"]
 
     @property
-    def non_path_parameters(self) -> list["ParameterDetail"]:
-        return [p for p in self.parameters if p.param_in != "path"]
+    def query_parameters(self) -> list["ParameterDetail"]:
+        return [p for p in self.parameters if p.param_in == "query"]
+
+    @property
+    def body_parameters(self) -> list["ParameterDetail"]:
+        return [p for p in self.parameters if p.param_in == "body"]
 
     def __str__(self):
         return f"{self.method.upper()}: {self.description}"

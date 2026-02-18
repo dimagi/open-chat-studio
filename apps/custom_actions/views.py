@@ -117,6 +117,18 @@ class CheckCustomActionHealth(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         )
 
 
+def _default_value_for(param):
+    if param.default is not None:
+        return param.default
+    return {
+        "boolean": False,
+        "integer": 0,
+        "number": 0.0,
+        "array": [],
+        "object": {},
+    }.get(param.schema_type, "")
+
+
 class CustomActionEndpointTester(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     """View for testing custom action endpoints."""
 
@@ -136,32 +148,10 @@ class CustomActionEndpointTester(LoginAndTeamRequiredMixin, PermissionRequiredMi
 
         operations_data = {}
         for operation in custom_action.operations:
-            param_values = {}
-            path_param_values = {}
-            for param in operation.parameters:
-                # Get default value
-                default_value = param.default
-                if default_value is None:
-                    # Provide sensible defaults based on parameter type
-                    if param.schema_type == "boolean":
-                        default_value = False
-                    elif param.schema_type == "integer":
-                        default_value = 0
-                    elif param.schema_type == "number":
-                        default_value = 0.0
-                    elif param.schema_type == "array":
-                        default_value = []
-                    elif param.schema_type == "object":
-                        default_value = {}
-                    else:
-                        default_value = ""
-
-                # Separate path parameters from other parameters
-                if param.param_in == "path":
-                    path_param_values[param.name] = default_value
-                else:
-                    param_values[param.name] = default_value
-
+            path_param_values = {p.name: _default_value_for(p) for p in operation.path_parameters}
+            param_values = {
+                p.name: _default_value_for(p) for p in operation.query_parameters + operation.body_parameters
+            }
             operations_data[operation.operation_id] = {
                 "params": param_values,
                 "pathParams": path_param_values,
