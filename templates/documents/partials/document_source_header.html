@@ -47,13 +47,13 @@
   {% if document_source.last_sync %}
     {% if document_source.sync_task_id %}
       <div aria-label="Syncing" class="status status-accent animate-ping"></div>
-      <span>Syncing. Previous Sync: </span>
+      <span class="pl-2">Syncing. Previous Sync: </span>
     {% elif document_source.has_sync_errors %}
       <div aria-label="Error" class="status status-error"></div>
-      <span>Last Sync (with errors): </span>
+      <span class="pl-2">Last Sync (with errors): </span>
     {% else %}
       <div aria-label="Success" class="status status-success"></div>
-      <span>Last Sync: </span>
+      <span class="pl-2">Last Sync: </span>
     {% endif %}
     <time datetime="{{ document_source.last_sync.isoformat }}" title="{{ document_source.last_sync.isoformat }}">
       {{ document_source.last_sync|date:"DATETIME_FORMAT" }}
