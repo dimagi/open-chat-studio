@@ -104,8 +104,6 @@ CONTENT_TYPES = {
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],
     "ocs_notifications": [
-        "notification",
-        "usernotification",
         "usernotificationpreferences",
         "eventtype",
         "notificationevent",
