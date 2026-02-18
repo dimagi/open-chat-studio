@@ -176,9 +176,11 @@ class UserComment(BaseTeamModel):
     @transaction.atomic()
     @staticmethod
     def add_for_model(model, comment: str, added_by: CustomUser, team: Team) -> "UserComment | None":
-        if model._meta.get_field("comments"):
-            return UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
-        return None
+        try:
+            model._meta.get_field("comments")
+        except models.FieldDoesNotExist:
+            return None
+        return UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
 
     def __str__(self):
         return f'<{self.user.username}>: "{self.comment}"'
