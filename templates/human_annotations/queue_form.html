@@ -133,6 +133,15 @@
               </div>
             </template>
 
+            <div class="form-control mt-2">
+              <label class="label cursor-pointer justify-start gap-2">
+                <input type="checkbox"
+                       x-model="field.required"
+                       class="checkbox checkbox-sm">
+                <span class="label-text">{% translate "Required" %}</span>
+              </label>
+            </div>
+
             <button type="button"
                     @click="removeField(index)"
                     class="btn btn-outline btn-sm btn-error mt-2">
@@ -175,6 +184,7 @@
               le: def.le !== undefined ? def.le : null,
               max_length: def.max_length !== undefined ? def.max_length : null,
               choices: def.choices || [],
+              required: def.required !== undefined ? def.required : true,
             }));
           }
           if (this.fields.length === 0) {
@@ -192,6 +202,7 @@
             le: null,
             max_length: null,
             choices: [],
+            required: true,
           });
         },
 
@@ -218,6 +229,9 @@
                 type: field.type,
                 description: field.description || '',
               };
+              if (!field.required) {
+                def.required = false;
+              }
               if (field.type === 'int' || field.type === 'float') {
                 if (field.ge !== null && field.ge !== '' && field.ge !== undefined) {
                   def.ge = field.type === 'float' ? parseFloat(field.ge) : parseInt(field.ge);

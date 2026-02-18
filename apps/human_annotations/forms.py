@@ -80,7 +80,7 @@ def build_annotation_form(queue):
 
     for name, defn in field_defs.items():
         if isinstance(defn, IntFieldDefinition):
-            kwargs = {"label": name, "help_text": defn.description, "required": True}
+            kwargs = {"label": name, "help_text": defn.description, "required": defn.required}
             if defn.ge is not None:
                 kwargs["min_value"] = defn.ge
             if defn.le is not None:
@@ -88,7 +88,7 @@ def build_annotation_form(queue):
             form_fields[name] = forms.IntegerField(**kwargs)
 
         elif isinstance(defn, FloatFieldDefinition):
-            kwargs = {"label": name, "help_text": defn.description, "required": True}
+            kwargs = {"label": name, "help_text": defn.description, "required": defn.required}
             if defn.ge is not None:
                 kwargs["min_value"] = defn.ge
             if defn.le is not None:
@@ -101,11 +101,11 @@ def build_annotation_form(queue):
                 label=name,
                 help_text=defn.description,
                 choices=choices,
-                required=True,
+                required=defn.required,
             )
 
         elif isinstance(defn, StringFieldDefinition):
-            kwargs = {"label": name, "help_text": defn.description, "required": True}
+            kwargs = {"label": name, "help_text": defn.description, "required": defn.required}
             if defn.max_length:
                 kwargs["max_length"] = defn.max_length
             form_fields[name] = forms.CharField(

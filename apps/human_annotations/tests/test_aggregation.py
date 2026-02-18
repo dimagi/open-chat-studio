@@ -118,6 +118,29 @@ def test_compute_aggregates_updates_on_recompute(team, queue_with_int_schema):
 
 
 @pytest.mark.django_db()
+def test_compute_aggregates_excludes_string_fields(team):
+    """String/text fields should be excluded from aggregation."""
+    queue = AnnotationQueue.objects.create(
+        team=team,
+        name="Mixed Queue",
+        schema={
+            "score": {"type": "int", "description": "Score 1-5", "ge": 1, "le": 5},
+            "notes": {"type": "string", "description": "Free text notes"},
+            "category": {"type": "choice", "description": "Category", "choices": ["good", "bad"]},
+        },
+        created_by=team.members.first(),
+    )
+    user = team.members.first()
+    _make_item_and_annotate(queue, team, user, {"score": 4, "notes": "looks good", "category": "good"})
+    _make_item_and_annotate(queue, team, user, {"score": 5, "notes": "great", "category": "good"})
+
+    agg = compute_aggregates_for_queue(queue)
+    assert "score" in agg.aggregates
+    assert "category" in agg.aggregates
+    assert "notes" not in agg.aggregates
+
+
+@pytest.mark.django_db()
 def test_aggregates_auto_recompute_on_annotation_save(team, queue_with_int_schema):
     """Annotation.save() should trigger aggregate recomputation automatically."""
     user1 = team.members.first()
