@@ -16,20 +16,14 @@
             <span class="badge badge-warning badge-sm">In Progress</span>
           {% endif %}
         </div>
-        {% if log.total_files_processed %}
-          <div class="flex flex-wrap gap-2">
-            <span class="badge badge-sm badge-success badge-outline">+{{ log.files_added }} Added</span>
-            <span class="badge badge-sm badge-info badge-outline">~{{ log.files_updated }} Updated</span>
-            <span class="badge badge-sm badge-warning badge-outline">-{{ log.files_removed }} Removed</span>
-            {% if log.duration_seconds %}
-              <span class="badge badge-sm badge-ghost">{{ log.duration_seconds|floatformat:1 }}s</span>
-            {% endif %}
-          </div>
-        {% elif log.duration_seconds %}
-          <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap gap-2">
+          <span class="badge badge-sm badge-success badge-outline">+{{ log.files_added }} Added</span>
+          <span class="badge badge-sm badge-info badge-outline">~{{ log.files_updated }} Updated</span>
+          <span class="badge badge-sm badge-warning badge-outline">-{{ log.files_removed }} Removed</span>
+          {% if log.duration_seconds %}
             <span class="badge badge-sm badge-ghost">{{ log.duration_seconds|floatformat:1 }}s</span>
-          </div>
-        {% endif %}
+          {% endif %}
+        </div>
         {% if log.error_message %}
           <button class="btn btn-xs btn-error btn-outline w-fit"
                   onclick="sync_error_modal_{{ log.pk }}.showModal()">View Error</button>
