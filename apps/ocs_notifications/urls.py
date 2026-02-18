@@ -8,8 +8,33 @@ urlpatterns = [
     path("", views.NotificationHome.as_view(), name="notifications_home"),
     path("table/", views.UserNotificationTableView.as_view(), name="notifications_table"),
     path(
+        "event/<int:event_type_id>/",
+        views.NotificationEventHome.as_view(),
+        name="notification_event_home",
+    ),
+    path(
+        "event/<int:event_type_id>/table/",
+        views.NotificationEventTableView.as_view(),
+        name="notification_event_table",
+    ),
+    path(
         "notification/<int:notification_id>/toggle-read/",
         views.ToggleNotificationReadView.as_view(),
         name="toggle_notification_read",
+    ),
+    path(
+        "notification/<int:notification_id>/mute/",
+        views.MuteNotificationView.as_view(),
+        name="mute_notification",
+    ),
+    path(
+        "notification/<int:notification_id>/unmute/",
+        views.UnmuteNotificationView.as_view(),
+        name="unmute_notification",
+    ),
+    path(
+        "toggle-do-not-disturb/",
+        views.ToggleDoNotDisturbView.as_view(),
+        name="toggle_do_not_disturb",
     ),
 ]

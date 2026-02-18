@@ -1,11 +1,1 @@
-<div class="space-y-1 {% if record.read %}opacity-50{% endif %}">
-  <div class="font-bold text-base">{{ record.notification.title }}</div>
-  <div class="text-sm text-gray-600 dark:text-gray-400">{{ record.notification.message }}</div>
-  {% if record.notification.links %}
-    <div class="mt-2">
-      {% for label, url in record.notification.links.items %}
-        {% include "generic/chip_button.html" with label=label url=url %}
-      {% endfor %}
-    </div>
-  {% endif %}
-</div>
+<div class="{% if record.read %}opacity-50{% endif %}">{{ record.latest_event.title }}</div>

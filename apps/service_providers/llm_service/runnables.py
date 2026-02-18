@@ -332,6 +332,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
 
     def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str]:
         assistant_runnable = self.adapter.get_openai_assistant()
+        error: Exception | None = None
 
         for _i in range(3):
             error = None

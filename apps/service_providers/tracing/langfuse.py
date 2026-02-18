@@ -18,7 +18,7 @@ from .base import ServiceNotInitializedException, ServiceReentryException, Trace
 from .const import SpanLevel
 
 if TYPE_CHECKING:
-    from langchain.callbacks.base import BaseCallbackHandler
+    from langchain_core.callbacks.base import BaseCallbackHandler
     from langfuse import Langfuse
 
     from apps.experiments.models import ExperimentSession

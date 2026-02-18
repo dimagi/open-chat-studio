@@ -16,7 +16,7 @@ from .base import TraceContext, Tracer
 from .callback import wrap_callback
 
 if TYPE_CHECKING:
-    from langchain.callbacks.base import BaseCallbackHandler
+    from langchain_core.callbacks.base import BaseCallbackHandler
 
     from apps.experiments.models import ExperimentSession
 
@@ -53,7 +53,7 @@ class TracingService:
 
         tracers = []
         if experiment and experiment.id and experiment.team_id:
-            ocs_tracer = OCSTracer(experiment.id, experiment.team_id)
+            ocs_tracer = OCSTracer(experiment, experiment.team_id)
             tracers.append(ocs_tracer)
 
         if experiment and experiment.trace_provider:

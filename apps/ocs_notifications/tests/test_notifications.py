@@ -137,12 +137,12 @@ class TestLlmErrorNotification:
         error_message = "Token limit exceeded"
 
         # Act
-        llm_error_notification(experiment.id, session.id, error_message)
+        llm_error_notification(experiment, session, error_message)
 
         # Assert
         expected_message = f"An LLM error occurred for participant '{session.participant.identifier}': {error_message}"
         mock_create_notification.assert_called_once_with(
-            title=f"LLM Error Detected for '{experiment.name}'",
+            title=f"LLM Error Detected for '{experiment}'",
             message=expected_message,
             level=LevelChoices.ERROR,
             team=experiment.team,

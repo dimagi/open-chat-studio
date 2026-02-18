@@ -116,6 +116,8 @@ class PipelineStartAction(EventActionHandlerBase):
                 messages = [last_message.to_langchain_message()]
             else:
                 messages = []
+        else:
+            raise ValueError(f"Unknown input type: {input_type}")
 
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
         participant_data = session.participant.global_data | session.participant_data_from_experiment

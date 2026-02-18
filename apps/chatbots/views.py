@@ -785,10 +785,9 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
             )
             new_experiment.create_version_task_id = task_id
             new_experiment.save(update_fields=["create_version_task_id"])
-        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
-    else:
-        experiment_id = kwargs["pk"]
-        return single_chatbot_home(request, team_slug, experiment_id)
+            return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
+    experiment_id = kwargs["pk"]
+    return single_chatbot_home(request, team_slug, experiment_id)
 
 
 def home(

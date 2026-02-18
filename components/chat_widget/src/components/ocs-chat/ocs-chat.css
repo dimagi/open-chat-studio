@@ -107,7 +107,7 @@
     * @prop --selected-files-bg-color: Selected files container background color (--chat-window-bg-color)
     * @prop --selected-files-border-color: Selected files container border color (--header-border-color)
     *
-    * @prop --selected-file-bg-color: Selected file item background color (--message-system-bg-color)
+    * @prop --selected-file-bg-color: Selected file item background color (--button-background-color-hover)
     * @prop --selected-file-font-size: Selected file item font size (--chat-window-font-size-sm)
     * @prop --selected-file-name-color: Selected file name color (--message-assistant-text-color)
     * @prop --selected-file-size-color: Selected file size display color (--input-placeholder-color)
@@ -262,7 +262,7 @@
     --selected-files-border-color: var(--header-border-color); /* #f3f4f6 */
 
     /* Selected file item variables */
-    --selected-file-bg-color: var(--message-system-bg-color); /* #f3f4f6 */
+    --selected-file-bg-color: var(--button-background-color-hover); /* #f3f4f6 */
 
     /* Selected file text variables */
     --selected-file-font-size: var(--chat-window-font-size-sm);

@@ -14,9 +14,7 @@ class CustomActionTable(tables.Table):
         orderable=True,
     )
     health_status = tables.TemplateColumn(
-        template_name="custom_actions/health_status_column.html",
-        verbose_name="Status",
-        orderable=False
+        template_name="custom_actions/health_status_column.html", verbose_name="Status", orderable=False
     )
     actions = actions.ActionsColumn(
         actions=[

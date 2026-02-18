@@ -1471,6 +1471,7 @@ class ExperimentSession(BaseTeamModel):
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
         """
+        trace_service = None
         try:
             with current_team(self.team):
                 experiment = use_experiment or self.experiment

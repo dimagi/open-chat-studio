@@ -1,16 +1,26 @@
+import datetime
 from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import Group
+from django.utils import timezone
+from time_machine import travel
 
-from apps.ocs_notifications.models import LevelChoices, UserNotification, UserNotificationPreferences
+from apps.ocs_notifications.models import EventType, EventUser, LevelChoices, UserNotificationPreferences
 from apps.ocs_notifications.utils import (
+    DurationTimeDelta,
     create_identifier,
     create_notification,
-    send_notification_email,
+    get_users_to_be_notified,
+    is_notification_muted,
+    mute_notification,
+    send_notification_email_async,
+    should_send_email,
     toggle_notification_read,
 )
-from apps.utils.factories.notifications import UserNotificationFactory
+from apps.teams.backends import add_user_to_team
+from apps.utils.factories.notifications import EventTypeFactory, EventUserFactory, NotificationEventFactory
+from apps.utils.factories.team import TeamFactory
 
 
 @pytest.fixture(autouse=True)
@@ -20,55 +30,60 @@ def enable_flag_for_notifications():
 
 
 @pytest.mark.django_db()
-def test_email_not_sent_when_preference_doesnt_exist(team_with_users, mailoutbox):
-    """
-    Test that email is not sent when user notification preferences don't exist.
-    """
-    user = team_with_users.members.first()
-    user_notification = UserNotificationFactory.create(user=user, notification__level=LevelChoices.ERROR)
+class TestSendNotificationEmail:
+    def test_email_not_sent_when_preference_doesnt_exist(self, team_with_users, mailoutbox):
+        """
+        Test that email is not sent when user notification preferences don't exist.
+        """
+        user = team_with_users.members.first()
+        event_type = EventTypeFactory.create(team=team_with_users, level=LevelChoices.ERROR)
+        EventUserFactory.create(user=user, team=team_with_users, event_type=event_type)
+        notification_event = NotificationEventFactory.create(team=team_with_users, event_type=event_type)
 
-    send_notification_email(user_notification)
-    assert len(mailoutbox) == 0
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("notification_level", "email_preference_level", "should_send"),
-    [
-        # When preference is INFO, send all types
-        (LevelChoices.WARNING, LevelChoices.INFO, True),
-        # When preference is WARNING, only send WARNING and ERROR
-        (LevelChoices.INFO, LevelChoices.WARNING, False),
-        # When preference is ERROR, only send ERROR
-        (LevelChoices.ERROR, LevelChoices.ERROR, True),
-    ],
-)
-def test_send_notification_email_respects_levels(
-    team_with_users, notification_level, email_preference_level, should_send, mailoutbox
-):
-    """
-    Test that email notifications respect user notification level preferences.
-
-    Verifies that emails are sent only when the notification level meets or exceeds
-    the user's email notification threshold level.
-    """
-    user = team_with_users.members.first()
-    user_notification = UserNotificationFactory.create(user=user, notification__level=notification_level)
-
-    # Create user preferences with email level threshold
-    UserNotificationPreferences.objects.create(
-        team=user_notification.team,
-        user=user,
-        email_enabled=True,
-        email_level=email_preference_level,
-    )
-
-    send_notification_email(user_notification)
-
-    if should_send:
-        assert len(mailoutbox) == 1
-    else:
+        send_notification_email_async([user.id], notification_event)
         assert len(mailoutbox) == 0
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("notification_level", "email_preference_level", "should_send"),
+        [
+            # When preference is INFO, send all types
+            (LevelChoices.WARNING, LevelChoices.INFO, True),
+            # When preference is WARNING, only send WARNING and ERROR
+            (LevelChoices.INFO, LevelChoices.WARNING, False),
+            # When preference is ERROR, only send ERROR
+            (LevelChoices.ERROR, LevelChoices.ERROR, True),
+        ],
+    )
+    def test_send_notification_email_respects_levels(
+        self, team_with_users, notification_level, email_preference_level, should_send, mailoutbox
+    ):
+        """
+        Test that email notifications respect user notification level preferences using get_users_to_be_notified and
+        should_send_email.
+
+        Verifies that emails are sent only when the notification level meets or exceeds
+        the user's email notification threshold level.
+        """
+        user = team_with_users.members.first()
+        event_type = EventTypeFactory.create(team=team_with_users, level=notification_level)
+        NotificationEventFactory.create(team=team_with_users, event_type=event_type)
+
+        # Create user preferences with email level threshold
+        UserNotificationPreferences.objects.create(
+            team=team_with_users,
+            user=user,
+            email_enabled=True,
+            email_level=email_preference_level,
+        )
+
+        # get_users_to_be_notified returns EventUser objects
+        user_info = get_users_to_be_notified(team_with_users, permissions=[])
+        assert user in user_info, "User should be included in the notification recipients"
+
+        # should_send_email determines if email should be sent for this user/event
+        user_email_info = user_info[user]
+        assert should_send_email(user_email_info, event_level=notification_level) == should_send
 
 
 @pytest.mark.django_db()
@@ -78,7 +93,7 @@ class TestCreateNotification:
         Test that creating a notification stores the event data correctly.
 
         Verifies that:
-        1. The event_data passed during notification creation is stored in the Notification model.
+        1. The event_data passed during notification creation is stored in the EventType model.
         """
         event_data = {"action": "test_event", "details": {"key": "value"}}
 
@@ -91,19 +106,20 @@ class TestCreateNotification:
             event_data=event_data,
         )
 
-        notification = UserNotification.objects.filter(user=team_with_users.members.first()).first().notification
-        assert notification.event_data == event_data, "Event data should be stored correctly in the Notification model."
+        identifier = create_identifier("event-data-test", event_data)
+        event_type = EventType.objects.get(team=team_with_users, identifier=identifier)
+        assert event_type.event_data == event_data, "Event data should be stored correctly in the EventType model."
 
     def test_create_notification_notifies_user_when_notification_created(self, team_with_users):
         """
         Test that creating a new notification notifies the recipient user.
 
         Verifies that:
-        1. A UserNotification entry is created for the specified user
+        1. An EventUser entry is created for the specified user
         2. The user's unread notification cache is invalidated
         """
         user = team_with_users.members.first()
-        assert UserNotification.objects.filter(user=user).count() == 0
+        assert EventUser.objects.filter(user=user).count() == 0
 
         create_notification(
             title="Test Notification",
@@ -113,7 +129,7 @@ class TestCreateNotification:
             slug="test-notification",
         )
 
-        assert UserNotification.objects.filter(user=user).count() == 1
+        assert EventUser.objects.filter(user=user).count() == 1
 
     def test_user_is_notified_again(self, team_with_users):
         """
@@ -124,7 +140,15 @@ class TestCreateNotification:
         2. After marking a notification as read, creating the same notification
            again resets it to unread
         """
+        team_with_users.members.last().delete()
         user = team_with_users.members.first()
+
+        # Ensure user has in-app notifications enabled
+        UserNotificationPreferences.objects.update_or_create(
+            team=team_with_users,
+            user=user,
+            defaults={"in_app_enabled": True, "in_app_level": 0},
+        )
 
         # Create initial notification
         create_notification(
@@ -139,8 +163,8 @@ class TestCreateNotification:
         assert user.unread_notifications_count(team_with_users) == 1
 
         # Mark it as read to retrigger it when the same notification is created again
-        user_notification = UserNotification.objects.get(user=user)
-        toggle_notification_read(user, user_notification=user_notification, read=True)
+        event_user = EventUser.objects.get(user=user)
+        toggle_notification_read(user, event_user=event_user, read=True)
 
         # Verify it's now marked as read
         assert user.unread_notifications_count(team_with_users) == 0
@@ -156,8 +180,8 @@ class TestCreateNotification:
 
         # Should be renotified (unread again)
         assert user.unread_notifications_count(team_with_users) == 1
-        user_notification.refresh_from_db()
-        assert user_notification.read is False, "UserNotification should be marked as unread again"
+        event_user.refresh_from_db()
+        assert event_user.read is False, "EventUser should be marked as unread again"
 
     def test_create_identifier(self):
         """
@@ -207,5 +231,137 @@ class TestCreateNotification:
         )
 
         # # Verify that only the user with permission received the notification
-        assert UserNotification.objects.filter(user_id=user_with_perm.user_id).count() == 1
-        assert UserNotification.objects.filter(user_id=user_without_perm.user_id).count() == 0
+        assert EventUser.objects.filter(user_id=user_with_perm.user_id).count() == 1
+        assert EventUser.objects.filter(user_id=user_without_perm.user_id).count() == 0
+
+    @patch("apps.ocs_notifications.utils.create_identifier")
+    def test_user_notification_not_created_when_muted(self, create_identifier, team_with_users):
+        """
+        Ensure that when a notification is muted for a user, creating a notification with the same identifier
+        does not unmute or alter the existing EventUser for that user.
+        """
+        user = team_with_users.members.first()
+        identifiers = ["muted-notification", "unmuted-notification"]
+        create_identifier.side_effect = identifiers
+
+        muted_event_type = EventType.objects.create(
+            team=team_with_users,
+            identifier="muted-notification",
+            level=LevelChoices.INFO,
+        )
+        mute_notification(
+            user=user,
+            team=team_with_users,
+            event_type=muted_event_type,
+            timedelta=DurationTimeDelta.DURATION_8H,
+        )
+
+        create_notification(
+            title="Muted Notification",
+            message="This is not an important message.",
+            level=LevelChoices.INFO,
+            team=team_with_users,
+            slug="slug",
+            event_data={},
+        )
+
+        create_notification(
+            title="Non-muted Notification",
+            message="This is an important message.",
+            level=LevelChoices.INFO,
+            team=team_with_users,
+            slug="slug",
+            event_data={},
+        )
+
+        # Both notifications should have been created
+        assert EventType.objects.filter(team=team_with_users, identifier__in=identifiers).count() == 2
+
+        assert EventUser.objects.filter(user=user, event_type__identifier="muted-notification").count() == 1
+        assert EventUser.objects.filter(user=user, event_type__identifier="unmuted-notification").count() == 1
+
+
+@pytest.mark.django_db()
+class TestNotificationMuting:
+    def test_mute_notification_for_8h(self, team_with_users):
+        """Ensure that muting for 8 hours is team-specific and expires correctly."""
+        user = team_with_users.members.first()
+        team2 = TeamFactory()
+        add_user_to_team(team2, user)
+        event_type = EventType.objects.create(
+            team=team_with_users,
+            identifier="mute-8h-test",
+            level=LevelChoices.INFO,
+        )
+        event_type_team2 = EventType.objects.create(
+            team=team2,
+            identifier="mute-8h-test",
+            level=LevelChoices.INFO,
+        )
+
+        with travel(timezone.now(), tick=False) as freezer:
+            mute_notification(
+                user=user,
+                team=team_with_users,
+                event_type=event_type,
+                timedelta=DurationTimeDelta.DURATION_8H,
+            )
+
+            # Verify team-specific muting
+            assert (
+                is_notification_muted(EventUser.objects.get(user=user, team=team_with_users, event_type=event_type))
+                is True
+            )
+            (
+                EventUser.objects.filter(user=user, team=team2, event_type=event_type_team2).exists() is False,
+                "Mute should not leak to other teams",
+            )
+
+            # Verify expiration
+            freezer.shift(datetime.timedelta(hours=8, minutes=1))
+
+            assert (
+                is_notification_muted(EventUser.objects.get(user=user, team=team_with_users, event_type=event_type))
+                is False
+            )
+
+    def test_mute_notification_forever(self, team_with_users):
+        """Ensure that muting indefinitely is team-specific and persists."""
+        user = team_with_users.members.first()
+        team2 = TeamFactory()
+        add_user_to_team(team2, user)
+        event_type = EventType.objects.create(
+            team=team_with_users,
+            identifier="mute-forever-test",
+            level=LevelChoices.INFO,
+        )
+        event_type_team2 = EventType.objects.create(
+            team=team2,
+            identifier="mute-forever-test",
+            level=LevelChoices.INFO,
+        )
+
+        with travel(timezone.now(), tick=False) as freezer:
+            mute_notification(
+                user=user,
+                team=team_with_users,
+                event_type=event_type,
+                timedelta=DurationTimeDelta.FOREVER,
+            )
+
+            # Verify team-specific muting
+            assert (
+                is_notification_muted(EventUser.objects.get(user=user, team=team_with_users, event_type=event_type))
+                is True
+            )
+            (
+                EventUser.objects.filter(user=user, team=team2, event_type=event_type_team2).exists() is False,
+                "Mute should not leak to other teams",
+            )
+
+            # Verify it stays muted long-term
+            freezer.shift(datetime.timedelta(days=365 * 10))
+            assert (
+                is_notification_muted(EventUser.objects.get(user=user, team=team_with_users, event_type=event_type))
+                is True
+            )

@@ -16,7 +16,7 @@ from apps.trace.models import Trace, TraceStatus
 from .base import TraceContext, Tracer
 
 if TYPE_CHECKING:
-    from apps.experiments.models import ExperimentSession
+    from apps.experiments.models import Experiment, ExperimentSession
 
 logger = logging.getLogger("ocs.tracing")
 
@@ -26,12 +26,13 @@ class OCSTracer(Tracer):
     Internal OCS tracer that creates Trace objects in the database.
     """
 
-    def __init__(self, experiment_id: int, team_id: int):
+    def __init__(self, experiment: Experiment, team_id: int):
         super().__init__(OCS_TRACE_PROVIDER, {})
-        self.experiment_id = experiment_id
+        self.experiment = experiment
         self.team_id = team_id
         self.start_time: float = None
         self.trace_record = None
+        self.session: ExperimentSession | None = None
         self.error_detected = False
         self.error_message: str = ""
 
@@ -53,27 +54,18 @@ class OCSTracer(Tracer):
         Creates a database Trace record on entry and updates it with
         duration and status on exit.
         """
-        from apps.experiments.models import Experiment
 
         # Set base class state from context
         self.trace_name = trace_context.name
         self.trace_id = trace_context.id
         self.session = session
 
-        # Determine experiment ID (handle versioning)
-        try:
-            experiment = Experiment.objects.get(id=self.experiment_id)
-        except Experiment.DoesNotExist:
-            logger.exception(f"Experiment with id {self.experiment_id} does not exist. Cannot start trace.")
-            yield trace_context
-            return
-
-        experiment_id = self.experiment_id
+        experiment_id = self.experiment.id
         experiment_version_number = None
-        if experiment.is_a_version:
+        if self.experiment.is_a_version:
             # Trace needs to be associated with the working version of the experiment
-            experiment_id = experiment.working_version_id
-            experiment_version_number = experiment.version_number
+            experiment_id = self.experiment.working_version_id
+            experiment_version_number = self.experiment.version_number
 
         # Create database trace record
         self.trace_record = Trace.objects.create(
@@ -119,14 +111,14 @@ class OCSTracer(Tracer):
 
                     logger.debug(
                         "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
-                        self.experiment_id,
+                        self.experiment.id,
                         session.id,
                         duration_ms,
                     )
                 except Exception:
                     logger.exception(
                         "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
-                        self.experiment_id,
+                        self.experiment.id,
                         session.id,
                         self.trace_record.output_message_id,
                     )
@@ -199,7 +191,7 @@ class OCSTracer(Tracer):
         """
         from apps.experiments.models import Experiment
 
-        cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment_id)
+        cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment.id)
         cache.delete(cache_key)
 
 
@@ -218,7 +210,7 @@ class OCSCallbackHandler(BaseCallbackHandler):
             error_message = self.tracer.error_message
 
         llm_error_notification(
-            experiment_id=self.tracer.experiment_id, session_id=self.tracer.session.id, error_message=error_message
+            experiment=self.tracer.experiment, session=self.tracer.session, error_message=error_message
         )
 
     def on_chain_error(self, *args, **kwargs) -> None:

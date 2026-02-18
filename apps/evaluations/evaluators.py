@@ -64,7 +64,7 @@ class LLMResponseMixin(BaseModel):
 
 
 class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
-    model_config = ConfigDict(evaluator_schema=EvaluatorSchema(label="LLM Evaluator", icon="fa-robot"))
+    model_config = ConfigDict(evaluator_schema=EvaluatorSchema(label="LLM Evaluator", icon="fa-robot"))  # ty: ignore[invalid-key]
 
     prompt: str = Field(
         description=(
@@ -135,7 +135,7 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
     """Runs python"""
 
     model_config = ConfigDict(
-        evaluator_schema=EvaluatorSchema(
+        evaluator_schema=EvaluatorSchema(  # ty: ignore[invalid-key]
             label="Python Evaluator",
             icon="fa-solid fa-file-code",
         )

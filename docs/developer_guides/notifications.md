@@ -7,10 +7,13 @@ The `ocs_notifications` app provides a **team-scoped notification system** for O
 This system is designed to:
 
 - **Alert team members** about important events (custom action health checks, evaluations, data syncs, etc.)
-- **Notify users asynchronously** without blocking your feature code
+- **Handle per-user bookkeeping automatically** (read/unread, mute, do-not-disturb)
 - **Support multi-channel delivery** with granular user preferences (in-app, email, level thresholds)
-- **Reduce notification fatigue** through deduplication and severity filtering
+- **Reduce notification fatigue** through deduplication, muting, and severity filtering
 - **Persist notifications** so users can view, filter, and manage them later
+
+> Note: Notifications are gated by the `flag_notifications` feature flag. If the flag is disabled for a team,
+> `create_notification()` is a no-op.
 
 ## Core Concepts
 
@@ -28,17 +31,17 @@ Users configure separate thresholds for in-app and email delivery. For example, 
 
 ### The Identifier System
 
-Notifications are **deduplicated** by combining a slug and event data. When you call `create_notification()` with the same slug and event_data, the system updates the existing notification rather than creating a duplicate.
+Notifications are **threaded** by combining a slug and event data. The app hashes `{"slug": slug, "data": event_data}` into a SHA1 identifier, stored on **EventType** - which identifies an event in the system. When you call `create_notification()` with the same slug and event_data, the system reuses the same EventType and appends a new **NotificationEvent** to that thread.
 
 **How deduplication works:**
 
-- **Same slug + Same event_data** → Updates existing notification, re-notifies users who previously read it
-- **Same slug + Different event_data** → Creates separate notification (different event thread)
+- **Same slug + Same event_data** → Reuses the same event thread; creates a new NotificationEvent and re-notifies users who previously read it
+- **Same slug + Different event_data** → Creates a separate event thread
 
 **Example:**
 
 ```python
-# First time: Creates notification
+# First time: Creates event thread + first event
 create_notification(
     slug="payment-api-timeout",
     event_data={"api_id": 1},  # Unique to this API
@@ -48,10 +51,11 @@ create_notification(
 # Later: Same API times out again
 create_notification(
     slug="payment-api-timeout",
-    event_data={"api_id": 1},  # SAME → updates existing
+    event_data={"api_id": 1},  # SAME → same thread
     # ... other fields
 )
-# → Existing notification is updated
+# → Same EventType (thread)
+# → New NotificationEvent created
 # → Users who read it are marked unread (gets re-notified)
 
 # Different API times out
@@ -60,17 +64,23 @@ create_notification(
     event_data={"api_id": 2},  # DIFFERENT → separate notification
     # ... other fields
 )
-# → New notification thread for this API
+# → New EventType (thread) for this API
 ```
 
 ### The Data Model
 
-Notifications are split into two models:
+Notifications are split into three primary models:
 
-- **`Notification`** (per team, per slug+event_data): Shared across all team members; contains the title, message, and event data
-- **`UserNotification`** (per user): Tracks which users have seen the notification, read/unread status for each user
+- **`EventType`** (per team, per slug+event_data): The event thread key. Stores identifier, event data, and severity level.
+- **`NotificationEvent`** (per occurrence): Each call to `create_notification()` creates a new event with title/message/links.
+- **`EventUser`** (per user per event thread): Tracks read/unread status and muting for each user.
 
-When you call `create_notification()`, the system creates/updates both automatically, applying permission filters when determining which users receive it.
+When you call `create_notification()`, the system creates/updates these automatically, applying permission filters when determining which users receive it.
+
+User preferences live in **`UserNotificationPreferences`** and control:
+- In-app enabled + minimum in-app level (used for unread counts/badge)
+- Email enabled + minimum email level (used when sending emails)
+- Do Not Disturb (blocks all notifications for a duration)
 
 
 ## How to Create Notifications
@@ -104,7 +114,7 @@ For better code organization and maintainability, **preferably add your notifica
 - **`team`** (Team): Team to notify (determines who receives this notification)
 - **`slug`** (str): Identifier for notification type; groups related notifications
   - Use format: `"feature-event-type"` (e.g., `"custom-action-health-check"`)
-  - Same slug + same event_data = updates existing notification
+  - Same slug + same event_data = same event thread
 
 ### Optional Parameters
 
@@ -125,7 +135,13 @@ For better code organization and maintainability, **preferably add your notifica
   - Use for: linking to the relevant bot, session, or admin page
   - Example: `{"View Bot": "/experiments/123/", "View Session": "/sessions/456/"}`
   - Default: empty dict
-  
+
+### Delivery Behavior
+
+- **In-app**: Notifications always create `EventUser` rows for eligible users. The unread badge/count respects the
+  user’s in-app level preference (and can be disabled entirely).
+- **Email**: Email is sent synchronously when a notification is created and the user meets their email preferences.
+- **Do Not Disturb / Mute**: If a user has Do Not Disturb enabled or muted that event thread, they won’t be notified of new events.
 
 ## When & Where to Call create_notification()
 
@@ -157,18 +173,3 @@ Follow this checklist when integrating notifications:
    - All team members? Or only users with specific permissions?
    - Use `permissions` parameter if role-based filtering is needed
    - Test with users having different permissions
-
-6. **Choose where to call it**: Signal, view, or Celery task?
-   - Signals: For model lifecycle events
-   - Views: For user-triggered actions
-   - Celery: For background job results
-
-7. **Write tests**: Create unit tests verifying the notification is sent
-   - Use `UserNotification.objects.filter(...)` to assert notification was created
-   - Test permission filters if used
-   - Test with different notification level preferences
-
-8. **Document it**: Add code comments explaining what triggers the notification
-   - What slug/event_data is used and why
-   - Who receives it and why
-   - Example: Link to AGENTS.md or add inline docstring
