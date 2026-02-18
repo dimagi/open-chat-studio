@@ -51,6 +51,8 @@ class Flags(FlagInfo, Enum):
 
     CHAT_WIDGET = ("flag_chat_widget", "Use embedded chat widget instead of full-page chat UI (POC)")
 
+    HUMAN_ANNOTATIONS = ("flag_human_annotations", "Human annotation queues for labeling and review", "", [], True)
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)

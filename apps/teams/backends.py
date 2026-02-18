@@ -99,6 +99,7 @@ CONTENT_TYPES = {
         "evaluationresult",
         "evaluationrunaggregate",
     ],
+    "human_annotations": ["annotationqueue", "annotationitem", "annotation"],
     "trace": ["trace", "span"],
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],
@@ -185,6 +186,7 @@ GROUPS = [
         [
             AppPermSetDef("experiments", ALL),
             AppPermSetDef("bot_channels", ALL),
+            AppPermSetDef("human_annotations", ALL),
             ModelPermSetDef("annotations", "tag", [VIEW]),
             ModelPermSetDef("annotations", "customtaggeditem", ALL),
             ModelPermSetDef("annotations", "usercomment", ALL),
