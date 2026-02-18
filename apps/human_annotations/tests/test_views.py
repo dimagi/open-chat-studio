@@ -103,6 +103,30 @@ def test_queue_detail(client, team_with_users, queue):
 
 
 @pytest.mark.django_db()
+def test_queue_detail_shows_aggregates(client, team_with_users, queue, user):
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 4, "notes": "Good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    # Compute aggregates
+    from apps.human_annotations.aggregation import compute_aggregates_for_queue
+
+    compute_aggregates_for_queue(queue)
+
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Aggregate Scores" in content
+    assert "quality_score" in content
+
+
+@pytest.mark.django_db()
 def test_queue_items_table(client, team_with_users, queue):
     AnnotationItemFactory(queue=queue, team=team_with_users)
     url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])

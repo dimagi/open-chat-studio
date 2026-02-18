@@ -203,9 +203,21 @@ class Annotation(BaseTeamModel):
             self._update_item_review_count()
 
     def _update_item_review_count(self):
-        """Increment item review count and update status."""
+        """Increment item review count, update status, and recompute queue aggregates."""
         with transaction.atomic():
             item = AnnotationItem.objects.select_for_update().get(pk=self.item_id)
             item.review_count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
             item.update_status(save=False)
             item.save(update_fields=["review_count", "status"])
+
+        from apps.human_annotations.aggregation import compute_aggregates_for_queue
+
+        compute_aggregates_for_queue(item.queue)
+
+
+class AnnotationQueueAggregate(BaseTeamModel):
+    """Stores aggregated annotation results for a queue."""
+
+    queue = models.OneToOneField(AnnotationQueue, on_delete=models.CASCADE, related_name="aggregate")
+    aggregates = models.JSONField(default=dict, help_text="Aggregated stats per schema field")
+    computed_at = models.DateTimeField(auto_now=True)

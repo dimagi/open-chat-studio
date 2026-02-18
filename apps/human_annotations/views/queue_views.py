@@ -125,6 +125,10 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
             "human_annotations:queue_items_table",
             args=[self.request.team.slug, queue.pk],
         )
+
+        aggregate = getattr(queue, "aggregate", None)
+        context["aggregates"] = aggregate.aggregates if aggregate else {}
+
         return context
 
 
