@@ -12,7 +12,7 @@ from apps.utils.factories.experiment import ExperimentSessionFactory
 @pytest.mark.django_db()
 class TestOCSTracer:
     def test_ending_trace_creates_trace_object(self, experiment):
-        tracer = OCSTracer(experiment.id, experiment.team_id)
+        tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory()
 
         # Initially no traces exist
@@ -28,7 +28,7 @@ class TestOCSTracer:
     def test_noop(self, experiment):
         """Span context manager should do nothing if the tracer is not ready"""
 
-        tracer = OCSTracer(experiment.id, experiment.team_id)
+        tracer = OCSTracer(experiment, experiment.team_id)
 
         # Using span context manager when tracer is not ready should not raise an error
         span_context = TraceContext(id=uuid4(), name="test_span")
@@ -49,7 +49,7 @@ class TestOCSTracer:
         A span that is started should be added to the current trace. If there is an active span, it should be added
         to the trace with its parent span set to the current span.
         """
-        tracer = OCSTracer(experiment.id, experiment.team_id)
+        tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory()
 
         trace_id = uuid4()
@@ -91,7 +91,7 @@ class TestOCSTracer:
         """
         Test that a span with an error is properly recorded.
         """
-        tracer = OCSTracer(experiment.id, experiment.team_id)
+        tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory()
 
         trace_id = uuid4()
@@ -116,7 +116,7 @@ class TestOCSTracer:
         assert span.error is not None
 
     def test_record_experiment_version(self, experiment):
-        tracer = OCSTracer(experiment.id, experiment.team_id)
+        tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory()
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
@@ -126,7 +126,7 @@ class TestOCSTracer:
             assert tracer.trace_record.experiment_id == experiment.id
 
         version = experiment.create_new_version()
-        tracer = OCSTracer(version.id, experiment.team_id)
+        tracer = OCSTracer(version, experiment.team_id)
         trace_context = TraceContext(id=uuid4(), name="test_trace")
         with tracer.trace(trace_context=trace_context, session=session):
             assert tracer.trace_record.experiment_version_number == version.version_number
@@ -134,7 +134,7 @@ class TestOCSTracer:
 
     def test_trace_error_recording(self, experiment):
         """Test that errors during trace execution are captured in the trace record"""
-        tracer = OCSTracer(experiment.id, experiment.team_id)
+        tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory()
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
@@ -155,11 +155,15 @@ class TestOCSCallbackHandler:
     @patch("apps.service_providers.tracing.ocs_tracer.llm_error_notification")
     def test_on_llm_error_creates_notification(self, mock_llm_error_notification):
         """Test that LLM error handler creates a notification."""
+        # Set up experiment mock
+        experiment = Mock(id=456)
+
         # Set up tracer
-        tracer = OCSTracer(experiment_id=456, team_id=123)
+        tracer = OCSTracer(experiment, team_id=123)
         tracer.trace_id = str(uuid4())
 
         # Set up a session with a participant so the notification includes context
+
         participant = Mock()
         participant.identifier = "user@example.com"
         session = Mock()
@@ -176,8 +180,8 @@ class TestOCSCallbackHandler:
 
         # Verify llm_error_notification was called with correct parameters
         mock_llm_error_notification.assert_called_once_with(
-            experiment_id=456,
-            session_id=789,
+            experiment=experiment,
+            session=session,
             error_message=error_message,
         )
 

@@ -79,9 +79,7 @@ def custom_action_unexpected_error_notification(custom_action, function_def, exc
 
 
 @silence_exceptions(logger, log_message="Failed to create LLM error notification")
-def llm_error_notification(experiment_id: int, session_id: int, error_message: str):
-    experiment = Experiment.objects.get(id=experiment_id)
-    session = ExperimentSession.objects.get(id=session_id)
+def llm_error_notification(experiment: Experiment, session: ExperimentSession, error_message: str):
     message = f"An LLM error occurred for participant '{session.participant.identifier}': {error_message}"
     create_notification(
         title=f"LLM Error Detected for '{experiment}'",
@@ -89,7 +87,7 @@ def llm_error_notification(experiment_id: int, session_id: int, error_message: s
         level=LevelChoices.ERROR,
         team=experiment.team,
         slug="llm-error",
-        event_data={"bot_id": experiment_id, "error_message": error_message},
+        event_data={"bot_id": experiment.id, "error_message": error_message},
         permissions=["experiments.change_experiment"],
         links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
     )
