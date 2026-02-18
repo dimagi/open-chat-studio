@@ -1,3 +1,8 @@
+from unittest import mock
+
+from pydantic import BaseModel
+
+from apps.help.base import BaseHelpAgent
 from apps.help.registry import AGENT_REGISTRY, register_agent
 from apps.help.utils import extract_function_signature, get_python_node_coder_prompt
 
@@ -78,3 +83,42 @@ class TestAgentRegistry:
         finally:
             AGENT_REGISTRY.clear()
             AGENT_REGISTRY.update(original_registry)
+
+
+class StubInput(BaseModel):
+    prompt: str
+
+
+class StubOutput(BaseModel):
+    result: str
+
+
+class StubAgent(BaseHelpAgent[StubInput, StubOutput]):
+    name = "stub"
+    mode = "low"
+
+    @classmethod
+    def get_system_prompt(cls, input):
+        return "You are a stub."
+
+    @classmethod
+    def get_user_message(cls, input):
+        return input.prompt
+
+    def parse_response(self, response) -> StubOutput:
+        return StubOutput(result=response["messages"][-1].text)
+
+
+class TestBaseHelpAgent:
+    @mock.patch("apps.help.base.build_system_agent")
+    def test_run_invokes_agent_and_returns_parsed_output(self, mock_build):
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"messages": [mock.Mock(text="hello")]}
+        mock_build.return_value = mock_agent
+
+        agent = StubAgent(input=StubInput(prompt="say hi"))
+        result = agent.run()
+
+        assert result == StubOutput(result="hello")
+        mock_build.assert_called_once_with("low", "You are a stub.")
+        mock_agent.invoke.assert_called_once_with({"messages": [{"role": "user", "content": "say hi"}]})
