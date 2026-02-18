@@ -482,11 +482,11 @@ function GenerateCodeSection({
     setGenerating(true);
     apiClient.generateCode(prompt, currentCode).then((generatedCode) => {
       setGenerating(false);
-      if (generatedCode.error || generatedCode.response === "") {
+      if (generatedCode.error || !generatedCode.response?.code) {
         setError(generatedCode.error || "No code generated. Please provide more information.");
         return;
-      } else if (generatedCode.response) {
-        setGenerated(generatedCode.response);
+      } else {
+        setGenerated(generatedCode.response.code);
         setShowGenerate(false);
       }
     }).catch(() => {
@@ -851,7 +851,7 @@ export function LlmWidget(props: WidgetParams) {
   const readOnly = usePipelineStore((state) => state.readOnly);
 
   const getSelectedModelSchema = (selectedModelId: string) => {
-    const selectedModelName = parameterValues.LlmProviderModelId.find(model => 
+    const selectedModelName = parameterValues.LlmProviderModelId.find(model =>
       String(model.value) === String(selectedModelId)
     )?.label.split(": ")[1] || "";
 
@@ -873,7 +873,7 @@ export function LlmWidget(props: WidgetParams) {
         // Update the LLM parameters only when the model's parameter set changed
         const currModelParamSchema = getSelectedModelSchema(providerModelId);
         const prevModelParamSchema = getSelectedModelSchema(old.data.params.llm_provider_model_id);
-        
+
         if (currModelParamSchema && prevModelParamSchema != currModelParamSchema) {
           let defaultLlmParams = {};
           // Update the parameter set in the state with the new model's default parameters
@@ -907,7 +907,7 @@ export function LlmWidget(props: WidgetParams) {
     return acc;
   }, {} as ProviderModelsByType);
 
-  
+
   const providerId = concatenate(props.nodeParams.llm_provider_id);
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
   const modelParameters = props.nodeParams.llm_model_parameters || {};
