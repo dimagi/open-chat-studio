@@ -60,7 +60,7 @@ from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 
 if TYPE_CHECKING:
-    from apps.channels.models import BaseMessage
+    from apps.channels.datamodels import BaseMessage
 
 logger = logging.getLogger("ocs.channels")
 

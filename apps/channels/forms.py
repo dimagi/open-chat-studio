@@ -7,7 +7,7 @@ from functools import cached_property
 import phonenumbers
 from django import forms
 from django.conf import settings
-from django.contrib.postgres.forms import SimpleArrayField
+from django.contrib.postgres.forms import SimpleArrayField  # ty: ignore[unresolved-import]
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types

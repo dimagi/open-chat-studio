@@ -184,3 +184,4 @@ exclude = ["migrations/"]
 
 [tool.ty.rules]
 all = "ignore"
+unresolved-import = "error"
