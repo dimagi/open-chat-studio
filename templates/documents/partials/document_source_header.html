@@ -72,7 +72,7 @@
   {% endif %}
 </div>
 <dialog id="sync_logs_modal_{{ document_source.id }}" class="modal">
-  <div class="modal-box max-w-4xl bg-base-100 border border-base-300">
+  <div class="modal-box max-w-4xl max-h-[70vh] flex flex-col bg-base-100 border border-base-300">
     <form method="dialog">
       <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
     </form>
@@ -80,7 +80,7 @@
       <i class="{{ document_source.source_type_enum.css_logo }}" aria-hidden="true"></i>
       Sync Logs: {{ document_source.source_config }}
     </h3>
-    <div class="mb-4">
+    <div class="mb-4 shrink-0">
       <label class="label cursor-pointer justify-start gap-2">
         <input
           type="checkbox"
@@ -93,7 +93,7 @@
         <span class="label-text">Show errors only</span>
       </label>
     </div>
-    <div id="sync_logs_content_{{ document_source.id }}">
+    <div id="sync_logs_content_{{ document_source.id }}" class="overflow-y-auto">
       <span class="loading loading-spinner"></span>
     </div>
   </div>
