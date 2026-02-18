@@ -1,94 +1,82 @@
 {% if sync_logs %}
-  <div class="overflow-x-auto">
-    <table class="table table-zebra table-sm">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Status</th>
-          <th>Files Added</th>
-          <th>Files Updated</th>
-          <th>Files Removed</th>
-          <th>Duration</th>
-          <th>Error</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for log in sync_logs %}
-          <tr>
-            <td>
-              <time datetime="{{ log.sync_date.isoformat }}" title="{{ log.sync_date.isoformat }}">
-                {{ log.sync_date|date:"DATETIME_FORMAT" }}
-              </time>
-            </td>
-            <td>
-              {% if log.status == "success" %}
-                <span class="badge badge-success badge-sm">Success</span>
-              {% elif log.status == "failed" %}
-                <span class="badge badge-error badge-sm">Failed</span>
-              {% else %}
-                <span class="badge badge-warning badge-sm">In Progress</span>
-              {% endif %}
-            </td>
-            <td>{{ log.files_added }}</td>
-            <td>{{ log.files_updated }}</td>
-            <td>{{ log.files_removed }}</td>
-            <td>
-              {% if log.duration_seconds %}
-                {{ log.duration_seconds|floatformat:1 }}s
-              {% else %}
-                -
-              {% endif %}
-            </td>
-            <td>
-              {% if log.error_message %}
-                <details class="collapse collapse-arrow bg-base-200">
-                  <summary class="collapse-title min-h-0 py-1 px-2 text-xs cursor-pointer">
-                    View Error
-                  </summary>
-                  <div class="collapse-content">
-                    <pre class="text-xs whitespace-pre-wrap">{{ log.error_message }}</pre>
-                  </div>
-                </details>
-              {% else %}
-                -
-              {% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div class="flex flex-col gap-3">
+    {% for log in sync_logs %}
+      <div class="bg-base-200 rounded-lg p-3 flex flex-col gap-2">
+        <div class="flex justify-between items-center">
+          <time class="text-sm font-medium"
+                datetime="{{ log.sync_date.isoformat }}"
+                title="{{ log.sync_date.isoformat }}">
+            {{ log.sync_date|date:"DATETIME_FORMAT" }}
+          </time>
+          {% if log.status == "success" %}
+            <span class="badge badge-success badge-sm">Success</span>
+          {% elif log.status == "failed" %}
+            <span class="badge badge-error badge-sm">Failed</span>
+          {% else %}
+            <span class="badge badge-warning badge-sm">In Progress</span>
+          {% endif %}
+        </div>
+        {% if log.total_files_processed %}
+          <div class="flex flex-wrap gap-2">
+            <span class="badge badge-sm badge-success badge-outline">+{{ log.files_added }} Added</span>
+            <span class="badge badge-sm badge-info badge-outline">~{{ log.files_updated }} Updated</span>
+            <span class="badge badge-sm badge-warning badge-outline">-{{ log.files_removed }} Removed</span>
+            {% if log.duration_seconds %}
+              <span class="badge badge-sm badge-ghost">{{ log.duration_seconds|floatformat:1 }}s</span>
+            {% endif %}
+          </div>
+        {% elif log.duration_seconds %}
+          <div class="flex flex-wrap gap-2">
+            <span class="badge badge-sm badge-ghost">{{ log.duration_seconds|floatformat:1 }}s</span>
+          </div>
+        {% endif %}
+        {% if log.error_message %}
+          <button class="btn btn-xs btn-error btn-outline w-fit"
+                  onclick="sync_error_modal_{{ log.pk }}.showModal()">View Error</button>
+          <dialog id="sync_error_modal_{{ log.pk }}" class="modal">
+            <div class="modal-box bg-base-100 border border-base-300">
+              <form method="dialog">
+                <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+              </form>
+              <h3 class="font-bold text-sm mb-3">Sync Error</h3>
+              <pre class="text-xs whitespace-pre-wrap bg-base-200 rounded p-3">{{ log.error_message }}</pre>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+              <button>close</button>
+            </form>
+          </dialog>
+        {% endif %}
+      </div>
+    {% endfor %}
   </div>
-
   {% if sync_logs.has_other_pages %}
     <div class="flex justify-center gap-2 mt-4">
       {% if sync_logs.has_previous %}
-        <button
-          class="btn btn-sm"
-          hx-get="{% url 'documents:document_source_sync_logs' team.slug collection.id document_source.id %}?page={{ sync_logs.previous_page_number }}{% if show_errors_only %}&errors_only=true{% endif %}"
-          hx-target="#sync_logs_content_{{ document_source.id }}"
-          hx-swap="innerHTML"
-        >
-          <i class="fa-solid fa-chevron-left"></i> Previous
+        <button class="btn btn-sm"
+                hx-get="{% url 'documents:document_source_sync_logs' team.slug collection.id document_source.id %}?page={{ sync_logs.previous_page_number }}
+                        {% if show_errors_only %}&errors_only=true{% endif %}"
+                hx-target="#sync_logs_content_{{ document_source.id }}"
+                hx-swap="innerHTML">
+          <i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Previous
         </button>
       {% endif %}
-      <span class="btn btn-sm btn-ghost">
-        Page {{ sync_logs.number }} of {{ sync_logs.paginator.num_pages }}
-      </span>
+      <span class="btn btn-sm btn-ghost">Page {{ sync_logs.number }} of {{ sync_logs.paginator.num_pages }}</span>
       {% if sync_logs.has_next %}
-        <button
-          class="btn btn-sm"
-          hx-get="{% url 'documents:document_source_sync_logs' team.slug collection.id document_source.id %}?page={{ sync_logs.next_page_number }}{% if show_errors_only %}&errors_only=true{% endif %}"
-          hx-target="#sync_logs_content_{{ document_source.id }}"
-          hx-swap="innerHTML"
-        >
-          Next <i class="fa-solid fa-chevron-right"></i>
+        <button class="btn btn-sm"
+                hx-get="{% url 'documents:document_source_sync_logs' team.slug collection.id document_source.id %}?page={{ sync_logs.next_page_number }}
+                        {% if show_errors_only %}&errors_only=true{% endif %}"
+                hx-target="#sync_logs_content_{{ document_source.id }}"
+                hx-swap="innerHTML">
+          Next <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
         </button>
       {% endif %}
     </div>
   {% endif %}
 {% else %}
-  <div class="alert">
-    <i class="fa-solid fa-info-circle"></i>
-    <span>No sync logs found{% if show_errors_only %} with errors{% endif %}.</span>
+  <div class="flex items-center gap-2 bg-base-200 rounded-lg p-3">
+    <i class="fa-solid fa-info-circle" aria-hidden="true"></i>
+    <span>No sync logs found
+      {% if show_errors_only %}with errors{% endif %}
+    .</span>
   </div>
 {% endif %}
