@@ -27,7 +27,7 @@
       <template x-if="locked">
         <div class="alert alert-warning mb-3">
           <i class="fa fa-lock"></i>
-          <span>{% translate "Schema cannot be changed after annotations have started." %}</span>
+          <span>{% translate "Schema structure is locked after annotations have started. You can still change whether fields are required." %}</span>
         </div>
       </template>
 
@@ -149,13 +149,12 @@
               </div>
             </template>
 
-            <div class="form-control mt-2">
+            <div class="form-control mt-2" :class="locked && 'bg-base-100 rounded-lg p-2 border border-primary/30'">
               <label class="label cursor-pointer justify-start gap-2">
                 <input type="checkbox"
                        x-model="field.required"
-                       :disabled="locked"
-                       class="checkbox checkbox-sm">
-                <span class="label-text">{% translate "Required" %}</span>
+                       class="checkbox checkbox-sm checkbox-primary">
+                <span class="label-text" :class="locked && 'font-semibold'">{% translate "Required" %}</span>
               </label>
             </div>
 

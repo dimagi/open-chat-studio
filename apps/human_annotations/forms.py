@@ -32,9 +32,8 @@ class AnnotationQueueForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if self.instance.pk and self.instance.items.filter(review_count__gt=0).exists():
-            self.fields["schema"].disabled = True
-            self.fields["schema"].help_text = "Cannot change after annotations have started."
+        self._schema_locked = self.instance.pk and self.instance.items.filter(review_count__gt=0).exists()
+        if self._schema_locked:
             self.fields["num_reviews_required"].disabled = True
             self.fields["num_reviews_required"].help_text = "Cannot change after annotations have started."
 
@@ -64,7 +63,23 @@ class AnnotationQueueForm(forms.ModelForm):
             except Exception as e:
                 raise ValidationError(f"Invalid field '{name}': {e}") from e
 
+        if self._schema_locked:
+            self._validate_locked_schema_change(data)
+
         return data
+
+    def _validate_locked_schema_change(self, new_schema):
+        """When annotations exist, only the 'required' property may change."""
+        existing = self.instance.schema
+
+        if set(new_schema.keys()) != set(existing.keys()):
+            raise ValidationError("Cannot add or remove fields after annotations have started.")
+
+        for name in new_schema:
+            new_def = {k: v for k, v in new_schema[name].items() if k != "required"}
+            old_def = {k: v for k, v in existing[name].items() if k != "required"}
+            if new_def != old_def:
+                raise ValidationError(f"Cannot change field '{name}' structure after annotations have started.")
 
     def clean_num_reviews_required(self):
         value = self.cleaned_data["num_reviews_required"]
