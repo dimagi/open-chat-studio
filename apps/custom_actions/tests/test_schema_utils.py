@@ -36,6 +36,7 @@ class TestGetOperationsFromSpecDict:
         schema_type: str,
         required: bool = False,
         default: Any = None,
+        param_in: str | None = None,
     ):
         """Helper to assert parameter exists with expected properties."""
         param = self._get_parameter(operation, param_name)
@@ -44,6 +45,8 @@ class TestGetOperationsFromSpecDict:
         assert param.required == required, f"Expected required={required}, got {param.required}"
         if default is not None:
             assert param.default == default, f"Expected default={default}, got {param.default}"
+        if param_in is not None:
+            assert param.param_in == param_in, f"Expected param_in={param_in}, got {param.param_in}"
 
     def test_extract_operations_with_varying_types(self):
         """
@@ -119,11 +122,22 @@ class TestGetOperationsFromSpecDict:
         assert param_names == {"limit", "offset", "active", "name"}
 
         self._assert_parameter(
-            operation=list_users, param_name="limit", schema_type="integer", required=False, default=10
+            operation=list_users,
+            param_name="limit",
+            schema_type="integer",
+            required=False,
+            default=10,
+            param_in="query",
         )
-        self._assert_parameter(operation=list_users, param_name="offset", schema_type="integer", required=False)
-        self._assert_parameter(operation=list_users, param_name="active", schema_type="boolean", required=False)
-        self._assert_parameter(operation=list_users, param_name="name", schema_type="string", required=False)
+        self._assert_parameter(
+            operation=list_users, param_name="offset", schema_type="integer", required=False, param_in="query"
+        )
+        self._assert_parameter(
+            operation=list_users, param_name="active", schema_type="boolean", required=False, param_in="query"
+        )
+        self._assert_parameter(
+            operation=list_users, param_name="name", schema_type="string", required=False, param_in="query"
+        )
 
     def _test_create_user(self, operations: list[APIOperationDetails]):
         """Test POST /users operation."""
@@ -137,17 +151,35 @@ class TestGetOperationsFromSpecDict:
         assert param_names == {"score", "username", "email", "age", "is_admin", "tags", "rating", "metadata", "notes"}
 
         # Query parameter with number type
-        self._assert_parameter(operation=create_user, param_name="score", schema_type="number", required=False)
+        self._assert_parameter(
+            operation=create_user, param_name="score", schema_type="number", required=False, param_in="query"
+        )
 
         # Request body parameters with various types
-        self._assert_parameter(operation=create_user, param_name="username", schema_type="string", required=True)
-        self._assert_parameter(operation=create_user, param_name="email", schema_type="string", required=True)
-        self._assert_parameter(operation=create_user, param_name="age", schema_type="integer", required=False)
-        self._assert_parameter(operation=create_user, param_name="is_admin", schema_type="boolean", required=False)
-        self._assert_parameter(operation=create_user, param_name="tags", schema_type="array", required=False)
-        self._assert_parameter(operation=create_user, param_name="rating", schema_type="number", required=False)
-        self._assert_parameter(operation=create_user, param_name="metadata", schema_type="object", required=False)
-        self._assert_parameter(operation=create_user, param_name="notes", schema_type="string", required=False)
+        self._assert_parameter(
+            operation=create_user, param_name="username", schema_type="string", required=True, param_in="body"
+        )
+        self._assert_parameter(
+            operation=create_user, param_name="email", schema_type="string", required=True, param_in="body"
+        )
+        self._assert_parameter(
+            operation=create_user, param_name="age", schema_type="integer", required=False, param_in="body"
+        )
+        self._assert_parameter(
+            operation=create_user, param_name="is_admin", schema_type="boolean", required=False, param_in="body"
+        )
+        self._assert_parameter(
+            operation=create_user, param_name="tags", schema_type="array", required=False, param_in="body"
+        )
+        self._assert_parameter(
+            operation=create_user, param_name="rating", schema_type="number", required=False, param_in="body"
+        )
+        self._assert_parameter(
+            operation=create_user, param_name="metadata", schema_type="object", required=False, param_in="body"
+        )
+        self._assert_parameter(
+            operation=create_user, param_name="notes", schema_type="string", required=False, param_in="body"
+        )
 
     def _test_get_user(self, operations: list[APIOperationDetails]):
         """Test GET /users/{user_id} operation."""
@@ -160,8 +192,12 @@ class TestGetOperationsFromSpecDict:
         param_names = {p.name for p in get_user.parameters}
         assert param_names == {"user_id", "include_profile"}
 
-        self._assert_parameter(operation=get_user, param_name="user_id", schema_type="string", required=True)
-        self._assert_parameter(operation=get_user, param_name="include_profile", schema_type="boolean", required=False)
+        self._assert_parameter(
+            operation=get_user, param_name="user_id", schema_type="string", required=True, param_in="path"
+        )
+        self._assert_parameter(
+            operation=get_user, param_name="include_profile", schema_type="boolean", required=False, param_in="query"
+        )
 
     def _test_update_user(self, operations: list[APIOperationDetails]):
         """Test PUT /users/{user_id} operation."""
@@ -174,11 +210,17 @@ class TestGetOperationsFromSpecDict:
         param_names = {p.name for p in update_user.parameters}
         assert param_names == {"user_id", "email", "age", "profile_updated"}
 
-        self._assert_parameter(operation=update_user, param_name="user_id", schema_type="string", required=True)
-        self._assert_parameter(operation=update_user, param_name="email", schema_type="string", required=False)
-        self._assert_parameter(operation=update_user, param_name="age", schema_type="integer", required=False)
         self._assert_parameter(
-            operation=update_user, param_name="profile_updated", schema_type="boolean", required=False
+            operation=update_user, param_name="user_id", schema_type="string", required=True, param_in="path"
+        )
+        self._assert_parameter(
+            operation=update_user, param_name="email", schema_type="string", required=False, param_in="body"
+        )
+        self._assert_parameter(
+            operation=update_user, param_name="age", schema_type="integer", required=False, param_in="body"
+        )
+        self._assert_parameter(
+            operation=update_user, param_name="profile_updated", schema_type="boolean", required=False, param_in="body"
         )
 
     def test_enum_query_parameter_does_not_raise(self):
@@ -285,4 +327,6 @@ class TestGetOperationsFromSpecDict:
         param_names = {p.name for p in delete_user.parameters}
         assert param_names == {"user_id"}
 
-        self._assert_parameter(operation=delete_user, param_name="user_id", schema_type="string", required=True)
+        self._assert_parameter(
+            operation=delete_user, param_name="user_id", schema_type="string", required=True, param_in="path"
+        )

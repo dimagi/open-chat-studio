@@ -33,6 +33,7 @@ Expected Context Variables:
 {% endblock breadcrumbs %}
 
 {% block app %}
+  {% csrf_token %}
   <div class="max-w-4xl mx-auto" id="endpoint-tester">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-3xl font-bold">Test Endpoints</h1>
@@ -190,161 +191,105 @@ Expected Context Variables:
                 <div>
                   <div class="divider my-2"></div>
 
-                  <div class="bg-base-200 rounded-lg p-4"
-                       x-data="{
+                  <div x-data="{
                          responseKeys: getResponseTableKeys(getOperationState('{{ operation.operation_id }}').response.body),
                          isUniformList: isUniformObjectList(getOperationState('{{ operation.operation_id }}').response.body),
                          isFullscreen: false
                        }">
-                    <div class="flex items-center justify-between mb-3">
-                      <span class="font-semibold">Response</span>
-                      <div class="flex gap-2">
-                        <button type="button"
-                                class="btn btn-xs btn-ghost"
-                                @click="isFullscreen = true"
-                                title="View fullscreen">
-                          <i class="fas fa-expand"></i>
-                        </button>
-                        <span :class="getStatusBadgeClass(getOperationState('{{ operation.operation_id }}').response.status_code)"
-                              class="badge badge-lg">
-                          <span x-text="getOperationState('{{ operation.operation_id }}').response.status_code"></span>
-                        </span>
-                      </div>
-                    </div>
+                    <!-- Backdrop (shown when fullscreen) -->
+                    <div x-show="isFullscreen"
+                         class="fixed inset-0 bg-black/50 z-40"
+                         @click="isFullscreen = false"></div>
 
-                    <!-- View Toggle -->
-                    <template x-if="getOperationState('{{ operation.operation_id }}').response.is_json">
-                      <div class="flex gap-2 mb-3">
-                        <button type="button"
-                                class="btn btn-xs"
-                                :class="getOperationState('{{ operation.operation_id }}').viewAs === 'json' ? 'btn-active' : 'btn-ghost'"
-                                @click="getOperationState('{{ operation.operation_id }}').viewAs = 'json'">
-                          JSON
-                        </button>
-                        <template x-if="isUniformList">
+                    <!-- Response card - switches between inline and fullscreen via conditional classes -->
+                    <div :class="isFullscreen
+                                 ? 'fixed inset-4 bg-base-100 rounded-lg shadow-xl z-50 flex flex-col'
+                                 : 'bg-base-200 rounded-lg p-4'">
+
+                      <!-- Header -->
+                      <div :class="isFullscreen
+                                   ? 'flex items-center justify-between p-4 border-b border-base-300'
+                                   : 'flex items-center justify-between mb-3'">
+                        <span class="font-semibold"
+                              x-text="isFullscreen ? 'Response (Fullscreen)' : 'Response'"></span>
+                        <div class="flex gap-2">
                           <button type="button"
-                                  class="btn btn-xs"
-                                  :class="getOperationState('{{ operation.operation_id }}').viewAs === 'table' ? 'btn-active' : 'btn-ghost'"
-                                  @click="getOperationState('{{ operation.operation_id }}').viewAs = 'table'">
-                            Table
-                          </button>
-                        </template>
-                      </div>
-                    </template>
-
-                    <!-- JSON View -->
-                    <template x-if="getOperationState('{{ operation.operation_id }}').viewAs === 'json'">
-                      <div class="bg-base-300 rounded p-3 font-mono text-xs max-h-96 overflow-y-auto">
-                        <pre x-text="formatJsonResponse(getOperationState('{{ operation.operation_id }}').response.body)"></pre>
-                      </div>
-                    </template>
-
-                    <!-- Table View -->
-                    <template x-if="getOperationState('{{ operation.operation_id }}').viewAs === 'table'">
-                      <div class="overflow-x-auto max-h-96">
-                        <table class="table table-sm table-zebra">
-                          <thead>
-                            <tr>
-                              <template x-for="key in responseKeys"
-                                        :key="key">
-                                <th x-text="key"></th>
-                              </template>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <template x-for="(row, index) in getOperationState('{{ operation.operation_id }}').response.body"
-                                      :key="index">
-                              <tr>
-                                <template x-for="key in responseKeys"
-                                          :key="key">
-                                  <td>
-                                    <span x-text="formatTableCell(row[key])"></span>
-                                  </td>
-                                </template>
-                              </tr>
-                            </template>
-                          </tbody>
-                        </table>
-                      </div>
-                    </template>
-
-                    <!-- Fullscreen Modal -->
-                    <template x-if="isFullscreen">
-                      <div>
-                        <div class="fixed inset-0 bg-black/50 z-40" @click="isFullscreen = false"></div>
-                        <div class="fixed inset-4 bg-base-100 rounded-lg shadow-xl z-50 flex flex-col">
-                          <div class="flex items-center justify-between p-4 border-b border-base-300">
-                            <span class="font-semibold">Response (Fullscreen)</span>
-                            <button type="button"
-                                    class="btn btn-ghost btn-sm"
-                                    @click="isFullscreen = false"
-                                    title="Exit fullscreen">
+                                  class="btn btn-xs btn-ghost"
+                                  @click="isFullscreen = !isFullscreen"
+                                  :title="isFullscreen ? 'Exit fullscreen' : 'View fullscreen'">
+                            <span x-show="!isFullscreen"><i class="fas fa-expand"></i></span>
+                            <span x-show="isFullscreen">
                               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                               </svg>
-                            </button>
-                          </div>
-
-                          <!-- Fullscreen View Toggle -->
-                          <template x-if="getOperationState('{{ operation.operation_id }}').response.is_json">
-                            <div class="flex gap-2 p-4 border-b border-base-300">
-                              <button type="button"
-                                      class="btn btn-xs"
-                                      :class="getOperationState('{{ operation.operation_id }}').viewAs === 'json' ? 'btn-active' : 'btn-ghost'"
-                                      @click="getOperationState('{{ operation.operation_id }}').viewAs = 'json'">
-                                JSON
-                              </button>
-                              <template x-if="isUniformList">
-                                <button type="button"
-                                        class="btn btn-xs"
-                                        :class="getOperationState('{{ operation.operation_id }}').viewAs === 'table' ? 'btn-active' : 'btn-ghost'"
-                                        @click="getOperationState('{{ operation.operation_id }}').viewAs = 'table'">
-                                  Table
-                                </button>
-                              </template>
-                            </div>
-                          </template>
-
-                          <div class="flex-1 overflow-auto p-4">
-                            <!-- Fullscreen JSON View -->
-                            <template x-if="getOperationState('{{ operation.operation_id }}').viewAs === 'json'">
-                              <div class="bg-base-300 rounded p-4 font-mono text-sm h-full overflow-auto">
-                                <pre x-text="formatJsonResponse(getOperationState('{{ operation.operation_id }}').response.body)"></pre>
-                              </div>
-                            </template>
-
-                            <!-- Fullscreen Table View -->
-                            <template x-if="getOperationState('{{ operation.operation_id }}').viewAs === 'table'">
-                              <div class="overflow-auto h-full">
-                                <table class="table table-sm table-zebra w-full">
-                                  <thead>
-                                    <tr>
-                                      <template x-for="key in responseKeys"
-                                                :key="key">
-                                        <th x-text="key"></th>
-                                      </template>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    <template x-for="(row, index) in getOperationState('{{ operation.operation_id }}').response.body"
-                                              :key="index">
-                                      <tr>
-                                        <template x-for="key in responseKeys"
-                                                  :key="key">
-                                          <td>
-                                            <span x-text="formatTableCell(row[key])"></span>
-                                          </td>
-                                        </template>
-                                      </tr>
-                                    </template>
-                                  </tbody>
-                                </table>
-                              </div>
-                            </template>
-                          </div>
+                            </span>
+                          </button>
+                          <span :class="getStatusBadgeClass(getOperationState('{{ operation.operation_id }}').response.status_code)"
+                                class="badge badge-lg">
+                            <span x-text="getOperationState('{{ operation.operation_id }}').response.status_code"></span>
+                          </span>
                         </div>
                       </div>
-                    </template>
+
+                      <!-- View Toggle (JSON/Table) -->
+                      <template x-if="getOperationState('{{ operation.operation_id }}').response.is_json">
+                        <div :class="isFullscreen ? 'flex gap-2 p-4 border-b border-base-300' : 'flex gap-2 mb-3'">
+                          <button type="button"
+                                  class="btn btn-xs"
+                                  :class="getOperationState('{{ operation.operation_id }}').viewAs === 'json' ? 'btn-active' : 'btn-ghost'"
+                                  @click="getOperationState('{{ operation.operation_id }}').viewAs = 'json'">
+                            JSON
+                          </button>
+                          <template x-if="isUniformList">
+                            <button type="button"
+                                    class="btn btn-xs"
+                                    :class="getOperationState('{{ operation.operation_id }}').viewAs === 'table' ? 'btn-active' : 'btn-ghost'"
+                                    @click="getOperationState('{{ operation.operation_id }}').viewAs = 'table'">
+                              Table
+                            </button>
+                          </template>
+                        </div>
+                      </template>
+
+                      <!-- Content area -->
+                      <div :class="isFullscreen ? 'flex-1 overflow-auto p-4' : ''">
+                        <!-- JSON View -->
+                        <template x-if="getOperationState('{{ operation.operation_id }}').viewAs === 'json'">
+                          <div :class="isFullscreen
+                                       ? 'bg-base-300 rounded p-4 font-mono text-sm h-full overflow-auto'
+                                       : 'bg-base-300 rounded p-3 font-mono text-xs max-h-96 overflow-y-auto'">
+                            <pre x-text="formatJsonResponse(getOperationState('{{ operation.operation_id }}').response.body)"></pre>
+                          </div>
+                        </template>
+
+                        <!-- Table View -->
+                        <template x-if="getOperationState('{{ operation.operation_id }}').viewAs === 'table'">
+                          <div :class="isFullscreen ? 'overflow-auto h-full' : 'overflow-x-auto max-h-96'">
+                            <table class="table table-sm table-zebra" :class="isFullscreen ? 'w-full' : ''">
+                              <thead>
+                                <tr>
+                                  <template x-for="key in responseKeys" :key="key">
+                                    <th x-text="key"></th>
+                                  </template>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <template x-for="(row, index) in getOperationState('{{ operation.operation_id }}').response.body"
+                                          :key="index">
+                                  <tr>
+                                    <template x-for="key in responseKeys" :key="key">
+                                      <td>
+                                        <span x-text="formatTableCell(row[key])"></span>
+                                      </td>
+                                    </template>
+                                  </tr>
+                                </template>
+                              </tbody>
+                            </table>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -412,43 +357,43 @@ Expected Context Variables:
           return this.operations[operationId] || {};
         },
 
-          /**
-           * Update a parameter value with type coercion
-           */
-          updateParamValue(operationId, paramName, value) {
-            this.operations[operationId].paramValues[paramName] = this.coerceParameterValue(value);
-          },
+        /**
+         * Update a parameter value with type coercion
+         */
+        updateParamValue(operationId, paramName, value) {
+          this.operations[operationId].paramValues[paramName] = this.coerceParameterValue(value);
+        },
 
-          /**
-           * Get a parameter value from operation state
-           */
-          getParamValue(operationId, paramName) {
-            return this.operations[operationId]?.paramValues?.[paramName] ?? '';
-          },
+        /**
+         * Get a parameter value from operation state
+         */
+        getParamValue(operationId, paramName) {
+          return this.operations[operationId]?.paramValues?.[paramName] ?? '';
+        },
 
-          /**
-           * Update JSON input from textarea
-           */
-          updateJsonInput(operationId, value) {
-            this.operations[operationId].jsonInput = value;
-          },
+        /**
+         * Update JSON input from textarea
+         */
+        updateJsonInput(operationId, value) {
+          this.operations[operationId].jsonInput = value;
+        },
 
-          /**
-           * Parse parameter values as JSON only
-           */
-          coerceParameterValue(value) {
-            if (value === '' || value === null || value === undefined) {
-              return '';
-            }
+        /**
+         * Parse parameter values as JSON only
+         */
+        coerceParameterValue(value) {
+          if (value === '' || value === null || value === undefined) {
+            return '';
+          }
 
-            // Parse as JSON
-            try {
-              return JSON.parse(value);
-            } catch (e) {
-              // If not valid JSON, return the raw string
-              return value;
-            }
-          },
+          // Parse as JSON
+          try {
+            return JSON.parse(value);
+          } catch (e) {
+            // If not valid JSON, return the raw string
+            return value;
+          }
+        },
 
         /**
          * Build parameters from JSON input
@@ -464,21 +409,21 @@ Expected Context Variables:
           }
         },
 
-          /**
-           * Get response table keys (computed once, not repeated per row)
-           */
-          getResponseTableKeys(responseBody) {
-            if (!Array.isArray(responseBody) || responseBody.length === 0) {
-              return [];
-            }
+        /**
+         * Get response table keys (computed once, not repeated per row)
+         */
+        getResponseTableKeys(responseBody) {
+          if (!Array.isArray(responseBody) || responseBody.length === 0) {
+            return [];
+          }
 
-            const firstItem = responseBody[0];
-            if (typeof firstItem !== 'object' || firstItem === null || Array.isArray(firstItem)) {
-              return [];
-            }
+          const firstItem = responseBody[0];
+          if (typeof firstItem !== 'object' || firstItem === null || Array.isArray(firstItem)) {
+            return [];
+          }
 
-            return Object.keys(firstItem);
-          },
+          return Object.keys(firstItem);
+        },
 
         async testEndpoint(operationId, customActionId) {
           const opState = this.operations[operationId];
@@ -486,70 +431,69 @@ Expected Context Variables:
           opState.error = null;
           opState.response = null;
 
+          try {
+            // Build params from JSON input
+            let params;
             try {
-              // Build params from JSON input
-              let params;
-              try {
-                params = this.buildParamsFromJson(operationId);
-              } catch (jsonError) {
-                throw new Error(jsonError.message);
-              }
-
-              // Get path parameters
-              const pathParams = opState.pathParams || {};
-
-              // Make request to server
-              const response = await fetch(
-                "{% url 'custom_actions:test_endpoint' custom_action.team.slug custom_action.id %}",
-                {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
-                                   document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '',
-                  },
-                  body: JSON.stringify({
-                    operation_id: operationId,
-                    params: params,
-                    path_params: pathParams,
-                  }),
-                }
-              );
-
-              let data;
-              const raw = await response.text();
-              try {
-                data = JSON.parse(raw);
-              } catch (e) {
-                // If response is not JSON (e.g., HTML error page), use the raw text
-                throw new Error(`Server error: ${response.status} - ${raw.substring(0, 200)}`);
-              }
-
-              if (!response.ok) {
-                throw new Error(data.error || `Request failed with status ${response.status}`);
-              }
-
-              opState.response = data;
-              opState.error = null;
-            } catch (error) {
-              console.error('Test endpoint error:', error);
-              opState.error = error.message;
-              opState.response = null;
-            } finally {
-              opState.loading = false;
+              params = this.buildParamsFromJson(operationId);
+            } catch (jsonError) {
+              throw new Error(jsonError.message);
             }
-          },
 
-          getMethodBadgeClass(method) {
-            const classes = {
-              'get': 'badge-info',
-              'post': 'badge-success',
-              'put': 'badge-warning',
-              'patch': 'badge-warning',
-              'delete': 'badge-error',
-            };
-            return classes[method.toLowerCase()] || 'badge-secondary';
-          },
+            // Get path parameters
+            const pathParams = opState.pathParams || {};
+
+            // Make request to server
+            const response = await fetch(
+              "{% url 'custom_actions:test_endpoint' custom_action.team.slug custom_action.id %}",
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '',
+                },
+                body: JSON.stringify({
+                  operation_id: operationId,
+                  params: params,
+                  path_params: pathParams,
+                }),
+              }
+            );
+
+            let data;
+            const raw = await response.text();
+            try {
+              data = JSON.parse(raw);
+            } catch (e) {
+              // If response is not JSON (e.g., HTML error page), use the raw text
+              throw new Error(`Server error: ${response.status} - ${raw.substring(0, 200)}`);
+            }
+
+            if (!response.ok) {
+              throw new Error(data.error || `Request failed with status ${response.status}`);
+            }
+
+            opState.response = data;
+            opState.error = null;
+          } catch (error) {
+            console.error('Test endpoint error:', error);
+            opState.error = error.message;
+            opState.response = null;
+          } finally {
+            opState.loading = false;
+          }
+        },
+
+        getMethodBadgeClass(method) {
+          const classes = {
+            'get': 'badge-info',
+            'post': 'badge-success',
+            'put': 'badge-warning',
+            'patch': 'badge-warning',
+            'delete': 'badge-error',
+          };
+          return classes[method.toLowerCase()] || 'badge-secondary';
+        },
 
         getStatusBadgeClass(statusCode) {
           if (statusCode >= this.HTTP_STATUS.SUCCESS_MIN && statusCode <= this.HTTP_STATUS.SUCCESS_MAX) {
@@ -567,62 +511,62 @@ Expected Context Variables:
           return 'badge-secondary';
         },
 
-          /**
-           * Validate that response body is an array of uniform objects
-           * with defensive checks for response structure
-           */
-          isUniformObjectList(data) {
-            // Defensive check: ensure data exists and is an array
-            if (!Array.isArray(data) || data.length === 0) {
+        /**
+         * Validate that response body is an array of uniform objects
+         * with defensive checks for response structure
+         */
+        isUniformObjectList(data) {
+          // Defensive check: ensure data exists and is an array
+          if (!Array.isArray(data) || data.length === 0) {
+            return false;
+          }
+
+          // Check if first element is an object (not null, not array)
+          if (typeof data[0] !== 'object' || data[0] === null || Array.isArray(data[0])) {
+            return false;
+          }
+
+          // Get keys from first object
+          const firstKeys = Object.keys(data[0]).sort();
+
+          // Check if all objects have the same keys
+          return data.every(item => {
+            if (typeof item !== 'object' || item === null || Array.isArray(item)) {
               return false;
             }
+            const itemKeys = Object.keys(item).sort();
+            return itemKeys.length === firstKeys.length && itemKeys.every((key, idx) => key === firstKeys[idx]);
+          });
+        },
 
-            // Check if first element is an object (not null, not array)
-            if (typeof data[0] !== 'object' || data[0] === null || Array.isArray(data[0])) {
-              return false;
-            }
+        formatTableCell(value) {
+          // Format cell value for table display
+          if (value === null || value === undefined) {
+            return '';
+          }
+          if (typeof value === 'object') {
+            return JSON.stringify(value);
+          }
+          if (typeof value === 'boolean') {
+            return value ? 'true' : 'false';
+          }
+          return String(value);
+        },
 
-            // Get keys from first object
-            const firstKeys = Object.keys(data[0]).sort();
-
-            // Check if all objects have the same keys
-            return data.every(item => {
-              if (typeof item !== 'object' || item === null || Array.isArray(item)) {
-                return false;
-              }
-              const itemKeys = Object.keys(item).sort();
-              return itemKeys.length === firstKeys.length && itemKeys.every((key, idx) => key === firstKeys[idx]);
-            });
-          },
-
-          formatTableCell(value) {
-            // Format cell value for table display
-            if (value === null || value === undefined) {
-              return '';
+        formatJsonResponse(body) {
+          // Handle response body that might be a string or object
+          if (typeof body === 'string') {
+            // Try to parse as JSON, return as-is if it fails
+            try {
+              return JSON.stringify(JSON.parse(body), null, 2);
+            } catch (e) {
+              // If parsing fails, return the string as-is
+              return body;
             }
-            if (typeof value === 'object') {
-              return JSON.stringify(value);
-            }
-            if (typeof value === 'boolean') {
-              return value ? 'true' : 'false';
-            }
-            return String(value);
-          },
-
-          formatJsonResponse(body) {
-            // Handle response body that might be a string or object
-            if (typeof body === 'string') {
-              // Try to parse as JSON, return as-is if it fails
-              try {
-                return JSON.stringify(JSON.parse(body), null, 2);
-              } catch (e) {
-                // If parsing fails, return the string as-is
-                return body;
-              }
-            }
-            // If it's already an object, stringify it
-            return JSON.stringify(body, null, 2);
-          },
+          }
+          // If it's already an object, stringify it
+          return JSON.stringify(body, null, 2);
+        },
       }));
     });
   </script>

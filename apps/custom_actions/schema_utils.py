@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Any
+from typing import Any, Literal
 
 from django.core.exceptions import ValidationError
 from langchain_community.tools import APIOperation
@@ -100,12 +100,26 @@ class ParameterDetail(BaseModel):
     required: bool = False
     schema_type: str = Field(default="string")
     default: Any = None
-    param_in: str = Field(default="query")  # where the parameter is used: "path", "query", "body", "header", "cookie"
+    # "body" is a synthetic value used internally for request body parameters;
+    # it does not correspond to an OpenAPI 3.x "in" value.
+    param_in: Literal["path", "query", "body", "header", "cookie"] = "query"
+
+    def get_default_value(self) -> Any:
+        """Return the default value for this parameter, with type-appropriate fallbacks."""
+        if self.default is not None:
+            return self.default
+        return {
+            "boolean": False,
+            "integer": 0,
+            "number": 0.0,
+            "array": [],
+            "object": {},
+        }.get(self.schema_type, "")
 
 
 class APIOperationDetails(BaseModel):
     operation_id: str
-    description: str
+    description: str | None = None
     path: str
     method: str
     parameters: list[ParameterDetail] = []
@@ -123,7 +137,7 @@ class APIOperationDetails(BaseModel):
         return [p for p in self.parameters if p.param_in == "body"]
 
     def __str__(self):
-        return f"{self.method.upper()}: {self.description}"
+        return f"{self.method.upper()}: {self.description or self.operation_id}"
 
 
 def get_operations_from_spec_dict(spec_dict) -> list[APIOperationDetails]:
@@ -132,6 +146,8 @@ def get_operations_from_spec_dict(spec_dict) -> list[APIOperationDetails]:
 
 
 def get_operations_from_spec(spec, spec_dict=None) -> list[APIOperationDetails]:
+    # When spec_dict is None, parameter locations (path/query/etc.) cannot be resolved;
+    # all non-body parameters will default to param_in="query".
     operations = []
     for path in spec.paths:
         for method in spec.get_methods_for_path(path):
@@ -167,19 +183,19 @@ def _extract_parameters(
                 param_in_map[param_name] = param_in
 
     parameters = []
-    for property in operation.properties:
-        param_in = param_in_map.get(property.name, "query")
-        schema_type = property.type
+    for prop in operation.properties:
+        param_in = param_in_map.get(prop.name, "query")
+        schema_type = prop.type
         if not isinstance(schema_type, str):
-            # property.type can be a DataType enum or a dynamically created enum class
+            # prop.type can be a DataType enum or a dynamically created enum class
             schema_type = schema_type.value if isinstance(schema_type, DataType) else "string"
         parameters.append(
             ParameterDetail(
-                name=property.name,
-                required=property.required,
+                name=prop.name,
+                required=prop.required,
                 schema_type=schema_type,
-                description=property.description,
-                default=property.default,
+                description=prop.description,
+                default=prop.default,
                 param_in=param_in,
             )
         )
@@ -187,7 +203,7 @@ def _extract_parameters(
     # Extract request body parameters (these are always in the body)
     if operation.request_body:
         for param in operation.request_body.properties:
-            params = param.dict()
+            params = param.model_dump()
             if isinstance(param.type, DataType):
                 params["schema_type"] = param.type.value
                 # UGLY HACK! DataType.Array is converted into a string like "Array<DataType.STRING>"
