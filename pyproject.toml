@@ -152,6 +152,8 @@ dev = [
     "django-debug-toolbar>=5.2.0",
     "djlint>=1.36.4",
     "prek>=0.3.2",
+    "django-types",
+    "ty",
 ]
 docs = [
     "mkdocs-material>=9.6.12",
