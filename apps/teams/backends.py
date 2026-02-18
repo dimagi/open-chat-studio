@@ -99,7 +99,7 @@ CONTENT_TYPES = {
         "evaluationresult",
         "evaluationrunaggregate",
     ],
-    "human_annotations": ["annotationqueue", "annotationitem", "annotation"],
+    "human_annotations": ["annotationqueue", "annotationitem", "annotation", "annotationqueueaggregate"],
     "trace": ["trace", "span"],
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],

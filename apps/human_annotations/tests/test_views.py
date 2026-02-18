@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client
 from django.urls import reverse
 
+from apps.human_annotations.aggregation import compute_aggregates_for_queue
 from apps.human_annotations.models import (
     Annotation,
     AnnotationItemStatus,
@@ -114,8 +115,6 @@ def test_queue_detail_shows_aggregates(client, team_with_users, queue, user):
     )
 
     # Compute aggregates
-    from apps.human_annotations.aggregation import compute_aggregates_for_queue
-
     compute_aggregates_for_queue(queue)
 
     url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
