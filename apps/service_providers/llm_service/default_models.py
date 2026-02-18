@@ -9,8 +9,8 @@ from apps.service_providers.llm_service.model_parameters import (
     AnthropicReasoningParameters,
     BasicParameters,
     ClaudeHaikuLatestParameters,
-    ClaudeOpus46Parameters,
     ClaudeOpus4_20250514Parameters,
+    ClaudeOpus46Parameters,
     GPT5Parameters,
     GPT5ProParameters,
     GPT51Parameters,
@@ -180,7 +180,7 @@ def get_model_parameters(model_name: str, **param_overrides) -> dict:
     return parameters_model(**param_overrides).model_dump()
 
 
-def get_default_model(provider_type: str) -> Model:
+def get_default_model(provider_type: str) -> Model | None:
     return next((m for m in DEFAULT_LLM_PROVIDER_MODELS[provider_type] if m.is_default), None)
 
 

@@ -80,7 +80,7 @@ def test_ad_hoc_bot_message(messaging_service, get_user_message, slack_channel):
 
 @pytest.fixture()
 def slack_channel(slack_provider) -> ExperimentChannel:
-    return ExperimentChannelFactory(
+    return ExperimentChannelFactory(  # ty: ignore[invalid-return-type]
         platform=ChannelPlatform.SLACK,
         messaging_provider=slack_provider,
         experiment__team=slack_provider.team,

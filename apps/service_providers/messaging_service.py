@@ -138,7 +138,7 @@ class TwilioService(MessagingService):
         """
         message_context = self.client.messages.get(current_chunk_sid)
         message = message_context.fetch()
-        return message.status
+        return message.status  # ty: ignore[invalid-return-type]
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         """
@@ -196,7 +196,7 @@ class TwilioService(MessagingService):
 
     def _get_account_numbers(self) -> list[str]:
         """Returns all numbers associated with this client account"""
-        return [num.phone_number for num in self.client.incoming_phone_numbers.list()]
+        return [num.phone_number for num in self.client.incoming_phone_numbers.list()]  # ty: ignore[invalid-return-type]
 
     def is_valid_number(self, number: str) -> bool:
         if settings.DEBUG:

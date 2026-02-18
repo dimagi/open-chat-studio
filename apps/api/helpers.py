@@ -12,7 +12,7 @@ def get_user_from_request(request: HttpRequest) -> CustomUser | None:
         user_api_key = _get_api_key_object(request, UserAPIKey)
         return user_api_key.user
     else:
-        return request.user
+        return request.user  # ty: ignore[invalid-return-type]
 
 
 def get_team_from_request(request: HttpRequest) -> CustomUser | None:

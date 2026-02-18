@@ -111,7 +111,7 @@ def get_evaluator_type_display(evaluator_type: str) -> dict[str, str]:
         Dict with label and icon for the evaluator type
     """
     evaluator_type_info = get_evaluator_type_info()
-    return evaluator_type_info.get(evaluator_type, {"label": evaluator_type, "icon": None})
+    return evaluator_type_info.get(evaluator_type, {"label": evaluator_type, "icon": None})  # ty: ignore[invalid-return-type]
 
 
 def parse_history_text(history_text: str) -> list:

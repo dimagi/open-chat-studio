@@ -927,7 +927,7 @@ class TestExperimentTrends:
             assert sum(success) == 0
 
 
-def _compare_models(original, new, expected_changed_fields: list) -> set:
+def _compare_models(original, new, expected_changed_fields: list) -> None:
     field_difference = original.compare_with_model(new, original.get_fields_to_exclude()).difference(
         set(expected_changed_fields)
     )

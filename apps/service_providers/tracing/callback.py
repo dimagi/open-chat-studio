@@ -42,7 +42,7 @@ def wrap_callback(
     if run_name_map or filter_patterns:
         callback = NameMappingWrapper(callback, run_name_map or {}, filter_patterns or [])
 
-    return CallbackWrapper(callback)
+    return CallbackWrapper(callback)  # ty: ignore[invalid-return-type]
 
 
 def serialize_input_output_dict(data: dict[Any, Any]) -> dict[Any, Any]:

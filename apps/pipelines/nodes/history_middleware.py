@@ -76,7 +76,7 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
                 return messages[i].additional_kwargs["id"]
 
     def _get_compression_marker(self, messages: list[BaseMessage]) -> str:
-        return messages[1].content
+        return messages[1].content  # ty: ignore[invalid-return-type]
 
 
 class SummarizeHistoryMiddleware(BaseNodeHistoryMiddleware):

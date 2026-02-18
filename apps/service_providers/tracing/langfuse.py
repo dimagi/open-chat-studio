@@ -136,7 +136,7 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
-        return {
+        return {  # ty: ignore[invalid-return-type]
             "trace_id": self.trace_record.trace_id,
             "trace_url": self.client.get_trace_url(trace_id=self.trace_record.trace_id),
             "trace_provider": self.type,
