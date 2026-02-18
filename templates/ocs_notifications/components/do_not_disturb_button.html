@@ -1,0 +1,56 @@
+{% load humanize %}
+{% url "ocs_notifications:toggle_do_not_disturb" request.team.slug as toggle_mute_url %}
+<div id="btn-do-not-disturb">
+    {% if end_datetime is not None %}
+        <button
+            class="btn btn-sm tooltip"
+            data-tip="Automatically unmutes {{ end_datetime|naturaltime }}"
+            hx-post="{{ toggle_mute_url }}"
+            hx-vals='{"duration": ""}'
+            hx-target="#btn-do-not-disturb"
+            hx-swap="outerHTML">
+            <i class="fa fa-bell"></i> Turn off DND
+        </button>
+    {% else %}
+        <div class="dropdown">
+            <div tabindex="0" role="button" title="Silence all notifications" class="btn btn-sm">
+                <i class="fa fa-bell-slash"></i> Silence
+            </div>
+            <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
+                <li class="menu-title">Turn off after</li>
+                <li>
+                    <a hx-post="{{ toggle_mute_url }}"
+                        hx-vals='{"duration": "8h"}'
+                        hx-target="#btn-do-not-disturb"
+                        hx-swap="outerHTML">
+                        8 hours
+                    </a>
+                </li>
+                <li>
+                    <a hx-post="{{ toggle_mute_url }}"
+                        hx-vals='{"duration": "1d"}'
+                        hx-target="#btn-do-not-disturb"
+                        hx-swap="outerHTML">
+                        1 day
+                    </a>
+                </li>
+                <li>
+                    <a hx-post="{{ toggle_mute_url }}"
+                        hx-vals='{"duration": "1w"}'
+                        hx-target="#btn-do-not-disturb"
+                        hx-swap="outerHTML">
+                        1 week
+                    </a>
+                </li>
+                <li>
+                    <a hx-post="{{ toggle_mute_url }}"
+                        hx-vals='{"duration": "1m"}'
+                        hx-target="#btn-do-not-disturb"
+                        hx-swap="outerHTML">
+                        1 month
+                    </a>
+                </li>
+            </ul>
+        </div>
+    {% endif %}
+</div>

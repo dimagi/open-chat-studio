@@ -5,7 +5,7 @@ from django.db import models
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.ocs_notifications.models import UserNotification, UserNotificationPreferences
+from apps.ocs_notifications.models import EventUser, LevelChoices, UserNotificationPreferences
 from apps.ocs_notifications.utils import get_user_notification_cache_value, set_user_notification_cache
 from apps.teams.models import Team
 from apps.users.model_audit_fields import CUSTOM_USER_FIELDS
@@ -69,11 +69,15 @@ class CustomUser(AbstractUser):
         if count is not None:
             return count
 
-        preferences, _created = UserNotificationPreferences.objects.get_or_create(user=self, team=team)
-        if preferences.in_app_enabled:
-            level = preferences.in_app_level
-            count = UserNotification.objects.filter(
-                team__slug=team.slug, user_id=self.id, read=False, notification__level__gte=level
+        preferences = UserNotificationPreferences.objects.filter(user=self, team=team).first()
+        in_app_enabled = preferences.in_app_enabled if preferences else True
+        level = preferences.in_app_level if preferences else LevelChoices.INFO
+        if in_app_enabled:
+            count = EventUser.objects.filter(
+                team__slug=team.slug,
+                user_id=self.id,
+                read=False,
+                event_type__level__gte=level,
             ).count()
         else:
             count = 0

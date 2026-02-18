@@ -2,9 +2,11 @@ from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
+from time_machine import travel
 
 from apps.ocs_notifications.models import UserNotificationPreferences
-from apps.utils.factories.notifications import UserNotificationFactory
+from apps.utils.factories.notifications import EventUserFactory
 
 
 @pytest.mark.django_db()
@@ -25,7 +27,7 @@ class TestToggleNotificationReadView:
         """
         # Setup
         user = team_with_users.members.first()
-        user_notification = UserNotificationFactory.create(
+        user_notification = EventUserFactory.create(
             user=user,
             team=team_with_users,
             read=False,
@@ -157,3 +159,40 @@ class TestNotificationPreferencesView:
         cache_call = mock_bust_cache.call_args
         assert cache_call[0][0] == user.id
         assert cache_call[1]["team_slug"] == team_with_users.slug
+
+
+class TestToggleDoNotDisturbView:
+    @pytest.mark.django_db()
+    def test_reset_do_not_disturbed(self, client, team_with_users):
+        """test that sending duration = '' resets do not disturb"""
+        user = team_with_users.members.first()
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        # Set DND to a value first
+        UserNotificationPreferences.objects.update_or_create(
+            user=user, team=team_with_users, defaults={"do_not_disturb_until": "2026-02-13T00:00:00Z"}
+        )
+        url = reverse("ocs_notifications:toggle_do_not_disturb", args=[team_with_users.slug])
+        response = client.post(url, data={"duration": ""})
+        assert response.status_code == 200
+        pref = UserNotificationPreferences.objects.get(user=user, team=team_with_users)
+        assert pref.do_not_disturb_until is None
+
+    @pytest.mark.django_db()
+    def test_set_do_not_disturb_for_8h(self, client, team_with_users):
+        """test that sending duration = '8h' sets it to 8h from now"""
+        user = team_with_users.members.first()
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        with travel("2025-01-01 10:00:00+00:00", tick=False):
+            url = reverse("ocs_notifications:toggle_do_not_disturb", args=[team_with_users.slug])
+            response = client.post(url, data={"duration": "8h"})
+            assert response.status_code == 200
+            pref = UserNotificationPreferences.objects.get(user=user, team=team_with_users)
+            assert pref.do_not_disturb_until - timezone.now() == timezone.timedelta(hours=8)
