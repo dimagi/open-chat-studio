@@ -153,18 +153,20 @@ class TestOCSTracer:
 
 class TestOCSCallbackHandler:
     @patch("apps.service_providers.tracing.ocs_tracer.llm_error_notification")
-    def test_on_llm_error_creates_notification(self, mock_llm_error_notification):
+    @patch("apps.experiments.models.Experiment.objects.get")
+    def test_on_llm_error_creates_notification(self, mock_experiment_get, mock_llm_error_notification):
         """Test that LLM error handler creates a notification."""
+        # Set up experiment mock
+        experiment = Mock()
+        experiment.id = 456
+        mock_experiment_get.return_value = experiment
+
         # Set up tracer
         tracer = OCSTracer(experiment_id=456, team_id=123)
         tracer.trace_id = str(uuid4())
 
-        # Set up experiment mock
-        experiment = Mock()
-        experiment.id = 456
-        tracer.experiment = experiment
-
         # Set up a session with a participant so the notification includes context
+
         participant = Mock()
         participant.identifier = "user@example.com"
         session = Mock()
