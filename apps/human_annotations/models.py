@@ -220,4 +220,3 @@ class AnnotationQueueAggregate(BaseTeamModel):
 
     queue = models.OneToOneField(AnnotationQueue, on_delete=models.CASCADE, related_name="aggregate")
     aggregates = models.JSONField(default=dict, help_text="Aggregated stats per schema field")
-    computed_at = models.DateTimeField(auto_now=True)

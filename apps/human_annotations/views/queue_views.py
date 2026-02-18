@@ -114,7 +114,7 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        return AnnotationQueue.objects.filter(team=self.request.team)
+        return AnnotationQueue.objects.filter(team=self.request.team).select_related("aggregate")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

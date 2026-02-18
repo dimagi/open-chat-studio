@@ -20,7 +20,6 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('aggregates', models.JSONField(default=dict, help_text='Aggregated stats per schema field')),
-                ('computed_at', models.DateTimeField(auto_now=True)),
                 ('queue', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='aggregate', to='human_annotations.annotationqueue')),
                 ('team', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='teams.team', verbose_name='Team')),
             ],
