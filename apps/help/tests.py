@@ -116,22 +116,19 @@ class StubAgent(BaseHelpAgent[StubInput, StubOutput]):
     def get_user_message(cls, input):
         return input.prompt
 
-    def parse_response(self, response) -> StubOutput:
-        return StubOutput(result=response["messages"][-1].text)
-
 
 class TestBaseHelpAgent:
     @mock.patch("apps.help.base.build_system_agent")
     def test_run_invokes_agent_and_returns_parsed_output(self, mock_build):
         mock_agent = mock.Mock()
-        mock_agent.invoke.return_value = {"messages": [mock.Mock(text="hello")]}
+        mock_agent.invoke.return_value = {"structured_response": StubOutput(result="hello")}
         mock_build.return_value = mock_agent
 
         agent = StubAgent(input=StubInput(prompt="say hi"))
         result = agent.run()
 
         assert result == StubOutput(result="hello")
-        mock_build.assert_called_once_with("low", "You are a stub.")
+        mock_build.assert_called_once_with("low", "You are a stub.", response_format=StubOutput)
         mock_agent.invoke.assert_called_once_with({"messages": [{"role": "user", "content": "say hi"}]})
 
 
@@ -200,10 +197,12 @@ class TestCodeGenerateAgent:
 
 
 class TestProgressMessagesAgent:
-    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    @mock.patch("apps.help.base.build_system_agent")
     def test_run_returns_messages(self, mock_build):
         mock_agent = mock.Mock()
-        mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=["Thinking...", "Almost there..."])}
+        mock_agent.invoke.return_value = {
+            "structured_response": ProgressMessagesOutput(messages=["Thinking...", "Almost there..."])
+        }
         mock_build.return_value = mock_agent
 
         agent = ProgressMessagesAgent(
@@ -217,10 +216,10 @@ class TestProgressMessagesAgent:
         call_kwargs = mock_build.call_args
         assert call_kwargs.kwargs["response_format"] is ProgressMessagesOutput
 
-    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    @mock.patch("apps.help.base.build_system_agent")
     def test_user_message_includes_name_and_description(self, mock_build):
         mock_agent = mock.Mock()
-        mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=["Working..."])}
+        mock_agent.invoke.return_value = {"structured_response": ProgressMessagesOutput(messages=["Working..."])}
         mock_build.return_value = mock_agent
 
         agent = ProgressMessagesAgent(
@@ -233,10 +232,10 @@ class TestProgressMessagesAgent:
         assert "MyBot" in user_message
         assert "Helps with tasks" in user_message
 
-    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    @mock.patch("apps.help.base.build_system_agent")
     def test_user_message_excludes_empty_description(self, mock_build):
         mock_agent = mock.Mock()
-        mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=["Working..."])}
+        mock_agent.invoke.return_value = {"structured_response": ProgressMessagesOutput(messages=["Working..."])}
         mock_build.return_value = mock_agent
 
         agent = ProgressMessagesAgent(input=ProgressMessagesInput(chatbot_name="MyBot"))
@@ -245,17 +244,6 @@ class TestProgressMessagesAgent:
         call_args = mock_agent.invoke.call_args[0][0]
         user_message = call_args["messages"][0]["content"]
         assert "Description:" not in user_message
-
-    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
-    def test_run_returns_empty_list_when_none(self, mock_build):
-        mock_agent = mock.Mock()
-        mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=None)}
-        mock_build.return_value = mock_agent
-
-        agent = ProgressMessagesAgent(input=ProgressMessagesInput(chatbot_name="TestBot"))
-        result = agent.run()
-
-        assert result == ProgressMessagesOutput(messages=[])
 
 
 class TestRunAgentView:

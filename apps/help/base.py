@@ -17,15 +17,27 @@ class BaseHelpAgent[TInput: BaseModel, TOutput: BaseModel](BaseModel):
     Subclasses that use the default run() must also define:
     - get_system_prompt(input) — build the system prompt
     - get_user_message(input) — build the user message
-    - parse_response(response) — extract TOutput from agent response
 
-    Subclasses may override run() entirely for custom execution logic.
+    Subclasses may optionally override:
+    - parse_response(response) — custom response extraction (default: return structured_response)
+    - run() — entirely custom execution logic
+
+    The default run() passes TOutput as response_format for structured output.
     """
 
     name: ClassVar[str]
     mode: ClassVar[Literal["high", "low"]]
 
     input: TInput
+
+    @classmethod
+    def _get_output_type(cls) -> type[BaseModel]:
+        """Resolve the concrete TOutput type from the class hierarchy."""
+        for klass in cls.__mro__:
+            meta = getattr(klass, "__pydantic_generic_metadata__", None)
+            if meta and meta.get("origin") is BaseHelpAgent:
+                return meta["args"][1]
+        raise TypeError(f"Cannot determine output type for {cls.__name__}")
 
     @classmethod
     def get_system_prompt(cls, input: TInput) -> str:
@@ -36,9 +48,13 @@ class BaseHelpAgent[TInput: BaseModel, TOutput: BaseModel](BaseModel):
         raise NotImplementedError
 
     def run(self) -> TOutput:
-        agent = build_system_agent(self.mode, self.get_system_prompt(self.input))
+        agent = build_system_agent(
+            self.mode,
+            self.get_system_prompt(self.input),
+            response_format=self._get_output_type(),
+        )
         response = agent.invoke({"messages": [{"role": "user", "content": self.get_user_message(self.input)}]})
         return self.parse_response(response)
 
     def parse_response(self, response) -> TOutput:
-        raise NotImplementedError
+        return response["structured_response"]

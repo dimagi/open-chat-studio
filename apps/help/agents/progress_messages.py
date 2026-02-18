@@ -4,7 +4,6 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel
 
-from apps.help.agent import build_system_agent
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import register_agent
 
@@ -52,13 +51,3 @@ class ProgressMessagesAgent(BaseHelpAgent[ProgressMessagesInput, ProgressMessage
         if input.chatbot_description:
             message += f"\nDescription: '{input.chatbot_description}'"
         return message
-
-    def run(self) -> ProgressMessagesOutput:
-        agent = build_system_agent(
-            self.mode,
-            self.get_system_prompt(self.input),
-            response_format=ProgressMessagesOutput,
-        )
-        result = agent.invoke({"messages": [{"role": "user", "content": self.get_user_message(self.input)}]})
-        messages = result["structured_response"].messages or []
-        return ProgressMessagesOutput(messages=messages)
