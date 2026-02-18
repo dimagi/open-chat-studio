@@ -92,6 +92,7 @@ class EditAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Up
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["existing_schema"] = self.object.schema
+        context["schema_locked"] = self.object.items.filter(review_count__gt=0).exists()
         return context
 
     def get_success_url(self):

@@ -76,6 +76,63 @@ def test_create_queue(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_create_queue_with_optional_field(client, team_with_users):
+    """Creating a queue with required=false should persist and load correctly."""
+    url = reverse("human_annotations:queue_new", args=[team_with_users.slug])
+    schema = {
+        "score": {"type": "int", "description": "Score"},
+        "notes": {"type": "string", "description": "Notes", "required": False},
+    }
+    data = {
+        "name": "Optional Fields Queue",
+        "description": "",
+        "schema": json.dumps(schema),
+        "num_reviews_required": 1,
+    }
+    response = client.post(url, data)
+    assert response.status_code == 302
+
+    queue = AnnotationQueue.objects.get(name="Optional Fields Queue", team=team_with_users)
+    assert queue.schema["notes"]["required"] is False
+
+    # Load the edit page and verify the schema is in the context
+    edit_url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.get(edit_url)
+    assert response.status_code == 200
+    assert response.context["existing_schema"]["notes"]["required"] is False
+
+
+@pytest.mark.django_db()
+def test_edit_queue_saves_optional_field(client, team_with_users, queue):
+    """Editing a queue to set required=false should persist via the update view."""
+    edit_url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    schema = {
+        "score": {"type": "int", "description": "Score", "ge": 1, "le": 5},
+        "comment": {"type": "string", "description": "Comment", "required": False},
+    }
+    response = client.post(
+        edit_url,
+        {
+            "name": queue.name,
+            "description": queue.description,
+            "schema": json.dumps(schema),
+            "num_reviews_required": queue.num_reviews_required,
+        },
+    )
+    assert response.status_code == 302
+
+    queue.refresh_from_db()
+    assert queue.schema["comment"]["required"] is False
+
+    # Verify the edit page renders the saved value in both context and HTML
+    response = client.get(edit_url)
+    assert response.context["existing_schema"]["comment"]["required"] is False
+    # Check the json_script output in the rendered HTML
+    html = response.content.decode()
+    assert '"required": false' in html or '"required":false' in html
+
+
+@pytest.mark.django_db()
 def test_edit_queue_locks_fields_after_annotations(client, team_with_users, queue, user):
     """Schema and num_reviews_required should be disabled after annotations have started."""
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
@@ -93,6 +150,7 @@ def test_edit_queue_locks_fields_after_annotations(client, team_with_users, queu
     form = response.context["form"]
     assert form.fields["schema"].disabled is True
     assert form.fields["num_reviews_required"].disabled is True
+    assert response.context["schema_locked"] is True
 
 
 @pytest.mark.django_db()
