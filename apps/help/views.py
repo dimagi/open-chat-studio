@@ -25,7 +25,8 @@ def run_agent(request, team_slug: str, agent_name: str):
         body = json.loads(request.body)
         agent = agent_cls(input=body)
     except (json.JSONDecodeError, ValidationError) as e:
-        return JsonResponse({"error": str(e)}, status=400)
+        logger.info("Agent '%s' input error: %s", agent_name, e)
+        return JsonResponse({"error": "Invalid input."}, status=400)
 
     try:
         result = agent.run()
