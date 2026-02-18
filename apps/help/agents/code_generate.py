@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import ClassVar, Literal
 
@@ -10,8 +9,6 @@ from pydantic import BaseModel
 from apps.help.agent import build_system_agent
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import register_agent
-
-logger = logging.getLogger("ocs.help")
 
 _system_prompt = None
 
@@ -53,7 +50,6 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
 
     def _run_with_retry(self, current_code: str, error: str | None, iteration: int) -> CodeGenerateOutput:
         if iteration > self.max_retries:
-            logger.warning("Code generation failed after %d retries, returning last attempt.", self.max_retries)
             return CodeGenerateOutput(code=current_code)
 
         system_prompt = self._build_system_prompt(current_code, error)

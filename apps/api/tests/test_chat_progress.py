@@ -13,7 +13,7 @@ def _clear_cache():
 
 
 class TestGetProgressMessages:
-    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    @mock.patch("apps.help.base.build_system_agent")
     def test_returns_messages_on_success(self, mock_build_agent):
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=["Thinking...", "Almost there..."])}
@@ -23,7 +23,7 @@ class TestGetProgressMessages:
 
         assert result == ["Thinking...", "Almost there..."]
 
-    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    @mock.patch("apps.help.base.build_system_agent")
     def test_returns_empty_list_on_agent_build_failure(self, mock_build_agent):
         mock_build_agent.side_effect = Exception("no system agent models configured")
 
@@ -31,7 +31,7 @@ class TestGetProgressMessages:
 
         assert result == []
 
-    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    @mock.patch("apps.help.base.build_system_agent")
     def test_returns_empty_list_on_invoke_failure(self, mock_build_agent):
         mock_agent = mock.Mock()
         mock_agent.invoke.side_effect = RuntimeError("LLM API error")
@@ -41,7 +41,7 @@ class TestGetProgressMessages:
 
         assert result == []
 
-    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    @mock.patch("apps.help.base.build_system_agent")
     def test_returns_empty_list_on_missing_structured_response(self, mock_build_agent):
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {}
@@ -51,7 +51,7 @@ class TestGetProgressMessages:
 
         assert result == []
 
-    @mock.patch("apps.help.agents.progress_messages.build_system_agent")
+    @mock.patch("apps.help.base.build_system_agent")
     def test_excludes_description_when_empty(self, mock_build_agent):
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=["Working..."])}
