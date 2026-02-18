@@ -9,12 +9,12 @@ from .models import CustomUser
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
-    list_display = UserAdmin.list_display + (
+    list_display = UserAdmin.list_display + (  # ty: ignore[unsupported-operator]
         "last_login",
         "last_login_natural",
     )
-    list_filter = UserAdmin.list_filter + (("last_login", RelativeDateFieldListFilter),)
-    fieldsets = UserAdmin.fieldsets + (("Custom Fields", {"fields": ("avatar", "language")}),)
+    list_filter = UserAdmin.list_filter + (("last_login", RelativeDateFieldListFilter),)  # ty: ignore[unsupported-operator]
+    fieldsets = UserAdmin.fieldsets + (("Custom Fields", {"fields": ("avatar", "language")}),)  # ty: ignore[unsupported-operator]
 
     @admin.display(description="Last Login")
     def last_login_natural(self, obj):

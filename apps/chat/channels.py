@@ -132,7 +132,7 @@ class ChannelBase(ABC):
     """
 
     voice_replies_supported: ClassVar[bool] = False
-    supported_message_types: ClassVar[str] = []
+    supported_message_types: ClassVar[list[MESSAGE_TYPES]] = []
     supports_conversational_consent_flow: ClassVar[bool] = True
 
     def __init__(
