@@ -16,7 +16,7 @@ from apps.trace.models import Trace, TraceStatus
 from .base import TraceContext, Tracer
 
 if TYPE_CHECKING:
-    from apps.experiments.models import ExperimentSession
+    from apps.experiments.models import Experiment, ExperimentSession
 
 logger = logging.getLogger("ocs.tracing")
 
@@ -26,11 +26,9 @@ class OCSTracer(Tracer):
     Internal OCS tracer that creates Trace objects in the database.
     """
 
-    def __init__(self, experiment_id: int, team_id: int):
-        from apps.experiments.models import Experiment
-
+    def __init__(self, experiment: Experiment, team_id: int):
         super().__init__(OCS_TRACE_PROVIDER, {})
-        self.experiment = Experiment.objects.get(id=experiment_id)
+        self.experiment = experiment
         self.team_id = team_id
         self.start_time: float = None
         self.trace_record = None

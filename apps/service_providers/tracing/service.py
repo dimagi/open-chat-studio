@@ -53,7 +53,7 @@ class TracingService:
 
         tracers = []
         if experiment and experiment.id and experiment.team_id:
-            ocs_tracer = OCSTracer(experiment.id, experiment.team_id)
+            ocs_tracer = OCSTracer(experiment, experiment.team_id)
             tracers.append(ocs_tracer)
 
         if experiment and experiment.trace_provider:
