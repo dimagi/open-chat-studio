@@ -3,9 +3,15 @@ from unittest import mock
 import pytest
 from django.urls import reverse
 
-from apps.documents.models import Collection, CollectionFile, DocumentSource, DocumentSourceSyncLog, FileStatus, SyncStatus
+from apps.documents.models import (
+    Collection,
+    CollectionFile,
+    DocumentSourceSyncLog,
+    FileStatus,
+    SyncStatus,
+)
 from apps.files.models import File
-from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -262,16 +268,7 @@ class TestDocumentSourceSyncLogs:
 
     @pytest.fixture()
     def document_source(self, collection):
-        from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig
-
-        config = DocumentSourceConfig(
-            github=GitHubSourceConfig(
-                repo_url="https://github.com/test/repo", branch="main", file_pattern="*.md", path_filter=""
-            )
-        )
-        return DocumentSource.objects.create(
-            collection=collection, team=collection.team, source_type="github", config=config, auto_sync_enabled=True
-        )
+        return DocumentSourceFactory(collection=collection, source_type="github", auto_sync_enabled=True)
 
     def test_view_sync_logs(self, team_with_user, collection, document_source, client):
         """Test viewing sync logs for a document source"""
@@ -295,7 +292,10 @@ class TestDocumentSourceSyncLogs:
         )
 
         client.force_login(team_with_user.members.first())
-        url = reverse("documents:document_source_sync_logs", args=[team_with_user.slug, collection.id, document_source.id])
+        url = reverse(
+            "documents:document_source_sync_logs",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
 
         response = client.get(url)
         assert response.status_code == 200
@@ -306,9 +306,7 @@ class TestDocumentSourceSyncLogs:
     def test_filter_sync_logs_by_errors(self, team_with_user, collection, document_source, client):
         """Test filtering sync logs to show only errors"""
         # Create success and failed logs
-        DocumentSourceSyncLog.objects.create(
-            document_source=document_source, status=SyncStatus.SUCCESS, files_added=5
-        )
+        DocumentSourceSyncLog.objects.create(document_source=document_source, status=SyncStatus.SUCCESS, files_added=5)
         DocumentSourceSyncLog.objects.create(
             document_source=document_source,
             status=SyncStatus.FAILED,
@@ -316,7 +314,10 @@ class TestDocumentSourceSyncLogs:
         )
 
         client.force_login(team_with_user.members.first())
-        url = reverse("documents:document_source_sync_logs", args=[team_with_user.slug, collection.id, document_source.id])
+        url = reverse(
+            "documents:document_source_sync_logs",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
 
         # Request with errors_only filter
         response = client.get(url, {"errors_only": "true"})
@@ -338,7 +339,10 @@ class TestDocumentSourceSyncLogs:
             )
 
         client.force_login(team_with_user.members.first())
-        url = reverse("documents:document_source_sync_logs", args=[team_with_user.slug, collection.id, document_source.id])
+        url = reverse(
+            "documents:document_source_sync_logs",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
 
         # First page
         response = client.get(url)

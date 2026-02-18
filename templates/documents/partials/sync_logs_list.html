@@ -47,8 +47,7 @@
     <div class="flex justify-center gap-2 mt-4">
       {% if sync_logs.has_previous %}
         <button class="btn btn-sm"
-                hx-get="{% url 'documents:document_source_sync_logs' team.slug collection.id document_source.id %}?page={{ sync_logs.previous_page_number }}
-                        {% if show_errors_only %}&errors_only=true{% endif %}"
+                hx-get="{% url 'documents:document_source_sync_logs' team.slug collection.id document_source.id %}?page={{ sync_logs.previous_page_number }}{% if show_errors_only %}&errors_only=true{% endif %}"
                 hx-target="#sync_logs_content_{{ document_source.id }}"
                 hx-swap="innerHTML">
           <i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Previous
@@ -57,8 +56,7 @@
       <span class="btn btn-sm btn-ghost">Page {{ sync_logs.number }} of {{ sync_logs.paginator.num_pages }}</span>
       {% if sync_logs.has_next %}
         <button class="btn btn-sm"
-                hx-get="{% url 'documents:document_source_sync_logs' team.slug collection.id document_source.id %}?page={{ sync_logs.next_page_number }}
-                        {% if show_errors_only %}&errors_only=true{% endif %}"
+                hx-get="{% url 'documents:document_source_sync_logs' team.slug collection.id document_source.id %}?page={{ sync_logs.next_page_number }}{% if show_errors_only %}&errors_only=true{% endif %}"
                 hx-target="#sync_logs_content_{{ document_source.id }}"
                 hx-swap="innerHTML">
           Next <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>

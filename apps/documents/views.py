@@ -36,6 +36,7 @@ from apps.documents.models import (
     DocumentSourceSyncLog,
     FileStatus,
     SourceType,
+    SyncStatus,
 )
 from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import sync_document_source_task
@@ -300,6 +301,7 @@ def sync_document_source(request, team_slug: str, collection_id: int, pk: int):
 
 @login_and_team_required
 @permission_required("documents.view_collection", raise_exception=True)
+@require_http_methods(["GET"])
 def document_source_sync_logs(request, team_slug: str, collection_id: int, pk: int):
     """View sync logs for a document source"""
     document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
@@ -309,7 +311,7 @@ def document_source_sync_logs(request, team_slug: str, collection_id: int, pk: i
     # Filter by errors only if requested
     show_errors_only = request.GET.get("errors_only") == "true"
     if show_errors_only:
-        sync_logs = sync_logs.filter(status="failed")
+        sync_logs = sync_logs.filter(status=SyncStatus.FAILED)
 
     # Paginate logs
     page = request.GET.get("page", 1)
