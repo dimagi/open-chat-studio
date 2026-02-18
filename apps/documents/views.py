@@ -329,12 +329,7 @@ def document_source_sync_logs(request, team_slug: str, collection_id: int, pk: i
         "team": request.team,
     }
 
-    # For HTMX requests (pagination/filtering), return only the list
-    if request.htmx:
-        return render(request, "documents/partials/sync_logs_list.html", context)
-
-    # Otherwise, return the full modal
-    return render(request, "documents/partials/sync_logs_modal.html", context)
+    return render(request, "documents/partials/sync_logs_list.html", context)
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
