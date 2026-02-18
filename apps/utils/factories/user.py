@@ -1,4 +1,5 @@
 import factory
+import factory.django
 import faker
 from django.contrib.auth.models import Group
 

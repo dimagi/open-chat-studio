@@ -1,4 +1,5 @@
 import factory
+import factory.django
 
 from apps.human_annotations.models import AnnotationItem, AnnotationQueue
 from apps.utils.factories.experiment import ExperimentSessionFactory

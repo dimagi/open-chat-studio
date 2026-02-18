@@ -1,4 +1,5 @@
 import factory
+import factory.django
 
 from apps.ocs_notifications.models import EventType, EventUser, LevelChoices, NotificationEvent
 from apps.utils.factories.team import TeamFactory
