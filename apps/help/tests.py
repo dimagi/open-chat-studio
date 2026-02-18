@@ -1,7 +1,9 @@
+import json
 from unittest import mock
 
 import pydantic as pydantic_module
 import pytest
+from django.test import RequestFactory
 from pydantic import BaseModel
 
 from apps.help.agents.code_generate import CodeGenerateAgent, CodeGenerateInput, CodeGenerateOutput
@@ -13,6 +15,7 @@ from apps.help.agents.progress_messages import (
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import AGENT_REGISTRY, register_agent
 from apps.help.utils import extract_function_signature, get_python_node_coder_prompt
+from apps.help.views import run_agent
 
 
 def test_get_python_node_coder_prompt():
@@ -253,3 +256,51 @@ class TestProgressMessagesAgent:
         result = agent.run()
 
         assert result == ProgressMessagesOutput(messages=[])
+
+
+class TestRunAgentView:
+    """Test the run_agent view directly, bypassing auth decorators via __wrapped__."""
+
+    def _make_request(self, agent_name, body):
+        factory = RequestFactory()
+        request = factory.post(
+            f"/help/{agent_name}/",
+            data=json.dumps(body),
+            content_type="application/json",
+        )
+        # Bypass @require_POST (already POST), @login_and_team_required, @csrf_exempt
+        # by calling the innermost function via __wrapped__
+        inner = run_agent.__wrapped__.__wrapped__
+        return inner(request, team_slug="test-team", agent_name=agent_name)
+
+    def test_unknown_agent_returns_404(self):
+        response = self._make_request("nonexistent", {})
+        assert response.status_code == 404
+
+    def test_invalid_input_returns_400(self):
+        # code_generate requires "query" field
+        response = self._make_request("code_generate", {"bad": "data"})
+        assert response.status_code == 400
+
+    @mock.patch("apps.help.agents.code_generate.build_system_agent")
+    def test_successful_agent_call(self, mock_build):
+        valid_code = "def main(input: str, **kwargs) -> str:\n    return input"
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"messages": [mock.Mock(text=valid_code)]}
+        mock_build.return_value = mock_agent
+
+        with mock.patch("apps.help.agents.code_generate.CodeNode"):
+            response = self._make_request("code_generate", {"query": "write code"})
+
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert "response" in data
+        assert data["response"]["code"] == valid_code
+
+    @mock.patch("apps.help.agents.code_generate.build_system_agent")
+    def test_agent_error_returns_500(self, mock_build):
+        mock_build.side_effect = RuntimeError("boom")
+        response = self._make_request("code_generate", {"query": "write code"})
+        assert response.status_code == 500
+        data = json.loads(response.content)
+        assert "error" in data
