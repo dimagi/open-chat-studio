@@ -1065,7 +1065,7 @@ class Participant(BaseTeamModel):
         """
         Updates participant name field from a data dictionary.
         """
-        if "name" in data:
+        if "name" in data and data["name"] is not None:
             self.name = data["name"]
             self.save(update_fields=["name"])
 
