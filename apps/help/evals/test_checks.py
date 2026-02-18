@@ -32,6 +32,11 @@ class TestCheckHasMain:
         result = check_has_main(code)
         assert result is not None
 
+    def test_wrong_return_type(self):
+        code = "def main(input: str, **kwargs) -> int:\n    return 1"
+        result = check_has_main(code)
+        assert result is not None
+
 
 class TestCheckCodeNode:
     def test_valid_code(self):
