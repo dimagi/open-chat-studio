@@ -13,49 +13,6 @@ class LevelChoices(models.IntegerChoices):
     ERROR = 2, "Error"
 
 
-class Notification(BaseTeamModel):
-    # TODO: Remove model
-    title = models.CharField(max_length=255)
-    message = models.TextField()
-    level = models.PositiveSmallIntegerField(choices=LevelChoices.choices, db_index=True)
-    users = models.ManyToManyField("users.CustomUser", through="UserNotification", related_name="notifications")
-    last_event_at = models.DateTimeField()
-    identifier = models.CharField(max_length=40)
-    event_data = SanitizedJSONField(default=dict, blank=True)
-    links = SanitizedJSONField(default=dict, blank=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["team", "identifier"],
-                condition=~models.Q(identifier=""),
-                name="unique_notification_per_team_and_identifier",
-            ),
-        ]
-
-    def __str__(self):
-        return self.title
-
-    def save(self, *args, **kwargs):
-        if self.last_event_at is None:
-            self.last_event_at = self.created_at
-        super().save(*args, **kwargs)
-
-
-class UserNotification(BaseTeamModel):
-    # TODO: Remove model
-    notification = models.ForeignKey(Notification, on_delete=models.CASCADE)
-    user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
-    read = models.BooleanField(default=False, db_index=True)
-    read_at = models.DateTimeField(null=True)
-
-    class Meta:
-        unique_together = ("notification", "user")
-
-    def __str__(self):
-        return f"{self.user} - {self.notification.title}"
-
-
 class UserNotificationPreferences(BaseTeamModel):
     """Store user preferences for in-app and email notifications"""
 
