@@ -1,18 +1,17 @@
-# Documentation: docs/developer_guides/igor.md
-name: Igor Followup
+name: Claude Followup
 
 on:
   workflow_run:
     workflows: ["Lint and Test"]
     types: [completed]
     branches:
-      - 'claude-incremental/**'
+      - 'claude/**'
 
 concurrency:
-  group: claude-incremental-followup-${{ github.event.workflow_run.head_branch }}
+  group: claude-followup-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
-# Restrict default permissions - job overrides as needed
+# Restrict default permissions — job overrides as needed
 permissions:
   contents: read
   pull-requests: read
@@ -80,11 +79,11 @@ jobs:
 
           echo "PR number: $PR_NUMBER"
 
-          # Check if the followup label is already applied
-          HAS_LABEL=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name' | grep -c '^igor-is-done$' || true)
+          # Check if the followup label is already applied (one-round limit)
+          HAS_LABEL=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name' | grep -c '^claude-followup-done$' || true)
 
           if [ "$HAS_LABEL" -gt 0 ]; then
-            echo "::notice::PR #$PR_NUMBER already has igor-is-done label, skipping"
+            echo "::notice::PR #$PR_NUMBER already has claude-followup-done label, skipping"
             echo "skip=true" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -193,11 +192,11 @@ jobs:
             1. Comment on the PR noting that no changes were needed
           claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(npm run dev:*),Bash(npm ci:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ruff:*),Bash(uv lock:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh run download:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Read,Write,Edit"'
 
-      - name: Add 'done' label
+      - name: Add followup-done label
         if: always() && steps.check.outputs.skip != 'true' && steps.check.outputs.pr_number != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr edit "${{ steps.check.outputs.pr_number }}" \
             --repo "${{ github.repository }}" \
-            --add-label "igor-is-done"
+            --add-label "claude-followup-done"
