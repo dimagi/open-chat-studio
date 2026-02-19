@@ -11,7 +11,7 @@ from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.human_annotations")
 
 
 class QueueStatus(models.TextChoices):
