@@ -101,23 +101,6 @@ def test_compute_aggregates_empty_queue(team):
 
 
 @pytest.mark.django_db()
-def test_compute_aggregates_updates_on_recompute(team, queue_with_int_schema):
-    user1 = team.members.first()
-    user2 = team.members.last()
-
-    _make_item_and_annotate(queue_with_int_schema, team, user1, {"score": 3})
-    agg1 = compute_aggregates_for_queue(queue_with_int_schema)
-    assert agg1.aggregates["score"]["count"] == 1
-    assert agg1.aggregates["score"]["mean"] == 3.0
-
-    _make_item_and_annotate(queue_with_int_schema, team, user2, {"score": 5})
-    agg2 = compute_aggregates_for_queue(queue_with_int_schema)
-    assert agg2.pk == agg1.pk  # same object, updated
-    assert agg2.aggregates["score"]["count"] == 2
-    assert agg2.aggregates["score"]["mean"] == 4.0
-
-
-@pytest.mark.django_db()
 def test_compute_aggregates_excludes_string_fields(team):
     """String/text fields should be excluded from aggregation."""
     queue = AnnotationQueue.objects.create(

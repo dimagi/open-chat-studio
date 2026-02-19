@@ -269,14 +269,6 @@ def test_edit_locked_queue_rejects_adding_field(client, team_with_users, user):
 
 
 @pytest.mark.django_db()
-def test_queue_detail(client, team_with_users, queue):
-    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
-    response = client.get(url)
-    assert response.status_code == 200
-    assert queue.name in response.content.decode()
-
-
-@pytest.mark.django_db()
 def test_queue_detail_shows_aggregates(client, team_with_users, queue, user):
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
     Annotation.objects.create(

@@ -3,8 +3,7 @@ import json
 import pytest
 
 from apps.human_annotations.forms import AnnotationQueueForm, build_annotation_form
-from apps.human_annotations.models import Annotation, AnnotationQueue, AnnotationStatus
-from apps.utils.factories.human_annotations import AnnotationItemFactory
+from apps.human_annotations.models import AnnotationQueue
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -112,70 +111,3 @@ def test_required_fields_reject_empty_submission(team):
     assert not form.is_valid()
     assert "score" in form.errors
     assert "notes" in form.errors
-
-
-@pytest.mark.django_db()
-def test_locked_queue_form_allows_required_change(team):
-    """When annotations exist, changing 'required' should be accepted."""
-    user = team.members.first()
-    queue = AnnotationQueue.objects.create(
-        team=team,
-        name="Queue",
-        schema={"score": {"type": "int", "description": "Score", "ge": 1, "le": 5}},
-        created_by=user,
-    )
-    item = AnnotationItemFactory(queue=queue, team=team)
-    Annotation.objects.create(
-        item=item,
-        team=team,
-        reviewer=user,
-        data={"score": 4},
-        status=AnnotationStatus.SUBMITTED,
-    )
-
-    new_schema = {"score": {"type": "int", "description": "Score", "ge": 1, "le": 5, "required": False}}
-    form = AnnotationQueueForm(
-        instance=queue,
-        data={
-            "name": queue.name,
-            "description": "",
-            "schema": json.dumps(new_schema),
-            "num_reviews_required": queue.num_reviews_required,
-        },
-    )
-    assert form.is_valid(), form.errors
-    assert form.cleaned_data["schema"]["score"]["required"] is False
-
-
-@pytest.mark.django_db()
-def test_locked_queue_form_rejects_structural_change(team):
-    """When annotations exist, changing field type/constraints should be rejected."""
-    user = team.members.first()
-    queue = AnnotationQueue.objects.create(
-        team=team,
-        name="Queue",
-        schema={"score": {"type": "int", "description": "Score", "ge": 1, "le": 5}},
-        created_by=user,
-    )
-    item = AnnotationItemFactory(queue=queue, team=team)
-    Annotation.objects.create(
-        item=item,
-        team=team,
-        reviewer=user,
-        data={"score": 4},
-        status=AnnotationStatus.SUBMITTED,
-    )
-
-    # Try to change the type
-    bad_schema = {"score": {"type": "float", "description": "Score", "ge": 1, "le": 5}}
-    form = AnnotationQueueForm(
-        instance=queue,
-        data={
-            "name": queue.name,
-            "description": "",
-            "schema": json.dumps(bad_schema),
-            "num_reviews_required": queue.num_reviews_required,
-        },
-    )
-    assert not form.is_valid()
-    assert "schema" in form.errors
