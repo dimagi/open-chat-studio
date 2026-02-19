@@ -4,15 +4,15 @@ GitHub Actions workflows for automated issue implementation, incremental task pr
 
 ## Use Cases
 
-- Implement an issue end-to-end when assigned or labeled
+- Implement an issue end-to-end when labeled or mentioned
 - Work through multi-task issues incrementally (one task per run)
 - Automatically fix CI failures and address review comments on Claude PRs
 
 ## How to Use
 
-### One-off: assign or label an issue
+### One-off: label an issue
 
-1. Apply the `claude` label to an issue, **or** assign it
+1. Apply the `claude` label to an issue
 2. Claude creates a branch, implements the work, and opens a PR
 
 ### Incremental: multi-task issues

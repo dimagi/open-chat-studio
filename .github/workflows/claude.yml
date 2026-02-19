@@ -14,14 +14,15 @@ on:
   pull_request_review_comment:
     types: [created]
   issues:
-    types: [assigned, labeled]
+    types: [labeled]
   pull_request_review:
     types: [submitted]
 
 concurrency:
   group: >-
     claude-${{
-      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'scheduled' ||
+      github.event_name == 'schedule' && 'scheduled' ||
+      github.event_name == 'workflow_dispatch' && format('dispatch-{0}', inputs.issue_number) ||
       github.event.issue.number ||
       github.event.pull_request.number ||
       github.run_id
@@ -88,13 +89,14 @@ jobs:
           ISSUE_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title')
           ISSUE_BODY=$(echo "$ISSUE_DATA" | jq -r '.body')
 
-          echo "issue_title<<EOF" >> $GITHUB_OUTPUT
+          DELIMITER="ghadelim_$(openssl rand -hex 8)"
+          echo "issue_title<<$DELIMITER" >> $GITHUB_OUTPUT
           echo "$ISSUE_TITLE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "$DELIMITER" >> $GITHUB_OUTPUT
 
-          echo "issue_body<<EOF" >> $GITHUB_OUTPUT
+          echo "issue_body<<$DELIMITER" >> $GITHUB_OUTPUT
           echo "$ISSUE_BODY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "$DELIMITER" >> $GITHUB_OUTPUT
 
   # ── Scheduled / manual: implement the next task on the found issue ──
   scheduled:
@@ -155,6 +157,14 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+
+      - name: Install Node dependencies
+        run: npm ci
+
       - name: Create branch
         id: branch
         run: |
@@ -187,21 +197,20 @@ jobs:
             5. After completing the task, update the issue using gh issue edit to:
                - Check off the completed task (change - [ ] to - [x])
                - Add any learnings to the ## Learnings section (create if needed)
-            5. If you cannot complete the task, mark it as blocked (add "blocked:" prefix to the task)
-            6. Add a comment to the issue summarizing what you did
+            6. If you cannot complete the task, mark it as blocked (add "blocked:" prefix to the task)
+            7. Add a comment to the issue summarizing what you did
 
             If all tasks are complete or blocked, comment on the issue explaining the status.
           claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Read,Write,Edit"'
 
-  # ── Event-driven: respond to @claude mentions, issue assignment, label ──
+  # ── Event-driven: respond to @claude mentions, issue label ──
   claude:
     if: |
       github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-        (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'claude') ||
-        (github.event_name == 'issues' && github.event.action == 'assigned')
+        (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'claude')
       )
     runs-on: ubuntu-latest
     permissions:
@@ -258,6 +267,14 @@ jobs:
           uv venv
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+
+      - name: Install Node dependencies
+        run: npm ci
 
       - name: Run Claude Code
         id: claude
