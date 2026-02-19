@@ -67,6 +67,9 @@ class EventType(BaseTeamModel):
                 name="unique_event_type_per_team_and_identifier",
             ),
         ]
+        indexes = [
+            models.Index(fields=["created_at"], name="ocs_notif_eventtype_created_at_idx"),
+        ]
 
 
 class NotificationEvent(BaseTeamModel):
