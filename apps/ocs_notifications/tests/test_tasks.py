@@ -42,11 +42,13 @@ class TestCleanupOldNotificationEvents:
         assert not EventUser.objects.filter(pk=event_user.pk).exists()
 
     def test_only_deletes_event_types_older_than_exactly_90_days(self, team):
-        boundary_date = timezone.now() - datetime.timedelta(days=90)
+        now = timezone.now()
+        boundary_date = now - datetime.timedelta(days=90)
         with travel(boundary_date, tick=False):
             boundary_event_type = EventTypeFactory.create(team=team)
 
-        cleanup_old_notification_events()
+        with travel(now, tick=False):
+            cleanup_old_notification_events()
 
         assert EventType.objects.filter(pk=boundary_event_type.pk).exists()
 
