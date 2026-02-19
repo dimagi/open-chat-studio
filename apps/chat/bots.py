@@ -144,10 +144,7 @@ class PipelineBot:
         )
         runnable = graph.build_runnable()
         runner = DjangoLangGraphRunner(DjangoSafeContextThreadPoolExecutor)
-        try:
-            raw_output = runner.invoke(runnable, input_state, config)
-        except Exception:
-            raise
+        raw_output = runner.invoke(runnable, input_state, config)
         output = PipelineState(**raw_output).json_safe()
         return output
 
