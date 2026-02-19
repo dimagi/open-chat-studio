@@ -98,6 +98,11 @@ class TestCheckHasMain:
         result = check_has_main(code)
         assert result is not None
 
+    def test_wrong_return_type(self):
+        code = "def main(input: str, **kwargs) -> int:\n    return 1"
+        result = check_has_main(code)
+        assert result is not None
+
 
 class TestCheckCodeNode:
     def test_valid_code(self):
@@ -171,7 +176,7 @@ def check_has_main(code: str) -> str | None:
             if args.kwarg is None:
                 return "main() must accept **kwargs"
             # Must have -> str return annotation
-            if node.returns is None:
+            if not (isinstance(node.returns, ast.Name) and node.returns.id == "str"):
                 return "main() must have -> str return annotation"
             return None
 

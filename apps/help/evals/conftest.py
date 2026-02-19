@@ -85,8 +85,12 @@ def run_checks(output, checks: list[dict], output_field: str | None = None):
 
 
 def _system_agent_models_configured() -> bool:
-    """Check if system agent API keys are configured."""
-    return bool(getattr(settings, "SYSTEM_AGENT_MODELS_HIGH", None)) or bool(
+    """Check if system agent API keys are configured.
+
+    Both HIGH and LOW tiers are required: agents use HIGH for generation,
+    and llm_judge uses LOW for evaluation.
+    """
+    return bool(getattr(settings, "SYSTEM_AGENT_MODELS_HIGH", None)) and bool(
         getattr(settings, "SYSTEM_AGENT_MODELS_LOW", None)
     )
 
