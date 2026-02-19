@@ -13,7 +13,7 @@ from apps.ocs_notifications.notifications import llm_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.trace.models import Trace, TraceStatus
 
-from .base import SpanNotificationConfig, TraceContext, Tracer  # noqa: F401
+from .base import SpanNotificationConfig, TraceContext, Tracer
 
 if TYPE_CHECKING:
     from apps.experiments.models import Experiment, ExperimentSession
@@ -35,6 +35,8 @@ class OCSTracer(Tracer):
         self.session: ExperimentSession | None = None
         self.error_detected = False
         self.error_message: str = ""
+        self.error_span_name: str = ""
+        self.error_notification_config: SpanNotificationConfig | None = None
 
     @property
     def ready(self) -> bool:
@@ -123,6 +125,15 @@ class OCSTracer(Tracer):
                         self.trace_record.output_message_id,
                     )
 
+            # Fire notification if a span declared one and the trace errored
+            if (
+                self.error_detected
+                and self.error_span_name
+                and self.error_notification_config is not None
+                and not self.experiment.is_working_version
+            ):
+                self._fire_trace_error_notification()
+
             # Reset state
             self.trace_record = None
             self.error_detected = False
@@ -130,6 +141,8 @@ class OCSTracer(Tracer):
             self.trace_name = None
             self.trace_id = None
             self.session = None
+            self.error_span_name = ""
+            self.error_notification_config = None
 
     @contextmanager
     def span(
@@ -157,6 +170,10 @@ class OCSTracer(Tracer):
                 self.error_detected = True
                 if not self.error_message:
                     self.error_message = str(error_to_record)
+                # First erroring span wins — captures innermost span (it exits before outer spans)
+                if not self.error_span_name:
+                    self.error_span_name = span_context.name
+                    self.error_notification_config = span_context.notification_config
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
         """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
@@ -193,6 +210,19 @@ class OCSTracer(Tracer):
 
         cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment.id)
         cache.delete(cache_key)
+
+    def _fire_trace_error_notification(self) -> None:
+        from apps.ocs_notifications.notifications import trace_error_notification
+
+        trace_url = self.trace_record.get_absolute_url() if self.trace_record else None
+        trace_error_notification(
+            experiment=self.experiment,
+            session=self.session,
+            span_name=self.error_span_name,
+            error_message=self.error_message,
+            permissions=self.error_notification_config.permissions if self.error_notification_config else None,
+            trace_url=trace_url,
+        )
 
 
 class OCSCallbackHandler(BaseCallbackHandler):
