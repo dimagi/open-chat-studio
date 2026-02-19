@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 
-from apps.ocs_notifications.notifications import llm_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.trace.models import Trace, TraceStatus
 
@@ -232,16 +231,19 @@ class OCSCallbackHandler(BaseCallbackHandler):
 
     def on_llm_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True
-        error_message = "LLM error occurred"
         if not self.tracer.error_message:
             if _error := kwargs.get("error") or (args[0] if args else None):
-                self.tracer.error_message = error_message = str(_error)
-        else:
-            error_message = self.tracer.error_message
+                self.tracer.error_message = str(_error)
 
-        llm_error_notification(
-            experiment=self.tracer.experiment, session=self.tracer.session, error_message=error_message
-        )
+        # Safety net: if the LLM error is caught before reaching any OCS span boundary,
+        # this virtual span name ensures a notification still fires at trace exit.
+        # In practice, LLM errors propagate through "Run Pipeline", so this fallback
+        # is only reached if the error is swallowed above the LangChain layer.
+        if not self.tracer.error_span_name:
+            self.tracer.error_span_name = "llm"
+            self.tracer.error_notification_config = SpanNotificationConfig(
+                permissions=["experiments.change_experiment"]
+            )
 
     def on_chain_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True

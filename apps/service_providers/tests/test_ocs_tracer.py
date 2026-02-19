@@ -152,17 +152,11 @@ class TestOCSTracer:
 
 
 class TestOCSCallbackHandler:
-    @patch("apps.service_providers.tracing.ocs_tracer.llm_error_notification")
-    def test_on_llm_error_creates_notification(self, mock_llm_error_notification):
-        """Test that LLM error handler creates a notification."""
-        # Set up experiment mock
+    def test_on_llm_error_sets_virtual_span_fallback(self):
+        """LLM error handler sets a virtual span fallback (no longer fires llm_error_notification)."""
         experiment = Mock(id=456)
-
-        # Set up tracer
         tracer = OCSTracer(experiment, team_id=123)
         tracer.trace_id = str(uuid4())
-
-        # Set up a session with a participant so the notification includes context
 
         participant = Mock()
         participant.identifier = "user@example.com"
@@ -171,23 +165,28 @@ class TestOCSCallbackHandler:
         session.participant = participant
         tracer.session = session
 
-        # Create callback handler
         callback_handler = OCSCallbackHandler(tracer=tracer)
 
-        # Trigger LLM error
         error_message = "Connection timeout to OpenAI API"
         callback_handler.on_llm_error(error=Exception(error_message))
 
-        # Verify llm_error_notification was called with correct parameters
-        mock_llm_error_notification.assert_called_once_with(
-            experiment=experiment,
-            session=session,
-            error_message=error_message,
-        )
-
-        # Verify tracer state is updated
         assert tracer.error_detected is True
         assert tracer.error_message == error_message
+        assert tracer.error_span_name == "llm"
+        assert isinstance(tracer.error_notification_config, SpanNotificationConfig)
+        assert tracer.error_notification_config.permissions == ["experiments.change_experiment"]
+
+    def test_on_llm_error_does_not_overwrite_existing_span_name(self):
+        """Virtual span fallback is only set when error_span_name is not already captured."""
+        experiment = Mock(id=456)
+        tracer = OCSTracer(experiment, team_id=123)
+        tracer.error_span_name = "Run Pipeline"  # Already set by a span
+        tracer.session = Mock()
+
+        callback_handler = OCSCallbackHandler(tracer=tracer)
+        callback_handler.on_llm_error(error=Exception("LLM error"))
+
+        assert tracer.error_span_name == "Run Pipeline"  # NOT overwritten
 
 
 @pytest.mark.django_db()
