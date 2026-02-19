@@ -6,8 +6,9 @@
     - type: syntax
     - type: has_main
     - type: code_node
-    - type: llm_judge
-      criteria: "The generated code defines a main function that returns the string 'Hello, World!' when called"
+    - type: execute
+      input: "anything"
+      expected: "Hello, World!"
 
 - id: echo_input
   input:
@@ -17,8 +18,9 @@
     - type: syntax
     - type: has_main
     - type: code_node
-    - type: llm_judge
-      criteria: "The generated code returns the input parameter unchanged"
+    - type: execute
+      input: "test input"
+      expected: "test input"
 
 - id: fix_syntax_error
   input:
@@ -28,8 +30,9 @@
     - type: syntax
     - type: has_main
     - type: code_node
-    - type: llm_judge
-      criteria: "The code fixes the syntax error (unclosed parenthesis) and preserves the .upper() behavior"
+    - type: execute
+      input: "hello"
+      expected: "HELLO"
 
 - id: use_participant_data
   input:
@@ -50,5 +53,9 @@
     - type: syntax
     - type: has_main
     - type: code_node
-    - type: llm_judge
-      criteria: "The code checks if input is empty and returns 'Error' in that case, otherwise returns the uppercased input"
+    - type: execute
+      input: ""
+      expected: "Error"
+    - type: execute
+      input: "hello"
+      expected: "HELLO"

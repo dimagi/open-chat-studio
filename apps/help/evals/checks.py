@@ -53,6 +53,27 @@ def check_code_node(code: str) -> str | None:
         return f"CodeNode validation failed: {e}"
 
 
+def check_execute(code: str, input_value: str, expected: str) -> str | None:
+    """Execute the code in the RestrictedPython sandbox and check the output.
+    Returns None on success, error message on failure.
+    """
+    from apps.pipelines.nodes.nodes import CodeNode
+
+    try:
+        node = CodeNode.model_validate({"code": code, "name": "eval", "node_id": "eval", "django_node": None})
+    except Exception as e:
+        return f"CodeNode validation failed: {e}"
+
+    try:
+        result = node.compile_and_execute_code(input=input_value)
+    except Exception as e:
+        return f"Execution failed: {e}"
+
+    if result != expected:
+        return f"Expected {expected!r}, got {result!r}"
+    return None
+
+
 def check_count(messages: list[str], expected: int) -> str | None:
     """Check that the message list has the expected count.
     Returns None on success, error message on failure.

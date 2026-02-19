@@ -1,6 +1,7 @@
 from apps.help.evals.checks import (
     check_code_node,
     check_count,
+    check_execute,
     check_has_main,
     check_max_words,
     check_syntax,
@@ -46,6 +47,29 @@ class TestCheckCodeNode:
     def test_invalid_code(self):
         result = check_code_node("not valid at all")
         assert result is not None
+
+
+class TestCheckExecute:
+    def test_correct_output(self):
+        code = 'def main(input: str, **kwargs) -> str:\n    return "Hello, World!"'
+        assert check_execute(code, "anything", "Hello, World!") is None
+
+    def test_echo_input(self):
+        code = "def main(input: str, **kwargs) -> str:\n    return input"
+        assert check_execute(code, "test value", "test value") is None
+
+    def test_wrong_output(self):
+        code = 'def main(input: str, **kwargs) -> str:\n    return "wrong"'
+        result = check_execute(code, "anything", "expected")
+        assert result is not None
+        assert "Expected" in result
+        assert "'expected'" in result
+
+    def test_runtime_error(self):
+        code = "def main(input: str, **kwargs) -> str:\n    return 1 / 0"
+        result = check_execute(code, "anything", "whatever")
+        assert result is not None
+        assert "Execution failed" in result
 
 
 class TestCheckCount:
