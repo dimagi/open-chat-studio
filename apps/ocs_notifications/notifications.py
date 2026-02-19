@@ -1,5 +1,7 @@
 import logging
 
+from django.utils.text import slugify
+
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.decorators import silence_exceptions
 
@@ -108,8 +110,6 @@ def trace_error_notification(
     All failures of the same span on the same experiment share one EventType
     thread regardless of the specific error message.
     """
-    from django.utils.text import slugify
-
     slug = slugify(span_name.replace("_", " "))
     human_name = span_name.replace("_", " ").title()
     title = f"{human_name} Failed for '{experiment}'"
