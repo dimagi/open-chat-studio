@@ -440,7 +440,7 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
     def has_sync_errors(self) -> bool:
         """Check if the last sync had errors"""
         last_log = self.sync_logs.first()
-        return last_log and last_log.status == SyncStatus.FAILED
+        return last_log is not None and last_log.status == SyncStatus.FAILED
 
 
 class DocumentSourceSyncLog(models.Model):
