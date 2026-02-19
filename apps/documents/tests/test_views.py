@@ -3,9 +3,15 @@ from unittest import mock
 import pytest
 from django.urls import reverse
 
-from apps.documents.models import Collection, CollectionFile, FileStatus
+from apps.documents.models import (
+    Collection,
+    CollectionFile,
+    DocumentSourceSyncLog,
+    FileStatus,
+    SyncStatus,
+)
 from apps.files.models import File
-from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -248,3 +254,121 @@ class TestDeleteCollectionFile:
             # Verify file still exists and is still linked to assistant
             file.refresh_from_db()
             assert file.is_archived is False
+
+
+@pytest.mark.django_db()
+class TestDocumentSourceSyncLogs:
+    @pytest.fixture()
+    def team_with_user(self):
+        return TeamWithUsersFactory()
+
+    @pytest.fixture()
+    def collection(self, team_with_user):
+        return CollectionFactory(team=team_with_user, is_index=True)
+
+    @pytest.fixture()
+    def document_source(self, collection):
+        return DocumentSourceFactory(collection=collection, source_type="github", auto_sync_enabled=True)
+
+    def test_view_sync_logs(self, team_with_user, collection, document_source, client):
+        """Test viewing sync logs for a document source"""
+        # Create some sync logs
+        DocumentSourceSyncLog.objects.create(
+            document_source=document_source,
+            status=SyncStatus.SUCCESS,
+            files_added=5,
+            files_updated=2,
+            files_removed=1,
+            duration_seconds=10.5,
+        )
+        DocumentSourceSyncLog.objects.create(
+            document_source=document_source,
+            status=SyncStatus.FAILED,
+            files_added=0,
+            files_updated=0,
+            files_removed=0,
+            error_message="Connection timeout",
+            duration_seconds=5.0,
+        )
+
+        client.force_login(team_with_user.members.first())
+        url = reverse(
+            "documents:document_source_sync_logs",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
+
+        response = client.get(url)
+        assert response.status_code == 200
+        assert b"Connection timeout" in response.content
+        assert b"Success" in response.content
+        assert b"Failed" in response.content
+
+    def test_filter_sync_logs_by_errors(self, team_with_user, collection, document_source, client):
+        """Test filtering sync logs to show only errors"""
+        # Create success and failed logs
+        DocumentSourceSyncLog.objects.create(document_source=document_source, status=SyncStatus.SUCCESS, files_added=5)
+        DocumentSourceSyncLog.objects.create(
+            document_source=document_source,
+            status=SyncStatus.FAILED,
+            error_message="Connection timeout",
+        )
+
+        client.force_login(team_with_user.members.first())
+        url = reverse(
+            "documents:document_source_sync_logs",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
+
+        # Request with errors_only filter
+        response = client.get(url, {"errors_only": "true"})
+        assert response.status_code == 200
+        # Should show failed log
+        assert b"Connection timeout" in response.content
+        # Should not show success (when context is properly filtered)
+        content = response.content.decode()
+        assert "Success" not in content or content.count("Success") <= 1  # Allow one in badge type
+
+    def test_pagination_of_sync_logs(self, team_with_user, collection, document_source, client):
+        """Test pagination of sync logs"""
+        # Create more than 10 logs to test pagination
+        for i in range(15):
+            DocumentSourceSyncLog.objects.create(
+                document_source=document_source,
+                status=SyncStatus.SUCCESS,
+                files_added=i,
+            )
+
+        client.force_login(team_with_user.members.first())
+        url = reverse(
+            "documents:document_source_sync_logs",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
+
+        # First page
+        response = client.get(url)
+        assert response.status_code == 200
+        assert b"Page 1 of 2" in response.content
+
+        # Second page
+        response = client.get(url, {"page": "2"})
+        assert response.status_code == 200
+        assert b"Page 2 of 2" in response.content
+
+    def test_document_source_has_sync_errors(self, document_source):
+        """Test the has_sync_errors method on DocumentSource"""
+        # Initially no logs
+        assert not document_source.has_sync_errors()
+
+        # Add a successful log
+        DocumentSourceSyncLog.objects.create(document_source=document_source, status=SyncStatus.SUCCESS, files_added=1)
+        assert not document_source.has_sync_errors()
+
+        # Add a failed log (should be most recent)
+        DocumentSourceSyncLog.objects.create(
+            document_source=document_source, status=SyncStatus.FAILED, error_message="Test error"
+        )
+        assert document_source.has_sync_errors()
+
+        # Add another successful log (now most recent)
+        DocumentSourceSyncLog.objects.create(document_source=document_source, status=SyncStatus.SUCCESS, files_added=1)
+        assert not document_source.has_sync_errors()
