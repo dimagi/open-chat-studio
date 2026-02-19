@@ -96,3 +96,14 @@ def check_max_words(messages: list[str], limit: int) -> str | None:
     if violations:
         return "\n".join(violations)
     return None
+
+
+def check_filter_params(filters: list, expected_params: list[str]) -> str | None:
+    """Check that the output contains exactly the expected column values.
+    Returns None on success, error message on failure.
+    """
+    actual_params = sorted(f.column for f in filters)
+    expected_sorted = sorted(expected_params)
+    if actual_params != expected_sorted:
+        return f"Expected params {expected_sorted}, got {actual_params}"
+    return None
