@@ -1,8 +1,42 @@
 import React from "react";
-import {JsonSchema, NodeParams} from "../types/nodeParams";
+import {JsonSchema, NodeParams, VisibleWhenCondition} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
 import {getWidget} from "./widgets";
 import {getCachedData} from "../utils";
+
+/**
+ * Evaluates a single visibility condition against the current node params.
+ * Returns true if the field should be visible.
+ */
+function evaluateCondition(condition: VisibleWhenCondition, nodeParams: NodeParams): boolean {
+  const fieldValue = nodeParams[condition.field];
+  const operator = condition.operator ?? "==";
+  switch (operator) {
+    case "==": return fieldValue === condition.value;
+    case "!=": return fieldValue !== condition.value;
+    case "in": return Array.isArray(condition.value) && condition.value.includes(fieldValue);
+    case "not_in": return Array.isArray(condition.value) && !condition.value.includes(fieldValue);
+    default: return true;
+  }
+}
+
+/**
+ * Evaluates the ui:visibleWhen condition(s) for a field.
+ * Returns true if the field should be visible, false if it should be hidden.
+ * If no condition is defined, returns true (field is always visible).
+ */
+export function evaluateVisibleWhen(
+  visibleWhen: VisibleWhenCondition | VisibleWhenCondition[] | undefined,
+  nodeParams: NodeParams
+): boolean {
+  if (visibleWhen === undefined || visibleWhen === null) {
+    return true;
+  }
+  if (Array.isArray(visibleWhen)) {
+    return visibleWhen.every((condition) => evaluateCondition(condition, nodeParams));
+  }
+  return evaluateCondition(visibleWhen, nodeParams);
+}
 
 
 type GetWidgetsParams = {
@@ -152,6 +186,10 @@ export const getInputWidget = (
   const widgetSchema = params.schema.properties[params.name];
   const widgetOrType = widgetSchema["ui:widget"] || widgetSchema.type;
   if (widgetOrType == 'none') {
+    return <></>;
+  }
+
+  if (!evaluateVisibleWhen(widgetSchema["ui:visibleWhen"], params.params)) {
     return <></>;
   }
 

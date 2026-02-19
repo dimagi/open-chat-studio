@@ -504,6 +504,17 @@ class OptionsSource(StrEnum):
     synthetic_voice_id = "synthetic_voice_id"
 
 
+class VisibleWhen(BaseModel):
+    """Defines a condition under which a field should be visible in the UI.
+
+    Supported operators: "==", "!=", "in", "not_in"
+    """
+
+    field: str
+    value: Any
+    operator: str = "=="
+
+
 class UiSchema(BaseModel):
     widget: Widgets = None
 
@@ -515,6 +526,10 @@ class UiSchema(BaseModel):
     options_source: OptionsSource = None
     flag_required: str = None
 
+    # Use this to conditionally show/hide a field based on another field's value.
+    # Can be a single condition or a list of conditions (all must be satisfied).
+    visible_when: VisibleWhen | list[VisibleWhen] | None = None
+
     def __call__(self, schema: JsonDict):
         if self.widget:
             schema["ui:widget"] = self.widget
@@ -524,6 +539,11 @@ class UiSchema(BaseModel):
             schema["ui:optionsSource"] = self.options_source
         if self.flag_required:
             schema["ui:flagRequired"] = self.flag_required
+        if self.visible_when is not None:
+            if isinstance(self.visible_when, list):
+                schema["ui:visibleWhen"] = [cond.model_dump() for cond in self.visible_when]
+            else:
+                schema["ui:visibleWhen"] = self.visible_when.model_dump()
 
 
 class NodeSchema(BaseModel):
