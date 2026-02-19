@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from apps.service_providers.tracing.base import TraceContext
+from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
 from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
 from apps.trace.models import Span, Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -203,10 +203,6 @@ class TestOCSTracerNotifications:
 
     def test_span_with_notification_config_is_captured_on_error(self, experiment):
         """When a span whose TraceContext carries notification_config raises, OCSTracer records it."""
-        from unittest.mock import patch
-
-        from apps.service_providers.tracing.base import SpanNotificationConfig
-
         # Use a published (non-working) version so notification firing is allowed
         published = experiment.create_new_version()
         tracer = self._make_tracer(published)
@@ -233,10 +229,6 @@ class TestOCSTracerNotifications:
 
     def test_only_innermost_erroring_span_is_captured(self, experiment):
         """When nested spans both exit with an error, only the innermost span's config wins."""
-        from unittest.mock import patch
-
-        from apps.service_providers.tracing.base import SpanNotificationConfig
-
         # Use a published (non-working) version so notification firing is allowed
         published = experiment.create_new_version()
         tracer = self._make_tracer(published)
@@ -268,10 +260,6 @@ class TestOCSTracerNotifications:
 
     def test_notification_not_fired_for_working_version(self, experiment):
         """Notification is NOT fired when the experiment is a working version."""
-        from unittest.mock import patch
-
-        from apps.service_providers.tracing.base import SpanNotificationConfig
-
         # The base experiment fixture is always the working version
         assert experiment.is_working_version
         tracer = self._make_tracer(experiment)
@@ -289,8 +277,6 @@ class TestOCSTracerNotifications:
 
     def test_notification_not_fired_when_span_has_no_config(self, experiment):
         """Notification is NOT fired when the erroring span had no notification_config."""
-        from unittest.mock import patch
-
         # Use a published (non-working) version so the working-version guard doesn't hide the failure
         published = experiment.create_new_version()
         tracer = self._make_tracer(published)
@@ -308,8 +294,6 @@ class TestOCSTracerNotifications:
 
     def test_state_is_reset_after_trace_exits(self, experiment):
         """error_span_name and error_notification_config are reset after trace exits."""
-        from apps.service_providers.tracing.base import SpanNotificationConfig
-
         # The base experiment fixture is the working version — notification won't fire
         assert experiment.is_working_version
         tracer = self._make_tracer(experiment)
