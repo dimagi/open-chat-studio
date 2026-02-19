@@ -1,0 +1,110 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+
+{% block app %}
+<div class="prose max-w-none">
+  <h1>{% translate "Create Custom Voice" %}</h1>
+
+  <p class="text-sm opacity-70">
+    {% translate "Provider:" %} {{ provider.name }}
+  </p>
+
+  <div class="alert alert-info mb-6">
+    <i class="fa-solid fa-info-circle mr-2"></i>
+    <div>
+      <h4 class="font-bold">{% translate "Audio Sample Requirements" %}</h4>
+      <ul class="text-sm list-disc list-inside space-y-1">
+        <li>{% translate "Maximum 30 seconds duration" %}</li>
+        <li>{% translate "Record in a quiet space with minimal echo" %}</li>
+        <li>{% translate "Use a professional microphone if possible" %}</li>
+        <li>{% translate "The model will copy your exact tone, cadence, energy, and pauses" %}</li>
+        <li>{% translate "Supported formats: MP3, WAV, OGG, AAC, FLAC, WebM, MP4" %}</li>
+      </ul>
+    </div>
+  </div>
+
+  {% if not consents %}
+    <div class="alert alert-warning mb-6">
+      <i class="fa-solid fa-exclamation-triangle mr-2"></i>
+      <div>
+        <p>{% translate "No consent recordings available." %}</p>
+        <p class="text-sm">
+          {% translate "You must create a consent recording before creating a voice." %}
+        </p>
+        <a href="{% url 'service_providers:custom_voice_create_consent' request.team.slug provider.pk %}"
+           class="btn btn-sm btn-primary mt-2">
+          {% translate "Create Consent First" %}
+        </a>
+      </div>
+    </div>
+  {% else %}
+    <form method="post" enctype="multipart/form-data" class="not-prose">
+      {% csrf_token %}
+
+      <div class="form-control w-full max-w-md mb-4">
+        <label class="label" for="voice_name">
+          <span class="label-text">{% translate "Voice Name" %}</span>
+        </label>
+        <input type="text"
+               name="voice_name"
+               id="voice_name"
+               class="input input-bordered w-full"
+               placeholder="e.g., Professional Narrator"
+               required>
+        <label class="label">
+          <span class="label-text-alt">{% translate "A descriptive name for this voice" %}</span>
+        </label>
+      </div>
+
+      <div class="form-control w-full max-w-md mb-4">
+        <label class="label" for="consent_id">
+          <span class="label-text">{% translate "Consent Recording" %}</span>
+        </label>
+        <select name="consent_id" id="consent_id" class="select select-bordered w-full" required>
+          <option value="">{% translate "Select a consent recording" %}</option>
+          {% for consent in consents %}
+            <option value="{{ consent.id }}">
+              {{ consent.name }} ({{ consent.language }})
+            </option>
+          {% endfor %}
+        </select>
+        <label class="label">
+          <span class="label-text-alt">{% translate "The consent recording must be from the same voice actor" %}</span>
+        </label>
+      </div>
+
+      <div class="form-control w-full max-w-md mb-6">
+        <label class="label" for="audio_sample">
+          <span class="label-text">{% translate "Audio Sample" %}</span>
+        </label>
+        <input type="file"
+               name="audio_sample"
+               id="audio_sample"
+               accept="audio/*"
+               class="file-input file-input-bordered w-full"
+               required>
+        <label class="label">
+          <span class="label-text-alt">{% translate "30 seconds or less of the voice you want to clone" %}</span>
+        </label>
+      </div>
+
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-microphone mr-1"></i> {% translate "Create Voice" %}
+        </button>
+        <a href="{% url 'service_providers:custom_voice_list_voices' request.team.slug provider.pk %}"
+           class="btn btn-ghost">
+          {% translate "Cancel" %}
+        </a>
+      </div>
+    </form>
+  {% endif %}
+
+  <div class="mt-8 p-4 bg-base-200 rounded-lg">
+    <h3 class="font-bold mb-2">{% translate "Organization Limits" %}</h3>
+    <p class="text-sm">
+      {% translate "OpenAI allows a maximum of 20 custom voices per organization." %}
+    </p>
+  </div>
+</div>
+{% endblock app %}

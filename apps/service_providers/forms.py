@@ -112,6 +112,54 @@ class OpenAIVoiceEngineConfigForm(OpenAIConfigForm):
     file_formset_form = OpenAIVoiceEngineFileFormset
 
 
+class OpenAICustomVoiceFileFormset(BaseFileFormSet):
+    """
+    File formset for OpenAI Custom Voice audio samples.
+    Validates file extension, size, and provides guidance on duration limits.
+    """
+
+    accepted_file_types = ["mp3", "wav", "ogg", "aac", "flac", "webm", "mp4", "mpeg"]
+    max_file_size_mb = 10
+
+    def clean(self) -> None:
+        invalid_extensions = set()
+        oversized_files = []
+
+        for _key, in_memory_file in self.files.items():
+            # Validate file extension
+            file_extension = in_memory_file.name.rsplit(".", 1)[-1].lower()
+            if file_extension not in self.accepted_file_types:
+                invalid_extensions.add(f".{file_extension}")
+
+            # Validate file size
+            file_size_mb = in_memory_file.size / (1024 * 1024)
+            if file_size_mb > self.max_file_size_mb:
+                oversized_files.append(f"{in_memory_file.name} ({file_size_mb:.1f}MB)")
+
+        errors = []
+        if invalid_extensions:
+            valid_types = ", ".join(f".{t}" for t in self.accepted_file_types)
+            errors.append(f"File extensions not supported: {', '.join(invalid_extensions)}. Accepted: {valid_types}")
+
+        if oversized_files:
+            errors.append(f"Files exceed {self.max_file_size_mb}MB limit: {', '.join(oversized_files)}")
+
+        if errors:
+            raise forms.ValidationError(errors)
+
+        return super().clean()
+
+
+class OpenAICustomVoiceConfigForm(OpenAIConfigForm):
+    """
+    Configuration form for OpenAI Custom Voice provider.
+    Extends OpenAIConfigForm with file upload support for voice samples.
+    """
+
+    allow_file_upload = True
+    file_formset_form = OpenAICustomVoiceFileFormset
+
+
 class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["openai_api_key"]
 

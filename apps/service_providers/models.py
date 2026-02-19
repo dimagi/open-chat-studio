@@ -262,6 +262,7 @@ class VoiceProviderType(models.TextChoices):
     azure = "azure", _("Azure Text to Speech")
     openai = "openai", _("OpenAI Text to Speech")
     openai_voice_engine = "openaivoiceengine", _("OpenAI Voice Engine Text to Speech")
+    openai_custom_voice = "openaicustomvoice", _("OpenAI Custom Voice")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -276,6 +277,8 @@ class VoiceProviderType(models.TextChoices):
                 return forms.OpenAIConfigForm
             case VoiceProviderType.openai_voice_engine:
                 return forms.OpenAIVoiceEngineConfigForm
+            case VoiceProviderType.openai_custom_voice:
+                return forms.OpenAICustomVoiceConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
@@ -291,6 +294,8 @@ class VoiceProviderType(models.TextChoices):
                     return speech_service.OpenAISpeechService(**config)
                 case VoiceProviderType.openai_voice_engine:
                     return speech_service.OpenAIVoiceEngineSpeechService(**config)
+                case VoiceProviderType.openai_custom_voice:
+                    return speech_service.OpenAICustomVoiceSpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
@@ -317,6 +322,22 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_speech_service(config)
 
+    def get_custom_voice_client(self):
+        """
+        Get OpenAI Custom Voice API client for voice management operations.
+        Only available for openai_custom_voice provider type.
+        """
+        if self.type != VoiceProviderType.openai_custom_voice:
+            raise ValueError(f"Custom voice client not available for provider type: {self.type}")
+
+        from apps.service_providers.openai_custom_voice import OpenAICustomVoiceClient
+
+        return OpenAICustomVoiceClient(
+            api_key=self.config["openai_api_key"],
+            organization=self.config.get("openai_organization"),
+            base_url=self.config.get("openai_api_base"),
+        )
+
     @transaction.atomic()
     def add_files(self, files):
         if self.type == VoiceProviderType.openai_voice_engine:
@@ -336,6 +357,10 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 except IntegrityError:
                     message = f"Unable to upload '{file.name}' voice. This voice might already exist"
                     raise ValidationError(message) from None
+        elif self.type == VoiceProviderType.openai_custom_voice:
+            # Custom voice files are handled through the voice creation workflow
+            # (consent upload -> voice creation) rather than direct file upload
+            pass
 
     def remove_file(self, file_id: int):
         synthetic_voice = self.syntheticvoice_set.get(file_id=file_id)
@@ -371,7 +396,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
 
     @transaction.atomic()
     def delete(self):
-        if self.type == VoiceProviderType.openai_voice_engine:
+        if self.type in (VoiceProviderType.openai_voice_engine, VoiceProviderType.openai_custom_voice):
             files_to_delete = self.get_files()
             [f.delete() for f in files_to_delete]
         return super().delete()

@@ -376,14 +376,16 @@ class SyntheticVoice(BaseModel):
     Azure = "Azure"
     OpenAI = "OpenAI"
     OpenAIVoiceEngine = "OpenAIVoiceEngine"
+    OpenAICustomVoice = "OpenAICustomVoice"
 
     SERVICES = (
         ("AWS", AWS),
         ("Azure", Azure),
         ("OpenAI", OpenAI),
         ("OpenAIVoiceEngine", OpenAIVoiceEngine),
+        ("OpenAICustomVoice", OpenAICustomVoice),
     )
-    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine]
+    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine, OpenAICustomVoice]
 
     objects = SyntheticVoiceObjectManager()
     name = models.CharField(
@@ -399,12 +401,15 @@ class SyntheticVoice(BaseModel):
         null=False, blank=True, choices=GENDERS, max_length=14, help_text="The gender of this voice"
     )
     service = models.CharField(
-        null=False, blank=False, choices=SERVICES, max_length=17, help_text="The service this voice is from"
+        null=False, blank=False, choices=SERVICES, max_length=20, help_text="The service this voice is from"
     )
     voice_provider = models.ForeignKey(
         "service_providers.VoiceProvider", verbose_name=gettext("Team"), on_delete=models.CASCADE, null=True
     )
     file = models.ForeignKey("files.File", null=True, on_delete=models.SET_NULL)
+    config = models.JSONField(
+        default=dict, blank=True, help_text="Additional configuration for the voice (e.g., OpenAI voice_id)"
+    )
 
     class Meta:
         ordering = ["name"]
@@ -422,6 +427,18 @@ class SyntheticVoice(BaseModel):
         if self.language:
             display_str = f"{self.language}, {display_str}"
         return display_str
+
+    def get_openai_voice_id(self) -> str | None:
+        """Extract OpenAI voice ID from config for custom voices"""
+        if self.service == self.OpenAICustomVoice and self.config:
+            return self.config.get("voice_id")
+        return None
+
+    def get_openai_consent_id(self) -> str | None:
+        """Extract OpenAI consent ID from config for custom voices"""
+        if self.service == self.OpenAICustomVoice and self.config:
+            return self.config.get("consent_id")
+        return None
 
     @staticmethod
     def get_for_team(team: Team, exclude_services=None) -> list[SyntheticVoice]:

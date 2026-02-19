@@ -19,4 +19,30 @@ urlpatterns = [
     path("<slug:provider_type>/<int:pk>/delete/", views.delete_service_provider, name="delete"),
     path("<slug:provider_type>/<int:pk>/remove-file/<int:file_id>", views.remove_file, name="delete_file"),
     path("<slug:provider_type>/<int:pk>/upload-file/", views.AddFileToProvider.as_view(), name="add_file"),
+    # Custom Voice Management
+    path(
+        "voice/<int:pk>/custom-voice/consents/",
+        views.list_custom_voice_consents,
+        name="custom_voice_list_consents",
+    ),
+    path(
+        "voice/<int:pk>/custom-voice/consents/create/",
+        views.create_custom_voice_consent,
+        name="custom_voice_create_consent",
+    ),
+    path(
+        "voice/<int:pk>/custom-voice/voices/",
+        views.list_custom_voices,
+        name="custom_voice_list_voices",
+    ),
+    path(
+        "voice/<int:pk>/custom-voice/voices/create/",
+        views.create_custom_voice,
+        name="custom_voice_create",
+    ),
+    path(
+        "voice/<int:pk>/custom-voice/voices/<int:voice_pk>/delete/",
+        views.delete_custom_voice,
+        name="custom_voice_delete",
+    ),
 ]
