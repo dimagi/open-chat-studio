@@ -9,8 +9,8 @@
       per_message: 6
     - type: llm_judge
       criteria: >
-        All messages are short (2-4 words), encouraging, and appropriate for a health chatbot.
-        Messages should not contain technical jargon, apologies, or promises about results.
+        All messages are short, encouraging, and appropriate for a health chatbot.
+        Messages should not contain overly technical jargon, apologies, or promises about results.
         Messages should suggest active processing (e.g. thinking, analyzing).
 
 - id: no_description
@@ -38,4 +38,4 @@
     - type: llm_judge
       criteria: >
         Messages are short, friendly progress indicators appropriate for customer support.
-        No negative tone. No technical jargon. Should feel reassuring.
+        No negative tone. No overly technical jargon. Should feel reassuring.
