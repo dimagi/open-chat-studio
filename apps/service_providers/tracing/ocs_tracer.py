@@ -13,7 +13,7 @@ from apps.ocs_notifications.notifications import llm_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.trace.models import Trace, TraceStatus
 
-from .base import TraceContext, Tracer
+from .base import SpanNotificationConfig, TraceContext, Tracer  # noqa: F401
 
 if TYPE_CHECKING:
     from apps.experiments.models import Experiment, ExperimentSession
