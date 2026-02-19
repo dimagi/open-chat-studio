@@ -321,7 +321,7 @@ AUTHENTICATION_BACKENDS = (
 # https://docs.djangoproject.com/en/3.2/topics/i18n/
 
 LANGUAGE_CODE = "en-us"
-LANGUAGE_COOKIE_NAME = "gpt_playground_language"
+LANGUAGE_COOKIE_NAME = "ocs_language"
 LANGUAGES = [
     ("en", gettext_lazy("English")),
 ]
