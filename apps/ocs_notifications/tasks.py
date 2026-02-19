@@ -86,12 +86,4 @@ def cleanup_old_notification_events():
     Deleting EventType cascades to associated NotificationEvent and EventUser records.
     """
     three_months_ago = timezone.now() - timedelta(days=90)
-    old_event_types = EventType.objects.filter(created_at__lt=three_months_ago)
-
-    count = old_event_types.count()
-    if count == 0:
-        logger.info("No old notification events found to cleanup")
-        return
-
-    deleted = old_event_types.delete()
-    logger.info(f"Cleanup completed: deleted {deleted[0]} old notification event records")
+    EventType.objects.filter(created_at__lt=three_months_ago).delete()
