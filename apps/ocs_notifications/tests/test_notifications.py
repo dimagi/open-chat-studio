@@ -14,6 +14,7 @@ from apps.ocs_notifications.notifications import (
     message_delivery_failure_notification,
     pipeline_execution_failure_notification,
     tool_error_notification,
+    trace_error_notification,
 )
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -373,10 +374,6 @@ class TestTraceErrorNotification:
     @patch("apps.ocs_notifications.notifications.create_notification")
     def test_creates_notification_with_trace_url(self, mock_create_notification):
         """trace_error_notification passes correct slug, title, links to create_notification."""
-        # Local import is temporary: trace_error_notification does not exist yet (TDD red phase).
-        # Move to module-level imports in Task 5 once the function is implemented.
-        from apps.ocs_notifications.notifications import trace_error_notification
-
         experiment = ExperimentFactory.create()
         session = ExperimentSessionFactory.create(experiment=experiment)
         trace_url = "/traces/team/42/"
@@ -412,10 +409,6 @@ class TestTraceErrorNotification:
     @patch("apps.ocs_notifications.notifications.create_notification")
     def test_omits_view_trace_link_when_trace_url_is_none(self, mock_create_notification):
         """trace_error_notification omits 'View Trace' link when trace_url is None."""
-        # Local import is temporary: trace_error_notification does not exist yet (TDD red phase).
-        # Move to module-level imports in Task 5 once the function is implemented.
-        from apps.ocs_notifications.notifications import trace_error_notification
-
         experiment = ExperimentFactory.create()
         session = ExperimentSessionFactory.create(experiment=experiment)
 
@@ -435,10 +428,6 @@ class TestTraceErrorNotification:
     @patch("apps.ocs_notifications.notifications.create_notification")
     def test_slug_derived_from_span_name(self, mock_create_notification):
         """Slug is computed via slugify from span_name."""
-        # Local import is temporary: trace_error_notification does not exist yet (TDD red phase).
-        # Move to module-level imports in Task 5 once the function is implemented.
-        from apps.ocs_notifications.notifications import trace_error_notification
-
         experiment = ExperimentFactory.create()
         session = ExperimentSessionFactory.create(experiment=experiment)
 

@@ -93,6 +93,49 @@ def llm_error_notification(experiment: Experiment, session: ExperimentSession, e
     )
 
 
+@silence_exceptions(logger, log_message="Failed to create trace error notification")
+def trace_error_notification(
+    experiment: Experiment,
+    session: ExperimentSession,
+    span_name: str,
+    error_message: str,
+    permissions: list[str] | None,
+    trace_url: str | None = None,
+) -> None:
+    """Create a notification when an OCS span exits with an error.
+
+    Called at trace exit (not eagerly), so the trace URL is always available.
+    All failures of the same span on the same experiment share one EventType
+    thread regardless of the specific error message.
+    """
+    from django.utils.text import slugify
+
+    slug = slugify(span_name.replace("_", " "))
+    human_name = span_name.replace("_", " ").title()
+    title = f"{human_name} Failed for '{experiment}'"
+    participant = session.participant.identifier if session else "unknown"
+    message = f"An error occurred during '{span_name}' for participant '{participant}'"
+    if error_message:
+        message += f": {error_message}"
+
+    links: dict[str, str] = {"View Bot": experiment.get_absolute_url()}
+    if session:
+        links["View Session"] = session.get_absolute_url()
+    if trace_url:
+        links["View Trace"] = trace_url
+
+    create_notification(
+        title=title,
+        message=message,
+        level=LevelChoices.ERROR,
+        team=experiment.team,
+        slug=slug,
+        event_data={"experiment_id": experiment.id, "span_name": span_name},
+        permissions=permissions,
+        links=links,
+    )
+
+
 @silence_exceptions(logger, log_message="Failed to create audio synthesis failure notification")
 def audio_synthesis_failure_notification(experiment, session: ExperimentSession = None) -> None:
     """Create notification when audio synthesis fails."""
