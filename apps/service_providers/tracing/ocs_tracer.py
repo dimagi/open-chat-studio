@@ -240,7 +240,7 @@ class OCSCallbackHandler(BaseCallbackHandler):
         # In practice, LLM errors propagate through "Run Pipeline", so this fallback
         # is only reached if the error is swallowed above the LangChain layer.
         if not self.tracer.error_span_name:
-            self.tracer.error_span_name = "llm"
+            self.tracer.error_span_name = "LLM call"
             self.tracer.error_notification_config = SpanNotificationConfig(
                 permissions=["experiments.change_experiment"]
             )

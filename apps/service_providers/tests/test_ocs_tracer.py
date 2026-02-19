@@ -172,7 +172,7 @@ class TestOCSCallbackHandler:
 
         assert tracer.error_detected is True
         assert tracer.error_message == error_message
-        assert tracer.error_span_name == "llm"
+        assert tracer.error_span_name == "LLM call"
         assert isinstance(tracer.error_notification_config, SpanNotificationConfig)
         assert tracer.error_notification_config.permissions == ["experiments.change_experiment"]
 

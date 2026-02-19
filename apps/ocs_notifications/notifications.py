@@ -110,8 +110,11 @@ def trace_error_notification(
     All failures of the same span on the same experiment share one EventType
     thread regardless of the specific error message.
     """
+    _ABBREVS = {"llm", "api", "url", "id"}
     slug = slugify(span_name.replace("_", " "))
-    human_name = span_name.replace("_", " ").title()
+    human_name = " ".join(
+        word.upper() if word.lower() in _ABBREVS else word.capitalize() for word in span_name.replace("_", " ").split()
+    )
     title = f"{human_name} Failed for '{experiment}'"
     participant = session.participant.identifier if session else "unknown"
     message = f"An error occurred during '{span_name}' for participant '{participant}'"
