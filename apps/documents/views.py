@@ -85,7 +85,9 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
 def single_collection_home(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
 
-    document_sources = DocumentSource.objects.working_versions_queryset().filter(collection=collection)
+    document_sources = (
+        DocumentSource.objects.working_versions_queryset().filter(collection=collection).prefetch_related("sync_logs")
+    )
     collection_files_count = CollectionFile.objects.filter(collection=collection).count()
     manually_uploaded_files_count = CollectionFile.objects.filter(collection=collection).is_manually_uploaded().count()
     context = {

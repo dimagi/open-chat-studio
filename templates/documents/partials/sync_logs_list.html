@@ -20,7 +20,7 @@
           <span class="badge badge-sm badge-success badge-outline">+{{ log.files_added }} Added</span>
           <span class="badge badge-sm badge-info badge-outline">~{{ log.files_updated }} Updated</span>
           <span class="badge badge-sm badge-warning badge-outline">-{{ log.files_removed }} Removed</span>
-          {% if log.duration_seconds %}
+          {% if log.duration_seconds is not None %}
             <span class="badge badge-sm badge-ghost">{{ log.duration_seconds|floatformat:1 }}s</span>
           {% endif %}
         </div>
