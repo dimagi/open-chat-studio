@@ -366,3 +366,91 @@ class TestToolErrorNotification:
         # Assert
         call_args = mock_create_notification.call_args[1]
         assert call_args["links"] == {}
+
+
+class TestTraceErrorNotification:
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_creates_notification_with_trace_url(self, mock_create_notification):
+        """trace_error_notification passes correct slug, title, links to create_notification."""
+        # Local import is temporary: trace_error_notification does not exist yet (TDD red phase).
+        # Move to module-level imports in Task 5 once the function is implemented.
+        from apps.ocs_notifications.notifications import trace_error_notification
+
+        experiment = ExperimentFactory.create()
+        session = ExperimentSessionFactory.create(experiment=experiment)
+        trace_url = "/traces/team/42/"
+
+        trace_error_notification(
+            experiment=experiment,
+            session=session,
+            span_name="Run Pipeline",
+            error_message="Something went wrong",
+            permissions=["experiments.change_experiment"],
+            trace_url=trace_url,
+        )
+
+        mock_create_notification.assert_called_once_with(
+            title=f"Run Pipeline Failed for '{experiment}'",
+            message=(
+                f"An error occurred during 'Run Pipeline' for participant "
+                f"'{session.participant.identifier}': Something went wrong"
+            ),
+            level=LevelChoices.ERROR,
+            team=experiment.team,
+            slug="run-pipeline",
+            event_data={"experiment_id": experiment.id, "span_name": "Run Pipeline"},
+            permissions=["experiments.change_experiment"],
+            links={
+                "View Bot": experiment.get_absolute_url(),
+                "View Session": session.get_absolute_url(),
+                "View Trace": trace_url,
+            },
+        )
+
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_omits_view_trace_link_when_trace_url_is_none(self, mock_create_notification):
+        """trace_error_notification omits 'View Trace' link when trace_url is None."""
+        # Local import is temporary: trace_error_notification does not exist yet (TDD red phase).
+        # Move to module-level imports in Task 5 once the function is implemented.
+        from apps.ocs_notifications.notifications import trace_error_notification
+
+        experiment = ExperimentFactory.create()
+        session = ExperimentSessionFactory.create(experiment=experiment)
+
+        trace_error_notification(
+            experiment=experiment,
+            session=session,
+            span_name="Run Pipeline",
+            error_message="Something went wrong",
+            permissions=["experiments.change_experiment"],
+            trace_url=None,
+        )
+
+        call_kwargs = mock_create_notification.call_args.kwargs
+        assert "View Trace" not in call_kwargs["links"]
+
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_slug_derived_from_span_name(self, mock_create_notification):
+        """Slug is computed via slugify from span_name."""
+        # Local import is temporary: trace_error_notification does not exist yet (TDD red phase).
+        # Move to module-level imports in Task 5 once the function is implemented.
+        from apps.ocs_notifications.notifications import trace_error_notification
+
+        experiment = ExperimentFactory.create()
+        session = ExperimentSessionFactory.create(experiment=experiment)
+
+        trace_error_notification(
+            experiment=experiment,
+            session=session,
+            span_name="seed_message",
+            error_message="err",
+            permissions=None,
+            trace_url=None,
+        )
+
+        call_kwargs = mock_create_notification.call_args.kwargs
+        assert call_kwargs["slug"] == "seed-message"
+        assert call_kwargs["title"] == f"Seed Message Failed for '{experiment}'"
