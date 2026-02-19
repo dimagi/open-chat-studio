@@ -68,7 +68,7 @@ class EventType(BaseTeamModel):
             ),
         ]
         indexes = [
-            models.Index(fields=["created_at"], name="ocs_notif_eventtype_created_at_idx"),
+            models.Index(fields=["created_at"], name="eventtype_created_at_idx"),
         ]
 
 

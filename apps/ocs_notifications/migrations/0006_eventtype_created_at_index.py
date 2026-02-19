@@ -10,6 +10,6 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddIndex(
             model_name="eventtype",
-            index=models.Index(fields=["created_at"], name="ocs_notif_eventtype_created_at_idx"),
+            index=models.Index(fields=["created_at"], name="eventtype_created_at_idx"),
         ),
     ]
