@@ -1,23 +1,33 @@
-# Igor
+# Claude Workflows
 
-A GitHub Action that automatically makes incremental progress on large projects by working through tracking issues with task checklists.
+GitHub Actions workflows for automated issue implementation, incremental task progress, and CI followup.
 
 ## Use Cases
 
-- Migrate JS files to ES modules
-- Add TypeScript types across a codebase
-- Refactor a large module piece by piece
-- Any project that can be broken into independent tasks
+- Implement an issue end-to-end when assigned or labeled
+- Work through multi-task issues incrementally (one task per run)
+- Automatically fix CI failures and address review comments on Claude PRs
 
 ## How to Use
 
-1. **Create a tracking issue** with the `claude-incremental` label
-2. **Add it to the project** at https://github.com/orgs/dimagi/projects/3
-3. **Set status to "In Progress"** when ready for the worker to pick it up
+### One-off: assign or label an issue
 
-The workflow runs daily at 2am UTC and can be triggered manually.
+1. Apply the `claude` label to an issue, **or** assign it
+2. Claude creates a branch, implements the work, and opens a PR
 
-## Issue Format
+### Incremental: multi-task issues
+
+1. **Create a tracking issue** with the `claude` label using the format below
+2. The workflow runs daily at 2am UTC and picks the oldest eligible issue
+3. Each run implements one unchecked task and creates a PR
+4. After the PR merges, the next run picks up the next task
+5. Can also be triggered manually via Actions > Claude Code > Run workflow
+
+### Interactive: @claude in comments
+
+Mention `@claude` in any issue or PR comment to get a response or request changes.
+
+## Issue Format (for incremental tasks)
 
 ```markdown
 ## Goal
@@ -32,8 +42,7 @@ Optional background info the AI should know about.
 - [ ] Task 1
 
 Detailed context for this task. Include relevant file paths, expected
-behavior, edge cases, or links to related code. This helps the AI
-understand scope and intent beyond the one-line summary.
+behavior, edge cases, or links to related code.
 
 ### Task 2: Short description
 - [ ] Task 2
@@ -51,38 +60,25 @@ like, the better the result.
 <!-- AI updates this section with discoveries -->
 ```
 
-Each task gets its own section with a checkbox and a context block. The checkbox is what the workflow uses to track progress — keep it on its own line. The surrounding text provides the AI with the detail it needs to implement the task correctly.
-
-## How It Works
-
-1. Finds the oldest issue with the `claude-incremental` label
-2. Skips any issue that already has an open PR (one PR per issue at a time)
-3. Claude reads the issue and implements the first unchecked, non-blocked task
-4. Claude updates the issue (checks off task, adds learnings)
-5. Creates a PR linking to the tracking issue
-
-Multiple issues can have open PRs simultaneously — the constraint is one open PR per issue, not one globally.
+Each task gets its own section with a checkbox and a context block. The checkbox is what the workflow uses to track progress — keep it on its own line.
 
 ## Automatic Follow-up
 
-After Igor creates a PR, the **Igor Followup** workflow automatically runs one round of fixes when CI completes:
+After Claude creates a PR, the **Claude Followup** workflow automatically runs one round of fixes when CI completes:
 
-1. Waits for the "Lint and Test" workflow to complete (success or failure)
-2. Checks for the `igor-is-done` label — if present, skips (one-round limit)
-3. Reads CI failure logs and CodeRabbit review comments
+1. Waits for the "Lint and Test" workflow to complete on any `claude/**` branch
+2. Checks for the `claude-followup-done` label — if present, skips (one-round limit)
+3. Reads CI failure logs and review comments
 4. Fixes lint, type, test, and lockfile issues
 5. Addresses actionable review feedback
-6. Verifies fixes locally before pushing
-7. Comments on the PR with a summary of changes
-8. Adds the `igor-is-done` label to prevent re-runs
-
-This gives Igor one chance to fix common issues like formatting, type errors, and test failures before human review.
+6. Pushes fixes and comments on the PR with a summary
+7. Adds the `claude-followup-done` label to prevent re-runs
 
 ## Manual Trigger
 
-Run on a specific issue via Actions > Igor > Run workflow, then enter the issue number.
+Run on a specific issue via Actions > Claude Code > Run workflow, then enter the issue number.
 
 ## Files
 
-- `.github/workflows/claude-incremental.yml` - The main Igor workflow
-- `.github/workflows/claude-incremental-followup.yml` - The automatic follow-up workflow
+- `.github/workflows/claude.yml` — Main workflow (event-driven + scheduled)
+- `.github/workflows/claude-followup.yml` — Automatic CI followup
