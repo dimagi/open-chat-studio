@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from celery import shared_task
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.ocs_notifications.models import (
+    EventType,
     NotificationEvent,
 )
 from apps.web.meta import absolute_url
@@ -74,3 +77,21 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
                 from_email=None,
                 recipient_list=[user.email],
             )
+
+
+@shared_task(ignore_result=True)
+def cleanup_old_notification_events():
+    """Delete EventType records older than 3 months.
+
+    Deleting EventType cascades to associated NotificationEvent and EventUser records.
+    """
+    three_months_ago = timezone.now() - timedelta(days=90)
+    old_event_types = EventType.objects.filter(created_at__lt=three_months_ago)
+
+    count = old_event_types.count()
+    if count == 0:
+        logger.info("No old notification events found to cleanup")
+        return
+
+    deleted = old_event_types.delete()
+    logger.info(f"Cleanup completed: deleted {deleted[0]} old notification event records")

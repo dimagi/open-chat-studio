@@ -502,6 +502,10 @@ SCHEDULED_TASKS = {
         "task": "apps.custom_actions.tasks.check_all_custom_actions_health",
         "schedule": crontab(minute="5"),
     },
+    "ocs_notifications.tasks.cleanup_old_notification_events": {
+        "task": "apps.ocs_notifications.tasks.cleanup_old_notification_events",
+        "schedule": timedelta(days=1),
+    },
 }
 
 CACHES = {
