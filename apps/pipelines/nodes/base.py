@@ -512,7 +512,7 @@ class VisibleWhen(BaseModel):
 
     field: str
     value: Any
-    operator: str = "=="
+    operator: Literal["==", "!=", "in", "not_in"] = "=="
 
 
 class UiSchema(BaseModel):
