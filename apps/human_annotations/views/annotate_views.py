@@ -193,12 +193,13 @@ class SubmitAnnotation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
         form = FormClass(request.POST)
 
         if form.is_valid():
+            data = {k: v for k, v in form.cleaned_data.items() if v is not None and v != ""}
             try:
                 Annotation.objects.create(
                     item=item,
                     team=request.team,
                     reviewer=request.user,
-                    data=form.cleaned_data,
+                    data=data,
                     status=AnnotationStatus.SUBMITTED,
                 )
                 messages.success(request, "Annotation submitted.")
