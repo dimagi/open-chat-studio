@@ -125,13 +125,16 @@ class OCSTracer(Tracer):
                     )
 
             # Fire notification if a span declared one and the trace errored
-            if (
-                self.error_detected
-                and self.error_span_name
-                and self.error_notification_config is not None
-                and not self.experiment.is_working_version
-            ):
-                self._fire_trace_error_notification()
+            try:
+                if (
+                    self.error_detected
+                    and self.error_span_name
+                    and self.error_notification_config is not None
+                    and not self.experiment.is_working_version
+                ):
+                    self._fire_trace_error_notification()
+            except Exception:
+                logger.exception("Error firing trace error notification for trace %s", self.trace_id)
 
             # Reset state
             self.trace_record = None
