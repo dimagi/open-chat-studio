@@ -356,6 +356,7 @@ class EventBot:
             session=self.session,
             inputs={"input": event_prompt},
             metadata=self.trace_info.metadata,
+            notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
         ) as span:
             config = self.trace_service.get_langchain_config()
             response = llm.invoke(

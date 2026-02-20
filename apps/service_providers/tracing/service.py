@@ -76,6 +76,7 @@ class TracingService:
         session: ExperimentSession,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        notification_config: SpanNotificationConfig | None = None,
     ) -> Iterator[TraceContext]:
         """Context manager for tracing or spanning.
 
@@ -86,7 +87,7 @@ class TracingService:
             with self.trace(name, session, inputs, metadata) as ctx:
                 yield ctx
         else:
-            with self.span(name, inputs, metadata) as ctx:
+            with self.span(name, inputs, metadata, notification_config=notification_config) as ctx:
                 yield ctx
 
     @contextmanager

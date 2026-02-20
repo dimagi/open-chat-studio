@@ -654,7 +654,7 @@ class ChannelBase(ABC):
                 self._send_text_to_user_with_notification(download_link)
 
     def _handle_supported_message(self, human_message):
-        notification_config = SpanNotificationConfig(permissions=["experiments.change_experimentsession"])
+        notification_config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
         with self.trace_service.span(
             "Process Message", inputs={"input": human_message.content}, notification_config=notification_config
         ) as span:
