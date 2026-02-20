@@ -159,12 +159,12 @@ def get_langchain_run_name(serialized: dict[str, Any] | None, **kwargs: Any) -> 
         return kwargs["name"]
 
     try:
-        return serialized["name"]
+        return serialized["name"]  # ty: ignore[not-subscriptable]
     except (KeyError, TypeError):
         pass
 
     try:
-        return serialized["id"][-1]
+        return serialized["id"][-1]  # ty: ignore[not-subscriptable]
     except (KeyError, TypeError):
         pass
 

@@ -59,7 +59,7 @@ def test_code_node(code, user_input, output):
     node_output = node._process(
         PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
     )
-    assert node_output.update["messages"][-1] == output
+    assert node_output.update["messages"][-1] == output  # ty: ignore[not-subscriptable]
 
 
 EXTRA_FUNCTION = """
@@ -134,7 +134,7 @@ def main(input, **kwargs):
             participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
         ),
     )
-    assert node_output.update["messages"][-1] == "robot"
+    assert node_output.update["messages"][-1] == "robot"  # ty: ignore[not-subscriptable]
 
 
 @pytest.mark.django_db()
@@ -158,8 +158,8 @@ def main(input, **kwargs):
             participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
         ),
     )
-    assert node_output.update["messages"][-1] == output
-    assert node_output.update["participant_data"]["fun_facts"]["personality"] == output
+    assert node_output.update["messages"][-1] == output  # ty: ignore[not-subscriptable]
+    assert node_output.update["participant_data"]["fun_facts"]["personality"] == output  # ty: ignore[not-subscriptable]
 
 
 @django_db_with_data()
@@ -259,7 +259,7 @@ def main(input, **kwargs):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_get)
     state = PipelineState(messages=[user_input], outputs={}, experiment_session=None, temp_state={})
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output.update["messages"][-1] == user_input
+    assert node_output.update["messages"][-1] == user_input  # ty: ignore[not-subscriptable]
 
 
 @pytest.mark.django_db()
@@ -280,7 +280,7 @@ def main(input, **kwargs):
         temp_state={},
     )
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output.update["messages"][-1] == "content from file"
+    assert node_output.update["messages"][-1] == "content from file"  # ty: ignore[not-subscriptable]
 
 
 @pytest.mark.django_db()
@@ -321,7 +321,7 @@ def main(input, **kwargs):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output.update["messages"][-1] == "Number of schedules: 1"
+    assert node_output.update["messages"][-1] == "Number of schedules: 1"  # ty: ignore[not-subscriptable]
 
 
 @pytest.mark.django_db()
@@ -338,7 +338,7 @@ def main(input, **kwargs):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output.update["messages"][-1] == "Number of schedules: 0, Empty list: True"
+    assert node_output.update["messages"][-1] == "Number of schedules: 0, Empty list: True"  # ty: ignore[not-subscriptable]
 
 
 @pytest.mark.django_db()
@@ -354,7 +354,7 @@ def main(input, **kwargs):
         messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={}, session_state={}
     )
     output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert output.update["session_state"] == {"message_count": 2}
+    assert output.update["session_state"] == {"message_count": 2}  # ty: ignore[not-subscriptable]
 
 
 def test_tags_mocked():
@@ -366,8 +366,8 @@ def main(input, **kwargs):
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
     output = node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
-    assert output.update["output_message_tags"] == [("message-tag", "")]
-    assert output.update["session_tags"] == [("session-tag", "")]
+    assert output.update["output_message_tags"] == [("message-tag", "")]  # ty: ignore[not-subscriptable]
+    assert output.update["session_tags"] == [("session-tag", "")]  # ty: ignore[not-subscriptable]
 
 
 def test_set_list():
@@ -393,7 +393,7 @@ def main(input, **kwargs):
     node_output = node._process(
         PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
     )
-    assert node_output.update["messages"][-1] == "3,4 - {1, 2}"
+    assert node_output.update["messages"][-1] == "3,4 - {1, 2}"  # ty: ignore[not-subscriptable]
 
 
 def test_traceback():
@@ -473,7 +473,7 @@ def main(input, **kwargs):
     assert file.file.read() == b"hello world"
 
     # Verify file ID tracked in output metadata
-    generated_files = node_output.update["output_message_metadata"]["generated_files"]
+    generated_files = node_output.update["output_message_metadata"]["generated_files"]  # ty: ignore[not-subscriptable]
     assert file.id in generated_files
 
     # Verify ChatAttachment was created
