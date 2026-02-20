@@ -190,7 +190,7 @@ class Collection(BaseTeamModel, VersionsMixin):
 
         file_versions: dict[int, int] = {}
 
-        def _version_files(file_queryset, new_object_version, through_defaults: dict = None):
+        def _version_files(file_queryset, new_object_version, through_defaults: dict | None = None):
             nonlocal file_versions
             _file_versions: dict[int, int] = {}
             for file in file_queryset.iterator(chunk_size=50):
@@ -329,13 +329,13 @@ class Collection(BaseTeamModel, VersionsMixin):
     def add_files_to_index(
         self,
         collection_files: Iterator[CollectionFile],
-        chunk_size: int = None,
-        chunk_overlap: int = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ):
         index_manager = self.get_index_manager()
         index_manager.add_files(collection_files, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
-    def ensure_remote_index_created(self, file_ids: list[str] = None):
+    def ensure_remote_index_created(self, file_ids: list[str] | None = None):
         """
         Ensure that the remote index is created for this collection if it is not already created.
         This is used when the collection is created or when the version is created.

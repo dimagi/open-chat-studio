@@ -203,7 +203,7 @@ class ExperimentChannel(BaseTeamModel):
     def platform_enum(self):
         return ChannelPlatform(self.platform)
 
-    def extra_form(self, experiment, data: dict = None):
+    def extra_form(self, experiment, data: dict | None = None):
         if not experiment.id == self.experiment_id:
             raise ValueError("Experiment ID does not match channel experiment ID")
         return self.platform_enum.extra_form(experiment=experiment, channel=self, initial=self.extra_data, data=data)

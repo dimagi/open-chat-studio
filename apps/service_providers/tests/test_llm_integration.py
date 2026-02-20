@@ -137,7 +137,7 @@ def _run_llm_pipeline_test(
     provider_type: LlmProviderTypes,
     provider_config: dict,
     test_prompt: str = "Say 'test successful' and nothing else.",
-    model_name: str = None,
+    model_name: str | None = None,
 ):
     """Helper function to run a basic LLM pipeline test"""
     # Get default model for provider if not specified

@@ -71,7 +71,7 @@ class LlmService(pydantic.BaseModel):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         raise NotImplementedError
 
     def get_output_parser(self):
@@ -122,13 +122,13 @@ class LlmService(pydantic.BaseModel):
         )
         return parsed_output
 
-    def get_remote_index_manager(self, index_id: str = None) -> IndexManager:
+    def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
         raise NotImplementedError
 
     def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
         raise NotImplementedError
 
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         """
         Create a new vector store at the remote index service.
 
@@ -191,7 +191,7 @@ class OpenAIGenericService(LlmService):
 
         return {"openai_api_key": self.openai_api_key, "openai_api_base": self.openai_api_base, **kwargs}
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
 
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
@@ -304,7 +304,7 @@ class OpenAILlmService(OpenAIGenericService):
         )
         return transcript.text
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         tools = []
         for tool_name in built_in_tools:
             if tool_name == "web-search":
@@ -315,7 +315,7 @@ class OpenAILlmService(OpenAIGenericService):
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
 
-    def get_remote_index_manager(self, index_id: str = None) -> IndexManager:
+    def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
         from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 
         return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
@@ -325,7 +325,7 @@ class OpenAILlmService(OpenAIGenericService):
 
         return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
 
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         file_ids = file_ids or NOT_GIVEN
         vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids)
         return vector_store.id
@@ -350,7 +350,7 @@ class AzureLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
 
 
@@ -387,7 +387,7 @@ class AnthropicLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         config = config or {}
         tools = []
         for tool_name in built_in_tools:
@@ -422,7 +422,7 @@ class DeepSeekLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
 
 
@@ -437,7 +437,7 @@ class GoogleLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
         # Commenting it for now until we fix it
         # otherwise gemini would not work if code execution or web search is selected in the node

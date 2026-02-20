@@ -75,7 +75,7 @@ class AssistantAdapter(BaseAdapter):
         citations_enabled: bool,
         input_formatter: str | None = None,
         save_message_metadata_only: bool = False,
-        disabled_tools: set[str] = None,
+        disabled_tools: set[str] | None = None,
     ):
         self.session = session
         self.assistant = assistant
@@ -94,7 +94,9 @@ class AssistantAdapter(BaseAdapter):
         self.template_context = PromptTemplateContext(session, source_material_id=None)
 
     @classmethod
-    def for_pipeline(cls, session: ExperimentSession, node: AssistantNode, disabled_tools: set[str] = None) -> Self:
+    def for_pipeline(
+        cls, session: ExperimentSession, node: AssistantNode, disabled_tools: set[str] | None = None
+    ) -> Self:
         assistant = OpenAiAssistant.objects.get(id=node.assistant_id)
         return cls(
             session=session,

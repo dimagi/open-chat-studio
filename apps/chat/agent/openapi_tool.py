@@ -66,7 +66,9 @@ class FunctionDef(BaseModel):
 
 
 class OpenAPIOperationExecutor:
-    def __init__(self, auth_service: AuthService, function_def: FunctionDef, custom_action: "CustomAction" = None):
+    def __init__(
+        self, auth_service: AuthService, function_def: FunctionDef, custom_action: "CustomAction | None" = None
+    ):
         self.auth_service = auth_service
         self.function_def = function_def
         self.custom_action = custom_action

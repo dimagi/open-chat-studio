@@ -63,7 +63,7 @@ def _get_mock_document_iterator() -> Iterator[Document]:
     yield from _get_mock_documents()
 
 
-def _get_mock_documents(paths: list[str] = None) -> list[Document]:
+def _get_mock_documents(paths: list[str] | None = None) -> list[Document]:
     paths = paths or ["md_file.md", "txt_file.txt", "py_file.py", "src/file1.py", "src/file2.md", "src/file3.txt"]
     metadata = [
         {

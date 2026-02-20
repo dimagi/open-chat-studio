@@ -170,7 +170,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         """
         return self.get_llm_service().get_local_index_manager(embedding_model_name)
 
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         """
         Creates a remote index with the given name and returns its ID.
         If file_ids are provided, they will be linked to the index.

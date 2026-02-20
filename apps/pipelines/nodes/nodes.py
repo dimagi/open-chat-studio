@@ -883,7 +883,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         }
 
     def _add_file_attachment(self, state: PipelineState, output_state: PipelineState):
-        def add_file_attachment(filename: str, content: bytes, content_type: str = None):
+        def add_file_attachment(filename: str, content: bytes, content_type: str | None = None):
             """Attach a file to the AI response message.
 
             Args:
@@ -920,7 +920,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         return add_file_attachment
 
     def _abort_pipeline(self):
-        def abort_pipeline(message, tag_name: str = None):
+        def abort_pipeline(message, tag_name: str | None = None):
             """Calling this will terminate the pipeline execution. No further nodes will get executed in
             any branch of the pipeline graph.
 
