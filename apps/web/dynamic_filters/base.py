@@ -75,6 +75,7 @@ class MultiColumnFilter:
         filters: A list of `ColumnFilter` instances.
     """
 
+    slug: ClassVar[str] = ""
     filters: ClassVar[Sequence[ColumnFilter]]
 
     @classmethod
@@ -116,6 +117,7 @@ class ColumnFilter(BaseModel):
     label: str
     type: TYPE_ANNOTATION
     column: str = None
+    description: str = ""
 
     @computed_field
     @property
@@ -222,3 +224,25 @@ class StringColumnFilter(ColumnFilter):
             return queryset.filter(q)
 
         return queryset
+
+
+def get_filter_schema(filter_class: type[MultiColumnFilter]) -> dict[str, dict]:
+    """Extract static schema from a MultiColumnFilter for use in AI prompts.
+
+    Returns a dict keyed by query_param with label, type, description, and operators.
+    Does not call prepare() -- no DB access needed.
+    """
+    schema = {}
+    for f in filter_class.filters:
+        schema[f.query_param] = {
+            "label": f.label,
+            "type": f.type,
+            "description": f.description,
+            "operators": [op.value for op in FIELD_TYPE_FILTERS[f.type]],
+        }
+    return schema
+
+
+def get_filter_registry() -> dict[str, type[MultiColumnFilter]]:
+    """Build registry of slug -> MultiColumnFilter class from all subclasses."""
+    return {cls.slug: cls for cls in MultiColumnFilter.__subclasses__() if getattr(cls, "slug", "")}
