@@ -171,7 +171,7 @@ class StaticTrigger(BaseModel, VersionsMixin):
         return result
 
     @transaction.atomic()
-    def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):
+    def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):  # ty: ignore[invalid-method-override]
         """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
         new_instance.experiment = new_experiment
@@ -218,7 +218,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     is_active = models.BooleanField(default=True)
 
     @transaction.atomic()
-    def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):
+    def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):  # ty: ignore[invalid-method-override]
         """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
         new_instance.experiment = new_experiment

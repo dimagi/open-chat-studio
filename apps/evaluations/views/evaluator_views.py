@@ -18,7 +18,7 @@ class EvaluatorHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredM
     permission_required = "evaluations.view_evaluator"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "evaluators",
             "title": "Evaluators",

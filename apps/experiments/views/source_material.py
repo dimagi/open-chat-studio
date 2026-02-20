@@ -17,7 +17,7 @@ from apps.web.waf import WafRule, waf_allow
 class SourceMaterialHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "source_material",
             "title": "Source Material",

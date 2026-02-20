@@ -46,7 +46,7 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
     template_name = "generic/object_home.html"
     permission_required = "assistants.view_openaiassistant"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         has_providers = get_llm_providers_for_assistants(self.request.team).exists()
         if not has_providers:
             messages.warning(self.request, "You need to add an OpenAI LLM provider before you can create an assistant.")
@@ -122,7 +122,7 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
             return self.form_invalid(form)
 
     @transaction.atomic()
-    def form_valid(self, form, resource_formsets):
+    def form_valid(self, form, resource_formsets):  # ty: ignore[invalid-method-override]
         self.object = form.save()
         resource_formsets.save(self.request, self.object)
         try:

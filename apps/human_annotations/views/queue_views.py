@@ -32,7 +32,7 @@ class AnnotationQueueHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
     template_name = "generic/object_home.html"
     permission_required = "human_annotations.view_annotationqueue"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "annotation_queues",
             "title": "Annotation Queues",

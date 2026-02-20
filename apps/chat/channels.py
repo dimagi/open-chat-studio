@@ -968,7 +968,7 @@ class WebChannel(ChannelBase):
     supported_message_types = [MESSAGE_TYPES.TEXT]
     supports_conversational_consent_flow: bool = False
 
-    def send_text_to_user(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
         # Bot responses are returned by the task and picked up by a periodic request from the browser.
         # Ad-hoc bot messages are picked up by a periodic poll from the browser as well
         pass
@@ -978,7 +978,7 @@ class WebChannel(ChannelBase):
             raise ChannelException("WebChannel requires an existing session")
 
     @classmethod
-    def start_new_session(
+    def start_new_session(  # ty: ignore[invalid-method-override]
         cls,
         working_experiment: Experiment,
         participant_identifier: str,
@@ -1240,7 +1240,7 @@ class ApiChannel(ChannelBase):
     def participant_user(self):
         return super().participant_user or self.user
 
-    def send_text_to_user(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
 
@@ -1426,7 +1426,7 @@ class EvaluationChannel(ChannelBase):
 
         self.trace_service = TracingService.empty()
 
-    def send_text_to_user(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
         # The bot cannot send messages to this client, since evaluations are run internally
         pass
 

@@ -123,7 +123,7 @@ class LangFuseTracer(Tracer):
         if error := context.error:
             span.update(level="ERROR", status_message=error)
 
-    def get_langchain_callback(self) -> BaseCallbackHandler | None:
+    def get_langchain_callback(self) -> BaseCallbackHandler | None:  # ty: ignore[invalid-method-override]
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 

@@ -113,7 +113,7 @@ class ChannelForm(forms.ModelForm):
         else:
             self.fields["messaging_provider"].widget = forms.HiddenInput()
 
-    def save(self, experiment, config_data: dict):
+    def save(self, experiment, config_data: dict):  # ty: ignore[invalid-method-override]
         self.instance.team = experiment.team
         self.instance.experiment = experiment
         self.instance.extra_data = config_data

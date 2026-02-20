@@ -43,7 +43,7 @@ class FakeLlm(FakeListChatModel):
         generation = ChatGeneration(message=message)
         return ChatResult(generations=[generation])
 
-    def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
+    def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:  # ty: ignore[invalid-method-override]
         self.calls.append(mock.call(messages, *args, **kwargs))
         return super()._call(messages, *args, **kwargs)
 
@@ -136,7 +136,7 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
     responses: list
     i: int = 0
 
-    def invoke(self, input: dict, config: RunnableConfig | None = None) -> OutputType:
+    def invoke(self, input: dict, config: RunnableConfig | None = None) -> OutputType:  # ty: ignore[invalid-method-override]
         response = self._get_next_response()
         if isinstance(response, BaseException):
             raise response
@@ -157,7 +157,7 @@ class FakeLlmSimpleTokenCount(FakeLlm):
     def get_num_tokens(self, text: str) -> int:
         return len(text.split())
 
-    def get_num_tokens_from_messages(self, messages: list) -> int:
+    def get_num_tokens_from_messages(self, messages: list) -> int:  # ty: ignore[invalid-method-override]
         return BaseLanguageModel.get_num_tokens_from_messages(self, messages)
 
 

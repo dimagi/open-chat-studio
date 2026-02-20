@@ -106,7 +106,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.custom_action_operations.exists()
 
     @transaction.atomic()
-    def create_new_version(self):
+    def create_new_version(self):  # ty: ignore[invalid-method-override]
         from .sync import push_assistant_to_openai
 
         version_number = self.version_number

@@ -13,7 +13,7 @@ class ActionsColumn(tables.Column):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def render(self, value, record):
+    def render(self, value, record):  # ty: ignore[invalid-method-override]
         namespace = "chatbots"
         trigger_type = "timeout" if record["type"] == "__timeout__" else "static"
         view_log_url = reverse(
@@ -60,7 +60,7 @@ class ActionsColumn(tables.Column):
 
 
 class ParamsColumn(tables.Column):
-    def render(self, value, record):
+    def render(self, value, record):  # ty: ignore[invalid-method-override]
         formatted_items = truncate_dict_items(value)
         items = format_html_join("", "<li><strong>{}</strong>: {}</li>", formatted_items)
         return format_html("<ul>{}</ul>", items)
