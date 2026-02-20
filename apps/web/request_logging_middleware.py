@@ -72,6 +72,7 @@ class RequestLoggingMiddleware:
             "request_id": get_audit_transaction_id(),
             "duration": duration_ms,
         }
+        # team is added automatically to all log records via apps.utils.logging.ContextVarFilter
         for key, value in {
             "experiment_id": self._get_field(view_kwargs, post_data, "experiment_id", "chatbot_id"),
             "session_id": self._get_field(view_kwargs, post_data, "session_id"),
