@@ -116,7 +116,7 @@ class MockTracer(Tracer):
         return MagicMock()
 
     def get_trace_metadata(self) -> dict[str, str]:
-        return {"trace_id": str(self._trace_data["id"])}
+        return {"trace_id": str(self._trace_data["id"])}  # ty: ignore[not-subscriptable]
 
     def add_trace_tags(self, tags: list[str]) -> None:
         self.tags = tags

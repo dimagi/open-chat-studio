@@ -284,7 +284,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             return self
         except ValidationError as e:
             raise PydanticCustomError(
-                "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
+                "invalid_prompt",
+                e.error_dict["prompt"][0].message,
+                {"field": "prompt"},  # ty: ignore[not-subscriptable]
             ) from None
 
     @field_validator("tools", "built_in_tools", "mcp_tools", mode="before")
@@ -529,7 +531,9 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             return self
         except ValidationError as e:
             raise PydanticCustomError(
-                "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
+                "invalid_prompt",
+                e.error_dict["prompt"][0].message,
+                {"field": "prompt"},  # ty: ignore[not-subscriptable]
             ) from None
 
     def _process_conditional(self, state: PipelineState):
