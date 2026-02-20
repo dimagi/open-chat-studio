@@ -16,6 +16,8 @@ function evaluateCondition(condition: VisibleWhenCondition, nodeParams: NodePara
     case "!=": return fieldValue !== condition.value;
     case "in": return Array.isArray(condition.value) && condition.value.includes(fieldValue);
     case "not_in": return Array.isArray(condition.value) && !condition.value.includes(fieldValue);
+    case "is_empty": return !fieldValue || (Array.isArray(fieldValue) && fieldValue.length === 0);
+    case "is_not_empty": return !!fieldValue && (!Array.isArray(fieldValue) || fieldValue.length > 0);
     default: return true;
   }
 }
@@ -127,7 +129,7 @@ export const getWidgets = (
 ) => {
   const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
   const readOnly = usePipelineStore((state) => state.readOnly);
-  
+
   const wrappedInputWidget = (params: InputWidgetParams) => getInputWidget(params, getNodeFieldError, readOnly);
   return getWidgetsGeneric({schema, nodeId, nodeData, updateParamValue, widgetGenerator: wrappedInputWidget});
 }
