@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import json
 from pathlib import Path
 from typing import ClassVar, Literal
@@ -10,14 +11,10 @@ from apps.help.base import BaseHelpAgent
 from apps.help.registry import register_agent
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
-_system_prompt = None
 
-
+@functools.cache
 def _get_system_prompt():
-    global _system_prompt
-    if _system_prompt is None:
-        _system_prompt = (Path(__file__).parent.parent / "filter_system_prompt.md").read_text()
-    return _system_prompt
+    return (Path(__file__).parent.parent / "filter_system_prompt.md").read_text()
 
 
 class FilterInput(BaseModel):

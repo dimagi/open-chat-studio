@@ -147,27 +147,25 @@ def check_exact_filters(filters: list, expected_filters: list[dict]) -> str | No
     """Check that output filters exactly match expected filters (column, operator, value).
     Returns None on success, error message on failure.
     """
-    actual = sorted(
-        [{"column": f.column, "operator": f.operator, "value": f.value} for f in filters],
-        key=lambda d: d["column"],
-    )
-    expected = sorted(expected_filters, key=lambda d: d["column"])
+    actual_by_col = {f.column: {"column": f.column, "operator": f.operator, "value": f.value} for f in filters}
+    expected_by_col = {f["column"]: f for f in expected_filters}
 
-    if len(actual) != len(expected):
-        actual_cols = [f["column"] for f in actual]
-        expected_cols = [f["column"] for f in expected]
-        return (
-            f"Expected {len(expected)} filters {expected_cols}, got {len(actual)} {actual_cols}"
-            + f"\n\nExpected:\n{_format_filters(expected)}"
-            + f"\n\nActual:\n{_format_filters(actual)}"
-        )
+    actual_cols = set(actual_by_col)
+    expected_cols = set(expected_by_col)
 
     errors = []
-    for act, exp in zip(actual, expected, strict=True):
-        if act["column"] != exp["column"]:
-            errors.append(f"column mismatch: expected {exp['column']!r}, got {act['column']!r}")
-            continue
-        col = act["column"]
+
+    missing = expected_cols - actual_cols
+    if missing:
+        errors.append(f"Missing filters: {sorted(missing)}")
+
+    extra = actual_cols - expected_cols
+    if extra:
+        errors.append(f"Unexpected filters: {sorted(extra)}")
+
+    for col in sorted(actual_cols & expected_cols):
+        act = actual_by_col[col]
+        exp = expected_by_col[col]
         if act["operator"] != exp["operator"]:
             errors.append(f"{col}: operator expected {exp['operator']!r}, got {act['operator']!r}")
         value_err = _compare_filter_values(act["value"], exp["value"])
@@ -178,7 +176,7 @@ def check_exact_filters(filters: list, expected_filters: list[dict]) -> str | No
         return (
             "Filter mismatch:\n  "
             + "\n  ".join(errors)
-            + f"\n\nExpected:\n{_format_filters(expected)}"
-            + f"\n\nActual:\n{_format_filters(actual)}"
+            + f"\n\nExpected:\n{_format_filters(sorted(expected_by_col.values(), key=lambda d: d['column']))}"
+            + f"\n\nActual:\n{_format_filters(sorted(actual_by_col.values(), key=lambda d: d['column']))}"
         )
     return None
