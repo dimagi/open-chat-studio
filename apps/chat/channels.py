@@ -467,7 +467,7 @@ class ChannelBase(ABC):
         with self.trace_service.span(
             "seed_message",
             inputs={"input": self.experiment.seed_message},
-            notification_config=SpanNotificationConfig(permissions=["experiments.change_experimentsession"]),
+            notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
         ) as span:
             bot_response = self.bot.process_input(user_input=self.experiment.seed_message)
             span.set_outputs({"response": bot_response.content})
