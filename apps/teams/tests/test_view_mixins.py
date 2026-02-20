@@ -43,7 +43,7 @@ class TeamMixinTest(TestCase):
     def _get_request(self, user=None):
         request = self.factory.get("/team/")  # the url here is ignored
         request.user = user or AnonymousUser()
-        request.session = {}
+        request.session = {}  # ty: ignore[invalid-assignment]
         return request
 
     def _call_view(self, view_cls, user, team_slug):

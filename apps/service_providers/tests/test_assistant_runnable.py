@@ -38,7 +38,7 @@ LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTI
 @pytest.fixture()
 def session(request):
     chat = Chat()
-    chat.save = lambda: None
+    chat.save = lambda: None  # ty: ignore[invalid-assignment]
     session = ExperimentSessionFactory.build(chat=chat)
     session.participant_data_from_experiment = {}
     return session
@@ -585,8 +585,8 @@ def _get_assistant_mocked_history_recording(session, assistant, get_attachments_
     adapter = AssistantAdapter(session, assistant, citations_enabled=True)
     history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
     assistant = AssistantChat(adapter=adapter, history_manager=history_manager)
-    history_manager.save_message_to_history = Mock()
-    adapter.get_attachments = lambda _type: get_attachments_return_value or []
+    history_manager.save_message_to_history = Mock()  # ty: ignore[invalid-assignment]
+    adapter.get_attachments = lambda _type: get_attachments_return_value or []  # ty: ignore[invalid-assignment]
     return assistant
 
 

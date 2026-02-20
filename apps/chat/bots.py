@@ -278,7 +278,7 @@ class PipelineTestBot:
 
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
-            input = PipelineState(messages=[input], experiment_session=session)
+            input = PipelineState(messages=[input], experiment_session=session)  # ty: ignore[invalid-assignment]
             runner = DjangoLangGraphRunner(CurrentThreadExecutor)
             output = runner.invoke(runnable, input)
             output = PipelineState(**output).json_safe()

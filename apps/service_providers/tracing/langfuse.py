@@ -160,7 +160,7 @@ class ClientManager:
     certain amount of time."""
 
     def __init__(self, stale_timeout=300, prune_interval=60, max_clients=20) -> None:
-        self.key_timestamps: dict[str, float] = {}
+        self.key_timestamps: dict[str | None, float] = {}
         self.stale_timeout = stale_timeout
         self.max_clients = max_clients
         self.prune_interval = prune_interval

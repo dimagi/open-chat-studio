@@ -160,7 +160,7 @@ class TestOCSCallbackHandler:
 
         # Set up tracer
         tracer = OCSTracer(experiment, team_id=123)
-        tracer.trace_id = str(uuid4())
+        tracer.trace_id = str(uuid4())  # ty: ignore[invalid-assignment]
 
         # Set up a session with a participant so the notification includes context
 
