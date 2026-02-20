@@ -262,6 +262,8 @@ def get_filter_registry() -> dict[str, type[MultiColumnFilter]]:
     regardless of import order.
     """
     import apps.experiments.filters  # noqa: F401
+    import apps.ocs_notifications.filters  # noqa: F401
+    import apps.participants.filters  # noqa: F401
     import apps.trace.filters  # noqa: F401
 
     return {cls.slug: cls for cls in MultiColumnFilter.__subclasses__() if getattr(cls, "slug", "")}
