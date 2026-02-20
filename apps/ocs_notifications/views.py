@@ -14,7 +14,13 @@ from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
 from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent, UserNotificationPreferences
 from apps.ocs_notifications.tables import NotificationEventTable, UserNotificationTable
-from apps.ocs_notifications.utils import TIMEDELTA_MAP, mute_notification, toggle_notification_read, unmute_notification
+from apps.ocs_notifications.utils import (
+    TIMEDELTA_MAP,
+    bust_unread_notification_cache,
+    mute_notification,
+    toggle_notification_read,
+    unmute_notification,
+)
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -210,10 +216,12 @@ class NotificationEventHome(LoginAndTeamRequiredMixin, TemplateView):
         return get_object_or_404(EventType, team=self.request.team, id=self.kwargs["event_type_id"])
 
     def get(self, request, *args, **kwargs) -> HttpResponse:
-        # Clicking the event marks it as read
+        # Clicking the event marks it as read. We explicitly don't use the toggle_notification_read function here to
+        # avoid multiple DB queries
         EventUser.objects.filter(
             user=self.request.user, team=self.request.team, event_type=self.event_type, read=False
         ).update(read=True, read_at=timezone.now())
+        bust_unread_notification_cache(user_id=self.request.user.id, team_slug=self.kwargs["team_slug"])
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
