@@ -100,7 +100,7 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
       
       - name: Run Cypress tests
-        uses: cypress-io/github-action@v6
+        uses: cypress-io/github-action@v7
         with:
           start: ''
           wait-on: 'http://127.0.0.1:8000'
