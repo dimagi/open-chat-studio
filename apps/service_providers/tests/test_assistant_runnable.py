@@ -565,12 +565,14 @@ def test_get_messages_to_sync_to_thread():
     assistant = OpenAiAssistantFactory()
     session = ExperimentSessionFactory()
     chat = session.chat
-    ChatMessage.objects.bulk_create([
-        ChatMessage(chat=chat, message_type="human", content="hello0", metadata={}),
-        ChatMessage(chat=chat, message_type="ai", content="hello1", metadata={"openai_thread_checkpoint": True}),
-        ChatMessage(chat=chat, message_type="human", content="hello2", metadata={}),
-        ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
-    ])
+    ChatMessage.objects.bulk_create(
+        [
+            ChatMessage(chat=chat, message_type="human", content="hello0", metadata={}),
+            ChatMessage(chat=chat, message_type="ai", content="hello1", metadata={"openai_thread_checkpoint": True}),
+            ChatMessage(chat=chat, message_type="human", content="hello2", metadata={}),
+            ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
+        ]
+    )
     adapter = AssistantAdapter(session, assistant, citations_enabled=False)
     to_sync = adapter.get_messages_to_sync_to_thread()
     assert to_sync == [

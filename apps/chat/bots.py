@@ -225,7 +225,7 @@ class PipelineBot:
         message: str,
         type_: ChatMessageType,
         metadata: dict,
-        tags: list[tuple] = None,
+        tags: list[tuple] | None = None,
     ) -> ChatMessage:
         chat_message = ChatMessage.objects.create(
             chat=self.session.chat, message_type=type_.value, content=message, metadata=metadata
@@ -291,7 +291,7 @@ class EventBot:
         Your role is to generate messages to send to users. These could be reminders
         or prompts to help them complete their tasks or error messages. The text that you generate will be sent
         to the user in a chat message.
-        
+
         <example>
         Input: Remember to brush your teeth.
         Output: Don't forget to brush your teeth.
@@ -304,19 +304,19 @@ class EventBot:
         Input: The message was inappropriate.
         Output: Unfortunately I can't respond to your last message because it goes against my usage policy.
         </example>
-    
+
         You should generate the message in same language as the recent conversation history shown below.
         If there is no history use English.
 
         #### Conversation history
         {conversation_history}
-    
+
         #### User data
         {participant_data}
-    
+
         #### Current date and time
         {current_datetime}
-        
+
         Output only the final message, no additional text. Do not put the message in quotes.
         """
     )

@@ -87,7 +87,7 @@ def _get_mock_document_iterator() -> Iterator[Document]:
     yield from _get_mock_documents()
 
 
-def _get_mock_documents(paths: list[str] = None) -> list[Document]:
+def _get_mock_documents(paths: list[str] | None = None) -> list[Document]:
     paths = paths or ["page 1", "page 2"]
     metadata = [
         {

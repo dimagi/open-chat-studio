@@ -59,7 +59,7 @@ class File(BaseTeamModel, VersionsMixin):
 
     @classmethod
     def from_external_source(
-        cls, filename, external_file, external_id, external_source, team_id, metadata: dict = None
+        cls, filename, external_file, external_id, external_source, team_id, metadata: dict | None = None
     ):
         if existing := File.objects.filter(
             external_id=external_id, external_source=external_source, team_id=team_id

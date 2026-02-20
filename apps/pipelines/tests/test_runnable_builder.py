@@ -948,7 +948,7 @@ class TestAssistantNode:
     """Tests for assistant nodes (OpenAI assistants integration)"""
 
     def assistant_node_runnable_mock(
-        self, output: str, input_message_metadata: dict = None, output_message_metadata: dict = None
+        self, output: str, input_message_metadata: dict | None = None, output_message_metadata: dict | None = None
     ):
         """A mock for an assistant node runnable that returns the given output and metadata."""
         runnable_mock = Mock()

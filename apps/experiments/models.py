@@ -797,7 +797,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         version_description: str | None = None,
         make_default: bool = False,
         is_copy: bool = False,
-        name: str = None,
+        name: str | None = None,
     ):
         """
         Creates a copy of an experiment as a new version of the original experiment.
