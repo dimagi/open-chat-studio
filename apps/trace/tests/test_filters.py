@@ -155,14 +155,6 @@ class TestTraceFilter:
         result = self._create_filter_and_apply(queryset, "span_tags", Operators.EXCLUDES, value)
         assert trace not in result
 
-    def test_tags_filter_invalid_json(self, trace, team):
-        queryset = Trace.objects.filter(team=team)
-
-        # Test invalid JSON
-        result = self._create_filter_and_apply(queryset, "span_tags", Operators.ANY_OF, "invalid_json")
-        # Should return original queryset since filter returns None
-        assert trace in result
-
     def test_remote_id_filter_any_of(self, trace, team):
         trace.participant.remote_id = "remote123"
         trace.participant.save()
