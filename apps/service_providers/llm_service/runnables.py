@@ -75,7 +75,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def invoke(
+    def invoke(  # ty: ignore[invalid-method-override]
         self, input: str, config: RunnableConfig | None = None, attachments: list[Attachment] | None = None
     ) -> ChainOutput:
         callback = self.adapter.callback_handler

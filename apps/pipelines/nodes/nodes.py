@@ -478,7 +478,7 @@ class BooleanNode(PipelineRouterNode):
         """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         return {"output_0": "true", "output_1": "false"}
 
-    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
+    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:  # ty: ignore[invalid-method-override]
         if self.tag_output_message:
             tag_name = f"{self.name}:{selected_route}"
             tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE

@@ -90,7 +90,7 @@ class ExperimentVersionsFilter(ChoiceColumnFilter):
     label: str = "Versions"
     type: str = TYPE_CHOICE
 
-    def values_list(self, json_value: str) -> list[int]:
+    def values_list(self, json_value: str) -> list[int]:  # ty: ignore[invalid-method-override]
         values = super().values_list(json_value)
         # versions are returned as strings like "v1", "v2", so we need to strip the "v" and convert to int
         return [int(v[1:]) for v in values if "v" in v]

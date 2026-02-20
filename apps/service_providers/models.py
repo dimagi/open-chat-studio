@@ -370,7 +370,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         )
 
     @transaction.atomic()
-    def delete(self):
+    def delete(self):  # ty: ignore[invalid-method-override]
         if self.type == VoiceProviderType.openai_voice_engine:
             files_to_delete = self.get_files()
             [f.delete() for f in files_to_delete]

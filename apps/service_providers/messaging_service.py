@@ -174,7 +174,7 @@ class TwilioService(MessagingService):
         public_url = self._upload_audio_file(synthetic_voice)
         self.client.messages.create(from_=from_, to=to, media_url=[public_url])
 
-    def get_message_audio(self, message: TwilioMessage) -> BytesIO:
+    def get_message_audio(self, message: TwilioMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         auth = (self.account_sid, self.auth_token)
         response = httpx.get(message.media_url, auth=auth, follow_redirects=True)
         try:
@@ -244,7 +244,7 @@ class TurnIOService(MessagingService):
             whatsapp_id=to, file=audio_file, content_type="audio/ogg", media_type="audio", caption=None
         )
 
-    def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
+    def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         response = self.client.media.get_media(message.media_id)
 
         try:
@@ -326,7 +326,7 @@ class SureAdhereService(MessagingService):
         response.raise_for_status()
         return response.json()["access_token"]
 
-    def send_text_message(self, message: str, to: str, platform: ChannelPlatform, from_: str = None):
+    def send_text_message(self, message: str, to: str, platform: ChannelPlatform, from_: str = None):  # ty: ignore[invalid-method-override]
         access_token = self.get_access_token()
         send_msg_url = urljoin(self.base_url, "/treatment/external/send-msg")
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"}

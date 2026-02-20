@@ -172,7 +172,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         )
 
     @transaction.atomic()
-    def create_new_version(self, save=True):
+    def create_new_version(self, save=True):  # ty: ignore[invalid-method-override]
         """
         When a collection is indexed, we need to create a new vector store when we create a new version of it
         and upload the file versions to it.

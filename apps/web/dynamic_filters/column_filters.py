@@ -27,7 +27,7 @@ class ExperimentFilter(ChoiceColumnFilter):
         )
         self.options = [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
 
-    def parse_query_value(self, value) -> list[int]:
+    def parse_query_value(self, value) -> list[int]:  # ty: ignore[invalid-method-override]
         values = []
         for v in self.values_list(value):
             try:

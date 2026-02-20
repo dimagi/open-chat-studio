@@ -60,7 +60,7 @@ class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
     permission_required = "evaluations.view_evaluationdataset"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "evaluation_datasets",
             "title": "Datasets",
