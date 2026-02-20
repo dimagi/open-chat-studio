@@ -111,9 +111,9 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
         return get_filter_context_data(
             self.request.team,
             ExperimentSessionFilter.columns(self.request.team),
-            "last_message",
-            table_url,
-            "sessions-table",
+            filter_class=ExperimentSessionFilter,
+            table_url=table_url,
+            table_container_id="sessions-table",
             table_type=FilterSet.TableType.DATASETS,
         )
 
@@ -198,7 +198,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         context = get_filter_context_data(
             self.request.team,
             columns=ExperimentSessionFilter.columns(self.request.team),
-            date_range_column="last_message",
+            filter_class=ExperimentSessionFilter,
             table_url=table_url,
             table_container_id="sessions-table",
             table_type=FilterSet.TableType.DATASETS,

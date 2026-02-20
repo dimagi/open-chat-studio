@@ -224,7 +224,7 @@ class ProductInventoryView(SingleTableView):
         filter_context = get_filter_context_data(
             team=self.request.team,  # Assuming team is available in request
             columns=ProductInventoryFilter.columns(self.request.team),
-            date_range_column="created_date",
+            filter_class=ProductInventoryFilter,
             table_url=reverse("inventory:product_table"),  # Your HTMX table URL
             table_container_id="product-table",
             table_type="your-table-type"

@@ -24,7 +24,7 @@ def get_trace_filter_context_data(team):
     context = get_filter_context_data(
         team,
         columns=TraceFilter.columns(team),
-        date_range_column="timestamp",
+        filter_class=TraceFilter,
         table_url=table_url,
         table_container_id="data-table",
         table_type=FilterSet.TableType.TRACES,
