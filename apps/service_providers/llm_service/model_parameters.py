@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
 from apps.custom_actions.schema_utils import resolve_references
-from apps.pipelines.nodes.base import UiSchema, Widgets
+from apps.pipelines.nodes.base import UiSchema, VisibleWhen, Widgets
 
 
 class OpenAIReasoningEffortParameter(TextChoices):
@@ -114,7 +114,7 @@ class GPT52Parameters(LLMModelParamBase):
         le=2.0,
         title="Temperature",
         description="Only supported when reasoning effort is set to 'none'",
-        json_schema_extra=UiSchema(widget=Widgets.range),
+        json_schema_extra=UiSchema(widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none")),
     )
 
     top_p: float | None = Field(
@@ -123,7 +123,7 @@ class GPT52Parameters(LLMModelParamBase):
         le=1.0,
         title="Top P",
         description="Only supported when reasoning effort is set to 'none'",
-        json_schema_extra=UiSchema(widget=Widgets.range),
+        json_schema_extra=UiSchema(widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none")),
     )
 
     @field_validator("temperature", mode="before")
@@ -215,6 +215,7 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
         description="Determines how many tokens Claude can use for its internal reasoning process.",
         default=1024,
         ge=1024,
+        json_schema_extra=UiSchema(visible_when=VisibleWhen(field="thinking", value=True)),
     )
 
     @field_validator("budget_tokens", mode="before")

@@ -29,7 +29,7 @@
       <h3 class="text-lg font-medium mb-3">{% translate "Evaluator Parameters" %}</h3>
       <div id="dynamic-params">
         <template x-for="(field, fieldName) in selectedSchema?.properties || {}" :key="fieldName">
-          <div x-show="fieldName !== 'type'" class="fieldset w-full">
+          <div x-show="fieldName !== 'type' && isFieldVisible(field)" class="fieldset w-full">
 
             <!-- LLM Provider Widget -->
             <template x-if="getWidget(field) === 'llm_provider_model'">
@@ -547,6 +547,24 @@
 
         getWidget(field) {
           return field['ui:widget'] || null;
+        },
+
+        isFieldVisible(field) {
+          const visibleWhen = field['ui:visibleWhen'];
+          if (!visibleWhen) return true;
+
+          const conditions = Array.isArray(visibleWhen) ? visibleWhen : [visibleWhen];
+          return conditions.every(condition => {
+            const fieldValue = this.params[condition.field];
+            const operator = condition.operator || '==';
+            switch (operator) {
+              case '==': return fieldValue === condition.value;
+              case '!=': return fieldValue !== condition.value;
+              case 'in': return Array.isArray(condition.value) && condition.value.includes(fieldValue);
+              case 'not_in': return Array.isArray(condition.value) && !condition.value.includes(fieldValue);
+              default: return true;
+            }
+          });
         },
 
         isRequired(fieldName) {

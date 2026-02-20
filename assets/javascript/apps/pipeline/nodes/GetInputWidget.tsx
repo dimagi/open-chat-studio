@@ -1,9 +1,89 @@
-import React from "react";
-import {JsonSchema, NodeParams} from "../types/nodeParams";
+import React, {useEffect, useRef} from "react";
+import {JsonSchema, NodeParams, VisibleWhenCondition} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
 import {getWidget} from "./widgets";
 import {getCachedData} from "../utils";
 
+/**
+ * Evaluates a single visibility condition against the current node params.
+ * Returns true if the field should be visible.
+ */
+function evaluateCondition(condition: VisibleWhenCondition, nodeParams: NodeParams): boolean {
+  const fieldValue = nodeParams[condition.field];
+  const operator = condition.operator ?? "==";
+  switch (operator) {
+    case "==": return fieldValue === condition.value;
+    case "!=": return fieldValue !== condition.value;
+    case "in": return Array.isArray(condition.value) && condition.value.includes(fieldValue);
+    case "not_in": return Array.isArray(condition.value) && !condition.value.includes(fieldValue);
+    default: return true;
+  }
+}
+
+/**
+ * Evaluates the ui:visibleWhen condition(s) for a field.
+ * Returns true if the field should be visible, false if it should be hidden.
+ * If no condition is defined, returns true (field is always visible).
+ */
+export function evaluateVisibleWhen(
+  visibleWhen: VisibleWhenCondition | VisibleWhenCondition[] | undefined,
+  nodeParams: NodeParams
+): boolean {
+  if (visibleWhen === undefined || visibleWhen === null) {
+    return true;
+  }
+  if (Array.isArray(visibleWhen)) {
+    return visibleWhen.every((condition) => evaluateCondition(condition, nodeParams));
+  }
+  return evaluateCondition(visibleWhen, nodeParams);
+}
+
+
+type VisibleWhenWrapperProps = {
+  visibleWhen: VisibleWhenCondition | VisibleWhenCondition[] | undefined;
+  nodeParams: NodeParams;
+  fieldName: string;
+  nodeId: string;
+  schemaDefault: any;
+  children: React.ReactNode;
+}
+
+/**
+ * Wraps a field widget with visibility logic. When the field transitions from
+ * visible to hidden, its value is cleared to prevent stale values from causing
+ * backend validation errors.
+ */
+const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
+  visibleWhen,
+  nodeParams,
+  fieldName,
+  nodeId,
+  schemaDefault,
+  children,
+}) => {
+  const setNode = usePipelineStore((state) => state.setNode);
+  const isVisible = evaluateVisibleWhen(visibleWhen, nodeParams);
+  const prevVisibleRef = useRef(isVisible);
+
+  useEffect(() => {
+    if (prevVisibleRef.current && !isVisible) {
+      setNode(nodeId, (oldNode) => ({
+        ...oldNode,
+        data: {
+          ...oldNode.data,
+          params: {
+            ...oldNode.data.params,
+            [fieldName]: schemaDefault ?? null,
+          },
+        },
+      }));
+    }
+    prevVisibleRef.current = isVisible;
+  }, [isVisible]);
+
+  if (!isVisible) return <></>;
+  return <>{children}</>;
+};
 
 type GetWidgetsParams = {
   schema: JsonSchema;
@@ -158,30 +238,38 @@ export const getInputWidget = (
   const Widget = getWidget(widgetOrType, widgetSchema)
   let fieldError = getNodeFieldError(params.id, params.name);
   let paramValue = params.params[params.name];
-  
+
   // Use schema default if paramValue is undefined
   if (paramValue === undefined && widgetSchema.default !== undefined) {
     paramValue = widgetSchema.default;
   }
-  
+
   if (params.required && (paramValue === null || paramValue === undefined)) {
     fieldError = "This field is required";
   }
   return (
-    <Widget
-      nodeId={params.id}
-      name={params.name}
-      label={widgetSchema.title || params.name.replace(/_/g, " ")}
-      helpText={widgetSchema.description || ""}
-      paramValue={paramValue ?? ""}
-      inputError={fieldError}
-      updateParamValue={params.updateParamValue}
-      schema={widgetSchema}
+    <VisibleWhenWrapper
+      visibleWhen={widgetSchema["ui:visibleWhen"]}
       nodeParams={params.params}
-      nodeSchema={params.schema}
-      required={params.required}
-      getNodeFieldError={getNodeFieldError}
-      readOnly={readOnly}
-    />
+      fieldName={params.name}
+      nodeId={params.id}
+      schemaDefault={widgetSchema.default}
+    >
+      <Widget
+        nodeId={params.id}
+        name={params.name}
+        label={widgetSchema.title || params.name.replace(/_/g, " ")}
+        helpText={widgetSchema.description || ""}
+        paramValue={paramValue ?? ""}
+        inputError={fieldError}
+        updateParamValue={params.updateParamValue}
+        schema={widgetSchema}
+        nodeParams={params.params}
+        nodeSchema={params.schema}
+        required={params.required}
+        getNodeFieldError={getNodeFieldError}
+        readOnly={readOnly}
+      />
+    </VisibleWhenWrapper>
   );
 };
