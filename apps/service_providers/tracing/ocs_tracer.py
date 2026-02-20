@@ -238,7 +238,9 @@ class OCSCallbackHandler(BaseCallbackHandler):
 
         if not self.tracer.error_span_name:
             self.tracer.error_span_name = span_name
-            self.tracer.error_notification_config = SpanNotificationConfig(permissions="experiments.change_experiment")
+            self.tracer.error_notification_config = SpanNotificationConfig(
+                permissions=["experiments.change_experiment"]
+            )
 
     def on_llm_error(self, *args, **kwargs) -> None:
         error = kwargs.get("error") or (args[0] if args else None)
