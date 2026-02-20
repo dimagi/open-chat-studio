@@ -6,7 +6,7 @@ export type NodeParams = {
 export type VisibleWhenCondition = {
   field: string;
   value: any;
-  operator?: "==" | "!=" | "in" | "not_in";
+  operator?: "==" | "!=" | "in" | "not_in" | "is_empty" | "is_not_empty";
 }
 
 export type PropertySchema = {
