@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 
 
 def check_syntax(code: str) -> str | None:
@@ -106,4 +107,48 @@ def check_filter_params(filters: list, expected_params: list[str]) -> str | None
     expected_sorted = sorted(expected_params)
     if actual_params != expected_sorted:
         return f"Expected params {expected_sorted}, got {actual_params}"
+    return None
+
+
+def _normalize_filter_value(value) -> str:
+    """Normalize a filter value for comparison.
+
+    - Lists → sorted JSON array string
+    - Ints/floats → string
+    - Strings containing JSON arrays → sorted JSON array string
+    - Plain strings → as-is
+    """
+    if isinstance(value, list):
+        return json.dumps(sorted(str(v) for v in value))
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return json.dumps(sorted(str(v) for v in parsed))
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return str(value)
+
+
+def _filter_to_dict(f) -> dict:
+    """Convert a filter (dict or ColumnFilterData) to a normalized dict."""
+    if isinstance(f, dict):
+        column, operator, value = f["column"], f["operator"], f["value"]
+    else:
+        column, operator, value = f.column, f.operator, f.value
+    return {"column": column, "operator": operator, "value": _normalize_filter_value(value)}
+
+
+def check_exact_filters(filters: list, expected_filters: list[dict]) -> str | None:
+    """Check that output filters exactly match expected filters (column, operator, value).
+    Returns None on success, error message on failure.
+    """
+    actual = sorted((_filter_to_dict(f) for f in filters), key=lambda d: d["column"])
+    expected = sorted((_filter_to_dict(f) for f in expected_filters), key=lambda d: d["column"])
+    if actual != expected:
+        actual_fmt = "\n    ".join(str(f) for f in actual)
+        expected_fmt = "\n    ".join(str(f) for f in expected)
+        return f"Filter mismatch:\n  Expected:\n    {expected_fmt}\n  Actual:\n    {actual_fmt}"
     return None
