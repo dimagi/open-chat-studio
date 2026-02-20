@@ -1074,7 +1074,7 @@ class TelegramChannel(ChannelBase):
                 participant_data.update_consent(False)
             except ParticipantData.DoesNotExist:
                 raise ChannelException("Participant data does not exist during consent update") from e
-            except Exception as e:
+            except Exception as e:  # ty: ignore[invalid-assignment]
                 raise ChannelException(f"Unable to update consent for participant {self.participant_identifier}") from e
         else:
             raise ChannelException(f"Telegram API error occurred: {e.description}") from e

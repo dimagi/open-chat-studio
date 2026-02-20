@@ -115,7 +115,7 @@ class ColumnFilter(BaseModel):
     query_param: str
     label: str
     type: TYPE_ANNOTATION
-    column: str = None
+    column: str | None = None
 
     @computed_field
     @property

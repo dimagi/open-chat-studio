@@ -172,7 +172,7 @@ class ToolConfigModel(BaseModel):
     @classmethod
     def validate_domains(cls, value: list[str], info) -> list[str]:
         values = list(map(str.strip, filter(None, value)))
-        for value in values:
+        for value in values:  # ty: ignore[invalid-assignment]
             try:
                 validators.validate_domain_name(value)
             except ValidationError:
@@ -285,8 +285,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         except ValidationError as e:
             raise PydanticCustomError(
                 "invalid_prompt",
-                e.error_dict["prompt"][0].message,
-                {"field": "prompt"},  # ty: ignore[not-subscriptable]
+                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable]
+                {"field": "prompt"},
             ) from None
 
     @field_validator("tools", "built_in_tools", "mcp_tools", mode="before")
@@ -532,8 +532,8 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         except ValidationError as e:
             raise PydanticCustomError(
                 "invalid_prompt",
-                e.error_dict["prompt"][0].message,
-                {"field": "prompt"},  # ty: ignore[not-subscriptable]
+                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable]
+                {"field": "prompt"},
             ) from None
 
     def _process_conditional(self, state: PipelineState):

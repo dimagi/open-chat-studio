@@ -1487,8 +1487,8 @@ class ExperimentSession(BaseTeamModel):
                     )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
-                    trace_info = trace_service.get_trace_metadata()
-                return trace_info
+                    trace_metadata = trace_service.get_trace_metadata()
+                return trace_metadata
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:

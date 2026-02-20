@@ -42,7 +42,7 @@ def patch_executor(executor: type[Executor]) -> Generator[None, Any]:
     from langchain_core.runnables import config
 
     original = config.ContextThreadPoolExecutor
-    config.ContextThreadPoolExecutor = executor
+    config.ContextThreadPoolExecutor = executor  # ty: ignore[invalid-assignment]
     try:
         yield
     finally:

@@ -19,7 +19,7 @@ class CustomUserChangeForm(UserChangeForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if settings.USE_I18N and len(settings.LANGUAGES) > 1:
-            language = self.fields.get("language")
+            language = self.fields["language"]
             language.choices = settings.LANGUAGES
         else:
             self.fields.pop("language")

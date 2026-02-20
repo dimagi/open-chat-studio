@@ -58,9 +58,9 @@ class Tracer(ABC):
         self.type = type_
         self.config = config
 
-        self.trace_id: UUID = None
-        self.session: ExperimentSession = None
-        self.trace_name: str = None
+        self.trace_id: UUID | None = None
+        self.session: ExperimentSession | None = None
+        self.trace_name: str | None = None
 
     @property
     @abstractmethod

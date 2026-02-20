@@ -64,12 +64,12 @@ def create_pipeline_model(
     nodes: list[dict], edges: list[dict | str] | None = None, pipeline: Pipeline | None = None
 ) -> Pipeline:
     if not pipeline:
-        pipeline = PipelineFactory()
+        pipeline = PipelineFactory()  # ty: ignore[invalid-assignment]
     assert pipeline is not None
     if edges is None:
-        edges = _make_edges(nodes)
+        edges = _make_edges(nodes)  # ty: ignore[invalid-assignment]
     if edges and isinstance(edges[0], str):
-        edges = _edges_from_strings(edges, nodes)
+        edges = _edges_from_strings(edges, nodes)  # ty: ignore[invalid-assignment]
     flow_nodes = []
     for node in nodes:
         flow_nodes.append({"id": node["id"], "data": node})

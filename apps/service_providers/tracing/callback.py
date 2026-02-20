@@ -40,7 +40,7 @@ def wrap_callback(
     some magic with the type annotations."""
 
     if run_name_map or filter_patterns:
-        callback = NameMappingWrapper(callback, run_name_map or {}, filter_patterns or [])
+        callback = NameMappingWrapper(callback, run_name_map or {}, filter_patterns or [])  # ty: ignore[invalid-assignment]
 
     return CallbackWrapper(callback)  # ty: ignore[invalid-return-type]
 

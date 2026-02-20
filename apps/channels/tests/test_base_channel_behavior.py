@@ -288,7 +288,7 @@ def test_pre_conversation_flow(_send_seed_message):
     assert pre_survey
 
     def _user_message(message: str):
-        message = base_messages.text_message(message_text=message)
+        message = base_messages.text_message(message_text=message)  # ty: ignore[invalid-assignment]
         return channel.new_user_message(message)
 
     experiment = channel.experiment
@@ -507,7 +507,7 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
     experiment_session = ExperimentSessionFactory(experiment=experiment)
 
     channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
-    channel.experiment_session = experiment_session
+    channel.experiment_session = experiment_session  # ty: ignore[invalid-assignment]
     pre_survey = experiment.pre_survey
     assert pre_survey
 
@@ -556,7 +556,7 @@ def test_missing_channel_raises_error(twilio_provider):
         messaging_provider=twilio_provider, experiment=experiment, platform="whatsapp"
     )
     session = ExperimentSessionFactory(experiment_channel=experiment_channel)
-    session.experiment_channel.platform = "snail_mail"
+    session.experiment_channel.platform = "snail_mail"  # ty: ignore[invalid-assignment]
     with pytest.raises(Exception, match="Unsupported platform type snail_mail"):
         ChannelBase.from_experiment_session(session)
 
@@ -812,7 +812,7 @@ def test_participant_identifier_determination():
     # Reset cached value
     channel_base._participant_identifier = None
     # Set the session and check that the identifier is fetched from the session
-    channel_base.experiment_session = session
+    channel_base.experiment_session = session  # ty: ignore[invalid-assignment]
     assert channel_base.participant_identifier == "Alpha"
 
 
@@ -877,8 +877,8 @@ def test_supported_and_unsupported_attachments(experiment):
 
     session = ExperimentSessionFactory(experiment=experiment)
     channel = CustomChannel(experiment, experiment_channel=Mock(), experiment_session=session)
-    channel.send_text_to_user = Mock()
-    channel.send_file_to_user = Mock()
+    channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+    channel.send_file_to_user = Mock()  # ty: ignore[invalid-assignment]
 
     file1 = FileFactory(name="f1", content_type="image/jpeg")
     file2 = FileFactory(name="f2", content_type="image/jpeg")
@@ -898,8 +898,8 @@ def test_supported_and_unsupported_attachments(experiment):
 def test_chat_message_returned_for_cancelled_generate():
     session = ExperimentSessionFactory()
     channel = TestChannel(session.experiment, None, session)
-    channel._add_message = Mock()
-    channel._new_user_message = Mock()
+    channel._add_message = Mock()  # ty: ignore[invalid-assignment]
+    channel._new_user_message = Mock()  # ty: ignore[invalid-assignment]
     channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")
     channel.message = base_messages.text_message("123", "hi")
     response = channel.new_user_message(channel.message)
@@ -927,7 +927,7 @@ class TestNotifications:
         """Test that file delivery exception triggers a notification."""
         session = ExperimentSessionFactory.build()
         channel = TestChannel(session.experiment, session.experiment_channel, session)
-        channel.send_text_to_user = Mock()
+        channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
 
         # Create a test file
         test_file = FileFactory.build(name="test.jpg", content_type="image/jpeg")
@@ -953,8 +953,8 @@ class TestNotifications:
         channel = TestChannel(session.experiment, session.experiment_channel, session)
 
         # Mock transcription_started and get_message_audio
-        channel.transcription_started = Mock()
-        channel.get_message_audio = Mock(return_value=BytesIO(b"fake audio data"))
+        channel.transcription_started = Mock()  # ty: ignore[invalid-assignment]
+        channel.get_message_audio = Mock(return_value=BytesIO(b"fake audio data"))  # ty: ignore[invalid-assignment]
 
         # Mock _transcribe_audio to raise an exception
         with patch.object(channel, "_transcribe_audio", side_effect=Exception("Transcription failed")):
@@ -971,7 +971,7 @@ class TestNotifications:
         """Test that multiple file delivery failures create separate notifications."""
         session = ExperimentSessionFactory.build()
         channel = TestChannel(session.experiment, session.experiment_channel, session)
-        channel.send_text_to_user = Mock()
+        channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
 
         # Create test files
         file1 = FileFactory.build(name="test1.jpg", content_type="image/jpeg")

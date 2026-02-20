@@ -10,7 +10,7 @@ from apps.pipelines.nodes.base import PipelineState
 def test_session_tags():
     session = mock.Mock()
     bot = PipelineBot(session, mock.Mock(), None)
-    bot._save_message_to_history = mock.Mock()
+    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
     bot._save_outputs(
         input_state=PipelineState(messages=["hi"]),
         output=PipelineState(messages=["Hello"], session_tags=[("my-tag", None)]),
@@ -21,7 +21,7 @@ def test_session_tags():
 def test_save_session_state():
     session = mock.Mock()
     bot = PipelineBot(session, mock.Mock(), None)
-    bot._save_message_to_history = mock.Mock()
+    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
     bot._save_outputs(
         input_state=PipelineState(messages=["hi"]),
         output=PipelineState(messages=["Hello"], session_state={"test": "demo"}),
@@ -34,7 +34,7 @@ def test_save_participant_data():
     session = mock.Mock()
     bot = PipelineBot(session, mock.Mock(), None)
     participant_data = mock.Mock()
-    bot._save_message_to_history = mock.Mock()
+    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
     bot.__dict__["participant_data"] = participant_data
     bot._save_outputs(
         input_state=PipelineState(messages=["hi"]),

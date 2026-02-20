@@ -33,7 +33,7 @@ class CloneContext:
 
     source_team: Team
     target_team: Team
-    user: CustomUser = None
+    user: CustomUser | None = None
 
     # Phase 2: Providers
     llm_providers: dict[int, LlmProvider] = field(default_factory=dict)

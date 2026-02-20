@@ -19,7 +19,7 @@ from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code
 
 class EvaluatorSchema(BaseModel):
     label: str
-    icon: str = None
+    icon: str | None = None
 
 
 class EvaluatorResult(BaseModel):

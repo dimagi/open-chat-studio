@@ -39,7 +39,7 @@ def test_download_evaluation_run_csv_with_different_context_columns(client, team
     )
 
     result1 = EvaluationResultFactory(output=evaluator_result1.model_dump(), team=team_with_users)
-    result1.run.team = team_with_users
+    result1.run.team = team_with_users  # ty: ignore[invalid-assignment]
     result1.run.save()
 
     EvaluationResultFactory(

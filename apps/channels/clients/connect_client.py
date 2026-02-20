@@ -96,8 +96,8 @@ class CommCareConnectClient:
         return ciphertext, tag, nonce
 
     def _decrypt_message(self, key: bytes, ciphertext: str, tag: str, nonce: str) -> str:
-        ciphertext = base64.b64decode(ciphertext)
-        tag = base64.b64decode(tag)
-        nonce = base64.b64decode(nonce)
-        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-        return cipher.decrypt_and_verify(ciphertext, tag).decode()
+        ciphertext_bytes = base64.b64decode(ciphertext)
+        tag_bytes = base64.b64decode(tag)
+        nonce_bytes = base64.b64decode(nonce)
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce_bytes)
+        return cipher.decrypt_and_verify(ciphertext_bytes, tag_bytes).decode()
