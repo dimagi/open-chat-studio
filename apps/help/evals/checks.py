@@ -110,45 +110,59 @@ def check_filter_params(filters: list, expected_params: list[str]) -> str | None
     return None
 
 
-def _normalize_filter_value(value) -> str:
-    """Normalize a filter value for comparison.
+def _compare_filter_values(actual_str: str, expected) -> str | None:
+    """Compare an actual filter value string against an expected value.
 
-    - Lists → sorted JSON array string
-    - Ints/floats → string
-    - Strings containing JSON arrays → sorted JSON array string
-    - Plain strings → as-is
+    If expected is a list, parse actual as JSON and compare sorted lists.
+    This validates that the LLM produced valid JSON-encoded values.
+    Otherwise compare as strings.
     """
-    if isinstance(value, list):
-        return json.dumps(sorted(str(v) for v in value))
-    if isinstance(value, (int, float)):
-        return str(value)
-    if isinstance(value, str):
+    if isinstance(expected, list):
         try:
-            parsed = json.loads(value)
-            if isinstance(parsed, list):
-                return json.dumps(sorted(str(v) for v in parsed))
+            parsed = json.loads(actual_str)
         except (json.JSONDecodeError, TypeError):
-            pass
-    return str(value)
+            return f"expected JSON list {expected}, got unparseable value: {actual_str!r}"
+        if not isinstance(parsed, list):
+            return f"expected JSON list {expected}, got non-list: {parsed!r}"
+        expected_sorted = sorted(str(v) for v in expected)
+        actual_sorted = sorted(str(v) for v in parsed)
+        if actual_sorted != expected_sorted:
+            return f"expected {expected_sorted}, got {actual_sorted}"
+        return None
 
-
-def _filter_to_dict(f) -> dict:
-    """Convert a filter (dict or ColumnFilterData) to a normalized dict."""
-    if isinstance(f, dict):
-        column, operator, value = f["column"], f["operator"], f["value"]
-    else:
-        column, operator, value = f.column, f.operator, f.value
-    return {"column": column, "operator": operator, "value": _normalize_filter_value(value)}
+    expected_str = str(expected)
+    if actual_str != expected_str:
+        return f"expected {expected_str!r}, got {actual_str!r}"
+    return None
 
 
 def check_exact_filters(filters: list, expected_filters: list[dict]) -> str | None:
     """Check that output filters exactly match expected filters (column, operator, value).
     Returns None on success, error message on failure.
     """
-    actual = sorted((_filter_to_dict(f) for f in filters), key=lambda d: d["column"])
-    expected = sorted((_filter_to_dict(f) for f in expected_filters), key=lambda d: d["column"])
-    if actual != expected:
-        actual_fmt = "\n    ".join(str(f) for f in actual)
-        expected_fmt = "\n    ".join(str(f) for f in expected)
-        return f"Filter mismatch:\n  Expected:\n    {expected_fmt}\n  Actual:\n    {actual_fmt}"
+    actual = sorted(
+        [{"column": f.column, "operator": f.operator, "value": f.value} for f in filters],
+        key=lambda d: d["column"],
+    )
+    expected = sorted(expected_filters, key=lambda d: d["column"])
+
+    if len(actual) != len(expected):
+        actual_cols = [f["column"] for f in actual]
+        expected_cols = [f["column"] for f in expected]
+        return f"Expected {len(expected)} filters {expected_cols}, got {len(actual)} {actual_cols}"
+
+    errors = []
+    for act, exp in zip(actual, expected, strict=True):
+        if act["column"] != exp["column"]:
+            errors.append(f"column mismatch: expected {exp['column']!r}, got {act['column']!r}")
+            continue
+        col = act["column"]
+        if act["operator"] != exp["operator"]:
+            errors.append(f"{col}: operator expected {exp['operator']!r}, got {act['operator']!r}")
+        value_err = _compare_filter_values(act["value"], exp["value"])
+        if value_err:
+            errors.append(f"{col}: {value_err}")
+
+    if errors:
+        return "Filter mismatch:\n  " + "\n  ".join(errors)
     return None

@@ -18,7 +18,7 @@
       expected:
         - column: tags
           operator: any of
-          value: funny
+          value: ["funny"]
 
 - id: conversations_whatsapp_or_telegram
   input:
@@ -40,10 +40,10 @@
       expected:
         - column: state
           operator: any of
-          value: active
+          value: ["active"]
         - column: versions
           operator: any of
-          value: v6
+          value: ["v6"]
 
 - id: participant_starts_with_john
   input:
@@ -65,13 +65,13 @@
       expected:
         - column: state
           operator: any of
-          value: complete
+          value: ["completed"]
         - column: last_message
           operator: range
           value: "30d"
         - column: channels
           operator: excludes
-          value: API
+          value: ["API"]
 
 - id: tags_all_of_blue_funny
   input:
@@ -93,7 +93,7 @@
       expected:
         - column: experiment
           operator: any of
-          value: 609
+          value: [609]
         - column: first_message
           operator: range
           value: "90d"
@@ -107,13 +107,13 @@
       expected:
         - column: channels
           operator: any of
-          value: Web
+          value: ["Web"]
         - column: participant
           operator: contains
           value: demo
         - column: tags
           operator: excludes
-          value: go
+          value: ["go"]
 
 - id: complex_multi_filter
   input:
@@ -124,19 +124,19 @@
       expected:
         - column: state
           operator: any of
-          value: active
+          value: ["active"]
         - column: versions
           operator: any of
           value: ["v5", "v6"]
         - column: channels
           operator: any of
-          value: Facebook
+          value: ["Facebook"]
         - column: message_date
           operator: range
           value: "1h"
         - column: tags
           operator: any of
-          value: "👍"
+          value: ["👍"]
 
 - id: message_tagged_recent
   input:
