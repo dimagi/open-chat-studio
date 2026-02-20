@@ -1,9 +1,12 @@
+import json
 from typing import Self
 from urllib.parse import urlencode, urlparse
 
 from django.conf import settings
 from django.http import QueryDict
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+
+_LIST_OPERATORS = frozenset({"any of", "all of", "excludes"})
 
 
 class ColumnFilterData(BaseModel):
@@ -12,6 +15,16 @@ class ColumnFilterData(BaseModel):
     column: str
     operator: str
     value: str
+
+    @model_validator(mode="after")
+    def _normalize_list_value(self) -> Self:
+        """Wrap bare strings in a JSON array for operators that expect lists."""
+        if self.operator in _LIST_OPERATORS:
+            try:
+                json.loads(self.value)
+            except (json.JSONDecodeError, TypeError):
+                self.value = json.dumps([self.value])
+        return self
 
     def __bool__(self):
         return bool(self.column and self.operator and self.value)

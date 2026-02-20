@@ -136,6 +136,13 @@ def _compare_filter_values(actual_str: str, expected) -> str | None:
     return None
 
 
+def _format_filters(filters: list[dict]) -> str:
+    lines = []
+    for f in filters:
+        lines.append(f"  {f['column']} {f['operator']} {f['value']!r}")
+    return "\n".join(lines)
+
+
 def check_exact_filters(filters: list, expected_filters: list[dict]) -> str | None:
     """Check that output filters exactly match expected filters (column, operator, value).
     Returns None on success, error message on failure.
@@ -149,7 +156,11 @@ def check_exact_filters(filters: list, expected_filters: list[dict]) -> str | No
     if len(actual) != len(expected):
         actual_cols = [f["column"] for f in actual]
         expected_cols = [f["column"] for f in expected]
-        return f"Expected {len(expected)} filters {expected_cols}, got {len(actual)} {actual_cols}"
+        return (
+            f"Expected {len(expected)} filters {expected_cols}, got {len(actual)} {actual_cols}"
+            + f"\n\nExpected:\n{_format_filters(expected)}"
+            + f"\n\nActual:\n{_format_filters(actual)}"
+        )
 
     errors = []
     for act, exp in zip(actual, expected, strict=True):
@@ -164,5 +175,10 @@ def check_exact_filters(filters: list, expected_filters: list[dict]) -> str | No
             errors.append(f"{col}: {value_err}")
 
     if errors:
-        return "Filter mismatch:\n  " + "\n  ".join(errors)
+        return (
+            "Filter mismatch:\n  "
+            + "\n  ".join(errors)
+            + f"\n\nExpected:\n{_format_filters(expected)}"
+            + f"\n\nActual:\n{_format_filters(actual)}"
+        )
     return None

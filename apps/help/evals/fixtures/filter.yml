@@ -65,7 +65,7 @@
       expected:
         - column: state
           operator: any of
-          value: ["completed"]
+          value: ["complete"]
         - column: last_message
           operator: range
           value: "30d"
@@ -93,7 +93,7 @@
       expected:
         - column: experiment
           operator: any of
-          value: [609]
+          value: ["basic bot"]
         - column: first_message
           operator: range
           value: "90d"

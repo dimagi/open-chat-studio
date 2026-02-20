@@ -256,5 +256,12 @@ def get_filter_schema(filter_class: type[MultiColumnFilter]) -> dict[str, dict]:
 
 
 def get_filter_registry() -> dict[str, type[MultiColumnFilter]]:
-    """Build registry of slug -> MultiColumnFilter class from direct subclasses."""
+    """Build registry of slug -> MultiColumnFilter class from direct subclasses.
+
+    Imports known filter modules to ensure subclasses are registered
+    regardless of import order.
+    """
+    import apps.experiments.filters  # noqa: F401
+    import apps.trace.filters  # noqa: F401
+
     return {cls.slug: cls for cls in MultiColumnFilter.__subclasses__() if getattr(cls, "slug", "")}
