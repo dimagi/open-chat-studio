@@ -235,16 +235,6 @@ class OCSCallbackHandler(BaseCallbackHandler):
             if _error := kwargs.get("error") or (args[0] if args else None):
                 self.tracer.error_message = str(_error)
 
-        # Safety net: if the LLM error is caught before reaching any OCS span boundary,
-        # this virtual span name ensures a notification still fires at trace exit.
-        # In practice, LLM errors propagate through "Run Pipeline", so this fallback
-        # is only reached if the error is swallowed above the LangChain layer.
-        if not self.tracer.error_span_name:
-            self.tracer.error_span_name = "LLM call"
-            self.tracer.error_notification_config = SpanNotificationConfig(
-                permissions=["experiments.change_experiment"]
-            )
-
     def on_chain_error(self, *args, **kwargs) -> None:
         self.tracer.error_detected = True
         if not self.tracer.error_message:

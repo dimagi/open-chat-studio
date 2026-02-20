@@ -26,25 +26,6 @@ def custom_action_health_check_failure_notification(action, failure_reason: str)
     )
 
 
-@silence_exceptions(logger, log_message="Failed to create pipeline execution failure notification")
-def pipeline_execution_failure_notification(experiment, session: ExperimentSession, error: Exception) -> None:
-    """Create notification when pipeline execution fails."""
-    participant_identifier = session.participant.identifier
-    create_notification(
-        title=f"Pipeline execution failed for {experiment}",
-        message=(
-            f"Generating a response for user '{participant_identifier}' failed due to an error in the pipeline "
-            "execution"
-        ),
-        level=LevelChoices.ERROR,
-        team=experiment.team,
-        slug="pipeline-execution-failed",
-        event_data={"experiment_id": experiment.id, "error": str(error)},
-        permissions=["experiments.change_experiment"],
-        links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
-    )
-
-
 @silence_exceptions(logger, log_message="Failed to create custom action API failure notification")
 def custom_action_api_failure_notification(custom_action, function_def, exception: Exception) -> None:
     """Create notification for API failures."""
@@ -77,21 +58,6 @@ def custom_action_unexpected_error_notification(custom_action, function_def, exc
         event_data={"action_id": custom_action.id, "exception_type": type(exception).__name__},
         permissions=["custom_actions.view_customaction"],
         links={"View Action": custom_action.get_absolute_url()},
-    )
-
-
-@silence_exceptions(logger, log_message="Failed to create LLM error notification")
-def llm_error_notification(experiment: Experiment, session: ExperimentSession, error_message: str):
-    message = f"An LLM error occurred for participant '{session.participant.identifier}': {error_message}"
-    create_notification(
-        title=f"LLM Error Detected for '{experiment}'",
-        message=message,
-        level=LevelChoices.ERROR,
-        team=experiment.team,
-        slug="llm-error",
-        event_data={"bot_id": experiment.id, "error_message": error_message},
-        permissions=["experiments.change_experiment"],
-        links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
     )
 
 

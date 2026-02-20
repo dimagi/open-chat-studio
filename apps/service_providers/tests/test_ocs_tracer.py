@@ -152,18 +152,12 @@ class TestOCSTracer:
 
 
 class TestOCSCallbackHandler:
-    def test_on_llm_error_sets_virtual_span_fallback(self):
-        """LLM error handler sets a virtual span fallback (no longer fires llm_error_notification)."""
+    def test_on_llm_error_records_error(self):
+        """LLM error handler records the error on the tracer."""
         experiment = Mock(id=456)
         tracer = OCSTracer(experiment, team_id=123)
         tracer.trace_id = str(uuid4())
-
-        participant = Mock()
-        participant.identifier = "user@example.com"
-        session = Mock()
-        session.id = 789
-        session.participant = participant
-        tracer.session = session
+        tracer.session = Mock()
 
         callback_handler = OCSCallbackHandler(tracer=tracer)
 
@@ -172,21 +166,6 @@ class TestOCSCallbackHandler:
 
         assert tracer.error_detected is True
         assert tracer.error_message == error_message
-        assert tracer.error_span_name == "LLM call"
-        assert isinstance(tracer.error_notification_config, SpanNotificationConfig)
-        assert tracer.error_notification_config.permissions == ["experiments.change_experiment"]
-
-    def test_on_llm_error_does_not_overwrite_existing_span_name(self):
-        """Virtual span fallback is only set when error_span_name is not already captured."""
-        experiment = Mock(id=456)
-        tracer = OCSTracer(experiment, team_id=123)
-        tracer.error_span_name = "Run Pipeline"  # Already set by a span
-        tracer.session = Mock()
-
-        callback_handler = OCSCallbackHandler(tracer=tracer)
-        callback_handler.on_llm_error(error=Exception("LLM error"))
-
-        assert tracer.error_span_name == "Run Pipeline"  # NOT overwritten
 
 
 @pytest.mark.django_db()

@@ -10,9 +10,7 @@ from apps.ocs_notifications.notifications import (
     custom_action_health_check_failure_notification,
     custom_action_unexpected_error_notification,
     file_delivery_failure_notification,
-    llm_error_notification,
     message_delivery_failure_notification,
-    pipeline_execution_failure_notification,
     tool_error_notification,
     trace_error_notification,
 )
@@ -42,35 +40,6 @@ class TestCustomActionHealthCheckFailureNotification:
             event_data={"action_id": action.id, "status": action.health_status},
             permissions=["custom_actions.change_customaction"],
             links={"View Action": action.get_absolute_url()},
-        )
-
-
-class TestPipelineExecutionFailureNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification(self, mock_create_notification):
-        # Arrange
-        experiment = ExperimentFactory.create()
-        session = ExperimentSessionFactory.create(experiment=experiment)
-        error = Exception("Pipeline error")
-
-        # Act
-        pipeline_execution_failure_notification(experiment, session, error)
-
-        # Assert
-        expected_message = (
-            f"Generating a response for user '{session.participant.identifier}' failed due to an error in the pipeline "
-            "execution"
-        )
-        mock_create_notification.assert_called_once_with(
-            title=f"Pipeline execution failed for {experiment}",
-            message=expected_message,
-            level=LevelChoices.ERROR,
-            team=experiment.team,
-            slug="pipeline-execution-failed",
-            event_data={"experiment_id": experiment.id, "error": str(error)},
-            permissions=["experiments.change_experiment"],
-            links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
         )
 
 
@@ -125,32 +94,6 @@ class TestCustomActionUnexpectedErrorNotification:
             slug="custom-action-unexpected-error",
             event_data={"action_id": custom_action.id, "exception_type": "RuntimeError"},
             links={"View Action": custom_action.get_absolute_url()},
-        )
-
-
-class TestLlmErrorNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification(self, mock_create_notification):
-        # Arrange
-        experiment = ExperimentFactory.create()
-        session = ExperimentSessionFactory.create(experiment=experiment)
-        error_message = "Token limit exceeded"
-
-        # Act
-        llm_error_notification(experiment, session, error_message)
-
-        # Assert
-        expected_message = f"An LLM error occurred for participant '{session.participant.identifier}': {error_message}"
-        mock_create_notification.assert_called_once_with(
-            title=f"LLM Error Detected for '{experiment}'",
-            message=expected_message,
-            level=LevelChoices.ERROR,
-            team=experiment.team,
-            slug="llm-error",
-            event_data={"bot_id": experiment.id, "error_message": error_message},
-            permissions=["experiments.change_experiment"],
-            links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
         )
 
 
