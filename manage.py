@@ -12,4 +12,11 @@ if __name__ == "__main__":
             "available on your PYTHONPATH environment variable? Did you "
             "forget to activate a virtual environment?"
         ) from exc
+    port = os.environ.get("PORT")
+    if port:
+        # If the runserver command is used, insert the port into the arguments
+        if "runserver" in sys.argv:
+            # Remove any existing port argument first
+            sys.argv = [arg for arg in sys.argv if not arg.isdigit()]
+            sys.argv.append(port)
     execute_from_command_line(sys.argv)
