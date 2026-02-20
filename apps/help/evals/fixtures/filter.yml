@@ -1,6 +1,7 @@
 - id: sessions_last_week
   input:
     query: "sessions within the last week"
+    filter_slug: "session"
   checks:
     - type: count
       expected: 1
@@ -10,6 +11,7 @@
 - id: messages_tagged_funny
   input:
     query: "messages tagged with 'funny'"
+    filter_slug: "session"
   checks:
     - type: count
       expected: 1
@@ -19,6 +21,7 @@
 - id: conversations_whatsapp_or_telegram
   input:
     query: "conversations from WhatsApp or Telegram"
+    filter_slug: "session"
   checks:
     - type: count
       expected: 1
@@ -28,6 +31,7 @@
 - id: active_sessions_version_v6
   input:
     query: "active sessions using version v6"
+    filter_slug: "session"
   checks:
     - type: count
       expected: 2
@@ -37,6 +41,7 @@
 - id: participant_starts_with_john
   input:
     query: "participants whose name starts with 'john'"
+    filter_slug: "session"
   checks:
     - type: count
       expected: 1
@@ -46,6 +51,7 @@
 - id: completed_last_30_days_exclude_api
   input:
     query: "completed sessions from the last 30 days excluding the API channel"
+    filter_slug: "session"
   checks:
     - type: count
       expected: 3
@@ -55,6 +61,7 @@
 - id: tags_all_of_blue_funny
   input:
     query: "messages with both 'blue' and 'funny' tags"
+    filter_slug: "session"
   checks:
     - type: count
       expected: 1
@@ -64,6 +71,7 @@
 - id: chatbot_basic_bot_last_3_months
   input:
     query: "sessions for the 'basic bot' chatbot started in the last 3 months"
+    filter_slug: "session"
   checks:
     - type: count
       expected: 2
@@ -73,6 +81,7 @@
 - id: web_participant_demo_no_go_tag
   input:
     query: "Web conversations from participant containing 'demo' without the 'go' tag"
+    filter_slug: "session"
   checks:
     - type: count
       expected: 3
@@ -82,8 +91,19 @@
 - id: complex_multi_filter
   input:
     query: "active v5 or v6 sessions from Facebook in the last hour tagged with 👍"
+    filter_slug: "session"
   checks:
     - type: count
       expected: 5
     - type: filter_params
       expected: ["channels", "message_date", "state", "tags", "versions"]
+
+- id: message_tagged_recent
+  input:
+    query: "messages tagged 'important' from the last day"
+    filter_slug: "message"
+  checks:
+    - type: count
+      expected: 2
+    - type: filter_params
+      expected: ["last_message", "tags"]
