@@ -21,7 +21,9 @@ class ColumnFilterData(BaseModel):
         """Wrap bare strings in a JSON array for operators that expect lists."""
         if self.operator in _LIST_OPERATORS:
             try:
-                json.loads(self.value)
+                parsed = json.loads(self.value)
+                if not isinstance(parsed, list):
+                    self.value = json.dumps([self.value])
             except (json.JSONDecodeError, TypeError):
                 self.value = json.dumps([self.value])
         return self
