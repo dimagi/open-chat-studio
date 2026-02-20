@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from apps.pipelines.nodes.base import UiSchema, VisibleWhen, Widgets
+from apps.pipelines.nodes.base import NodeSchema, PipelineNode, UiSchema, VisibleWhen, Widgets
 
 
 class ModelWithVisibleWhen(BaseModel):
@@ -91,3 +91,35 @@ def test_no_visible_when_when_not_set():
 def test_visible_when_default_operator():
     condition = VisibleWhen(field="my_field", value="my_value")
     assert condition.operator == "=="
+
+
+def test_visible_when_is_not_empty():
+    class TestModel(PipelineNode):
+        model_config = ConfigDict(json_schema_extra=NodeSchema(label="Test"))
+        items: list[int] = Field(
+            default_factory=list,
+            json_schema_extra=UiSchema(visible_when=VisibleWhen(field="items", operator="is_not_empty")),
+        )
+
+    schema = TestModel.model_json_schema()
+    assert schema["properties"]["items"]["ui:visibleWhen"] == {
+        "field": "items",
+        "operator": "is_not_empty",
+        "value": None,
+    }
+
+
+def test_visible_when_is_empty():
+    class TestModel(PipelineNode):
+        model_config = ConfigDict(json_schema_extra=NodeSchema(label="Test"))
+        items: list[int] = Field(
+            default_factory=list,
+            json_schema_extra=UiSchema(visible_when=VisibleWhen(field="items", operator="is_empty")),
+        )
+
+    schema = TestModel.model_json_schema()
+    assert schema["properties"]["items"]["ui:visibleWhen"] == {
+        "field": "items",
+        "operator": "is_empty",
+        "value": None,
+    }

@@ -507,12 +507,12 @@ class OptionsSource(StrEnum):
 class VisibleWhen(BaseModel):
     """Defines a condition under which a field should be visible in the UI.
 
-    Supported operators: "==", "!=", "in", "not_in"
+    Supported operators: "==", "!=", "in", "not_in", "is_empty", "is_not_empty"
     """
 
     field: str
-    value: Any
-    operator: Literal["==", "!=", "in", "not_in"] = "=="
+    value: Any = None
+    operator: Literal["==", "!=", "in", "not_in", "is_empty", "is_not_empty"] = "=="
 
 
 class UiSchema(BaseModel):
