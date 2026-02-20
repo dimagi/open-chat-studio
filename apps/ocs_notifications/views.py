@@ -1,4 +1,7 @@
+from functools import cached_property
+
 from django.contrib import messages
+from django.http.response import HttpResponse as HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -202,16 +205,23 @@ class ToggleDoNotDisturbView(LoginAndTeamRequiredMixin, View):
 class NotificationEventHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "ocs_notifications/notification_event_home.html"
 
-    def get_context_data(self, **kwargs):
-        event_type = get_object_or_404(EventType, team=self.request.team, id=self.kwargs["event_type_id"])
-        table_url = reverse("ocs_notifications:notification_event_table", args=[self.request.team.slug, event_type.id])
+    @cached_property
+    def event_type(self) -> EventType:
+        return get_object_or_404(EventType, team=self.request.team, id=self.kwargs["event_type_id"])
 
+    def get(self, request, *args, **kwargs) -> HttpResponse:
         # Clicking the event marks it as read
         EventUser.objects.filter(
-            user=self.request.user, team=self.request.team, event_type=event_type, read=False
+            user=self.request.user, team=self.request.team, event_type=self.event_type, read=False
         ).update(read=True, read_at=timezone.now())
+        return super().get(request, *args, **kwargs)
 
-        title = event_type.notificationevent_set.order_by("-created_at").values_list("title", flat=True).first()
+    def get_context_data(self, **kwargs):
+        table_url = reverse(
+            "ocs_notifications:notification_event_table", args=[self.request.team.slug, self.event_type.id]
+        )
+
+        title = self.event_type.notificationevent_set.order_by("-created_at").values_list("title", flat=True).first()
         context = {
             "active_tab": "notifications",
             "title": "Notifications",
