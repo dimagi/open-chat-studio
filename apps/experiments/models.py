@@ -41,6 +41,7 @@ from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
 from apps.service_providers.tracing import TraceInfo, TracingService
+from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team, get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
@@ -1481,6 +1482,7 @@ class ExperimentSession(BaseTeamModel):
                     session=self,
                     inputs={"input": instruction_prompt},
                     metadata=trace_info.metadata,
+                    notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
                 ) as span:
                     bot_message = self._bot_prompt_for_user(
                         instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service

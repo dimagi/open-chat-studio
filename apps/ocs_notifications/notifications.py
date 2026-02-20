@@ -1,5 +1,7 @@
 import logging
 
+from django.utils.text import slugify
+
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.decorators import silence_exceptions
 
@@ -21,25 +23,6 @@ def custom_action_health_check_failure_notification(action, failure_reason: str)
         event_data={"action_id": action.id, "status": action.health_status},
         permissions=["custom_actions.change_customaction"],
         links={"View Action": action.get_absolute_url()},
-    )
-
-
-@silence_exceptions(logger, log_message="Failed to create pipeline execution failure notification")
-def pipeline_execution_failure_notification(experiment, session: ExperimentSession, error: Exception) -> None:
-    """Create notification when pipeline execution fails."""
-    participant_identifier = session.participant.identifier
-    create_notification(
-        title=f"Pipeline execution failed for {experiment}",
-        message=(
-            f"Generating a response for user '{participant_identifier}' failed due to an error in the pipeline "
-            "execution"
-        ),
-        level=LevelChoices.ERROR,
-        team=experiment.team,
-        slug="pipeline-execution-failed",
-        event_data={"experiment_id": experiment.id, "error": str(error)},
-        permissions=["experiments.change_experiment"],
-        links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
     )
 
 
@@ -78,18 +61,47 @@ def custom_action_unexpected_error_notification(custom_action, function_def, exc
     )
 
 
-@silence_exceptions(logger, log_message="Failed to create LLM error notification")
-def llm_error_notification(experiment: Experiment, session: ExperimentSession, error_message: str):
-    message = f"An LLM error occurred for participant '{session.participant.identifier}': {error_message}"
+@silence_exceptions(logger, log_message="Failed to create trace error notification")
+def trace_error_notification(
+    experiment: Experiment,
+    session: ExperimentSession,
+    span_name: str,
+    error_message: str,
+    permissions: list[str] | None,
+    trace_url: str | None = None,
+) -> None:
+    """Create a notification when an OCS span exits with an error.
+
+    Called at trace exit (not eagerly), so the trace URL is always available.
+    All failures of the same span on the same experiment share one EventType
+    thread regardless of the specific error message.
+    """
+    _ABBREVS = {"llm", "api", "url", "id"}
+    slug = slugify(span_name.replace("_", " "))
+    human_name = " ".join(
+        word.upper() if word.lower() in _ABBREVS else word.capitalize() for word in span_name.replace("_", " ").split()
+    )
+    title = f"{human_name} Failed for '{experiment}'"
+    participant = session.participant.identifier if session else "unknown"
+    message = f"An error occurred during '{span_name}' for participant '{participant}'"
+    if error_message:
+        message += f": {error_message}"
+
+    links: dict[str, str] = {"View Bot": experiment.get_absolute_url()}
+    if session:
+        links["View Session"] = session.get_absolute_url()
+    if trace_url:
+        links["View Trace"] = trace_url
+
     create_notification(
-        title=f"LLM Error Detected for '{experiment}'",
+        title=title,
         message=message,
         level=LevelChoices.ERROR,
         team=experiment.team,
-        slug="llm-error",
-        event_data={"bot_id": experiment.id, "error_message": error_message},
-        permissions=["experiments.change_experiment"],
-        links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
+        slug=slug,
+        event_data={"experiment_id": experiment.id, "span_name": span_name},
+        permissions=permissions,
+        links=links,
     )
 
 
