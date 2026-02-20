@@ -34,7 +34,7 @@ class GPT52ReasoningEffortParameter(TextChoices):
     XHIGH = "xhigh", "XHigh"
 
 
-class ClaudeOpus46EffortParameter(TextChoices):
+class Claude46EffortParameter(TextChoices):
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
     HIGH = "high", "High"
@@ -248,7 +248,7 @@ class ClaudeOpus46Parameters(BasicParameters):
         ge=0.0,
         le=2.0,
         title="Temperature",
-        description="Only supported when reasoning effort is set to 'none'",
+        description="Must be 1.0 when adaptive thinking is enabled.",
         json_schema_extra=UiSchema(widget=Widgets.range),
     )
     max_tokens: int = Field(
@@ -258,11 +258,11 @@ class ClaudeOpus46Parameters(BasicParameters):
         ge=1,
         le=128000,
     )
-    effort: ClaudeOpus46EffortParameter = Field(
+    effort: Claude46EffortParameter = Field(
         title="Reasoning Effort",
-        default=ClaudeOpus46EffortParameter.HIGH,
+        default=Claude46EffortParameter.HIGH,
         description="Control intelligence, speed, and cost tradeoffs with adaptive thinking.",
-        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=ClaudeOpus46EffortParameter.labels),
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=Claude46EffortParameter.labels),
     )
     adaptive_thinking: bool = Field(
         title="Enable Adaptive Thinking",
@@ -275,13 +275,23 @@ class ClaudeOpus46Parameters(BasicParameters):
 
     @field_validator("adaptive_thinking", mode="before")
     def check_temperature(cls, value: bool, info):
-        # Only when thinking is disabled can the model's temperature be adjusted
+        # Only when adaptive thinking is disabled can the model's temperature be adjusted
         if value and info.data.get("temperature") != 1.0:
             raise PydanticCustomError(
                 "invalid_model_parameters",
-                "Thinking can only be used with a temperature of 1.0",
+                "Adaptive thinking can only be used with a temperature of 1.0",
             )
         return value
+
+
+class ClaudeSonnet46Parameters(ClaudeOpus46Parameters):
+    max_tokens: int = Field(
+        title="Max Output Tokens",
+        default=32000,
+        description="The maximum number of tokens to generate in the completion.",
+        ge=1,
+        le=64000,
+    )
 
 
 def get_schema(model):
