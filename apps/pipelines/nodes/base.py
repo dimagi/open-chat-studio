@@ -508,6 +508,8 @@ class VisibleWhen(BaseModel):
     """Defines a condition under which a field should be visible in the UI.
 
     Supported operators: "==", "!=", "in", "not_in", "is_empty", "is_not_empty"
+
+    For "is_empty" and "is_not_empty", the `value` field is ignored.
     """
 
     field: str
