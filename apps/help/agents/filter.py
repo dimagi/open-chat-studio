@@ -39,7 +39,9 @@ class FilterAgent(BaseHelpAgent[FilterInput, FilterOutput]):
         from apps.web.dynamic_filters.base import get_filter_registry, get_filter_schema
 
         registry = get_filter_registry()
-        filter_class = registry[input.filter_slug]
+        filter_class = registry.get(input.filter_slug)
+        if filter_class is None:
+            raise ValueError(f"Unknown filter slug: {input.filter_slug!r}. Available: {sorted(registry.keys())}")
         schema = get_filter_schema(filter_class)
         template = _get_system_prompt()
         return template.format(schema=json.dumps(schema, indent=2))

@@ -244,5 +244,5 @@ def get_filter_schema(filter_class: type[MultiColumnFilter]) -> dict[str, dict]:
 
 
 def get_filter_registry() -> dict[str, type[MultiColumnFilter]]:
-    """Build registry of slug -> MultiColumnFilter class from all subclasses."""
+    """Build registry of slug -> MultiColumnFilter class from direct subclasses."""
     return {cls.slug: cls for cls in MultiColumnFilter.__subclasses__() if getattr(cls, "slug", "")}

@@ -32,5 +32,5 @@ class TestFilterAgentPrompt:
 
     def test_unknown_slug_raises(self):
         input_data = FilterInput(query="test", filter_slug="nonexistent")
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match="Unknown filter slug"):
             FilterAgent.get_system_prompt(input_data)

@@ -102,8 +102,18 @@ def check_filter_params(filters: list, expected_params: list[str]) -> str | None
     """Check that the output contains exactly the expected column values.
     Returns None on success, error message on failure.
     """
+    import logging
+
+    logger = logging.getLogger("ocs.evals")
+
     actual_params = sorted(f.column for f in filters)
     expected_sorted = sorted(expected_params)
+    logger.debug(
+        "check_filter_params: expected=%s, actual=%s, filters=%s",
+        expected_sorted,
+        actual_params,
+        [{"column": f.column, "operator": f.operator, "value": f.value} for f in filters],
+    )
     if actual_params != expected_sorted:
         return f"Expected params {expected_sorted}, got {actual_params}"
     return None
