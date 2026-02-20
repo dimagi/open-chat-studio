@@ -9,6 +9,7 @@ from apps.web.dynamic_filters.column_filters import TimestampFilter
 class ParticipantFilter(MultiColumnFilter):
     """Filter for experiment sessions using the new ColumnFilter pattern."""
 
+    date_range_column: ClassVar[str] = "created_on"
     filters: ClassVar[Sequence[ColumnFilter]] = [
         TimestampFilter(label="Created On", column="created_at", query_param="created_on"),
         StringColumnFilter(

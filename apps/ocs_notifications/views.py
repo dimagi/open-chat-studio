@@ -67,11 +67,11 @@ class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
         # Add filter context
-        columns = UserNotificationFilter.columns(request=self.request, team=self.request.team)
+        columns = UserNotificationFilter.columns(team=self.request.team)
         filter_context = get_filter_context_data(
             team=self.request.team,
             columns=columns,
-            date_range_column="notification_date",
+            filter_class=UserNotificationFilter,
             table_url=table_url,
             table_container_id="data-table",
             table_type=FilterSet.TableType.NOTIFICATIONS,
