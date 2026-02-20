@@ -173,3 +173,40 @@ Follow this checklist when integrating notifications:
    - All team members? Or only users with specific permissions?
    - Use `permissions` parameter if role-based filtering is needed
    - Test with users having different permissions
+
+## Span-Driven Notifications (Tracing Integration)
+
+For errors that occur inside traced spans (pipeline execution, message processing, etc.), notifications are fired **automatically at trace exit** rather than eagerly at each call site. This is powered by `SpanNotificationConfig` and the `OCSTracer`.
+
+### How It Works
+
+1. When opening a span via `TracingService.span()`, pass a `SpanNotificationConfig` to declare that errors in this span should trigger a notification:
+
+```python
+from apps.service_providers.tracing.base import SpanNotificationConfig
+
+with self.trace_service.span(
+    "Run Pipeline",
+    inputs={"input": data},
+    notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
+) as span:
+    # If an exception propagates out of this block, a notification
+    # will be fired automatically when the trace completes.
+    result = do_work()
+    span.set_outputs({"result": result})
+```
+
+2. When a span with a `notification_config` exits with an error, the `OCSTracer` captures the **innermost** erroring span's name and config (first error wins).
+3. At **trace exit**, if an error was detected and the experiment is not a working version, `OCSTracer` fires a single `trace_error_notification` with:
+   - A human-readable title derived from the span name (e.g., `"Run Pipeline"` becomes `"Run Pipeline Failed for 'My Bot'"`)
+   - The error message from the exception
+   - A link to the trace record for debugging
+   - Permission-scoped delivery based on the `SpanNotificationConfig`
+
+### When to Use Span-Driven Notifications
+
+- Preferrably always when you use a span and want users to be notified if that specific span encounters an error.
+
+Use direct `create_notification()` calls when:
+- The error occurs outside of a trace context (e.g., background tasks, health checks)
+- You need custom slug/event_data control beyond what span names provide
