@@ -73,6 +73,9 @@ class RequestLoggingMiddleware:
             "duration": duration_ms,
         }
         # team is added automatically to all log records via apps.utils.logging.ContextVarFilter
+        # Webhook views set request.experiment after resolving the channel, since the experiment
+        # isn't available in the URL. Fall back to URL kwargs / POST data for views that have it
+        # in the path (e.g. API views) or body.
         experiment = getattr(request, "experiment", None)
         experiment_id = (
             str(experiment.public_id)
