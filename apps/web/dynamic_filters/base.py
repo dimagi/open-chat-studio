@@ -73,10 +73,22 @@ class MultiColumnFilter:
 
     Attributes:
         filters: A list of `ColumnFilter` instances.
+        date_range_column: The query_param of the default timestamp filter used for date range queries.
     """
 
     slug: ClassVar[str] = ""
     filters: ClassVar[Sequence[ColumnFilter]]
+    date_range_column: ClassVar[str] = ""
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if col := cls.__dict__.get("date_range_column", ""):
+            query_params = {f.query_param for f in cls.__dict__.get("filters", [])}
+            if query_params and col not in query_params:
+                raise ValueError(
+                    f"{cls.__name__}.date_range_column={col!r} does not match "
+                    f"any filter query_param. Available: {sorted(query_params)}"
+                )
 
     @classmethod
     def columns(cls, team, **kwargs) -> dict[str, dict]:

@@ -169,6 +169,7 @@ class ExperimentSessionFilter(MultiColumnFilter):
     """Filter for experiment sessions using the new ColumnFilter pattern."""
 
     slug: ClassVar[str] = "session"
+    date_range_column: ClassVar[str] = "last_message"
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
         TimestampFilter(
@@ -202,6 +203,7 @@ class ChatMessageFilter(MultiColumnFilter):
     """Filter for chat messages using tags, timestamps, and versions."""
 
     slug: ClassVar[str] = "message"
+    date_range_column: ClassVar[str] = "last_message"
     filters: ClassVar[Sequence[ColumnFilter]] = [
         MessageTagsFilter(),
         TimestampFilter(

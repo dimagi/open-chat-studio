@@ -21,6 +21,10 @@ Produce a list of filters. Each filter has three fields:
 - **Specific dates**: Use ISO 8601 format with the `on`, `before`, or `after` operators.
 - **Version values**: Use the version name as the user says it, e.g. `"v5"`, `"v6"`. For multiple versions use a JSON array: `["v5", "v6"]`
 
+## Default Date Range Column
+
+When the user asks about a general time period (e.g., "last week", "last 30 days", "recent") without specifying a particular date column, use `{date_range_column}` as the column for the date range filter.
+
 ## Operator Selection Guide
 
 - User says "starts with X" → use `starts with` operator

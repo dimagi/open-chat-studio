@@ -5,7 +5,7 @@
   checks:
     - type: exact_filters
       expected:
-        - column: message_date
+        - column: last_message
           operator: range
           value: "7d"
 
@@ -131,7 +131,7 @@
         - column: channels
           operator: any of
           value: ["Facebook"]
-        - column: message_date
+        - column: last_message
           operator: range
           value: "1h"
         - column: tags

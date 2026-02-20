@@ -100,6 +100,7 @@ class ExperimentVersionsFilter(ChoiceColumnFilter):
 
 
 class TraceFilter(MultiColumnFilter):
+    date_range_column: ClassVar[str] = "timestamp"
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
         TimestampFilter(label="Timestamp", column="timestamp", query_param="timestamp"),

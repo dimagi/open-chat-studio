@@ -43,8 +43,9 @@ class FilterAgent(BaseHelpAgent[FilterInput, FilterOutput]):
         if filter_class is None:
             raise ValueError(f"Unknown filter slug: {input.filter_slug!r}. Available: {sorted(registry.keys())}")
         schema = get_filter_schema(filter_class)
+        date_range_column = filter_class.date_range_column
         template = _get_system_prompt()
-        return template.format(schema=json.dumps(schema, indent=2))
+        return template.format(schema=json.dumps(schema, indent=2), date_range_column=date_range_column)
 
     @classmethod
     def get_user_message(cls, input: FilterInput) -> str:
