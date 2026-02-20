@@ -1,0 +1,9 @@
+{% extends "generic/object_home.html" %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li class="pg-breadcrumb-active" aria-current="page"><a href="{% url 'ocs_notifications:notifications_home' request.team.slug %}">Notifications</a></li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}

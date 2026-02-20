@@ -200,11 +200,16 @@ class ToggleDoNotDisturbView(LoginAndTeamRequiredMixin, View):
 
 
 class NotificationEventHome(LoginAndTeamRequiredMixin, TemplateView):
-    template_name = "generic/object_home.html"
+    template_name = "ocs_notifications/notification_event_home.html"
 
     def get_context_data(self, **kwargs):
         event_type = get_object_or_404(EventType, team=self.request.team, id=self.kwargs["event_type_id"])
         table_url = reverse("ocs_notifications:notification_event_table", args=[self.request.team.slug, event_type.id])
+
+        # Clicking the event marks it as read
+        EventUser.objects.filter(
+            user=self.request.user, team=self.request.team, event_type=event_type, read=False
+        ).update(read=True, read_at=timezone.now())
 
         title = event_type.notificationevent_set.order_by("-created_at").values_list("title", flat=True).first()
         context = {
