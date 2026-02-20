@@ -1,4 +1,5 @@
 import platform
+import re
 import textwrap
 import time
 from pathlib import Path
@@ -160,10 +161,26 @@ def ngrok_url(c: Context):
     return public_url
 
 
+def _get_portless_name(c: Context) -> str:
+    result = c.run("portless list", hide=True, warn=True)
+    used_names = set(re.findall(r"http://(\w+)\.localhost", result.stdout)) if result.ok else set()
+    name = "ocs"
+    counter = 1
+    while name in used_names:
+        name = f"ocs{counter}"
+        counter += 1
+    return name
+
+
 @task(aliases=["django"], help={"public": "Expose server publicly via ngrok tunnel"})
 def runserver(c: Context, public=False):
     """Start Django development server (alias: inv django)."""
-    runserver_command = "python manage.py runserver"
+    has_portless = c.run("which portless", hide=True, warn=True).ok
+    if has_portless:
+        portless_name = _get_portless_name(c)
+        runserver_command = f"portless {portless_name} uv run manage.py runserver"
+    else:
+        runserver_command = "python manage.py runserver"
     if public:
         public_url = ngrok_url(c)
         env_vars = [
