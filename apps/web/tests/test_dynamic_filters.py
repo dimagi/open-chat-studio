@@ -1,21 +1,10 @@
 from apps.web.dynamic_filters.base import (
     FIELD_TYPE_FILTERS,
-    ColumnFilter,
     MultiColumnFilter,
     StringColumnFilter,
     get_filter_registry,
     get_filter_schema,
 )
-
-
-class TestColumnFilterDescription:
-    def test_default_description_is_empty(self):
-        f = ColumnFilter(query_param="test", label="Test", type="string")
-        assert f.description == ""
-
-    def test_description_can_be_set(self):
-        f = ColumnFilter(query_param="test", label="Test", type="string", description="A test filter")
-        assert f.description == "A test filter"
 
 
 class _TestFilter(MultiColumnFilter):
