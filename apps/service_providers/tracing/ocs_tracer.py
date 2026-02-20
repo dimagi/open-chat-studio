@@ -231,20 +231,23 @@ class OCSCallbackHandler(BaseCallbackHandler):
         super().__init__()
         self.tracer = tracer
 
-    def on_llm_error(self, *args, **kwargs) -> None:
+    def _capture_error(self, error_message: str, span_name: str) -> None:
         self.tracer.error_detected = True
         if not self.tracer.error_message:
-            if _error := kwargs.get("error") or (args[0] if args else None):
-                self.tracer.error_message = str(_error)
+            self.tracer.error_message = error_message
+
+        if not self.tracer.error_span_name:
+            self.tracer.error_span_name = span_name
+            self.tracer.error_notification_config = SpanNotificationConfig(permissions="experiments.change_experiment")
+
+    def on_llm_error(self, *args, **kwargs) -> None:
+        error = kwargs.get("error") or (args[0] if args else None)
+        self._capture_error(str(error) if error else "LLM error occurred", "LLM Error")
 
     def on_chain_error(self, *args, **kwargs) -> None:
-        self.tracer.error_detected = True
-        if not self.tracer.error_message:
-            error = kwargs.get("error") or (args[0] if args else None)
-            self.tracer.error_message = str(error) if error else "Chain error occurred"
+        error = kwargs.get("error") or (args[0] if args else None)
+        self._capture_error(str(error) if error else "Chain error occurred", "Chain Error")
 
     def on_tool_error(self, *args, **kwargs) -> None:
-        self.tracer.error_detected = True
-        if not self.tracer.error_message:
-            error = kwargs.get("error") or (args[0] if args else None)
-            self.tracer.error_message = str(error) if error else "Tool error occurred"
+        error = kwargs.get("error") or (args[0] if args else None)
+        self._capture_error(str(error) if error else "Tool error occurred", "Tool Error")
