@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 
+from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.trace.models import Trace, TraceStatus
 
@@ -214,8 +215,6 @@ class OCSTracer(Tracer):
         cache.delete(cache_key)
 
     def _fire_trace_error_notification(self) -> None:
-        from apps.ocs_notifications.notifications import trace_error_notification
-
         trace_url = self.trace_record.get_absolute_url() if self.trace_record else None
         trace_error_notification(
             experiment=self.experiment,
