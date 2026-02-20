@@ -130,7 +130,7 @@ def edit_action(
     url_name: str,
     url_factory: Callable[[str, Any, Any, Any], str] | None = None,
     required_permissions: list | None = None,
-    display_condition: callable | None = None,
+    display_condition: Callable[[Any, Any], bool] | None = None,
     template: str | None = None,
 ):
     kwargs = {}
@@ -150,7 +150,7 @@ def delete_action(
     url_name: str,
     url_factory: Callable[[str, Any, Any, Any], str] | None = None,
     required_permissions: list | None = None,
-    display_condition: callable | None = None,
+    display_condition: Callable[[Any, Any], bool] | None = None,
     confirm_message: str | None = None,
     template: str | None = None,
 ):
@@ -173,8 +173,8 @@ def chip_action(
     label: str | None = None,
     label_factory: Callable[[Any, Any], str] | None = None,
     required_permissions: list | None = None,
-    display_condition: callable | None = None,
-    enabled_condition: callable | None = None,
+    display_condition: Callable[[Any, Any], bool] | None = None,
+    enabled_condition: Callable[[Any, Any], bool] | None = None,
     url_factory: Callable[[Any, Any, Any, Any], str] | None = None,
     icon_class: str | None = None,
     button_style: str = "",
