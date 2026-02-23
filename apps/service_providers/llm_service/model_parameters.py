@@ -113,7 +113,6 @@ class GPT52Parameters(LLMModelParamBase):
         ge=0.0,
         le=2.0,
         title="Temperature",
-        description="Only supported when reasoning effort is set to 'none'",
         json_schema_extra=UiSchema(widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none")),
     )
 
@@ -122,7 +121,6 @@ class GPT52Parameters(LLMModelParamBase):
         ge=0.0,
         le=1.0,
         title="Top P",
-        description="Only supported when reasoning effort is set to 'none'",
         json_schema_extra=UiSchema(widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none")),
     )
 
@@ -250,7 +248,9 @@ class ClaudeOpus46Parameters(BasicParameters):
         le=2.0,
         title="Temperature",
         description="Only supported when reasoning effort is set to 'none'",
-        json_schema_extra=UiSchema(widget=Widgets.range),
+        json_schema_extra=UiSchema(
+            widget=Widgets.range, visible_when=VisibleWhen(field="adaptive_thinking", value=False)
+        ),
     )
     max_tokens: int = Field(
         title="Max Output Tokens",
