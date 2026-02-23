@@ -783,32 +783,8 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
         next.data.params.llm_model_parameters = {...old.data.params.llm_model_parameters, [paramName]: paramValue};
-
-        // When reasoning effort changes away from "none", clear temperature and top_p
-        if (paramName === 'effort' && paramValue !== 'none') {
-          if ('temperature' in next.data.params.llm_model_parameters) {
-            delete next.data.params.llm_model_parameters.temperature;
-          }
-          if ('top_p' in next.data.params.llm_model_parameters) {
-            delete next.data.params.llm_model_parameters.top_p;
-          }
-        }
       })
     );
-  };
-
-  const hasReasoningEffort = 'effort' in props.schema.properties;
-  const reasoningEffort = hasReasoningEffort ? props.modelParameters['effort'] : null;
-
-  // Parameters that should be hidden when reasoning_effort != "none"
-  const conditionalParams = ['temperature', 'top_p'];
-
-  const shouldShowParameter = (paramName: string): boolean => {
-    // If this parameter is conditional and reasoning effort is not "none", hide it
-    if (conditionalParams.includes(paramName) && hasReasoningEffort && reasoningEffort !== 'none') {
-      return false;
-    }
-    return true;
   };
 
   return (
@@ -816,11 +792,6 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
       <div className="text-sm label font-bold">Model Parameters</div>
       <div className="p-4">
         {Object.getOwnPropertyNames(props.schema.properties).map((paramName) => {
-          if (!shouldShowParameter(paramName)) {
-            return null;
-          }
-
-          const currentParamValue = props.modelParameters[paramName];
           return (
             <div key={`${props.nodeId}_${paramName}`}>
               {getInputWidget(
@@ -828,7 +799,7 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
                   id: props.nodeId,
                   name: paramName,
                   schema: props.schema,
-                  params: {name: paramName, [paramName]: currentParamValue},
+                  params: {name: paramName, ...props.modelParameters},
                   updateParamValue: updateLLMParamValue,
                   nodeType: "",
                   required: true,
