@@ -4,7 +4,7 @@ from abc import ABC
 from collections.abc import Callable, Sequence
 from copy import deepcopy
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Self, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, cast
 
 import sentry_sdk
 from langchain_core.runnables import RunnableConfig
@@ -18,6 +18,9 @@ from typing_extensions import TypedDict
 from apps.experiments.models import ExperimentSession
 from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
+
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.context import NodeContext
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -407,6 +410,10 @@ class PipelineNode(BasePipelineNode, ABC):
         }
         sentry_sdk.set_context("Node", sentry_context)
 
+        from apps.pipelines.nodes.context import NodeContext
+
+        context = NodeContext(state)
+        process_params["context"] = context
         output = self._process(**process_params)
         if isinstance(output, Command) and output.goto != END:
             return Command(goto=output.goto, update=self._augment_output(state, cast(PipelineState, output.update)))
@@ -422,7 +429,7 @@ class PipelineNode(BasePipelineNode, ABC):
             output["output_message_tags"].extend(get_output_tags_fn())
         return output
 
-    def _process(self, state: PipelineState) -> PipelineState | Command:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState | Command:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
@@ -440,7 +447,10 @@ class PipelineRouterNode(BasePipelineNode):
             state = PipelineState(state)
             state = self._prepare_state(self.node_id, incoming_edges, state)
 
-            conditional_branch, is_default_keyword = self._process_conditional(state)
+            from apps.pipelines.nodes.context import NodeContext
+
+            context = NodeContext(state)
+            conditional_branch, is_default_keyword = self._process_conditional(context)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch, is_default_keyword)
             # edge map won't contain the conditional branch if that handle isn't connected to another node
@@ -462,7 +472,7 @@ class PipelineRouterNode(BasePipelineNode):
     def get_output_tags(self, selected_route, is_default_keyword) -> list[str]:
         raise NotImplementedError()
 
-    def _process_conditional(self, state: PipelineState):
+    def _process_conditional(self, context: "NodeContext"):
         raise NotImplementedError()
 
 

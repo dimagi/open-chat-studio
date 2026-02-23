@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from typing import Annotated, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 from django.conf import settings
 from django.core import validators
@@ -72,6 +72,9 @@ from .mixins import (
     get_llm_provider,
 )
 
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.context import NodeContext
+
 logger = logging.getLogger("ocs.pipelines.nodes")
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
@@ -102,7 +105,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         env = SandboxedEnvironment()
         try:
             content = {
@@ -148,7 +151,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         llm = with_llm_retry(self.get_chat_model())
         output = llm.invoke(state["last_node_input"], config=self._config)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
@@ -395,7 +398,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
 
         return value
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         return execute_sub_agent(self, state)
 
 
@@ -423,7 +426,7 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
                 raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses") from None
         return value
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         user_input = state["last_node_input"]
         send_email_from_pipeline.delay(
             recipient_list=self.recipient_list.split(","), subject=self.subject, message=user_input
@@ -436,7 +439,7 @@ class Passthrough(PipelineNode):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing", can_add=False))
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         return PipelineState.from_node_output(
             node_name=self.name, node_id=self.node_id, output=state["last_node_input"]
         )
@@ -469,7 +472,8 @@ class BooleanNode(PipelineRouterNode):
         json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
-    def _process_conditional(self, state: PipelineState) -> tuple[Literal["true", "false"], bool]:
+    def _process_conditional(self, context: "NodeContext") -> tuple[Literal["true", "false"], bool]:
+        state = context._state
         if self.input_equals == state["last_node_input"]:
             return "true", False
         return "false", False
@@ -532,7 +536,8 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
                 "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
             ) from None
 
-    def _process_conditional(self, state: PipelineState):
+    def _process_conditional(self, context: "NodeContext"):
+        state = context._state
         default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
         session: ExperimentSession = state["experiment_session"]
         node_input = state["last_node_input"]
@@ -607,7 +612,8 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
     )
     route_key: str = Field(..., description="The key in the data to use for routing")
 
-    def _process_conditional(self, state: PipelineState):
+    def _process_conditional(self, context: "NodeContext"):
+        state = context._state
         from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 
         match self.data_source:
@@ -737,7 +743,7 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             if extra_vars:
                 raise PydanticCustomError("invalid_input_formatter", "Only {input} is allowed")
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         try:
             assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
         except OpenAiAssistant.DoesNotExist:
@@ -809,7 +815,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                 )
         return value
 
-    def _process(self, state: PipelineState) -> PipelineState | Command:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState | Command:
         output_state = PipelineState()
         try:
             result = self.compile_and_execute_code(

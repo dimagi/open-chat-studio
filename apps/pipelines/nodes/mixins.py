@@ -2,7 +2,7 @@ import json
 import logging
 import unicodedata
 from functools import lru_cache
-from typing import Annotated, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 import tiktoken
 from langchain_core.messages import BaseMessage
@@ -45,6 +45,9 @@ from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
+
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.context import NodeContext
 
 logger = logging.getLogger("ocs.pipelines.nodes")
 
@@ -355,7 +358,7 @@ class ExtractStructuredDataNodeMixin:
         structured_output = super().get_chat_model().with_structured_output(tool_class)
         return self._prompt_chain(reference_data) | with_llm_retry(structured_output)
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         ToolClass = self.get_tool_class(json.loads(self.data_schema))
         reference_data = self.get_reference_data(state)
         prompt_token_count = self._get_prompt_token_count(reference_data, ToolClass.model_json_schema())
