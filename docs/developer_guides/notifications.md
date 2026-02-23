@@ -12,9 +12,6 @@ This system is designed to:
 - **Reduce notification fatigue** through deduplication, muting, and severity filtering
 - **Persist notifications** so users can view, filter, and manage them later
 
-> Note: Notifications are gated by the `flag_notifications` feature flag. If the flag is disabled for a team,
-> `create_notification()` is a no-op.
-
 ## Core Concepts
 
 ### Notification Levels
