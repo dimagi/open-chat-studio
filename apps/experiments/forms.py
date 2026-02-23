@@ -23,7 +23,7 @@ class ConsentForm(forms.Form):
 
             if consent.identifier_type == "email":
                 self.fields["identifier"].widget = forms.EmailInput()
-                self.fields["identifier"].validators = [validators.validate_email]
+                self.fields["identifier"].validators = [validators.validate_email]  # ty: ignore[invalid-assignment]
 
             if self.initial.get("participant_id", None) or self.initial.get("identifier", None):
                 # don't allow participants to change their email

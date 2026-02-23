@@ -12,7 +12,9 @@ from apps.help.agent import build_system_agent
 from apps.help.evals.checks import (
     check_code_node,
     check_count,
+    check_exact_filters,
     check_execute,
+    check_filter_params,
     check_has_main,
     check_max_words,
     check_syntax,
@@ -55,6 +57,8 @@ CHECK_DISPATCH: dict[str, Callable] = {
     "execute": lambda output, params: check_execute(output, params["input"], params["expected"]),
     "count": lambda output, params: check_count(output, params["expected"]),
     "max_words": lambda output, params: check_max_words(output, params["per_message"]),
+    "filter_params": lambda output, params: check_filter_params(output, params["expected"]),
+    "exact_filters": lambda output, params: check_exact_filters(output, params["expected"]),
 }
 
 

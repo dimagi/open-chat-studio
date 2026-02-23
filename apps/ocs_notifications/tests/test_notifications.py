@@ -10,10 +10,9 @@ from apps.ocs_notifications.notifications import (
     custom_action_health_check_failure_notification,
     custom_action_unexpected_error_notification,
     file_delivery_failure_notification,
-    llm_error_notification,
     message_delivery_failure_notification,
-    pipeline_execution_failure_notification,
     tool_error_notification,
+    trace_error_notification,
 )
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -41,35 +40,6 @@ class TestCustomActionHealthCheckFailureNotification:
             event_data={"action_id": action.id, "status": action.health_status},
             permissions=["custom_actions.change_customaction"],
             links={"View Action": action.get_absolute_url()},
-        )
-
-
-class TestPipelineExecutionFailureNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification(self, mock_create_notification):
-        # Arrange
-        experiment = ExperimentFactory.create()
-        session = ExperimentSessionFactory.create(experiment=experiment)
-        error = Exception("Pipeline error")
-
-        # Act
-        pipeline_execution_failure_notification(experiment, session, error)
-
-        # Assert
-        expected_message = (
-            f"Generating a response for user '{session.participant.identifier}' failed due to an error in the pipeline "
-            "execution"
-        )
-        mock_create_notification.assert_called_once_with(
-            title=f"Pipeline execution failed for {experiment}",
-            message=expected_message,
-            level=LevelChoices.ERROR,
-            team=experiment.team,
-            slug="pipeline-execution-failed",
-            event_data={"experiment_id": experiment.id, "error": str(error)},
-            permissions=["experiments.change_experiment"],
-            links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
         )
 
 
@@ -124,32 +94,6 @@ class TestCustomActionUnexpectedErrorNotification:
             slug="custom-action-unexpected-error",
             event_data={"action_id": custom_action.id, "exception_type": "RuntimeError"},
             links={"View Action": custom_action.get_absolute_url()},
-        )
-
-
-class TestLlmErrorNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification(self, mock_create_notification):
-        # Arrange
-        experiment = ExperimentFactory.create()
-        session = ExperimentSessionFactory.create(experiment=experiment)
-        error_message = "Token limit exceeded"
-
-        # Act
-        llm_error_notification(experiment, session, error_message)
-
-        # Assert
-        expected_message = f"An LLM error occurred for participant '{session.participant.identifier}': {error_message}"
-        mock_create_notification.assert_called_once_with(
-            title=f"LLM Error Detected for '{experiment}'",
-            message=expected_message,
-            level=LevelChoices.ERROR,
-            team=experiment.team,
-            slug="llm-error",
-            event_data={"bot_id": experiment.id, "error_message": error_message},
-            permissions=["experiments.change_experiment"],
-            links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
         )
 
 
@@ -366,3 +310,79 @@ class TestToolErrorNotification:
         # Assert
         call_args = mock_create_notification.call_args[1]
         assert call_args["links"] == {}
+
+
+class TestTraceErrorNotification:
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_creates_notification_with_trace_url(self, mock_create_notification):
+        """trace_error_notification passes correct slug, title, links to create_notification."""
+        experiment = ExperimentFactory.create()
+        session = ExperimentSessionFactory.create(experiment=experiment)
+        trace_url = "/traces/team/42/"
+
+        trace_error_notification(
+            experiment=experiment,
+            session=session,
+            span_name="Run Pipeline",
+            error_message="Something went wrong",
+            permissions=["experiments.change_experiment"],
+            trace_url=trace_url,
+        )
+
+        mock_create_notification.assert_called_once_with(
+            title=f"Run Pipeline Failed for '{experiment}'",
+            message=(
+                f"An error occurred during 'Run Pipeline' for participant "
+                f"'{session.participant.identifier}': Something went wrong"
+            ),
+            level=LevelChoices.ERROR,
+            team=experiment.team,
+            slug="run-pipeline",
+            event_data={"experiment_id": experiment.id, "span_name": "Run Pipeline"},
+            permissions=["experiments.change_experiment"],
+            links={
+                "View Bot": experiment.get_absolute_url(),
+                "View Session": session.get_absolute_url(),
+                "View Trace": trace_url,
+            },
+        )
+
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_omits_view_trace_link_when_trace_url_is_none(self, mock_create_notification):
+        """trace_error_notification omits 'View Trace' link when trace_url is None."""
+        experiment = ExperimentFactory.create()
+        session = ExperimentSessionFactory.create(experiment=experiment)
+
+        trace_error_notification(
+            experiment=experiment,
+            session=session,
+            span_name="Run Pipeline",
+            error_message="Something went wrong",
+            permissions=["experiments.change_experiment"],
+            trace_url=None,
+        )
+
+        call_kwargs = mock_create_notification.call_args.kwargs
+        assert "View Trace" not in call_kwargs["links"]
+
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_slug_derived_from_span_name(self, mock_create_notification):
+        """Slug is computed via slugify from span_name."""
+        experiment = ExperimentFactory.create()
+        session = ExperimentSessionFactory.create(experiment=experiment)
+
+        trace_error_notification(
+            experiment=experiment,
+            session=session,
+            span_name="seed_message",
+            error_message="err",
+            permissions=None,
+            trace_url=None,
+        )
+
+        call_kwargs = mock_create_notification.call_args.kwargs
+        assert call_kwargs["slug"] == "seed-message"
+        assert call_kwargs["title"] == f"Seed Message Failed for '{experiment}'"

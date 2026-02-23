@@ -54,7 +54,7 @@ from apps.service_providers.llm_service.history_managers import ExperimentHistor
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.service_providers.tracing import TraceInfo, TracingService
-from apps.service_providers.tracing.base import TraceContext
+from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
 from apps.slack.utils import parse_session_external_id
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
@@ -464,7 +464,11 @@ class ChannelBase(ABC):
         return None
 
     def _send_seed_message(self) -> str:
-        with self.trace_service.span("seed_message", inputs={"input": self.experiment.seed_message}) as span:
+        with self.trace_service.span(
+            "seed_message",
+            inputs={"input": self.experiment.seed_message},
+            notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
+        ) as span:
             bot_response = self.bot.process_input(user_input=self.experiment.seed_message)
             span.set_outputs({"response": bot_response.content})
             self.send_message_to_user(bot_response.content)
@@ -650,7 +654,10 @@ class ChannelBase(ABC):
                 self._send_text_to_user_with_notification(download_link)
 
     def _handle_supported_message(self, human_message):
-        with self.trace_service.span("Process Message", inputs={"input": human_message.content}) as span:
+        notification_config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
+        with self.trace_service.span(
+            "Process Message", inputs={"input": human_message.content}, notification_config=notification_config
+        ) as span:
             self.submit_input_to_llm()
             ai_message = self.bot.process_input(
                 human_message.content, attachments=self.message.attachments, human_message=human_message
@@ -660,7 +667,9 @@ class ChannelBase(ABC):
             span.set_outputs({"response": ai_message.content, "attachments": [file.name for file in files]})
 
             with self.trace_service.span(
-                "Send message to user", inputs={"bot_message": ai_message.content, "files": [str(f) for f in files]}
+                "Send message to user",
+                inputs={"bot_message": ai_message.content, "files": [str(f) for f in files]},
+                notification_config=notification_config,
             ):
                 self.send_message_to_user(bot_message=ai_message.content, files=files)
 
@@ -968,7 +977,7 @@ class WebChannel(ChannelBase):
     supported_message_types = [MESSAGE_TYPES.TEXT]
     supports_conversational_consent_flow: bool = False
 
-    def send_text_to_user(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
         # Bot responses are returned by the task and picked up by a periodic request from the browser.
         # Ad-hoc bot messages are picked up by a periodic poll from the browser as well
         pass
@@ -978,7 +987,7 @@ class WebChannel(ChannelBase):
             raise ChannelException("WebChannel requires an existing session")
 
     @classmethod
-    def start_new_session(
+    def start_new_session(  # ty: ignore[invalid-method-override]
         cls,
         working_experiment: Experiment,
         participant_identifier: str,
@@ -1074,8 +1083,10 @@ class TelegramChannel(ChannelBase):
                 participant_data.update_consent(False)
             except ParticipantData.DoesNotExist:
                 raise ChannelException("Participant data does not exist during consent update") from e
-            except Exception as e:
-                raise ChannelException(f"Unable to update consent for participant {self.participant_identifier}") from e
+            except Exception as exc:
+                raise ChannelException(
+                    f"Unable to update consent for participant {self.participant_identifier}"
+                ) from exc
         else:
             raise ChannelException(f"Telegram API error occurred: {e.description}") from e
 
@@ -1240,7 +1251,7 @@ class ApiChannel(ChannelBase):
     def participant_user(self):
         return super().participant_user or self.user
 
-    def send_text_to_user(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
 
@@ -1426,7 +1437,7 @@ class EvaluationChannel(ChannelBase):
 
         self.trace_service = TracingService.empty()
 
-    def send_text_to_user(self, bot_message: str):
+    def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
         # The bot cannot send messages to this client, since evaluations are run internally
         pass
 

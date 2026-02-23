@@ -317,7 +317,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     filter_context = get_filter_context_data(
         request.team,
         columns=columns,
-        date_range_column="last_message",
+        filter_class=ExperimentSessionFilter,
         table_url=session_table_url,
         table_container_id="sessions-table",
         table_type=FilterSet.TableType.SESSIONS,
@@ -835,12 +835,12 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
     template_name = "generic/object_home.html"
     permission_required = "experiments.view_experimentsession"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         table_url = reverse("chatbots:all_sessions_list", kwargs={"team_slug": team_slug})
         filter_context = get_filter_context_data(
             team=self.request.team,
             columns=ExperimentSessionFilter.columns(self.request.team),
-            date_range_column="last_message",
+            filter_class=ExperimentSessionFilter,
             table_url=table_url,
             table_container_id="data-table",
             table_type=FilterSet.TableType.ALL_SESSIONS,

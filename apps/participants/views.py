@@ -67,12 +67,12 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
     template_name = "generic/object_home.html"
     permission_required = "experiments.view_participant"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         table_url = reverse("participants:participant_table", kwargs={"team_slug": team_slug})
         filter_context = get_filter_context_data(
             self.request.team,
             columns=ParticipantFilter.columns(self.request.team),
-            date_range_column="created_on",
+            filter_class=ParticipantFilter,
             table_url=table_url,
             table_container_id="data-table",
             table_type=FilterSet.TableType.PARTICIPANTS,

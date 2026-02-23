@@ -2,6 +2,7 @@ from apps.help.evals.checks import (
     check_code_node,
     check_count,
     check_execute,
+    check_filter_params,
     check_has_main,
     check_max_words,
     check_syntax,
@@ -90,3 +91,29 @@ class TestCheckMaxWords:
     def test_exceeds_limit(self):
         result = check_max_words(["this has way too many words in it"], 4)
         assert result is not None
+
+
+class TestCheckFilterParams:
+    def _make_filter(self, column):
+        from apps.web.dynamic_filters.datastructures import ColumnFilterData
+
+        return ColumnFilterData(column=column, operator="any of", value="x")
+
+    def test_exact_match(self):
+        filters = [self._make_filter("state"), self._make_filter("channels")]
+        assert check_filter_params(filters, ["channels", "state"]) is None
+
+    def test_missing_param(self):
+        filters = [self._make_filter("state")]
+        result = check_filter_params(filters, ["state", "channels"])
+        assert result is not None
+        assert "channels" in result
+
+    def test_extra_param(self):
+        filters = [self._make_filter("state"), self._make_filter("tags")]
+        result = check_filter_params(filters, ["state"])
+        assert result is not None
+        assert "tags" in result
+
+    def test_empty(self):
+        assert check_filter_params([], []) is None

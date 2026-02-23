@@ -50,6 +50,7 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 * Lint JS: `npm run lint path/to/file.js`
 * TypeScript type checking: `npm run type-check path/to/file.ts`
 * Dev environment: `docker compose -f docker-compose-dev.yml up`
+* Run Django dev server: `inv runserver` (uses `portless` if available, otherwise falls back to `python manage.py runserver`)
 * Django migrations: `python manage.py migrate`
 * Create migration: `python manage.py makemigrations <app_name>`
 

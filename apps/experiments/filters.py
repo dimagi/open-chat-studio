@@ -25,8 +25,14 @@ from apps.web.dynamic_filters.column_filters import (
 
 
 def get_filter_context_data(
-    team, columns: dict[str, dict], date_range_column: str, table_url: str, table_container_id: str, table_type: str
+    team,
+    columns: dict[str, dict],
+    filter_class: type[MultiColumnFilter],
+    table_url: str,
+    table_container_id: str,
+    table_type: str,
 ):
+    date_range_column = filter_class.date_range_column
     if date_range_column not in columns:
         raise ValueError("Date range column is not present in list of columns")
     return {
@@ -44,6 +50,7 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
     query_param: str = "tags"
     label: str = "Tags"
     type: str = TYPE_CHOICE
+    description: str = "Filter by tags on sessions or messages"
 
     def prepare(self, team, **_):
         self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
@@ -87,6 +94,8 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
 class MessageTagsFilter(ChatMessageTagsFilter):
     """Simple tags filter for messages - works directly on message tags."""
 
+    description: str = "Filter by tags on messages"
+
     def apply_any_of(self, queryset, value, timezone=None):
         return queryset.filter(tags__name__in=value)
 
@@ -102,6 +111,7 @@ class MessageTagsFilter(ChatMessageTagsFilter):
 class VersionsFilter(ChoiceColumnFilter):
     query_param: str = "versions"
     label: str = "Versions"
+    description: str = "Filter by chatbot version (e.g. v1, v2)"
 
     def prepare(self, team, **kwargs):
         single_experiment = kwargs.get("single_experiment")
@@ -128,6 +138,8 @@ class VersionsFilter(ChoiceColumnFilter):
 class MessageVersionsFilter(VersionsFilter):
     """Versions filter for messages - works directly on message version tags."""
 
+    description: str = "Filter by message version"
+
     def apply_any_of(self, queryset, value, timezone=None):
         return queryset.filter(tags__name__in=value, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
 
@@ -144,9 +156,10 @@ class ChannelsFilter(ChoiceColumnFilter):
     query_param: str = "channels"
     label: str = "Channels"
     column: str = "platform"
+    description: str = "Filter by messaging platform/channel"
 
     def prepare(self, team, **_):
-        self.options = ChannelPlatform.for_filter(team)
+        self.options = ChannelPlatform.for_filter(team)  # ty: ignore[invalid-assignment]
 
     def parse_query_value(self, query_value) -> any:
         selected_display_names = self.values_list(query_value)
@@ -161,11 +174,28 @@ class ChannelsFilter(ChoiceColumnFilter):
 class ExperimentSessionFilter(MultiColumnFilter):
     """Filter for experiment sessions using the new ColumnFilter pattern."""
 
+    slug: ClassVar[str] = "session"
+    date_range_column: ClassVar[str] = "last_message"
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
-        TimestampFilter(label="Last Message", column="last_activity_at", query_param="last_message"),
-        TimestampFilter(label="First Message", column="first_activity_at", query_param="first_message"),
-        TimestampFilter(label="Message Date", column="chat__messages__created_at", query_param="message_date"),
+        TimestampFilter(
+            label="Last Message",
+            column="last_activity_at",
+            query_param="last_message",
+            description="Filter by last message time",
+        ),
+        TimestampFilter(
+            label="First Message",
+            column="first_activity_at",
+            query_param="first_message",
+            description="Filter by first message time",
+        ),
+        TimestampFilter(
+            label="Message Date",
+            column="chat__messages__created_at",
+            query_param="message_date",
+            description="Filter by message date",
+        ),
         ChatMessageTagsFilter(),
         VersionsFilter(),
         ChannelsFilter(),
@@ -178,8 +208,15 @@ class ExperimentSessionFilter(MultiColumnFilter):
 class ChatMessageFilter(MultiColumnFilter):
     """Filter for chat messages using tags, timestamps, and versions."""
 
+    slug: ClassVar[str] = "message"
+    date_range_column: ClassVar[str] = "last_message"
     filters: ClassVar[Sequence[ColumnFilter]] = [
         MessageTagsFilter(),
-        TimestampFilter(label="Message Time", column="created_at", query_param="last_message"),
+        TimestampFilter(
+            label="Message Time",
+            column="created_at",
+            query_param="last_message",
+            description="Filter by message time",
+        ),
         MessageVersionsFilter(),
     ]

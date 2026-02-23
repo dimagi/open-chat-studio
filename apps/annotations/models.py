@@ -103,12 +103,12 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
     tags = TaggableManager(through=CustomTaggedItem)
     _skipped_category_tags: ClassVar[list] = [TagCategories.MEDIA_TYPE.value]  # Tag categories with special treatment
 
-    def add_tags(self, tags: list[str], team: Team, added_by: CustomUser = None):
+    def add_tags(self, tags: list[str], team: Team, added_by: CustomUser | None = None):
         tag_objs = Tag.objects.filter(team=team, name__in=tags)
         for tag in tag_objs:
             self.add_tag(tag, team, added_by)
 
-    def create_and_add_tag(self, tag: str, team: Team, tag_category: TagCategories, added_by: CustomUser = None):
+    def create_and_add_tag(self, tag: str, team: Team, tag_category: TagCategories, added_by: CustomUser | None = None):
         tag, _ = Tag.objects.get_or_create(
             name=tag,
             team=team,
@@ -117,7 +117,7 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         )
         self.add_tag(tag, team=team, added_by=added_by)
 
-    def add_tag(self, tag: Tag, team: Team, added_by: CustomUser = None):
+    def add_tag(self, tag: Tag, team: Team, added_by: CustomUser | None = None):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     def user_tag_names(self):

@@ -58,7 +58,7 @@ class OpenAiAssistantForm(forms.ModelForm):
             "x-model.number.fill": "llmProvider",
         }
         self.fields["llm_provider"].required = True
-        self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+        self.fields["llm_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"  # ty: ignore[invalid-assignment]
         self.fields["llm_provider_model"].required = True
         self.fields["include_file_info"].help_text = """If checked, extra information about uploaded files will
             be appended to the instructions. This will give the assistant knowledge about the file types."""

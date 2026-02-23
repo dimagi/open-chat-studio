@@ -72,8 +72,18 @@ class RequestLoggingMiddleware:
             "request_id": get_audit_transaction_id(),
             "duration": duration_ms,
         }
+        # team is added automatically to all log records via apps.utils.logging.ContextVarFilter
+        # Webhook views set request.experiment after resolving the channel, since the experiment
+        # isn't available in the URL. Fall back to URL kwargs / POST data for views that have it
+        # in the path (e.g. API views) or body.
+        experiment = getattr(request, "experiment", None)
+        experiment_id = (
+            str(experiment.public_id)
+            if experiment
+            else self._get_field(view_kwargs, post_data, "experiment_id", "chatbot_id")
+        )
         for key, value in {
-            "experiment_id": self._get_field(view_kwargs, post_data, "experiment_id", "chatbot_id"),
+            "experiment_id": experiment_id,
             "session_id": self._get_field(view_kwargs, post_data, "session_id"),
             "widget_version": request.headers.get("x-ocs-widget-version"),
             "query": request.META.get("QUERY_STRING", ""),

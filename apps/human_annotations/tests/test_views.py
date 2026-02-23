@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client
 from django.urls import reverse
 
+from apps.human_annotations.aggregation import compute_aggregates_for_queue
 from apps.human_annotations.models import (
     Annotation,
     AnnotationItemStatus,
@@ -75,8 +76,65 @@ def test_create_queue(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_create_queue_with_optional_field(client, team_with_users):
+    """Creating a queue with required=false should persist and load correctly."""
+    url = reverse("human_annotations:queue_new", args=[team_with_users.slug])
+    schema = {
+        "score": {"type": "int", "description": "Score"},
+        "notes": {"type": "string", "description": "Notes", "required": False},
+    }
+    data = {
+        "name": "Optional Fields Queue",
+        "description": "",
+        "schema": json.dumps(schema),
+        "num_reviews_required": 1,
+    }
+    response = client.post(url, data)
+    assert response.status_code == 302
+
+    queue = AnnotationQueue.objects.get(name="Optional Fields Queue", team=team_with_users)
+    assert queue.schema["notes"]["required"] is False
+
+    # Load the edit page and verify the schema is in the context
+    edit_url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.get(edit_url)
+    assert response.status_code == 200
+    assert response.context["existing_schema"]["notes"]["required"] is False
+
+
+@pytest.mark.django_db()
+def test_edit_queue_saves_optional_field(client, team_with_users, queue):
+    """Editing a queue to set required=false should persist via the update view."""
+    edit_url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    schema = {
+        "score": {"type": "int", "description": "Score", "ge": 1, "le": 5},
+        "comment": {"type": "string", "description": "Comment", "required": False},
+    }
+    response = client.post(
+        edit_url,
+        {
+            "name": queue.name,
+            "description": queue.description,
+            "schema": json.dumps(schema),
+            "num_reviews_required": queue.num_reviews_required,
+        },
+    )
+    assert response.status_code == 302
+
+    queue.refresh_from_db()
+    assert queue.schema["comment"]["required"] is False
+
+    # Verify the edit page renders the saved value in both context and HTML
+    response = client.get(edit_url)
+    assert response.context["existing_schema"]["comment"]["required"] is False
+    # Check the json_script output in the rendered HTML
+    html = response.content.decode()
+    assert '"required": false' in html or '"required":false' in html
+
+
+@pytest.mark.django_db()
 def test_edit_queue_locks_fields_after_annotations(client, team_with_users, queue, user):
-    """Schema and num_reviews_required should be disabled after annotations have started."""
+    """num_reviews_required should be disabled after annotations have started; schema stays editable for 'required'."""
     item = AnnotationItemFactory(queue=queue, team=team_with_users)
     Annotation.objects.create(
         item=item,
@@ -90,16 +148,146 @@ def test_edit_queue_locks_fields_after_annotations(client, team_with_users, queu
     response = client.get(url)
     assert response.status_code == 200
     form = response.context["form"]
-    assert form.fields["schema"].disabled is True
+    assert form.fields["schema"].disabled is False
     assert form.fields["num_reviews_required"].disabled is True
+    assert response.context["schema_locked"] is True
 
 
 @pytest.mark.django_db()
-def test_queue_detail(client, team_with_users, queue):
+def test_edit_locked_queue_allows_required_change(client, team_with_users, user):
+    """Changing 'required' on schema fields should be allowed after annotations have started."""
+    queue = AnnotationQueue.objects.create(
+        team=team_with_users,
+        name="Locked Queue",
+        schema={
+            "score": {"type": "int", "description": "Score", "ge": 1, "le": 5},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        created_by=user,
+    )
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 4, "notes": "OK"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    # Change 'notes' to optional — should succeed
+    new_schema = {
+        "score": {"type": "int", "description": "Score", "ge": 1, "le": 5},
+        "notes": {"type": "string", "description": "Notes", "required": False},
+    }
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.post(
+        url,
+        {
+            "name": queue.name,
+            "description": "",
+            "schema": json.dumps(new_schema),
+            "num_reviews_required": queue.num_reviews_required,
+        },
+    )
+    assert response.status_code == 302
+
+    queue.refresh_from_db()
+    assert queue.schema["notes"]["required"] is False
+
+
+@pytest.mark.django_db()
+def test_edit_locked_queue_rejects_structural_change(client, team_with_users, user):
+    """Changing field structure (type, constraints, etc.) should be rejected after annotations."""
+    queue = AnnotationQueue.objects.create(
+        team=team_with_users,
+        name="Locked Queue",
+        schema={
+            "score": {"type": "int", "description": "Score", "ge": 1, "le": 5},
+        },
+        created_by=user,
+    )
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 4},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+
+    # Try changing the type from int to float
+    bad_schema = {"score": {"type": "float", "description": "Score", "ge": 1, "le": 5}}
+    response = client.post(
+        url,
+        {
+            "name": queue.name,
+            "description": "",
+            "schema": json.dumps(bad_schema),
+            "num_reviews_required": queue.num_reviews_required,
+        },
+    )
+    assert response.status_code == 200  # re-renders form with error
+    assert "Cannot change" in response.context["form"].errors["schema"][0]
+
+
+@pytest.mark.django_db()
+def test_edit_locked_queue_rejects_adding_field(client, team_with_users, user):
+    """Adding a new field should be rejected after annotations."""
+    queue = AnnotationQueue.objects.create(
+        team=team_with_users,
+        name="Locked Queue",
+        schema={"score": {"type": "int", "description": "Score"}},
+        created_by=user,
+    )
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 4},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    bad_schema = {
+        "score": {"type": "int", "description": "Score"},
+        "notes": {"type": "string", "description": "Notes"},
+    }
+    response = client.post(
+        url,
+        {
+            "name": queue.name,
+            "description": "",
+            "schema": json.dumps(bad_schema),
+            "num_reviews_required": queue.num_reviews_required,
+        },
+    )
+    assert response.status_code == 200
+    assert "Cannot add or remove" in response.context["form"].errors["schema"][0]
+
+
+@pytest.mark.django_db()
+def test_queue_detail_shows_aggregates(client, team_with_users, queue, user):
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 4, "notes": "Good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    # Compute aggregates
+    compute_aggregates_for_queue(queue)
+
     url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
     response = client.get(url)
     assert response.status_code == 200
-    assert queue.name in response.content.decode()
+    content = response.content.decode()
+    assert "Aggregate Scores" in content
+    assert "quality_score" in content
 
 
 @pytest.mark.django_db()

@@ -113,7 +113,7 @@ class ChannelForm(forms.ModelForm):
         else:
             self.fields["messaging_provider"].widget = forms.HiddenInput()
 
-    def save(self, experiment, config_data: dict):
+    def save(self, experiment, config_data: dict):  # ty: ignore[invalid-method-override]
         self.instance.team = experiment.team
         self.instance.experiment = experiment
         self.instance.extra_data = config_data
@@ -454,10 +454,13 @@ class SlackChannelForm(ExtraFormBase):
 
     def _channel_matches_slack_team(self, channel) -> bool:
         # filtering must be done manually since the data is encrypted in the DB so can't be queried against
-        if self.messaging_provider and (slack_team_id := self.messaging_provider.config.get("slack_team_id")):
-            mp = channel.messaging_provider
-            return mp is not None and mp.config.get("slack_team_id") == slack_team_id  # ty: ignore[possibly-unresolved-reference]
-        return False
+        if not self.messaging_provider:
+            return False
+        slack_team_id = self.messaging_provider.config.get("slack_team_id")
+        if not slack_team_id:
+            return False
+        mp = channel.messaging_provider
+        return mp is not None and mp.config.get("slack_team_id") == slack_team_id
 
     def _validate_unique_keywords(self, keywords):
         """Check that keywords are not already used by other channels system-wide"""
