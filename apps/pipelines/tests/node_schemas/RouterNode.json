@@ -59,15 +59,28 @@
     },
     "user_max_token_limit": {
       "default": null,
-      "title": "User Max Token Limit",
-      "ui:widget": "none",
+      "description": "Maximum number of tokens before messages are summarized or truncated.",
+      "title": "Token Limit",
+      "ui:visibleWhen": {
+        "field": "history_mode",
+        "operator": "in",
+        "value": [
+          "summarize",
+          "truncate_tokens"
+        ]
+      },
       "type": "integer"
     },
     "max_history_length": {
       "default": 10,
+      "description": "Chat history will only keep the most recent messages up to this limit.",
       "title": "Max History Length",
       "type": "integer",
-      "ui:widget": "none"
+      "ui:visibleWhen": {
+        "field": "history_mode",
+        "operator": "==",
+        "value": "max_history_length"
+      }
     },
     "name": {
       "title": "Node Name",
