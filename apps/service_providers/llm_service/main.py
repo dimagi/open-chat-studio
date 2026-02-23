@@ -326,8 +326,8 @@ class OpenAILlmService(OpenAIGenericService):
         return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
 
     def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
-        file_ids = file_ids or NOT_GIVEN  # ty: ignore[invalid-assignment]
-        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids)
+        file_ids_param = file_ids or NOT_GIVEN
+        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids_param)
         return vector_store.id
 
 

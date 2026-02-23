@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 from urllib.parse import urljoin
 
 import backoff
@@ -130,7 +130,7 @@ class TwilioService(MessagingService):
         interval=2,
         jitter=None,
     )
-    def block_until_delivered(self, current_chunk_sid: str) -> bool:
+    def block_until_delivered(self, current_chunk_sid: str) -> str:
         """
         Checks if the current message chunk has been delivered.
 
@@ -138,7 +138,7 @@ class TwilioService(MessagingService):
         """
         message_context = self.client.messages.get(current_chunk_sid)
         message = message_context.fetch()
-        return message.status  # ty: ignore[invalid-return-type]
+        return cast(str, message.status)
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         """

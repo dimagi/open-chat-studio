@@ -32,7 +32,8 @@ class Command(BaseCommand):
                     WHERE table_name = 'otp_totp_totpdevice'
                 )
             """)
-            return cursor.fetchone()[0]  # ty: ignore[not-subscriptable]
+            row = cursor.fetchone()
+            return row[0] if row else False
 
     def _get_totp_devices(self):
         """Get TOTP devices using raw SQL."""

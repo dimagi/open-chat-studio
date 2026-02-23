@@ -20,7 +20,9 @@ class TestLlmProviderModel(TestCase):
 
         with connection.cursor() as cursor:
             cursor.execute("SELECT config FROM service_providers_llmprovider")
-            assert cursor.fetchone()[0] != test_data  # ty: ignore[not-subscriptable]
+            row = cursor.fetchone()
+            assert row is not None
+            assert row[0] != test_data
 
 
 class TestForm(ObfuscatingMixin, forms.Form):

@@ -55,7 +55,7 @@ class ChainOutput(Serializable):
     completion_tokens: int
     """Number of tokens in the completion."""
 
-    type: Literal["OcsChainOutput"] = "ChainOutput"  # ty: ignore[invalid-assignment]
+    type: Literal["ChainOutput"] = "ChainOutput"
 
     @classmethod
     def is_lc_serializable(cls) -> bool:

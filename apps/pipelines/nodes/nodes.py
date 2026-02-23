@@ -172,11 +172,11 @@ class ToolConfigModel(BaseModel):
     @classmethod
     def validate_domains(cls, value: list[str], info) -> list[str]:
         values = list(map(str.strip, filter(None, value)))
-        for value in values:  # ty: ignore[invalid-assignment]
+        for domain in values:
             try:
-                validators.validate_domain_name(value)
+                validators.validate_domain_name(domain)
             except ValidationError:
-                raise ValueError(f"Invalid domain name '{value}' in field '{info.field_name}'") from None
+                raise ValueError(f"Invalid domain name '{domain}' in field '{info.field_name}'") from None
         return values
 
     @field_serializer("allowed_domains", "blocked_domains")
