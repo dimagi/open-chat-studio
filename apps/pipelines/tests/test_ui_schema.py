@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.pipelines.nodes.base import NodeSchema, PipelineNode, UiSchema, VisibleWhen, Widgets
+from apps.pipelines.nodes.mixins import HistoryMixin
 
 
 class ModelWithVisibleWhen(BaseModel):
@@ -123,3 +124,23 @@ def test_visible_when_is_empty():
         "operator": "is_empty",
         "value": None,
     }
+
+
+def test_history_mixin_user_max_token_limit_visible_when():
+    props = HistoryMixin.model_json_schema()["properties"]
+    assert props["user_max_token_limit"]["ui:visibleWhen"] == {
+        "field": "history_mode",
+        "operator": "in",
+        "value": ["summarize", "truncate_tokens"],
+    }
+    assert "ui:widget" not in props["user_max_token_limit"]
+
+
+def test_history_mixin_max_history_length_visible_when():
+    props = HistoryMixin.model_json_schema()["properties"]
+    assert props["max_history_length"]["ui:visibleWhen"] == {
+        "field": "history_mode",
+        "operator": "==",
+        "value": "max_history_length",
+    }
+    assert "ui:widget" not in props["max_history_length"]
