@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 class StateAccessor:
-    """Conventional read-only access to user-facing pipeline state.
+    """Conventional read-only access to the pipeline state.
 
     Accessed via context.state -- groups temp, session, and participant data
     that nodes use for rendering, routing, and extraction.
@@ -94,25 +94,13 @@ class PipelineAccessor:
 
 
 class NodeContext:
-    """Access-controlled view of pipeline state for nodes.
-
-    Provides typed, read-only access to the data nodes need.
-    Hides system internals (path, node_source, raw outputs dict).
-    The underlying ``_pipeline_state`` attribute uses a single-underscore convention
-    to signal that direct access is discouraged but not prevented.
-
-    Top-level properties: node I/O and session context (used by every node).
-    Sub-objects:
-        context.state    -- user-facing state (temp, session, participant data)
-        context.pipeline -- execution introspection (node outputs, routes)
-    """
+    """Access-controlled view of pipeline state for nodes."""
 
     def __init__(self, state: PipelineState):
         self._pipeline_state = state
         self.state = StateAccessor(state)
         self.pipeline = PipelineAccessor(state)
 
-    # --- Node input ---
     @property
     def input(self) -> str:
         """The primary input for this node (from the previous node's output)."""
@@ -128,7 +116,6 @@ class NodeContext:
         """File attachments from the user message."""
         return self._pipeline_state.get("temp_state", {}).get("attachments", [])
 
-    # --- Session context ---
     @property
     def session(self) -> ExperimentSession | None:
         """The experiment session. Use for session.id, session.team, etc."""
