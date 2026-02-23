@@ -360,9 +360,9 @@ class ExtractStructuredDataNodeMixin:
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         ToolClass = self.get_tool_class(json.loads(self.data_schema))
-        reference_data = self.get_reference_data(state)
+        reference_data = self.get_reference_data(context)
         prompt_token_count = self._get_prompt_token_count(reference_data, ToolClass.model_json_schema())
-        message_chunks = self.chunk_messages(state["last_node_input"], prompt_token_count=prompt_token_count)
+        message_chunks = self.chunk_messages(context.input, prompt_token_count=prompt_token_count)
 
         new_reference_data = reference_data
         for message_chunk in message_chunks:
@@ -377,12 +377,12 @@ class ExtractStructuredDataNodeMixin:
             # )
             new_reference_data = self.update_reference_data(output, reference_data)
 
-        return self.get_node_output(state, new_reference_data)
+        return self.get_node_output(context, new_reference_data)
 
-    def get_node_output(self, state, output_data) -> PipelineState:
+    def get_node_output(self, context, output_data) -> PipelineState:
         raise NotImplementedError()
 
-    def get_reference_data(self, state):
+    def get_reference_data(self, context):
         return ""
 
     def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:

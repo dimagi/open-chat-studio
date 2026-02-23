@@ -17,6 +17,7 @@ from apps.channels.datamodels import Attachment
 from apps.experiments.models import AgentTools
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.nodes.base import Intents, PipelineState, merge_dict_values_as_lists
+from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import (
     EndNode,
     LLMResponseWithPrompt,
@@ -350,16 +351,15 @@ class TestRouterNode:
             llm_provider_model_id=provider_model.id,
         )
         participant_data = {"participant_data": "b"}
-        node._process_conditional(
-            PipelineState(
-                outputs={"123": {"message": "a"}},
-                messages=["a"],
-                experiment_session=experiment_session,
-                node_inputs=["a"],
-                last_node_input="a",
-                participant_data=participant_data,
-            ),
+        state = PipelineState(
+            outputs={"123": {"message": "a"}},
+            messages=["a"],
+            experiment_session=experiment_session,
+            node_inputs=["a"],
+            last_node_input="a",
+            participant_data=participant_data,
         )
+        node._process_conditional(NodeContext(state))
 
         # Verify that create_agent was called with the correct system prompt containing participant data
         assert create_agent_mock.called
@@ -525,7 +525,7 @@ class TestRouterNode:
             last_node_input="a",
         )
 
-        keyword, is_default_keyword = node._process_conditional(state)
+        keyword, is_default_keyword = node._process_conditional(NodeContext(state))
         assert keyword == "DEFAULT"
         assert is_default_keyword
 

@@ -5,6 +5,7 @@ import pytest
 
 from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
 from apps.utils.factories.team import TeamFactory
@@ -12,14 +13,13 @@ from apps.utils.factories.team import TeamFactory
 
 def _run_code_node(code, experiment_session=None):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    return node._process(
-        PipelineState(
-            outputs={},
-            experiment_session=experiment_session,
-            last_node_input="test_input",
-            node_inputs=["test_input"],
-        )
+    state = PipelineState(
+        outputs={},
+        experiment_session=experiment_session,
+        last_node_input="test_input",
+        node_inputs=["test_input"],
     )
+    return node._process(state, NodeContext(state))
 
 
 class TestCodeNodeHttpAvailability:
@@ -40,8 +40,9 @@ def main(input, **kwargs):
     return "should not reach here"
 """
         node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+        state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
         with pytest.raises(CodeNodeRunError, match="Importing 'httpx' is not allowed"):
-            node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
+            node._process(state, NodeContext(state))
 
 
 @pytest.mark.django_db()

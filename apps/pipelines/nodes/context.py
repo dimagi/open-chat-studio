@@ -120,9 +120,9 @@ class NodeContext:
 
     # --- Session context ---
     @property
-    def session(self) -> ExperimentSession:
+    def session(self) -> ExperimentSession | None:
         """The experiment session. Use for session.id, session.team, etc."""
-        return self._state["experiment_session"]
+        return self._state.get("experiment_session")
 
     @property
     def input_message_id(self) -> int | None:
