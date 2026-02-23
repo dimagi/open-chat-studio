@@ -4,6 +4,7 @@ import logging
 from enum import Enum
 
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Exists, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -119,7 +120,9 @@ def create_notification(
     EventUser.objects.bulk_create(event_users_to_create)
     EventUser.objects.bulk_update(event_users_to_update, fields=["read", "read_at"])
 
-    send_notification_email_async.delay(users_to_email, notification_event_id=notification_event.id)
+    transaction.on_commit(
+        lambda: send_notification_email_async.delay(users_to_email, notification_event_id=notification_event.id)
+    )
     return notification_event
 
 
