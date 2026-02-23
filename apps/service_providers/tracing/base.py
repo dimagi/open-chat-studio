@@ -24,6 +24,16 @@ class ServiceNotInitializedException(Exception):
 
 
 @dataclasses.dataclass
+class SpanNotificationConfig:
+    """Declares that a span should trigger a notification if it exits with an error.
+
+    The slug and title are derived from the span name automatically by OCSTracer.
+    """
+
+    permissions: list[str] | None = None
+
+
+@dataclasses.dataclass
 class TraceContext:
     """Context object for active traces and spans.
 
@@ -36,6 +46,7 @@ class TraceContext:
     outputs: dict[str, Any] = dataclasses.field(default_factory=dict)
     error: str | None = dataclasses.field(default=None)
     exception: Exception | None = dataclasses.field(default=None)
+    notification_config: SpanNotificationConfig | None = dataclasses.field(default=None)
 
     def set_outputs(self, outputs: dict[str, Any]) -> None:
         """Set outputs for this trace/span. Can be called multiple times to merge outputs."""

@@ -13,12 +13,12 @@ from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
-from apps.ocs_notifications.notifications import pipeline_execution_failure_notification
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.tracing import TraceInfo, TracingService
+from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.web.search import get_global_search_url
 
 if TYPE_CHECKING:
@@ -69,7 +69,11 @@ class PipelineBot:
             input_state["input_message_id"] = human_message.id
             input_state["input_message_url"] = get_global_search_url(human_message)
 
-        with self.trace_service.span("Run Pipeline", inputs={"input_state": input_state.json_safe()}) as span:
+        with self.trace_service.span(
+            "Run Pipeline",
+            inputs={"input_state": input_state.json_safe()},
+            notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
+        ) as span:
             ai_message = self.invoke_pipeline(
                 input_state=input_state, human_message=human_message, save_run_to_history=True
             )
@@ -140,13 +144,7 @@ class PipelineBot:
         )
         runnable = graph.build_runnable()
         runner = DjangoLangGraphRunner(DjangoSafeContextThreadPoolExecutor)
-        try:
-            raw_output = runner.invoke(runnable, input_state, config)
-        except Exception as e:
-            # Notify experiment admins of pipeline execution failure, only for non-working versions
-            if not self.experiment.is_working_version:
-                pipeline_execution_failure_notification(self.experiment, self.session, e)
-            raise
+        raw_output = runner.invoke(runnable, input_state, config)
         output = PipelineState(**raw_output).json_safe()
         return output
 
@@ -358,6 +356,7 @@ class EventBot:
             session=self.session,
             inputs={"input": event_prompt},
             metadata=self.trace_info.metadata,
+            notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
         ) as span:
             config = self.trace_service.get_langchain_config()
             response = llm.invoke(

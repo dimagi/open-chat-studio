@@ -8,7 +8,7 @@ function initializeRowClickHandlers() {
       }
 
       const handler = function (event) {
-        if (event.target.tagName === 'TR' || event.target.tagName === 'TD') {
+        if (event.target.tagName === 'TR' || event.target.tagName === 'TD' || event.target.closest('[clickable]')) {
           let editUrl = this.getAttribute('data-redirect-url');
           let target = this.getAttribute('data-redirect-target');
           try {

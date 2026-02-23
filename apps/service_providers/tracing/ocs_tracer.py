@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, Any
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 
-from apps.ocs_notifications.notifications import llm_error_notification
+from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.trace.models import Trace, TraceStatus
 
-from .base import TraceContext, Tracer
+from .base import SpanNotificationConfig, TraceContext, Tracer
 
 if TYPE_CHECKING:
     from apps.experiments.models import Experiment, ExperimentSession
@@ -35,6 +35,8 @@ class OCSTracer(Tracer):
         self.session: ExperimentSession | None = None
         self.error_detected = False
         self.error_message: str = ""
+        self.error_span_name: str = ""
+        self.error_notification_config: SpanNotificationConfig | None = None
 
     @property
     def ready(self) -> bool:
@@ -123,6 +125,18 @@ class OCSTracer(Tracer):
                         self.trace_record.output_message_id,
                     )
 
+            # Fire notification if a span declared one and the trace errored
+            try:
+                if (
+                    self.error_detected
+                    and self.error_span_name
+                    and self.error_notification_config is not None
+                    and not self.experiment.is_working_version
+                ):
+                    self._fire_trace_error_notification()
+            except Exception:
+                logger.exception("Error firing trace error notification for trace %s", self.trace_id)
+
             # Reset state
             self.trace_record = None
             self.error_detected = False
@@ -130,6 +144,8 @@ class OCSTracer(Tracer):
             self.trace_name = None
             self.trace_id = None
             self.session = None
+            self.error_span_name = ""
+            self.error_notification_config = None
 
     @contextmanager
     def span(
@@ -157,6 +173,10 @@ class OCSTracer(Tracer):
                 self.error_detected = True
                 if not self.error_message:
                     self.error_message = str(error_to_record)
+                # First erroring span wins — captures innermost span (it exits before outer spans)
+                if not self.error_span_name:
+                    self.error_span_name = span_context.name
+                    self.error_notification_config = span_context.notification_config
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
         """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
@@ -194,33 +214,42 @@ class OCSTracer(Tracer):
         cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment.id)
         cache.delete(cache_key)
 
+    def _fire_trace_error_notification(self) -> None:
+        trace_url = self.trace_record.get_absolute_url() if self.trace_record else None
+        trace_error_notification(
+            experiment=self.experiment,
+            session=self.session,
+            span_name=self.error_span_name,
+            error_message=self.error_message,
+            permissions=self.error_notification_config.permissions if self.error_notification_config else None,
+            trace_url=trace_url,
+        )
+
 
 class OCSCallbackHandler(BaseCallbackHandler):
     def __init__(self, tracer: OCSTracer):
         super().__init__()
         self.tracer = tracer
 
-    def on_llm_error(self, *args, **kwargs) -> None:
+    def _capture_error(self, error_message: str, span_name: str) -> None:
         self.tracer.error_detected = True
-        error_message = "LLM error occurred"
         if not self.tracer.error_message:
-            if _error := kwargs.get("error") or (args[0] if args else None):
-                self.tracer.error_message = error_message = str(_error)
-        else:
-            error_message = self.tracer.error_message
+            self.tracer.error_message = error_message
 
-        llm_error_notification(
-            experiment=self.tracer.experiment, session=self.tracer.session, error_message=error_message
-        )
+        if not self.tracer.error_span_name:
+            self.tracer.error_span_name = span_name
+            self.tracer.error_notification_config = SpanNotificationConfig(
+                permissions=["experiments.change_experiment"]
+            )
+
+    def on_llm_error(self, *args, **kwargs) -> None:
+        error = kwargs.get("error") or (args[0] if args else None)
+        self._capture_error(str(error) if error else "LLM error occurred", "LLM Error")
 
     def on_chain_error(self, *args, **kwargs) -> None:
-        self.tracer.error_detected = True
-        if not self.tracer.error_message:
-            error = kwargs.get("error") or (args[0] if args else None)
-            self.tracer.error_message = str(error) if error else "Chain error occurred"
+        error = kwargs.get("error") or (args[0] if args else None)
+        self._capture_error(str(error) if error else "Chain error occurred", "Chain Error")
 
     def on_tool_error(self, *args, **kwargs) -> None:
-        self.tracer.error_detected = True
-        if not self.tracer.error_message:
-            error = kwargs.get("error") or (args[0] if args else None)
-            self.tracer.error_message = str(error) if error else "Tool error occurred"
+        error = kwargs.get("error") or (args[0] if args else None)
+        self._capture_error(str(error) if error else "Tool error occurred", "Tool Error")

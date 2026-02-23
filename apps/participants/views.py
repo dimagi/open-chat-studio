@@ -72,7 +72,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
         filter_context = get_filter_context_data(
             self.request.team,
             columns=ParticipantFilter.columns(self.request.team),
-            date_range_column="created_on",
+            filter_class=ParticipantFilter,
             table_url=table_url,
             table_container_id="data-table",
             table_type=FilterSet.TableType.PARTICIPANTS,

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from langchain_core.callbacks.base import BaseCallbackHandler
 
     from apps.experiments.models import ExperimentSession
+    from apps.service_providers.tracing.base import SpanNotificationConfig
 
 
 logger = logging.getLogger("ocs.tracing")
@@ -75,6 +76,7 @@ class TracingService:
         session: ExperimentSession,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        notification_config: SpanNotificationConfig | None = None,
     ) -> Iterator[TraceContext]:
         """Context manager for tracing or spanning.
 
@@ -85,7 +87,7 @@ class TracingService:
             with self.trace(name, session, inputs, metadata) as ctx:
                 yield ctx
         else:
-            with self.span(name, inputs, metadata) as ctx:
+            with self.span(name, inputs, metadata, notification_config=notification_config) as ctx:
                 yield ctx
 
     @contextmanager
@@ -134,11 +136,12 @@ class TracingService:
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        notification_config: SpanNotificationConfig | None = None,
     ) -> Iterator[TraceContext]:
         """Context manager for spanning."""
         # Create context object that will be passed to tracers and yielded to user
         span_id = uuid.uuid4()
-        span_context = TraceContext(id=span_id, name=span_name)
+        span_context = TraceContext(id=span_id, name=span_name, notification_config=notification_config)
 
         if not self.activated:
             # Return a dummy context if not activated

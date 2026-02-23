@@ -12,12 +12,14 @@ class ParticipantFilter(StringColumnFilter):
     query_param: str = "participant"
     columns: list[str] = ["participant__identifier", "participant__name"]
     label: str = "Participant"
+    description: str = "Filter by participant name or identifier"
 
 
 class ExperimentFilter(ChoiceColumnFilter):
     query_param: str = "experiment"
     column: str = "experiment_id"
     label: str = "Chatbot"
+    description: str = "Filter by chatbot (experiment) name"
 
     def prepare(self, team, **_):
         from apps.experiments.models import Experiment
@@ -56,17 +58,20 @@ class StatusFilter(ChoiceColumnFilter):
     column: str = "status"
     label: str = "Status"
     options: list[str] = SessionStatus.for_chatbots()
+    description: str = "Filter by session status (e.g. active, complete)"
 
 
 class RemoteIdFilter(ChoiceColumnFilter):
     query_param: str = "remote_id"
     column: str = "participant__remote_id"
     label: str = "Remote ID"
+    description: str = "Filter by participant's remote/external ID"
 
 
 class TimestampFilter(ColumnFilter):
     type: str = TYPE_TIMESTAMP
     options: list[dict[str, str]] = DATE_RANGE_OPTIONS
+    description: str = "Filter by date/time"
 
     def _get_date_as_utc(self, value) -> datetime | None:
         try:

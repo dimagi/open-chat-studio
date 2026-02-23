@@ -55,6 +55,7 @@ class SeverityLevelFilter(ChoiceColumnFilter):
 class UserNotificationFilter(MultiColumnFilter):
     """Filter for user notifications using multiple column filters."""
 
+    date_range_column: ClassVar[str] = "notification_date"
     filters: ClassVar[Sequence] = [
         ReadFilter(),
         TimestampFilter(label="Notification Date", column="latest_event__created_at", query_param="notification_date"),

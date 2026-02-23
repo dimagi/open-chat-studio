@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.db import models, transaction
 from django.db.models import Sum
@@ -8,6 +10,8 @@ from apps.evaluations.field_definitions import FieldDefinition
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
+
+logger = logging.getLogger("ocs.human_annotations")
 
 
 class QueueStatus(models.TextChoices):
@@ -203,9 +207,23 @@ class Annotation(BaseTeamModel):
             self._update_item_review_count()
 
     def _update_item_review_count(self):
-        """Increment item review count and update status."""
+        """Increment item review count, update status, and recompute queue aggregates."""
         with transaction.atomic():
             item = AnnotationItem.objects.select_for_update().get(pk=self.item_id)
             item.review_count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
             item.update_status(save=False)
             item.save(update_fields=["review_count", "status"])
+
+        from apps.human_annotations.aggregation import compute_aggregates_for_queue
+
+        try:
+            compute_aggregates_for_queue(item.queue)
+        except Exception:
+            logger.exception("Failed to recompute aggregates for queue %s", item.queue_id)
+
+
+class AnnotationQueueAggregate(BaseTeamModel):
+    """Stores aggregated annotation results for a queue."""
+
+    queue = models.OneToOneField(AnnotationQueue, on_delete=models.CASCADE, related_name="aggregate")
+    aggregates = models.JSONField(default=dict, help_text="Aggregated stats per schema field")

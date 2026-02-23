@@ -24,6 +24,13 @@
         {% translate "Define the fields annotators will fill out when reviewing items." %}
       </p>
 
+      <template x-if="locked">
+        <div class="alert alert-warning mb-3">
+          <i class="fa fa-lock"></i>
+          <span>{% translate "Schema structure is locked after annotations have started. You can still change whether fields are required." %}</span>
+        </div>
+      </template>
+
       <div class="space-y-4">
         <template x-for="(field, index) in fields" :key="field._id">
           <div class="card bg-base-200 p-4">
@@ -35,6 +42,7 @@
                      x-model="field.name"
                      placeholder="{% translate "e.g., 'accuracy', 'score'" %}"
                      class="input input-bordered w-full input-sm"
+                     :disabled="locked"
                      required>
             </div>
 
@@ -44,6 +52,7 @@
               </label>
               <select x-model="field.type"
                       @change="onTypeChange(field)"
+                      :disabled="locked"
                       class="select select-bordered w-full select-sm">
                 <option value="string">{% translate "Text" %}</option>
                 <option value="int">{% translate "Integer" %}</option>
@@ -59,6 +68,7 @@
               <input type="text"
                      x-model="field.description"
                      placeholder="{% translate "Description shown to annotators" %}"
+                     :disabled="locked"
                      class="input input-bordered w-full input-sm">
             </div>
 
@@ -73,6 +83,7 @@
                          x-model="field.ge"
                          :step="field.type === 'float' ? 'any' : '1'"
                          placeholder="{% translate "Min (inclusive)" %}"
+                         :disabled="locked"
                          class="input input-bordered w-full input-sm">
                 </div>
                 <div>
@@ -83,6 +94,7 @@
                          x-model="field.le"
                          :step="field.type === 'float' ? 'any' : '1'"
                          placeholder="{% translate "Max (inclusive)" %}"
+                         :disabled="locked"
                          class="input input-bordered w-full input-sm">
                 </div>
               </div>
@@ -99,6 +111,7 @@
                          x-model="field.max_length"
                          min="1"
                          placeholder="{% translate "Optional" %}"
+                         :disabled="locked"
                          class="input input-bordered w-full input-sm">
                 </div>
               </div>
@@ -116,9 +129,11 @@
                       <input type="text"
                              x-model="field.choices[choiceIndex]"
                              placeholder="{% translate "Choice value" %}"
+                             :disabled="locked"
                              class="input input-bordered w-full input-sm">
                       <button type="button"
                               @click="field.choices.splice(choiceIndex, 1)"
+                              x-show="!locked"
                               class="btn btn-outline btn-xs btn-error">
                         <i class="fa fa-trash"></i>
                       </button>
@@ -126,6 +141,7 @@
                   </template>
                   <button type="button"
                           @click="if (!field.choices) field.choices = []; field.choices.push('')"
+                          x-show="!locked"
                           class="btn btn-outline btn-primary btn-xs mt-1">
                     <i class="fa fa-plus"></i> {% translate "Add Choice" %}
                   </button>
@@ -133,8 +149,18 @@
               </div>
             </template>
 
+            <div class="form-control mt-2" :class="locked && 'bg-base-100 rounded-lg p-2 border border-primary/30'">
+              <label class="label cursor-pointer justify-start gap-2">
+                <input type="checkbox"
+                       x-model="field.required"
+                       class="checkbox checkbox-sm checkbox-primary">
+                <span class="label-text" :class="locked && 'font-semibold'">{% translate "Required" %}</span>
+              </label>
+            </div>
+
             <button type="button"
                     @click="removeField(index)"
+                    x-show="!locked"
                     class="btn btn-outline btn-sm btn-error mt-2">
               <i class="fa fa-trash"></i> {% translate "Remove Field" %}
             </button>
@@ -144,6 +170,7 @@
 
       <button type="button"
               @click="addField()"
+              x-show="!locked"
               class="btn btn-outline btn-primary btn-sm mt-3">
         <i class="fa fa-plus"></i> {% translate "Add Field" %}
       </button>
@@ -160,6 +187,7 @@
   <script>
     document.addEventListener('alpine:init', () => {
       Alpine.data('schemaFieldBuilder', () => ({
+        locked: {{ schema_locked|yesno:"true,false" }},
         fields: [],
 
         init() {
@@ -175,6 +203,7 @@
               le: def.le !== undefined ? def.le : null,
               max_length: def.max_length !== undefined ? def.max_length : null,
               choices: def.choices || [],
+              required: def.required !== undefined ? def.required : true,
             }));
           }
           if (this.fields.length === 0) {
@@ -192,6 +221,7 @@
             le: null,
             max_length: null,
             choices: [],
+            required: true,
           });
         },
 
@@ -218,6 +248,9 @@
                 type: field.type,
                 description: field.description || '',
               };
+              if (!field.required) {
+                def.required = false;
+              }
               if (field.type === 'int' || field.type === 'float') {
                 if (field.ge !== null && field.ge !== '' && field.ge !== undefined) {
                   def.ge = field.type === 'float' ? parseFloat(field.ge) : parseInt(field.ge);
