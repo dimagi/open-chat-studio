@@ -231,7 +231,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     generate_citations: bool = Field(
         default=True,
         description="Allow files from this collection to be referenced in LLM responses and downloaded by users",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
+        json_schema_extra=UiSchema(
+            widget=Widgets.toggle,
+            visible_when=VisibleWhen(field="collection_index_ids", operator="is_not_empty"),
+        ),
     )
 
     tools: list[str] = Field(
