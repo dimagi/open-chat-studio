@@ -23,12 +23,6 @@ from apps.utils.factories.notifications import EventTypeFactory, EventUserFactor
 from apps.utils.factories.team import TeamFactory
 
 
-@pytest.fixture(autouse=True)
-def enable_flag_for_notifications():
-    with patch("apps.ocs_notifications.utils._notifications_flag_is_active", return_value=True):
-        yield
-
-
 @pytest.mark.django_db()
 class TestSendNotificationEmail:
     def test_email_not_sent_when_preference_doesnt_exist(self, team_with_users, mailoutbox):

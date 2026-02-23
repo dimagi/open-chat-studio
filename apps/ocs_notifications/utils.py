@@ -16,8 +16,7 @@ from apps.ocs_notifications.models import (
     UserNotificationPreferences,
 )
 from apps.ocs_notifications.tasks import send_notification_email_async
-from apps.teams.flags import Flags
-from apps.teams.models import Flag, Team
+from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -66,9 +65,6 @@ def create_notification(
     Returns:
         NotificationEvent: The created NotificationEvent instance, or None if creation failed.
     """
-    if not _notifications_flag_is_active(team):
-        return
-
     links = links or {}
 
     user_info = get_users_to_be_notified(team, permissions)
@@ -173,16 +169,6 @@ def get_users_to_be_notified(team: Team, permissions: list[str]) -> dict:
 
 def should_send_email(user_email_info: dict, event_level) -> bool:
     return user_email_info["email_enabled"] and event_level >= user_email_info["email_level"]
-
-
-def _notifications_flag_is_active(team: Team) -> bool:
-    key = f"notifications_flag_{team.id}"
-    is_active = cache.get(key, default=None)
-    if is_active is None:
-        flag = Flag.objects.filter(name=Flags.NOTIFICATIONS.slug).first()
-        is_active = bool(flag and flag.is_active_for_team(team))
-        cache.set(key, is_active, 30)  # Cache the flag status for 30 seconds
-    return is_active
 
 
 def get_user_notification_cache_value(user_id: int, team_slug: str) -> int | None:
