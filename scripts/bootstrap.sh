@@ -163,7 +163,7 @@ install_uv() {
     fi
 }
 
-# Check Node.js and npm
+# Check Node.js and bun
 check_node() {
     step "Checking Node.js installation..."
     if command_exists node; then
@@ -181,10 +181,11 @@ check_node() {
         [ "$CHECK_ONLY" != true ] && exit 1
     fi
 
-    if command_exists npm; then
-        info "npm is installed ($(npm --version))"
+    if command_exists bun; then
+        info "bun is installed ($(bun --version))"
     else
-        error "npm is not installed. Please install npm before running this script."
+        error "bun is not installed. Please install bun before running this script."
+        error "Visit: https://bun.sh/"
         [ "$CHECK_ONLY" != true ] && exit 1
     fi
 }
@@ -264,9 +265,9 @@ install_python_deps() {
 # Install Node.js dependencies
 install_node_deps() {
     step "Installing Node.js dependencies..."
-    if confirm "Install/update Node.js dependencies with 'npm install'?" "y"; then
-        info "Running: npm install"
-        npm ci --omit=optional
+    if confirm "Install/update Node.js dependencies with 'bun install'?" "y"; then
+        info "Running: bun install"
+        bun install
         info "Node.js dependencies installed successfully"
     else
         warn "Skipped Node.js dependencies installation"
@@ -309,7 +310,7 @@ check_node_deps() {
         if [ -d "node_modules" ]; then
             info "node_modules directory exists"
         else
-            warn "node_modules not found. Run 'npm install' to install dependencies"
+            warn "node_modules not found. Run 'bun install' to install dependencies"
         fi
     else
         warn "package.json not found"
@@ -376,7 +377,7 @@ print_next_steps() {
     echo ""
 
     echo "  5. Build frontend assets:"
-    echo "     npm run dev"
+    echo "     bun run dev"
     echo ""
 
     echo "See CLAUDE.md for more development commands and information."

@@ -32,18 +32,18 @@ RUN --mount=type=cache,target=/root/.cache \
       --group prod \
       --compile-bytecode
 
-FROM node:24 AS build-node
-RUN nodejs -v && npm -v
+FROM oven/bun:1 AS build-node
+RUN bun --version
 WORKDIR /code
 
 # keep in sync with tailwind.config.js
-COPY *.json *.js .babelrc /code/
+COPY *.json *.js .babelrc bun.lock /code/
 COPY config/settings.py /code/config/settings.py
 COPY templates /code/templates/
 COPY assets /code/assets/
 
-RUN npm install
-RUN npm run build
+RUN bun install --frozen-lockfile
+RUN bun run build
 
 FROM python:3.13-slim-bullseye
 ENV PYTHONUNBUFFERED=1

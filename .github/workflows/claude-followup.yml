@@ -121,15 +121,13 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
-      - name: Set up Node.js
+      - name: Set up Bun
         if: steps.check.outputs.skip != 'true'
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
+        uses: oven-sh/setup-bun@v2
 
       - name: Install Node dependencies
         if: steps.check.outputs.skip != 'true'
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Run Claude Code
         if: steps.check.outputs.skip != 'true'
@@ -163,8 +161,8 @@ jobs:
 
             **For CI failures:**
             - Lint errors: run `ruff check --fix` and `ruff format` to fix Python issues
-            - JS/TS lint: run `npm run lint` to check, fix issues manually
-            - Type errors: run `npm run type-check` to check, fix issues manually
+            - JS/TS lint: run `bun run lint` to check, fix issues manually
+            - Type errors: run `bun run type-check` to check, fix issues manually
             - Test failures: read the failing test, understand the failure, fix the code or test
             - Lock file issues: run `uv lock` to regenerate
 
@@ -177,8 +175,8 @@ jobs:
 
             Run the checks locally to verify your fixes:
             - `ruff check && ruff format --check` (Python lint)
-            - `npm run build` (frontend build)
-            - `npm run type-check` (TypeScript types)
+            - `bun run build` (frontend build)
+            - `bun run type-check` (TypeScript types)
             - `pytest path/to/relevant/tests.py -v` (relevant tests)
 
             ### Step 4: Push and comment
@@ -190,7 +188,7 @@ jobs:
 
             If CI passed and there are no actionable review comments:
             1. Comment on the PR noting that no changes were needed
-          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(npm run dev:*),Bash(npm ci:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ruff:*),Bash(uv lock:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh run download:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Read,Write,Edit"'
+          claude_args: '--allowedTools "Bash(bun run lint:*),Bash(bun run type-check:*),Bash(bun run build:*),Bash(bun run dev:*),Bash(bun install:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ruff:*),Bash(uv lock:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh run download:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Read,Write,Edit"'
 
       - name: Add followup-done label
         if: always() && steps.check.outputs.skip != 'true' && steps.check.outputs.pr_number != ''

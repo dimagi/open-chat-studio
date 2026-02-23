@@ -58,16 +58,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Use Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
       - name: Build front end
-        run: npm run build
+        run: bun run build
       - name: Check types
-        run: npm run type-check
+        run: bun run type-check
 
   code-style:
     if: github.ref != 'refs/heads/main'
@@ -78,13 +76,11 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
       - name: Install dependencies
         run: |
-          npm ci
+          bun install --frozen-lockfile
           sudo apt-get install -y ripgrep
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4

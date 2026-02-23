@@ -9,7 +9,7 @@
     "dev": "webpack --mode development",
     "dev-watch": "webpack --mode development --watch",
     "type-check": "tsc --noEmit",
-    "type-check-watch": "npm run type-check -- --watch",
+    "type-check-watch": "bun run type-check -- --watch",
     "lint": "eslint --fix assets/javascript",
     "cypress:open": "cypress open",
     "cypress:run": "cypress run"

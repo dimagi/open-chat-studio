@@ -67,13 +67,13 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
 
         #### Build the front-end resources
 
-        To build JavaScript and CSS files, first install npm packages:
+        To build JavaScript and CSS files, first install packages:
 
         ```bash
-        inv npm --install
+        inv bun --install
         # or
-        npm install
-        npm run dev
+        bun install
+        bun run dev
         ```
 
         **Note**

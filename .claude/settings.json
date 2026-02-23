@@ -12,11 +12,11 @@
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(rg:*)",
-      "Bash(npm run build:*)",
-      "Bash(npm run type-check:*)",
-      "Bash(npx stencil test:*)",
+      "Bash(bun run build:*)",
+      "Bash(bun run type-check:*)",
+      "Bash(bunx stencil test:*)",
       "WebFetch(domain:docs.openchatstudio.com)",
-      "Bash(npm run lint:*)"
+      "Bash(bun run lint:*)"
     ]
   },
   "enableAllProjectMcpServers": false,

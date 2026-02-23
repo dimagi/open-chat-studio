@@ -6,6 +6,7 @@ loader/
 *.sw[mnpcod]
 *.log
 *.lock
+!bun.lock
 *.tmp
 *.tmp.*
 log.txt

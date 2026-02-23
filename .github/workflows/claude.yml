@@ -157,13 +157,11 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install Node dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Create branch
         id: branch
@@ -191,7 +189,7 @@ jobs:
             2. Implement that task, making git commits as you go
             3. Run lint and tests, fix any issues:
                - Python: ruff check --fix && ruff format
-               - JS/TS: npm run lint
+               - JS/TS: bun run lint
                - Python test: pytest path/to/file.py -v
             4. Push the changes you've made to GitHub and create a PR with the 'claude' label.
             5. After completing the task, update the issue using gh issue edit to:
@@ -201,7 +199,7 @@ jobs:
             7. Add a comment to the issue summarizing what you did
 
             If all tasks are complete or blocked, comment on the issue explaining the status.
-          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Read,Write,Edit"'
+          claude_args: '--allowedTools "Bash(bun run lint:*),Bash(bun run type-check:*),Bash(bun run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Read,Write,Edit"'
 
   # ── Event-driven: respond to @claude mentions, issue label ──
   claude:
@@ -267,13 +265,11 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install Node dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Run Claude Code
         id: claude
@@ -282,4 +278,4 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           branch_prefix: "claude/"
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git branch:*),Bash(gh pr create:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Read,Write,Edit"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(bun run lint:*),Bash(bun run type-check:*),Bash(bun run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git branch:*),Bash(gh pr create:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Read,Write,Edit"

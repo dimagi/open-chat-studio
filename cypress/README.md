@@ -6,7 +6,7 @@ This directory contains end-to-end tests for Open Chat Studio using Cypress.
 
 1. **Install dependencies** (if not already done):
    ```bash
-   npm install
+   bun install
    ```
 
 2. **Configure environment variables**:
@@ -29,13 +29,13 @@ This directory contains end-to-end tests for Open Chat Studio using Cypress.
 
 ### Interactive Mode (recommended for development)
 ```bash
-npm run cypress:open
+bun run cypress:open
 ```
 This opens the Cypress Test Runner where you can select and run individual tests.
 
 ### Headless Mode (for CI/CD)
 ```bash
-npm run cypress:run
+bun run cypress:run
 ```
 This runs all tests headlessly in the terminal.
 

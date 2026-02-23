@@ -53,11 +53,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
-      
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
@@ -68,10 +66,10 @@ jobs:
           uv sync --locked --dev
       
       - name: Install Node dependencies
-        run: npm ci
-      
+        run: bun install --frozen-lockfile
+
       - name: Build frontend
-        run: npm run build
+        run: bun run build
       
       - name: Set up test database and user
         run: |
@@ -89,7 +87,7 @@ jobs:
       - name: Start Django server
         run: |
           uv run python manage.py runserver 0.0.0.0:8000 &
-          npx wait-on http://127.0.0.1:8000 --timeout 60000
+          bunx wait-on http://127.0.0.1:8000 --timeout 60000
         env:
           DEBUG: 'true'
           USE_DEBUG_TOOLBAR: 'false'

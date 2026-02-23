@@ -17,8 +17,8 @@ that connects directly to the Open Chat Studio (OCS) Chat API.
 To try this component out, run:
 
 ```bash
-npm install
-npm start
+bun install
+bun start
 ```
 
 Now load the localhost URL shown in the console in your browser.
@@ -32,19 +32,19 @@ Now load the localhost URL shown in the console in your browser.
 To build the component for production, run:
 
 ```bash
-npm run build
+bun run build
 ```
 
 To run the unit tests for the components, run:
 
 ```bash
-npm test
+bun test
 ```
 
 ## Making Changes
 
 To make changes to the component, you can edit the files in the `src/components/open-chat-studio-widget` directory. You can
-also edit the `src/index.html` file to change the page that is loaded when you run `npm start`.
+also edit the `src/index.html` file to change the page that is loaded when you run `bun start`.
 
 ### Styling
 
@@ -55,7 +55,7 @@ The component uses [Tailwind CSS](https://tailwindcss.com/) for styling.
 This widget is published via GitHub actions. To trigger the action:
 
 * Update the version number in `package.json`.
-  * `npm version [patch|minor|major]` 
+  * `bun version [patch|minor|major]`
   * Commit and push the changes.
 * Tag the repo with `w_v{version number}`.
 * Push the changes and the tag to `main`.

@@ -110,7 +110,7 @@ const modulesConfig = {
 module.exports = (env, argv) => {
   if (argv.mode === 'production' && process.env.GITHUB_REF === 'refs/heads/main') {
     // Uploads source maps to Sentry
-    // These env variables must be set in the environment when running 'npm run build'
+    // These env variables must be set in the environment when running 'bun run build'
     // for the source maps to be uploaded.
     const sentryPlugin = sentryWebpackPlugin({
       authToken: process.env.SENTRY_AUTH_TOKEN,
