@@ -47,6 +47,7 @@ type VisibleWhenWrapperProps = {
   fieldName: string;
   nodeId: string;
   schemaDefault: any;
+  onHide?: () => void;
   children: React.ReactNode;
 }
 
@@ -54,6 +55,10 @@ type VisibleWhenWrapperProps = {
  * Wraps a field widget with visibility logic. When the field transitions from
  * visible to hidden, its value is cleared to prevent stale values from causing
  * backend validation errors.
+ *
+ * The optional `onHide` callback overrides the default reset behaviour, which
+ * is useful for sub-schema widgets (e.g. ModelParametersWidget) that store
+ * their values at a nested path rather than directly in node.data.params.
  */
 const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   visibleWhen,
@@ -61,6 +66,7 @@ const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   fieldName,
   nodeId,
   schemaDefault,
+  onHide,
   children,
 }) => {
   const setNode = usePipelineStore((state) => state.setNode);
@@ -69,17 +75,21 @@ const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
 
   useEffect(() => {
     if (prevVisibleRef.current && !isVisible) {
-      // set the value to the default value or 'null' when it isn't visible
-      setNode(nodeId, (oldNode) => ({
-        ...oldNode,
-        data: {
-          ...oldNode.data,
-          params: {
-            ...oldNode.data.params,
-            [fieldName]: schemaDefault ?? null,
+      if (onHide) {
+        onHide();
+      } else {
+        // set the value to the default value or 'null' when it isn't visible
+        setNode(nodeId, (oldNode) => ({
+          ...oldNode,
+          data: {
+            ...oldNode.data,
+            params: {
+              ...oldNode.data.params,
+              [fieldName]: schemaDefault ?? null,
+            },
           },
-        },
-      }));
+        }));
+      }
     }
     prevVisibleRef.current = isVisible;
   }, [isVisible]);
@@ -210,12 +220,19 @@ export const getNodeInputWidget = (param: InputWidgetParams) => {
 
 /**
  * Generates the appropriate input widget based on the input parameter type.
+ *
+ * The optional `onHide` callback is forwarded to `VisibleWhenWrapper` and
+ * overrides the default field-reset behaviour when a field becomes hidden.
+ * Callers that render widgets for a sub-schema (e.g. ModelParametersWidget)
+ * should supply an `onHide` that writes to the correct nested path.
+ *
  * @returns The input widget for the specified parameter type.
  */
 export const getInputWidget = (
   params: InputWidgetParams,
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined,
-  readOnly: boolean
+  readOnly: boolean,
+  onHide?: () => void,
 ) => {
   if (params.name == "llm_model" || params.name == "max_token_limit") {
     /*
@@ -257,6 +274,7 @@ export const getInputWidget = (
       fieldName={params.name}
       nodeId={params.id}
       schemaDefault={widgetSchema.default}
+      onHide={onHide}
     >
       <Widget
         nodeId={params.id}

@@ -792,6 +792,16 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
       <div className="text-sm label font-bold">Model Parameters</div>
       <div className="p-4">
         {Object.getOwnPropertyNames(props.schema.properties).map((paramName) => {
+          const schemaDefault = props.schema.properties[paramName]?.default ?? null;
+          const onHide = () =>
+            setNode(props.nodeId, (old) =>
+              produce(old, (next) => {
+                next.data.params.llm_model_parameters = {
+                  ...next.data.params.llm_model_parameters,
+                  [paramName]: schemaDefault,
+                };
+              })
+            );
           return (
             <div key={`${props.nodeId}_${paramName}`}>
               {getInputWidget(
@@ -805,7 +815,8 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
                   required: true,
                 },
                 props.getNodeFieldError,
-                props.readOnly
+                props.readOnly,
+                onHide,
               )}
             </div>
           );
