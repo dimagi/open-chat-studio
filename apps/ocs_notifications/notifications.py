@@ -106,7 +106,7 @@ def trace_error_notification(
 
 
 @silence_exceptions(logger, log_message="Failed to create audio synthesis failure notification")
-def audio_synthesis_failure_notification(experiment, session: ExperimentSession = None) -> None:
+def audio_synthesis_failure_notification(experiment, session: ExperimentSession | None = None) -> None:
     """Create notification when audio synthesis fails."""
     links = {"View Bot": experiment.get_absolute_url()}
     if session:

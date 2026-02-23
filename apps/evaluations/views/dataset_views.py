@@ -60,7 +60,7 @@ class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
     permission_required = "evaluations.view_evaluationdataset"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "evaluation_datasets",
             "title": "Datasets",
@@ -402,8 +402,8 @@ def update_message(request, team_slug, message_id):
     # Update the message
     for attr, val in data.items():
         setattr(message, attr, val)
-    message.input_chat_message = None
-    message.expected_output_chat_message = None
+    message.input_chat_message = None  # ty: ignore[invalid-assignment]
+    message.expected_output_chat_message = None  # ty: ignore[invalid-assignment]
     message.metadata = message.metadata or {}
     message.metadata["session_id"] = None
     message.metadata["experiment_id"] = None

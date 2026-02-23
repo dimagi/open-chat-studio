@@ -170,7 +170,7 @@ class TracingService:
             self.span_stack.pop()
 
     def get_langchain_callbacks(
-        self, run_name_map: dict[str, str] = None, filter_patterns: list[str] = None
+        self, run_name_map: dict[str, str] | None = None, filter_patterns: list[str] | None = None
     ) -> list[BaseCallbackHandler]:
         if not self.activated:
             return []
@@ -186,10 +186,10 @@ class TracingService:
     def get_langchain_config(
         self,
         *,
-        callbacks: list = None,
-        configurable: dict = None,
-        run_name_map: dict[str, str] = None,
-        filter_patterns: list[str] = None,
+        callbacks: list | None = None,
+        configurable: dict | None = None,
+        run_name_map: dict[str, str] | None = None,
+        filter_patterns: list[str] | None = None,
     ) -> RunnableConfig:
         """
         Generates a RunnableConfig object with specific attributes and callbacks.

@@ -9,11 +9,11 @@ class PromptTemplateContext:
     def __init__(
         self,
         session,
-        source_material_id: int = None,
-        collection_id: int = None,
-        collection_index_ids: list[int] = None,
-        extra: dict = None,
-        participant_data: dict = None,
+        source_material_id: int | None = None,
+        collection_id: int | None = None,
+        collection_index_ids: list[int] | None = None,
+        extra: dict | None = None,
+        participant_data: dict | None = None,
     ):
         self.session = session
         self.source_material_id = source_material_id

@@ -106,7 +106,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.custom_action_operations.exists()
 
     @transaction.atomic()
-    def create_new_version(self):
+    def create_new_version(self):  # ty: ignore[invalid-method-override]
         from .sync import push_assistant_to_openai
 
         version_number = self.version_number
@@ -157,7 +157,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         delete_openai_assistant_task.delay(self.id)
         return True
 
-    def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
+    def get_related_pipeline_node_queryset(self, assistant_ids: list | None = None):
         """Returns working version pipelines with assistant nodes containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
         return Node.objects.assistant_nodes().filter(
@@ -167,7 +167,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             pipeline__is_archived=False,
         )
 
-    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list = None):
+    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list | None = None):
         """Returns published experiment versions referenced by versioned pipelines with assistant nodes
         containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]

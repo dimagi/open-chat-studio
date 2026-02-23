@@ -33,8 +33,8 @@ logger = logging.getLogger("ocs.tools")
 class ToolArtifact(BaseModel):
     name: str
     content_type: str
-    content: bytes = None
-    path: str = None
+    content: bytes | None = None
+    path: str | None = None
 
     def get_content(self):
         if self.content:
@@ -66,7 +66,9 @@ class FunctionDef(BaseModel):
 
 
 class OpenAPIOperationExecutor:
-    def __init__(self, auth_service: AuthService, function_def: FunctionDef, custom_action: "CustomAction" = None):
+    def __init__(
+        self, auth_service: AuthService, function_def: FunctionDef, custom_action: "CustomAction | None" = None
+    ):
         self.auth_service = auth_service
         self.function_def = function_def
         self.custom_action = custom_action
@@ -325,12 +327,12 @@ def _schema_to_pydantic_field_type(spec: OpenAPISpec, schema: Schema) -> type:
         properties = {}
         for name, prop in schema.properties.items():
             if not prop.title:
-                prop.title = name
+                prop.title = name  # ty: ignore[invalid-assignment]
             properties[name] = _schema_to_pydantic(spec, prop)
         return _create_model(schema.title, properties)
     elif schema.type == DataType.ARRAY:
         if not schema.items.title:
-            schema.items.title = f"{schema.title}Items"
+            schema.items.title = f"{schema.title}Items"  # ty: ignore[invalid-assignment]
         return list[_schema_to_pydantic(spec, schema.items)]
     elif schema.enum:
         return _get_enum_type(schema)

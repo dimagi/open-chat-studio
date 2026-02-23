@@ -102,7 +102,7 @@ def test_slack_channel_new_with_keywords_succeeds(team_with_users, experiment):
         }
 
         form = SlackChannelForm(experiment=experiment, data=form_data)
-        form.messaging_provider = provider
+        form.messaging_provider = provider  # ty: ignore[invalid-assignment]
 
         assert form.is_valid(), f"Form errors: {form.errors}"
 
@@ -149,7 +149,7 @@ def test_slack_channel_edit_keeping_some_keywords_succeeds(team_with_users, expe
         form = SlackChannelForm(
             experiment=experiment, data=form_data, initial=health_bot.extra_data, channel=health_bot
         )
-        form.messaging_provider = provider
+        form.messaging_provider = provider  # ty: ignore[invalid-assignment]
         form.instance = health_bot  # This should be set by the channel parameter
 
         # This should succeed - editing a channel should allow keeping its own existing keywords
@@ -191,7 +191,7 @@ def test_slack_channel_duplicate_keywords_fails(team_with_users, experiment):
         }
 
         form = SlackChannelForm(experiment=experiment, data=form_data)
-        form.messaging_provider = provider
+        form.messaging_provider = provider  # ty: ignore[invalid-assignment]
 
         assert not form.is_valid()
         assert "keywords" in form.errors
@@ -232,7 +232,7 @@ def test_slack_channel_cross_team_keyword_conflicts(team_with_users, experiment)
         }
 
         form = SlackChannelForm(experiment=experiment, data=form_data)
-        form.messaging_provider = provider
+        form.messaging_provider = provider  # ty: ignore[invalid-assignment]
 
         # Should fail because keywords must be unique across ALL teams using the same Slack workspace
         assert not form.is_valid(), f"Form errors: {form.errors}"

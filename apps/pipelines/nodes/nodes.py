@@ -172,11 +172,11 @@ class ToolConfigModel(BaseModel):
     @classmethod
     def validate_domains(cls, value: list[str], info) -> list[str]:
         values = list(map(str.strip, filter(None, value)))
-        for value in values:
+        for domain in values:
             try:
-                validators.validate_domain_name(value)
+                validators.validate_domain_name(domain)
             except ValidationError:
-                raise ValueError(f"Invalid domain name '{value}' in field '{info.field_name}'") from None
+                raise ValueError(f"Invalid domain name '{domain}' in field '{info.field_name}'") from None
         return values
 
     @field_serializer("allowed_domains", "blocked_domains")
@@ -284,7 +284,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             return self
         except ValidationError as e:
             raise PydanticCustomError(
-                "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
+                "invalid_prompt",
+                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable]
+                {"field": "prompt"},
             ) from None
 
     @field_validator("tools", "built_in_tools", "mcp_tools", mode="before")
@@ -478,7 +480,7 @@ class BooleanNode(PipelineRouterNode):
         """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         return {"output_0": "true", "output_1": "false"}
 
-    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
+    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:  # ty: ignore[invalid-method-override]
         if self.tag_output_message:
             tag_name = f"{self.name}:{selected_route}"
             tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
@@ -529,7 +531,9 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             return self
         except ValidationError as e:
             raise PydanticCustomError(
-                "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
+                "invalid_prompt",
+                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable]
+                {"field": "prompt"},
             ) from None
 
     def _process_conditional(self, state: PipelineState):
@@ -883,7 +887,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         }
 
     def _add_file_attachment(self, state: PipelineState, output_state: PipelineState):
-        def add_file_attachment(filename: str, content: bytes, content_type: str = None):
+        def add_file_attachment(filename: str, content: bytes, content_type: str | None = None):
             """Attach a file to the AI response message.
 
             Args:
@@ -920,7 +924,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         return add_file_attachment
 
     def _abort_pipeline(self):
-        def abort_pipeline(message, tag_name: str = None):
+        def abort_pipeline(message, tag_name: str | None = None):
             """Calling this will terminate the pipeline execution. No further nodes will get executed in
             any branch of the pipeline graph.
 

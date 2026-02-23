@@ -489,11 +489,11 @@ class TestRouterNode:
 
                 output_state = command.update
 
-                assert node.name in output_state["outputs"]
-                assert "route" in output_state["outputs"][node.name]
-                assert "message" in output_state["outputs"][node.name]
-                assert output_state["outputs"][node.name]["route"] == "A"
-                assert output_state["outputs"][node.name]["message"] == "hello world"
+                assert node.name in output_state["outputs"]  # ty: ignore[not-subscriptable]
+                assert "route" in output_state["outputs"][node.name]  # ty: ignore[not-subscriptable]
+                assert "message" in output_state["outputs"][node.name]  # ty: ignore[not-subscriptable]
+                assert output_state["outputs"][node.name]["route"] == "A"  # ty: ignore[not-subscriptable]
+                assert output_state["outputs"][node.name]["message"] == "hello world"  # ty: ignore[not-subscriptable]
                 assert command.goto == ["next_node_a"]
 
     @pytest.mark.django_db()
@@ -948,7 +948,7 @@ class TestAssistantNode:
     """Tests for assistant nodes (OpenAI assistants integration)"""
 
     def assistant_node_runnable_mock(
-        self, output: str, input_message_metadata: dict = None, output_message_metadata: dict = None
+        self, output: str, input_message_metadata: dict | None = None, output_message_metadata: dict | None = None
     ):
         """A mock for an assistant node runnable that returns the given output and metadata."""
         runnable_mock = Mock()

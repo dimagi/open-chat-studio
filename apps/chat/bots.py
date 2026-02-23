@@ -223,7 +223,7 @@ class PipelineBot:
         message: str,
         type_: ChatMessageType,
         metadata: dict,
-        tags: list[tuple] = None,
+        tags: list[tuple] | None = None,
     ) -> ChatMessage:
         chat_message = ChatMessage.objects.create(
             chat=self.session.chat, message_type=type_.value, content=message, metadata=metadata
@@ -276,9 +276,9 @@ class PipelineTestBot:
 
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
-            input = PipelineState(messages=[input], experiment_session=session)
+            state = PipelineState(messages=[input], experiment_session=session)
             runner = DjangoLangGraphRunner(CurrentThreadExecutor)
-            output = runner.invoke(runnable, input)
+            output = runner.invoke(runnable, state)
             output = PipelineState(**output).json_safe()
         return output
 
