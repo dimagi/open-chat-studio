@@ -52,13 +52,13 @@ class AuthedRequest:
     def __init__(self, auth=True, session=None):
         self.user = User()
         self.session = session or {}
-        self.user.is_authenticated = auth  # ty: ignore[invalid-assignment]
+        self.user.is_authenticated = auth
 
 
 @dataclass
 class User:
     username: str = "test@example.com"
-    is_authenticated: str = True  # ty: ignore[invalid-assignment]
+    is_authenticated: bool = True
 
 
 @dataclass

@@ -116,13 +116,14 @@ class MockTracer(Tracer):
         return MagicMock()
 
     def get_trace_metadata(self) -> dict[str, str]:
-        return {"trace_id": str(self._trace_data["id"])}  # ty: ignore[not-subscriptable]
+        assert self._trace_data is not None
+        return {"trace_id": str(self._trace_data["id"])}
 
     def add_trace_tags(self, tags: list[str]) -> None:
         self.tags = tags
 
-    def set_output_message_id(self, message_id: int):  # ty: ignore[invalid-method-override]
+    def set_output_message_id(self, output_message_id: str) -> None:
         pass
 
-    def set_input_message_id(self, message_id: int):  # ty: ignore[invalid-method-override]
+    def set_input_message_id(self, input_message_id: str) -> None:
         pass
