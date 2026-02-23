@@ -3,6 +3,7 @@ import {JsonSchema, NodeParams, VisibleWhenCondition} from "../types/nodeParams"
 import usePipelineStore from "../stores/pipelineStore";
 import {getWidget} from "./widgets";
 import {getCachedData} from "../utils";
+import {produce} from "immer";
 
 /**
  * Evaluates a single visibility condition against the current node params.
@@ -79,16 +80,11 @@ const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
         onHide();
       } else {
         // set the value to the default value or 'null' when it isn't visible
-        setNode(nodeId, (oldNode) => ({
-          ...oldNode,
-          data: {
-            ...oldNode.data,
-            params: {
-              ...oldNode.data.params,
-              [fieldName]: schemaDefault ?? null,
-            },
-          },
-        }));
+        setNode(nodeId, (oldNode) =>
+          produce(oldNode, (next) => {
+            next.data.params[fieldName] = schemaDefault ?? null;
+          })
+        );
       }
     }
     prevVisibleRef.current = isVisible;
