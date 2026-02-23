@@ -888,7 +888,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         }
 
     def _add_file_attachment(self, context, output_state: PipelineState):
-        def add_file_attachment(filename: str, content: bytes, content_type: str = None):
+        def add_file_attachment(filename: str, content: bytes, content_type: str | None = None):
             """Attach a file to the AI response message.
 
             Args:
