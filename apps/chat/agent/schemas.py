@@ -100,6 +100,7 @@ class MultiSearchIndexSchema(BaseModel):
 class SetSessionStateSchema(BaseModel):
     key: str = Field(description="The key in the session state to set")
     value: str | int | dict | list = Field(description="The value to set in session state")
+    tool_call_id: Annotated[str, InjectedToolCallId]
 
 
 class GetSessionStateSchema(BaseModel):
