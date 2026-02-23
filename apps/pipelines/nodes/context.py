@@ -98,7 +98,7 @@ class NodeContext:
 
     Provides typed, read-only access to the data nodes need.
     Hides system internals (path, node_source, raw outputs dict).
-    The underlying ``_state`` attribute uses a single-underscore convention
+    The underlying ``_pipeline_state`` attribute uses a single-underscore convention
     to signal that direct access is discouraged but not prevented.
 
     Top-level properties: node I/O and session context (used by every node).
@@ -108,7 +108,7 @@ class NodeContext:
     """
 
     def __init__(self, state: PipelineState):
-        self._state = state
+        self._pipeline_state = state
         self.state = StateAccessor(state)
         self.pipeline = PipelineAccessor(state)
 
@@ -116,28 +116,28 @@ class NodeContext:
     @property
     def input(self) -> str:
         """The primary input for this node (from the previous node's output)."""
-        return self._state["last_node_input"]
+        return self._pipeline_state["last_node_input"]
 
     @property
     def inputs(self) -> list[str]:
         """All inputs available to this node (from multiple incoming edges)."""
-        return self._state["node_inputs"]
+        return self._pipeline_state["node_inputs"]
 
     @property
     def attachments(self) -> list:
         """File attachments from the user message."""
-        return self._state.get("temp_state", {}).get("attachments", [])
+        return self._pipeline_state.get("temp_state", {}).get("attachments", [])
 
     # --- Session context ---
     @property
     def session(self) -> ExperimentSession | None:
         """The experiment session. Use for session.id, session.team, etc."""
-        return self._state.get("experiment_session")
+        return self._pipeline_state.get("experiment_session")
 
     @property
     def input_message_id(self) -> int | None:
-        return self._state.get("input_message_id")
+        return self._pipeline_state.get("input_message_id")
 
     @property
     def input_message_url(self) -> str | None:
-        return self._state.get("input_message_url")
+        return self._pipeline_state.get("input_message_url")
