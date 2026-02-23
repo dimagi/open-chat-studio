@@ -69,6 +69,7 @@ const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
 
   useEffect(() => {
     if (prevVisibleRef.current && !isVisible) {
+      // set the value to the default value or 'null' when it isn't visible
       setNode(nodeId, (oldNode) => ({
         ...oldNode,
         data: {
