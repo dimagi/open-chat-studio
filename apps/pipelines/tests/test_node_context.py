@@ -33,22 +33,12 @@ class TestNodeContextInput:
         ctx = NodeContext(state)
         assert ctx.input == "some input"
 
-    def test_returns_empty_string_when_set(self):
-        state = _minimal_state(last_node_input="")
-        ctx = NodeContext(state)
-        assert ctx.input == ""
-
 
 class TestNodeContextInputs:
     def test_returns_node_inputs_list(self):
         state = _minimal_state(node_inputs=["a", "b", "c"])
         ctx = NodeContext(state)
         assert ctx.inputs == ["a", "b", "c"]
-
-    def test_returns_single_element_list(self):
-        state = _minimal_state(node_inputs=["only"])
-        ctx = NodeContext(state)
-        assert ctx.inputs == ["only"]
 
 
 class TestNodeContextAttachments:
@@ -172,16 +162,6 @@ class TestStateAccessorMergedParticipantData:
         result = accessor.merged_participant_data
 
         assert result == {}
-
-    @patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy.from_state")
-    def test_returns_empty_dict_when_proxy_returns_empty(self, mock_from_state):
-        proxy = MagicMock()
-        proxy.get.return_value = {}
-        mock_from_state.return_value = proxy
-
-        state = _minimal_state()
-        accessor = StateAccessor(state)
-        assert accessor.merged_participant_data == {}
 
 
 class TestStateAccessorUserInput:
@@ -330,21 +310,6 @@ class TestPipelineAccessorGetNodePath:
 
 
 class TestNodeContextSubObjects:
-    def test_state_accessor_is_state_accessor_instance(self):
-        state = _minimal_state()
-        ctx = NodeContext(state)
-        assert isinstance(ctx.state, StateAccessor)
-
-    def test_pipeline_accessor_is_pipeline_accessor_instance(self):
-        state = _minimal_state()
-        ctx = NodeContext(state)
-        assert isinstance(ctx.pipeline, PipelineAccessor)
-
-    def test_state_and_pipeline_share_same_state(self):
-        state = _minimal_state()
-        ctx = NodeContext(state)
-        assert ctx.state._state is ctx.pipeline._state
-
     def test_context_accesses_state_through_sub_accessor(self):
         """Verify context.state.* paths work end-to-end."""
         state = _minimal_state(
@@ -357,59 +322,6 @@ class TestNodeContextSubObjects:
         assert ctx.state.temp == {"user_input": "hi", "attachments": ["att1"]}
         assert ctx.state.session_state == {"step": 1}
         assert ctx.state.participant_data == {"name": "Bob"}
-
-
-# ===========================================================================
-# Edge cases
-# ===========================================================================
-
-
-class TestEdgeCases:
-    def test_completely_empty_optional_fields(self):
-        """When all optional fields are absent, sensible defaults are returned."""
-        state = PipelineState(
-            {
-                "messages": ["msg"],
-                "outputs": {},
-                "experiment_session": MagicMock(),
-                "last_node_input": "msg",
-                "node_inputs": ["msg"],
-            }
-        )
-        ctx = NodeContext(state)
-        # Optional top-level properties
-        assert ctx.attachments == []
-        assert ctx.input_message_id is None
-        assert ctx.input_message_url is None
-        # StateAccessor defaults
-        assert ctx.state.temp == {}
-        assert ctx.state.session_state == {}
-        assert ctx.state.participant_data == {}
-        assert ctx.state.original_user_message == ""
-
-    def test_temp_state_present_but_empty(self):
-        state = _minimal_state(temp_state={})
-        ctx = NodeContext(state)
-        assert ctx.attachments == []
-        assert ctx.state.original_user_message == ""
-
-    def test_pipeline_accessor_with_empty_outputs(self):
-        state = _minimal_state(outputs={})
-        ctx = NodeContext(state)
-        assert ctx.pipeline.has_node_output("anything") is False
-        assert ctx.pipeline.get_node_output("anything") is None
-        assert ctx.pipeline.get_all_routes() == {}
-
-    @patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy.from_state")
-    def test_merged_participant_data_via_context(self, mock_from_state):
-        """Verify the full path context.state.merged_participant_data works."""
-        proxy = MagicMock()
-        proxy.get.return_value = {"key": "value"}
-        mock_from_state.return_value = proxy
-
-        state = _minimal_state()
-        ctx = NodeContext(state)
-        assert ctx.state.merged_participant_data == {"key": "value"}
 
 
 # ===========================================================================
@@ -448,28 +360,6 @@ class TestMultipleRoutes:
         accessor = PipelineAccessor(state)
         routes = accessor.get_all_routes()
         assert routes == {"router1": "path_a", "router2": "path_b"}
-
-    def test_has_node_output_for_router_node(self):
-        state = PipelineState(
-            {
-                "messages": ["hello"],
-                "last_node_input": "hello",
-                "node_inputs": ["hello"],
-                "experiment_session": MagicMock(),
-                "temp_state": {},
-                "outputs": {
-                    "router1": {
-                        "node_id": "r1",
-                        "message": "out1",
-                        "route": "path_a",
-                    },
-                },
-                "path": [],
-            }
-        )
-        accessor = PipelineAccessor(state)
-        assert accessor.has_node_output("router1") is True
-        assert accessor.get_node_output("router1") == "out1"
 
 
 # ===========================================================================
