@@ -247,7 +247,6 @@ class ClaudeOpus46Parameters(BasicParameters):
         ge=0.0,
         le=2.0,
         title="Temperature",
-        description="Only supported when reasoning effort is set to 'none'",
         json_schema_extra=UiSchema(
             widget=Widgets.range, visible_when=VisibleWhen(field="adaptive_thinking", value=False)
         ),
