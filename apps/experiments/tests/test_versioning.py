@@ -245,7 +245,7 @@ class TestVersion:
 
         # Now change the params
         action = static_trigger.action
-        action.params = {"some_other_param": "a value"}
+        action.params = {"some_other_param": "a value"}  # ty: ignore[invalid-assignment]
         action.save()
 
         curr_version_details = static_trigger.version_details

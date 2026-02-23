@@ -147,9 +147,9 @@ def validate_api_schema_full(operations, schema, server_url, url_validator):
     operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
     invalid_operations = set(operations) - set(operations_by_id)
     if invalid_operations:
-        raise forms.ValidationError({
-            "allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"
-        })
+        raise forms.ValidationError(
+            {"allowed_operations": f"Invalid operations selected: {', '.join(sorted(invalid_operations))}"}
+        )
     for op_id in operations:
         op = operations_by_id[op_id]
 

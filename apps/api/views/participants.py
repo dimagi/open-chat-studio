@@ -157,7 +157,7 @@ def _create_update_schedules(request, experiment, participant, schedule_data):
     updated = []
     for external_id, data in data_by_id.items():
         if external_id in existing_by_id:
-            message = existing_by_id.get(external_id)
+            message = existing_by_id[external_id]
             message.next_trigger_date = data["date"]
             message.custom_schedule_params["name"] = data["name"]
             message.custom_schedule_params["prompt_text"] = data["prompt"]

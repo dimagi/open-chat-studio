@@ -40,7 +40,7 @@ def wrap_callback(
     some magic with the type annotations."""
 
     if run_name_map or filter_patterns:
-        callback = NameMappingWrapper(callback, run_name_map or {}, filter_patterns or [])
+        callback = NameMappingWrapper(callback, run_name_map or {}, filter_patterns or [])  # ty: ignore[invalid-assignment]
 
     return CallbackWrapper(callback)  # ty: ignore[invalid-return-type]
 
@@ -159,12 +159,12 @@ def get_langchain_run_name(serialized: dict[str, Any] | None, **kwargs: Any) -> 
         return kwargs["name"]
 
     try:
-        return serialized["name"]
+        return serialized["name"]  # ty: ignore[not-subscriptable]
     except (KeyError, TypeError):
         pass
 
     try:
-        return serialized["id"][-1]
+        return serialized["id"][-1]  # ty: ignore[not-subscriptable]
     except (KeyError, TypeError):
         pass
 

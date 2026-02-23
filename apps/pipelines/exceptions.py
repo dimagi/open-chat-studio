@@ -1,7 +1,7 @@
 class PipelineBuildError(Exception):
     """Exception to raise for errors detected at build time."""
 
-    def __init__(self, message: str, node_id: str = None, edge_ids: list[str] = None):
+    def __init__(self, message: str, node_id: str | None = None, edge_ids: list[str] | None = None):
         """
         Parameters:
             message (str): A descriptive error message explaining the pipeline build failure.
@@ -51,7 +51,7 @@ class AbortPipeline(Exception):
     This exception is used to stop the pipeline execution and can be caught by the pipeline runner.
     """
 
-    def __init__(self, message: str, tag_name: str = None):
+    def __init__(self, message: str, tag_name: str | None = None):
         """
         Parameters:
             message (str): A descriptive error message explaining the reason for the abortion.

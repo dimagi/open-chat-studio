@@ -30,7 +30,7 @@ from apps.service_providers.llm_service.history_managers import (
 )
 from apps.service_providers.llm_service.parsers import custom_parse_ai_message
 
-lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
+lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message  # ty: ignore[invalid-assignment]
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
     from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
@@ -55,7 +55,7 @@ class ChainOutput(Serializable):
     completion_tokens: int
     """Number of tokens in the completion."""
 
-    type: Literal["OcsChainOutput"] = "ChainOutput"
+    type: Literal["ChainOutput"] = "ChainOutput"
 
     @classmethod
     def is_lc_serializable(cls) -> bool:
@@ -75,7 +75,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def invoke(
+    def invoke(  # ty: ignore[invalid-method-override]
         self, input: str, config: RunnableConfig | None = None, attachments: list[Attachment] | None = None
     ) -> ChainOutput:
         callback = self.adapter.callback_handler

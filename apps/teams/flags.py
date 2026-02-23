@@ -47,10 +47,10 @@ class Flags(FlagInfo, Enum):
 
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
 
-    NOTIFICATIONS = ("flag_notifications", "User notifications")
+    NOTIFICATIONS = ("flag_notifications", "User notifications", "", [], False, True)
 
     CHAT_WIDGET = ("flag_chat_widget", "Use embedded chat widget instead of full-page chat UI (POC)")
-    
+
     TESTING_CUSTOM_ACTIONS = (
         "flag_custom_actions_test_endpoints",
         "Testing endpoints for custom actions (internal use only)",

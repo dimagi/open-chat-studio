@@ -12,7 +12,7 @@ class TaskbadgerTaskWrapper:
         if self.task:
             self.task.safe_update(value=count)
 
-    def set_progress(self, progress: int, total: int = None):
+    def set_progress(self, progress: int, total: int | None = None):
         if self.task:
             kwargs = {"value": progress}
             if total:

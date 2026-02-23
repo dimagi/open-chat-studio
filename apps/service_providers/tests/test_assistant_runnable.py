@@ -38,7 +38,7 @@ LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTI
 @pytest.fixture()
 def session(request):
     chat = Chat()
-    chat.save = lambda: None
+    chat.save = lambda: None  # ty: ignore[invalid-assignment]
     session = ExperimentSessionFactory.build(chat=chat)
     session.participant_data_from_experiment = {}
     return session
@@ -565,12 +565,14 @@ def test_get_messages_to_sync_to_thread():
     assistant = OpenAiAssistantFactory()
     session = ExperimentSessionFactory()
     chat = session.chat
-    ChatMessage.objects.bulk_create([
-        ChatMessage(chat=chat, message_type="human", content="hello0", metadata={}),
-        ChatMessage(chat=chat, message_type="ai", content="hello1", metadata={"openai_thread_checkpoint": True}),
-        ChatMessage(chat=chat, message_type="human", content="hello2", metadata={}),
-        ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
-    ])
+    ChatMessage.objects.bulk_create(
+        [
+            ChatMessage(chat=chat, message_type="human", content="hello0", metadata={}),
+            ChatMessage(chat=chat, message_type="ai", content="hello1", metadata={"openai_thread_checkpoint": True}),
+            ChatMessage(chat=chat, message_type="human", content="hello2", metadata={}),
+            ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
+        ]
+    )
     adapter = AssistantAdapter(session, assistant, citations_enabled=False)
     to_sync = adapter.get_messages_to_sync_to_thread()
     assert to_sync == [
@@ -583,8 +585,8 @@ def _get_assistant_mocked_history_recording(session, assistant, get_attachments_
     adapter = AssistantAdapter(session, assistant, citations_enabled=True)
     history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
     assistant = AssistantChat(adapter=adapter, history_manager=history_manager)
-    history_manager.save_message_to_history = Mock()
-    adapter.get_attachments = lambda _type: get_attachments_return_value or []
+    history_manager.save_message_to_history = Mock()  # ty: ignore[invalid-assignment]
+    adapter.get_attachments = lambda _type: get_attachments_return_value or []  # ty: ignore[invalid-assignment]
     return assistant
 
 

@@ -17,7 +17,7 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "traces",
             "title": "Traces",

@@ -310,9 +310,9 @@ class PipelineState(dict):
 class BasePipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    _config: RunnableConfig = None
-    _incoming_nodes: list[str] = None
-    _outgoing_nodes: list[str] = None
+    _config: RunnableConfig | None = None
+    _incoming_nodes: list[str] | None = None
+    _outgoing_nodes: list[str] | None = None
 
     node_id: SkipJsonSchema[str] = Field(exclude=True)
     django_node: SkipJsonSchema[Any] = Field(exclude=True)
@@ -514,15 +514,15 @@ class OptionsSource(StrEnum):
 
 
 class UiSchema(BaseModel):
-    widget: Widgets = None
+    widget: Widgets | None = None
 
     # Use this with Enum fields to provide label text
-    enum_labels: list[str] = None
+    enum_labels: list[str] | None = None
 
     # Use this with 'select' type fields to indicate where the options should come from
     # See `apps.pipelines.views._pipeline_node_parameter_values`
-    options_source: OptionsSource = None
-    flag_required: str = None
+    options_source: OptionsSource | None = None
+    flag_required: str | None = None
 
     def __call__(self, schema: JsonDict):
         if self.widget:
@@ -537,14 +537,14 @@ class UiSchema(BaseModel):
 
 class NodeSchema(BaseModel):
     label: str
-    icon: str = None
+    icon: str | None = None
     flow_node_type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
-    can_delete: bool = None
-    can_add: bool = None
+    can_delete: bool | None = None
+    can_add: bool | None = None
     deprecated: bool = False
-    deprecation_message: str = None
-    documentation_link: str = None
-    field_order: list[str] = Field(
+    deprecation_message: str | None = None
+    documentation_link: str | None = None
+    field_order: list[str] | None = Field(
         None,
         description=(
             "The order of the fields in the UI. "

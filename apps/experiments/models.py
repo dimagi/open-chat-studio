@@ -334,7 +334,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         consent_form_id = ConsentForm.objects.filter(team=self.team, is_default=True).values("id")[:1]
         self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
 
-    def create_new_version(self, save=True):
+    def create_new_version(self, save=True):  # ty: ignore[invalid-method-override]
         new_version = super().create_new_version(save=False)
         new_version.is_default = False
         new_version.save()
@@ -793,12 +793,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return self.get_api_url()
 
     @transaction.atomic()
-    def create_new_version(
+    def create_new_version(  # ty: ignore[invalid-method-override]
         self,
         version_description: str | None = None,
         make_default: bool = False,
         is_copy: bool = False,
-        name: str = None,
+        name: str | None = None,
     ):
         """
         Creates a copy of an experiment as a new version of the original experiment.
@@ -1489,8 +1489,8 @@ class ExperimentSession(BaseTeamModel):
                     )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
-                    trace_info = trace_service.get_trace_metadata()
-                return trace_info
+                    trace_metadata = trace_service.get_trace_metadata()
+                return trace_metadata
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:

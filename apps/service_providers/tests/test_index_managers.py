@@ -38,7 +38,7 @@ class LocalIndexManagerMock(LocalIndexManager):
     def chunk_file(self, file, chunk_size=None, chunk_overlap=None):
         return ["test", "content"]
 
-    def get_embedding_vector(self, text):
+    def get_embedding_vector(self, text):  # ty: ignore[invalid-method-override]
         """Mock method to return a fixed embedding vector"""
         return [0.1] * settings.EMBEDDING_VECTOR_SIZE
 

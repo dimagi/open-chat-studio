@@ -53,7 +53,8 @@ class TypeSelectForm:
     def get_secondary_key(self, instance):
         if instance:
             return getattr(instance, self.secondary_key_field)
-        return self.primary.fields[self.secondary_key_field].choices[0][0]
+        choices = list(self.primary.fields[self.secondary_key_field].choices)
+        return choices[0][0]
 
     def __post_init__(self):
         if self.secondary_key_field not in self.primary.fields:

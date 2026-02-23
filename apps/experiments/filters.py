@@ -159,7 +159,7 @@ class ChannelsFilter(ChoiceColumnFilter):
     description: str = "Filter by messaging platform/channel"
 
     def prepare(self, team, **_):
-        self.options = ChannelPlatform.for_filter(team)
+        self.options = ChannelPlatform.for_filter(team)  # ty: ignore[invalid-assignment]
 
     def parse_query_value(self, query_value) -> any:
         selected_display_names = self.values_list(query_value)

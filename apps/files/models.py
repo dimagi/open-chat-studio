@@ -59,7 +59,7 @@ class File(BaseTeamModel, VersionsMixin):
 
     @classmethod
     def from_external_source(
-        cls, filename, external_file, external_id, external_source, team_id, metadata: dict = None
+        cls, filename, external_file, external_id, external_source, team_id, metadata: dict | None = None
     ):
         if existing := File.objects.filter(
             external_id=external_id, external_source=external_source, team_id=team_id
@@ -106,7 +106,7 @@ class File(BaseTeamModel, VersionsMixin):
 
         if content:
             content_file = ContentFile(content, name=filename)
-            new_file.file = content_file
+            new_file.file = content_file  # ty: ignore[invalid-assignment]
             new_file.content_size = content_file.size
 
         new_file.save()
@@ -172,7 +172,7 @@ class File(BaseTeamModel, VersionsMixin):
         if self.file and self.file.storage.exists(self.file.name):
             new_file_file = ContentFile(self.file.read())
             new_file_file.name = self.file.name
-            new_file.file = new_file_file
+            new_file.file = new_file_file  # ty: ignore[invalid-assignment]
         new_file.save()
         return new_file
 

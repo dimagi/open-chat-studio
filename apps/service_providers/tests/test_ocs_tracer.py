@@ -156,7 +156,7 @@ class TestOCSCallbackHandler:
         """LLM error handler records the error on the tracer."""
         experiment = Mock(id=456)
         tracer = OCSTracer(experiment, team_id=123)
-        tracer.trace_id = str(uuid4())
+        tracer.trace_id = str(uuid4())  # ty: ignore[invalid-assignment]
         tracer.session = Mock()
 
         callback_handler = OCSCallbackHandler(tracer=tracer)

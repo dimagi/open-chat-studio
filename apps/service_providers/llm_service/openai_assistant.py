@@ -27,7 +27,7 @@ class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
     TODO: Here's a PR that tries to fix it in LangChain: https://github.com/langchain-ai/langchain/pull/21484
     """
 
-    def invoke(self, input: dict, config: RunnableConfig | None = None):
+    def invoke(self, input: dict, config: RunnableConfig | None = None):  # ty: ignore[invalid-method-override]
         config = ensure_config(config)
         callback_manager = CallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),

@@ -59,7 +59,7 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
     template_name = "generic/object_home.html"
     permission_required = "documents.view_collection"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "collections",
             "title": "Collections",
@@ -108,7 +108,7 @@ def single_collection_home(request, team_slug: str, pk: int):
 
 
 @login_and_team_required
-def collection_files_view(request, team_slug: str, collection_id: int, document_source_id: int = None):
+def collection_files_view(request, team_slug: str, collection_id: int, document_source_id: int | None = None):
     collection = get_object_or_404(Collection, id=collection_id, team__slug=team_slug)
     document_source = None
     if document_source_id:
@@ -158,7 +158,7 @@ class QueryView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin
     template_name = "documents/collection_query_view.html"
     permission_required = "documents.view_collection"
 
-    def get_context_data(
+    def get_context_data(  # ty: ignore[invalid-method-override]
         self,
         team_slug: str,
         pk: str,
