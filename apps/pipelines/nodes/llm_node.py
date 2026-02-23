@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import operator
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
@@ -21,6 +23,9 @@ from apps.service_providers.llm_service.utils import (
     remove_citations_from_text,
 )
 
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.context import NodeContext
+
 
 class StateSchema(AgentState):
     # allows tools to manipulate participant data and session state
@@ -29,7 +34,7 @@ class StateSchema(AgentState):
     input_message_id: Annotated[int | None, operator.or_]
 
 
-def execute_sub_agent(node: PipelineNode, context):
+def execute_sub_agent(node: PipelineNode, context: NodeContext):
     user_input = context.input
     session = context.session
     tool_callbacks = ToolCallbacks()
@@ -88,7 +93,9 @@ def _process_agent_output(node: PipelineNode, session: ExperimentSession, messag
     return ai_message, ai_message_metadata
 
 
-def build_node_agent(node, context, session: ExperimentSession, tool_callbacks: ToolCallbacks):
+def build_node_agent(
+    node: PipelineNode, context: NodeContext, session: ExperimentSession, tool_callbacks: ToolCallbacks
+):
     prompt_context = _get_prompt_context(node, session, context)
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
@@ -121,7 +128,7 @@ def _process_files(session: ExperimentSession, cited_files: set[File], generated
     }
 
 
-def _get_prompt_context(node, session: ExperimentSession, context):
+def _get_prompt_context(node: PipelineNode, session: ExperimentSession, context: NodeContext):
     extra_prompt_context = {
         "temp_state": context.state.temp or {},
         "session_state": context.state.session_state or {},

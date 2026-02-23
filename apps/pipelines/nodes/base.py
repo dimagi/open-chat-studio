@@ -377,15 +377,14 @@ class PipelineNode(BasePipelineNode, ABC):
             required_parameter_1: str
             optional_parameter_1: int | None = None
 
-            def _process(self, state: PipelineState) -> PipelineState:
-                input = state["messages"][-1]
-                output = ... # do something
+            def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
+                output = ... # do something with context.input
                 return output # The state will be updated with output
 
-       class FunLambdaNode(PipelineNode):
+        class FunLambdaNode(PipelineNode):
             required_parameter_1: str
 
-            def _process(self, state: PipelineState) -> PipelineState:
+            def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
                 ...
                 return # The state will not be updated, since None is returned
 

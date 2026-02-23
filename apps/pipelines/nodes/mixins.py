@@ -379,10 +379,10 @@ class ExtractStructuredDataNodeMixin:
 
         return self.get_node_output(context, new_reference_data)
 
-    def get_node_output(self, context, output_data) -> PipelineState:
+    def get_node_output(self, context: "NodeContext", output_data) -> PipelineState:
         raise NotImplementedError()
 
-    def get_reference_data(self, context):
+    def get_reference_data(self, context: "NodeContext"):
         return ""
 
     def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:

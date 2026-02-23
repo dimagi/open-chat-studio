@@ -853,6 +853,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         http_client = RestrictedHttpClient(team=team)
 
+        # Note: We expose pipeline_state methods directly here rather than going through
+        # PipelineAccessor because CodeNode needs a *cloned* state with the current node
+        # injected into outputs (line above). The clone also isolates user code mutations
+        # from the real pipeline state. This is an intentional bypass of the NodeContext
+        # abstraction for CodeNode's sandboxed execution environment.
         return {
             "http": http_client,
             "get_participant_data": participant_data_proxy.get,

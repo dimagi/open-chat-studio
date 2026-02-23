@@ -188,18 +188,18 @@ class TestStateAccessorUserInput:
     def test_returns_user_input(self):
         state = _minimal_state(temp_state={"user_input": "What is AI?"})
         accessor = StateAccessor(state)
-        assert accessor.user_input == "What is AI?"
+        assert accessor.original_user_message == "What is AI?"
 
     def test_returns_empty_string_when_user_input_missing(self):
         state = _minimal_state(temp_state={"outputs": {}})
         accessor = StateAccessor(state)
-        assert accessor.user_input == ""
+        assert accessor.original_user_message == ""
 
     def test_returns_empty_string_when_temp_state_missing(self):
         state = _minimal_state()
         del state["temp_state"]
         accessor = StateAccessor(state)
-        assert accessor.user_input == ""
+        assert accessor.original_user_message == ""
 
 
 # ===========================================================================
@@ -353,7 +353,7 @@ class TestNodeContextSubObjects:
             participant_data={"name": "Bob"},
         )
         ctx = NodeContext(state)
-        assert ctx.state.user_input == "hi"
+        assert ctx.state.original_user_message == "hi"
         assert ctx.state.temp == {"user_input": "hi", "attachments": ["att1"]}
         assert ctx.state.session_state == {"step": 1}
         assert ctx.state.participant_data == {"name": "Bob"}
@@ -385,13 +385,13 @@ class TestEdgeCases:
         assert ctx.state.temp == {}
         assert ctx.state.session_state == {}
         assert ctx.state.participant_data == {}
-        assert ctx.state.user_input == ""
+        assert ctx.state.original_user_message == ""
 
     def test_temp_state_present_but_empty(self):
         state = _minimal_state(temp_state={})
         ctx = NodeContext(state)
         assert ctx.attachments == []
-        assert ctx.state.user_input == ""
+        assert ctx.state.original_user_message == ""
 
     def test_pipeline_accessor_with_empty_outputs(self):
         state = _minimal_state(outputs={})

@@ -8,10 +8,15 @@ if TYPE_CHECKING:
 
 
 class StateAccessor:
-    """Read-only access to user-facing pipeline state.
+    """Conventional read-only access to user-facing pipeline state.
 
     Accessed via context.state -- groups temp, session, and participant data
     that nodes use for rendering, routing, and extraction.
+
+    Note: "Read-only" is by convention, not enforcement. Properties return
+    mutable dict references, so callers *could* mutate the underlying state.
+    Nodes should treat these as read-only and use dedicated setters (e.g.
+    CodeNode's set_temp_state_key) for mutations.
     """
 
     def __init__(self, state: PipelineState):
@@ -49,8 +54,11 @@ class StateAccessor:
         return ParticipantDataProxy.from_state(self._state).get() or {}
 
     @property
-    def user_input(self) -> str:
-        """The original user message that started this pipeline invocation."""
+    def original_user_message(self) -> str:
+        """The original user message that started this pipeline invocation.
+
+        Distinct from context.input, which is the output of the previous node.
+        """
         return self._state.get("temp_state", {}).get("user_input", "")
 
 
@@ -80,7 +88,7 @@ class PipelineAccessor:
         """Get all routing decisions made so far in this execution."""
         return self._state.get_all_routes()
 
-    def get_node_path(self, node_name: str) -> list:
+    def get_node_path(self, node_name: str) -> list | None:
         """Get the execution path leading to a node."""
         return self._state.get_node_path(node_name)
 
@@ -90,6 +98,8 @@ class NodeContext:
 
     Provides typed, read-only access to the data nodes need.
     Hides system internals (path, node_source, raw outputs dict).
+    The underlying ``_state`` attribute uses a single-underscore convention
+    to signal that direct access is discouraged but not prevented.
 
     Top-level properties: node I/O and session context (used by every node).
     Sub-objects:
