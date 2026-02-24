@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from typing import Annotated, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 from django.conf import settings
 from django.core import validators
@@ -47,6 +47,7 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -72,6 +73,9 @@ from .mixins import (
     StructuredDataSchemaValidatorMixin,
     get_llm_provider,
 )
+
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.context import NodeContext
 
 logger = logging.getLogger("ocs.pipelines.nodes")
 
@@ -103,21 +107,21 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         env = SandboxedEnvironment()
         try:
             content = {
-                "input": state["last_node_input"],
-                "node_inputs": state["node_inputs"],
-                "temp_state": state.get("temp_state", {}),
-                "session_state": state.get("session_state", {}),
-                "input_message_id": state.get("input_message_id"),
-                "input_message_url": state.get("input_message_url"),
+                "input": context.input,
+                "node_inputs": context.inputs,
+                "temp_state": context.state.temp,
+                "session_state": context.state.session_state,
+                "input_message_id": context.input_message_id,
+                "input_message_url": context.input_message_url,
             }
 
-            if "experiment_session" in state and state["experiment_session"]:
-                exp_session = state["experiment_session"]
-                participant = getattr(exp_session, "participant", None)
+            session = context.session
+            if session:
+                participant = getattr(session, "participant", None)
                 if participant:
                     content.update(
                         {
@@ -126,14 +130,14 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                                 "platform": getattr(participant, "platform", None),
                             },
                             "participant_schedules": participant.get_schedules_for_experiment(
-                                exp_session.experiment,
+                                session.experiment,
                                 as_dict=True,
                                 include_inactive=True,
                             )
                             or [],
                         }
                     )
-                content["participant_data"] = ParticipantDataProxy.from_state(state).get() or {}
+                content["participant_data"] = context.state.participant_data
 
             template = env.from_string(self.template_string)
             output = template.render(content)
@@ -149,9 +153,9 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         llm = with_llm_retry(self.get_chat_model())
-        output = llm.invoke(state["last_node_input"], config=self._config)
+        output = llm.invoke(context.input, config=self._config)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
 
 
@@ -404,8 +408,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
 
         return value
 
-    def _process(self, state: PipelineState) -> PipelineState:
-        return execute_sub_agent(self, state)
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
+        return execute_sub_agent(self, context)
 
 
 class SendEmail(PipelineNode, OutputMessageTagMixin):
@@ -432,12 +436,11 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
                 raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses") from None
         return value
 
-    def _process(self, state: PipelineState) -> PipelineState:
-        user_input = state["last_node_input"]
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         send_email_from_pipeline.delay(
-            recipient_list=self.recipient_list.split(","), subject=self.subject, message=user_input
+            recipient_list=self.recipient_list.split(","), subject=self.subject, message=context.input
         )
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=user_input)
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=context.input)
 
 
 class Passthrough(PipelineNode):
@@ -445,10 +448,8 @@ class Passthrough(PipelineNode):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing", can_add=False))
 
-    def _process(self, state: PipelineState) -> PipelineState:
-        return PipelineState.from_node_output(
-            node_name=self.name, node_id=self.node_id, output=state["last_node_input"]
-        )
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=context.input)
 
 
 class StartNode(Passthrough):
@@ -478,8 +479,8 @@ class BooleanNode(PipelineRouterNode):
         json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
-    def _process_conditional(self, state: PipelineState) -> tuple[Literal["true", "false"], bool]:
-        if self.input_equals == state["last_node_input"]:
+    def _process_conditional(self, context: "NodeContext") -> tuple[Literal["true", "false"], bool]:
+        if self.input_equals == context.input:
             return "true", False
         return "false", False
 
@@ -543,15 +544,15 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
                 {"field": "prompt"},
             ) from None
 
-    def _process_conditional(self, state: PipelineState):
+    def _process_conditional(self, context: "NodeContext"):
         default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
-        session: ExperimentSession = state["experiment_session"]
-        node_input = state["last_node_input"]
+        node_input = context.input
+        session = context.session
         extra_prompt_context = {
-            "temp_state": state.get("temp_state", {}),
-            "session_state": session.state or {},
+            "temp_state": context.state.temp,
+            "session_state": context.state.session_state,
         }
-        participant_data = state.get("participant_data") or {}
+        participant_data = context.state.participant_data or {}
         template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
         system_message = get_system_message(
             prompt_template=f"{self.prompt}\nThe default routing destination is: {default_keyword}",
@@ -572,8 +573,8 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         is_default_keyword = False
         try:
-            context = {"messages": [HumanMessage(content=node_input)]}
-            result = agent.invoke(context, config=self._config)
+            agent_input = {"messages": [HumanMessage(content=node_input)]}
+            result = agent.invoke(agent_input, config=self._config)
             structured_response = result["structured_response"]
             keyword = structured_response.route.upper()  # ensure case-insensitive matching
         except PydanticValidationError:
@@ -618,16 +619,16 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
     )
     route_key: str = Field(..., description="The key in the data to use for routing")
 
-    def _process_conditional(self, state: PipelineState):
+    def _process_conditional(self, context: "NodeContext"):
         from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 
         match self.data_source:
             case self.DataSource.participant_data:
-                data = ParticipantDataProxy.from_state(state).get()
+                data = context.state.participant_data
             case self.DataSource.temp_state:
-                data = state.get("temp_state") or {}
+                data = context.state.temp or {}
             case self.DataSource.session_state:
-                data = state.get("session_state") or {}
+                data = context.state.session_state or {}
 
         formatted_key = f"{{data.{self.route_key}}}"
         try:
@@ -661,7 +662,7 @@ class ExtractStructuredData(
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    def get_node_output(self, state, output_data) -> PipelineState:
+    def get_node_output(self, context, output_data) -> PipelineState:
         output = json.dumps(output_data)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
@@ -686,11 +687,11 @@ class ExtractParticipantData(
     )
     key_name: str = ""
 
-    def get_reference_data(self, state) -> Any:
+    def get_reference_data(self, context) -> Any:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
         corresponding to that key will be returned insteadg
         """
-        data = state.get("participant_data") or {}
+        data = context.state.participant_data or {}
         if self.key_name:
             return data.get(self.key_name, "")
         return data
@@ -703,12 +704,12 @@ class ExtractParticipantData(
         # if reference data is a string or list, we cannot merge, so let's override
         return new_data
 
-    def get_node_output(self, state, output_data) -> PipelineState:
+    def get_node_output(self, context, output_data) -> PipelineState:
         if self.key_name:
             output_data = {self.key_name: output_data}
 
         return PipelineState.from_node_output(
-            node_name=self.name, node_id=self.node_id, output=state["last_node_input"], participant_data=output_data
+            node_name=self.name, node_id=self.node_id, output=context.input, participant_data=output_data
         )
 
 
@@ -748,18 +749,16 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             if extra_vars:
                 raise PydanticCustomError("invalid_input_formatter", "Only {input} is allowed")
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         try:
             assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
         except OpenAiAssistant.DoesNotExist:
             raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
 
-        session: ExperimentSession | None = state.get("experiment_session")
+        session = context.session
         runnable = self._get_assistant_runnable(assistant, session=session)
-        attachments = self._get_attachments(state)
-        chain_output: ChainOutput = runnable.invoke(
-            state["last_node_input"], config=self._config, attachments=attachments
-        )
+        attachments = [att for att in context.attachments if att.upload_to_assistant]
+        chain_output: ChainOutput = runnable.invoke(context.input, config=self._config, attachments=attachments)
         output = chain_output.output
 
         return PipelineState.from_node_output(
@@ -769,9 +768,6 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             input_message_metadata=runnable.history_manager.input_message_metadata or {},
             output_message_metadata=runnable.history_manager.output_message_metadata or {},
         )
-
-    def _get_attachments(self, state) -> list:
-        return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession):
         history_manager = AssistantPipelineHistoryManager()
@@ -820,13 +816,13 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                 )
         return value
 
-    def _process(self, state: PipelineState) -> PipelineState | Command:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState | Command:
         output_state = PipelineState()
         try:
             result = self.compile_and_execute_code(
-                additional_globals=self._get_custom_functions(state, output_state),
-                input=state["last_node_input"],
-                node_inputs=state["node_inputs"],
+                additional_globals=self._get_custom_functions(state, context, output_state),
+                input=context.input,
+                node_inputs=context.inputs,
             )
         except WaitForNextInput:
             return Command(goto=END)
@@ -845,10 +841,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             ),
         )
 
-    def _get_custom_functions(self, state: PipelineState, output_state: PipelineState) -> dict:
+    def _get_custom_functions(self, state: PipelineState, context: "NodeContext", output_state: PipelineState) -> dict:
         """
         Args:
             state: The input state. Do not modify this state.
+            context: The NodeContext for read access.
             output_state: An empty state dict to which state modifications should be made.
         """
         pipeline_state = PipelineState.clone(state)
@@ -859,15 +856,20 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         output_state["session_state"] = pipeline_state.get("session_state") or {}
 
         # use 'output_state' so that we capture any updates
-        participant_data_proxy = ParticipantDataProxy(output_state, state.get("experiment_session"))
+        participant_data_proxy = ParticipantDataProxy(output_state, context.session)
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
-        session = state.get("experiment_session")
+        session = context.session
         team = session.team if session else None
 
         http_client = RestrictedHttpClient(team=team)
 
+        # We create a PipelineAccessor wrapping a *cloned* state with the current node
+        # injected into outputs (line above). The clone also isolates user code mutations
+        # from the real pipeline state. This is an intentional bypass of the NodeContext
+        # abstraction for CodeNode's sandboxed execution environment.
+        pipeline_accessor = PipelineAccessor(pipeline_state)
         return {
             "http": http_client,
             "get_participant_data": participant_data_proxy.get,
@@ -880,20 +882,20 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "set_temp_state_key": self._set_temp_state_key(output_state),
             "get_session_state_key": self._get_session_state_key(output_state),
             "set_session_state_key": self._set_session_state_key(output_state),
-            "get_selected_route": pipeline_state.get_selected_route,
-            "get_node_path": pipeline_state.get_node_path,
-            "get_all_routes": pipeline_state.get_all_routes,
-            "add_file_attachment": self._add_file_attachment(state, output_state),
+            "get_selected_route": pipeline_accessor.get_selected_route,
+            "get_node_path": pipeline_accessor.get_node_path,
+            "get_all_routes": pipeline_accessor.get_all_routes,
+            "add_file_attachment": self._add_file_attachment(context, output_state),
             "add_message_tag": output_state.add_message_tag,
             "add_session_tag": output_state.add_session_tag,
-            "get_node_output": pipeline_state.get_node_output_by_name,
+            "get_node_output": pipeline_accessor.get_node_output,
             # control flow
             "abort_with_message": self._abort_pipeline(),
-            "require_node_outputs": self._require_node_outputs(state),
+            "require_node_outputs": self._require_node_outputs(context),
             "wait_for_next_input": self.wait_for_next_input,
         }
 
-    def _add_file_attachment(self, state: PipelineState, output_state: PipelineState):
+    def _add_file_attachment(self, context, output_state: PipelineState):
         def add_file_attachment(filename: str, content: bytes, content_type: str | None = None):
             """Attach a file to the AI response message.
 
@@ -909,7 +911,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             if not isinstance(content, bytes):
                 raise CodeNodeRunError("'content' must be bytes")
 
-            session = state.get("experiment_session")
+            session = context.session
             if not session:
                 raise CodeNodeRunError("Cannot attach files without an active session")
 
@@ -941,7 +943,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         return abort_pipeline
 
-    def _require_node_outputs(self, state: PipelineState):
+    def _require_node_outputs(self, context):
         """A helper function to require inputs from a specific node"""
 
         def require_node_outputs(*node_names):
@@ -955,7 +957,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             if not all(isinstance(name, str) for name in node_names):
                 raise CodeNodeRunError("Node names passed to 'require_node_outputs' must be a string")
             for node_name in node_names:
-                if node_name not in state["outputs"]:
+                if not context.pipeline.has_node_output(node_name):
                     raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
 
         return require_node_outputs
