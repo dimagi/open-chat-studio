@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
-
 if TYPE_CHECKING:
     from apps.experiments.models import ExperimentSession
     from apps.pipelines.nodes.base import PipelineState
@@ -44,9 +42,7 @@ class StateAccessor:
         The participant's global_data plus data that might have been updated by previous nodes in this pipeline
         execution.
         """
-        session = self._state.get("experiment_session")
-        participant_data_proxy = ParticipantDataProxy(pipeline_state=self._state, experiment_session=session)
-        return participant_data_proxy.get()
+        return self._state.get("participant_data", {})
 
     @property
     def original_user_message(self) -> str:
