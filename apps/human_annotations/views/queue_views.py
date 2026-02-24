@@ -1,6 +1,8 @@
+import contextlib
 import csv
 import json
 import re
+import uuid
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -15,8 +17,9 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 from django_tables2 import LazyPaginator, SingleTableView
 
-from apps.experiments.filters import ExperimentSessionFilter
+from apps.experiments.filters import ExperimentSessionFilter, get_filter_context_data
 from apps.experiments.models import ExperimentSession
+from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -215,30 +218,43 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
 
     def get(self, request, team_slug: str, pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        sessions = (
-            ExperimentSession.objects.filter(team=request.team)
-            .select_related("experiment", "participant", "chat")
-            .order_by("-last_activity_at")[:200]
+        table_url = reverse("human_annotations:queue_sessions_table", args=[team_slug, pk])
+        sessions_json_url = reverse("human_annotations:queue_sessions_json", args=[team_slug, pk])
+        filter_context = get_filter_context_data(
+            request.team,
+            columns=ExperimentSessionFilter.columns(request.team),
+            filter_class=ExperimentSessionFilter,
+            table_url=table_url,
+            table_container_id="sessions-table",
+            table_type=FilterSet.TableType.SESSIONS,
         )
         return render(
             request,
             "human_annotations/add_items_from_sessions.html",
             {
                 "queue": queue,
-                "sessions": sessions,
+                "sessions_json_url": sessions_json_url,
                 "active_tab": "annotation_queues",
+                **filter_context,
             },
         )
 
     def post(self, request, team_slug: str, pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        session_ids = request.POST.getlist("sessions")
+        session_ids_raw = request.POST.get("session_ids", "")
+        # Silently skip non-UUID values to avoid ORM errors from tampered form data.
+        external_ids = []
+        for s in session_ids_raw.split(","):
+            s = s.strip()
+            if s:
+                with contextlib.suppress(ValueError):
+                    external_ids.append(str(uuid.UUID(s)))
 
-        if not session_ids:
+        if not external_ids:
             messages.error(request, "No sessions selected.")
             return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
-        sessions = list(ExperimentSession.objects.filter(id__in=session_ids, team=request.team))
+        sessions = list(ExperimentSession.objects.filter(external_id__in=external_ids, team=request.team))
         existing_session_ids = set(
             AnnotationItem.objects.filter(
                 queue=queue,

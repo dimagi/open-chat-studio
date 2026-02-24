@@ -707,3 +707,66 @@ def test_queue_sessions_json_requires_login(team_with_users, queue):
     url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
     response = c.get(url)
     assert response.status_code in (302, 403)
+
+
+# ===== AddSessionsToQueue GET + POST =====
+
+
+@pytest.mark.django_db()
+def test_add_sessions_get_renders_filter_context(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "df_filter_columns" in response.context
+    assert "df_filter_data_source_url" in response.context
+    assert "sessions_json_url" in response.context
+
+
+@pytest.mark.django_db()
+def test_add_sessions_post_creates_items_from_external_ids(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    sessions = ExperimentSessionFactory.create_batch(2, team=team_with_users)
+    session_ids = ",".join(str(s.external_id) for s in sessions)
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"session_ids": session_ids})
+    assert response.status_code == 302
+    assert response["Location"] == reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    from apps.human_annotations.models import AnnotationItem
+
+    assert AnnotationItem.objects.filter(queue=queue).count() == 2
+
+
+@pytest.mark.django_db()
+def test_add_sessions_post_skips_duplicates(client, team_with_users, queue):
+    from apps.human_annotations.models import AnnotationItem
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    existing_session = item.session
+    new_session = ExperimentSessionFactory(team=team_with_users)
+    session_ids = ",".join([str(existing_session.external_id), str(new_session.external_id)])
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    client.post(url, {"session_ids": session_ids})
+    assert AnnotationItem.objects.filter(queue=queue).count() == 2  # 1 old + 1 new
+
+
+@pytest.mark.django_db()
+def test_add_sessions_post_empty_redirects_with_error(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"session_ids": ""})
+    assert response.status_code == 302
+    from apps.human_annotations.models import AnnotationItem
+
+    assert AnnotationItem.objects.filter(queue=queue).count() == 0
+
+
+@pytest.mark.django_db()
+def test_add_sessions_post_ignores_other_team_sessions(client, team_with_users, queue):
+    from apps.human_annotations.models import AnnotationItem
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    other_session = ExperimentSessionFactory()  # different team
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    client.post(url, {"session_ids": str(other_session.external_id)})
+    assert AnnotationItem.objects.filter(queue=queue).count() == 0
