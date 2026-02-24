@@ -42,23 +42,22 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 
 ## Useful commands
 
-* Run python tests: `pytest path/to/test.py -v` (all tests in a file)
-* Lint python: `ruff check path/to/file.py --fix`
-* Format python: `ruff format path/to/file.py`
-* Type check python: `ty check apps/`
+* Run python tests: `uv run pytest path/to/test.py -v` (all tests in a file)
+* Lint python: `uv run ruff check path/to/file.py --fix`
+* Format python: `uv run ruff format path/to/file.py`
+* Type check python: `uv run ty check apps/`
 * Build JS & CSS: `npm run dev`
 * Lint JS: `npm run lint path/to/file.js`
 * TypeScript type checking: `npm run type-check path/to/file.ts`
-* Dev environment: `docker compose -f docker-compose-dev.yml up`
-* Run Django dev server: `inv runserver` (uses `portless` if available, otherwise falls back to `python manage.py runserver`)
-* Django migrations: `python manage.py migrate`
-* Create migration: `python manage.py makemigrations <app_name>`
+* Run Django dev server: `uv run inv runserver` (uses `portless` if available, otherwise falls back to `uv run python manage.py runserver`)
+* Django migrations: `uv run python manage.py migrate`
+* Create migration: `uv run python manage.py makemigrations <app_name>`
 
 ## Do
 * Always lint, test, and typecheck updated files. Use project-wide build sparingly
 * When adding new features: write or update unit tests first, then code to green
 * For regressions: add a failing test that reproduces the bug, then fix to green
-* Always use .github/pull_request_template.md as the template for pull request descriptions
+* Always use @.github/pull_request_template.md as the template for pull request descriptions
 
 ## Don't
 * Use local imports for any reason other than to avoid circular imports or as a means to reduce startup time (reserved for specific imports)
