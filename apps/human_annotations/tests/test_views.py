@@ -676,10 +676,12 @@ def test_queue_sessions_table_view(client, team_with_users, queue):
 
 @pytest.mark.django_db()
 def test_queue_sessions_table_only_shows_team_sessions(client, team_with_users, queue):
-    from apps.utils.factories.experiment import ExperimentSessionFactory
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 
     own_session = ExperimentSessionFactory(team=team_with_users)
+    ChatMessageFactory(chat=own_session.chat)
     other_session = ExperimentSessionFactory()  # different team
+    ChatMessageFactory(chat=other_session.chat)
     url = reverse("human_annotations:queue_sessions_table", args=[team_with_users.slug, queue.pk])
     response = client.get(url)
     content = response.content.decode()
@@ -689,9 +691,11 @@ def test_queue_sessions_table_only_shows_team_sessions(client, team_with_users, 
 
 @pytest.mark.django_db()
 def test_queue_sessions_json_returns_external_ids(client, team_with_users, queue):
-    from apps.utils.factories.experiment import ExperimentSessionFactory
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 
     sessions = ExperimentSessionFactory.create_batch(3, team=team_with_users)
+    for s in sessions:
+        ChatMessageFactory(chat=s.chat)
     ExperimentSessionFactory()  # different team — must not appear
     url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
     response = client.get(url)

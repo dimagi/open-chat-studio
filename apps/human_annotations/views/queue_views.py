@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, Prefetch, Sum
+from django.db.models import Count, Exists, OuterRef, Prefetch, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -17,6 +17,7 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 from django_tables2 import LazyPaginator, SingleTableView
 
+from apps.chat.models import ChatMessage
 from apps.experiments.filters import ExperimentSessionFilter, get_filter_context_data
 from apps.experiments.models import ExperimentSession
 from apps.filters.models import FilterSet
@@ -186,14 +187,14 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
         # Validate queue ownership — pk is in the URL for namespacing but not used for filtering.
         get_object_or_404(AnnotationQueue, id=self.kwargs["pk"], team=self.request.team)
         queryset = _get_base_session_queryset(self.request)
+        message_count_sq = (
+            ChatMessage.objects.filter(chat=OuterRef("chat")).values("chat").annotate(c=Count("id")).values("c")
+        )
         return (
-            # NOTE: Count("chat__messages", distinct=True) requires a JOIN to the messages
-            # table. For large teams this may be slow; consider a subquery if it becomes
-            # a bottleneck (also applies to the evaluations equivalent).
-            queryset.annotate(message_count=Coalesce(Count("chat__messages", distinct=True), 0))
+            queryset.annotate(message_count=Coalesce(Subquery(message_count_sq), 0))
             .filter(message_count__gt=0)
             .select_related("team", "participant__user", "chat", "experiment")
-            .order_by("experiment__name")
+            .order_by("-last_activity_at")
         )
 
 
@@ -210,7 +211,7 @@ def annotation_queue_sessions_json(request, team_slug: str, pk: int):
     queryset = _get_base_session_queryset(request)
     # Exclude sessions already added to this queue so the count reflects available sessions.
     queryset = queryset.exclude(id__in=AnnotationItem.objects.filter(queue_id=pk).values("session_id"))
-    queryset = queryset.annotate(message_count=Count("chat__messages", distinct=True)).filter(message_count__gt=0)
+    queryset = queryset.filter(Exists(ChatMessage.objects.filter(chat=OuterRef("chat"))))
     session_keys = list(queryset.values_list("external_id", flat=True))
     return JsonResponse(session_keys, safe=False)
 
