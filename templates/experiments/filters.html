@@ -39,7 +39,7 @@
   <!-- Filters Panel -->
   <div x-show="filterData.showFilters" class="absolute left-0 mt-2 p-4 bg-base-100 border border-base-200 rounded-lg shadow-lg z-10 min-w-max max-w-screen-lg" x-cloak>
     <!-- Natural Language Filter Input -->
-    <div class="mb-3">
+    <div class="mb-3" x-show="filterSlug" x-cloak>
       <div class="flex gap-2">
         <input
           type="text"
