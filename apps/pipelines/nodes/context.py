@@ -38,10 +38,6 @@ class StateAccessor:
 
     @property
     def participant_data(self) -> dict:
-        """
-        The participant's global_data plus data that might have been updated by previous nodes in this pipeline
-        execution.
-        """
         return self._state.get("participant_data", {})
 
     @property
