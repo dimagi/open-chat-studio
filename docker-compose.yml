@@ -47,8 +47,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/open_chat_studio
-      - REDIS_URL=redis://redis:6379
       - PORT=0.0.0.0:8000
     depends_on:
       migrate:
