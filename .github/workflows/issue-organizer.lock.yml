@@ -23,7 +23,7 @@
 #
 # Daily workflow that analyzes recent issues and links related issues as sub-issues
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"52caf04386b1d9eaee075340ce092ac979f2cd4ae944f08b56152478604cfdf3","compiler_version":"v0.49.3"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"6793c3609d63bd29aec945e75f6910c086bf7becd4f62456a20f317f61ca1443","compiler_version":"v0.49.3"}
 
 name: "Issue Organizer"
 "on":
@@ -333,7 +333,7 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'GH_AW_SAFE_OUTPUTS_CONFIG_EOF'
-          {"create_discussion":{"expires":168,"max":1},"create_issue":{"expires":2,"group":true,"max":5},"link_sub_issue":{"max":50},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
+          {"create_discussion":{"expires":168,"max":1},"create_issue":{"group":true,"max":5},"link_sub_issue":{"max":50},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
           GH_AW_SAFE_OUTPUTS_CONFIG_EOF
           cat > /opt/gh-aw/safeoutputs/tools.json << 'GH_AW_SAFE_OUTPUTS_TOOLS_EOF'
           [
@@ -1214,7 +1214,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_discussion\":{\"category\":\"audits\",\"close_older_discussions\":true,\"expires\":168,\"fallback_to_issue\":true,\"max\":1,\"title_prefix\":\"[Issue Organizer] \"},\"create_issue\":{\"expires\":2,\"group\":true,\"max\":5,\"title_prefix\":\"[Parent] \"},\"link_sub_issue\":{\"max\":50},\"missing_data\":{},\"missing_tool\":{}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_discussion\":{\"category\":\"audits\",\"close_older_discussions\":true,\"expires\":168,\"fallback_to_issue\":true,\"max\":1,\"title_prefix\":\"[Issue Organizer] \"},\"create_issue\":{\"group\":true,\"max\":5,\"title_prefix\":\"[Parent] \"},\"link_sub_issue\":{\"max\":50},\"missing_data\":{},\"missing_tool\":{}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
