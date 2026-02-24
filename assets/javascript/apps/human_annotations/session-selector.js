@@ -20,7 +20,10 @@ window.annotationQueueSessionSelector = function (options = {}) {
       document.addEventListener('htmx:afterSettle', (e) => {
         if (e.target.id === 'sessions-table') this.restoreCheckboxStates();
       });
-      window.addEventListener('filter:change', () => this.loadSessionIds());
+      window.addEventListener('filter:change', () => {
+        this.clearAllSelections();
+        this.loadSessionIds();
+      });
       this.loadSessionIds();
     },
 

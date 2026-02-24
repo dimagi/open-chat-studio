@@ -199,7 +199,7 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
 
 
 @login_and_team_required
-@permission_required("human_annotations.add_annotationitem")
+@permission_required("human_annotations.add_annotationitem", raise_exception=True)
 def annotation_queue_sessions_json(request, team_slug: str, pk: int):
     """Returns filtered session external_ids as JSON for the Alpine session selector.
 
