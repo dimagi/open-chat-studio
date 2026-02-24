@@ -659,3 +659,51 @@ def test_annotation_sessions_selection_table_has_selection_column(team_with_user
     assert "experiment" in table.columns
     assert "participant" in table.columns
     assert "message_count" in table.columns
+
+
+# ===== Queue sessions table & JSON views =====
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_table_view(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    ExperimentSessionFactory.create_batch(3, team=team_with_users)
+    url = reverse("human_annotations:queue_sessions_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_table_only_shows_team_sessions(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    own_session = ExperimentSessionFactory(team=team_with_users)
+    other_session = ExperimentSessionFactory()  # different team
+    url = reverse("human_annotations:queue_sessions_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    content = response.content.decode()
+    assert str(own_session.external_id) in content
+    assert str(other_session.external_id) not in content
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_json_returns_external_ids(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    sessions = ExperimentSessionFactory.create_batch(3, team=team_with_users)
+    ExperimentSessionFactory()  # different team — must not appear
+    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    data = response.json()
+    expected_ids = {str(s.external_id) for s in sessions}
+    assert set(str(i) for i in data) == expected_ids
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_json_requires_login(team_with_users, queue):
+    c = Client()  # unauthenticated
+    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    response = c.get(url)
+    assert response.status_code in (302, 403)

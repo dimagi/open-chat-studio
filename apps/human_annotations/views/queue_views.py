@@ -4,21 +4,26 @@ import re
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count, Prefetch, Sum
-from django.http import HttpResponse
+from django.db.models.functions import Coalesce
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
-from django_tables2 import SingleTableView
+from django_tables2 import LazyPaginator, SingleTableView
 
+from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
+from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 from ..forms import AnnotationQueueForm
 from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue, AnnotationStatus
-from ..tables import AnnotationItemTable, AnnotationQueueTable
+from ..tables import AnnotationItemTable, AnnotationQueueTable, AnnotationSessionsSelectionTable
 
 User = get_user_model()
 
@@ -154,6 +159,55 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
                 ),
             )
         )
+
+
+def _get_base_session_queryset(request):
+    """Returns a team-scoped, filtered session queryset with no annotations or related selection."""
+    timezone = request.session.get("detected_tz", None)
+    filter_params = FilterParams.from_request(request)
+    queryset = ExperimentSession.objects.filter(team=request.team)
+    session_filter = ExperimentSessionFilter()
+    return session_filter.apply(queryset, filter_params=filter_params, timezone=timezone)
+
+
+class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+    """Filterable, paginated session table for selecting sessions to add to a queue."""
+
+    model = ExperimentSession
+    table_class = AnnotationSessionsSelectionTable
+    template_name = "table/single_table_lazy_pagination.html"
+    permission_required = "human_annotations.add_annotationitem"
+    paginator_class = LazyPaginator
+
+    def get_queryset(self):
+        # Validate queue ownership — pk is in the URL for namespacing but not used for filtering.
+        get_object_or_404(AnnotationQueue, id=self.kwargs["pk"], team=self.request.team)
+        queryset = _get_base_session_queryset(self.request)
+        return (
+            # NOTE: Count("chat__messages", distinct=True) requires a JOIN to the messages
+            # table. For large teams this may be slow; consider a subquery if it becomes
+            # a bottleneck (also applies to the evaluations equivalent).
+            queryset.annotate(message_count=Coalesce(Count("chat__messages", distinct=True), 0))
+            .select_related("team", "participant__user", "chat", "experiment")
+            .order_by("experiment__name")
+        )
+
+
+@login_and_team_required
+@permission_required("human_annotations.add_annotationitem")
+def annotation_queue_sessions_json(request, team_slug: str, pk: int):
+    """Returns filtered session external_ids as JSON for the Alpine session selector.
+
+    pk is validated for queue ownership but not used for filtering — returns all matching
+    team sessions excluding those already in the queue.
+    """
+    # Validate queue ownership
+    get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+    queryset = _get_base_session_queryset(request)
+    # Exclude sessions already added to this queue so the count reflects available sessions.
+    queryset = queryset.exclude(id__in=AnnotationItem.objects.filter(queue_id=pk).values("session_id"))
+    session_keys = list(queryset.values_list("external_id", flat=True))
+    return JsonResponse(session_keys, safe=False)
 
 
 class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
