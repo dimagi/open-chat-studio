@@ -194,7 +194,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Starred Filters as Small Tabs -->
     <div class="mt-4">
       <div class="flex flex-wrap gap-2">
@@ -207,7 +207,7 @@
           <div class="grid grid-cols-4 gap-1">
             <template x-for="filterSet in starredFilters" :key="filterSet.id">
               <div
-                  class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
+                  class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors"
                   @click="applyStarredFilter(filterSet.id)">
                 <span class="text-base-content" x-text="filterSet.name"></span>
               </div>
@@ -238,6 +238,10 @@
         loading: false,
         columns: filterColumns,
       },
+      nlQuery: '',
+      nlLoading: false,
+      nlError: '',
+      filterSlug: "{{ df_table_type }}",
       starredFilters: [],
       savedFilters: null,
       selectedSavedFilterId: null,
@@ -250,7 +254,7 @@
             this.applySavedFilter(selectedSavedFilter);
           }
         })
-        
+
 
         const App = SiteJS.app;
         this.loadFiltersFromQueryString(window.location.search);
@@ -493,7 +497,7 @@
         if (this.filterData.filters.length === 0) {
           this.addFilter();
         }
-        
+
         // Fetch experiment versions for any experiment filters loaded from URL
         this.syncChatbotVersionsField(this.filterData.filters);
       },
@@ -631,7 +635,7 @@
             versions.forEach(version => allVersions.add(version));
           });
           this.updateVersionsColumn(
-            Array.from(allVersions).sort((a, b) => 
+            Array.from(allVersions).sort((a, b) =>
               parseInt(b.slice(1)) - parseInt(a.slice(1))
             )
           );
@@ -761,9 +765,9 @@
           if (this.getActiveFilters(this.filterData.filters).length > 0) return;
 
           const savedFilters = await this.fetchSavedFilters();
-          const defaultFilter = savedFilters.find(fs => fs.is_default_for_user) || 
+          const defaultFilter = savedFilters.find(fs => fs.is_default_for_user) ||
                                  savedFilters.find(fs => fs.is_default_for_team);
-          
+
           if (defaultFilter?.filter_query_string) {
             this.filterData.filters = [];
             await this.applySavedFilter(defaultFilter);
@@ -793,10 +797,10 @@
 
       async updateSavedFilterQueryString(id) {
         const filterSetName = this.getSavedFilterSetName(id);
-        
+
         try {
           await this.makeSavedFilterUpdateRequest(id, { filter_query_string: window.location.search.substring(1) });
-          await this.reloadSavedFilters(); 
+          await this.reloadSavedFilters();
           this.notifyUser(`"${filterSetName}" updated`, "success");
         } catch (error) {
           console.error('Error updating filter:', error);
@@ -807,16 +811,16 @@
       async toggleField(id, field) {
         const filterSetName = this.getSavedFilterSetName(id);
         const filterSet = this.savedFilters.find(f => f.id === id);
-        
+
         if (!filterSet) return;
-        
+
         const currentValue = filterSet[field];
         const newValue = !currentValue;
-        
+
         try {
           // Update UI immediately
           this.updateFilterProperty(id, field, newValue);
-          
+
           // Make API call
           const payload = { [field]: newValue };
           await this.makeSavedFilterUpdateRequest(id, payload);
@@ -831,7 +835,7 @@
 
       async deleteSavedFilter(id, name) {
         if(!confirm(`Delete "${name}"?`)) return;
-        
+
         try {
           await this.makeSavedFilterDeleteRequest(id);
           await this.reloadSavedFilters();
@@ -884,7 +888,7 @@
         const filter = this.savedFilters.find(f => f.id === filterId);
         if (filter) {
           filter[property] = value;
-          
+
           // Handle clearing other defaults when setting a new default
           if ((property === 'is_default_for_user' || property === 'is_default_for_team') && value) {
             this.savedFilters.forEach(f => {
@@ -896,7 +900,7 @@
         }
       },
 
-      
+
     }));
     });
   </script>
