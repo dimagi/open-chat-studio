@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
 from apps.custom_actions.schema_utils import resolve_references
-from apps.pipelines.nodes.base import UiSchema, Widgets
+from apps.pipelines.nodes.base import UiSchema, VisibleWhen, Widgets
 
 
 class OpenAIReasoningEffortParameter(TextChoices):
@@ -113,8 +113,9 @@ class GPT52Parameters(LLMModelParamBase):
         ge=0.0,
         le=2.0,
         title="Temperature",
-        description="Only supported when reasoning effort is set to 'none'",
-        json_schema_extra=UiSchema(widget=Widgets.range),
+        json_schema_extra=UiSchema(
+            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), default_on_show=0.7
+        ),
     )
 
     top_p: float | None = Field(
@@ -122,8 +123,9 @@ class GPT52Parameters(LLMModelParamBase):
         ge=0.0,
         le=1.0,
         title="Top P",
-        description="Only supported when reasoning effort is set to 'none'",
-        json_schema_extra=UiSchema(widget=Widgets.range),
+        json_schema_extra=UiSchema(
+            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), default_on_show=1.0
+        ),
     )
 
     @field_validator("temperature", mode="before")
@@ -134,10 +136,7 @@ class GPT52Parameters(LLMModelParamBase):
                 "Temperature can only be set when reasoning effort is 'none'",
             )
         elif value is None and info.data.get("effort") == "none":
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "Temperature must be set when reasoning effort is 'none'",
-            )
+            return 0.7
         return value
 
     @field_validator("top_p", mode="before")
@@ -148,10 +147,7 @@ class GPT52Parameters(LLMModelParamBase):
                 "Top P can only be set when reasoning effort is 'none'",
             )
         elif value is None and info.data.get("effort") == "none":
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "Top P must be set when reasoning effort is 'none'",
-            )
+            return 1.0
         return value
 
 
@@ -215,6 +211,7 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
         description="Determines how many tokens Claude can use for its internal reasoning process.",
         default=1024,
         ge=1024,
+        json_schema_extra=UiSchema(visible_when=VisibleWhen(field="thinking", value=True)),
     )
 
     @field_validator("budget_tokens", mode="before")
@@ -248,8 +245,9 @@ class ClaudeOpus46Parameters(BasicParameters):
         ge=0.0,
         le=2.0,
         title="Temperature",
-        description="Must be 1.0 when adaptive thinking is enabled.",
-        json_schema_extra=UiSchema(widget=Widgets.range),
+        json_schema_extra=UiSchema(
+            widget=Widgets.range, visible_when=VisibleWhen(field="adaptive_thinking", value=False)
+        ),
     )
     max_tokens: int = Field(
         title="Max Output Tokens",

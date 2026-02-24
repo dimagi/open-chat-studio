@@ -8,11 +8,12 @@ from apps.utils.factories.experiment import ExperimentFactory, SurveyFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
+@pytest.mark.django_db()
 class TestSurveyTableView:
     def test_get_queryset(self, experiment):
         assert experiment.pre_survey is not None
         experiment.create_new_version()
-        assert Survey.objects.count() == 2
+        assert Survey.objects.filter(team=experiment.team).count() == 2
 
         request = RequestFactory().get(reverse("experiments:survey_table", args=[experiment.team.slug]))
         request.team = experiment.team
