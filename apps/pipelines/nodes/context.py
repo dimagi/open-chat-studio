@@ -38,20 +38,11 @@ class StateAccessor:
 
     @property
     def participant_data(self) -> dict:
-        """In-flight participant data accumulated during this pipeline execution.
-        Does NOT include persisted global_data from the database.
-        For the merged view, use merged_participant_data.
+        """
+        The participant's global_data plus data that might have been updated by previous nodes in this pipeline
+        execution.
         """
         return self._state.get("participant_data", {})
-
-    @property
-    def merged_participant_data(self) -> dict:
-        """Participant data merged with persisted global_data from the database.
-        This is what template rendering and routing nodes should use.
-        """
-        from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
-
-        return ParticipantDataProxy.from_state(self._state).get() or {}
 
     @property
     def original_user_message(self) -> str:

@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext, PipelineAccessor, StateAccessor
@@ -134,34 +134,6 @@ class TestStateAccessorParticipantData:
         state = _minimal_state()
         accessor = StateAccessor(state)
         assert accessor.participant_data == {}
-
-
-class TestStateAccessorMergedParticipantData:
-    @patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy.from_state")
-    def test_returns_merged_data(self, mock_from_state):
-        proxy = MagicMock()
-        proxy.get.return_value = {"name": "Alice", "age": 30}
-        mock_from_state.return_value = proxy
-
-        state = _minimal_state()
-        accessor = StateAccessor(state)
-        result = accessor.merged_participant_data
-
-        mock_from_state.assert_called_once_with(state)
-        proxy.get.assert_called_once()
-        assert result == {"name": "Alice", "age": 30}
-
-    @patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy.from_state")
-    def test_returns_empty_dict_when_proxy_returns_none(self, mock_from_state):
-        proxy = MagicMock()
-        proxy.get.return_value = None
-        mock_from_state.return_value = proxy
-
-        state = _minimal_state()
-        accessor = StateAccessor(state)
-        result = accessor.merged_participant_data
-
-        assert result == {}
 
 
 class TestStateAccessorUserInput:

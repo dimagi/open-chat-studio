@@ -135,7 +135,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                             or [],
                         }
                     )
-                content["participant_data"] = context.state.merged_participant_data
+                content["participant_data"] = context.state.participant_data
 
             template = env.from_string(self.template_string)
             output = template.render(content)
@@ -538,11 +538,11 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
     def _process_conditional(self, context: "NodeContext"):
         default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
-        session = context.session
         node_input = context.input
+        session = context.session
         extra_prompt_context = {
             "temp_state": context.state.temp,
-            "session_state": session.state or {},
+            "session_state": context.state.session_state,
         }
         participant_data = context.state.participant_data or {}
         template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
@@ -616,7 +616,7 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
 
         match self.data_source:
             case self.DataSource.participant_data:
-                data = context.state.merged_participant_data
+                data = context.state.participant_data
             case self.DataSource.temp_state:
                 data = context.state.temp or {}
             case self.DataSource.session_state:
