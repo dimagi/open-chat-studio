@@ -20,17 +20,6 @@ if [ ! -f "$file_path" ]; then
   exit 0
 fi
 
-ext="${file_path##*.}"
-
-case "$ext" in
-  py)
-    uv run ruff check --fix "$file_path" 2>&1 || true
-    uv run ruff format "$file_path" 2>&1 || true
-    ;;
-  js|ts|jsx|tsx)
-    cd "$CLAUDE_PROJECT_DIR"
-    npm run lint "$file_path" 2>&1 || true
-    ;;
-esac
+prek run --files "$file_path" -q 2>&1 || true
 
 exit 0
