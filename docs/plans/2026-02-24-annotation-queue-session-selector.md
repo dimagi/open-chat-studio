@@ -44,12 +44,12 @@ Expected: `ImportError` — `AnnotationSessionsSelectionTable` does not exist ye
 
 **Step 3: Add the table class**
 
-At the top of `apps/human_annotations/tables.py`, add imports (check existing imports and add only what's missing):
+In `apps/human_annotations/tables.py`, **replace** the existing `import django_tables2 as tables` line with the following imports. Then update all `tables.Column(...)` → `columns.Column(...)` and `tables.TemplateColumn(...)` → `TemplateColumn(...)` in the existing `AnnotationQueueTable` and `AnnotationItemTable` classes:
 
 ```python
 from django.conf import settings
 from django.urls import reverse
-from django_tables2 import columns, tables
+from django_tables2 import columns, TemplateColumn, tables
 
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
@@ -202,6 +202,9 @@ Expected: `NoReverseMatch` — URLs do not exist yet.
 At the top of `apps/human_annotations/views/queue_views.py`, add/update imports (add only what is missing):
 
 ```python
+import uuid
+
+from django.contrib.auth.decorators import permission_required
 from django.http import HttpResponse, JsonResponse
 
 from django_tables2 import LazyPaginator, SingleTableView
@@ -216,11 +219,20 @@ from django.db.models.functions import Coalesce
 from ..tables import AnnotationItemTable, AnnotationQueueTable, AnnotationSessionsSelectionTable
 ```
 
-**Step 4: Add the two new views to `queue_views.py`**
+**Step 4: Add the helper and two new views to `queue_views.py`**
 
 Add after `AnnotationQueueItemsTableView`:
 
 ```python
+def _get_base_session_queryset(request):
+    """Returns a team-scoped, filtered session queryset with no annotations or related selection."""
+    timezone = request.session.get("detected_tz", None)
+    filter_params = FilterParams.from_request(request)
+    queryset = ExperimentSession.objects.filter(team=request.team)
+    session_filter = ExperimentSessionFilter()
+    return session_filter.apply(queryset, filter_params=filter_params, timezone=timezone)
+
+
 class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     """Filterable, paginated session table for selecting sessions to add to a queue."""
 
@@ -231,12 +243,13 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
     paginator_class = LazyPaginator
 
     def get_queryset(self):
-        timezone = self.request.session.get("detected_tz", None)
-        filter_params = FilterParams.from_request(self.request)
-        queryset = ExperimentSession.objects.filter(team=self.request.team)
-        session_filter = ExperimentSessionFilter()
-        queryset = session_filter.apply(queryset, filter_params=filter_params, timezone=timezone)
+        # Validate queue ownership — pk is in the URL for namespacing but not used for filtering.
+        get_object_or_404(AnnotationQueue, id=self.kwargs["pk"], team=self.request.team)
+        queryset = _get_base_session_queryset(self.request)
         return (
+            # NOTE: Count("chat__messages", distinct=True) requires a JOIN to the messages
+            # table. For large teams this may be slow; consider a subquery if it becomes
+            # a bottleneck (also applies to the evaluations equivalent).
             queryset.annotate(message_count=Coalesce(Count("chat__messages", distinct=True), 0))
             .select_related("team", "participant__user", "chat", "experiment")
             .order_by("experiment__name")
@@ -246,12 +259,16 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
 @login_and_team_required
 @permission_required("human_annotations.add_annotationitem")
 def annotation_queue_sessions_json(request, team_slug: str, pk: int):
-    """Returns filtered session external_ids as JSON for the Alpine session selector."""
-    timezone = request.session.get("detected_tz", None)
-    filter_params = FilterParams.from_request(request)
-    queryset = ExperimentSession.objects.filter(team=request.team)
-    session_filter = ExperimentSessionFilter()
-    queryset = session_filter.apply(queryset, filter_params=filter_params, timezone=timezone)
+    """Returns filtered session external_ids as JSON for the Alpine session selector.
+
+    pk is validated for queue ownership but not used for filtering — returns all matching
+    team sessions excluding those already in the queue.
+    """
+    # Validate queue ownership
+    get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+    queryset = _get_base_session_queryset(request)
+    # Exclude sessions already added to this queue so the count reflects available sessions.
+    queryset = queryset.exclude(id__in=AnnotationItem.objects.filter(queue_id=pk).values("session_id"))
     session_keys = list(queryset.values_list("external_id", flat=True))
     return JsonResponse(session_keys, safe=False)
 ```
@@ -313,6 +330,7 @@ def test_add_sessions_get_renders_filter_context(client, team_with_users, queue)
     assert response.status_code == 200
     assert "df_filter_columns" in response.context
     assert "df_filter_data_source_url" in response.context
+    assert "sessions_json_url" in response.context
 
 
 @pytest.mark.django_db()
@@ -322,6 +340,9 @@ def test_add_sessions_post_creates_items_from_external_ids(client, team_with_use
     url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
     response = client.post(url, {"session_ids": session_ids})
     assert response.status_code == 302
+    assert response["Location"] == reverse(
+        "human_annotations:queue_detail", args=[team_with_users.slug, queue.pk]
+    )
     from apps.human_annotations.models import AnnotationItem
     assert AnnotationItem.objects.filter(queue=queue).count() == 2
 
@@ -401,7 +422,15 @@ Replace the existing `post` method:
 def post(self, request, team_slug: str, pk: int):
     queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
     session_ids_raw = request.POST.get("session_ids", "")
-    external_ids = [s.strip() for s in session_ids_raw.split(",") if s.strip()]
+    # Silently skip non-UUID values to avoid ORM errors from tampered form data.
+    external_ids = []
+    for s in session_ids_raw.split(","):
+        s = s.strip()
+        if s:
+            try:
+                external_ids.append(str(uuid.UUID(s)))
+            except ValueError:
+                pass
 
     if not external_ids:
         messages.error(request, "No sessions selected.")
@@ -487,7 +516,12 @@ window.annotationQueueSessionSelector = function (options = {}) {
     sessionIdsIsLoading: false,
 
     init() {
-      window.addEventListener('dataset-mode:table-update', () => this.restoreCheckboxStates());
+      // Restore checkbox states after HTMX paginates/sorts the table.
+      // Note: 'dataset-mode:table-update' is only dispatched by evaluations-bundle.js,
+      // which is not loaded on this page — listen to the underlying HTMX event directly.
+      document.addEventListener('htmx:afterSettle', (e) => {
+        if (e.target.id === 'sessions-table') this.restoreCheckboxStates();
+      });
       window.addEventListener('filter:change', () => this.loadSessionIds());
       this.loadSessionIds();
     },
