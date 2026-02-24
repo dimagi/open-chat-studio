@@ -900,6 +900,65 @@
         }
       },
 
+      async generateFiltersFromNL() {
+        if (!this.nlQuery.trim()) return;
+        this.nlLoading = true;
+        this.nlError = '';
+        const agentUrl = "{% url 'help:run_agent' request.team.slug 'filter' %}";
+        const App = SiteJS.app;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        try {
+          const res = await fetch(agentUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            signal: controller.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': App.Cookies.get('csrftoken'),
+            },
+            body: JSON.stringify({ query: this.nlQuery, filter_slug: this.filterSlug }),
+          });
+          const data = await res.json();
+          if (!res.ok || data.error) {
+            this.nlError = "Couldn't understand that query. Try rephrasing it.";
+            return;
+          }
+          const listOperators = new Set(['any of', 'all of', 'excludes']);
+          const newFilters = (data.response?.filters || [])
+            .filter(item => this.filterData.columns[item.column])
+            .map(item => {
+              const isList = listOperators.has(item.operator);
+              let selectedValues = [];
+              let value = item.value;
+              if (isList) {
+                try { selectedValues = JSON.parse(item.value); } catch { selectedValues = []; }
+                value = '';
+              }
+              return {
+                column: item.column,
+                operator: item.operator,
+                value,
+                selectedValues,
+                availableOperators: this.filterData.columns[item.column].operators || [],
+                showOptions: false,
+                searchQuery: '',
+                filteredOptions: [...(this.filterData.columns[item.column].options || [])],
+              };
+            });
+          if (!newFilters.length) {
+            this.nlError = "No matching filters found.";
+            return;
+          }
+          this.filterData.filters = newFilters;
+          this.triggerFilterChange();
+        } catch {
+          this.nlError = "Couldn't understand that query. Try rephrasing it.";
+        } finally {
+          clearTimeout(timeoutId);
+          this.nlLoading = false;
+        }
+      },
 
     }));
     });
