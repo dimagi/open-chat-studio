@@ -54,8 +54,9 @@ type VisibleWhenWrapperProps = {
 
 /**
  * Wraps a field widget with visibility logic. When the field transitions from
- * visible to hidden, its value is cleared to prevent stale values from causing
- * backend validation errors.
+ * visible to hidden (including on initial load when it starts hidden), its
+ * value is cleared to prevent stale values from causing backend validation
+ * errors.
  *
  * The optional `onHide` callback overrides the default reset behaviour, which
  * is useful for sub-schema widgets (e.g. ModelParametersWidget) that store
@@ -72,10 +73,16 @@ const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
 }) => {
   const setNode = usePipelineStore((state) => state.setNode);
   const isVisible = evaluateVisibleWhen(visibleWhen, nodeParams);
-  const prevVisibleRef = useRef(isVisible);
+  // Use undefined as the initial value so we can detect the first render and
+  // clear stale values for fields that are hidden on initial load.
+  const prevVisibleRef = useRef<boolean | undefined>(undefined);
 
   useEffect(() => {
-    if (prevVisibleRef.current && !isVisible) {
+    // Clear the field value when:
+    // 1. The field is initially hidden on mount (prevVisibleRef.current === undefined)
+    // 2. The field transitions from visible to hidden (prevVisibleRef.current === true)
+    const wasVisibleOrUnmounted = prevVisibleRef.current === undefined || prevVisibleRef.current === true;
+    if (wasVisibleOrUnmounted && !isVisible) {
       if (onHide) {
         onHide();
       } else {
