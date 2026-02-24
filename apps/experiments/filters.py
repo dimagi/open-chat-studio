@@ -43,6 +43,7 @@ def get_filter_context_data(
         "df_filter_data_source_url": table_url,
         "df_filter_data_source_container_id": table_container_id,
         "df_table_type": table_type,
+        "df_filter_slug": filter_class.slug,
     }
 
 
