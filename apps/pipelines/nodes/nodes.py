@@ -122,18 +122,26 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
             if session:
                 participant = getattr(session, "participant", None)
                 if participant:
+                    schedules = []
+                    if context.repo is not None:
+                        schedules = (
+                            context.repo.get_participant_schedules(
+                                participant=participant,
+                                experiment_id=session.experiment_id,
+                                as_dict=True,
+                                include_inactive=True,
+                            )
+                            or []
+                        )
+                    else:
+                        logger.warning("Pipeline repository is not available; participant schedules will be empty")
                     content.update(
                         {
                             "participant_details": {
                                 "identifier": getattr(participant, "identifier", None),
                                 "platform": getattr(participant, "platform", None),
                             },
-                            "participant_schedules": participant.get_schedules_for_experiment(
-                                session.experiment,
-                                as_dict=True,
-                                include_inactive=True,
-                            )
-                            or [],
+                            "participant_schedules": schedules,
                         }
                     )
                 content["participant_data"] = context.state.participant_data
@@ -153,7 +161,7 @@ class LLMResponse(PipelineNode, LLMResponseMixin):
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        llm = with_llm_retry(self.get_chat_model())
+        llm = with_llm_retry(self.get_chat_model(repo=context.repo))
         output = llm.invoke(context.input, config=self._config)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
 
@@ -546,19 +554,24 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "session_state": context.state.session_state,
         }
         participant_data = context.state.participant_data or {}
-        template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
+        template_context = PromptTemplateContext(
+            session, extra=extra_prompt_context, participant_data=participant_data, repo=context.repo
+        )
         system_message = get_system_message(
             prompt_template=f"{self.prompt}\nThe default routing destination is: {default_keyword}",
             prompt_context=template_context,
         )
 
         # Build the agent
+        repo = context.repo
         middleware = []
-        if history_middleware := self.build_history_middleware(session=session, system_message=system_message):
+        if history_middleware := self.build_history_middleware(
+            session=session, system_message=system_message, repo=repo
+        ):
             middleware.append(history_middleware)
 
         agent = create_agent(
-            model=self.get_chat_model(),
+            model=self.get_chat_model(repo=repo),
             system_prompt=system_message,
             middleware=middleware,
             response_format=self._create_router_schema(),
@@ -584,7 +597,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             is_default_keyword = True
 
         if session:
-            self.save_history(session, node_input, keyword)
+            self.save_history(session, node_input, keyword, repo=repo)
         return keyword, is_default_keyword
 
 
@@ -743,10 +756,12 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
                 raise PydanticCustomError("invalid_input_formatter", "Only {input} is allowed")
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        try:
-            assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
-        except OpenAiAssistant.DoesNotExist:
-            raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
+        if context.repo is None:
+            raise PipelineNodeRunError("Pipeline repository is not available")
+
+        assistant = context.repo.get_assistant(self.assistant_id)
+        if assistant is None:
+            raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist")
 
         session = context.session
         runnable = self._get_assistant_runnable(assistant, session=session)
@@ -888,7 +903,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "wait_for_next_input": self.wait_for_next_input,
         }
 
-    def _add_file_attachment(self, context, output_state: PipelineState):
+    def _add_file_attachment(self, context: "NodeContext", output_state: PipelineState):
         def add_file_attachment(filename: str, content: bytes, content_type: str | None = None):
             """Attach a file to the AI response message.
 
@@ -899,8 +914,6 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             """
             from io import BytesIO
 
-            from apps.files.models import File, FilePurpose
-
             if not isinstance(content, bytes):
                 raise CodeNodeRunError("'content' must be bytes")
 
@@ -908,16 +921,22 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             if not session:
                 raise CodeNodeRunError("Cannot attach files without an active session")
 
+            if context.repo is None:
+                raise PipelineNodeRunError("Pipeline repository is not available")
+
             file_obj = BytesIO(content)
-            file = File.create(
+            file = context.repo.create_file(
                 filename=filename,
                 file_obj=file_obj,
                 team_id=session.team_id,
                 content_type=content_type,
-                purpose=FilePurpose.MESSAGE_MEDIA,
             )
 
-            session.chat.attach_files(attachment_type="code_interpreter", files=[file])
+            context.repo.attach_files_to_chat(
+                chat=session.chat,
+                attachment_type="code_interpreter",
+                files=[file],
+            )
 
             metadata = output_state.setdefault("output_message_metadata", {})
             generated_files = metadata.setdefault("generated_files", [])

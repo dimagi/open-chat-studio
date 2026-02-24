@@ -25,10 +25,11 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
     to the database in the before_model step, if a summary is generated.
     """
 
-    def __init__(self, session, node: PipelineNode, **kwargs):
-        super().__init__(model=node.get_chat_model(), **kwargs)
+    def __init__(self, session, node: PipelineNode, repo=None, **kwargs):
+        super().__init__(model=node.get_chat_model(repo=repo), **kwargs)
         self.session = session
         self.node = node
+        self.repo = repo
 
     def before_agent(self, state, runtime):
         return {
@@ -37,7 +38,7 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
                 # history to the user's message. We need to replace the full message history in the state.
                 # See https://github.com/langchain-ai/langchain/blob/c63f23d2339b2604edc9ae1d9f7faf7d6cc7dc78/libs/langchain_v1/langchain/agents/middleware/summarization.py#L286-L292
                 RemoveMessage(id=REMOVE_ALL_MESSAGES),
-                *self.node.get_history(self.session, exclude_message_id=state.get("input_message_id")),
+                *self.node.get_history(self.session, exclude_message_id=state.get("input_message_id"), repo=self.repo),
                 *state["messages"],
             ]
         }
@@ -62,7 +63,9 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
         # The first message is always a RemoveMessage if a summary was created
 
         self.node.store_compression_checkpoint(
-            compression_marker=self._get_compression_marker(messages), checkpoint_message_id=checkpoint_message_id
+            compression_marker=self._get_compression_marker(messages),
+            checkpoint_message_id=checkpoint_message_id,
+            repo=self.repo,
         )
 
     def _find_latest_message_db_id(self, messages: list) -> str | None:

@@ -15,9 +15,6 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
-from apps.chat.conversation import COMPRESSION_MARKER
-from apps.chat.models import ChatMessage
-from apps.experiments.models import ExperimentSession
 from apps.pipelines.exceptions import (
     PipelineNodeBuildError,
 )
@@ -25,7 +22,6 @@ from apps.pipelines.models import (
     PipelineChatHistory,
     PipelineChatHistoryModes,
     PipelineChatHistoryTypes,
-    PipelineChatMessages,
 )
 from apps.pipelines.nodes.base import (
     PipelineState,
@@ -43,11 +39,13 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
-from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 
 if TYPE_CHECKING:
+    from apps.experiments.models import ExperimentSession
     from apps.pipelines.nodes.context import NodeContext
+    from apps.pipelines.repository import PipelineRepository
 
 logger = logging.getLogger("ocs.pipelines.nodes")
 
@@ -64,6 +62,8 @@ def get_llm_provider_model(llm_provider_model_id: int):
 
 @lru_cache
 def get_llm_provider(llm_provider_id: int):
+    from apps.service_providers.models import LlmProvider
+
     try:
         return LlmProvider.objects.get(id=llm_provider_id)
     except LlmProvider.DoesNotExist:
@@ -131,21 +131,30 @@ class LLMResponseMixin(BaseModel):
 
         return self
 
-    def get_llm_service(self) -> LlmService:
-        from apps.service_providers.models import LlmProvider
-
+    def get_llm_service(self, repo: "PipelineRepository | None" = None) -> LlmService:
         try:
-            provider = LlmProvider.objects.get(id=self.llm_provider_id)
+            if repo:
+                provider = repo.get_llm_provider(self.llm_provider_id)
+                if provider is None:
+                    raise PipelineNodeBuildError(
+                        f"LLM provider with id {self.llm_provider_id} does not exist"
+                    ) from None
+            else:
+                from apps.service_providers.models import LlmProvider
+
+                provider = LlmProvider.objects.get(id=self.llm_provider_id)
             return provider.get_llm_service()
-        except LlmProvider.DoesNotExist:
+        except PipelineNodeBuildError:
+            raise
+        except LookupError:
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
-    def get_chat_model(self):
+    def get_chat_model(self, repo: "PipelineRepository | None" = None):
         model_name = get_llm_provider_model(self.llm_provider_model_id).name
         logger.debug(f"Calling {model_name} with parameters: {self.llm_model_parameters}")
-        return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
+        return self.get_llm_service(repo=repo).get_chat_model(model_name, **self.llm_model_parameters)
 
 
 class HistoryMixin(LLMResponseMixin):
@@ -198,7 +207,12 @@ class HistoryMixin(LLMResponseMixin):
     def get_history_mode(self) -> PipelineChatHistoryModes:
         return self.history_mode or PipelineChatHistoryModes.SUMMARIZE
 
-    def get_history(self, session: ExperimentSession, exclude_message_id: int | None = None) -> list[BaseMessage]:
+    def get_history(
+        self,
+        session: "ExperimentSession",
+        exclude_message_id: int | None = None,
+        repo: "PipelineRepository | None" = None,
+    ) -> list[BaseMessage]:
         """
         Returns the chat history messages for the node based on its history configuration.
 
@@ -210,20 +224,38 @@ class HistoryMixin(LLMResponseMixin):
             return []
 
         if self.use_session_history:
+            if repo:
+                return repo.get_session_messages_until_marker(
+                    chat=session.chat,
+                    marker=self.get_history_mode(),
+                    exclude_message_id=exclude_message_id,
+                )
             return session.chat.get_langchain_messages_until_marker(
                 marker=self.get_history_mode(), exclude_message_id=exclude_message_id
             )
         else:
-            try:
-                history: PipelineChatHistory = session.pipeline_chat_history.get(
-                    type=self.history_type, name=self._get_history_name()
+            if repo:
+                history = repo.get_pipeline_chat_history(
+                    session=session,
+                    history_type=self.history_type,
+                    history_name=self._get_history_name(),
                 )
-            except PipelineChatHistory.DoesNotExist:
-                return []
+            else:
+                try:
+                    history = session.pipeline_chat_history.get(type=self.history_type, name=self._get_history_name())
+                except PipelineChatHistory.DoesNotExist:
+                    history = None
 
+            if history is None:
+                return []
             return history.get_langchain_messages_until_marker(self.get_history_mode())
 
-    def store_compression_checkpoint(self, compression_marker: str, checkpoint_message_id: int):
+    def store_compression_checkpoint(
+        self,
+        compression_marker: str,
+        checkpoint_message_id: int,
+        repo: "PipelineRepository | None" = None,
+    ):
         """Persist the correct compression marker for this node's history mode.
 
         When `summary` is the literal `COMPRESSION_MARKER`, we record the node's current
@@ -232,23 +264,44 @@ class HistoryMixin(LLMResponseMixin):
         """
         history_mode = self.get_history_mode()
         if self.use_session_history:
-            message = ChatMessage.objects.get(id=checkpoint_message_id)
-            if compression_marker == COMPRESSION_MARKER:
-                message.metadata.update({"compression_marker": history_mode})
-                message.save(update_fields=["metadata"])
+            if repo:
+                repo.save_compression_checkpoint_global(
+                    message_id=checkpoint_message_id,
+                    compression_marker=compression_marker,
+                    history_mode=history_mode,
+                )
             else:
-                message.summary = compression_marker
-                message.save(update_fields=["summary"])
+                from apps.chat.conversation import COMPRESSION_MARKER
+                from apps.chat.models import ChatMessage
 
+                message = ChatMessage.objects.get(id=checkpoint_message_id)
+                if compression_marker == COMPRESSION_MARKER:
+                    message.metadata.update({"compression_marker": history_mode})
+                    message.save(update_fields=["metadata"])
+                else:
+                    message.summary = compression_marker
+                    message.save(update_fields=["summary"])
         else:
-            # Use pipeline history
-            updates = {"compression_marker": history_mode}
-            if compression_marker != COMPRESSION_MARKER:
-                updates["summary"] = compression_marker
-            PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
+            if repo:
+                repo.save_compression_checkpoint_pipeline(
+                    message_id=checkpoint_message_id,
+                    compression_marker=compression_marker,
+                    history_mode=history_mode,
+                )
+            else:
+                from apps.chat.conversation import COMPRESSION_MARKER
+                from apps.pipelines.models import PipelineChatMessages
+
+                updates: dict[str, Any] = {"compression_marker": history_mode}
+                if compression_marker != COMPRESSION_MARKER:
+                    updates["summary"] = compression_marker
+                PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
 
     def build_history_middleware(
-        self, session: ExperimentSession, system_message: BaseMessage
+        self,
+        session: "ExperimentSession",
+        system_message: BaseMessage,
+        repo: "PipelineRepository | None" = None,
     ) -> BaseNodeHistoryMiddleware | None:
         """Construct the history compression middleware configured for this node."""
         if self.history_is_disabled:
@@ -259,6 +312,7 @@ class HistoryMixin(LLMResponseMixin):
         compressor_kwargs = {
             "session": session,
             "node": self,
+            "repo": repo,
         }
         if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
             return MaxHistoryLengthHistoryMiddleware(max_history_length=self.max_history_length, **compressor_kwargs)
@@ -279,7 +333,13 @@ class HistoryMixin(LLMResponseMixin):
         if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
             return TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
 
-    def save_history(self, session: ExperimentSession, human_message: str, ai_message: str):
+    def save_history(
+        self,
+        session: "ExperimentSession",
+        human_message: str,
+        ai_message: str,
+        repo: "PipelineRepository | None" = None,
+    ):
         if self.history_is_disabled:
             return
 
@@ -287,8 +347,23 @@ class HistoryMixin(LLMResponseMixin):
             # Global History is saved outside of the node
             return
 
-        history, _ = session.pipeline_chat_history.get_or_create(type=self.history_type, name=self._get_history_name())
-        message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=self.node_id)
+        if repo:
+            history, _ = repo.get_or_create_pipeline_chat_history(
+                session=session,
+                history_type=self.history_type,
+                history_name=self._get_history_name(),
+            )
+            message = repo.save_pipeline_chat_message(
+                history=history,
+                node_id=self.node_id,
+                human_message=human_message,
+                ai_message=ai_message,
+            )
+        else:
+            history, _ = session.pipeline_chat_history.get_or_create(
+                type=self.history_type, name=self._get_history_name()
+            )
+            message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=self.node_id)
         return message
 
 

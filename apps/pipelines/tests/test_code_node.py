@@ -451,6 +451,8 @@ def test_code_node_reserved_session_state_keys(key_name, should_raise):
 
 @pytest.mark.django_db()
 def test_add_file_attachment(experiment_session):
+    from apps.pipelines.repository import DjangoPipelineRepository
+
     code = """
 def main(input, **kwargs):
     add_file_attachment("test.txt", b"hello world", "text/plain")
@@ -463,7 +465,8 @@ def main(input, **kwargs):
         experiment_session=experiment_session,
         temp_state={},
     )
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    config = {"configurable": {"repo": DjangoPipelineRepository()}}
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
 
     # Verify file was created
     file = File.objects.latest("id")

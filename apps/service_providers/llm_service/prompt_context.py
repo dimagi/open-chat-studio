@@ -1,8 +1,13 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
 from apps.utils.time import pretty_date
+
+if TYPE_CHECKING:
+    from apps.pipelines.repository import PipelineRepository
 
 
 class PromptTemplateContext:
@@ -14,6 +19,7 @@ class PromptTemplateContext:
         collection_index_ids: list[int] | None = None,
         extra: dict | None = None,
         participant_data: dict | None = None,
+        repo: PipelineRepository | None = None,
     ):
         self.session = session
         self.source_material_id = source_material_id
@@ -21,9 +27,12 @@ class PromptTemplateContext:
         self.collection_index_ids = collection_index_ids or []
         self.extra = extra or {}
         self.context_cache = {}
+        self.repo = repo
         if participant_data is None:
             participant_data = session.participant_data_from_experiment
-        self.participant_data_proxy = ParticipantDataProxy({"participant_data": participant_data}, self.session)
+        self.participant_data_proxy = ParticipantDataProxy(
+            {"participant_data": participant_data}, self.session, repo=repo
+        )
 
     @property
     def factories(self):
@@ -51,10 +60,14 @@ class PromptTemplateContext:
         return context
 
     def get_source_material(self):
-        from apps.experiments.models import SourceMaterial
-
         if self.source_material_id is None:
             return ""
+
+        if self.repo is not None:
+            source_material = self.repo.get_source_material(self.source_material_id)
+            return source_material.material if source_material else ""
+
+        from apps.experiments.models import SourceMaterial
 
         try:
             return SourceMaterial.objects.get(id=self.source_material_id).material
@@ -67,11 +80,23 @@ class PromptTemplateContext:
         * File (id=27, content_type=image/png): summary1
         * File (id=28, content_type=application/pdf): summary2
         """
+        if self.repo is not None:
+            collection = self.repo.get_collection(self.collection_id)
+            if collection is None:
+                return ""
+            file_info = collection.files.values_list("id", "summary", "content_type")
+            return "\n".join(
+                [
+                    f"* File (id={id}, content_type={content_type}): {summary}\n"
+                    for id, summary, content_type in file_info
+                ]
+            )
+
         from apps.documents.models import Collection
 
         try:
-            repo = Collection.objects.get(id=self.collection_id)
-            file_info = repo.files.values_list("id", "summary", "content_type")
+            collection = Collection.objects.get(id=self.collection_id)
+            file_info = collection.files.values_list("id", "summary", "content_type")
             return "\n".join(
                 [
                     f"* File (id={id}, content_type={content_type}): {summary}\n"
@@ -87,10 +112,13 @@ class PromptTemplateContext:
         Collection Index (id=1, name=Product collection): This is a collection about product documentation
         Collection Index (id=2, name=FAQ): Customer support FAQ database
         """
-        from apps.documents.models import Collection
-
         if not self.collection_index_ids:
             return ""
+
+        if self.repo is not None:
+            return self.repo.get_collection_index_summaries(self.collection_index_ids)
+
+        from apps.documents.models import Collection
 
         collections = Collection.objects.filter(id__in=self.collection_index_ids).values_list("id", "name", "summary")
         return "\n".join([f"Collection Index (id={id}, name={name}): {summary}" for id, name, summary in collections])
@@ -184,11 +212,12 @@ EMPTY = SafeAccessWrapper(None)
 class ParticipantDataProxy:
     """Allows multiple access without needing to re-fetch from the DB"""
 
-    def __init__(self, pipeline_state: dict, experiment_session):
+    def __init__(self, pipeline_state: dict, experiment_session, repo: PipelineRepository | None = None):
         self.session = experiment_session
         self.experiment_id = self.session.experiment_id if self.session else None
         self._participant_data = pipeline_state.setdefault("participant_data", {})
         self._scheduled_messages = None
+        self.repo = repo
 
     def get(self):
         """Returns the current participant's data as a dictionary."""
@@ -245,9 +274,17 @@ class ParticipantDataProxy:
         Returns all active scheduled messages for the participant in the current chat session.
         """
         if self._scheduled_messages is None:
-            self._scheduled_messages = self.session.participant.get_schedules_for_experiment(
-                self.experiment_id, as_dict=True, as_timezone=self.get_timezone()
-            )
+            if self.repo is not None:
+                self._scheduled_messages = self.repo.get_participant_schedules(
+                    self.session.participant,
+                    self.experiment_id,
+                    as_dict=True,
+                    as_timezone=self.get_timezone(),
+                )
+            else:
+                self._scheduled_messages = self.session.participant.get_schedules_for_experiment(
+                    self.experiment_id, as_dict=True, as_timezone=self.get_timezone()
+                )
         return self._scheduled_messages
 
     def get_timezone(self):

@@ -129,7 +129,9 @@ class TestEmailPipeline:
             messages=["Ice is not a liquid. When it is melted it turns into water."],
             experiment_session=ExperimentSessionFactory(),
         )
-        create_runnable(pipeline, nodes).invoke(state)
+        from apps.pipelines.repository import DjangoPipelineRepository
+
+        create_runnable(pipeline, nodes).invoke(state, config={"configurable": {"repo": DjangoPipelineRepository()}})
         assert len(mail.outbox) == 1
         assert mail.outbox[0].subject == "This is an interesting email"
         assert mail.outbox[0].to == ["test@example.com"]
@@ -190,6 +192,8 @@ class TestLLMResponse:
             end_node(),
         ]
         participant_data = {"name": "A"}
+        from apps.pipelines.repository import DjangoPipelineRepository
+
         output = create_runnable(pipeline, nodes).invoke(
             PipelineState(
                 messages=[user_input],
@@ -197,7 +201,8 @@ class TestLLMResponse:
                 temp_state={"temp_key": "temp_value"},
                 participant_data=participant_data,
                 session_state={"session_key": "session_value"},
-            )
+            ),
+            config={"configurable": {"repo": DjangoPipelineRepository()}},
         )["messages"][-1]
         expected_output = (
             f"Node 2: temp_value session_value Node 1: Use this {source_material.material} to answer questions "
@@ -228,7 +233,12 @@ class TestLLMResponse:
         ]
         runnable = create_runnable(pipeline, nodes, edges)
 
-        output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+        from apps.pipelines.repository import DjangoPipelineRepository
+
+        output = runnable.invoke(
+            PipelineState(messages=["a"], experiment_session=experiment_session),
+            config={"configurable": {"repo": DjangoPipelineRepository()}},
+        )
         assert output["intents"] == [Intents.END_SESSION]
 
     @django_db_with_data()
@@ -947,6 +957,12 @@ class TestDataExtraction:
 class TestAssistantNode:
     """Tests for assistant nodes (OpenAI assistants integration)"""
 
+    @pytest.fixture(autouse=True)
+    def _repo_config(self):
+        from apps.pipelines.repository import DjangoPipelineRepository
+
+        self.config = {"configurable": {"repo": DjangoPipelineRepository()}}
+
     def assistant_node_runnable_mock(
         self, output: str, input_message_metadata: dict | None = None, output_message_metadata: dict | None = None
     ):
@@ -978,7 +994,7 @@ class TestAssistantNode:
             experiment_session=ExperimentSessionFactory(),
             attachments=[],
         )
-        output_state = runnable.invoke(state)
+        output_state = runnable.invoke(state, config=self.config)
         assert output_state["input_message_metadata"] == {"test": "metadata"}
         assert output_state["output_message_metadata"] == {"test": "metadata"}
         assert output_state["messages"][-1] == "Hi there human"
@@ -1011,7 +1027,7 @@ class TestAssistantNode:
             experiment_session=ExperimentSessionFactory(),
             attachments=[att.model_dump() for att in attachments],
         )
-        output_state = runnable.invoke(state)
+        output_state = runnable.invoke(state, config=self.config)
         assert output_state["messages"][-1] == "Hi there human"
         args, kwargs = runnable_mock.invoke.call_args
         assert kwargs["attachments"] == [attachments[1]]
@@ -1035,7 +1051,7 @@ class TestAssistantNode:
             attachments=[],
         )
         with pytest.raises(PipelineNodeBuildError):
-            runnable.invoke(state)
+            runnable.invoke(state, config=self.config)
 
     @pytest.mark.django_db()
     @patch("apps.service_providers.models.LlmProvider.get_llm_service")
@@ -1059,7 +1075,7 @@ class TestAssistantNode:
                 experiment_session=ExperimentSessionFactory(),
                 attachments=[],
             )
-            output_state = runnable.invoke(state)
+            output_state = runnable.invoke(state, config=self.config)
         assert output_state["input_message_metadata"] == {}
         assert output_state["output_message_metadata"] == {}
         assert output_state["messages"][-1] == "How are you doing?"

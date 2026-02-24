@@ -153,7 +153,7 @@ class TestTruncateTokensHistoryMiddleware:
             assert msg.content != COMPRESSION_MARKER, "Unexpected compression marker in messages"
 
         mock_node.store_compression_checkpoint.assert_called_with(
-            compression_marker=COMPRESSION_MARKER, checkpoint_message_id=9
+            compression_marker=COMPRESSION_MARKER, checkpoint_message_id=9, repo=None
         )
 
 

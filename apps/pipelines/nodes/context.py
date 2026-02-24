@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from apps.experiments.models import ExperimentSession
     from apps.pipelines.nodes.base import PipelineState
+    from apps.pipelines.repository import PipelineRepository
 
 
 class StateAccessor:
@@ -131,10 +132,11 @@ class PipelineAccessor:
 class NodeContext:
     """Access-controlled view of pipeline state for nodes."""
 
-    def __init__(self, state: PipelineState):
+    def __init__(self, state: PipelineState, repo: PipelineRepository | None = None):
         self._pipeline_state = state
         self.state = StateAccessor(state)
         self.pipeline = PipelineAccessor(state)
+        self.repo = repo
 
     @property
     def input(self) -> str:

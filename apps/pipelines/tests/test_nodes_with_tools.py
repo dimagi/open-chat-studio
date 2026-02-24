@@ -79,7 +79,11 @@ def test_assistant_node(patched_invoke, disabled_tools):
         messages=["Hi there bot"],
         experiment_session=ExperimentSessionFactory(team=assistant.team),
     )
-    output_state = runnable.invoke(state, config={"configurable": {"disabled_tools": disabled_tools}})
+    from apps.pipelines.repository import DjangoPipelineRepository
+
+    output_state = runnable.invoke(
+        state, config={"configurable": {"disabled_tools": disabled_tools, "repo": DjangoPipelineRepository()}}
+    )
     assert output_state["messages"][-1] == "hello"
     args = patched_invoke.call_args[0]
     assert patched_invoke.call_count == 1
@@ -116,7 +120,9 @@ def test_tool_filtering(disabled_tools, provider, provider_model):
         {**node_data["params"], "node_id": node_data["id"], "django_node": django_node}
     )
     node._config = ensure_config({"configurable": {"disabled_tools": disabled_tools}})
-    tools = _get_configured_tools(node, ExperimentSessionFactory(), ToolCallbacks())
+    from apps.pipelines.repository import DjangoPipelineRepository
+
+    tools = _get_configured_tools(node, ExperimentSessionFactory(), ToolCallbacks(), repo=DjangoPipelineRepository())
     tool_names = {getattr(tool, "name", "") for tool in tools}
     assert not set(disabled_tools) & tool_names
 
@@ -152,7 +158,9 @@ def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_mod
         experiment_session=session,
         participant_data={"test": "abc", "other": "xyz"},
     )
-    output = graph.invoke(state)
+    from apps.pipelines.repository import DjangoPipelineRepository
+
+    output = graph.invoke(state, config={"configurable": {"repo": DjangoPipelineRepository()}})
     assert output["messages"][-1] == "123"
     assert output["participant_data"] == {"test": ["123", "next"], "other": "xyz"}
 
@@ -201,7 +209,9 @@ def test_tool_artifact_response(get_configured_tools, get_llm_service, provider,
         experiment_session=session,
         participant_data={"test": "abc", "other": "xyz"},
     )
-    output = graph.invoke(state)
+    from apps.pipelines.repository import DjangoPipelineRepository
+
+    output = graph.invoke(state, config={"configurable": {"repo": DjangoPipelineRepository()}})
     assert output["messages"][-1] == "ai response after tool"
     assert tool.func.call_args == (("test arg",), {})
     assert len(service.llm.get_call_messages()) == 2

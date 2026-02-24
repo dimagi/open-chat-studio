@@ -331,7 +331,8 @@ class PipelineNode(BasePipelineNode, ABC):
         }
         sentry_sdk.set_context("Node", sentry_context)
 
-        context = NodeContext(state)
+        repo = config.get("configurable", {}).get("repo")
+        context = NodeContext(state, repo=repo)
         process_params["context"] = context
         output = self._process(**process_params)
         if isinstance(output, Command) and output.goto != END:
@@ -365,7 +366,8 @@ class PipelineRouterNode(BasePipelineNode):
 
             state = PipelineState(state)
             state = self._prepare_state(self.node_id, incoming_edges, state)
-            context = NodeContext(state)
+            repo = config.get("configurable", {}).get("repo")
+            context = NodeContext(state, repo=repo)
             conditional_branch, is_default_keyword = self._process_conditional(context)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch, is_default_keyword)

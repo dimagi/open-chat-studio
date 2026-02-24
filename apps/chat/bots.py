@@ -133,11 +133,14 @@ class PipelineBot:
     def _run_pipeline(self, input_state, pipeline_to_use):
         from apps.experiments.models import AgentTools
         from apps.pipelines.graph import PipelineGraph
+        from apps.pipelines.repository import DjangoPipelineRepository
 
+        repo = DjangoPipelineRepository()
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
         config = self.trace_service.get_langchain_config(
             configurable={
                 "disabled_tools": AgentTools.reminder_tools() if self.disable_reminder_tools else [],
+                "repo": repo,
             },
             run_name_map=graph.node_id_to_name_mapping,
             filter_patterns=graph.filter_patterns,
@@ -273,12 +276,14 @@ class PipelineTestBot:
     def process_input(self, input: str) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
         from apps.pipelines.nodes.helpers import temporary_session
+        from apps.pipelines.repository import DjangoPipelineRepository
 
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
             state = PipelineState(messages=[input], experiment_session=session)
             runner = DjangoLangGraphRunner(CurrentThreadExecutor)
-            output = runner.invoke(runnable, state)
+            config = {"configurable": {"repo": DjangoPipelineRepository()}}
+            output = runner.invoke(runnable, state, config=config)
             output = PipelineState(**output).json_safe()
         return output
 
