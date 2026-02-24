@@ -50,6 +50,7 @@
           placeholder="e.g. sessions from last week excluding WhatsApp"
           class="input input-sm input-bordered flex-1"
           :disabled="nlLoading"
+          aria-label="Natural language filter query"
         >
         <button
           type="button"
@@ -63,7 +64,7 @@
           </span>
         </button>
       </div>
-      <div x-show="nlError" x-cloak class="mt-1 text-sm text-error" x-text="nlError"></div>
+      <div x-show="nlError" x-cloak class="mt-1 text-sm text-error" x-text="nlError" aria-live="polite"></div>
     </div>
     {% endflag %}
     <div class="space-y-2">

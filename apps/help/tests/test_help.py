@@ -6,7 +6,9 @@ import pytest
 from django.test import RequestFactory
 from pydantic import BaseModel
 
+import apps.experiments.filters  # noqa: F401 — trigger filter registration
 from apps.help.agents.code_generate import CodeGenerateAgent, CodeGenerateInput, CodeGenerateOutput
+from apps.help.agents.filter import FilterOutput
 from apps.help.agents.progress_messages import (
     ProgressMessagesAgent,
     ProgressMessagesInput,
@@ -16,6 +18,7 @@ from apps.help.base import BaseHelpAgent
 from apps.help.registry import AGENT_REGISTRY, register_agent
 from apps.help.utils import extract_function_signature, get_python_node_coder_prompt
 from apps.help.views import run_agent
+from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
 def test_get_python_node_coder_prompt():
@@ -287,10 +290,6 @@ class TestRunAgentView:
 
     @mock.patch("apps.help.base.build_system_agent")
     def test_successful_filter_agent_call(self, mock_build):
-        import apps.experiments.filters  # noqa: F401 — trigger filter registration
-        from apps.help.agents.filter import FilterOutput
-        from apps.web.dynamic_filters.datastructures import ColumnFilterData
-
         stub_output = FilterOutput(filters=[ColumnFilterData(column="state", operator="equals", value="setup")])
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {"structured_response": stub_output}
