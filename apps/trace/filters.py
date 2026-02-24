@@ -32,30 +32,6 @@ def get_trace_filter_context_data(team):
     return context
 
 
-class SpanNameFilter(ChoiceColumnFilter):
-    query_param: str = "span_name"
-    column: str = "spans__name"
-    label: str = "Span Name"
-
-    def prepare(self, team, **_):
-        self.options = list(team.span_set.values_list("name", flat=True).order_by("name").distinct())
-
-
-class SpanTagsFilter(ChoiceColumnFilter):
-    query_param: str = "span_tags"
-    column: str = "spans__tags__name"
-    label: str = "Span Tags"
-    type: str = TYPE_CHOICE
-
-    def prepare(self, team, **_):
-        self.options = list(
-            team.span_set.filter(tags__is_system_tag=True)
-            .values_list("tags__name", flat=True)
-            .order_by("tags__name")
-            .distinct("tags__name")
-        )
-
-
 class MessageTagsFilter(ChoiceColumnFilter):
     query_param: str = "message_tags"
     label: str = "Message Tags"
@@ -105,8 +81,6 @@ class TraceFilter(MultiColumnFilter):
         ParticipantFilter(),
         TimestampFilter(label="Timestamp", column="timestamp", query_param="timestamp"),
         MessageTagsFilter(),
-        SpanTagsFilter(),
-        SpanNameFilter(),
         RemoteIdFilter(),
         ExperimentFilter(),
         ExperimentVersionsFilter(),
