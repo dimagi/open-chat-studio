@@ -146,17 +146,17 @@ def test_history_mixin_max_history_length_visible_when():
     assert "ui:widget" not in props["max_history_length"]
 
 
-def test_show_default_emitted_in_schema():
+def test_default_on_show_emitted_in_schema():
     class ModelWithShowDefault(BaseModel):
         value: float | None = Field(
             default=None,
-            json_schema_extra=UiSchema(show_default=0.7),
+            json_schema_extra=UiSchema(default_on_show=0.7),
         )
 
     properties = ModelWithShowDefault.model_json_schema()["properties"]
-    assert properties["value"]["ui:showDefault"] == 0.7
+    assert properties["value"]["ui:onShowDefault"] == 0.7
 
 
-def test_show_default_not_emitted_when_none():
+def test_default_on_show_not_emitted_when_none():
     properties = get_schema_properties()
-    assert "ui:showDefault" not in properties["dependent_field"]
+    assert "ui:onShowDefault" not in properties["dependent_field"]

@@ -114,7 +114,7 @@ class GPT52Parameters(LLMModelParamBase):
         le=2.0,
         title="Temperature",
         json_schema_extra=UiSchema(
-            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), show_default=0.7
+            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), default_on_show=0.7
         ),
     )
 
@@ -124,7 +124,7 @@ class GPT52Parameters(LLMModelParamBase):
         le=1.0,
         title="Top P",
         json_schema_extra=UiSchema(
-            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), show_default=1.0
+            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), default_on_show=1.0
         ),
     )
 

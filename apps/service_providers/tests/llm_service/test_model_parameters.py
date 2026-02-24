@@ -41,10 +41,10 @@ class TestGPT52ParametersSchema:
     """The JSON schema for GPT52Parameters must advertise show defaults so the
     frontend can populate the sliders immediately when effort switches to 'none'."""
 
-    def test_temperature_has_show_default_in_schema(self):
+    def test_temperature_has_default_on_show_in_schema(self):
         schema = get_schema(GPT52Parameters)
-        assert schema["properties"]["temperature"]["ui:showDefault"] == 0.7
+        assert schema["properties"]["temperature"]["ui:onShowDefault"] == 0.7
 
-    def test_top_p_has_show_default_in_schema(self):
+    def test_top_p_has_default_on_show_in_schema(self):
         schema = get_schema(GPT52Parameters)
-        assert schema["properties"]["top_p"]["ui:showDefault"] == 1.0
+        assert schema["properties"]["top_p"]["ui:onShowDefault"] == 1.0

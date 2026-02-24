@@ -536,7 +536,7 @@ class UiSchema(BaseModel):
     # transitions from hidden to visible and its current value is null/undefined.
     # Distinct from the JSON schema `default`, which is what the field is cleared to
     # when it becomes hidden.
-    show_default: Any = None
+    default_on_show: Any = None
 
     def __call__(self, schema: JsonDict):
         if self.widget:
@@ -552,8 +552,8 @@ class UiSchema(BaseModel):
                 schema["ui:visibleWhen"] = [cond.model_dump() for cond in self.visible_when]
             else:
                 schema["ui:visibleWhen"] = self.visible_when.model_dump()
-        if self.show_default is not None:
-            schema["ui:showDefault"] = self.show_default
+        if self.default_on_show is not None:
+            schema["ui:onShowDefault"] = self.default_on_show
 
 
 class NodeSchema(BaseModel):
