@@ -17,7 +17,7 @@ from apps.channels.datamodels import Attachment
 from apps.experiments.models import AgentTools
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.nodes.base import Intents, PipelineState, merge_dict_values_as_lists
-from apps.pipelines.nodes.context import NodeContext
+from apps.pipelines.nodes.context import NodeContext, PipelineAccessor
 from apps.pipelines.nodes.nodes import (
     EndNode,
     LLMResponseWithPrompt,
@@ -1294,11 +1294,12 @@ class TestPipelineStateHelpers:
         }
 
         state = PipelineState(**pipeline_state_json)
+        accessor = PipelineAccessor(state)
 
-        assert state.get_selected_route("router_1") == "path_a"
-        assert state.get_selected_route("router_2") == "path_b"
-        assert state.get_selected_route("normal_node") is None
-        assert state.get_selected_route("non_existent_node") is None
+        assert accessor.get_selected_route("router_1") == "path_a"
+        assert accessor.get_selected_route("router_2") == "path_b"
+        assert accessor.get_selected_route("normal_node") is None
+        assert accessor.get_selected_route("non_existent_node") is None
 
     def test_get_all_routes(self):
         pipeline_state_json = {
@@ -1314,7 +1315,7 @@ class TestPipelineStateHelpers:
         }
         state = PipelineState(**pipeline_state_json)
         expected_routes = {"router_1": "path_a", "router_2": "path_b", "router_3": "path_c"}
-        assert state.get_all_routes() == expected_routes
+        assert PipelineAccessor(state).get_all_routes() == expected_routes
 
         # no router node case
         pipeline_state_json = {
@@ -1324,7 +1325,7 @@ class TestPipelineStateHelpers:
             "path": [],
         }
         state = PipelineState(**pipeline_state_json)
-        assert state.get_all_routes() == {}
+        assert PipelineAccessor(state).get_all_routes() == {}
 
     def test_get_node_path(self):
         pipeline_state_json = {
@@ -1345,9 +1346,10 @@ class TestPipelineStateHelpers:
             ],
         }
         state = PipelineState(**pipeline_state_json)
+        accessor = PipelineAccessor(state)
 
-        assert state.get_node_path("start") == ["start"]
-        assert state.get_node_path("branch_a") == ["start", "router", "branch_a"]
-        assert state.get_node_path("branch_b") == ["start", "router", "branch_b"]
-        assert state.get_node_path("end") == ["start", "router", "branch_a", "end"]
-        assert state.get_node_path("nonexistent_node") == ["nonexistent_node"]
+        assert accessor.get_node_path("start") == ["start"]
+        assert accessor.get_node_path("branch_a") == ["start", "router", "branch_a"]
+        assert accessor.get_node_path("branch_b") == ["start", "router", "branch_b"]
+        assert accessor.get_node_path("end") == ["start", "router", "branch_a", "end"]
+        assert accessor.get_node_path("nonexistent_node") == ["nonexistent_node"]

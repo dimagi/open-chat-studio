@@ -1,6 +1,7 @@
 import pytest
 
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.tests.utils import (
     code_node,
     create_runnable,
@@ -160,7 +161,7 @@ def main(input, **kwargs):
     )
     output_state = PipelineState(output)
     if safety_check == "safe":
-        assert output_state.get_node_output_by_name("end") == "B"
+        assert PipelineAccessor(output_state).get_node_output("end") == "B"
         assert "C" in output_state["outputs"]
     else:
         assert output_state["__interrupt__"][0].value == {"message": "Unsafe input: unsafe", "tag_name": "unsafe_input"}
@@ -201,7 +202,7 @@ def main(input, **kwargs):
         PipelineState(messages=["Hi"], experiment_session=experiment_session)
     )
     output_state = PipelineState(output)
-    assert output_state.get_node_output_by_name("end") == "B: A: Hi,C: Hi"
+    assert PipelineAccessor(output_state).get_node_output("end") == "B: A: Hi,C: Hi"
     assert isinstance(output_state["outputs"]["Code"], dict)
     assert output_state.get_execution_flow() in [
         [
@@ -252,7 +253,7 @@ def main(input, **kwargs):
         PipelineState(messages=["Hi"], experiment_session=experiment_session)
     )
     output_state = PipelineState(output)
-    assert output_state.get_node_output_by_name("end") == "B: A: Hi,C: Hi"
+    assert PipelineAccessor(output_state).get_node_output("end") == "B: A: Hi,C: Hi"
 
 
 @django_db_with_data()

@@ -161,13 +161,6 @@ class PipelineState(dict):
         """Adds the tag to the chat session."""
         self.setdefault("session_tags", []).append((tag, ""))
 
-    def get_node_id(self, node_name: str) -> str | None:
-        """
-        Helper method to get a node ID from a node name.
-        """
-        outputs = self.get_node_outputs_by_name(node_name)
-        return outputs[-1]["node_id"] if outputs else None
-
     def get_node_name(self, node_id: str) -> str | None:
         """
         Helper method to get a node name from a node ID.
@@ -179,39 +172,6 @@ class PipelineState(dict):
                 return name
         return None
 
-    def get_selected_route(self, node_name: str) -> str | None:
-        """
-        Returns the route keyword selected by a specific router node with the given name.
-        If the node does not exist or has no route defined, it returns `None`.
-        """
-        outputs = self.get_node_outputs_by_name(node_name)
-        return outputs[-1].get("route") if outputs else None
-
-    def get_node_path(self, node_name: str) -> list | None:
-        """
-        Gets the path (list of node names) leading to the specified node.
-        Returns:
-            A list containing the sequence of nodes leading to the target node.
-            If the node is not found in the pipeline path, returns a list containing
-            only the specified node name.
-        """
-        path = []
-        current_name = node_name
-        while current_name:
-            path.insert(0, current_name)
-            current_node_id = self.get_node_id(current_name)
-            if not current_node_id:
-                break
-
-            for _, current, targets in self.get("path", []):
-                if current_node_id in targets:
-                    current_name = self.get_node_name(current)
-                    break
-            else:
-                break
-
-        return path
-
     def get_execution_flow(self):
         """Returns the execution flow of the pipeline as a list of tuples.
         Each tuple contains the previous node name, the current node name, and a list of destination node names.
@@ -220,42 +180,6 @@ class PipelineState(dict):
             (self.get_node_name(prev), self.get_node_name(source), [self.get_node_name(x) for x in dest])
             for prev, source, dest in self.get("path", [])
         ]
-
-    def get_all_routes(self) -> dict:
-        """
-        Returns a dictionary containing all routing decisions made in the pipeline up to the current node.
-        The keys are the node names and the values are the route keywords chosen by each router node.
-
-        Note that in parallel workflows only the most recent route for a particular node will be returned.
-        """
-        routes_dict = {}
-        outputs = self.get("outputs", {})
-        for node_name, node_data in outputs.items():
-            if isinstance(node_data, list):
-                # Unclear how to handle the case where a router gets called twice due to parallel execution
-                # Take the last one for now
-                node_data = node_data[-1]
-            if "route" in node_data:
-                routes_dict[node_name] = node_data["route"]
-
-        return routes_dict
-
-    def get_node_output_by_name(self, node_name: str) -> Any:
-        """
-        Returns the output of the specified node if it has been executed.
-        If the node has not been executed, it returns `None`.
-        """
-        outputs = self.get_node_outputs_by_name(node_name)
-        return outputs[-1]["message"] if outputs else None
-
-    def get_node_outputs_by_name(self, node_name: str) -> list[dict] | None:
-        """
-        Get the outputs of a node by its name.
-        """
-        outputs = self["outputs"].get(node_name)
-        if outputs is not None:
-            return outputs if isinstance(outputs, list) else [outputs]
-        return None
 
     def get_node_outputs(self, node_id: str) -> list[str] | None:
         """

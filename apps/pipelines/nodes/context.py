@@ -59,9 +59,31 @@ class PipelineAccessor:
     def __init__(self, state: PipelineState):
         self._state = state
 
+    def _get_node_outputs_by_name(self, node_name: str) -> list[dict] | None:
+        """Get the outputs of a node by its name."""
+        outputs = self._state.get("outputs", {}).get(node_name)
+        if outputs is not None:
+            return outputs if isinstance(outputs, list) else [outputs]
+        return None
+
+    def _get_node_id(self, node_name: str) -> str | None:
+        """Get a node ID from a node name."""
+        outputs = self._get_node_outputs_by_name(node_name)
+        return outputs[-1]["node_id"] if outputs else None
+
+    def _get_node_name(self, node_id: str) -> str | None:
+        """Get a node name from a node ID."""
+        for name, output in self._state.get("outputs", {}).items():
+            if isinstance(output, list):
+                output = output[0] if output else None
+            if output and output.get("node_id") == node_id:
+                return name
+        return None
+
     def get_node_output(self, node_name: str) -> Any:
         """Get the output of a previously executed node by name."""
-        return self._state.get_node_output_by_name(node_name)
+        outputs = self._get_node_outputs_by_name(node_name)
+        return outputs[-1]["message"] if outputs else None
 
     def has_node_output(self, node_name: str) -> bool:
         """Check whether a node has been executed (has an entry in outputs)."""
@@ -69,15 +91,41 @@ class PipelineAccessor:
 
     def get_selected_route(self, node_name: str) -> str | None:
         """Get the routing decision made by a router node."""
-        return self._state.get_selected_route(node_name)
+        outputs = self._get_node_outputs_by_name(node_name)
+        return outputs[-1].get("route") if outputs else None
 
     def get_all_routes(self) -> dict:
-        """Get all routing decisions made so far in this execution."""
-        return self._state.get_all_routes()
+        """Get all routing decisions made so far in this execution.
+
+        Note that in parallel workflows only the most recent route for a particular node will be returned.
+        """
+        routes_dict = {}
+        outputs = self._state.get("outputs", {})
+        for node_name, node_data in outputs.items():
+            if isinstance(node_data, list):
+                node_data = node_data[-1]
+            if "route" in node_data:
+                routes_dict[node_name] = node_data["route"]
+        return routes_dict
 
     def get_node_path(self, node_name: str) -> list | None:
         """Get the execution path leading to a node."""
-        return self._state.get_node_path(node_name)
+        path = []
+        current_name = node_name
+        while current_name:
+            path.insert(0, current_name)
+            current_node_id = self._get_node_id(current_name)
+            if not current_node_id:
+                break
+
+            for _, current, targets in self._state.get("path", []):
+                if current_node_id in targets:
+                    current_name = self._get_node_name(current)
+                    break
+            else:
+                break
+
+        return path
 
 
 class NodeContext:
