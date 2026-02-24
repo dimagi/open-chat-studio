@@ -315,6 +315,7 @@
       toggleFilters() {
         this.filterData.showFilters = !this.filterData.showFilters;
         if (this.filterData.showFilters) {
+          this.nlError = '';
           if (!this.starredFilters.length) {
             this.loadStarredFilters();
           }
