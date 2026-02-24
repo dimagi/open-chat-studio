@@ -9,6 +9,7 @@ from apps.chat.models import ChatAttachment
 from apps.files.models import File
 from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
 from apps.pipelines.tests.utils import (
     code_node,
@@ -56,9 +57,8 @@ def main(input, **kwargs):
 )
 def test_code_node(code, user_input, output):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node_output = node._process(
-        PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
-    )
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
+    node_output = node._process(state, NodeContext(state))
     assert node_output.update["messages"][-1] == output  # ty: ignore[not-subscriptable]
 
 
@@ -112,10 +112,9 @@ def test_code_node_build_errors(code, error):
 )
 def test_code_node_runtime_errors(code, user_input, error):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
     with pytest.raises(CodeNodeRunError, match=error):
-        node._process(
-            PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
-        )
+        node._process(state, NodeContext(state))
 
 
 @pytest.mark.django_db()
@@ -125,15 +124,14 @@ def main(input, **kwargs):
     return get_participant_data()["fun_facts"]["body_type"]
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node_output = node._process(
-        PipelineState(
-            last_node_input="hi",
-            node_inputs=["hi"],
-            outputs={},
-            experiment_session=experiment_session,
-            participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
-        ),
+    state = PipelineState(
+        last_node_input="hi",
+        node_inputs=["hi"],
+        outputs={},
+        experiment_session=experiment_session,
+        participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
     )
+    node_output = node._process(state, NodeContext(state))
     assert node_output.update["messages"][-1] == "robot"  # ty: ignore[not-subscriptable]
 
 
@@ -149,15 +147,14 @@ def main(input, **kwargs):
     return get_participant_data()["fun_facts"]["personality"]
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node_output = node._process(
-        PipelineState(
-            last_node_input="hi",
-            node_inputs=["hi"],
-            outputs={},
-            experiment_session=experiment_session,
-            participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
-        ),
+    state = PipelineState(
+        last_node_input="hi",
+        node_inputs=["hi"],
+        outputs={},
+        experiment_session=experiment_session,
+        participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
     )
+    node_output = node._process(state, NodeContext(state))
     assert node_output.update["messages"][-1] == output  # ty: ignore[not-subscriptable]
     assert node_output.update["participant_data"]["fun_facts"]["personality"] == output  # ty: ignore[not-subscriptable]
 
@@ -244,8 +241,9 @@ def main(input, **kwargs):
     return input
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
     with pytest.raises(CodeNodeRunError, match="Cannot set the 'outputs' key of the temporary state"):
-        node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
+        node._process(state, NodeContext(state))
 
 
 def test_temp_state_user_input():
@@ -365,7 +363,8 @@ def main(input, **kwargs):
     return input
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
-    output = node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
+    output = node._process(state, NodeContext(state))
     assert output.update["output_message_tags"] == [("message-tag", "")]  # ty: ignore[not-subscriptable]
     assert output.update["session_tags"] == [("session-tag", "")]  # ty: ignore[not-subscriptable]
 
@@ -390,9 +389,8 @@ def main(input, **kwargs):
     """
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
-    node_output = node._process(
-        PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
-    )
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
+    node_output = node._process(state, NodeContext(state))
     assert node_output.update["messages"][-1] == "3,4 - {1, 2}"  # ty: ignore[not-subscriptable]
 
 
@@ -408,8 +406,9 @@ def main(input, **kwargs):
     """
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
     with pytest.raises(CodeNodeRunError) as exc_info:
-        node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
+        node._process(state, NodeContext(state))
     assert (
         str(exc_info.value)
         == """Error: NameError("name 'fail' is not defined")
@@ -490,12 +489,11 @@ def main(input, **kwargs):
     return input
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(
+        outputs={},
+        experiment_session=experiment_session,
+        last_node_input="hi",
+        node_inputs=["hi"],
+    )
     with pytest.raises(CodeNodeRunError, match="'content' must be bytes"):
-        node._process(
-            PipelineState(
-                outputs={},
-                experiment_session=experiment_session,
-                last_node_input="hi",
-                node_inputs=["hi"],
-            )
-        )
+        node._process(state, NodeContext(state))

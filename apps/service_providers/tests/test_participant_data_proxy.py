@@ -22,24 +22,6 @@ class TestParticipantDataProxy:
         assert proxy._participant_data == {}
         assert proxy._scheduled_messages is None
 
-    def test_from_state(self):
-        """Test creating a ParticipantDataProxy from pipeline state"""
-        session = ExperimentSessionFactory()
-        pipeline_state = {"experiment_session": session, "participant_data": {"test": 1}}
-        proxy = ParticipantDataProxy.from_state(pipeline_state)
-
-        assert proxy.session == session
-        assert proxy.experiment_id == session.experiment.id
-        assert proxy._participant_data == {"test": 1}
-
-    def test_from_state_with_missing_session(self):
-        """Test handling when state doesn't have experiment_session"""
-        pipeline_state = {}
-        proxy = ParticipantDataProxy.from_state(pipeline_state)
-
-        assert proxy.session is None
-        assert proxy.experiment_id is None
-
     def test_get_returns_merged_data(self):
         """Test that get() merges participant global data with participant data"""
         participant = ParticipantFactory(name="Test User")
