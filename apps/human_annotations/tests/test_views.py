@@ -643,3 +643,19 @@ def test_progress_accounts_for_multiple_reviews(team_with_users):
     progress = queue.get_progress()
     assert progress["reviews_done"] == 1
     assert progress["percent"] == 25
+
+
+# ===== AnnotationSessionsSelectionTable =====
+
+
+@pytest.mark.django_db()
+def test_annotation_sessions_selection_table_has_selection_column(team_with_users):
+    from apps.human_annotations.tables import AnnotationSessionsSelectionTable
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    session = ExperimentSessionFactory(team=team_with_users)
+    table = AnnotationSessionsSelectionTable([session])
+    assert "selection" in table.columns
+    assert "experiment" in table.columns
+    assert "participant" in table.columns
+    assert "message_count" in table.columns
