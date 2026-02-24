@@ -1,0 +1,30 @@
+FROM python:3.13-slim-bullseye
+
+ENV PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/venv
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    libpq5 \
+    gettext \
+    ffmpeg \
+    libssl-dev \
+    ca-certificates \
+    libasound2 \
+    wget \
+    libmagic1 \
+    mailcap \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /uvx /bin/
+
+WORKDIR /code
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-default-groups --group dev --compile-bytecode
+
+ENV PATH="/venv/bin:$PATH"
