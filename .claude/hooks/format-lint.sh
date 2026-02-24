@@ -24,8 +24,8 @@ ext="${file_path##*.}"
 
 case "$ext" in
   py)
-    ruff check --fix "$file_path" 2>&1 || true
-    ruff format "$file_path" 2>&1 || true
+    uv run ruff check --fix "$file_path" 2>&1 || true
+    uv run ruff format "$file_path" 2>&1 || true
     ;;
   js|ts|jsx|tsx)
     cd "$CLAUDE_PROJECT_DIR"
