@@ -113,7 +113,9 @@ class GPT52Parameters(LLMModelParamBase):
         ge=0.0,
         le=2.0,
         title="Temperature",
-        json_schema_extra=UiSchema(widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none")),
+        json_schema_extra=UiSchema(
+            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), show_default=0.7
+        ),
     )
 
     top_p: float | None = Field(
@@ -121,7 +123,9 @@ class GPT52Parameters(LLMModelParamBase):
         ge=0.0,
         le=1.0,
         title="Top P",
-        json_schema_extra=UiSchema(widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none")),
+        json_schema_extra=UiSchema(
+            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), show_default=1.0
+        ),
     )
 
     @field_validator("temperature", mode="before")
@@ -132,10 +136,7 @@ class GPT52Parameters(LLMModelParamBase):
                 "Temperature can only be set when reasoning effort is 'none'",
             )
         elif value is None and info.data.get("effort") == "none":
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "Temperature must be set when reasoning effort is 'none'",
-            )
+            return 0.7
         return value
 
     @field_validator("top_p", mode="before")
@@ -146,10 +147,7 @@ class GPT52Parameters(LLMModelParamBase):
                 "Top P can only be set when reasoning effort is 'none'",
             )
         elif value is None and info.data.get("effort") == "none":
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "Top P must be set when reasoning effort is 'none'",
-            )
+            return 1.0
         return value
 
 

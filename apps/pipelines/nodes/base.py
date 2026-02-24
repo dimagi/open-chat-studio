@@ -532,6 +532,12 @@ class UiSchema(BaseModel):
     # Can be a single condition or a list of conditions (all must be satisfied).
     visible_when: VisibleWhen | list[VisibleWhen] | None = None
 
+    # When set, the frontend will populate this field with this value when the field
+    # transitions from hidden to visible and its current value is null/undefined.
+    # Distinct from the JSON schema `default`, which is what the field is cleared to
+    # when it becomes hidden.
+    show_default: Any = None
+
     def __call__(self, schema: JsonDict):
         if self.widget:
             schema["ui:widget"] = self.widget
@@ -546,6 +552,8 @@ class UiSchema(BaseModel):
                 schema["ui:visibleWhen"] = [cond.model_dump() for cond in self.visible_when]
             else:
                 schema["ui:visibleWhen"] = self.visible_when.model_dump()
+        if self.show_default is not None:
+            schema["ui:showDefault"] = self.show_default
 
 
 class NodeSchema(BaseModel):

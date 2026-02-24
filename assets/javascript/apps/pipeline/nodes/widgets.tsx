@@ -793,6 +793,7 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
       <div className="p-4">
         {Object.getOwnPropertyNames(props.schema.properties).map((paramName) => {
           const schemaDefault = props.schema.properties[paramName]?.default ?? null;
+          const showDefault = props.schema.properties[paramName]?.["ui:showDefault"] ?? null;
           const onHide = () =>
             setNode(props.nodeId, (old) =>
               produce(old, (next) => {
@@ -802,6 +803,21 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
                 };
               })
             );
+          const onShow = showDefault !== null
+            ? () =>
+                setNode(props.nodeId, (old) => {
+                  const currentValue = old.data.params.llm_model_parameters?.[paramName];
+                  if (currentValue === null || currentValue === undefined) {
+                    return produce(old, (next) => {
+                      next.data.params.llm_model_parameters = {
+                        ...next.data.params.llm_model_parameters,
+                        [paramName]: showDefault,
+                      };
+                    });
+                  }
+                  return old;
+                })
+            : undefined;
           return (
             <div key={`${props.nodeId}_${paramName}`}>
               {getInputWidget(
@@ -817,6 +833,7 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
                 props.getNodeFieldError,
                 props.readOnly,
                 onHide,
+                onShow,
               )}
             </div>
           );

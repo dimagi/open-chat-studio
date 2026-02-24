@@ -49,6 +49,7 @@ type VisibleWhenWrapperProps = {
   nodeId: string;
   schemaDefault: any;
   onHide?: () => void;
+  onShow?: () => void;
   children: React.ReactNode;
 }
 
@@ -69,6 +70,7 @@ const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   nodeId,
   schemaDefault,
   onHide,
+  onShow,
   children,
 }) => {
   const setNode = usePipelineStore((state) => state.setNode);
@@ -92,6 +94,11 @@ const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
             next.data.params[fieldName] = schemaDefault ?? null;
           })
         );
+      }
+    } else if (prevVisibleRef.current === false && isVisible) {
+      // Populate the field when it transitions from hidden to visible.
+      if (onShow) {
+        onShow();
       }
     }
     prevVisibleRef.current = isVisible;
@@ -236,6 +243,7 @@ export const getInputWidget = (
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined,
   readOnly: boolean,
   onHide?: () => void,
+  onShow?: () => void,
 ) => {
   if (params.name == "llm_model" || params.name == "max_token_limit") {
     /*
@@ -278,6 +286,7 @@ export const getInputWidget = (
       nodeId={params.id}
       schemaDefault={widgetSchema.default}
       onHide={onHide}
+      onShow={onShow}
     >
       <Widget
         nodeId={params.id}
