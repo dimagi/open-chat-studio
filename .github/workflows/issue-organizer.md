@@ -49,7 +49,7 @@ steps:
       cat /tmp/gh-aw/issues-data/issues.json
 safe-outputs:
   create-issue:
-    expires: 2h
+    expires: false
     title-prefix: "[Parent] "
     max: 5
     group: true
