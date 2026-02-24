@@ -1,46 +1,79 @@
 {% extends "web/app/app_base.html" %}
+{% load i18n static %}
 
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'human_annotations:queue_home' request.team.slug %}">Annotation Queues</a></li>
       <li><a href="{% url 'human_annotations:queue_detail' request.team.slug queue.pk %}">{{ queue.name }}</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">Add Sessions</li>
+      <li class="pg-breadcrumb-active" aria-current="page">{% translate "Add Sessions" %}</li>
     </ul>
   </div>
 {% endblock breadcrumbs %}
 
 {% block app %}
-<div class="flex flex-col gap-4 max-w-2xl">
-  <h2 class="text-xl font-bold">Add Sessions to "{{ queue.name }}"</h2>
+<div x-data="annotationQueueSessionSelector({ sessionIdsFetchUrl: '{{ sessions_json_url }}' })"
+     x-init="init()">
 
-  <form method="post">
-    {% csrf_token %}
-    <div class="form-control">
-      <label class="label">
-        <span class="label-text">Select sessions to add:</span>
-      </label>
-      <div class="max-h-96 overflow-y-auto border rounded p-2">
-        {% for session in sessions %}
-          <label class="flex items-center gap-2 py-1 cursor-pointer">
-            <input type="checkbox" name="sessions" value="{{ session.id }}" class="checkbox checkbox-sm">
-            <span class="text-sm">
-              {{ session.experiment.name }} - {{ session.participant.identifier }}
-              {% if session.last_activity_at %}
-                ({{ session.last_activity_at|timesince }} ago)
-              {% endif %}
-            </span>
-          </label>
-        {% empty %}
-          <span class="text-gray-400 text-sm">No sessions found</span>
-        {% endfor %}
+  <div class="flex flex-col gap-4">
+    <h2 class="text-xl font-bold">{% blocktranslate with name=queue.name %}Add Sessions to "{{ name }}"{% endblocktranslate %}</h2>
+
+    <!-- Error messages -->
+    <div x-show="errorMessages.length" class="alert alert-error mb-4" x-cloak>
+      <i class="fa-solid fa-exclamation-triangle"></i>
+      <div>
+        <template x-for="error in errorMessages">
+          <p x-text="error"></p>
+        </template>
       </div>
     </div>
-    <div class="mt-4 flex gap-2">
-      <button type="submit" class="btn btn-primary">Add to Queue</button>
-      <a href="{% url 'human_annotations:queue_detail' team_slug=request.team.slug pk=queue.pk %}"
-         class="btn btn-ghost">Cancel</a>
+
+    <!-- Filter controls + session count -->
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <div>
+        {% include "experiments/filters.html" %}
+      </div>
+      <div class="flex items-center gap-3 text-sm font-medium">
+        <div x-show="selectedSessionIds.size > 0">
+          <span x-text="selectedSessionIds.size"></span>
+          {% translate "session" %}<span x-show="selectedSessionIds.size !== 1">s</span>
+          {% translate "of" %} <span x-text="allSessionIds.size"></span> {% translate "selected" %}
+          <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
+            {% translate "Clear" %}
+          </button>
+        </div>
+        <div x-show="selectedSessionIds.size === 0 && allSessionIds.size > 0">
+          <span x-text="allSessionIds.size"></span>
+          {% translate "session" %}<span x-show="allSessionIds.size !== 1">s</span>
+        </div>
+      </div>
     </div>
-  </form>
+
+    <!-- Sessions table (HTMX lazy-loaded) -->
+    <div id="sessions-table"
+         data-url="{% url 'human_annotations:queue_sessions_table' request.team.slug queue.pk %}">
+      {% include "table/table_placeholder.html" %}
+    </div>
+
+    <!-- Submission form -->
+    <form method="post" @submit="validateAndSubmit($event)">
+      {% csrf_token %}
+      <input type="hidden" name="session_ids" x-model="sessionIdsString">
+      <div class="flex gap-2 mt-4">
+        <button type="submit" class="btn btn-primary">
+          {% translate "Add to Queue" %}
+        </button>
+        <a href="{% url 'human_annotations:queue_detail' team_slug=request.team.slug pk=queue.pk %}"
+           class="btn btn-ghost">
+          {% translate "Cancel" %}
+        </a>
+      </div>
+    </form>
+  </div>
+
 </div>
 {% endblock app %}
+
+{% block page_js %}
+  <script src="{% static 'js/human_annotations-bundle.js' %}"></script>
+{% endblock page_js %}
