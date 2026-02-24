@@ -191,6 +191,7 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
             # table. For large teams this may be slow; consider a subquery if it becomes
             # a bottleneck (also applies to the evaluations equivalent).
             queryset.annotate(message_count=Coalesce(Count("chat__messages", distinct=True), 0))
+            .filter(message_count__gt=0)
             .select_related("team", "participant__user", "chat", "experiment")
             .order_by("experiment__name")
         )
@@ -209,6 +210,7 @@ def annotation_queue_sessions_json(request, team_slug: str, pk: int):
     queryset = _get_base_session_queryset(request)
     # Exclude sessions already added to this queue so the count reflects available sessions.
     queryset = queryset.exclude(id__in=AnnotationItem.objects.filter(queue_id=pk).values("session_id"))
+    queryset = queryset.annotate(message_count=Count("chat__messages", distinct=True)).filter(message_count__gt=0)
     session_keys = list(queryset.values_list("external_id", flat=True))
     return JsonResponse(session_keys, safe=False)
 

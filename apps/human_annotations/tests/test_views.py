@@ -709,6 +709,34 @@ def test_queue_sessions_json_requires_login(team_with_users, queue):
     assert response.status_code in (302, 403)
 
 
+@pytest.mark.django_db()
+def test_queue_sessions_table_excludes_sessions_without_messages(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+
+    session_with_messages = ExperimentSessionFactory(team=team_with_users)
+    ChatMessageFactory(chat=session_with_messages.chat)
+    session_without_messages = ExperimentSessionFactory(team=team_with_users)
+
+    url = reverse("human_annotations:queue_sessions_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    content = response.content.decode()
+    assert str(session_with_messages.external_id) in content
+    assert str(session_without_messages.external_id) not in content
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_json_excludes_sessions_without_messages(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+
+    session_with_messages = ExperimentSessionFactory(team=team_with_users)
+    ChatMessageFactory(chat=session_with_messages.chat)
+    ExperimentSessionFactory(team=team_with_users)  # no messages
+
+    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    data = client.get(url).json()
+    assert set(data) == {str(session_with_messages.external_id)}
+
+
 # ===== AddSessionsToQueue GET + POST =====
 
 
