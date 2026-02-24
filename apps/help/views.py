@@ -2,7 +2,6 @@ import json
 import logging
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from pydantic import ValidationError
 
@@ -15,7 +14,6 @@ logger = logging.getLogger("ocs.help")
 
 @require_POST
 @login_and_team_required
-@csrf_exempt
 def run_agent(request, team_slug: str, agent_name: str):
     agent_cls = AGENT_REGISTRY.get(agent_name)
     if not agent_cls:
