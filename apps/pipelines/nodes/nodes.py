@@ -46,6 +46,7 @@ from apps.pipelines.nodes.base import (
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -857,11 +858,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         http_client = RestrictedHttpClient(team=team)
 
-        # Note: We expose pipeline_state methods directly here rather than going through
-        # PipelineAccessor because CodeNode needs a *cloned* state with the current node
+        # We create a PipelineAccessor wrapping a *cloned* state with the current node
         # injected into outputs (line above). The clone also isolates user code mutations
         # from the real pipeline state. This is an intentional bypass of the NodeContext
         # abstraction for CodeNode's sandboxed execution environment.
+        pipeline_accessor = PipelineAccessor(pipeline_state)
         return {
             "http": http_client,
             "get_participant_data": participant_data_proxy.get,
@@ -874,13 +875,13 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "set_temp_state_key": self._set_temp_state_key(output_state),
             "get_session_state_key": self._get_session_state_key(output_state),
             "set_session_state_key": self._set_session_state_key(output_state),
-            "get_selected_route": pipeline_state.get_selected_route,
-            "get_node_path": pipeline_state.get_node_path,
-            "get_all_routes": pipeline_state.get_all_routes,
+            "get_selected_route": pipeline_accessor.get_selected_route,
+            "get_node_path": pipeline_accessor.get_node_path,
+            "get_all_routes": pipeline_accessor.get_all_routes,
             "add_file_attachment": self._add_file_attachment(context, output_state),
             "add_message_tag": output_state.add_message_tag,
             "add_session_tag": output_state.add_session_tag,
-            "get_node_output": pipeline_state.get_node_output_by_name,
+            "get_node_output": pipeline_accessor.get_node_output,
             # control flow
             "abort_with_message": self._abort_pipeline(),
             "require_node_outputs": self._require_node_outputs(context),
