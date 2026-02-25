@@ -739,3 +739,53 @@ def test_add_session_to_queue_post_wrong_team_queue_returns_404(client, team_wit
     url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
     response = client.post(url, {"queue_id": other_queue.pk})
     assert response.status_code == 404
+
+
+# ===== Dogfood bug fixes =====
+
+
+@pytest.mark.django_db()
+def test_add_session_to_queue_modal_has_auto_open_directive(client, team_with_users, queue, session):
+    """ISSUE-001: The modal partial must include an Alpine x-init directive that calls showModal() on insertion."""
+    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert 'x-init="$el.showModal()"' in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_session_detail_shows_annotation_queue_names(client, team_with_users, queue):
+    """ISSUE-002: After a session is added to a queue, the session detail page shows the queue name."""
+    session = ExperimentSessionFactory(
+        experiment__team=team_with_users,
+        team=team_with_users,
+        chat__team=team_with_users,
+    )
+    AnnotationItem.objects.create(
+        queue=queue,
+        session=session,
+        team=team_with_users,
+        item_type="session",
+    )
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team_with_users.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    assert queue.name in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_annotation_item_table_description_has_truncate_class(client, team_with_users, queue, session):
+    """ISSUE-003: The description chip in the annotation items table must use truncate to prevent UUID overflow."""
+    AnnotationItem.objects.create(
+        queue=queue,
+        session=session,
+        team=team_with_users,
+        item_type="session",
+    )
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "truncate" in response.content.decode()
