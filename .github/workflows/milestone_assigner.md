@@ -1,6 +1,6 @@
 ---
-description: Weekly workflow that analyzes recent issues and assigns milestones to issues that clearly belong to a milestone
 name: Milestone Assigner
+description: Weekly workflow that analyzes recent issues and assigns milestones to issues that clearly belong to a milestone
 on:
   schedule: weekly on friday around 11 pm
   workflow_dispatch:
