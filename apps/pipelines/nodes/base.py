@@ -432,6 +432,19 @@ class OptionsSource(StrEnum):
     synthetic_voice_id = "synthetic_voice_id"
 
 
+class VisibleWhen(BaseModel):
+    """Defines a condition under which a field should be visible in the UI.
+
+    Supported operators: "==", "!=", "in", "not_in", "is_empty", "is_not_empty"
+
+    For "is_empty" and "is_not_empty", the `value` field is ignored.
+    """
+
+    field: str
+    value: Any = None
+    operator: Literal["==", "!=", "in", "not_in", "is_empty", "is_not_empty"] = "=="
+
+
 class UiSchema(BaseModel):
     widget: Widgets | None = None
 
@@ -443,6 +456,16 @@ class UiSchema(BaseModel):
     options_source: OptionsSource | None = None
     flag_required: str | None = None
 
+    # Use this to conditionally show/hide a field based on another field's value.
+    # Can be a single condition or a list of conditions (all must be satisfied).
+    visible_when: VisibleWhen | list[VisibleWhen] | None = None
+
+    # When set, the frontend will populate this field with this value when the field
+    # transitions from hidden to visible and its current value is null/undefined.
+    # Distinct from the JSON schema `default`, which is what the field is cleared to
+    # when it becomes hidden.
+    default_on_show: Any = None
+
     def __call__(self, schema: JsonDict):
         if self.widget:
             schema["ui:widget"] = self.widget
@@ -452,6 +475,13 @@ class UiSchema(BaseModel):
             schema["ui:optionsSource"] = self.options_source
         if self.flag_required:
             schema["ui:flagRequired"] = self.flag_required
+        if self.visible_when is not None:
+            if isinstance(self.visible_when, list):
+                schema["ui:visibleWhen"] = [cond.model_dump() for cond in self.visible_when]
+            else:
+                schema["ui:visibleWhen"] = self.visible_when.model_dump()
+        if self.default_on_show is not None:
+            schema["ui:onShowDefault"] = self.default_on_show
 
 
 class NodeSchema(BaseModel):

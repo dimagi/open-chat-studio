@@ -27,6 +27,7 @@ from apps.pipelines.models import (
 from apps.pipelines.nodes.base import (
     PipelineState,
     UiSchema,
+    VisibleWhen,
     Widgets,
 )
 from apps.pipelines.nodes.history_middleware import (
@@ -175,14 +176,25 @@ class HistoryMixin(LLMResponseMixin):
     )
     user_max_token_limit: int | None = Field(
         None,
+        title="Token Limit",
+        description="Maximum number of tokens before messages are summarized or truncated.",
         json_schema_extra=UiSchema(
-            widget=Widgets.none,
+            visible_when=VisibleWhen(
+                field="history_mode",
+                operator="in",
+                value=["summarize", "truncate_tokens"],
+            ),
         ),
     )
     max_history_length: int = Field(
         10,
+        title="Max History Length",
+        description="Chat history will only keep the most recent messages up to this limit.",
         json_schema_extra=UiSchema(
-            widget=Widgets.none,
+            visible_when=VisibleWhen(
+                field="history_mode",
+                value="max_history_length",
+            ),
         ),
     )
 

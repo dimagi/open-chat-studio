@@ -11,7 +11,6 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.ocs_notifications.models import (
-    EventType,
     NotificationEvent,
 )
 from apps.web.meta import absolute_url
@@ -81,9 +80,6 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
 
 @shared_task(ignore_result=True)
 def cleanup_old_notification_events():
-    """Delete EventType records older than 3 months.
-
-    Deleting EventType cascades to associated NotificationEvent and EventUser records.
-    """
+    """Delete NotificationEvent records older than 3 months."""
     three_months_ago = timezone.now() - timedelta(days=90)
-    EventType.objects.filter(created_at__lt=three_months_ago).delete()
+    NotificationEvent.objects.filter(created_at__lt=three_months_ago).delete()

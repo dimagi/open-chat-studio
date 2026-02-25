@@ -1193,8 +1193,11 @@ class WhatsappChannel(ChannelBase):
 
 class SureAdhereChannel(ChannelBase):
     def send_text_to_user(self, text: str):
+        from_ = self.experiment_channel.extra_data.get("sureadhere_tenant_id")
         to_patient = self.participant_identifier
-        self.messaging_service.send_text_message(message=text, to=to_patient, platform=ChannelPlatform.SUREADHERE)
+        self.messaging_service.send_text_message(
+            message=text, from_=from_, to=to_patient, platform=ChannelPlatform.SUREADHERE
+        )
 
     @property
     def supported_message_types(self):

@@ -43,6 +43,7 @@ from apps.pipelines.nodes.base import (
     PipelineRouterNode,
     PipelineState,
     UiSchema,
+    VisibleWhen,
     Widgets,
     deprecated_node,
 )
@@ -239,12 +240,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         ge=1,
         le=100,
         description="The maximum number of results to retrieve from the index",
-        json_schema_extra=UiSchema(widget=Widgets.range),
+        json_schema_extra=UiSchema(
+            widget=Widgets.range,
+            visible_when=VisibleWhen(field="collection_index_ids", operator="is_not_empty"),
+        ),
     )
     generate_citations: bool = Field(
         default=True,
         description="Allow files from this collection to be referenced in LLM responses and downloaded by users",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
+        json_schema_extra=UiSchema(
+            widget=Widgets.toggle,
+            visible_when=VisibleWhen(field="collection_index_ids", operator="is_not_empty"),
+        ),
     )
 
     tools: list[str] = Field(
