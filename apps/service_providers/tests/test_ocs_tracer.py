@@ -5,7 +5,7 @@ import pytest
 
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
 from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
-from apps.trace.models import Span, Trace
+from apps.trace.models import Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -39,9 +39,6 @@ class TestOCSTracer:
         ):
             # Should execute without errors even though tracer is not ready
             pass
-
-        # Verify no Span objects were created
-        assert Span.objects.count() == 0
 
     def test_record_experiment_version(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)

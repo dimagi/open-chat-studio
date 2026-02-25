@@ -727,3 +727,162 @@ def test_add_session_to_queue_post_duplicate_returns_200(
     assert response.status_code == 200
     assert AnnotationItem.objects.filter(queue=queue, session=session).count() == 1
     assert "already" in response.content.decode().lower()
+
+
+# ===== AnnotationSessionsSelectionTable =====
+
+
+@pytest.mark.django_db()
+def test_annotation_sessions_selection_table_has_selection_column(team_with_users):
+    from apps.human_annotations.tables import AnnotationSessionsSelectionTable
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    session = ExperimentSessionFactory(team=team_with_users)
+    table = AnnotationSessionsSelectionTable([session])
+    assert "selection" in table.columns
+    assert "experiment" in table.columns
+    assert "participant" in table.columns
+    assert "message_count" in table.columns
+
+
+# ===== Queue sessions table & JSON views =====
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_table_view(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    ExperimentSessionFactory.create_batch(3, team=team_with_users)
+    url = reverse("human_annotations:queue_sessions_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_table_only_shows_team_sessions(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+
+    own_session = ExperimentSessionFactory(team=team_with_users)
+    ChatMessageFactory(chat=own_session.chat)
+    other_session = ExperimentSessionFactory()  # different team
+    ChatMessageFactory(chat=other_session.chat)
+    url = reverse("human_annotations:queue_sessions_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    content = response.content.decode()
+    assert str(own_session.external_id) in content
+    assert str(other_session.external_id) not in content
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_json_returns_external_ids(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+
+    sessions = ExperimentSessionFactory.create_batch(3, team=team_with_users)
+    for s in sessions:
+        ChatMessageFactory(chat=s.chat)
+    ExperimentSessionFactory()  # different team — must not appear
+    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    data = response.json()
+    expected_ids = {str(s.external_id) for s in sessions}
+    assert set(str(i) for i in data) == expected_ids
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_json_requires_login(team_with_users, queue):
+    c = Client()  # unauthenticated
+    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    response = c.get(url)
+    assert response.status_code in (302, 403)
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_table_excludes_sessions_without_messages(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+
+    session_with_messages = ExperimentSessionFactory(team=team_with_users)
+    ChatMessageFactory(chat=session_with_messages.chat)
+    session_without_messages = ExperimentSessionFactory(team=team_with_users)
+
+    url = reverse("human_annotations:queue_sessions_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    content = response.content.decode()
+    assert str(session_with_messages.external_id) in content
+    assert str(session_without_messages.external_id) not in content
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_json_excludes_sessions_without_messages(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+
+    session_with_messages = ExperimentSessionFactory(team=team_with_users)
+    ChatMessageFactory(chat=session_with_messages.chat)
+    ExperimentSessionFactory(team=team_with_users)  # no messages
+
+    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    data = client.get(url).json()
+    assert set(data) == {str(session_with_messages.external_id)}
+
+
+# ===== AddSessionsToQueue GET + POST =====
+
+
+@pytest.mark.django_db()
+def test_add_sessions_get_renders_filter_context(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "df_filter_columns" in response.context
+    assert "df_filter_data_source_url" in response.context
+    assert "sessions_json_url" in response.context
+
+
+@pytest.mark.django_db()
+def test_add_sessions_post_creates_items_from_external_ids(client, team_with_users, queue):
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    sessions = ExperimentSessionFactory.create_batch(2, team=team_with_users)
+    session_ids = ",".join(str(s.external_id) for s in sessions)
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"session_ids": session_ids})
+    assert response.status_code == 302
+    assert response["Location"] == reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    from apps.human_annotations.models import AnnotationItem
+
+    assert AnnotationItem.objects.filter(queue=queue).count() == 2
+
+
+@pytest.mark.django_db()
+def test_add_sessions_post_skips_duplicates(client, team_with_users, queue):
+    from apps.human_annotations.models import AnnotationItem
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    item = AnnotationItemFactory(queue=queue, team=team_with_users)
+    existing_session = item.session
+    new_session = ExperimentSessionFactory(team=team_with_users)
+    session_ids = ",".join([str(existing_session.external_id), str(new_session.external_id)])
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    client.post(url, {"session_ids": session_ids})
+    assert AnnotationItem.objects.filter(queue=queue).count() == 2  # 1 old + 1 new
+
+
+@pytest.mark.django_db()
+def test_add_sessions_post_empty_redirects_with_error(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"session_ids": ""})
+    assert response.status_code == 302
+    from apps.human_annotations.models import AnnotationItem
+
+    assert AnnotationItem.objects.filter(queue=queue).count() == 0
+
+
+@pytest.mark.django_db()
+def test_add_sessions_post_ignores_other_team_sessions(client, team_with_users, queue):
+    from apps.human_annotations.models import AnnotationItem
+    from apps.utils.factories.experiment import ExperimentSessionFactory
+
+    other_session = ExperimentSessionFactory()  # different team
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    client.post(url, {"session_ids": str(other_session.external_id)})
+    assert AnnotationItem.objects.filter(queue=queue).count() == 0
