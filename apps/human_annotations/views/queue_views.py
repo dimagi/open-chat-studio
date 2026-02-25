@@ -7,14 +7,16 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import IntegrityError
 from django.db.models import Count, Prefetch, Sum
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 
 from apps.experiments.models import ExperimentSession
+from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..forms import AnnotationQueueForm
@@ -215,6 +217,11 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
 
 class AddSessionToQueueFromSession(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.add_annotationitem"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not flag_is_active(request, Flags.HUMAN_ANNOTATIONS.slug):
+            raise Http404
+        return super().dispatch(request, *args, **kwargs)
 
     def get(self, request, team_slug: str, session_id: str):
         session = get_object_or_404(ExperimentSession, external_id=session_id, team=request.team)

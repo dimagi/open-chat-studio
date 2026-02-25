@@ -13,6 +13,7 @@ from apps.human_annotations.models import (
     AnnotationQueue,
     AnnotationStatus,
 )
+from apps.teams.models import Flag
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.human_annotations import (
     AnnotationItemFactory,
@@ -655,8 +656,16 @@ def session(team_with_users):
     return ExperimentSessionFactory(team=team_with_users, chat__team=team_with_users)
 
 
+@pytest.fixture()
+def human_annotations_flag():
+    flag, _ = Flag.objects.get_or_create(name="flag_human_annotations")
+    flag.everyone = True
+    flag.save()
+    return flag
+
+
 @pytest.mark.django_db()
-def test_add_session_to_queue_get_lists_active_queues(client, team_with_users, queue, session):
+def test_add_session_to_queue_get_lists_active_queues(client, team_with_users, queue, session, human_annotations_flag):
     """GET returns the modal partial listing active queues for the team."""
     url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
     response = client.get(url)
@@ -665,7 +674,7 @@ def test_add_session_to_queue_get_lists_active_queues(client, team_with_users, q
 
 
 @pytest.mark.django_db()
-def test_add_session_to_queue_get_shows_already_added(client, team_with_users, queue, session):
+def test_add_session_to_queue_get_shows_already_added(client, team_with_users, queue, session, human_annotations_flag):
     """If the session is already in a queue, that queue shows an 'Already added' badge and its radio is disabled."""
     AnnotationItem.objects.create(
         queue=queue,
@@ -683,7 +692,7 @@ def test_add_session_to_queue_get_shows_already_added(client, team_with_users, q
 
 
 @pytest.mark.django_db()
-def test_add_session_to_queue_get_excludes_inactive_queues(client, team_with_users, session):
+def test_add_session_to_queue_get_excludes_inactive_queues(client, team_with_users, session, human_annotations_flag):
     """GET only lists ACTIVE queues — paused/archived queues must not appear."""
     paused_queue = AnnotationQueueFactory(team=team_with_users, status="paused")
     url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
@@ -693,7 +702,7 @@ def test_add_session_to_queue_get_excludes_inactive_queues(client, team_with_use
 
 
 @pytest.mark.django_db()
-def test_add_session_to_queue_post_creates_item(client, team_with_users, queue, session):
+def test_add_session_to_queue_post_creates_item(client, team_with_users, queue, session, human_annotations_flag):
     """POST with a valid queue_id creates an AnnotationItem and returns 200 with queue name."""
     url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
     response = client.post(url, {"queue_id": queue.pk})
@@ -703,7 +712,9 @@ def test_add_session_to_queue_post_creates_item(client, team_with_users, queue, 
 
 
 @pytest.mark.django_db()
-def test_add_session_to_queue_post_duplicate_returns_200(client, team_with_users, queue, session):
+def test_add_session_to_queue_post_duplicate_returns_200(
+    client, team_with_users, queue, session, human_annotations_flag
+):
     """POST with a session already in the queue returns 200 with an 'already' message (no duplicate row)."""
     AnnotationItem.objects.create(
         queue=queue,
