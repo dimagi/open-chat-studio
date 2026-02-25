@@ -151,6 +151,25 @@ class TestReadableValue:
         result = readable_value({"input": {"message_text": "", "participant_id": "test@test.com"}})
         assert result is None
 
+    def test_function_call_with_non_dict_args_does_not_crash(self):
+        # Sentry bug: args from external API may not be a dict
+        result = readable_value(
+            {
+                "role": "assistant",
+                "content": [{"type": "function_call", "name": "search", "args": "invalid"}],
+            }
+        )
+        assert result == "assistant: → search('invalid')"
+
+    def test_function_call_with_null_args_does_not_crash(self):
+        result = readable_value(
+            {
+                "role": "assistant",
+                "content": [{"type": "function_call", "name": "ping", "args": None}],
+            }
+        )
+        assert result == "assistant: → ping(None)"
+
     def test_anthropic_tool_use_block(self):
         # Anthropic GENERATION output with tool_use block
         result = readable_value(

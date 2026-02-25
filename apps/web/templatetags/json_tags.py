@@ -92,7 +92,7 @@ def _extract_text(content) -> str | None:
             elif block.get("type") == "function_call":
                 name = block.get("name", "?")
                 args = block.get("args", {})
-                args_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+                args_str = ", ".join(f"{k}={v!r}" for k, v in args.items()) if isinstance(args, dict) else repr(args)
                 parts.append(f"→ {name}({args_str})")
             elif block.get("type") == "tool_use":
                 name = block.get("name", "?")
