@@ -8,10 +8,12 @@ from django.urls import reverse
 from apps.human_annotations.aggregation import compute_aggregates_for_queue
 from apps.human_annotations.models import (
     Annotation,
+    AnnotationItem,
     AnnotationItemStatus,
     AnnotationQueue,
     AnnotationStatus,
 )
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.human_annotations import (
     AnnotationItemFactory,
     AnnotationQueueFactory,
@@ -643,3 +645,97 @@ def test_progress_accounts_for_multiple_reviews(team_with_users):
     progress = queue.get_progress()
     assert progress["reviews_done"] == 1
     assert progress["percent"] == 25
+
+
+# ===== Add Session to Queue from Session Detail =====
+
+
+@pytest.fixture()
+def session(team_with_users):
+    return ExperimentSessionFactory(team=team_with_users, chat__team=team_with_users)
+
+
+@pytest.mark.django_db()
+def test_add_session_to_queue_get_lists_active_queues(client, team_with_users, queue, session):
+    """GET returns the modal partial listing active queues for the team."""
+    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert queue.name in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_add_session_to_queue_get_shows_already_added(client, team_with_users, queue, session):
+    """If the session is already in a queue, that queue shows an 'Already added' badge and its radio is disabled."""
+    AnnotationItem.objects.create(
+        queue=queue,
+        session=session,
+        team=team_with_users,
+        item_type="session",
+    )
+    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
+    response = client.get(url)
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert queue.name in content
+    assert "Already added" in content
+    assert "disabled" in content
+
+
+@pytest.mark.django_db()
+def test_add_session_to_queue_get_excludes_inactive_queues(client, team_with_users, session):
+    """GET only lists ACTIVE queues — paused/archived queues must not appear."""
+    paused_queue = AnnotationQueueFactory(team=team_with_users, status="paused")
+    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert paused_queue.name not in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_add_session_to_queue_get_requires_team_membership(team_with_users, session):
+    """A user who is not a team member gets a 404 (team access is treated as 404 to avoid leaking info)."""
+    outsider = User.objects.create_user(username="outsider", password="test")
+    outsider_client = Client()
+    outsider_client.force_login(outsider)
+    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
+    response = outsider_client.get(url)
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+def test_add_session_to_queue_post_creates_item(client, team_with_users, queue, session):
+    """POST with a valid queue_id creates an AnnotationItem and returns 200 with queue name."""
+    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
+    response = client.post(url, {"queue_id": queue.pk})
+    assert response.status_code == 200
+    assert AnnotationItem.objects.filter(queue=queue, session=session).exists()
+    assert queue.name in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_add_session_to_queue_post_duplicate_returns_200(client, team_with_users, queue, session):
+    """POST with a session already in the queue returns 200 with an 'already' message (no duplicate row)."""
+    AnnotationItem.objects.create(
+        queue=queue,
+        session=session,
+        team=team_with_users,
+        item_type="session",
+    )
+    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
+    response = client.post(url, {"queue_id": queue.pk})
+    assert response.status_code == 200
+    assert AnnotationItem.objects.filter(queue=queue, session=session).count() == 1
+    assert "already" in response.content.decode().lower()
+
+
+@pytest.mark.django_db()
+def test_add_session_to_queue_post_wrong_team_queue_returns_404(client, team_with_users, session):
+    """POST with a queue_id from a different team returns 404."""
+    from apps.utils.factories.team import TeamFactory
+
+    other_team = TeamFactory()
+    other_queue = AnnotationQueueFactory(team=other_team)
+    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
+    response = client.post(url, {"queue_id": other_queue.pk})
+    assert response.status_code == 404

@@ -5,6 +5,7 @@ import re
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import IntegrityError
 from django.db.models import Count, Prefetch, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -17,7 +18,7 @@ from apps.experiments.models import ExperimentSession
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..forms import AnnotationQueueForm
-from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue, AnnotationStatus
+from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue, AnnotationStatus, QueueStatus
 from ..tables import AnnotationItemTable, AnnotationQueueTable
 
 User = get_user_model()
@@ -210,6 +211,62 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
             msg += f" Skipped {skipped} duplicates."
         messages.success(request, msg)
         return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
+
+
+class AddSessionToQueueFromSession(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "human_annotations.add_annotationitem"
+
+    def get(self, request, team_slug: str, session_id: str):
+        session = get_object_or_404(ExperimentSession, external_id=session_id, team=request.team)
+        queues = list(
+            AnnotationQueue.objects.filter(team=request.team, status=QueueStatus.ACTIVE).order_by("name")[:50]
+        )
+        already_queued_ids = set(
+            AnnotationItem.objects.filter(
+                session=session,
+                queue__in=queues,
+            ).values_list("queue_id", flat=True)
+        )
+        return render(
+            request,
+            "human_annotations/add_session_to_queue_modal.html",
+            {
+                "session": session,
+                "queues": queues,
+                "already_queued_ids": already_queued_ids,
+            },
+        )
+
+    def post(self, request, team_slug: str, session_id: str):
+        session = get_object_or_404(ExperimentSession, external_id=session_id, team=request.team)
+        queue_id = request.POST.get("queue_id")
+        if not queue_id:
+            return render(
+                request,
+                "human_annotations/add_session_to_queue_result.html",
+                {"error": "Please select a queue."},
+            )
+        queue = get_object_or_404(AnnotationQueue, id=queue_id, team=request.team, status=QueueStatus.ACTIVE)
+        try:
+            item, created = AnnotationItem.objects.get_or_create(
+                queue=queue,
+                session=session,
+                defaults={
+                    "team": request.team,
+                    "item_type": AnnotationItemType.SESSION,
+                },
+            )
+        except IntegrityError:
+            # Concurrent POST race: another request inserted the row between our SELECT and INSERT.
+            created = False
+        return render(
+            request,
+            "human_annotations/add_session_to_queue_result.html",
+            {
+                "queue": queue,
+                "created": created,
+            },
+        )
 
 
 class ManageAssignees(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):

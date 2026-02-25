@@ -1,0 +1,59 @@
+{% load i18n %}
+<dialog id="add-to-queue-dialog-{{ session.pk }}" class="modal">
+  <div class="modal-box">
+    <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+            onclick="this.closest('dialog').close()">✕</button>
+    <h3 class="font-bold text-lg mb-4">{% translate "Add to Annotation Queue" %}</h3>
+
+    {% if queues %}
+      <form x-data="{ selected: false }"
+            hx-post="{% url 'human_annotations:session_add_to_queue' request.team.slug session.external_id %}"
+            hx-target="closest .modal-box"
+            hx-swap="innerHTML">
+        {% csrf_token %}
+        <div class="flex flex-col gap-2 max-h-64 overflow-y-auto">
+          {% for queue in queues %}
+            <label class="flex items-center gap-3 py-2 cursor-pointer {% if queue.id in already_queued_ids %}opacity-50{% endif %}">
+              <input type="radio"
+                     name="queue_id"
+                     value="{{ queue.id }}"
+                     class="radio radio-sm radio-primary"
+                     @change="selected = true"
+                     {% if queue.id in already_queued_ids %}disabled{% endif %}>
+              <span class="text-sm font-medium">{{ queue.name }}</span>
+              {% if queue.id in already_queued_ids %}
+                <span class="badge badge-ghost badge-sm">{% translate "Already added" %}</span>
+              {% endif %}
+            </label>
+          {% endfor %}
+        </div>
+        <div class="modal-action mt-4 flex items-center gap-2">
+          <button type="button"
+                  class="btn btn-ghost btn-sm"
+                  onclick="this.closest('dialog').close()">
+            {% translate "Cancel" %}
+          </button>
+          <button type="submit"
+                  class="btn btn-primary btn-sm"
+                  :disabled="!selected">
+            {% translate "Add to Queue" %}
+          </button>
+        </div>
+      </form>
+    {% else %}
+      <p class="text-gray-500 text-sm">
+        {% translate "No active annotation queues found for this team." %}
+      </p>
+      <div class="modal-action">
+        <button type="button"
+                class="btn btn-ghost btn-sm"
+                onclick="this.closest('dialog').close()">
+          {% translate "Close" %}
+        </button>
+      </div>
+    {% endif %}
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>{% translate "close" %}</button>
+  </form>
+</dialog>

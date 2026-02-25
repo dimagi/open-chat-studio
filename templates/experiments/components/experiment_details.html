@@ -36,6 +36,21 @@
           {% include "annotations/tag_ui.html" with object=experiment_session.chat allow_edit=experiment.is_editable %}
         </dd>
       </div>
+      {% if perms.human_annotations.add_annotationitem %}
+        <div class="py-3 grid grid-cols-3 sm:gap-4">
+          <dt class="text-sm font-medium leading-6">{% translate "Annotation Queues" %}</dt>
+          <dd class="text-sm col-span-2">
+            <button class="btn btn-sm btn-ghost"
+                    hx-get="{% url 'human_annotations:session_add_to_queue' request.team.slug experiment_session.external_id %}"
+                    hx-target="#add-to-queue-modal-container-{{ experiment_session.pk }}"
+                    hx-swap="innerHTML"
+                    hx-on::after-settle="document.getElementById('add-to-queue-dialog-{{ experiment_session.pk }}').showModal()">
+              <i class="fa-solid fa-plus"></i> {% translate "Add to Queue" %}
+            </button>
+            <div id="add-to-queue-modal-container-{{ experiment_session.pk }}"></div>
+          </dd>
+        </div>
+      {% endif %}
       {% if perms.annotations.add_usercomment %}
         <div x-data="{showComments: false}">
           <div class="py-3 grid grid-cols-3 mb-2">
