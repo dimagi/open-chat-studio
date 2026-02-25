@@ -91,6 +91,28 @@ class TestBuildChildMap:
         assert result == [{"observation": root, "depth": 0}]
 
 
+class TestAutoSelectedSpanId:
+    def test_selects_first_error_span(self):
+        view = TraceLangufuseSpansView()
+        ok_obs = _make_observation("obs-1", "Root", level="DEFAULT")
+        err_obs = _make_observation("obs-2", "Failure", level="ERROR")
+        flattened = [
+            {"observation": ok_obs, "depth": 0},
+            {"observation": err_obs, "depth": 1},
+        ]
+        assert view._get_auto_selected_span_id(flattened) == "obs-2"
+
+    def test_falls_back_to_first_span_when_no_errors(self):
+        view = TraceLangufuseSpansView()
+        obs = _make_observation("obs-1", "Root", level="DEFAULT")
+        flattened = [{"observation": obs, "depth": 0}]
+        assert view._get_auto_selected_span_id(flattened) == "obs-1"
+
+    def test_returns_none_for_empty_list(self):
+        view = TraceLangufuseSpansView()
+        assert view._get_auto_selected_span_id([]) is None
+
+
 @pytest.mark.django_db()
 class TestTraceLangufuseSpansView:
     @pytest.fixture()
@@ -205,3 +227,5 @@ class TestTraceLangufuseSpansView:
         assert b"LLM Call" in response.content
         assert LANGFUSE_TRACE_URL.encode() in response.content
         mock_api.trace.get.assert_called_once_with(LANGFUSE_TRACE_ID)
+        assert "flattened_observations" in response.context
+        assert response.context["auto_selected_span_id"] == "obs-1"  # no errors, first span

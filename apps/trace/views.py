@@ -101,8 +101,11 @@ class TraceLangufuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionR
             observations = langfuse_trace.observations or []
             context["langfuse_available"] = True
             context["langfuse_error"] = False
-            context["root_observations"] = [o for o in observations if not o.parent_observation_id]
-            context["child_observations_map"] = self._build_child_map(observations)
+            root_observations = [o for o in observations if not o.parent_observation_id]
+            child_map = self._build_child_map(observations)
+            flattened = self._flatten_observations(root_observations, child_map)
+            context["flattened_observations"] = flattened
+            context["auto_selected_span_id"] = self._get_auto_selected_span_id(flattened)
         except Exception:
             logger.exception("Error fetching Langfuse trace %s", langfuse_trace_id)
             context["langfuse_available"] = False
@@ -137,3 +140,10 @@ class TraceLangufuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionR
         for root in root_observations:
             _walk(root, 0)
         return result
+
+    def _get_auto_selected_span_id(self, flattened_observations) -> str | None:
+        """Return the first ERROR span id; fall back to the first span."""
+        for item in flattened_observations:
+            if item["observation"].level == "ERROR":
+                return item["observation"].id
+        return flattened_observations[0]["observation"].id if flattened_observations else None
