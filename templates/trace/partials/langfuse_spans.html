@@ -1,0 +1,59 @@
+{% load i18n json_tags %}
+{% if not langfuse_available and not langfuse_error %}
+  {# No Langfuse provider or no trace info — show a subtle note #}
+  <div id="langfuse-spans-section" class="langfuse_not_available mt-6">
+    <p class="text-xs text-base-content/40 text-center">No Langfuse trace available for this trace.</p>
+  </div>
+{% elif not langfuse_available and langfuse_error %}
+  {# API call failed — show error with optional fallback link #}
+  <div id="langfuse-spans-section" class="langfuse_error mt-6">
+    <div class="card bg-base-100 shadow-md">
+      <div class="card-body">
+        <div role="alert" class="alert alert-warning">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <div>
+            <p>Could not load Langfuse trace data.</p>
+            {% if langfuse_trace_url %}
+              <a href="{{ langfuse_trace_url }}"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 class="link">
+                View directly on Langfuse <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  {# Successful fetch — show span tree #}
+  <div id="langfuse-spans-section" class="mt-6">
+    <div class="card bg-base-100 shadow-md">
+      <div class="card-header border-b border-base-200 px-6 py-4">
+        <div class="flex justify-between items-center">
+          <h3 class="text-lg font-semibold text-base-content">Langfuse Trace</h3>
+          <a href="{{ langfuse_trace_url }}"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="btn btn-sm btn-outline gap-1"
+             title="View full trace on Langfuse">
+            {% include "svg/langfuse.svg" %}
+            <span>View in Langfuse</span>
+          </a>
+        </div>
+      </div>
+      <div class="card-body p-4">
+        {% if root_observations %}
+          <div class="space-y-2">
+            {% for obs in root_observations %}
+              {% include "trace/partials/langfuse_observation.html" with observation=obs depth=0 %}
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-base-content/60 text-sm">No observations recorded for this trace.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endif %}

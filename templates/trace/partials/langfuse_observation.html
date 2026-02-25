@@ -1,0 +1,52 @@
+{% load default_tags json_tags %}
+{% with children=child_observations_map|get_item:observation.id %}
+  <div x-data="{ open: false }" class="border border-base-200 rounded-lg">
+    {# Header row — always visible #}
+    <div class="flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-base-50"
+         @click="open = !open">
+      <button class="btn btn-xs btn-ghost btn-circle"
+              :aria-label="open ? 'Collapse' : 'Expand'">
+        <i class="fa-solid fa-chevron-right transition-transform"
+           :class="open ? 'rotate-90' : ''"></i>
+      </button>
+      {# Status badge #}
+      {% if observation.level == "ERROR" %}
+        <span class="badge badge-error badge-sm">ERROR</span>
+      {% elif observation.level == "WARNING" %}
+        <span class="badge badge-warning badge-sm">WARN</span>
+      {% else %}
+        <span class="badge badge-success badge-sm">OK</span>
+      {% endif %}
+      <span class="text-sm font-medium flex-1">{{ observation.name }}</span>
+      {% if observation.latency %}
+        <span class="text-xs text-base-content/50">{{ observation.latency|floatformat:3 }}s</span>
+      {% endif %}
+    </div>
+    {# Expandable body #}
+    <div x-show="open" class="border-t border-base-200 px-4 py-3 space-y-3">
+      {% if observation.status_message %}<div class="text-sm text-error">{{ observation.status_message }}</div>{% endif %}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {% if observation.input %}
+          <div>
+            <div class="text-xs font-medium text-base-content/60 mb-1">Input</div>
+            <pre class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.input|to_json }}</pre>
+          </div>
+        {% endif %}
+        {% if observation.output %}
+          <div>
+            <div class="text-xs font-medium text-base-content/60 mb-1">Output</div>
+            <pre class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.output|to_json }}</pre>
+          </div>
+        {% endif %}
+      </div>
+      {# Child observations #}
+      {% if children %}
+        <div class="space-y-2 pl-4 border-l-2 border-base-200">
+          {% for child in children %}
+            {% include "trace/partials/langfuse_observation.html" with observation=child depth=depth|add:1 %}
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endwith %}
