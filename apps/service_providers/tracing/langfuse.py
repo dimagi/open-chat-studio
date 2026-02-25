@@ -20,11 +20,24 @@ from .const import SpanLevel
 if TYPE_CHECKING:
     from langchain_core.callbacks.base import BaseCallbackHandler
     from langfuse import Langfuse
+    from langfuse.api.client import FernLangfuse
 
     from apps.experiments.models import ExperimentSession
 
 
 logger = logging.getLogger("ocs.tracing.langfuse")
+
+
+def get_langfuse_api_client(config: dict) -> FernLangfuse:
+    """Create a Langfuse management API client for reading trace data."""
+    from langfuse.api.client import FernLangfuse
+
+    return FernLangfuse(
+        base_url=config["host"],
+        username=config["public_key"],
+        password=config["secret_key"],
+        timeout=10,
+    )
 
 
 class LangFuseTracer(Tracer):
