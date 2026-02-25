@@ -74,7 +74,7 @@ class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredM
         )
 
 
-class TraceLangufuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
+class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
     model = Trace
     template_name = "trace/partials/langfuse_spans.html"
     permission_required = "trace.view_trace"

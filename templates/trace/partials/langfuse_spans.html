@@ -1,4 +1,4 @@
-{% load i18n json_tags %}
+{% load json_tags %}
 {% if not langfuse_available and not langfuse_error %}
   {# No Langfuse provider or no trace info — show a subtle note #}
   <div id="langfuse-spans-section" class="langfuse_not_available mt-6">

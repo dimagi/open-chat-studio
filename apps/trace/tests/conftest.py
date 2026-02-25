@@ -18,5 +18,6 @@ def team(user):
 
 
 @pytest.fixture()
-def client():
+def anon_client():
+    """Unauthenticated Django test client (intentionally shadows pytest-django's built-in)."""
     return Client()

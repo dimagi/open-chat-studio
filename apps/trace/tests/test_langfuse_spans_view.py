@@ -1,3 +1,4 @@
+from collections import defaultdict
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -6,7 +7,7 @@ from django.urls import reverse
 
 from apps.service_providers.models import TraceProviderType
 from apps.trace.models import TraceStatus
-from apps.trace.views import TraceLangufuseSpansView
+from apps.trace.views import TraceLangfuseSpansView
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory
 from apps.utils.factories.traces import TraceFactory
@@ -34,14 +35,14 @@ class TestBuildChildMap:
     """Unit tests for tree-building logic — no DB needed."""
 
     def test_separates_root_and_child_observations(self):
-        view = TraceLangufuseSpansView()
+        view = TraceLangfuseSpansView()
         root = _make_observation("obs-1", "Root")
         child = _make_observation("obs-2", "Child", parent_id="obs-1")
         result = view._build_child_map([root, child])
         assert result == {"obs-1": [child]}
 
     def test_multiple_children_under_same_parent(self):
-        view = TraceLangufuseSpansView()
+        view = TraceLangfuseSpansView()
         root = _make_observation("obs-1", "Root")
         child_a = _make_observation("obs-2", "Child A", parent_id="obs-1")
         child_b = _make_observation("obs-3", "Child B", parent_id="obs-1")
@@ -49,21 +50,19 @@ class TestBuildChildMap:
         assert result == {"obs-1": [child_a, child_b]}
 
     def test_returns_plain_dict_not_defaultdict(self):
-        from collections import defaultdict
-
-        view = TraceLangufuseSpansView()
+        view = TraceLangfuseSpansView()
         result = view._build_child_map([])
         assert not isinstance(result, defaultdict)
         assert isinstance(result, dict)
 
     def test_observation_with_no_parent_not_in_map(self):
-        view = TraceLangufuseSpansView()
+        view = TraceLangfuseSpansView()
         root = _make_observation("obs-1", "Root")
         result = view._build_child_map([root])
         assert result == {}
 
     def test_flatten_observations_depth_first_with_depths(self):
-        view = TraceLangufuseSpansView()
+        view = TraceLangfuseSpansView()
         root = _make_observation("obs-1", "Root")
         child_a = _make_observation("obs-2", "Child A", parent_id="obs-1")
         child_b = _make_observation("obs-3", "Child B", parent_id="obs-1")
@@ -80,12 +79,12 @@ class TestBuildChildMap:
         ]
 
     def test_flatten_observations_empty(self):
-        view = TraceLangufuseSpansView()
+        view = TraceLangfuseSpansView()
         result = view._flatten_observations([], {})
         assert result == []
 
     def test_flatten_observations_single_span(self):
-        view = TraceLangufuseSpansView()
+        view = TraceLangfuseSpansView()
         root = _make_observation("obs-1", "Root")
         result = view._flatten_observations([root], {})
         assert result == [{"observation": root, "depth": 0}]
@@ -93,7 +92,7 @@ class TestBuildChildMap:
 
 class TestAutoSelectedSpanId:
     def test_selects_first_error_span(self):
-        view = TraceLangufuseSpansView()
+        view = TraceLangfuseSpansView()
         ok_obs = _make_observation("obs-1", "Root", level="DEFAULT")
         err_obs = _make_observation("obs-2", "Failure", level="ERROR")
         flattened = [
@@ -103,18 +102,18 @@ class TestAutoSelectedSpanId:
         assert view._get_auto_selected_span_id(flattened) == "obs-2"
 
     def test_falls_back_to_first_span_when_no_errors(self):
-        view = TraceLangufuseSpansView()
+        view = TraceLangfuseSpansView()
         obs = _make_observation("obs-1", "Root", level="DEFAULT")
         flattened = [{"observation": obs, "depth": 0}]
         assert view._get_auto_selected_span_id(flattened) == "obs-1"
 
     def test_returns_none_for_empty_list(self):
-        view = TraceLangufuseSpansView()
+        view = TraceLangfuseSpansView()
         assert view._get_auto_selected_span_id([]) is None
 
 
 @pytest.mark.django_db()
-class TestTraceLangufuseSpansView:
+class TestTraceLangfuseSpansView:
     @pytest.fixture()
     def trace_provider(self, team):
         return TraceProviderFactory(
@@ -149,25 +148,25 @@ class TestTraceLangufuseSpansView:
     def _url(self, team, trace):
         return reverse("trace:trace_langfuse_spans", args=[team.slug, trace.pk])
 
-    def test_null_experiment_returns_not_available(self, client, team, user, output_message):
+    def test_null_experiment_returns_not_available(self, anon_client, team, user, output_message):
         """Trace with no experiment (experiment=None): no AttributeError, show 'not available' note."""
         trace = TraceFactory(team=team, experiment=None, output_message=output_message, status=TraceStatus.SUCCESS)
-        client.force_login(user)
-        response = client.get(self._url(team, trace))
+        anon_client.force_login(user)
+        response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
         assert b"langfuse_not_available" in response.content
 
-    def test_no_langfuse_provider_returns_not_available(self, client, team, user):
+    def test_no_langfuse_provider_returns_not_available(self, anon_client, team, user):
         """Experiment has no trace_provider: show 'not available' note."""
         experiment = ExperimentFactory(team=team, trace_provider=None)
         output_message = ChatMessageFactory(chat=ChatFactory(team=team), metadata={})
         trace = TraceFactory(team=team, experiment=experiment, output_message=output_message)
-        client.force_login(user)
-        response = client.get(self._url(team, trace))
+        anon_client.force_login(user)
+        response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
         assert b"langfuse_not_available" in response.content
 
-    def test_no_langfuse_trace_info_returns_not_available(self, client, team, user, trace_provider):
+    def test_no_langfuse_trace_info_returns_not_available(self, anon_client, team, user, trace_provider):
         """Output message has no Langfuse trace_info: show 'not available' note."""
         experiment = ExperimentFactory(team=team, trace_provider=trace_provider)
         output_message = ChatMessageFactory(
@@ -175,21 +174,21 @@ class TestTraceLangufuseSpansView:
             metadata={"trace_info": [{"trace_provider": "ocs", "trace_id": "123"}]},
         )
         trace = TraceFactory(team=team, experiment=experiment, output_message=output_message)
-        client.force_login(user)
-        response = client.get(self._url(team, trace))
+        anon_client.force_login(user)
+        response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
         assert b"langfuse_not_available" in response.content
 
-    def test_no_output_message_returns_not_available(self, client, team, user, trace_provider):
+    def test_no_output_message_returns_not_available(self, anon_client, team, user, trace_provider):
         """Trace has no output_message: show 'not available' note."""
         experiment = ExperimentFactory(team=team, trace_provider=trace_provider)
         trace = TraceFactory(team=team, experiment=experiment, output_message=None)
-        client.force_login(user)
-        response = client.get(self._url(team, trace))
+        anon_client.force_login(user)
+        response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
         assert b"langfuse_not_available" in response.content
 
-    def test_none_trace_id_in_trace_info_returns_not_available(self, client, team, user, trace_provider):
+    def test_none_trace_id_in_trace_info_returns_not_available(self, anon_client, team, user, trace_provider):
         """trace_info has a Langfuse entry but trace_id is None: show 'not available' note."""
         experiment = ExperimentFactory(team=team, trace_provider=trace_provider)
         output_message = ChatMessageFactory(
@@ -199,36 +198,36 @@ class TestTraceLangufuseSpansView:
             },
         )
         trace = TraceFactory(team=team, experiment=experiment, output_message=output_message)
-        client.force_login(user)
-        response = client.get(self._url(team, trace))
+        anon_client.force_login(user)
+        response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
         assert b"langfuse_not_available" in response.content
 
-    def test_langfuse_api_error_returns_error_partial(self, client, team, user, trace):
+    def test_langfuse_api_error_returns_error_partial(self, anon_client, team, user, trace):
         """Langfuse API call fails: show error partial with fallback link."""
-        client.force_login(user)
+        anon_client.force_login(user)
         with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
             mock_api = MagicMock()
             mock_api.trace.get.side_effect = Exception("API unreachable")
             mock_client_factory.return_value = mock_api
-            response = client.get(self._url(team, trace))
+            response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
         assert b"langfuse_error" in response.content
         assert LANGFUSE_TRACE_URL.encode() in response.content
 
-    def test_successful_fetch_renders_observations(self, client, team, user, trace):
+    def test_successful_fetch_renders_observations(self, anon_client, team, user, trace):
         """Successful Langfuse fetch: render span tree with observation names."""
         root_obs = _make_observation("obs-1", "Pipeline Run")
         child_obs = _make_observation("obs-2", "LLM Call", parent_id="obs-1")
         mock_trace_data = MagicMock()
         mock_trace_data.observations = [root_obs, child_obs]
 
-        client.force_login(user)
+        anon_client.force_login(user)
         with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
             mock_api = MagicMock()
             mock_api.trace.get.return_value = mock_trace_data
             mock_client_factory.return_value = mock_api
-            response = client.get(self._url(team, trace))
+            response = anon_client.get(self._url(team, trace))
 
         assert response.status_code == 200
         assert b"Pipeline Run" in response.content
