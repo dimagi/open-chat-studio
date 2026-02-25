@@ -390,6 +390,62 @@ def test_fire_from_first_message_logs_against_first_message(session):
 
 
 @pytest.mark.django_db()
+def test_trigger_from_first_message_count_not_reset_by_new_message(session):
+    """When trigger_from_first_message=True and total_num_triggers > 1, new messages
+    should not reset the trigger count. All fires count against the first message."""
+    with travel("2024-04-02", tick=False) as frozen_time:
+        timeout_trigger = TimeoutTrigger.objects.create(
+            experiment=session.experiment,
+            action=EventAction.objects.create(action_type=EventActionType.LOG),
+            delay=10 * 60,  # 10 minutes
+            total_num_triggers=2,
+            trigger_from_first_message=True,
+        )
+
+        chat = Chat.objects.create(team=session.team)
+        first_message = ChatMessage.objects.create(
+            chat=chat,
+            content="First message",
+            message_type=ChatMessageType.HUMAN,
+        )
+        session.chat = chat
+        session.save()
+
+        # Wait for timeout and fire once
+        frozen_time.shift(delta=timedelta(minutes=11))
+        assert len(timeout_trigger.timed_out_sessions()) == 1
+        timeout_trigger.fire(session)
+        assert (
+            timeout_trigger.event_logs.filter(
+                session=session, chat_message=first_message, status=EventLogStatusChoices.SUCCESS
+            ).count()
+            == 1
+        )
+
+        # Send a new human message — this should NOT reset the count
+        ChatMessage.objects.create(
+            chat=chat,
+            content="Second message",
+            message_type=ChatMessageType.HUMAN,
+        )
+
+        # Wait for another timeout window and fire again
+        frozen_time.shift(delta=timedelta(minutes=11))
+        assert len(timeout_trigger.timed_out_sessions()) == 1
+        timeout_trigger.fire(session)
+        assert (
+            timeout_trigger.event_logs.filter(
+                session=session, chat_message=first_message, status=EventLogStatusChoices.SUCCESS
+            ).count()
+            == 2
+        )
+
+        # Both triggers exhausted — no more triggers should be left
+        frozen_time.shift(delta=timedelta(minutes=11))
+        assert len(timeout_trigger.timed_out_sessions()) == 0
+
+
+@pytest.mark.django_db()
 def test_not_triggered_no_human_message(session):
     with travel("2024-04-02", tick=False) as frozen_time:
         timeout_trigger = TimeoutTrigger.objects.create(
