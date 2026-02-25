@@ -30,7 +30,7 @@
   {# Successful fetch — split-pane UI #}
   <div id="langfuse-spans-section" class="mt-6">
     <div class="card bg-base-100 shadow-md"
-         x-data="{ selectedSpanId: '{{ auto_selected_span_id|default:'' }}' }">
+         x-data="{ selectedSpanId: '{{ auto_selected_span_id|default:''|escapejs }}' }">
 
       {# Card header #}
       <div class="card-header border-b border-base-200 px-6 py-4">
@@ -56,10 +56,12 @@
           {# Left pane: tree navigator #}
           <div class="w-1/3 border-r border-base-200 overflow-y-auto py-2 flex-shrink-0 min-h-0">
             {% for item in flattened_observations %}
-              <div class="flex items-center gap-2 pr-3 py-1.5 cursor-pointer rounded-lg mx-1 text-sm hover:bg-base-200 transition-colors"
-                   style="padding-left: calc(0.75rem + {{ item.depth }} * 1rem)"
-                   :class="selectedSpanId === '{{ item.observation.id }}' ? 'bg-primary/10 text-primary font-medium' : ''"
-                   @click="selectedSpanId = '{{ item.observation.id }}'">
+              <button type="button"
+                      class="flex items-center gap-2 pr-3 py-1.5 cursor-pointer rounded-lg mx-1 text-sm hover:bg-base-200 transition-colors w-full text-left"
+                      style="padding-left: calc(0.75rem + {{ item.depth }} * 1rem)"
+                      :class="selectedSpanId === '{{ item.observation.id|escapejs }}' ? 'bg-primary/10 text-primary font-medium' : ''"
+                      @click="selectedSpanId = '{{ item.observation.id|escapejs }}'"
+                      @keydown.enter="selectedSpanId = '{{ item.observation.id|escapejs }}'">
                 {# Status dot #}
                 {% if item.observation.level == "ERROR" %}
                   <span class="w-2 h-2 rounded-full bg-error flex-shrink-0"></span>
@@ -72,7 +74,7 @@
                 {% if item.observation.latency %}
                   <span class="text-xs text-base-content/40 flex-shrink-0 tabular-nums">{{ item.observation.latency|floatformat:2 }}s</span>
                 {% endif %}
-              </div>
+              </button>
             {% endfor %}
           </div>
 
@@ -86,7 +88,7 @@
             </div>
 
             {% for item in flattened_observations %}
-              <div x-show="selectedSpanId === '{{ item.observation.id }}'"
+              <div x-show="selectedSpanId === '{{ item.observation.id|escapejs }}'"
                    x-cloak
                    class="p-4 space-y-4">
 

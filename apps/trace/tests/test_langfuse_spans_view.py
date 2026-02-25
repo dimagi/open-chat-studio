@@ -149,6 +149,14 @@ class TestTraceLangufuseSpansView:
     def _url(self, team, trace):
         return reverse("trace:trace_langfuse_spans", args=[team.slug, trace.pk])
 
+    def test_null_experiment_returns_not_available(self, client, team, user, output_message):
+        """Trace with no experiment (experiment=None): no AttributeError, show 'not available' note."""
+        trace = TraceFactory(team=team, experiment=None, output_message=output_message, status=TraceStatus.SUCCESS)
+        client.force_login(user)
+        response = client.get(self._url(team, trace))
+        assert response.status_code == 200
+        assert b"langfuse_not_available" in response.content
+
     def test_no_langfuse_provider_returns_not_available(self, client, team, user):
         """Experiment has no trace_provider: show 'not available' note."""
         experiment = ExperimentFactory(team=team, trace_provider=None)

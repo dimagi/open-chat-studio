@@ -90,13 +90,15 @@ class TraceLangufuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionR
         langfuse_trace_id, langfuse_trace_url = self._get_langfuse_info(trace)
         context["langfuse_trace_url"] = langfuse_trace_url
 
-        if not langfuse_trace_id or not trace.experiment.trace_provider:
+        experiment = trace.experiment
+        trace_provider = experiment.trace_provider if experiment else None
+        if not langfuse_trace_id or not trace_provider:
             context["langfuse_available"] = False
             context["langfuse_error"] = False
             return context
 
         try:
-            api_client = get_langfuse_api_client(trace.experiment.trace_provider.config)
+            api_client = get_langfuse_api_client(trace_provider.config)
             langfuse_trace = api_client.trace.get(langfuse_trace_id)
             observations = langfuse_trace.observations or []
             context["langfuse_available"] = True
