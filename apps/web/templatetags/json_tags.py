@@ -94,6 +94,22 @@ def _extract_text(content) -> str | None:
                 args = block.get("args", {})
                 args_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
                 parts.append(f"→ {name}({args_str})")
+            elif block.get("type") == "tool_use":
+                name = block.get("name", "?")
+                input_ = block.get("input", {})
+                args_str = (
+                    ", ".join(f"{k}={v!r}" for k, v in input_.items()) if isinstance(input_, dict) else repr(input_)
+                )
+                parts.append(f"→ {name}({args_str})")
+            elif block.get("type") == "tool_result":
+                result_content = block.get("content", "")
+                if isinstance(result_content, str):
+                    result_text = result_content
+                elif isinstance(result_content, list):
+                    result_text = _extract_text(result_content) or ""
+                else:
+                    result_text = repr(result_content)
+                parts.append(f"← tool_result: {result_text}" if result_text else "← tool_result")
         return "\n".join(filter(None, parts)) or None
     return None
 

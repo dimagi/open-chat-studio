@@ -150,3 +150,69 @@ class TestReadableValue:
     def test_span_input_with_message_text_empty_skipped(self):
         result = readable_value({"input": {"message_text": "", "participant_id": "test@test.com"}})
         assert result is None
+
+    def test_anthropic_tool_use_block(self):
+        # Anthropic GENERATION output with tool_use block
+        result = readable_value(
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "tu_1", "name": "search", "input": {"query": "hello"}}],
+            }
+        )
+        assert result == "assistant: → search(query='hello')"
+
+    def test_anthropic_tool_use_block_no_input(self):
+        result = readable_value(
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "name": "ping", "input": {}}],
+            }
+        )
+        assert result == "assistant: → ping()"
+
+    def test_anthropic_tool_result_block_string(self):
+        # tool_result with plain string content
+        result = readable_value(
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "tu_1", "content": "42 results found"}],
+            }
+        )
+        assert result == "user: ← tool_result: 42 results found"
+
+    def test_anthropic_tool_result_block_nested_text(self):
+        # tool_result with list of text blocks as content
+        result = readable_value(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tu_1",
+                        "content": [{"type": "text", "text": "Found it."}],
+                    }
+                ],
+            }
+        )
+        assert result == "user: ← tool_result: Found it."
+
+    def test_anthropic_tool_result_block_empty_content(self):
+        result = readable_value(
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "tu_1", "content": ""}],
+            }
+        )
+        assert result == "user: ← tool_result"
+
+    def test_anthropic_mixed_text_and_tool_use(self):
+        result = readable_value(
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I'll search for that."},
+                    {"type": "tool_use", "name": "search", "input": {"query": "hello"}},
+                ],
+            }
+        )
+        assert result == "assistant: I'll search for that.\n→ search(query='hello')"
