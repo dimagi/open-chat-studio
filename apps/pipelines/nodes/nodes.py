@@ -134,7 +134,12 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                             or []
                         )
                     else:
-                        logger.warning("Pipeline repository is not available; participant schedules will be empty")
+                        schedules = (
+                            participant.get_schedules_for_experiment(
+                                session.experiment_id, as_dict=True, include_inactive=True
+                            )
+                            or []
+                        )
                     content.update(
                         {
                             "participant_details": {

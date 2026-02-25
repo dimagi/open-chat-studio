@@ -10,6 +10,7 @@ from langchain_core.tools import BaseTool
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.experiments.models import ExperimentSession
+from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
@@ -39,7 +40,7 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
     session = context.session
     repo = context.repo
     if repo is None:
-        raise RuntimeError("NodeContext.repo is required for execute_sub_agent but was None")
+        raise PipelineNodeRunError("NodeContext.repo is required for execute_sub_agent but was None")
     tool_callbacks = ToolCallbacks()
     agent = build_node_agent(node, context, session, tool_callbacks)
 
@@ -103,7 +104,7 @@ def build_node_agent(
 ):
     repo = context.repo
     if repo is None:
-        raise RuntimeError("NodeContext.repo is required for build_node_agent but was None")
+        raise PipelineNodeRunError("NodeContext.repo is required for build_node_agent but was None")
     prompt_context = _get_prompt_context(node, session, context, repo=repo)
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks, repo=repo)
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)

@@ -242,11 +242,12 @@ class TestCollectionSearch:
         coll_c = _collection(name="C", summary="Not indexed", is_index=False)
         repo = InMemoryPipelineRepository(collections={1: coll_a, 2: coll_b, 3: coll_c})
         result = repo.get_collections_for_search([1, 2, 3])
-        # InMemoryPipelineRepository returns all matching IDs (filtering by is_index
-        # is the responsibility of the caller or specific implementation logic)
-        assert len(result) == 3
+        # Only collections with is_index=True should be returned, matching
+        # the Django implementation's filter(is_index=True) behavior
+        assert len(result) == 2
         assert coll_a in result
         assert coll_b in result
+        assert coll_c not in result
 
     def test_get_collections_for_search_skips_missing_ids(self):
         coll = _collection(name="A", summary="Index A")

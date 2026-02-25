@@ -5,6 +5,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 import tiktoken
+from django.core.exceptions import ObjectDoesNotExist
 from langchain_core.messages import BaseMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.prompts import PromptTemplate
@@ -146,7 +147,7 @@ class LLMResponseMixin(BaseModel):
             return provider.get_llm_service()
         except PipelineNodeBuildError:
             raise
-        except LookupError:
+        except ObjectDoesNotExist:
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e

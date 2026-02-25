@@ -334,9 +334,8 @@ class DjangoPipelineRepository:
 class InMemoryPipelineRepository:
     """Test-only implementation with dict-based stores and no DB access.
 
-    Pre-load data via the constructor or setters. Returns configured data,
-    raises ``ValueError`` for unconfigured lookups. Records calls for
-    test assertions.
+    Pre-load data via the constructor or setters. Returns configured data
+    or ``None`` for unconfigured lookups. Records calls for test assertions.
     """
 
     def __init__(
@@ -454,7 +453,17 @@ class InMemoryPipelineRepository:
         return self._collections.get(collection_id)
 
     def get_collections_for_search(self, collection_ids: list[int]) -> list[Any]:
-        return [self._collections[cid] for cid in collection_ids if cid in self._collections]
+        results = []
+        for cid in collection_ids:
+            coll = self._collections.get(cid)
+            if coll is None:
+                continue
+            is_index = getattr(coll, "is_index", None)
+            if is_index is None and isinstance(coll, dict):
+                is_index = coll.get("is_index", True)
+            if is_index is not False:
+                results.append(coll)
+        return results
 
     def get_collection_index_summaries(self, collection_index_ids: list[int]) -> str:
         if not collection_index_ids:
