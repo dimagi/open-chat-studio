@@ -28,7 +28,10 @@ def to_json(obj):
 
 
 def _extract_text(content) -> str | None:
-    """Extract plain text from a string or a list of {type, text} content blocks."""
+    """Extract plain text from a string or a list of {type, text} content blocks.
+
+    Returns None if the input is neither a string nor a recognisable list of text blocks.
+    """
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -38,7 +41,7 @@ def _extract_text(content) -> str | None:
 
 
 @register.filter
-def readable_value(value):
+def readable_value(value) -> str | None:
     """Extract a human-readable string from a Langfuse observation input/output value.
 
     Returns None when no readable form can be extracted; the caller should

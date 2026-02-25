@@ -88,3 +88,6 @@ class TestReadableValue:
         # response key checked before content key
         result = readable_value({"response": "answer", "content": "other"})
         assert result == "answer"
+
+    def test_empty_list_returns_none(self):
+        assert readable_value([]) is None
