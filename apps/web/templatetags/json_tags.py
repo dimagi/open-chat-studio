@@ -6,8 +6,8 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.http import QueryDict
 from django.utils.safestring import mark_safe
 from pygments import highlight as _pygments_highlight
-from pygments.formatters import HtmlFormatter
-from pygments.lexers import JsonLexer
+from pygments.formatters import HtmlFormatter  # ty: ignore[unresolved-import]
+from pygments.lexers import JsonLexer  # ty: ignore[unresolved-import]
 
 register = template.Library()
 
