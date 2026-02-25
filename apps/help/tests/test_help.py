@@ -6,7 +6,9 @@ import pytest
 from django.test import RequestFactory
 from pydantic import BaseModel
 
+import apps.experiments.filters  # noqa: F401 — trigger filter registration
 from apps.help.agents.code_generate import CodeGenerateAgent, CodeGenerateInput, CodeGenerateOutput
+from apps.help.agents.filter import FilterOutput
 from apps.help.agents.progress_messages import (
     ProgressMessagesAgent,
     ProgressMessagesInput,
@@ -16,6 +18,7 @@ from apps.help.base import BaseHelpAgent
 from apps.help.registry import AGENT_REGISTRY, register_agent
 from apps.help.utils import extract_function_signature, get_python_node_coder_prompt
 from apps.help.views import run_agent
+from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
 def test_get_python_node_coder_prompt():
@@ -256,7 +259,7 @@ class TestRunAgentView:
             data=json.dumps(body),
             content_type="application/json",
         )
-        # Bypass @require_POST (already POST), @login_and_team_required, @csrf_exempt
+        # Bypass @require_POST (already POST) and @login_and_team_required
         # by calling the innermost function via __wrapped__
         inner = run_agent.__wrapped__.__wrapped__
         return inner(request, team_slug="test-team", agent_name=agent_name)
@@ -284,6 +287,21 @@ class TestRunAgentView:
         data = json.loads(response.content)
         assert "response" in data
         assert data["response"]["code"] == valid_code
+
+    @mock.patch("apps.help.base.build_system_agent")
+    def test_successful_filter_agent_call(self, mock_build):
+        stub_output = FilterOutput(filters=[ColumnFilterData(column="state", operator="equals", value="setup")])
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": stub_output}
+        mock_build.return_value = mock_agent
+
+        response = self._make_request("filter", {"query": "active sessions", "filter_slug": "session"})
+
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert "response" in data
+        assert "filters" in data["response"]
+        assert data["response"]["filters"][0]["column"] == "state"
 
     @mock.patch("apps.help.agents.code_generate.build_system_agent")
     def test_agent_error_returns_500(self, mock_build):
