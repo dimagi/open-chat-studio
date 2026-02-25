@@ -154,5 +154,9 @@ class StaticTriggerForm(BaseTriggerForm):
 class TimeoutTriggerForm(BaseTriggerForm):
     class Meta:
         model = TimeoutTrigger
-        fields = ["delay", "total_num_triggers"]
-        labels = {"total_num_triggers": "Trigger count", "delay": "Wait time"}
+        fields = ["delay", "total_num_triggers", "trigger_from_first_message"]
+        labels = {
+            "total_num_triggers": "Trigger count",
+            "delay": "Wait time",
+            "trigger_from_first_message": "Trigger from first message",
+        }
