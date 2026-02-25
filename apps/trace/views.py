@@ -124,3 +124,16 @@ class TraceLangufuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionR
             if obs.parent_observation_id:
                 child_map[obs.parent_observation_id].append(obs)
         return dict(child_map)
+
+    def _flatten_observations(self, root_observations, child_map) -> list:
+        """Return depth-first ordered flat list of {"observation": obs, "depth": int} dicts."""
+        result = []
+
+        def _walk(obs, depth):
+            result.append({"observation": obs, "depth": depth})
+            for child in child_map.get(obs.id, []):
+                _walk(child, depth + 1)
+
+        for root in root_observations:
+            _walk(root, 0)
+        return result

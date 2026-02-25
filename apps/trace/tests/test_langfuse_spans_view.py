@@ -62,6 +62,34 @@ class TestBuildChildMap:
         result = view._build_child_map([root])
         assert result == {}
 
+    def test_flatten_observations_depth_first_with_depths(self):
+        view = TraceLangufuseSpansView()
+        root = _make_observation("obs-1", "Root")
+        child_a = _make_observation("obs-2", "Child A", parent_id="obs-1")
+        child_b = _make_observation("obs-3", "Child B", parent_id="obs-1")
+        grandchild = _make_observation("obs-4", "Grandchild", parent_id="obs-2")
+        child_map = {"obs-1": [child_a, child_b], "obs-2": [grandchild]}
+
+        result = view._flatten_observations([root], child_map)
+
+        assert [(item["observation"].name, item["depth"]) for item in result] == [
+            ("Root", 0),
+            ("Child A", 1),
+            ("Grandchild", 2),
+            ("Child B", 1),
+        ]
+
+    def test_flatten_observations_empty(self):
+        view = TraceLangufuseSpansView()
+        result = view._flatten_observations([], {})
+        assert result == []
+
+    def test_flatten_observations_single_span(self):
+        view = TraceLangufuseSpansView()
+        root = _make_observation("obs-1", "Root")
+        result = view._flatten_observations([root], {})
+        assert result == [{"observation": root, "depth": 0}]
+
 
 @pytest.mark.django_db()
 class TestTraceLangufuseSpansView:
