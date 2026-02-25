@@ -324,6 +324,72 @@ def test_not_triggered_for_complete_chats(status, matches, session):
 
 
 @pytest.mark.django_db()
+def test_timed_out_sessions_from_first_message(session):
+    """When trigger_from_first_message=True, the timeout is calculated from the first human message."""
+    with travel("2024-04-02", tick=False) as frozen_time:
+        timeout_trigger = TimeoutTrigger.objects.create(
+            experiment=session.experiment,
+            action=EventAction.objects.create(action_type=EventActionType.LOG),
+            delay=10 * 60,  # 10 minutes
+            trigger_from_first_message=True,
+        )
+
+        chat = Chat.objects.create(team=session.team)
+        ChatMessage.objects.create(
+            chat=chat,
+            content="First message",
+            message_type=ChatMessageType.HUMAN,
+        )
+        session.chat = chat
+        session.save()
+
+        # 5 minutes in: still within the window, should not trigger
+        frozen_time.shift(delta=timedelta(minutes=5))
+        assert len(timeout_trigger.timed_out_sessions()) == 0
+
+        # Send a second message at t=5min
+        ChatMessage.objects.create(
+            chat=chat,
+            content="Second message",
+            message_type=ChatMessageType.HUMAN,
+        )
+
+        # At 11 minutes total: first message is older than the 10-minute delay,
+        # even though the second message is only 6 minutes old
+        frozen_time.shift(delta=timedelta(minutes=6))
+        assert len(timeout_trigger.timed_out_sessions()) == 1
+
+
+@pytest.mark.django_db()
+def test_fire_from_first_message_logs_against_first_message(session):
+    """When trigger_from_first_message=True, fire() should log the event against the first message."""
+    chat = Chat.objects.create(team=session.team)
+    first_message = ChatMessage.objects.create(
+        chat=chat,
+        content="First",
+        message_type=ChatMessageType.HUMAN,
+    )
+    ChatMessage.objects.create(
+        chat=chat,
+        content="Second",
+        message_type=ChatMessageType.HUMAN,
+    )
+    session.chat = chat
+    session.save()
+
+    timeout_trigger = TimeoutTrigger.objects.create(
+        experiment=session.experiment,
+        action=EventAction.objects.create(action_type=EventActionType.LOG),
+        total_num_triggers=2,
+        delay=10 * 60,
+        trigger_from_first_message=True,
+    )
+
+    timeout_trigger.fire(session)
+    assert timeout_trigger.event_logs.filter(session=session, chat_message=first_message).count() == 1
+
+
+@pytest.mark.django_db()
 def test_not_triggered_no_human_message(session):
     with travel("2024-04-02", tick=False) as frozen_time:
         timeout_trigger = TimeoutTrigger.objects.create(

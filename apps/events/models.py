@@ -216,6 +216,10 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     is_archived = models.BooleanField(default=False)
     objects = TimeoutTriggerObjectManager()
     is_active = models.BooleanField(default=True)
+    trigger_from_first_message = models.BooleanField(
+        default=False,
+        help_text="If True, the timeout delay is calculated from the first human message instead of the last.",
+    )
 
     @transaction.atomic()
     def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):  # ty: ignore[invalid-method-override]
@@ -232,19 +236,21 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 
     def timed_out_sessions(self):
         """Finds all the timed out sessions where:
-        - The last human message was sent at a time earlier than the trigger time
+        - The relevant human message (first or last, based on trigger_from_first_message) was sent
+          at a time earlier than the trigger time
         - There have been fewer trigger attempts than the total number defined by the trigger
         """
         from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 
         time_window_to_ignore = timezone.now() - timedelta(seconds=self.delay)
+        message_ordering = "created_at" if self.trigger_from_first_message else "-created_at"
 
         last_human_message_created_at = (
             ChatMessage.objects.filter(
                 chat__experiment_session=OuterRef("pk"),
                 message_type=ChatMessageType.HUMAN,
             )
-            .order_by("-created_at")
+            .order_by(message_ordering)
             .values("created_at")[:1]
         )
         last_human_message_id = (
@@ -252,7 +258,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
                 chat__experiment_session=OuterRef("session_id"),
                 message_type=ChatMessageType.HUMAN,
             )
-            .order_by("-created_at")
+            .order_by(message_ordering)
             .values("id")[:1]
         )
         success_count_for_last_message = (
@@ -321,10 +327,11 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         return sessions.select_related("experiment_channel", "experiment").all()
 
     def fire(self, session) -> str | None:
-        last_human_message = ChatMessage.objects.filter(
+        messages = ChatMessage.objects.filter(
             chat_id=session.chat_id,
             message_type=ChatMessageType.HUMAN,
-        ).last()
+        )
+        last_human_message = messages.first() if self.trigger_from_first_message else messages.last()
 
         result = None
 
@@ -391,6 +398,11 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             fields=[
                 VersionField(group_name=group_name, name="delay", raw_value=self.delay),
                 VersionField(group_name=group_name, name="total_num_triggers", raw_value=self.total_num_triggers),
+                VersionField(
+                    group_name=group_name,
+                    name="trigger_from_first_message",
+                    raw_value=self.trigger_from_first_message,
+                ),
                 *action_param_versions,
             ],
         )
