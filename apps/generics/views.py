@@ -107,7 +107,9 @@ def render_session_details(
     annotation_queue_names = []
     if flag_is_active(request, Flags.HUMAN_ANNOTATIONS.slug):
         annotation_queue_names = list(
-            AnnotationItem.objects.filter(session=session).select_related("queue").values_list("queue__name", flat=True)
+            AnnotationItem.objects.filter(session=session, queue__team=session.team).values_list(
+                "queue__name", flat=True
+            )
         )
     return TemplateResponse(
         request,

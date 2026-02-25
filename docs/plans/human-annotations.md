@@ -205,7 +205,7 @@ Key files:
 
 Recommended sequence:
 1. **Item 9** (Session UI) — highest user-facing value, self-contained, no new models
-2. **Item 11** (Notifications) — hooks into existing views, low risk
+2. **Item 11** (Notifications) — hooks into existing views, low-risk
 3. **Item 10** (Automation) — most complex; requires new model field, migration, and Celery task
 
 Each item should be implemented with TDD (write failing test → implement → green) and committed independently.

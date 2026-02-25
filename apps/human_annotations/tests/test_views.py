@@ -653,7 +653,7 @@ def test_progress_accounts_for_multiple_reviews(team_with_users):
 
 @pytest.fixture()
 def session(team_with_users):
-    return ExperimentSessionFactory(team=team_with_users, chat__team=team_with_users)
+    return ExperimentSessionFactory(team=team_with_users, chat__team=team_with_users, experiment__team=team_with_users)
 
 
 @pytest.fixture()

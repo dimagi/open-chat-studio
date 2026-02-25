@@ -1,7 +1,9 @@
 {% load i18n %}
+{% translate "Close" as close_label %}
 <dialog id="add-to-queue-dialog-{{ session.pk }}" class="modal" x-data x-init="$el.showModal()">
   <div class="modal-box">
     <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+            aria-label="{{ close_label }}"
             onclick="this.closest('dialog').close()">✕</button>
     <h3 class="font-bold text-lg mb-4">{% translate "Add to Annotation Queue" %}</h3>
 

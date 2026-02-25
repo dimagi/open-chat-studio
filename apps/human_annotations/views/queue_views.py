@@ -10,6 +10,7 @@ from django.db.models import Count, Prefetch, Sum
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
 from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -254,7 +255,7 @@ class AddSessionToQueueFromSession(LoginAndTeamRequiredMixin, PermissionRequired
             return render(
                 request,
                 "human_annotations/add_session_to_queue_result.html",
-                {"error": "Please select a queue."},
+                {"error": _("Please select a queue.")},
             )
         queue = get_object_or_404(AnnotationQueue, id=queue_id, team=request.team, status=QueueStatus.ACTIVE)
         try:
