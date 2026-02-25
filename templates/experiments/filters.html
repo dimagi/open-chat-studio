@@ -936,13 +936,11 @@
         this.nlError = '';
         const agentUrl = "{% url 'help:run_agent' request.team.slug 'filter' %}";
         const App = SiteJS.app;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
         try {
           const res = await fetch(agentUrl, {
             method: 'POST',
             credentials: 'same-origin',
-            signal: controller.signal,
+            signal: AbortSignal.timeout(30000),
             headers: {
               'Content-Type': 'application/json',
               'X-CSRFToken': App.Cookies.get('csrftoken'),
@@ -985,7 +983,6 @@
         } catch {
           this.nlError = "Couldn't understand that query. Try rephrasing it.";
         } finally {
-          clearTimeout(timeoutId);
           this.nlLoading = false;
         }
       },
