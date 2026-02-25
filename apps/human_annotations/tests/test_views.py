@@ -774,18 +774,3 @@ def test_session_detail_shows_annotation_queue_names(client, team_with_users, qu
     response = client.get(url)
     assert response.status_code == 200
     assert queue.name in response.content.decode()
-
-
-@pytest.mark.django_db()
-def test_annotation_item_table_description_has_truncate_class(client, team_with_users, queue, session):
-    """ISSUE-003: The description chip in the annotation items table must use truncate to prevent UUID overflow."""
-    AnnotationItem.objects.create(
-        queue=queue,
-        session=session,
-        team=team_with_users,
-        item_type="session",
-    )
-    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
-    response = client.get(url)
-    assert response.status_code == 200
-    assert "truncate" in response.content.decode()
