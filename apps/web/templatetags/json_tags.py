@@ -5,8 +5,35 @@ from django import template
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import QueryDict
 from django.utils.safestring import mark_safe
+from pygments import highlight as _pygments_highlight
+from pygments.formatters import HtmlFormatter
+from pygments.lexers import JsonLexer
 
 register = template.Library()
+
+# Pre-computed at import time — cheap to generate, reused on every trace page load.
+_PYGMENTS_JSON_CSS = mark_safe(
+    ".highlight-json { background: transparent; line-height: 1.5; }\n"
+    + "\n".join(
+        line
+        for line in HtmlFormatter(style="default").get_style_defs(".highlight-json").splitlines()
+        if not line.startswith("pre {")
+    )
+    + "\n[data-theme='dark'] .highlight-json { background: transparent; }\n"
+    + "\n".join(
+        line
+        for line in HtmlFormatter(style="github-dark")
+        .get_style_defs("[data-theme='dark'] .highlight-json")
+        .splitlines()
+        if not line.startswith("pre {")
+    )
+)
+
+
+@register.simple_tag
+def pygments_json_css() -> str:
+    """Return the pre-computed Pygments CSS for JSON syntax highlighting."""
+    return _PYGMENTS_JSON_CSS
 
 
 @register.filter
@@ -25,6 +52,23 @@ def to_json(obj):
         return mark_safe(escape_script_tags(json_string))
     except JSONDecodeError:
         return mark_safe("Unable to decode JSON data")
+
+
+@register.filter
+def highlight_json(value) -> str:
+    """Render a Python value as Pygments syntax-highlighted JSON HTML.
+
+    Returns mark_safe HTML with <span> tags for token colours.  Place inside
+    a <pre class="highlight-json ..."> so that the pygments-json.css rules apply.
+    """
+    if isinstance(value, QueryDict):
+        value = dict(value)
+    try:
+        json_str = json.dumps(value, indent=2, cls=DjangoJSONEncoder)
+    except (TypeError, ValueError):
+        return mark_safe("Unable to encode JSON data")
+    formatter = HtmlFormatter(nowrap=True)
+    return mark_safe(_pygments_highlight(json_str, JsonLexer(), formatter))
 
 
 def _extract_text(content) -> str | None:

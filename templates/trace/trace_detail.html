@@ -1,5 +1,10 @@
 {% extends "web/app/app_base.html" %}
-{% load chat_tags %}
+{% load chat_tags json_tags %}
+{% block page_head %}
+  {{ block.super }}
+  <style>{% pygments_json_css %}</style>
+{% endblock page_head %}
+
 {% block breadcrumbs %}
   <div class="breadcrumbs text-sm">
     <ul>

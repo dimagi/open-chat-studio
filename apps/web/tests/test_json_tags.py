@@ -1,4 +1,31 @@
-from apps.web.templatetags.json_tags import readable_value
+from django.utils.safestring import SafeData
+
+from apps.web.templatetags.json_tags import highlight_json, readable_value
+
+
+class TestHighlightJson:
+    def test_returns_safe_html(self):
+        result = highlight_json({"key": "value"})
+        assert isinstance(result, SafeData)
+
+    def test_contains_syntax_spans(self):
+        result = highlight_json({"key": "value"})
+        assert "<span" in result
+
+    def test_dict_value_appears_in_output(self):
+        result = highlight_json({"hello": "world"})
+        assert "hello" in result
+        assert "world" in result
+
+    def test_none_renders_as_null(self):
+        result = highlight_json(None)
+        assert "null" in result
+        assert isinstance(result, SafeData)
+
+    def test_list_renders(self):
+        result = highlight_json([1, 2, 3])
+        assert "1" in result
+        assert isinstance(result, SafeData)
 
 
 class TestReadableValue:

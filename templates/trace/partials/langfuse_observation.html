@@ -28,36 +28,16 @@
       {% if observation.status_message %}<div class="text-sm text-error">{{ observation.status_message }}</div>{% endif %}
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {% if observation.input %}
-          {% with readable=observation.input|readable_value %}
-            <div>
-              <div class="text-xs font-medium text-base-content/60 mb-1">Input</div>
-              {% if readable %}<div class="text-sm bg-base-200 rounded p-2 whitespace-pre-wrap">{{ readable }}</div>{% endif %}
-              <div x-data="{ showRaw: false }" class="{% if readable %}mt-1{% endif %}">
-                <button type="button"
-                        class="text-xs text-base-content/40 hover:text-base-content/70"
-                        @click="showRaw = !showRaw"
-                        x-text="showRaw ? 'Hide raw JSON ▴' : 'Raw JSON ▾'"></button>
-                <pre x-show="showRaw"
-                     class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap mt-1">{{ observation.input|to_json }}</pre>
-              </div>
-            </div>
-          {% endwith %}
+          <div>
+            <div class="text-xs font-medium text-base-content/60 mb-1">Input</div>
+            <pre class="highlight-json text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.input|highlight_json }}</pre>
+          </div>
         {% endif %}
         {% if observation.output %}
-          {% with readable=observation.output|readable_value %}
-            <div>
-              <div class="text-xs font-medium text-base-content/60 mb-1">Output</div>
-              {% if readable %}<div class="text-sm bg-base-200 rounded p-2 whitespace-pre-wrap">{{ readable }}</div>{% endif %}
-              <div x-data="{ showRaw: false }" class="{% if readable %}mt-1{% endif %}">
-                <button type="button"
-                        class="text-xs text-base-content/40 hover:text-base-content/70"
-                        @click="showRaw = !showRaw"
-                        x-text="showRaw ? 'Hide raw JSON ▴' : 'Raw JSON ▾'"></button>
-                <pre x-show="showRaw"
-                     class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap mt-1">{{ observation.output|to_json }}</pre>
-              </div>
-            </div>
-          {% endwith %}
+          <div>
+            <div class="text-xs font-medium text-base-content/60 mb-1">Output</div>
+            <pre class="highlight-json text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.output|highlight_json }}</pre>
+          </div>
         {% endif %}
       </div>
       {# Child observations #}
