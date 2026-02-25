@@ -10,38 +10,14 @@
 
 ---
 
-### Task 1: Add `get_langfuse_api_client` helper — TDD
+### Task 1: Add `get_langfuse_api_client` helper
 
 **Files:**
 - Modify: `apps/service_providers/tracing/langfuse.py`
-- Create: `apps/service_providers/tracing/tests/test_langfuse_api_client.py`
 
-**Step 1: Write the failing test**
+Add this function after the `LangFuseTracer` class (before `ClientManager`). No separate test needed — it is covered by the view tests in Task 2.
 
-```python
-# apps/service_providers/tracing/tests/test_langfuse_api_client.py
-import pytest
-from apps.service_providers.tracing.langfuse import get_langfuse_api_client
-
-
-def test_get_langfuse_api_client_returns_fern_client():
-    from langfuse.api.client import FernLangfuse
-
-    config = {"public_key": "pk-test", "secret_key": "sk-test", "host": "https://cloud.langfuse.com"}
-    client = get_langfuse_api_client(config)
-    assert isinstance(client, FernLangfuse)
-```
-
-**Step 2: Run test to verify it fails**
-
-```bash
-pytest apps/service_providers/tracing/tests/test_langfuse_api_client.py -v
-```
-Expected: `ImportError` or `AttributeError` — `get_langfuse_api_client` does not exist yet.
-
-**Step 3: Add `get_langfuse_api_client` to `langfuse.py`**
-
-Add after the `LangFuseTracer` class (before `ClientManager`):
+**Step 1: Add `get_langfuse_api_client` to `langfuse.py`**
 
 ```python
 def get_langfuse_api_client(config: dict) -> "FernLangfuse":
@@ -52,48 +28,70 @@ def get_langfuse_api_client(config: dict) -> "FernLangfuse":
         base_url=config["host"],
         username=config["public_key"],
         password=config["secret_key"],
+        timeout=10,
     )
 ```
 
-Also add the `TYPE_CHECKING` import at the top of the file (there is already a `TYPE_CHECKING` block):
+Also add to the existing `TYPE_CHECKING` block at the top of the file:
 
 ```python
 if TYPE_CHECKING:
     from langfuse.api.client import FernLangfuse
-    # ... existing imports
+    # ... existing imports unchanged
 ```
 
-**Step 4: Run test to verify it passes**
+**Step 2: Lint**
 
 ```bash
-pytest apps/service_providers/tracing/tests/test_langfuse_api_client.py -v
-```
-Expected: PASS
-
-**Step 5: Lint**
-
-```bash
-ruff check apps/service_providers/tracing/langfuse.py apps/service_providers/tracing/tests/test_langfuse_api_client.py --fix
-ruff format apps/service_providers/tracing/langfuse.py apps/service_providers/tracing/tests/test_langfuse_api_client.py
+ruff check apps/service_providers/tracing/langfuse.py --fix
+ruff format apps/service_providers/tracing/langfuse.py
 ```
 
-**Step 6: Commit**
+**Step 3: Commit**
 
 ```bash
-git add apps/service_providers/tracing/langfuse.py apps/service_providers/tracing/tests/test_langfuse_api_client.py
+git add apps/service_providers/tracing/langfuse.py
 git commit -m "feat: add get_langfuse_api_client helper for reading trace data"
 ```
 
 ---
 
-### Task 2: Add URL and `TraceLangufuseSpansView` — TDD
+### Task 2: Add `apps/trace/tests/conftest.py`, URL, view, and tests — TDD
 
 **Files:**
+- Create: `apps/trace/tests/conftest.py`
 - Modify: `apps/trace/urls.py`
 - Modify: `apps/trace/views.py`
 - Create: `apps/trace/tests/test_langfuse_spans_view.py`
 
-**Step 1: Add the URL first (needed for `reverse()` in tests)**
+**Step 1: Create `apps/trace/tests/conftest.py`**
+
+```python
+import pytest
+from django.test import Client
+
+from apps.utils.factories.team import MembershipFactory, TeamFactory, get_test_user_groups
+from apps.utils.factories.user import UserFactory
+
+
+@pytest.fixture()
+def user():
+    return UserFactory()
+
+
+@pytest.fixture()
+def team(user):
+    team = TeamFactory()
+    MembershipFactory(team=team, user=user, groups=get_test_user_groups)
+    return team
+
+
+@pytest.fixture()
+def client():
+    return Client()
+```
+
+**Step 2: Add the URL**
 
 Add to `apps/trace/urls.py`:
 
@@ -117,11 +115,10 @@ urlpatterns = [
 ]
 ```
 
-**Step 2: Write the failing tests**
+**Step 3: Write the failing tests**
 
 ```python
 # apps/trace/tests/test_langfuse_spans_view.py
-from collections import defaultdict
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -129,6 +126,7 @@ from django.urls import reverse
 
 from apps.service_providers.models import TraceProviderType
 from apps.trace.models import TraceStatus
+from apps.trace.views import TraceLangufuseSpansView
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory
 from apps.utils.factories.traces import TraceFactory
@@ -151,6 +149,39 @@ def _make_observation(obs_id, name, level="DEFAULT", parent_id=None):
     obs.start_time = None
     obs.parent_observation_id = parent_id
     return obs
+
+
+class TestBuildChildMap:
+    """Unit tests for tree-building logic — no DB needed."""
+
+    def test_separates_root_and_child_observations(self):
+        view = TraceLangufuseSpansView()
+        root = _make_observation("obs-1", "Root")
+        child = _make_observation("obs-2", "Child", parent_id="obs-1")
+        result = view._build_child_map([root, child])
+        assert result == {"obs-1": [child]}
+
+    def test_multiple_children_under_same_parent(self):
+        view = TraceLangufuseSpansView()
+        root = _make_observation("obs-1", "Root")
+        child_a = _make_observation("obs-2", "Child A", parent_id="obs-1")
+        child_b = _make_observation("obs-3", "Child B", parent_id="obs-1")
+        result = view._build_child_map([root, child_a, child_b])
+        assert result == {"obs-1": [child_a, child_b]}
+
+    def test_returns_plain_dict_not_defaultdict(self):
+        from collections import defaultdict
+
+        view = TraceLangufuseSpansView()
+        result = view._build_child_map([])
+        assert not isinstance(result, defaultdict)
+        assert isinstance(result, dict)
+
+    def test_observation_with_no_parent_not_in_map(self):
+        view = TraceLangufuseSpansView()
+        root = _make_observation("obs-1", "Root")
+        result = view._build_child_map([root])
+        assert result == {}
 
 
 @pytest.mark.django_db()
@@ -189,7 +220,7 @@ class TestTraceLangufuseSpansView:
         return reverse("trace:trace_langfuse_spans", args=[team.slug, trace.pk])
 
     def test_no_langfuse_provider_returns_not_available(self, client, team, user):
-        """Experiment has no trace_provider: show 'not available' partial."""
+        """Experiment has no trace_provider: show 'not available' note."""
         experiment = ExperimentFactory(team=team, trace_provider=None)
         output_message = ChatMessageFactory(metadata={})
         trace = TraceFactory(team=team, experiment=experiment, output_message=output_message)
@@ -199,7 +230,7 @@ class TestTraceLangufuseSpansView:
         assert b"langfuse_not_available" in response.content
 
     def test_no_langfuse_trace_info_returns_not_available(self, client, team, user, trace_provider):
-        """Output message has no Langfuse trace_info: show 'not available' partial."""
+        """Output message has no Langfuse trace_info: show 'not available' note."""
         experiment = ExperimentFactory(team=team, trace_provider=trace_provider)
         output_message = ChatMessageFactory(metadata={"trace_info": [{"trace_provider": "ocs", "trace_id": "123"}]})
         trace = TraceFactory(team=team, experiment=experiment, output_message=output_message)
@@ -209,9 +240,21 @@ class TestTraceLangufuseSpansView:
         assert b"langfuse_not_available" in response.content
 
     def test_no_output_message_returns_not_available(self, client, team, user, trace_provider):
-        """Trace has no output_message: show 'not available' partial."""
+        """Trace has no output_message: show 'not available' note."""
         experiment = ExperimentFactory(team=team, trace_provider=trace_provider)
         trace = TraceFactory(team=team, experiment=experiment, output_message=None)
+        client.force_login(user)
+        response = client.get(self._url(team, trace))
+        assert response.status_code == 200
+        assert b"langfuse_not_available" in response.content
+
+    def test_none_trace_id_in_trace_info_returns_not_available(self, client, team, user, trace_provider):
+        """trace_info has a Langfuse entry but trace_id is None: show 'not available' note."""
+        experiment = ExperimentFactory(team=team, trace_provider=trace_provider)
+        output_message = ChatMessageFactory(
+            metadata={"trace_info": [{"trace_provider": "langfuse", "trace_id": None, "trace_url": LANGFUSE_TRACE_URL}]}
+        )
+        trace = TraceFactory(team=team, experiment=experiment, output_message=output_message)
         client.force_login(user)
         response = client.get(self._url(team, trace))
         assert response.status_code == 200
@@ -230,7 +273,7 @@ class TestTraceLangufuseSpansView:
         assert LANGFUSE_TRACE_URL.encode() in response.content
 
     def test_successful_fetch_renders_observations(self, client, team, user, trace):
-        """Successful Langfuse fetch: render span tree with observations."""
+        """Successful Langfuse fetch: render span tree with observation names."""
         root_obs = _make_observation("obs-1", "Pipeline Run")
         child_obs = _make_observation("obs-2", "LLM Call", parent_id="obs-1")
         mock_trace_data = MagicMock()
@@ -250,28 +293,33 @@ class TestTraceLangufuseSpansView:
         mock_api.trace.get.assert_called_once_with(LANGFUSE_TRACE_ID)
 ```
 
-**Step 3: Run tests to verify they fail**
+**Step 4: Run tests to verify they fail**
 
 ```bash
 pytest apps/trace/tests/test_langfuse_spans_view.py -v
 ```
-Expected: various failures — `TraceLangufuseSpansView` does not exist yet.
+Expected: import errors and fixture errors — `TraceLangufuseSpansView` does not exist yet.
 
-**Step 4: Implement `TraceLangufuseSpansView` in `apps/trace/views.py`**
+**Step 5: Implement `TraceLangufuseSpansView` in `apps/trace/views.py`**
 
-Add these imports at the top of `apps/trace/views.py`:
+Add at the top of `apps/trace/views.py` (with existing imports):
 
 ```python
 import logging
 from collections import defaultdict
+
+from apps.service_providers.tracing.langfuse import get_langfuse_api_client
+```
+
+Add `logger` at module level (after imports):
+
+```python
+logger = logging.getLogger(__name__)
 ```
 
 Add the view at the bottom of `apps/trace/views.py`:
 
 ```python
-logger = logging.getLogger(__name__)
-
-
 class TraceLangufuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
     model = Trace
     template_name = "trace/partials/langfuse_spans.html"
@@ -288,14 +336,12 @@ class TraceLangufuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionR
         langfuse_trace_id, langfuse_trace_url = self._get_langfuse_info(trace)
         context["langfuse_trace_url"] = langfuse_trace_url
 
-        if not langfuse_trace_id or not getattr(trace.experiment, "trace_provider", None):
+        if not langfuse_trace_id or not trace.experiment.trace_provider:
             context["langfuse_available"] = False
             context["langfuse_error"] = False
             return context
 
         try:
-            from apps.service_providers.tracing.langfuse import get_langfuse_api_client
-
             api_client = get_langfuse_api_client(trace.experiment.trace_provider.config)
             langfuse_trace = api_client.trace.get(langfuse_trace_id)
             observations = langfuse_trace.observations or []
@@ -319,42 +365,41 @@ class TraceLangufuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionR
         return None, None
 
     def _build_child_map(self, observations) -> dict:
-        child_map = defaultdict(list)
+        child_map: dict = defaultdict(list)
         for obs in observations:
             if obs.parent_observation_id:
                 child_map[obs.parent_observation_id].append(obs)
-        return child_map
+        return dict(child_map)
 ```
 
-Note: The `defaultdict` import and `logger` definition should be placed at module level. `defaultdict` is already used in `TraceDetailView.get_context_data`, so add `from collections import defaultdict` at the top of the file if not already there, and add `logger = logging.getLogger(__name__)` at module level.
-
-**Step 5: Run tests to verify they pass**
+**Step 6: Run tests to verify they pass**
 
 ```bash
 pytest apps/trace/tests/test_langfuse_spans_view.py -v
 ```
-Expected: all 5 tests PASS
+Expected: all tests PASS (4 unit tests + 6 DB tests = 10 total).
 
-**Step 6: Lint**
+**Step 7: Lint**
 
 ```bash
-ruff check apps/trace/views.py apps/trace/urls.py apps/trace/tests/test_langfuse_spans_view.py --fix
-ruff format apps/trace/views.py apps/trace/urls.py apps/trace/tests/test_langfuse_spans_view.py
+ruff check apps/trace/views.py apps/trace/urls.py apps/trace/tests/ --fix
+ruff format apps/trace/views.py apps/trace/urls.py apps/trace/tests/
 ```
 
-**Step 7: Commit**
+**Step 8: Commit**
 
 ```bash
-git add apps/trace/views.py apps/trace/urls.py apps/trace/tests/test_langfuse_spans_view.py
+git add apps/trace/tests/conftest.py apps/trace/tests/test_langfuse_spans_view.py apps/trace/views.py apps/trace/urls.py
 git commit -m "feat: add TraceLangufuseSpansView for HTMX lazy-loaded Langfuse spans"
 ```
 
 ---
 
-### Task 3: Create the partial template
+### Task 3: Create the partial templates
 
 **Files:**
 - Create: `templates/trace/partials/langfuse_spans.html`
+- Create: `templates/trace/partials/langfuse_observation.html`
 
 **Step 1: Create the directory**
 
@@ -365,11 +410,13 @@ mkdir -p templates/trace/partials
 **Step 2: Create `templates/trace/partials/langfuse_spans.html`**
 
 ```html
-{% load i18n %}
+{% load i18n json_tags %}
 
 {% if not langfuse_available and not langfuse_error %}
-{# No Langfuse provider or no trace info — silent, no error shown #}
-<div id="langfuse-spans-section" class="langfuse_not_available"></div>
+{# No Langfuse provider or no trace info — show a subtle note #}
+<div id="langfuse-spans-section" class="langfuse_not_available mt-6">
+    <p class="text-xs text-base-content/40 text-center">No Langfuse trace available for this trace.</p>
+</div>
 
 {% elif not langfuse_available and langfuse_error %}
 {# API call failed — show error with optional fallback link #}
@@ -423,9 +470,12 @@ mkdir -p templates/trace/partials
 
 **Step 3: Create `templates/trace/partials/langfuse_observation.html`**
 
-This recursive sub-template renders a single observation and its children.
+This recursive sub-template renders a single observation and its children. `{% include %}` without `only` inherits the parent context (including `child_observations_map`), so the recursive call works without explicitly passing it.
+
+The `get_item` template filter is registered globally in this project, so `child_observations_map|get_item:observation.id` is safe to use.
 
 ```html
+{% load json_tags %}
 {% with children=child_observations_map|get_item:observation.id %}
 <div x-data="{ open: false }" class="border border-base-200 rounded-lg">
     {# Header row — always visible #}
@@ -452,7 +502,7 @@ This recursive sub-template renders a single observation and its children.
     </div>
 
     {# Expandable body #}
-    <div x-show="open" x-collapse class="border-t border-base-200 px-4 py-3 space-y-3">
+    <div x-show="open" class="border-t border-base-200 px-4 py-3 space-y-3">
         {% if observation.status_message %}
             <div class="text-sm text-error">{{ observation.status_message }}</div>
         {% endif %}
@@ -461,13 +511,13 @@ This recursive sub-template renders a single observation and its children.
             {% if observation.input %}
                 <div>
                     <div class="text-xs font-medium text-base-content/60 mb-1">Input</div>
-                    <pre class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.input }}</pre>
+                    <pre class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.input|to_json }}</pre>
                 </div>
             {% endif %}
             {% if observation.output %}
                 <div>
                     <div class="text-xs font-medium text-base-content/60 mb-1">Output</div>
-                    <pre class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.output }}</pre>
+                    <pre class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.output|to_json }}</pre>
                 </div>
             {% endif %}
         </div>
@@ -485,17 +535,20 @@ This recursive sub-template renders a single observation and its children.
 {% endwith %}
 ```
 
-Note: The `get_item` template filter is needed to look up `child_observations_map[observation.id]`. Check if this filter exists in the project's template tags. If not, use a `{% with %}` workaround or add the filter. Search the codebase:
+Note: `x-collapse` (Alpine Collapse plugin) is omitted intentionally — use `x-show` only, as the Collapse plugin may not be present. Verify with:
 
 ```bash
-grep -r "get_item\|dict_get\|key_value" apps/templatetags/ templates/ --include="*.py" --include="*.html" | head -10
+grep -r "x-collapse\|alpinejs/collapse" templates/ --include="*.html" | head -5
 ```
 
-If `get_item` doesn't exist, use a context-passing approach in the view instead: pre-render the tree as a flat list with depth levels, avoiding the need for template dictionary lookups.
+If the plugin is available, replace `x-show="open"` with `x-show="open" x-collapse` for animation.
 
-**Step 4: Verify templates render in a browser or write a smoke test**
+**Step 4: Lint templates**
 
-The tests from Task 2 already verify the template is rendered with the right content. This is sufficient.
+```bash
+python -m djlint templates/trace/partials/ --check
+```
+Fix any issues reported.
 
 **Step 5: Commit**
 
@@ -511,9 +564,9 @@ git commit -m "feat: add Langfuse observation tree partial templates"
 **Files:**
 - Modify: `templates/trace/trace_detail.html`
 
-**Step 1: Add the HTMX placeholder**
+**Step 1: Add the HTMX placeholder after line 79**
 
-In `templates/trace/trace_detail.html`, after line 79 (`{% include "trace/inputs_outputs.html" %}`), add:
+In `templates/trace/trace_detail.html`, after `{% include "trace/inputs_outputs.html" %}`, add:
 
 ```html
         {# Langfuse spans — lazy loaded via HTMX #}
@@ -526,7 +579,7 @@ In `templates/trace/trace_detail.html`, after line 79 (`{% include "trace/inputs
         </div>
 ```
 
-The full updated block should look like:
+The full updated block:
 
 ```html
     <div class="border-t border-base-200 mt-2 pt-4">
@@ -551,20 +604,18 @@ The full updated block should look like:
     </div>
 ```
 
-**Step 2: Run the full trace test suite**
+**Step 2: Run full trace test suite**
 
 ```bash
 pytest apps/trace/ -v
 ```
-Expected: all existing tests still pass plus new tests from Task 2.
+Expected: all tests PASS.
 
 **Step 3: Lint the template**
 
 ```bash
-# djLint is run via pre-commit but can be run manually:
-python -m djlint templates/trace/trace_detail.html templates/trace/partials/ --check
+python -m djlint templates/trace/trace_detail.html --check
 ```
-Fix any formatting issues reported.
 
 **Step 4: Commit**
 
@@ -577,10 +628,10 @@ git commit -m "feat: add HTMX lazy-load placeholder for Langfuse spans on trace 
 
 ### Task 5: Final verification pass
 
-**Step 1: Run full trace test suite**
+**Step 1: Run full test suite for all touched apps**
 
 ```bash
-pytest apps/trace/ apps/service_providers/tracing/tests/ -v
+pytest apps/trace/ apps/service_providers/tracing/ -v
 ```
 Expected: all tests PASS.
 
@@ -593,8 +644,8 @@ ty check apps/trace/views.py apps/service_providers/tracing/langfuse.py
 **Step 3: Lint all touched files**
 
 ```bash
-ruff check apps/trace/ apps/service_providers/tracing/ --fix
-ruff format apps/trace/ apps/service_providers/tracing/
+ruff check apps/trace/ apps/service_providers/tracing/langfuse.py --fix
+ruff format apps/trace/ apps/service_providers/tracing/langfuse.py
 ```
 
 **Step 4: Commit any lint fixes if needed**
@@ -603,21 +654,3 @@ ruff format apps/trace/ apps/service_providers/tracing/
 git add -p
 git commit -m "chore: lint fixes for Langfuse spans feature"
 ```
-
----
-
-## Key Notes for Implementer
-
-**`get_item` template filter:** The `langfuse_observation.html` template uses `child_observations_map|get_item:observation.id`. Before implementing Task 3, verify this filter exists:
-```bash
-grep -r "register.filter.*get_item\|def get_item" apps/ --include="*.py"
-```
-If it does not exist, change `_build_child_map` in the view to use `str(obs.parent_observation_id)` as keys (since template lookups use string keys), and use `{{ child_observations_map|get_item:observation.id }}` only if the filter exists. An alternative is to pass `child_observations_map` as a regular `dict` and use a custom filter — or restructure the view to pass pre-built `(observation, children)` tuples to the template.
-
-**`TraceProviderFactory` type field:** The factory in `apps/utils/factories/service_provider_factories.py` uses `type = AuthProviderType.commcare` which is wrong for trace providers. In tests, always explicitly pass `type=TraceProviderType.langfuse` to override it.
-
-**Langfuse `x-collapse`:** The `x-collapse` directive requires the AlpineJS Collapse plugin. Check if it is already included in the base template:
-```bash
-grep -r "x-collapse\|alpinejs/collapse" templates/ --include="*.html" | head -5
-```
-If not present, use `x-show="open"` without `x-collapse` (just hide/show without animation).
