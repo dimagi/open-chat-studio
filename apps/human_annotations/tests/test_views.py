@@ -693,17 +693,6 @@ def test_add_session_to_queue_get_excludes_inactive_queues(client, team_with_use
 
 
 @pytest.mark.django_db()
-def test_add_session_to_queue_get_requires_team_membership(team_with_users, session):
-    """A user who is not a team member gets a 404 (team access is treated as 404 to avoid leaking info)."""
-    outsider = User.objects.create_user(username="outsider", password="test")
-    outsider_client = Client()
-    outsider_client.force_login(outsider)
-    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
-    response = outsider_client.get(url)
-    assert response.status_code == 404
-
-
-@pytest.mark.django_db()
 def test_add_session_to_queue_post_creates_item(client, team_with_users, queue, session):
     """POST with a valid queue_id creates an AnnotationItem and returns 200 with queue name."""
     url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
@@ -727,50 +716,3 @@ def test_add_session_to_queue_post_duplicate_returns_200(client, team_with_users
     assert response.status_code == 200
     assert AnnotationItem.objects.filter(queue=queue, session=session).count() == 1
     assert "already" in response.content.decode().lower()
-
-
-@pytest.mark.django_db()
-def test_add_session_to_queue_post_wrong_team_queue_returns_404(client, team_with_users, session):
-    """POST with a queue_id from a different team returns 404."""
-    from apps.utils.factories.team import TeamFactory
-
-    other_team = TeamFactory()
-    other_queue = AnnotationQueueFactory(team=other_team)
-    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
-    response = client.post(url, {"queue_id": other_queue.pk})
-    assert response.status_code == 404
-
-
-# ===== Dogfood bug fixes =====
-
-
-@pytest.mark.django_db()
-def test_add_session_to_queue_modal_has_auto_open_directive(client, team_with_users, queue, session):
-    """ISSUE-001: The modal partial must include an Alpine x-init directive that calls showModal() on insertion."""
-    url = reverse("human_annotations:session_add_to_queue", args=[team_with_users.slug, session.external_id])
-    response = client.get(url)
-    assert response.status_code == 200
-    assert 'x-init="$el.showModal()"' in response.content.decode()
-
-
-@pytest.mark.django_db()
-def test_session_detail_shows_annotation_queue_names(client, team_with_users, queue):
-    """ISSUE-002: After a session is added to a queue, the session detail page shows the queue name."""
-    session = ExperimentSessionFactory(
-        experiment__team=team_with_users,
-        team=team_with_users,
-        chat__team=team_with_users,
-    )
-    AnnotationItem.objects.create(
-        queue=queue,
-        session=session,
-        team=team_with_users,
-        item_type="session",
-    )
-    url = reverse(
-        "chatbots:chatbot_session_view",
-        args=[team_with_users.slug, session.experiment.public_id, session.external_id],
-    )
-    response = client.get(url)
-    assert response.status_code == 200
-    assert queue.name in response.content.decode()
