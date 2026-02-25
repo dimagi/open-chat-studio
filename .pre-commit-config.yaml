@@ -46,14 +46,14 @@ repos:
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]
+  - repo: https://github.com/allganize/ty-pre-commit
+    # Ty version.
+    rev: v0.0.18
+    hooks:
+      # Run the type checker.
+      - id: ty-check
   - repo: local
     hooks:
-      - id: ty
-        name: ty
-        entry: uv run ty check apps/
-        language: system
-        pass_filenames: false
-        always_run: true
       - id: waf-allow-not-first
         name: waf_allow must be the first decorator listed
         entry: scripts/waf_pre_commit.sh
