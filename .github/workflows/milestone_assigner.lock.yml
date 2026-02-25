@@ -23,12 +23,12 @@
 #
 # Weekly workflow that analyzes recent issues and assigns milestones to issues that clearly belong to a milestone
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"764d1effb80311810854ab017269e66da71fc3837e2e5b9305596b548933cd8b","compiler_version":"v0.49.3"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"8a6c40a8510eb816a45a59be912c0e84a3c589f2bb1a95b1148bb844849494d3","compiler_version":"v0.49.3"}
 
 name: "Milestone Assigner"
 "on":
   schedule:
-  - cron: "3 22 * * 5"
+  - cron: "59 23 * * 5"
     # Friendly format: weekly on friday around 11 pm (scattered)
   workflow_dispatch:
 
@@ -71,7 +71,7 @@ jobs:
       - name: Check workflow file timestamps
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          GH_AW_WORKFLOW_FILE: "issue-organizer.lock.yml"
+          GH_AW_WORKFLOW_FILE: "milestone_assigner.lock.yml"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -137,7 +137,7 @@ jobs:
           </system>
           GH_AW_PROMPT_EOF
           cat << 'GH_AW_PROMPT_EOF'
-          {{#runtime-import .github/workflows/issue-organizer.md}}
+          {{#runtime-import .github/workflows/milestone_assigner.md}}
           GH_AW_PROMPT_EOF
           } > "$GH_AW_PROMPT"
       - name: Interpolate variables and render templates
@@ -216,7 +216,7 @@ jobs:
       GH_AW_SAFE_OUTPUTS: /opt/gh-aw/safeoutputs/outputs.jsonl
       GH_AW_SAFE_OUTPUTS_CONFIG_PATH: /opt/gh-aw/safeoutputs/config.json
       GH_AW_SAFE_OUTPUTS_TOOLS_PATH: /opt/gh-aw/safeoutputs/tools.json
-      GH_AW_WORKFLOW_ID_SANITIZED: issueorganizer
+      GH_AW_WORKFLOW_ID_SANITIZED: milestone_assigner
     outputs:
       checkout_pr_success: ${{ steps.checkout-pr.outputs.checkout_pr_success || 'true' }}
       has_patch: ${{ steps.collect_output.outputs.has_patch }}
@@ -896,7 +896,7 @@ jobs:
           GH_AW_WORKFLOW_NAME: "Milestone Assigner"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
-          GH_AW_WORKFLOW_ID: "issue-organizer"
+          GH_AW_WORKFLOW_ID: "milestone_assigner"
           GH_AW_SECRET_VERIFICATION_RESULT: ${{ needs.agent.outputs.secret_verification_result }}
           GH_AW_CHECKOUT_PR_SUCCESS: ${{ needs.agent.outputs.checkout_pr_success }}
           GH_AW_GROUP_REPORTS: "false"
@@ -1051,7 +1051,7 @@ jobs:
     timeout-minutes: 15
     env:
       GH_AW_ENGINE_ID: "claude"
-      GH_AW_WORKFLOW_ID: "issue-organizer"
+      GH_AW_WORKFLOW_ID: "milestone_assigner"
       GH_AW_WORKFLOW_NAME: "Milestone Assigner"
     outputs:
       assign_milestone_milestone_assigned: ${{ steps.process_safe_outputs.outputs.milestone_assigned }}
