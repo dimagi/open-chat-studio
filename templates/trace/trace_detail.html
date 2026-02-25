@@ -1,82 +1,87 @@
 {% extends "web/app/app_base.html" %}
 {% load chat_tags %}
-
 {% block breadcrumbs %}
-    <div class="breadcrumbs text-sm">
-        <ul>
-            <li><a href="{% url 'trace:home' request.team.slug %}" class="link link-hover"><i class="fas fa-home mr-1"></i></a></li>
-            <li><a href="{% url 'trace:home' request.team.slug %}" class="link link-hover">Traces</a></li>
-            <li><span class="text-base-content/60">{{ trace.experiment.name }}</span></li>
-        </ul>
-    </div>
+  <div class="breadcrumbs text-sm">
+    <ul>
+      <li>
+        <a href="{% url 'trace:home' request.team.slug %}"
+           class="link link-hover"><i class="fas fa-home mr-1"></i></a>
+      </li>
+      <li>
+        <a href="{% url 'trace:home' request.team.slug %}"
+           class="link link-hover">Traces</a>
+      </li>
+      <li>
+        <span class="text-base-content/60">{{ trace.experiment.name }}</span>
+      </li>
+    </ul>
+  </div>
 {% endblock breadcrumbs %}
 
 {% block app %}
-<div>
+  <div>
     <div class="container mx-auto px-4 py-6">
-        <!-- Header Section -->
-        <div class="flex justify-between w-full">
-            <div>
-                <h1 class="text-3xl font-bold mb-2">{{ trace.experiment.name }}</h1>
-                <p class="text-sm text-base-content/60">Trace ID: {{ trace.trace_id }}</p>
-            </div>
-            <div class="flex flex-row gap-2 justify-center">
-                <div>
-                    {% include "trace/partials/status.html" with object=trace %}
-                </div>
-                <div class="text-center">
-                    <div class="font-bold">{{ trace.duration_seconds }}s</div>
-                    <div class="text-sm pg-text-muted font-medium">Total latency</div>
-                </div>
-            </div>
+      <!-- Header Section -->
+      <div class="flex justify-between w-full">
+        <div>
+          <h1 class="text-3xl font-bold mb-2">{{ trace.experiment.name }}</h1>
+          <p class="text-sm text-base-content/60">Trace ID: {{ trace.trace_id }}</p>
         </div>
-
-        <!-- Info Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-6">
-            <div>
-                <div class="text-sm text-base-content/60 tracking-wide">Experiment</div>
-                <div class="mt-1">
-                    {% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}
-                </div>
-                <div class="text-xs mt-1">
-                    {% if trace.experiment_version_number %}
-                        Version: {{ trace.experiment_version_number }}
-                    {% else %}
-                        Unreleased version
-                    {% endif %}
-                </div>
-            </div>
-            <div>
-                <div class="text-sm text-base-content/60 tracking-wide">Session</div>
-                <div class="mt-1">
-                    {% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}
-                </div>
-            </div>
-            <div>
-                <div class="text-sm text-base-content/60 tracking-wide">Participant</div>
-                <div class="mt-1">
-                    {% include "generic/chip.html" with chip=trace.participant.as_chip %}
-                </div>
-            </div>
-            <div>
-                <div class="text-sm text-base-content/60 tracking-wide">Timestamp</div>
-                <time datetime="{{ trace.timestamp.isoformat }}" title="{{ trace.timestamp.isoformat }}">
-                    {{ trace.timestamp|date:"DATETIME_FORMAT" }}
-                </time>
-            </div>
+        <div class="flex flex-row gap-2 justify-center">
+          <div>{% include "trace/partials/status.html" with object=trace %}</div>
+          <div class="text-center">
+            <div class="font-bold">{{ trace.duration_seconds }}s</div>
+            <div class="text-sm pg-text-muted font-medium">Total latency</div>
+          </div>
         </div>
+      </div>
+      <!-- Info Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-6">
+        <div>
+          <div class="text-sm text-base-content/60 tracking-wide">Experiment</div>
+          <div class="mt-1">{% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}</div>
+          <div class="text-xs mt-1">
+            {% if trace.experiment_version_number %}
+              Version: {{ trace.experiment_version_number }}
+            {% else %}
+              Unreleased version
+            {% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="text-sm text-base-content/60 tracking-wide">Session</div>
+          <div class="mt-1">{% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}</div>
+        </div>
+        <div>
+          <div class="text-sm text-base-content/60 tracking-wide">Participant</div>
+          <div class="mt-1">{% include "generic/chip.html" with chip=trace.participant.as_chip %}</div>
+        </div>
+        <div>
+          <div class="text-sm text-base-content/60 tracking-wide">Timestamp</div>
+          <time datetime="{{ trace.timestamp.isoformat }}"
+                title="{{ trace.timestamp.isoformat }}">
+            {{ trace.timestamp|date:"DATETIME_FORMAT" }}
+          </time>
+        </div>
+      </div>
     </div>
-
     <div class="border-t border-base-200 mt-2 pt-4">
-        {% if trace.error %}
+      {% if trace.error %}
         <!-- Error Message -->
         <div role="alert" class="alert alert-error mb-6">
-            <i class="fa-solid fa-circle-exclamation"></i>
-            <div class="text-sm">{{ trace.error|render_markdown }}</div>
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <div class="text-sm">{{ trace.error|render_markdown }}</div>
         </div>
-        {% endif %}
-
-        {% include "trace/inputs_outputs.html" %}
+      {% endif %}
+      {% include "trace/inputs_outputs.html" %}
+      {# Langfuse spans — lazy loaded via HTMX #}
+      <div hx-get="{% url 'trace:trace_langfuse_spans' request.team.slug trace.pk %}"
+           hx-trigger="load"
+           hx-swap="outerHTML">
+        <div class="mt-6 flex justify-center py-8">
+          <span class="loading loading-spinner loading-md text-base-content/40"></span>
+        </div>
+      </div>
     </div>
-</div>
+  </div>
 {% endblock app %}
