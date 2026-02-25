@@ -4,7 +4,8 @@
     {# Header row — always visible #}
     <div class="flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-base-50"
          @click="open = !open">
-      <button class="btn btn-xs btn-ghost btn-circle"
+      <button type="button"
+              class="btn btn-xs btn-ghost btn-circle"
               :aria-label="open ? 'Collapse' : 'Expand'">
         <i class="fa-solid fa-chevron-right transition-transform"
            :class="open ? 'rotate-90' : ''"></i>
@@ -33,7 +34,8 @@
               {% if readable %}
                 <div class="text-sm bg-base-200 rounded p-2 whitespace-pre-wrap">{{ readable }}</div>
                 <div x-data="{ showRaw: false }" class="mt-1">
-                  <button class="text-xs text-base-content/40 hover:text-base-content/70"
+                  <button type="button"
+                          class="text-xs text-base-content/40 hover:text-base-content/70"
                           @click="showRaw = !showRaw"
                           x-text="showRaw ? 'Hide raw JSON ▴' : 'Raw JSON ▾'"></button>
                   <pre x-show="showRaw"
@@ -52,7 +54,8 @@
               {% if readable %}
                 <div class="text-sm bg-base-200 rounded p-2 whitespace-pre-wrap">{{ readable }}</div>
                 <div x-data="{ showRaw: false }" class="mt-1">
-                  <button class="text-xs text-base-content/40 hover:text-base-content/70"
+                  <button type="button"
+                          class="text-xs text-base-content/40 hover:text-base-content/70"
                           @click="showRaw = !showRaw"
                           x-text="showRaw ? 'Hide raw JSON ▴' : 'Raw JSON ▾'"></button>
                   <pre x-show="showRaw"
