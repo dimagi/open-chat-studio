@@ -1,6 +1,6 @@
 {% load default_tags json_tags %}
 {% with children=child_observations_map|get_item:observation.id %}
-  <div x-data="{ open: false }" class="border border-base-200 rounded-lg">
+  <div x-data="{ open: true }" class="border border-base-200 rounded-lg">
     {# Header row — always visible #}
     <div class="flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-base-50"
          @click="open = !open">
@@ -27,16 +27,42 @@
       {% if observation.status_message %}<div class="text-sm text-error">{{ observation.status_message }}</div>{% endif %}
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {% if observation.input %}
-          <div>
-            <div class="text-xs font-medium text-base-content/60 mb-1">Input</div>
-            <pre class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.input|to_json }}</pre>
-          </div>
+          {% with readable=observation.input|readable_value %}
+            <div>
+              <div class="text-xs font-medium text-base-content/60 mb-1">Input</div>
+              {% if readable %}
+                <div class="text-sm bg-base-200 rounded p-2 whitespace-pre-wrap">{{ readable }}</div>
+                <div x-data="{ showRaw: false }" class="mt-1">
+                  <button class="text-xs text-base-content/40 hover:text-base-content/70"
+                          @click="showRaw = !showRaw"
+                          x-text="showRaw ? 'Hide raw JSON ▴' : 'Raw JSON ▾'"></button>
+                  <pre x-show="showRaw"
+                       class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap mt-1">{{ observation.input|to_json }}</pre>
+                </div>
+              {% else %}
+                <pre class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.input|to_json }}</pre>
+              {% endif %}
+            </div>
+          {% endwith %}
         {% endif %}
         {% if observation.output %}
-          <div>
-            <div class="text-xs font-medium text-base-content/60 mb-1">Output</div>
-            <pre class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.output|to_json }}</pre>
-          </div>
+          {% with readable=observation.output|readable_value %}
+            <div>
+              <div class="text-xs font-medium text-base-content/60 mb-1">Output</div>
+              {% if readable %}
+                <div class="text-sm bg-base-200 rounded p-2 whitespace-pre-wrap">{{ readable }}</div>
+                <div x-data="{ showRaw: false }" class="mt-1">
+                  <button class="text-xs text-base-content/40 hover:text-base-content/70"
+                          @click="showRaw = !showRaw"
+                          x-text="showRaw ? 'Hide raw JSON ▴' : 'Raw JSON ▾'"></button>
+                  <pre x-show="showRaw"
+                       class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap mt-1">{{ observation.output|to_json }}</pre>
+                </div>
+              {% else %}
+                <pre class="text-xs bg-base-200 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ observation.output|to_json }}</pre>
+              {% endif %}
+            </div>
+          {% endwith %}
         {% endif %}
       </div>
       {# Child observations #}
