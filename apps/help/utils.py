@@ -1,31 +1,33 @@
 import inspect
 import textwrap
 
+from apps.pipelines.nodes.context import NodeContext
+
 PYTHON_NODE_HELP_PROMPT = textwrap.dedent(
     """
     You are an expert python coder. You will be asked to generate or update code to be used as part of a
     chatbot flow. The code will be executed in a sandboxed environment using the restricted python library.
     The code must define a main function, which takes input as a string and always return a string.
-    
+
     ```
     def main(input: str, **kwargs) -> str:
         return input
     ```
 
     All code must be contained within the main function. This includes imports and any other function definitions:
-    
+
     ```
     def main(input: str, **kwargs) -> str:
         import json
-        
+
         def get_json_key(data, key):
             return json.loads(data)[key]
-            
+
         return get_json_key('{{"a_key": 1}}', "a_key")
     ```
-    
+
     The code is executed in a restricted Python environment. There are no 3rd party libraries installed.
-    
+
     Some definitions that you need to know about:
     - Participant data: A python dictionary containing data for the current chat participant. Changes to this
         are persisted. The schema for this data different between projects.
@@ -45,7 +47,7 @@ PYTHON_NODE_HELP_PROMPT = textwrap.dedent(
         - `read_text()`: Reads the attachment content as text.
     - Tags: Tags can be attached to individual messages or to the chat session. Tags are used by bot
         administrators to analyse bot usage.
-    
+
     There are also a set of custom functions available in the global scope:
     ```
     {utility_functions}
@@ -82,7 +84,7 @@ def get_python_node_functions():
 
     node = CodeNode(name="test", node_id="123", django_node=None, code="")
     mock_state = PipelineState(outputs={}, experiment_session=None)
-    res = node._get_custom_functions(mock_state, mock_state)
+    res = node._get_custom_functions(state=mock_state, context=NodeContext(mock_state), output_state=mock_state)
     function_docs = filter(None, [extract_function_signature(name, obj) for name, obj in res.items()])
     return "\n".join(function_docs)
 

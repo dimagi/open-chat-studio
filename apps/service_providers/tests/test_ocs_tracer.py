@@ -5,7 +5,7 @@ import pytest
 
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
 from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
-from apps.trace.models import Span, Trace
+from apps.trace.models import Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -39,81 +39,6 @@ class TestOCSTracer:
         ):
             # Should execute without errors even though tracer is not ready
             pass
-
-        # Verify no Span objects were created
-        assert Span.objects.count() == 0
-
-    @pytest.mark.skip("spans disabled")
-    def test_span_creation(self, experiment):
-        """
-        A span that is started should be added to the current trace. If there is an active span, it should be added
-        to the trace with its parent span set to the current span.
-        """
-        tracer = OCSTracer(experiment, experiment.team_id)
-        session = ExperimentSessionFactory()
-
-        trace_id = uuid4()
-        tracer.start_trace(
-            trace_name="test_trace",
-            trace_id=trace_id,
-            session=session,
-        )
-
-        span_id = uuid4()
-        tracer.start_span(
-            span_id=span_id,
-            span_name="test_span",
-            inputs={"input": "data"},
-            metadata={"meta": "data"},
-        )
-        trace = Trace.objects.get(trace_id=trace_id)
-        span = Span.objects.get(trace__trace_id=trace_id)
-        assert trace.spans.count() == 1
-        assert span.trace == trace, "The span's trace is expected to be the same as the tracer's"
-        assert span.parent_span is None, "The root span should not have a parent span"
-
-        nested_span_id = uuid4()
-        tracer.start_span(
-            span_id=nested_span_id,
-            span_name="child_span",
-            inputs={"input": "data"},
-            metadata={"meta": "data"},
-        )
-        assert trace.spans.count() == 2
-        child_span = span.child_spans.first()
-        assert child_span is not None, "Expected a child span, but got None"
-        assert child_span.trace_id == span.trace_id, "The child span's trace is expected to be the same as the parent's"
-
-        tracer.end_trace()
-
-    @pytest.mark.skip("spans disabled")
-    def test_span_with_error(self, experiment):
-        """
-        Test that a span with an error is properly recorded.
-        """
-        tracer = OCSTracer(experiment, experiment.team_id)
-        session = ExperimentSessionFactory()
-
-        trace_id = uuid4()
-        tracer.start_trace(
-            trace_name="test_trace",
-            trace_id=trace_id,
-            session=session,
-        )
-
-        span_id = uuid4()
-        tracer.start_span(
-            span_id=span_id,
-            span_name="test_span",
-            inputs={"input": "data"},
-            metadata={"meta": "data"},
-        )
-        tracer.end_span(
-            span_id=span_id,
-            error=Exception("Test error"),
-        )
-        span = Span.objects.get(trace=tracer.trace_record)
-        assert span.error is not None
 
     def test_record_experiment_version(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)

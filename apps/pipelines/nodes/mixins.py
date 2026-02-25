@@ -2,7 +2,7 @@ import json
 import logging
 import unicodedata
 from functools import lru_cache
-from typing import Annotated, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 import tiktoken
 from langchain_core.messages import BaseMessage
@@ -30,6 +30,7 @@ from apps.pipelines.models import (
 from apps.pipelines.nodes.base import (
     PipelineState,
     UiSchema,
+    VisibleWhen,
     Widgets,
 )
 from apps.pipelines.nodes.history_middleware import (
@@ -45,6 +46,9 @@ from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
+
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.context import NodeContext
 
 logger = logging.getLogger("ocs.pipelines.nodes")
 
@@ -162,14 +166,25 @@ class HistoryMixin(LLMResponseMixin):
     )
     user_max_token_limit: int | None = Field(
         None,
+        title="Token Limit",
+        description="Maximum number of tokens before messages are summarized or truncated.",
         json_schema_extra=UiSchema(
-            widget=Widgets.none,
+            visible_when=VisibleWhen(
+                field="history_mode",
+                operator="in",
+                value=["summarize", "truncate_tokens"],
+            ),
         ),
     )
     max_history_length: int = Field(
         10,
+        title="Max History Length",
+        description="Chat history will only keep the most recent messages up to this limit.",
         json_schema_extra=UiSchema(
-            widget=Widgets.none,
+            visible_when=VisibleWhen(
+                field="history_mode",
+                value="max_history_length",
+            ),
         ),
     )
 
@@ -355,11 +370,11 @@ class ExtractStructuredDataNodeMixin:
         structured_output = super().get_chat_model().with_structured_output(tool_class)
         return self._prompt_chain(reference_data) | with_llm_retry(structured_output)
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         ToolClass = self.get_tool_class(json.loads(self.data_schema))
-        reference_data = self.get_reference_data(state)
+        reference_data = self.get_reference_data(context)
         prompt_token_count = self._get_prompt_token_count(reference_data, ToolClass.model_json_schema())
-        message_chunks = self.chunk_messages(state["last_node_input"], prompt_token_count=prompt_token_count)
+        message_chunks = self.chunk_messages(context.input, prompt_token_count=prompt_token_count)
 
         new_reference_data = reference_data
         for message_chunk in message_chunks:
@@ -374,12 +389,12 @@ class ExtractStructuredDataNodeMixin:
             # )
             new_reference_data = self.update_reference_data(output, reference_data)
 
-        return self.get_node_output(state, new_reference_data)
+        return self.get_node_output(context, new_reference_data)
 
-    def get_node_output(self, state, output_data) -> PipelineState:
+    def get_node_output(self, context: "NodeContext", output_data) -> PipelineState:
         raise NotImplementedError()
 
-    def get_reference_data(self, state):
+    def get_reference_data(self, context: "NodeContext"):
         return ""
 
     def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:

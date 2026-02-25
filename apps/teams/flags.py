@@ -58,6 +58,8 @@ class Flags(FlagInfo, Enum):
 
     HUMAN_ANNOTATIONS = ("flag_human_annotations", "Human annotation queues for labeling and review", "", [], True)
 
+    NL_FILTERS = ("flag_nl_filters", "Natural language filter input for filter panels", "", [], True)
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)

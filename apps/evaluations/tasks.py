@@ -126,13 +126,16 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
         # Extract the input message content
         input_content = message.input.get("content", "")
 
+        participant_data = message.participant_data | {}
+        participant_data = session.participant.global_data | participant_data
+
         # Call the bot with the evaluation message and session
         bot_response = handle_evaluation_message(
             experiment_version=experiment,
             experiment_channel=evaluation_channel,
             message_text=input_content,
             session=session,
-            participant_data=message.participant_data,
+            participant_data=participant_data,
         )
         response_content = bot_response.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
