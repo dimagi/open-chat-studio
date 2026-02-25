@@ -20,6 +20,7 @@ const config = {
     'editors': './assets/javascript/editors.js',
     'evaluations': './assets/javascript/apps/evaluations/dataset-mode-selector.js',
     'evaluationTrends': './assets/javascript/apps/evaluations/trend-charts.js',
+    'human_annotations': './assets/javascript/apps/human_annotations/session-selector.js',
   },
 
   output: {
