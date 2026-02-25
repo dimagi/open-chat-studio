@@ -21,15 +21,15 @@
 #
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
-# Daily workflow that analyzes recent issues and links related issues as sub-issues
+# Weekly workflow that analyzes recent issues and assigns milestones to issues that clearly belong to a milestone
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"6793c3609d63bd29aec945e75f6910c086bf7becd4f62456a20f317f61ca1443","compiler_version":"v0.49.3"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"764d1effb80311810854ab017269e66da71fc3837e2e5b9305596b548933cd8b","compiler_version":"v0.49.3"}
 
-name: "Issue Organizer"
+name: "Milestone Assigner"
 "on":
   schedule:
-  - cron: "3 18 * * *"
-    # Friendly format: daily (scattered)
+  - cron: "3 22 * * 5"
+    # Friendly format: weekly on friday around 11 pm (scattered)
   workflow_dispatch:
 
 permissions: {}
@@ -37,7 +37,7 @@ permissions: {}
 concurrency:
   group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Issue Organizer"
+run-name: "Milestone Assigner"
 
 jobs:
   activation:
@@ -102,7 +102,7 @@ jobs:
           cat "/opt/gh-aw/prompts/safe_outputs_prompt.md"
           cat << 'GH_AW_PROMPT_EOF'
           <safe-output-tools>
-          Tools: create_issue, create_discussion, link_sub_issue, missing_tool, missing_data
+          Tools: assign_milestone, missing_tool, missing_data
           </safe-output-tools>
           <github-context>
           The following GitHub context information is available for this workflow:
@@ -144,7 +144,6 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
-          GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -240,7 +239,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         name: Fetch issues data
-        run: "# Create output directory\nmkdir -p /tmp/gh-aw/issues-data\n\necho \"⬇ Downloading the last 100 open issues (excluding sub-issues)...\"\n\n# Fetch the last 100 open issues that don't have a parent issue\n# Using search filter to exclude issues that are already sub-issues\ngh issue list --repo ${{ github.repository }} \\\n  --search \"-parent-issue:*\" \\\n  --state open \\\n  --json number,title,author,createdAt,state,url,body,labels,updatedAt,closedAt,milestone,assignees \\\n  --limit 100 \\\n  > /tmp/gh-aw/issues-data/issues.json\n\necho \"✓ Issues data saved to /tmp/gh-aw/issues-data/issues.json\"\necho \"Total issues fetched: $(jq 'length' /tmp/gh-aw/issues-data/issues.json)\"\necho \"\"\necho \"Issues data:\"\ncat /tmp/gh-aw/issues-data/issues.json\n"
+        run: "# Create output directory\nmkdir -p /tmp/gh-aw/issues-data\n\necho \"⬇ Downloading the last 100 open issues without a milestone...\"\n\n# Fetch the last 100 open issues that don't already have a milestone\ngh issue list --repo ${{ github.repository }} \\\n  --search \"no:milestone\" \\\n  --state open \\\n  --json number,title,author,createdAt,state,url,body,labels,updatedAt,closedAt,milestone,assignees \\\n  --limit 100 \\\n  > /tmp/gh-aw/issues-data/issues.json\n\necho \"✓ Issues data saved to /tmp/gh-aw/issues-data/issues.json\"\necho \"Total issues fetched: $(jq 'length' /tmp/gh-aw/issues-data/issues.json)\"\necho \"\"\necho \"Issues data:\"\ncat /tmp/gh-aw/issues-data/issues.json\n"
 
       - name: Configure Git credentials
         env:
@@ -281,7 +280,7 @@ jobs:
               version: "",
               agent_version: "2.1.50",
               cli_version: "v0.49.3",
-              workflow_name: "Issue Organizer",
+              workflow_name: "Milestone Assigner",
               experimental: false,
               supports_tools_allowlist: true,
               run_id: context.runId,
@@ -333,76 +332,37 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'GH_AW_SAFE_OUTPUTS_CONFIG_EOF'
-          {"create_discussion":{"expires":168,"max":1},"create_issue":{"group":true,"max":5},"link_sub_issue":{"max":50},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
+          {"assign_milestone":{"allowed":["Chat Widget","Evals","Multi-tenant","RAG","Security","Tracing"],"max":100},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
           GH_AW_SAFE_OUTPUTS_CONFIG_EOF
           cat > /opt/gh-aw/safeoutputs/tools.json << 'GH_AW_SAFE_OUTPUTS_TOOLS_EOF'
           [
             {
-              "description": "Create a new GitHub issue for tracking bugs, feature requests, or tasks. Use this for actionable work items that need assignment, labeling, and status tracking. For reports, announcements, or status updates that don't require task tracking, use create_discussion instead. CONSTRAINTS: Maximum 5 issue(s) can be created. Title will be prefixed with \"[Parent] \".",
+              "description": "Assign an issue to a milestone for release planning and progress tracking. Milestones must exist in the repository before assignment. CONSTRAINTS: Maximum 100 milestone assignment(s) can be made.",
               "inputSchema": {
                 "additionalProperties": false,
                 "properties": {
-                  "body": {
-                    "description": "Detailed issue description in Markdown. Do NOT repeat the title as a heading since it already appears as the issue's h1. Include context, reproduction steps, or acceptance criteria as appropriate.",
-                    "type": "string"
-                  },
-                  "labels": {
-                    "description": "Labels to categorize the issue (e.g., 'bug', 'enhancement'). Labels must exist in the repository.",
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  "parent": {
-                    "description": "Parent issue number for creating sub-issues. This is the numeric ID from the GitHub URL (e.g., 42 in github.com/owner/repo/issues/42). Can also be a temporary_id (e.g., 'aw_abc123', 'aw_Test123') from a previously created issue in the same workflow run.",
+                  "issue_number": {
+                    "description": "Issue number to assign to the milestone. This is the numeric ID from the GitHub URL (e.g., 567 in github.com/owner/repo/issues/567).",
                     "type": [
                       "number",
                       "string"
                     ]
                   },
-                  "temporary_id": {
-                    "description": "Unique temporary identifier for referencing this issue before it's created. Format: 'aw_' followed by 3 to 8 alphanumeric characters (e.g., 'aw_abc1', 'aw_Test123'). Use '#aw_ID' in body text to reference other issues by their temporary_id; these are replaced with actual issue numbers after creation.",
-                    "pattern": "^aw_[A-Za-z0-9]{3,8}$",
-                    "type": "string"
-                  },
-                  "title": {
-                    "description": "Concise issue title summarizing the bug, feature, or task. The title appears as the main heading, so keep it brief and descriptive.",
-                    "type": "string"
+                  "milestone_number": {
+                    "description": "Milestone number (not title) to assign the issue to. This is the numeric ID from the milestone URL (e.g., 12 in github.com/owner/repo/milestone/12). Find milestone numbers in the repository's Milestones page.",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
                   }
                 },
                 "required": [
-                  "title",
-                  "body"
+                  "issue_number",
+                  "milestone_number"
                 ],
                 "type": "object"
               },
-              "name": "create_issue"
-            },
-            {
-              "description": "Create a GitHub discussion for announcements, Q\u0026A, reports, status updates, or community conversations. Use this for content that benefits from threaded replies, doesn't require task tracking, or serves as documentation. For actionable work items that need assignment and status tracking, use create_issue instead. CONSTRAINTS: Maximum 1 discussion(s) can be created. Title will be prefixed with \"[Issue Organizer] \". Discussions will be created in category \"audits\".",
-              "inputSchema": {
-                "additionalProperties": false,
-                "properties": {
-                  "body": {
-                    "description": "Discussion content in Markdown. Do NOT repeat the title as a heading since it already appears as the discussion's h1. Include all relevant context, findings, or questions.",
-                    "type": "string"
-                  },
-                  "category": {
-                    "description": "Discussion category by name (e.g., 'General'), slug (e.g., 'general'), or ID. If omitted, uses the first available category. Category must exist in the repository.",
-                    "type": "string"
-                  },
-                  "title": {
-                    "description": "Concise discussion title summarizing the topic. The title appears as the main heading, so keep it brief and descriptive.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "title",
-                  "body"
-                ],
-                "type": "object"
-              },
-              "name": "create_discussion"
+              "name": "assign_milestone"
             },
             {
               "description": "Report that a tool or capability needed to complete the task is not available, or share any information you deem important about missing functionality or limitations. Use this when you cannot accomplish what was requested because the required functionality is missing or access is restricted.",
@@ -447,34 +407,6 @@ jobs:
               "name": "noop"
             },
             {
-              "description": "Link an issue as a sub-issue of a parent issue. Use this to establish parent-child relationships between issues for better organization and tracking of related work items. CONSTRAINTS: Maximum 50 sub-issue link(s) can be created.",
-              "inputSchema": {
-                "additionalProperties": false,
-                "properties": {
-                  "parent_issue_number": {
-                    "description": "The parent issue number to link the sub-issue to. This is the numeric ID from the GitHub URL (e.g., 100 in github.com/owner/repo/issues/100).",
-                    "type": [
-                      "number",
-                      "string"
-                    ]
-                  },
-                  "sub_issue_number": {
-                    "description": "The issue number to link as a sub-issue of the parent. This is the numeric ID from the GitHub URL (e.g., 101 in github.com/owner/repo/issues/101).",
-                    "type": [
-                      "number",
-                      "string"
-                    ]
-                  }
-                },
-                "required": [
-                  "parent_issue_number",
-                  "sub_issue_number"
-                ],
-                "type": "object"
-              },
-              "name": "link_sub_issue"
-            },
-            {
               "description": "Report that data or information needed to complete the task is not available. Use this when you cannot accomplish what was requested because required data, context, or information is missing.",
               "inputSchema": {
                 "additionalProperties": false,
@@ -505,82 +437,21 @@ jobs:
           GH_AW_SAFE_OUTPUTS_TOOLS_EOF
           cat > /opt/gh-aw/safeoutputs/validation.json << 'GH_AW_SAFE_OUTPUTS_VALIDATION_EOF'
           {
-            "create_discussion": {
+            "assign_milestone": {
               "defaultMax": 1,
               "fields": {
-                "body": {
-                  "required": true,
-                  "type": "string",
-                  "sanitize": true,
-                  "maxLength": 65000
-                },
-                "category": {
-                  "type": "string",
-                  "sanitize": true,
-                  "maxLength": 128
-                },
-                "repo": {
-                  "type": "string",
-                  "maxLength": 256
-                },
-                "title": {
-                  "required": true,
-                  "type": "string",
-                  "sanitize": true,
-                  "maxLength": 128
-                }
-              }
-            },
-            "create_issue": {
-              "defaultMax": 1,
-              "fields": {
-                "body": {
-                  "required": true,
-                  "type": "string",
-                  "sanitize": true,
-                  "maxLength": 65000
-                },
-                "labels": {
-                  "type": "array",
-                  "itemType": "string",
-                  "itemSanitize": true,
-                  "itemMaxLength": 128
-                },
-                "parent": {
+                "issue_number": {
                   "issueOrPRNumber": true
                 },
+                "milestone_number": {
+                  "required": true,
+                  "positiveInteger": true
+                },
                 "repo": {
                   "type": "string",
                   "maxLength": 256
-                },
-                "temporary_id": {
-                  "type": "string"
-                },
-                "title": {
-                  "required": true,
-                  "type": "string",
-                  "sanitize": true,
-                  "maxLength": 128
                 }
               }
-            },
-            "link_sub_issue": {
-              "defaultMax": 5,
-              "fields": {
-                "parent_issue_number": {
-                  "required": true,
-                  "issueNumberOrTemporaryId": true
-                },
-                "repo": {
-                  "type": "string",
-                  "maxLength": 256
-                },
-                "sub_issue_number": {
-                  "required": true,
-                  "issueNumberOrTemporaryId": true
-                }
-              },
-              "customValidation": "parentAndSubDifferent"
             },
             "missing_data": {
               "defaultMax": 20,
@@ -969,7 +840,6 @@ jobs:
     runs-on: ubuntu-slim
     permissions:
       contents: read
-      discussions: write
       issues: write
     outputs:
       noop_message: ${{ steps.noop.outputs.noop_message }}
@@ -997,7 +867,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
           GH_AW_NOOP_MAX: "1"
-          GH_AW_WORKFLOW_NAME: "Issue Organizer"
+          GH_AW_WORKFLOW_NAME: "Milestone Assigner"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1010,7 +880,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Issue Organizer"
+          GH_AW_WORKFLOW_NAME: "Milestone Assigner"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1023,14 +893,12 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Issue Organizer"
+          GH_AW_WORKFLOW_NAME: "Milestone Assigner"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_WORKFLOW_ID: "issue-organizer"
           GH_AW_SECRET_VERIFICATION_RESULT: ${{ needs.agent.outputs.secret_verification_result }}
           GH_AW_CHECKOUT_PR_SUCCESS: ${{ needs.agent.outputs.checkout_pr_success }}
-          GH_AW_CREATE_DISCUSSION_ERRORS: ${{ needs.safe_outputs.outputs.create_discussion_errors }}
-          GH_AW_CREATE_DISCUSSION_ERROR_COUNT: ${{ needs.safe_outputs.outputs.create_discussion_error_count }}
           GH_AW_GROUP_REPORTS: "false"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
@@ -1044,7 +912,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Issue Organizer"
+          GH_AW_WORKFLOW_NAME: "Milestone Assigner"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_NOOP_MESSAGE: ${{ steps.noop.outputs.noop_message }}
@@ -1092,8 +960,8 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          WORKFLOW_NAME: "Issue Organizer"
-          WORKFLOW_DESCRIPTION: "Daily workflow that analyzes recent issues and links related issues as sub-issues"
+          WORKFLOW_NAME: "Milestone Assigner"
+          WORKFLOW_DESCRIPTION: "Weekly workflow that analyzes recent issues and assigns milestones to issues that clearly belong to a milestone"
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
           script: |
@@ -1179,14 +1047,14 @@ jobs:
     runs-on: ubuntu-slim
     permissions:
       contents: read
-      discussions: write
       issues: write
     timeout-minutes: 15
     env:
       GH_AW_ENGINE_ID: "claude"
       GH_AW_WORKFLOW_ID: "issue-organizer"
-      GH_AW_WORKFLOW_NAME: "Issue Organizer"
+      GH_AW_WORKFLOW_NAME: "Milestone Assigner"
     outputs:
+      assign_milestone_milestone_assigned: ${{ steps.process_safe_outputs.outputs.milestone_assigned }}
       code_push_failure_count: ${{ steps.process_safe_outputs.outputs.code_push_failure_count }}
       code_push_failure_errors: ${{ steps.process_safe_outputs.outputs.code_push_failure_errors }}
       create_discussion_error_count: ${{ steps.process_safe_outputs.outputs.create_discussion_error_count }}
@@ -1214,7 +1082,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_discussion\":{\"category\":\"audits\",\"close_older_discussions\":true,\"expires\":168,\"fallback_to_issue\":true,\"max\":1,\"title_prefix\":\"[Issue Organizer] \"},\"create_issue\":{\"group\":true,\"max\":5,\"title_prefix\":\"[Parent] \"},\"link_sub_issue\":{\"max\":50},\"missing_data\":{},\"missing_tool\":{}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"assign_milestone\":{\"allowed\":[\"Chat Widget\",\"Evals\",\"Multi-tenant\",\"RAG\",\"Security\",\"Tracing\"],\"max\":100,\"target-repo\":\"dimagi/open-chat-studio\"},\"missing_data\":{},\"missing_tool\":{}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
