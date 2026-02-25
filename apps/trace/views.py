@@ -1,3 +1,6 @@
+import logging
+from collections import defaultdict
+
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Prefetch
 from django.urls import reverse
@@ -5,11 +8,14 @@ from django.views.generic import DetailView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.annotations.models import CustomTaggedItem
+from apps.service_providers.tracing.langfuse import get_langfuse_api_client
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.filters import TraceFilter, get_trace_filter_context_data
 from apps.trace.models import Trace, TraceStatus
 from apps.trace.tables import TraceTable
 from apps.web.dynamic_filters.datastructures import FilterParams
+
+logger = logging.getLogger(__name__)
 
 
 class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -66,3 +72,55 @@ class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredM
             )
             .filter(team=self.request.team)
         )
+
+
+class TraceLangufuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
+    model = Trace
+    template_name = "trace/partials/langfuse_spans.html"
+    permission_required = "trace.view_trace"
+
+    def get_queryset(self):
+        return Trace.objects.select_related("experiment__trace_provider", "output_message").filter(
+            team=self.request.team
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        trace = self.object
+        langfuse_trace_id, langfuse_trace_url = self._get_langfuse_info(trace)
+        context["langfuse_trace_url"] = langfuse_trace_url
+
+        if not langfuse_trace_id or not trace.experiment.trace_provider:
+            context["langfuse_available"] = False
+            context["langfuse_error"] = False
+            return context
+
+        try:
+            api_client = get_langfuse_api_client(trace.experiment.trace_provider.config)
+            langfuse_trace = api_client.trace.get(langfuse_trace_id)
+            observations = langfuse_trace.observations or []
+            context["langfuse_available"] = True
+            context["langfuse_error"] = False
+            context["root_observations"] = [o for o in observations if not o.parent_observation_id]
+            context["child_observations_map"] = self._build_child_map(observations)
+        except Exception:
+            logger.exception("Error fetching Langfuse trace %s", langfuse_trace_id)
+            context["langfuse_available"] = False
+            context["langfuse_error"] = True
+
+        return context
+
+    def _get_langfuse_info(self, trace) -> tuple[str | None, str | None]:
+        if not trace.output_message:
+            return None, None
+        for info in trace.output_message.trace_info:
+            if info.get("trace_provider") == "langfuse":
+                return info.get("trace_id"), info.get("trace_url")
+        return None, None
+
+    def _build_child_map(self, observations) -> dict:
+        child_map: dict = defaultdict(list)
+        for obs in observations:
+            if obs.parent_observation_id:
+                child_map[obs.parent_observation_id].append(obs)
+        return dict(child_map)
