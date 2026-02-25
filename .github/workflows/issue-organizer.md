@@ -1,8 +1,9 @@
 ---
-description: Daily workflow that analyzes recent issues and assigns milestones to issues that clearly belong to a milestone
+description: Weekly workflow that analyzes recent issues and assigns milestones to issues that clearly belong to a milestone
 name: Milestone Assigner
 on:
-  schedule: daily
+  schedule:
+    - cron: "0 23 * * 5"
   workflow_dispatch:
 permissions:
   contents: read
