@@ -246,7 +246,10 @@ class AddSessionToQueueFromSession(LoginAndTeamRequiredMixin, PermissionRequired
 
     def post(self, request, team_slug: str, session_id: str):
         session = get_object_or_404(ExperimentSession, external_id=session_id, team=request.team)
-        queue_id = request.POST.get("queue_id")
+        try:
+            queue_id = int(request.POST.get("queue_id", ""))
+        except (ValueError, TypeError):
+            queue_id = None
         if not queue_id:
             return render(
                 request,
