@@ -30,13 +30,17 @@ Key files:
 - Forms: `apps/human_annotations/forms.py`
 - Tests: `apps/human_annotations/tests/`
 
+### Phase 2 — Item 9 Complete (PR #2917)
+
+- **Session UI Integration** — "Add to Queue" button on session detail page. HTMX modal lists active queues; POST creates `AnnotationItem`; already-queued sessions shown as disabled. Queue memberships displayed as badges alongside the button. Gated behind the `flag_human_annotations` feature flag (view raises 404 and template hides the block when inactive). Fixes applied post-dogfood: modal auto-opens via Alpine `x-init`, queue name badges appear on reload, UUID text truncated in items table.
+
 ---
 
 ## Phase 2 — Remaining Work
 
 ---
 
-### Item 9: Session UI Integration — Add to Queue from Session Detail
+### ~~Item 9: Session UI Integration — Add to Queue from Session Detail~~ ✓ Done (PR #2917)
 
 **Goal:** Let a reviewer add the current session to an annotation queue directly from the session detail page, without navigating to the queue first.
 
