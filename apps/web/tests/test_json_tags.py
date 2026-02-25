@@ -91,3 +91,35 @@ class TestReadableValue:
 
     def test_empty_list_returns_none(self):
         assert readable_value([]) is None
+
+    def test_generation_output_with_tool_call(self):
+        # GENERATION output when LLM calls a tool — content is a function_call block
+        result = readable_value(
+            {
+                "role": "assistant",
+                "content": [{"type": "function_call", "name": "search", "args": {"query": "hello"}}],
+            }
+        )
+        assert result == "assistant: → search(query='hello')"
+
+    def test_generation_output_mixed_text_and_tool_call(self):
+        # LLM emits text then calls a tool in the same response
+        result = readable_value(
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "Let me look that up."},
+                    {"type": "function_call", "name": "search", "args": {"query": "hello"}},
+                ],
+            }
+        )
+        assert result == "assistant: Let me look that up.\n→ search(query='hello')"
+
+    def test_span_input_with_message_text(self):
+        # OCS span input shape: input key contains a dict with message_text
+        result = readable_value({"input": {"message_text": "hi", "participant_id": "test@test.com"}})
+        assert result == "hi"
+
+    def test_span_input_with_message_text_empty_skipped(self):
+        result = readable_value({"input": {"message_text": "", "participant_id": "test@test.com"}})
+        assert result is None

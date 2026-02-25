@@ -28,14 +28,28 @@ def to_json(obj):
 
 
 def _extract_text(content) -> str | None:
-    """Extract plain text from a string or a list of {type, text} content blocks.
+    """Extract plain text (and tool calls) from a string or list of content blocks.
 
-    Returns None if the input is neither a string nor a recognisable list of text blocks.
+    Handles text blocks ({type: "text", text: "..."}) and function_call blocks
+    ({type: "function_call", name: "...", args: {...}}). Returns None if the input
+    is neither a string nor a recognisable list of content blocks.
     """
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        parts = [block.get("text", "") for block in content if isinstance(block, dict) and block.get("type") == "text"]
+        parts = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "text":
+                text = block.get("text", "")
+                if text:
+                    parts.append(text)
+            elif block.get("type") == "function_call":
+                name = block.get("name", "?")
+                args = block.get("args", {})
+                args_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+                parts.append(f"→ {name}({args_str})")
         return "\n".join(filter(None, parts)) or None
     return None
 
@@ -76,5 +90,12 @@ def readable_value(value) -> str | None:
             v = value.get(key)
             if isinstance(v, str) and v:
                 return v
+
+        # OCS span input shape: {"input": {"message_text": "...", ...}}
+        nested = value.get("input")
+        if isinstance(nested, dict):
+            msg_text = nested.get("message_text")
+            if isinstance(msg_text, str) and msg_text:
+                return msg_text
 
     return None
