@@ -61,7 +61,7 @@ class AnnotationItemTable(tables.Table):
             chip_action(
                 label_factory=lambda record, _: str(record),
                 url_factory=_item_chip_url,
-                button_style="btn-soft btn-secondary",
+                button_style="btn-soft btn-secondary max-w-xs truncate",
             ),
         ],
         align="left",

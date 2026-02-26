@@ -1,0 +1,32 @@
+{% load i18n %}
+<button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        onclick="this.closest('dialog').close()">✕</button>
+
+{% if error %}
+  <div class="flex flex-col items-center gap-3 py-4">
+    <i class="fa-solid fa-circle-exclamation text-warning text-3xl"></i>
+    <p class="text-base font-medium">{{ error }}</p>
+  </div>
+{% elif created %}
+  <div class="flex flex-col items-center gap-3 py-4">
+    <i class="fa-solid fa-circle-check text-success text-3xl"></i>
+    <p class="text-base font-medium">
+      {% translate "Session added to" %} <strong>{{ queue.name }}</strong>
+    </p>
+  </div>
+{% else %}
+  <div class="flex flex-col items-center gap-3 py-4">
+    <i class="fa-solid fa-circle-info text-info text-3xl"></i>
+    <p class="text-base font-medium">
+      {% translate "Session is already in" %} <strong>{{ queue.name }}</strong>
+    </p>
+  </div>
+{% endif %}
+
+<div class="modal-action">
+  <button type="button"
+          class="btn btn-ghost btn-sm"
+          onclick="this.closest('dialog').close()">
+    {% translate "Close" %}
+  </button>
+</div>

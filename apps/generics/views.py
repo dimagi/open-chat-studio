@@ -5,6 +5,7 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.utils.translation import gettext
+from waffle import flag_is_active
 
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.events.models import StaticTrigger, StaticTriggerType
@@ -12,6 +13,8 @@ from apps.experiments.decorators import experiment_session_view
 from apps.experiments.models import ExperimentSession
 from apps.files.forms import get_file_formset
 from apps.generics.type_select_form import TypeSelectForm
+from apps.human_annotations.models import AnnotationItem
+from apps.teams.flags import Flags
 
 
 class BaseTypeSelectFormView(views.View):
@@ -101,6 +104,13 @@ def render_session_details(
     ).get(external_id=session_id, team__slug=team_slug)
     experiment = request.experiment
     participant = session.participant
+    annotation_queue_names = []
+    if flag_is_active(request, Flags.HUMAN_ANNOTATIONS.slug):
+        annotation_queue_names = list(
+            AnnotationItem.objects.filter(session=session, queue__team=session.team).values_list(
+                "queue__name", flat=True
+            )
+        )
     return TemplateResponse(
         request,
         template_path,
@@ -108,6 +118,7 @@ def render_session_details(
             "experiment": experiment,
             "experiment_session": session,
             "active_tab": active_tab,
+            "annotation_queue_names": annotation_queue_names,
             "details": [
                 (gettext("Participant"), session.get_participant_chip()),
                 (gettext("Remote ID"), participant.remote_id if participant and participant.remote_id else "-"),
