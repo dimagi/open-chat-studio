@@ -1544,8 +1544,6 @@ components:
             sessions:write: Manage Sessions
             files:read: Download file content
             participants:write: Update Participant Data
-            openid: OpenID Connect scope
-            profile: User Profile
     apiKeyAuth:
       type: apiKey
       in: header
