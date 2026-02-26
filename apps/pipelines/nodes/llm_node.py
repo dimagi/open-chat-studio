@@ -9,7 +9,6 @@ from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
-from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
@@ -163,7 +162,7 @@ def _get_search_tool(node):
     if not node.collection_index_ids:
         return None
 
-    collections = list(Collection.objects.filter(id__in=node.collection_index_ids, is_index=True))
+    collections = node.repo.get_collections_for_search(node.collection_index_ids)
     if not collections:
         # collections probably deleted
         return None
