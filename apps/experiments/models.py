@@ -1535,10 +1535,8 @@ class ExperimentSession(BaseTeamModel):
 
     @cached_property
     def experiment_version(self) -> Experiment:
-        """Returns the experiment version for this session based on the version stored in chat metadata.
-        Falls back to the default version if no specific version is set."""
-        version_number = self.get_experiment_version_number()
-        return self.experiment.get_version(version_number)
+        """Returns the default experiment, or if there is none, the working experiment"""
+        return self.experiment.default_version
 
     @cached_property
     def working_experiment(self) -> Experiment:
