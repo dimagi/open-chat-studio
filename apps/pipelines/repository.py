@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from io import BytesIO
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from langchain_core.messages import BaseMessage
 
-from apps.assistants.models import OpenAiAssistant
 from apps.chat.models import Chat, ChatMessage
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
@@ -14,6 +13,9 @@ from apps.files.models import File
 from apps.pipelines.models import PipelineChatHistory, PipelineChatMessages
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.models import LlmProvider
+
+if TYPE_CHECKING:
+    from apps.assistants.models import OpenAiAssistant
 
 
 class RepositoryLookupError(Exception):
@@ -259,6 +261,8 @@ class ORMRepository(PipelineRepository):
         return participant.get_schedules_for_experiment(experiment_id, **kwargs)
 
     def get_assistant(self, assistant_id):
+        from apps.assistants.models import OpenAiAssistant
+
         try:
             return OpenAiAssistant.objects.get(id=assistant_id)
         except OpenAiAssistant.DoesNotExist:

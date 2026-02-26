@@ -15,6 +15,7 @@ from apps.pipelines.nodes.nodes import (
     LLMResponseWithPrompt,
 )
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
     assistant_node,
     create_pipeline_model,
@@ -116,6 +117,7 @@ def test_tool_filtering(disabled_tools, provider, provider_model):
         {**node_data["params"], "node_id": node_data["id"], "django_node": django_node}
     )
     node._config = ensure_config({"configurable": {"disabled_tools": disabled_tools}})
+    node._repo = ORMRepository()
     tools = _get_configured_tools(node, ExperimentSessionFactory(), ToolCallbacks())
     tool_names = {getattr(tool, "name", "") for tool in tools}
     assert not set(disabled_tools) & tool_names
@@ -152,7 +154,7 @@ def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_mod
         experiment_session=session,
         participant_data={"test": "abc", "other": "xyz"},
     )
-    output = graph.invoke(state)
+    output = graph.invoke(state, config={"configurable": {"repo": ORMRepository()}})
     assert output["messages"][-1] == "123"
     assert output["participant_data"] == {"test": ["123", "next"], "other": "xyz"}
 
@@ -201,7 +203,7 @@ def test_tool_artifact_response(get_configured_tools, get_llm_service, provider,
         experiment_session=session,
         participant_data={"test": "abc", "other": "xyz"},
     )
-    output = graph.invoke(state)
+    output = graph.invoke(state, config={"configurable": {"repo": ORMRepository()}})
     assert output["messages"][-1] == "ai response after tool"
     assert tool.func.call_args == (("test arg",), {})
     assert len(service.llm.get_call_messages()) == 2

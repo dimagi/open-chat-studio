@@ -53,7 +53,10 @@ from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
-from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
+from apps.service_providers.llm_service.prompt_context import (
+    PipelineParticipantDataProxy,
+    PromptTemplateContext,
+)
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -553,7 +556,9 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "session_state": context.state.session_state,
         }
         participant_data = context.state.participant_data or {}
-        template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
+        template_context = PromptTemplateContext(
+            session, extra=extra_prompt_context, participant_data=participant_data, repo=self.repo
+        )
         system_message = get_system_message(
             prompt_template=f"{self.prompt}\nThe default routing destination is: {default_keyword}",
             prompt_context=template_context,
@@ -856,7 +861,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         output_state["session_state"] = pipeline_state.get("session_state") or {}
 
         # use 'output_state' so that we capture any updates
-        participant_data_proxy = ParticipantDataProxy(output_state, context.session)
+        participant_data_proxy = PipelineParticipantDataProxy(output_state, context.session, repo=self.repo)
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}

@@ -18,7 +18,9 @@ def mock_participant_data_proxy():
     proxy_mock.get.return_value = {"name": "Dimagi", "email": "hello@world.com"}
     proxy_mock.get_timezone.return_value = "UTC"
     proxy_mock.get_schedules.return_value = []
-    with patch("apps.service_providers.llm_service.prompt_context.ParticipantDataProxy", return_value=proxy_mock):
+    with patch(
+        "apps.service_providers.llm_service.prompt_context.PipelineParticipantDataProxy", return_value=proxy_mock
+    ):
         yield proxy_mock
 
 

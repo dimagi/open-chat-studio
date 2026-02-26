@@ -1,8 +1,12 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
+from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.utils.time import pretty_date
+
+if TYPE_CHECKING:
+    from apps.pipelines.repository import PipelineRepository
 
 
 class PromptTemplateContext:
@@ -14,6 +18,7 @@ class PromptTemplateContext:
         collection_index_ids: list[int] | None = None,
         extra: dict | None = None,
         participant_data: dict | None = None,
+        repo: "PipelineRepository | None" = None,
     ):
         self.session = session
         self.source_material_id = source_material_id
@@ -21,9 +26,12 @@ class PromptTemplateContext:
         self.collection_index_ids = collection_index_ids or []
         self.extra = extra or {}
         self.context_cache = {}
+        self.repo = repo or ORMRepository()
         if participant_data is None:
             participant_data = session.participant_data_from_experiment
-        self.participant_data_proxy = ParticipantDataProxy({"participant_data": participant_data}, self.session)
+        self.participant_data_proxy = PipelineParticipantDataProxy(
+            {"participant_data": participant_data}, self.session, repo=repo
+        )
 
     @property
     def factories(self):
@@ -51,14 +59,12 @@ class PromptTemplateContext:
         return context
 
     def get_source_material(self):
-        from apps.experiments.models import SourceMaterial
-
         if self.source_material_id is None:
             return ""
 
         try:
-            return SourceMaterial.objects.get(id=self.source_material_id).material
-        except SourceMaterial.DoesNotExist:
+            return self.repo.get_source_material(self.source_material_id).material
+        except RepositoryLookupError:
             return ""
 
     def get_media_summaries(self):
@@ -67,18 +73,10 @@ class PromptTemplateContext:
         * File (id=27, content_type=image/png): summary1
         * File (id=28, content_type=application/pdf): summary2
         """
-        from apps.documents.models import Collection
-
         try:
-            repo = Collection.objects.get(id=self.collection_id)
-            file_info = repo.files.values_list("id", "summary", "content_type")
-            return "\n".join(
-                [
-                    f"* File (id={id}, content_type={content_type}): {summary}\n"
-                    for id, summary, content_type in file_info
-                ]
-            )
-        except Collection.DoesNotExist:
+            file_info = self.repo.get_collection_file_info(self.collection_id)
+            return "\n".join(f"* File (id={fi.id}, content_type={fi.content_type}): {fi.summary}\n" for fi in file_info)
+        except RepositoryLookupError:
             return ""
 
     def get_collection_index_summaries(self):
@@ -87,13 +85,11 @@ class PromptTemplateContext:
         Collection Index (id=1, name=Product collection): This is a collection about product documentation
         Collection Index (id=2, name=FAQ): Customer support FAQ database
         """
-        from apps.documents.models import Collection
-
         if not self.collection_index_ids:
             return ""
 
-        collections = Collection.objects.filter(id__in=self.collection_index_ids).values_list("id", "name", "summary")
-        return "\n".join([f"Collection Index (id={id}, name={name}): {summary}" for id, name, summary in collections])
+        summaries = self.repo.get_collection_index_summaries(self.collection_index_ids)
+        return "\n".join(f"Collection Index (id={s.id}, name={s.name}): {s.summary}" for s in summaries)
 
     def get_participant_data(self):
         data = self.participant_data_proxy.get() or {}
@@ -192,7 +188,8 @@ class ParticipantDataProxy:
 
     def get(self):
         """Returns the current participant's data as a dictionary."""
-        return self.session.participant.global_data | self._participant_data
+        global_data = self.session.participant.global_data
+        return global_data | self._participant_data
 
     def set(self, data):
         """Updates the current participant's data with the provided dictionary.
@@ -253,3 +250,26 @@ class ParticipantDataProxy:
     def get_timezone(self):
         """Returns the participant's timezone"""
         return self._participant_data.get("timezone")
+
+
+class PipelineParticipantDataProxy(ParticipantDataProxy):
+    """ParticipantDataProxy subclass that uses a PipelineRepository for data access."""
+
+    def __init__(self, pipeline_state: dict, experiment_session, repo):
+        super().__init__(pipeline_state, experiment_session)
+        self.repo = repo
+
+    def get(self):
+        """Returns the current participant's data as a dictionary."""
+        global_data = self.repo.get_participant_global_data(self.session.participant)
+        return global_data | self._participant_data
+
+    def get_schedules(self):
+        """
+        Returns all active scheduled messages for the participant in the current chat session.
+        """
+        if self._scheduled_messages is None:
+            self._scheduled_messages = self.repo.get_participant_schedules(
+                self.session.participant, self.experiment_id, as_dict=True, as_timezone=self.get_timezone()
+            )
+        return self._scheduled_messages

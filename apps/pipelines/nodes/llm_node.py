@@ -80,7 +80,7 @@ def _process_agent_output(node: PipelineNode, session: ExperimentSession, messag
         output=message, session=session, include_citations=node.generate_citations
     )
     ai_message_metadata = _process_files(
-        session, cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
+        node, session, cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
     )
     if node.generate_citations:
         ai_message = populate_reference_section_from_citations(
@@ -113,14 +113,16 @@ def build_node_agent(
     )
 
 
-def _process_files(session: ExperimentSession, cited_files: set[File], generated_files: set[File]) -> dict:
+def _process_files(
+    node: PipelineNode, session: ExperimentSession, cited_files: set[File], generated_files: set[File]
+) -> dict:
     """`cited_files` is a list of files that are cited in the response whereas generated files are those generated
     by the LLM
     """
     if cited_files:
-        session.chat.attach_files(attachment_type="file_citation", files=cited_files)
+        node.repo.attach_files_to_chat(session.chat, attachment_type="file_citation", files=cited_files)
     if generated_files:
-        session.chat.attach_files(attachment_type="code_interpreter", files=generated_files)
+        node.repo.attach_files_to_chat(session.chat, attachment_type="code_interpreter", files=generated_files)
     return {
         "cited_files": [file.id for file in cited_files],
         "generated_files": [file.id for file in generated_files],
@@ -139,6 +141,7 @@ def _get_prompt_context(node: PipelineNode, session: ExperimentSession, context:
         collection_index_ids=node.collection_index_ids,
         extra=extra_prompt_context,
         participant_data=context.state.participant_data or {},
+        repo=node.repo,
     )
 
 
