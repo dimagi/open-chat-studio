@@ -151,14 +151,12 @@ def chat_upload_file(request, session_id):
                 "participant_remote_id": participant_remote_id,
             },
         )
-        uploaded_files.append(
-            {
-                "id": file_obj.id,
-                "name": file_obj.name,
-                "size": file_obj.content_size,
-                "content_type": file_obj.content_type,
-            }
-        )
+        uploaded_files.append({
+            "id": file_obj.id,
+            "name": file_obj.name,
+            "size": file_obj.content_size,
+            "content_type": file_obj.content_type,
+        })
 
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
@@ -172,11 +170,21 @@ def chat_upload_file(request, session_id):
     # auth=["{}"],
     examples=[
         OpenApiExample(
-            name="StartChatSession",
-            summary="Start a new chat session for an experiment",
+            name="StartSessionWorkingVersion",
+            summary="Start session with working (unreleased) version",
             value={
                 "chatbot_id": "123e4567-e89b-12d3-a456-426614174000",
                 "session_data": {"source": "widget", "page_url": "https://example.com"},
+                "participant_remote_id": "abc",
+                "participant_name": "participant_name",
+            },
+        ),
+        OpenApiExample(
+            name="StartSessionSpecificVersion",
+            summary="Start session with specific published version (requires auth)",
+            value={
+                "chatbot_id": "123e4567-e89b-12d3-a456-426614174000",
+                "version_number": 2,
                 "participant_remote_id": "abc",
                 "participant_name": "participant_name",
             },
@@ -193,16 +201,33 @@ def chat_start_session(request):
 
     data = serializer.validated_data
     experiment_id = data["chatbot_id"]
+    version_number = data.get("version_number")
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
 
-    # Get experiment
-    experiment = get_object_or_404(Experiment, public_id=experiment_id)
-    if not experiment.is_working_version:
+    # Security check: Only authenticated users can specify version numbers
+    if version_number is not None and not request.user.is_authenticated:
         return Response(
-            {"error": "Chatbot ID must reference the unreleased version of an chatbot"},
-            status=status.HTTP_400_BAD_REQUEST,
+            {"error": "Version number requires authentication"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Get the appropriate experiment version
+    experiment_version = None
+    if version_number is None:
+        # Default behavior: use working version
+        experiment = get_object_or_404(Experiment, public_id=experiment_id)
+        if not experiment.is_working_version:
+            return Response(
+                {"error": "Chatbot ID must reference the unreleased version of an chatbot"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    else:
+        # Look up the working version by public_id, then find the specific version
+        experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
+        experiment_version = get_object_or_404(
+            Experiment, working_version_id=experiment.id, version_number=version_number
         )
 
     team = experiment.team
@@ -257,6 +282,10 @@ def chat_start_session(request):
         participant_user=user,
         metadata=metadata,
     )
+
+    if experiment_version is not None:
+        session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version_number)
+
     if user is not None and session_data:
         session.state = session_data
         session.save(update_fields=["state"])
@@ -264,7 +293,7 @@ def chat_start_session(request):
     # Prepare response data
     response_data = {
         "session_id": session.external_id,
-        "chatbot": experiment,
+        "chatbot": experiment_version or experiment,
         "participant": participant,
     }
 

@@ -194,6 +194,12 @@ class ParticipantDataUpdateRequest(serializers.Serializer):
 
 class ChatStartSessionRequest(serializers.Serializer):
     chatbot_id = serializers.UUIDField(label="Chatbot ID")
+    version_number = serializers.IntegerField(
+        label="Version Number",
+        required=False,
+        allow_null=True,
+        help_text="Optional version number of the chatbot to use. Requires authentication.",
+    )
     session_data = serializers.DictField(
         label="Initial session data",
         required=False,
