@@ -127,7 +127,7 @@ def test_start_session_without_version_uses_working(api_client, experiment):
 
 @pytest.mark.django_db()
 def test_start_session_with_version_id_not_working_version(authed_user, authed_client, experiment_with_version):
-    """Using a version's public_id (not the working version) without version_number returns 400."""
+    """Using a version's public_id (not the working version) without version_number returns 404."""
     url = reverse("api:chat:start-session")
     version = experiment_with_version.versions.first()
     data = {
@@ -135,4 +135,4 @@ def test_start_session_with_version_id_not_working_version(authed_user, authed_c
         "participant_remote_id": authed_user.email,
     }
     response = authed_client.post(url, data=data, format="json")
-    assert response.status_code == 400
+    assert response.status_code == 404

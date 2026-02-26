@@ -321,10 +321,8 @@ def chat_start_session(request):
         participant_identifier=participant.identifier,
         participant_user=user,
         metadata=metadata,
+        version=version_number if version_number is not None else Experiment.DEFAULT_VERSION_NUMBER,
     )
-
-    if experiment_version is not None:
-        session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version_number)
 
     if user is not None and session_data:
         session.state = session_data
