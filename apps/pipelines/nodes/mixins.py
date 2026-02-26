@@ -5,7 +5,6 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 import tiktoken
-from django.core.exceptions import ObjectDoesNotExist
 from langchain_core.messages import BaseMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.prompts import PromptTemplate
@@ -20,7 +19,6 @@ from apps.pipelines.exceptions import (
     PipelineNodeBuildError,
 )
 from apps.pipelines.models import (
-    PipelineChatHistory,
     PipelineChatHistoryModes,
     PipelineChatHistoryTypes,
 )
@@ -133,27 +131,18 @@ class LLMResponseMixin(BaseModel):
 
         return self
 
-    def get_llm_service(self, repo: "PipelineRepository | None" = None) -> LlmService:
+    def get_llm_service(self, repo: "PipelineRepository") -> LlmService:
         try:
-            if repo:
-                provider = repo.get_llm_provider(self.llm_provider_id)
-                if provider is None:
-                    raise PipelineNodeBuildError(
-                        f"LLM provider with id {self.llm_provider_id} does not exist"
-                    ) from None
-            else:
-                from apps.service_providers.models import LlmProvider
-
-                provider = LlmProvider.objects.get(id=self.llm_provider_id)
+            provider = repo.get_llm_provider(self.llm_provider_id)
+            if provider is None:
+                raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
             return provider.get_llm_service()
         except PipelineNodeBuildError:
             raise
-        except ObjectDoesNotExist:
-            raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
-    def get_chat_model(self, repo: "PipelineRepository | None" = None):
+    def get_chat_model(self, repo: "PipelineRepository"):
         model_name = get_llm_provider_model(self.llm_provider_model_id).name
         logger.debug(f"Calling {model_name} with parameters: {self.llm_model_parameters}")
         return self.get_llm_service(repo=repo).get_chat_model(model_name, **self.llm_model_parameters)
@@ -223,8 +212,8 @@ class HistoryMixin(LLMResponseMixin):
     def get_history(
         self,
         session: "ExperimentSession",
+        repo: "PipelineRepository",
         exclude_message_id: int | None = None,
-        repo: "PipelineRepository | None" = None,
     ) -> list[BaseMessage]:
         """
         Returns the chat history messages for the node based on its history configuration.
@@ -237,37 +226,26 @@ class HistoryMixin(LLMResponseMixin):
             return []
 
         if self.use_session_history:
-            if repo:
-                return repo.get_session_messages_until_marker(
-                    chat=session.chat,
-                    marker=self.get_history_mode(),
-                    exclude_message_id=exclude_message_id,
-                )
-            return session.chat.get_langchain_messages_until_marker(
-                marker=self.get_history_mode(), exclude_message_id=exclude_message_id
+            return repo.get_session_messages_until_marker(
+                chat=session.chat,
+                marker=self.get_history_mode(),
+                exclude_message_id=exclude_message_id,
             )
-        else:
-            if repo:
-                history = repo.get_pipeline_chat_history(
-                    session=session,
-                    history_type=self.history_type,
-                    history_name=self._get_history_name(),
-                )
-            else:
-                try:
-                    history = session.pipeline_chat_history.get(type=self.history_type, name=self._get_history_name())
-                except PipelineChatHistory.DoesNotExist:
-                    history = None
 
-            if history is None:
-                return []
-            return history.get_langchain_messages_until_marker(self.get_history_mode())
+        history = repo.get_pipeline_chat_history(
+            session=session,
+            history_type=self.history_type,
+            history_name=self._get_history_name(),
+        )
+        if history is None:
+            return []
+        return history.get_langchain_messages_until_marker(self.get_history_mode())
 
     def store_compression_checkpoint(
         self,
         compression_marker: str,
         checkpoint_message_id: int,
-        repo: "PipelineRepository | None" = None,
+        repo: "PipelineRepository",
     ):
         """Persist the correct compression marker for this node's history mode.
 
@@ -277,44 +255,23 @@ class HistoryMixin(LLMResponseMixin):
         """
         history_mode = self.get_history_mode()
         if self.use_session_history:
-            if repo:
-                repo.save_compression_checkpoint_global(
-                    message_id=checkpoint_message_id,
-                    compression_marker=compression_marker,
-                    history_mode=history_mode,
-                )
-            else:
-                from apps.chat.conversation import COMPRESSION_MARKER
-                from apps.chat.models import ChatMessage
-
-                message = ChatMessage.objects.get(id=checkpoint_message_id)
-                if compression_marker == COMPRESSION_MARKER:
-                    message.metadata.update({"compression_marker": history_mode})
-                    message.save(update_fields=["metadata"])
-                else:
-                    message.summary = compression_marker
-                    message.save(update_fields=["summary"])
+            repo.save_compression_checkpoint_global(
+                message_id=checkpoint_message_id,
+                compression_marker=compression_marker,
+                history_mode=history_mode,
+            )
         else:
-            if repo:
-                repo.save_compression_checkpoint_pipeline(
-                    message_id=checkpoint_message_id,
-                    compression_marker=compression_marker,
-                    history_mode=history_mode,
-                )
-            else:
-                from apps.chat.conversation import COMPRESSION_MARKER
-                from apps.pipelines.models import PipelineChatMessages
-
-                updates: dict[str, Any] = {"compression_marker": history_mode}
-                if compression_marker != COMPRESSION_MARKER:
-                    updates["summary"] = compression_marker
-                PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
+            repo.save_compression_checkpoint_pipeline(
+                message_id=checkpoint_message_id,
+                compression_marker=compression_marker,
+                history_mode=history_mode,
+            )
 
     def build_history_middleware(
         self,
         session: "ExperimentSession",
         system_message: BaseMessage,
-        repo: "PipelineRepository | None" = None,
+        repo: "PipelineRepository",
     ) -> BaseNodeHistoryMiddleware | None:
         """Construct the history compression middleware configured for this node."""
         if self.history_is_disabled:
@@ -351,7 +308,7 @@ class HistoryMixin(LLMResponseMixin):
         session: "ExperimentSession",
         human_message: str,
         ai_message: str,
-        repo: "PipelineRepository | None" = None,
+        repo: "PipelineRepository",
     ):
         if self.history_is_disabled:
             return
@@ -360,23 +317,17 @@ class HistoryMixin(LLMResponseMixin):
             # Global History is saved outside of the node
             return
 
-        if repo:
-            history, _ = repo.get_or_create_pipeline_chat_history(
-                session=session,
-                history_type=self.history_type,
-                history_name=self._get_history_name(),
-            )
-            message = repo.save_pipeline_chat_message(
-                history=history,
-                node_id=self.node_id,
-                human_message=human_message,
-                ai_message=ai_message,
-            )
-        else:
-            history, _ = session.pipeline_chat_history.get_or_create(
-                type=self.history_type, name=self._get_history_name()
-            )
-            message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=self.node_id)
+        history, _ = repo.get_or_create_pipeline_chat_history(
+            session=session,
+            history_type=self.history_type,
+            history_name=self._get_history_name(),
+        )
+        message = repo.save_pipeline_chat_message(
+            history=history,
+            node_id=self.node_id,
+            human_message=human_message,
+            ai_message=ai_message,
+        )
         return message
 
 
@@ -442,19 +393,20 @@ class ExtractStructuredDataNodeMixin:
             | prompt
         )
 
-    def extraction_chain(self, tool_class, reference_data):
-        structured_output = super().get_chat_model().with_structured_output(tool_class)
+    def extraction_chain(self, tool_class, reference_data, repo: "PipelineRepository"):
+        structured_output = super().get_chat_model(repo=repo).with_structured_output(tool_class)
         return self._prompt_chain(reference_data) | with_llm_retry(structured_output)
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
+        repo = context.repo
         ToolClass = self.get_tool_class(json.loads(self.data_schema))
         reference_data = self.get_reference_data(context)
-        prompt_token_count = self._get_prompt_token_count(reference_data, ToolClass.model_json_schema())
+        prompt_token_count = self._get_prompt_token_count(reference_data, ToolClass.model_json_schema(), repo=repo)
         message_chunks = self.chunk_messages(context.input, prompt_token_count=prompt_token_count)
 
         new_reference_data = reference_data
         for message_chunk in message_chunks:
-            chain = self.extraction_chain(tool_class=ToolClass, reference_data=new_reference_data)
+            chain = self.extraction_chain(tool_class=ToolClass, reference_data=new_reference_data, repo=repo)
             output = chain.invoke(message_chunk, config=self._config)
             output = output.model_dump()
             # TOOO: tracing
@@ -476,8 +428,8 @@ class ExtractStructuredDataNodeMixin:
     def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:
         return new_data
 
-    def _get_prompt_token_count(self, reference_data: dict | str, json_schema: dict) -> int:
-        llm = super().get_chat_model()
+    def _get_prompt_token_count(self, reference_data: dict | str, json_schema: dict, repo: "PipelineRepository") -> int:
+        llm = super().get_chat_model(repo=repo)
         prompt_chain = self._prompt_chain(reference_data)
         # If we invoke the chain with an empty input, we get the prompt without the conversation history, which
         # is what we want.

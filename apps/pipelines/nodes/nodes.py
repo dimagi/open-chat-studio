@@ -124,23 +124,15 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                 participant = getattr(session, "participant", None)
                 if participant:
                     schedules = []
-                    if context.repo is not None:
-                        schedules = (
-                            context.repo.get_participant_schedules(
-                                participant=participant,
-                                experiment_id=session.experiment_id,
-                                as_dict=True,
-                                include_inactive=True,
-                            )
-                            or []
+                    schedules = (
+                        context.repo.get_participant_schedules(
+                            participant=participant,
+                            experiment_id=session.experiment_id,
+                            as_dict=True,
+                            include_inactive=True,
                         )
-                    else:
-                        schedules = (
-                            participant.get_schedules_for_experiment(
-                                session.experiment_id, as_dict=True, include_inactive=True
-                            )
-                            or []
-                        )
+                        or []
+                    )
                     content.update(
                         {
                             "participant_details": {
@@ -876,7 +868,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         output_state["session_state"] = pipeline_state.get("session_state") or {}
 
         # use 'output_state' so that we capture any updates
-        participant_data_proxy = ParticipantDataProxy(output_state, context.session)
+        participant_data_proxy = ParticipantDataProxy(output_state, context.session, repo=context.repo)
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}

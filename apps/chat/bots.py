@@ -15,6 +15,7 @@ from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
+from apps.pipelines.repository import DjangoPipelineRepository
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.tracing import TraceInfo, TracingService
@@ -384,7 +385,9 @@ class EventBot:
 
     @property
     def system_prompt(self):
-        context = PromptTemplateContext(self.session, None).get_context(["participant_data", "current_datetime"])
+        context = PromptTemplateContext(self.session, None, repo=DjangoPipelineRepository()).get_context(
+            ["participant_data", "current_datetime"]
+        )
         context["conversation_history"] = self.get_conversation_history()
         return self.SYSTEM_PROMPT.format(**context)
 

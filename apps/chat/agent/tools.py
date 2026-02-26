@@ -28,6 +28,7 @@ from apps.files.models import FileChunkEmbedding
 from apps.ocs_notifications.notifications import tool_error_notification
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.pipelines.repository import DjangoPipelineRepository
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
 from apps.teams.utils import get_current_team, get_slug_for_team
@@ -355,7 +356,7 @@ class AppendToParticipantDataTool(CustomBaseTool):
     args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
 
     def action(self, key: str, value: str | int | list, tool_call_id: str, graph_state: dict):
-        data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
+        data_proxy = ParticipantDataProxy(graph_state, self.experiment_session, repo=DjangoPipelineRepository())
         new_value = data_proxy.append_to_key(key, value)
         if len(new_value) > 10:
             new_value_msg = f"The last 10 items in the list are: {new_value[-10:]}"
@@ -378,7 +379,7 @@ class IncrementCounterTool(CustomBaseTool):
 
     def action(self, counter: str, value: int, tool_call_id: str, graph_state: dict):
         namespaced_key = f"_counter_{counter}"
-        data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
+        data_proxy = ParticipantDataProxy(graph_state, self.experiment_session, repo=DjangoPipelineRepository())
         new_value = data_proxy.increment_key(namespaced_key, value)
         message = f"The '{counter}' counter has been successfully incremented. The new value is {new_value}."
         return Command(

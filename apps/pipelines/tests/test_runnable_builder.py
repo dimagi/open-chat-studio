@@ -26,6 +26,7 @@ from apps.pipelines.nodes.nodes import (
     StartNode,
     StaticRouterNode,
 )
+from apps.pipelines.repository import DjangoPipelineRepository
 from apps.pipelines.tests.utils import (
     assistant_node,
     boolean_node,
@@ -129,7 +130,6 @@ class TestEmailPipeline:
             messages=["Ice is not a liquid. When it is melted it turns into water."],
             experiment_session=ExperimentSessionFactory(),
         )
-        from apps.pipelines.repository import DjangoPipelineRepository
 
         create_runnable(pipeline, nodes).invoke(state, config={"configurable": {"repo": DjangoPipelineRepository()}})
         assert len(mail.outbox) == 1
@@ -161,7 +161,10 @@ class TestLLMResponse:
             end_node(),
         ]
         assert (
-            create_runnable(pipeline, nodes).invoke(PipelineState(messages=["Repeat exactly: 123"]))["messages"][-1]
+            create_runnable(pipeline, nodes).invoke(
+                PipelineState(messages=["Repeat exactly: 123"]),
+                config={"configurable": {"repo": DjangoPipelineRepository()}},
+            )["messages"][-1]
             == "123"
         )
 
@@ -192,7 +195,6 @@ class TestLLMResponse:
             end_node(),
         ]
         participant_data = {"name": "A"}
-        from apps.pipelines.repository import DjangoPipelineRepository
 
         output = create_runnable(pipeline, nodes).invoke(
             PipelineState(
@@ -232,8 +234,6 @@ class TestLLMResponse:
             {"id": "llm -> end", "source": llm["id"], "target": end["id"]},
         ]
         runnable = create_runnable(pipeline, nodes, edges)
-
-        from apps.pipelines.repository import DjangoPipelineRepository
 
         output = runnable.invoke(
             PipelineState(messages=["a"], experiment_session=experiment_session),
@@ -369,7 +369,7 @@ class TestRouterNode:
             last_node_input="a",
             participant_data=participant_data,
         )
-        node._process_conditional(NodeContext(state))
+        node._process_conditional(NodeContext(state, repo=DjangoPipelineRepository()))
 
         # Verify that create_agent was called with the correct system prompt containing participant data
         assert create_agent_mock.called
@@ -455,19 +455,21 @@ class TestRouterNode:
                 "target": end["id"],
             },
         ]
-        runnable = create_runnable(pipeline, nodes, edges)
 
-        output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session))
+        runnable = create_runnable(pipeline, nodes, edges)
+        config = {"configurable": {"repo": DjangoPipelineRepository()}}
+
+        output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session), config=config)
         assert output["messages"][-1] == "Template A: a"
-        output = runnable.invoke(PipelineState(messages=["A"], experiment_session=experiment_session))
+        output = runnable.invoke(PipelineState(messages=["A"], experiment_session=experiment_session), config=config)
         assert output["messages"][-1] == "Template A: A"
-        output = runnable.invoke(PipelineState(messages=["b"], experiment_session=experiment_session))
+        output = runnable.invoke(PipelineState(messages=["b"], experiment_session=experiment_session), config=config)
         assert output["messages"][-1] == "Template B: b"
-        output = runnable.invoke(PipelineState(messages=["c"], experiment_session=experiment_session))
+        output = runnable.invoke(PipelineState(messages=["c"], experiment_session=experiment_session), config=config)
         assert output["messages"][-1] == "Template C: c"
-        output = runnable.invoke(PipelineState(messages=["d"], experiment_session=experiment_session))
+        output = runnable.invoke(PipelineState(messages=["d"], experiment_session=experiment_session), config=config)
         assert output["messages"][-1] == "Template D: d"
-        output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session))
+        output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session), config=config)
         assert output["messages"][-1] == "Template A: z"
 
     @pytest.mark.django_db()
@@ -535,7 +537,7 @@ class TestRouterNode:
             last_node_input="a",
         )
 
-        keyword, is_default_keyword = node._process_conditional(NodeContext(state))
+        keyword, is_default_keyword = node._process_conditional(NodeContext(state, repo=DjangoPipelineRepository()))
         assert keyword == "DEFAULT"
         assert is_default_keyword
 
@@ -803,7 +805,8 @@ class TestDataExtraction:
                 messages=["ai: hi user\nhuman: hi there I am John"],
                 experiment_session=session,
             )
-            assert graph.invoke(state)["messages"][-1] == '{"name": "John"}'
+            config = {"configurable": {"repo": DjangoPipelineRepository()}}
+            assert graph.invoke(state, config=config)["messages"][-1] == '{"name": "John"}'
 
     @django_db_with_data()
     def test_extract_structured_data_with_chunking(self, provider, provider_model, pipeline):
@@ -830,7 +833,8 @@ class TestDataExtraction:
                 messages=["ai: hi user\nhuman: hi there I am John"],
                 experiment_session=session,
             )
-            extracted_data = graph.invoke(state)["messages"][-1]
+            config = {"configurable": {"repo": DjangoPipelineRepository()}}
+            extracted_data = graph.invoke(state, config=config)["messages"][-1]
 
         # This is what the LLM sees.
         inferences = llm.get_call_messages()
@@ -950,7 +954,8 @@ class TestDataExtraction:
                 experiment_session=session,
                 participant_data=initial_data or {},
             )
-            result = runnable.invoke(state)
+            config = {"configurable": {"repo": DjangoPipelineRepository()}}
+            result = runnable.invoke(state, config=config)
             return result["participant_data"]
 
 
@@ -959,8 +964,6 @@ class TestAssistantNode:
 
     @pytest.fixture(autouse=True)
     def _repo_config(self):
-        from apps.pipelines.repository import DjangoPipelineRepository
-
         self.config = {"configurable": {"repo": DjangoPipelineRepository()}}
 
     def assistant_node_runnable_mock(

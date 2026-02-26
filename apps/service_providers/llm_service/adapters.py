@@ -88,10 +88,11 @@ class AssistantAdapter(BaseAdapter):
         self.team = session.team
 
         from apps.chat.agent.tools import get_assistant_tools
+        from apps.pipelines.repository import DjangoPipelineRepository
 
         self.tools = get_assistant_tools(assistant, experiment_session=session)
         self.disabled_tools = disabled_tools
-        self.template_context = PromptTemplateContext(session, source_material_id=None)
+        self.template_context = PromptTemplateContext(session, source_material_id=None, repo=DjangoPipelineRepository())
 
     @classmethod
     def for_pipeline(
@@ -139,7 +140,11 @@ class AssistantAdapter(BaseAdapter):
 
         input_variables = get_template_variables(instructions, "f-string")
         if input_variables:
-            context = PromptTemplateContext(self.session, None).get_context(input_variables)
+            from apps.pipelines.repository import DjangoPipelineRepository
+
+            context = PromptTemplateContext(self.session, None, repo=DjangoPipelineRepository()).get_context(
+                input_variables
+            )
             instructions = instructions.format(**context)
 
         code_interpreter_attachments = self.get_attachments(["code_interpreter"])

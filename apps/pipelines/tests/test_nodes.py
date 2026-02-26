@@ -9,7 +9,6 @@ from apps.chat.conversation import COMPRESSION_MARKER
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.history_middleware import MaxHistoryLengthHistoryMiddleware
 from apps.pipelines.nodes.mixins import (
-    PipelineChatHistory,
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
 )
@@ -114,36 +113,17 @@ def history_node_factory():
 
 class TestHistoryMixin:
     def test_get_history_uses_session_history_for_global_type(self, history_node_factory):
-        """PipelineChatHistoryTypes.GLOBAL uses session history"""
-        node = history_node_factory(
-            history_type=PipelineChatHistoryTypes.GLOBAL,
-        )
-        pipeline_history = Mock()
-        session = Mock(
-            chat=Mock(get_langchain_messages_until_marker=Mock(return_value=["session-history"])),
-            pipeline_chat_history=pipeline_history,
-        )
-
-        result = node.get_history(session)
-
-        assert result == ["session-history"]
-        session.chat.get_langchain_messages_until_marker.assert_called_once_with(
-            marker=node.get_history_mode(), exclude_message_id=None
-        )
-        pipeline_history.get.assert_not_called()
-
-    def test_get_history_uses_session_history_for_global_type_with_repo(self, history_node_factory):
-        """PipelineChatHistoryTypes.GLOBAL uses repo when provided"""
+        """PipelineChatHistoryTypes.GLOBAL uses repo to get session history"""
         node = history_node_factory(
             history_type=PipelineChatHistoryTypes.GLOBAL,
         )
         repo = Mock()
-        repo.get_session_messages_until_marker.return_value = ["repo-session-history"]
+        repo.get_session_messages_until_marker.return_value = ["session-history"]
         session = Mock(chat=Mock())
 
         result = node.get_history(session, repo=repo)
 
-        assert result == ["repo-session-history"]
+        assert result == ["session-history"]
         repo.get_session_messages_until_marker.assert_called_once_with(
             chat=session.chat,
             marker=node.get_history_mode(),
@@ -151,44 +131,22 @@ class TestHistoryMixin:
         )
 
     def test_get_history_uses_pipeline_history_when_configured(self, history_node_factory):
-        """PipelineChatHistoryTypes.NODE uses pipeline history"""
+        """PipelineChatHistoryTypes.NODE uses repo to get pipeline history"""
         node = history_node_factory(history_type=PipelineChatHistoryTypes.NODE)
         mock_history = Mock(get_langchain_messages_until_marker=Mock(return_value=["node-history"]))
-        pipeline_history = Mock(get=Mock(return_value=mock_history))
-        session = Mock(chat=Mock(), pipeline_chat_history=pipeline_history)
-
-        result = node.get_history(session)
-
-        assert result == ["node-history"]
-        pipeline_history.get.assert_called_once_with(type=PipelineChatHistoryTypes.NODE, name=node.node_id)
-        mock_history.get_langchain_messages_until_marker.assert_called_once_with(node.get_history_mode())
-        session.chat.get_langchain_messages_until_marker.assert_not_called()
-
-    def test_get_history_uses_pipeline_history_with_repo(self, history_node_factory):
-        """PipelineChatHistoryTypes.NODE uses repo when provided"""
-        node = history_node_factory(history_type=PipelineChatHistoryTypes.NODE)
-        mock_history = Mock(get_langchain_messages_until_marker=Mock(return_value=["repo-node-history"]))
         repo = Mock()
         repo.get_pipeline_chat_history.return_value = mock_history
         session = Mock()
 
         result = node.get_history(session, repo=repo)
 
-        assert result == ["repo-node-history"]
+        assert result == ["node-history"]
         repo.get_pipeline_chat_history.assert_called_once_with(
             session=session,
             history_type=PipelineChatHistoryTypes.NODE,
             history_name=node.node_id,
         )
-
-    def test_get_history_returns_empty_when_pipeline_history_missing(self, history_node_factory):
-        node = history_node_factory(history_type=PipelineChatHistoryTypes.NODE)
-        pipeline_history = Mock()
-        pipeline_history.get.side_effect = PipelineChatHistory.DoesNotExist
-        session = Mock(chat=Mock(), pipeline_chat_history=pipeline_history)
-
-        assert node.get_history(session) == []
-        pipeline_history.get.assert_called_once_with(type=PipelineChatHistoryTypes.NODE, name=node.node_id)
+        mock_history.get_langchain_messages_until_marker.assert_called_once_with(node.get_history_mode())
 
     def test_get_history_returns_empty_when_repo_returns_none(self, history_node_factory):
         """When repo returns None for pipeline history, should return empty list"""
@@ -259,39 +217,9 @@ class TestHistoryMixin:
             history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
         )
 
-    def test_store_compression_checkpoint_fallback_global(self, history_node_factory):
-        """When repo is None, falls back to direct ORM access for global history"""
-        node = history_node_factory(
-            history_type=PipelineChatHistoryTypes.GLOBAL,
-            history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
-        )
-
-        with patch("apps.chat.models.ChatMessage") as mock_chat_message_class:
-            mock_message = Mock(metadata={}, save=Mock())
-            mock_chat_message_class.objects.get.return_value = mock_message
-
-            node.store_compression_checkpoint(compression_marker=COMPRESSION_MARKER, checkpoint_message_id=7)
-
-            assert mock_message.metadata["compression_marker"] == PipelineChatHistoryModes.TRUNCATE_TOKENS
-            mock_message.save.assert_called_once_with(update_fields=["metadata"])
-
-    def test_store_compression_checkpoint_fallback_node(self, history_node_factory):
-        """When repo is None, falls back to direct ORM access for pipeline history"""
-        node = history_node_factory(
-            history_type=PipelineChatHistoryTypes.NODE,
-            history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
-        )
-
-        with patch("apps.pipelines.models.PipelineChatMessages") as mock_pipeline_chat_message_class:
-            queryset_mock = Mock()
-            mock_pipeline_chat_message_class.objects.filter.return_value = queryset_mock
-
-            node.store_compression_checkpoint(compression_marker=COMPRESSION_MARKER, checkpoint_message_id=7)
-            queryset_mock.update.assert_called_once_with(compression_marker=PipelineChatHistoryModes.TRUNCATE_TOKENS)
-
     def test_build_history_middleware_returns_none_when_history_disabled(self, history_node_factory):
         node = history_node_factory(history_type=PipelineChatHistoryTypes.NONE)
-        middleware = node.build_history_middleware(Mock(), SystemMessage(content="system"))
+        middleware = node.build_history_middleware(Mock(), SystemMessage(content="system"), repo=Mock())
         assert middleware is None
 
     @patch("apps.pipelines.nodes.nodes.LLMResponseMixin.get_chat_model")
@@ -303,7 +231,7 @@ class TestHistoryMixin:
             max_history_length=5,
         )
         session = Mock()
-        middleware = node.build_history_middleware(session, SystemMessage(content="system"))
+        middleware = node.build_history_middleware(session, SystemMessage(content="system"), repo=Mock())
         assert isinstance(middleware, MaxHistoryLengthHistoryMiddleware)
 
     @patch("apps.pipelines.nodes.mixins.LLMResponseMixin.get_chat_model")
@@ -325,7 +253,7 @@ class TestHistoryMixin:
         session = Mock()
         system_message = SystemMessage(content="system")
 
-        middleware = node.build_history_middleware(session, system_message)
+        middleware = node.build_history_middleware(session, system_message, repo=Mock())
 
         assert isinstance(middleware, SummarizeHistoryMiddleware)
         count_tokens.assert_called_once_with([system_message])
@@ -350,7 +278,7 @@ class TestHistoryMixin:
         session = Mock()
         system_message = SystemMessage(content="system")
 
-        middleware = node.build_history_middleware(session, system_message)
+        middleware = node.build_history_middleware(session, system_message, repo=Mock())
 
         assert isinstance(middleware, TruncateTokensHistoryMiddleware)
         count_tokens.assert_called_once_with([system_message])

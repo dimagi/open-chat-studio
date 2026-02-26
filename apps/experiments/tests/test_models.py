@@ -343,7 +343,7 @@ class TestExperimentSession:
         participant = ParticipantFactory()
         session = ExperimentSessionFactory(participant=participant, team=participant.team)
         data = {"first_name": "Jimmy"}
-        data_proxy = ParticipantDataProxy({"participant_data": data}, session)
+        data_proxy = ParticipantDataProxy({"participant_data": data}, session, repo=Mock())
         data = data_proxy.get()
         assert data == {
             "name": participant.name,
@@ -352,7 +352,7 @@ class TestExperimentSession:
 
         data["name"] = "James Newman"
 
-        data_proxy = ParticipantDataProxy({"participant_data": data}, session)
+        data_proxy = ParticipantDataProxy({"participant_data": data}, session, repo=Mock())
         data = data_proxy.get()
         assert data == {
             "name": "James Newman",

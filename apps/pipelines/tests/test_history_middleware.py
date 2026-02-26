@@ -39,6 +39,7 @@ class TestBaseNodeHistoryMiddleware:
         middleware = BaseNodeHistoryMiddleware(
             session=experiment_session,
             node=mock_node,
+            repo=Mock(),
             trigger=("messages", 10),  # doesn't matter for this test
             keep=("messages", 5),  # doesn't matter for this test
         )
@@ -58,6 +59,7 @@ class TestBaseNodeHistoryMiddleware:
         middleware = BaseNodeHistoryMiddleware(
             session=experiment_session,
             node=mock_node,
+            repo=Mock(),
             trigger=("messages", 10),
             keep=("messages", 5),
         )
@@ -82,6 +84,7 @@ class TestMaxHistoryLengthHistoryMiddleware:
         middleware = MaxHistoryLengthHistoryMiddleware(
             session=experiment_session,
             node=mock_node,
+            repo=Mock(),
             max_history_length=keep_value,
         )
 
@@ -126,9 +129,11 @@ class TestTruncateTokensHistoryMiddleware:
         mock_should_summarize.return_value = True
         token_limit = 100
 
+        mock_repo = Mock()
         middleware = TruncateTokensHistoryMiddleware(
             session=experiment_session,
             node=mock_node,
+            repo=mock_repo,
             token_limit=token_limit,
         )
 
@@ -153,7 +158,7 @@ class TestTruncateTokensHistoryMiddleware:
             assert msg.content != COMPRESSION_MARKER, "Unexpected compression marker in messages"
 
         mock_node.store_compression_checkpoint.assert_called_with(
-            compression_marker=COMPRESSION_MARKER, checkpoint_message_id=9, repo=None
+            compression_marker=COMPRESSION_MARKER, checkpoint_message_id=9, repo=mock_repo
         )
 
 
@@ -173,6 +178,7 @@ class TestSummarizeHistoryMiddleware:
         middleware = SummarizeHistoryMiddleware(
             session=experiment_session,
             node=mock_node,
+            repo=Mock(),
             token_limit=token_limit,
         )
 

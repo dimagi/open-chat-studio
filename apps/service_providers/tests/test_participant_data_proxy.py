@@ -1,8 +1,7 @@
-from unittest.mock import patch
+from unittest.mock import Mock
 
 import pytest
 
-from apps.experiments.models import Participant
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 
@@ -15,7 +14,8 @@ class TestParticipantDataProxy:
         """Test that ParticipantDataProxy initializes correctly"""
         experiment = ExperimentFactory()
         session = ExperimentSessionFactory(experiment=experiment)
-        proxy = ParticipantDataProxy({}, session)
+        repo = Mock()
+        proxy = ParticipantDataProxy({}, session, repo=repo)
 
         assert proxy.session == session
         assert proxy.experiment_id == experiment.id
@@ -28,7 +28,7 @@ class TestParticipantDataProxy:
         experiment = ExperimentFactory()
         session = ExperimentSessionFactory(experiment=experiment, participant=participant)
 
-        proxy = ParticipantDataProxy({"participant_data": {"favorite_color": "blue"}}, session)
+        proxy = ParticipantDataProxy({"participant_data": {"favorite_color": "blue"}}, session, repo=Mock())
 
         # Participant's global_data should include the name
         expected_data = {"name": "Test User", "favorite_color": "blue"}
@@ -37,7 +37,7 @@ class TestParticipantDataProxy:
     def test_set_validates_data_type(self):
         """Test that set() validates the data type"""
         session = ExperimentSessionFactory()
-        proxy = ParticipantDataProxy({}, session)
+        proxy = ParticipantDataProxy({}, session, repo=Mock())
 
         with pytest.raises(ValueError, match="Data must be a dictionary"):
             proxy.set("not a dictionary")
@@ -47,7 +47,7 @@ class TestParticipantDataProxy:
         session = ExperimentSessionFactory()
 
         input_state = {}
-        proxy = ParticipantDataProxy(input_state, session)
+        proxy = ParticipantDataProxy(input_state, session, repo=Mock())
 
         # Set some data
         proxy.set({"favorite_color": "blue", "name": "New Name"})
@@ -60,33 +60,35 @@ class TestParticipantDataProxy:
         participant = ParticipantFactory()
         experiment = ExperimentFactory()
         session = ExperimentSessionFactory(experiment=experiment, participant=participant)
-        proxy = ParticipantDataProxy({}, session)
-
-        # Mock the get_schedules_for_experiment method on participant
         mock_schedules = [{"id": 1, "message": "Test reminder", "scheduled_time": "2023-01-01T10:00:00Z"}]
-        with patch.object(
-            Participant, "get_schedules_for_experiment", return_value=mock_schedules
-        ) as mock_get_schedules:
-            result = proxy.get_schedules()
+        repo = Mock()
+        repo.get_participant_schedules.return_value = mock_schedules
+        proxy = ParticipantDataProxy({}, session, repo=repo)
 
-            # Method should be called with the experiment and timezone params
-            mock_get_schedules.assert_called_once_with(experiment.id, as_dict=True, as_timezone=proxy.get_timezone())
-            assert result == mock_schedules
+        result = proxy.get_schedules()
 
-            # Subsequent calls should use cached result
-            proxy.get_schedules()
-            assert mock_get_schedules.call_count == 1
+        repo.get_participant_schedules.assert_called_once_with(
+            participant,
+            experiment.id,
+            as_dict=True,
+            as_timezone=proxy.get_timezone(),
+        )
+        assert result == mock_schedules
+
+        # Subsequent calls should use cached result
+        proxy.get_schedules()
+        assert repo.get_participant_schedules.call_count == 1
 
     def test_get_timezone(self):
         """Test that get_timezone returns the participant's timezone"""
         session = ExperimentSessionFactory()
 
-        proxy = ParticipantDataProxy({"participant_data": {"timezone": "America/New_York"}}, session)
+        proxy = ParticipantDataProxy({"participant_data": {"timezone": "America/New_York"}}, session, repo=Mock())
 
         assert proxy.get_timezone() == "America/New_York"
 
         # Test with no timezone set
-        proxy = ParticipantDataProxy({}, session)
+        proxy = ParticipantDataProxy({}, session, repo=Mock())
         assert proxy.get_timezone() is None
 
     def test_set_key(self):
@@ -94,7 +96,7 @@ class TestParticipantDataProxy:
         session = ExperimentSessionFactory()
 
         input_state = {"participant_data": {"name": "jack"}}
-        proxy = ParticipantDataProxy(input_state, session)
+        proxy = ParticipantDataProxy(input_state, session, repo=Mock())
 
         # Set some data
         proxy.set_key("favorite_color", "blue")
@@ -110,7 +112,7 @@ class TestParticipantDataProxy:
         session = ExperimentSessionFactory()
 
         input_state = {}
-        proxy = ParticipantDataProxy(input_state, session)
+        proxy = ParticipantDataProxy(input_state, session, repo=Mock())
 
         assert "random_stuff" not in proxy.get()
 
@@ -130,7 +132,7 @@ class TestParticipantDataProxy:
         session = ExperimentSessionFactory()
 
         input_state = {}
-        proxy = ParticipantDataProxy(input_state, session)
+        proxy = ParticipantDataProxy(input_state, session, repo=Mock())
 
         # Test incrementing a non-existent key (should start at 0)
         proxy.increment_key("counter")
