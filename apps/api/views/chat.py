@@ -220,12 +220,20 @@ def chat_start_session(request):
         experiment = get_object_or_404(Experiment, public_id=experiment_id)
         if not experiment.is_working_version:
             return Response(
-                {"error": "Chatbot ID must reference the unreleased version of an chatbot"},
+                {"error": "Chatbot ID must reference the unreleased version of a chatbot"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
     else:
         # Look up the working version by public_id, then find the specific version
         experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
+
+        # Verify the authenticated user belongs to the experiment's team
+        if not experiment.team.members.filter(id=request.user.id).exists():
+            return Response(
+                {"error": "You do not have access to this chatbot"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         experiment_version = get_object_or_404(
             Experiment, working_version_id=experiment.id, version_number=version_number
         )

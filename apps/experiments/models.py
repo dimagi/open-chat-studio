@@ -904,7 +904,8 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         success_trend = {}
 
         trace_counts = (
-            Trace.objects.filter(
+            Trace.objects
+            .filter(
                 Q(experiment__working_version_id=self.id) | Q(experiment_id=self.id),
                 timestamp__gte=from_date,
                 timestamp__lte=to_date,
@@ -1210,63 +1211,59 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 ),
             )
         else:
-            fields.extend(
-                [
-                    VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
-                    VersionField(
-                        group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model
-                    ),
-                    VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
-                    VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
-                    VersionField(
-                        group_name="Safety",
-                        name="safety_layers",
-                        queryset=self.safety_layers,
-                    ),
-                    VersionField(
-                        group_name="Safety",
-                        name="safety_violation_emails",
-                        raw_value=", ".join(self.safety_violation_notification_emails),
-                    ),
-                    VersionField(
-                        group_name="Safety",
-                        name="input_formatter",
-                        raw_value=self.input_formatter,
-                    ),
-                    # Source material
-                    VersionField(
-                        group_name="Source Material",
-                        name="source_material",
-                        raw_value=self.source_material,
-                    ),
-                    # Tools
-                    VersionField(
-                        group_name="Tools",
-                        name="tools",
-                        raw_value=set(self.tools),
-                        to_display=VersionFieldDisplayFormatters.format_tools,
-                    ),
-                    VersionField(
-                        group_name="Tools",
-                        name="custom_actions",
-                        queryset=self.get_custom_action_operations(),
-                        to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
-                    ),
-                    # Routing
-                    VersionField(
-                        group_name="Routing",
-                        name="routes",
-                        queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
-                        to_display=VersionFieldDisplayFormatters.format_route,
-                    ),
-                    VersionField(
-                        group_name="Routing",
-                        name="terminal_bot",
-                        queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
-                        to_display=VersionFieldDisplayFormatters.format_route,
-                    ),
-                ]
-            )
+            fields.extend([
+                VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
+                VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
+                VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
+                VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
+                VersionField(
+                    group_name="Safety",
+                    name="safety_layers",
+                    queryset=self.safety_layers,
+                ),
+                VersionField(
+                    group_name="Safety",
+                    name="safety_violation_emails",
+                    raw_value=", ".join(self.safety_violation_notification_emails),
+                ),
+                VersionField(
+                    group_name="Safety",
+                    name="input_formatter",
+                    raw_value=self.input_formatter,
+                ),
+                # Source material
+                VersionField(
+                    group_name="Source Material",
+                    name="source_material",
+                    raw_value=self.source_material,
+                ),
+                # Tools
+                VersionField(
+                    group_name="Tools",
+                    name="tools",
+                    raw_value=set(self.tools),
+                    to_display=VersionFieldDisplayFormatters.format_tools,
+                ),
+                VersionField(
+                    group_name="Tools",
+                    name="custom_actions",
+                    queryset=self.get_custom_action_operations(),
+                    to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
+                ),
+                # Routing
+                VersionField(
+                    group_name="Routing",
+                    name="routes",
+                    queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
+                    to_display=VersionFieldDisplayFormatters.format_route,
+                ),
+                VersionField(
+                    group_name="Routing",
+                    name="terminal_bot",
+                    queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
+                    to_display=VersionFieldDisplayFormatters.format_route,
+                ),
+            ])
         return VersionDetails(
             instance=self,
             fields=fields,
@@ -1290,7 +1287,8 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             node_name = AssistantNode.__name__
             # TODO: What about multiple assistant nodes?
             assistant_id = (
-                Node.objects.filter(type=node_name, pipeline=self.pipeline, params__assistant_id__isnull=False)
+                Node.objects
+                .filter(type=node_name, pipeline=self.pipeline, params__assistant_id__isnull=False)
                 .values_list("params__assistant_id", flat=True)
                 .first()
             )
@@ -1339,7 +1337,8 @@ class ExperimentRoute(BaseTeamModel, VersionsMixin):
         if parent:
             child_ids = cls.objects.filter(parent=parent).values_list("child_id", flat=True)
             eligible_experiments = (
-                Experiment.objects.filter(team=team)
+                Experiment.objects
+                .filter(team=team)
                 .exclude(id__in=child_ids)
                 .exclude(id__in=parent_ids)
                 .exclude(id=parent.id)
@@ -1481,13 +1480,15 @@ class Participant(BaseTeamModel):
     def last_seen(self) -> datetime:
         """Gets the "last seen" date for this participant based on their last message"""
         latest_session = (
-            self.experimentsession_set.annotate(message_count=Count("chat__messages"))
+            self.experimentsession_set
+            .annotate(message_count=Count("chat__messages"))
             .exclude(message_count=0)
             .order_by("-created_at")
             .values("id")[:1]
         )
         return (
-            ChatMessage.objects.filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
+            ChatMessage.objects
+            .filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
             .order_by("-created_at")
             .values_list("created_at", flat=True)
             .first()
@@ -1513,7 +1514,8 @@ class Participant(BaseTeamModel):
         last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
         joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
         return (
-            self.get_experiments_queryset(include_archived=True)
+            self
+            .get_experiments_queryset(include_archived=True)
             .annotate(
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
@@ -1547,7 +1549,8 @@ class Participant(BaseTeamModel):
 
         child_experiments = ExperimentRoute.objects.filter(team=self.team, parent_id=experiment_id).values("child")
         messages = (
-            ScheduledMessage.objects.filter(
+            ScheduledMessage.objects
+            .filter(
                 Q(experiment_id=experiment_id) | Q(experiment__in=models.Subquery(child_experiments)),
                 participant=self,
                 team=self.team,
@@ -1669,7 +1672,8 @@ class ExperimentSessionQuerySet(models.QuerySet):
 
     def annotate_with_message_count(self):
         message_count_subquery = Subquery(
-            ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
+            ChatMessage.objects
+            .filter(chat_id=OuterRef("chat_id"))
             .values("chat")
             .annotate(count=Count("id"))
             .values("count")[:1]
@@ -1921,8 +1925,10 @@ class ExperimentSession(BaseTeamModel):
 
     @cached_property
     def experiment_version(self) -> Experiment:
-        """Returns the default experiment, or if there is none, the working experiment"""
-        return self.experiment.default_version
+        """Returns the experiment version for this session based on the version stored in chat metadata.
+        Falls back to the default version if no specific version is set."""
+        version_number = self.get_experiment_version_number()
+        return self.experiment.get_version(version_number)
 
     @cached_property
     def working_experiment(self) -> Experiment:

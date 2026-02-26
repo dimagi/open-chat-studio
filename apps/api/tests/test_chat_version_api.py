@@ -10,7 +10,14 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @pytest.fixture()
-def authed_user():
+def authed_user(team_with_users):
+    """Return a user who is a member of the experiment's team."""
+    return team_with_users.members.first()
+
+
+@pytest.fixture()
+def other_team_user():
+    """Return a user from a different team."""
     other_team = TeamWithUsersFactory.create()
     return other_team.members.first()
 
@@ -19,6 +26,13 @@ def authed_user():
 def authed_client(authed_user):
     client = APIClient()
     client.login(username=authed_user.email, password="password")
+    return client
+
+
+@pytest.fixture()
+def other_team_client(other_team_user):
+    client = APIClient()
+    client.login(username=other_team_user.email, password="password")
     return client
 
 
@@ -51,6 +65,8 @@ def test_start_session_with_version_number_authenticated(authed_user, authed_cli
 
     session = ExperimentSession.objects.get(external_id=response_json["session_id"])
     assert session.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION) == version.version_number
+    # Verify the session's experiment_version property returns the correct version
+    assert session.experiment_version.version_number == version.version_number
 
 
 @pytest.mark.django_db()
@@ -65,6 +81,21 @@ def test_start_session_with_version_number_unauthenticated_forbidden(api_client,
     response = api_client.post(url, data=data, format="json")
     assert response.status_code == 403
     assert response.json()["error"] == "Version number requires authentication"
+
+
+@pytest.mark.django_db()
+def test_start_session_with_version_cross_team_forbidden(other_team_user, other_team_client, experiment_with_version):
+    """Users from a different team cannot create sessions for another team's chatbot versions."""
+    url = reverse("api:chat:start-session")
+    version = experiment_with_version.versions.first()
+    data = {
+        "chatbot_id": str(experiment_with_version.public_id),
+        "version_number": version.version_number,
+        "participant_remote_id": other_team_user.email,
+    }
+    response = other_team_client.post(url, data=data, format="json")
+    assert response.status_code == 403
+    assert response.json()["error"] == "You do not have access to this chatbot"
 
 
 @pytest.mark.django_db()
