@@ -187,23 +187,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatStartSessionResponse'
               examples:
-                StartSessionWorkingVersion:
+                StartSessionWorkingVersionResponse:
                   value:
-                    chatbot_id: 123e4567-e89b-12d3-a456-426614174000
-                    session_data:
-                      source: widget
-                      page_url: https://example.com
-                    participant_remote_id: abc
-                    participant_name: participant_name
-                  summary: Start session with working (unreleased) version
-                StartSessionSpecificVersion:
+                    session_id: 123e4567-e89b-12d3-a456-426614174000
+                    chatbot:
+                      id: 123e4567-e89b-12d3-a456-426614174000
+                      name: Example Bot
+                      version_number: 0
+                      versions: []
+                      url: https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/
+                    participant:
+                      identifier: abc
+                      remote_id: abc
+                  summary: Session started with working version
+                StartSessionSpecificVersionResponse:
                   value:
-                    chatbot_id: 123e4567-e89b-12d3-a456-426614174000
-                    version_number: 2
-                    participant_remote_id: abc
-                    participant_name: participant_name
-                  summary: Start session with specific published version (requires
-                    auth)
+                    session_id: 123e4567-e89b-12d3-a456-426614174000
+                    chatbot:
+                      id: 123e4567-e89b-12d3-a456-426614174000
+                      name: Example Bot
+                      version_number: 2
+                      versions: []
+                      url: https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/
+                    participant:
+                      identifier: abc
+                      remote_id: abc
+                  summary: Session started with specific published version
           description: ''
   /api/experiments/:
     get:

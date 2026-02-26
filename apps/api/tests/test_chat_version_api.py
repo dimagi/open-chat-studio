@@ -25,14 +25,14 @@ def other_team_user():
 @pytest.fixture()
 def authed_client(authed_user):
     client = APIClient()
-    client.login(username=authed_user.email, password="password")
+    client.force_login(authed_user)
     return client
 
 
 @pytest.fixture()
 def other_team_client(other_team_user):
     client = APIClient()
-    client.login(username=other_team_user.email, password="password")
+    client.force_login(other_team_user)
     return client
 
 
@@ -112,7 +112,7 @@ def test_start_session_with_nonexistent_version(authed_user, authed_client, expe
 
 
 @pytest.mark.django_db()
-def test_start_session_without_version_uses_working(team_with_users, api_client, experiment):
+def test_start_session_without_version_uses_working(api_client, experiment):
     """Omitting version_number uses the working version (backward compatible)."""
     url = reverse("api:chat:start-session")
     data = {"chatbot_id": str(experiment.public_id)}

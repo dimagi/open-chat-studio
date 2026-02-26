@@ -178,6 +178,7 @@ def chat_upload_file(request, session_id):
                 "participant_remote_id": "abc",
                 "participant_name": "participant_name",
             },
+            request_only=True,
         ),
         OpenApiExample(
             name="StartSessionSpecificVersion",
@@ -188,6 +189,39 @@ def chat_upload_file(request, session_id):
                 "participant_remote_id": "abc",
                 "participant_name": "participant_name",
             },
+            request_only=True,
+        ),
+        OpenApiExample(
+            name="StartSessionWorkingVersionResponse",
+            summary="Session started with working version",
+            value={
+                "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                "chatbot": {
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "name": "Example Bot",
+                    "version_number": 0,
+                    "versions": [],
+                    "url": "https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
+                },
+                "participant": {"identifier": "abc", "remote_id": "abc"},
+            },
+            response_only=True,
+        ),
+        OpenApiExample(
+            name="StartSessionSpecificVersionResponse",
+            summary="Session started with specific published version",
+            value={
+                "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                "chatbot": {
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "name": "Example Bot",
+                    "version_number": 2,
+                    "versions": [],
+                    "url": "https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
+                },
+                "participant": {"identifier": "abc", "remote_id": "abc"},
+            },
+            response_only=True,
         ),
     ],
 )
@@ -213,20 +247,11 @@ def chat_start_session(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    # Get the appropriate experiment version
-    experiment_version = None
-    if version_number is None:
-        # Default behavior: use working version
-        experiment = get_object_or_404(Experiment, public_id=experiment_id)
-        if not experiment.is_working_version:
-            return Response(
-                {"error": "Chatbot ID must reference the unreleased version of a chatbot"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-    else:
-        # Look up the working version by public_id, then find the specific version
-        experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
+    # Always look up the working version by public_id
+    experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
 
+    experiment_version = None
+    if version_number is not None:
         # Verify the authenticated user belongs to the experiment's team
         if not experiment.team.members.filter(id=request.user.id).exists():
             return Response(
