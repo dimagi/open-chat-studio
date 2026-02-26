@@ -7,3 +7,5 @@ from apps.trace.models import Trace
 class TraceFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Trace
+
+    duration = 1000
