@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from io import BytesIO
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import BaseMessage
 
@@ -16,8 +17,7 @@ if TYPE_CHECKING:
     from apps.service_providers.models import LlmProvider
 
 
-@runtime_checkable
-class PipelineRepository(Protocol):
+class PipelineRepository(ABC):
     """Defines all DB operations needed during pipeline execution.
 
     Implementations must satisfy every method listed here. Nodes will
@@ -27,6 +27,7 @@ class PipelineRepository(Protocol):
 
     # -- Chat history ---------------------------------------------------------
 
+    @abstractmethod
     def get_pipeline_chat_history(
         self,
         session: ExperimentSession,
@@ -36,6 +37,7 @@ class PipelineRepository(Protocol):
         """Return an existing pipeline chat history record, or None."""
         ...
 
+    @abstractmethod
     def get_or_create_pipeline_chat_history(
         self,
         session: ExperimentSession,
@@ -48,6 +50,7 @@ class PipelineRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     def save_pipeline_chat_message(
         self,
         history: PipelineChatHistory,
@@ -58,6 +61,7 @@ class PipelineRepository(Protocol):
         """Persist a new human/AI message pair in the pipeline chat history."""
         ...
 
+    @abstractmethod
     def get_session_messages_until_marker(
         self,
         chat: Chat,
@@ -67,6 +71,7 @@ class PipelineRepository(Protocol):
         """Fetch session-level (global) messages up to a compression marker."""
         ...
 
+    @abstractmethod
     def save_compression_checkpoint_global(
         self,
         message_id: int,
@@ -76,6 +81,7 @@ class PipelineRepository(Protocol):
         """Save a compression checkpoint on a global ChatMessage."""
         ...
 
+    @abstractmethod
     def save_compression_checkpoint_pipeline(
         self,
         message_id: int,
@@ -87,30 +93,36 @@ class PipelineRepository(Protocol):
 
     # -- LLM providers --------------------------------------------------------
 
+    @abstractmethod
     def get_llm_provider(self, llm_provider_id: int) -> LlmProvider | None:
         """Return an LlmProvider by id, or None if not found."""
         ...
 
     # -- Source materials & collections ----------------------------------------
 
+    @abstractmethod
     def get_source_material(self, source_material_id: int) -> SourceMaterial | None:
         """Return a SourceMaterial by id, or None if not found."""
         ...
 
+    @abstractmethod
     def get_collection(self, collection_id: int) -> Collection | None:
         """Return a Collection by id, or None if not found."""
         ...
 
+    @abstractmethod
     def get_collections_for_search(self, collection_ids: list[int]) -> list[Collection]:
         """Return Collection objects matching the given ids (index collections)."""
         ...
 
+    @abstractmethod
     def get_collection_index_summaries(self, collection_index_ids: list[int]) -> str:
         """Return a formatted string of collection index summaries."""
         ...
 
     # -- Files -----------------------------------------------------------------
 
+    @abstractmethod
     def create_file(
         self,
         filename: str,
@@ -122,6 +134,7 @@ class PipelineRepository(Protocol):
         """Create and persist a file record."""
         ...
 
+    @abstractmethod
     def attach_files_to_chat(
         self,
         chat: Chat,
@@ -133,6 +146,7 @@ class PipelineRepository(Protocol):
 
     # -- Participant -----------------------------------------------------------
 
+    @abstractmethod
     def get_participant_schedules(
         self,
         participant: Any,
@@ -146,12 +160,13 @@ class PipelineRepository(Protocol):
 
     # -- Assistants ------------------------------------------------------------
 
+    @abstractmethod
     def get_assistant(self, assistant_id: int) -> OpenAiAssistant | None:
         """Return an OpenAiAssistant by id, or None if not found."""
         ...
 
 
-class DjangoPipelineRepository:
+class DjangoPipelineRepository(PipelineRepository):
     """Production implementation backed by the Django ORM.
 
     Each method wraps ORM calls that are currently scattered across pipeline
@@ -331,7 +346,7 @@ class DjangoPipelineRepository:
             return None
 
 
-class InMemoryPipelineRepository:
+class InMemoryPipelineRepository(PipelineRepository):
     """Test-only implementation with dict-based stores and no DB access.
 
     Pre-load data via the constructor or setters. Returns configured data
