@@ -134,7 +134,6 @@ class PipelineBot:
     def _run_pipeline(self, input_state, pipeline_to_use):
         from apps.experiments.models import AgentTools
         from apps.pipelines.graph import PipelineGraph
-        from apps.pipelines.repository import DjangoPipelineRepository
 
         repo = DjangoPipelineRepository()
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
@@ -277,7 +276,6 @@ class PipelineTestBot:
     def process_input(self, input: str) -> PipelineState:
         from apps.pipelines.graph import PipelineGraph
         from apps.pipelines.nodes.helpers import temporary_session
-        from apps.pipelines.repository import DjangoPipelineRepository
 
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
