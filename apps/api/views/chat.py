@@ -338,6 +338,11 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
     attachment_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, help_text="List of file IDs from prior upload"
     )
+    version_number = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="Optional version number of the chatbot to use. Requires authentication.",
+    )
 
 
 @extend_schema(
@@ -380,6 +385,7 @@ def chat_send_message(request, session_id):
     data = serializer.validated_data
     message_text = data["message"]
     attachment_ids = data.get("attachment_ids", [])
+    version_number = data.get("version_number")
 
     session = get_experiment_session_cached(session_id)
     if not session:
@@ -388,6 +394,23 @@ def chat_send_message(request, session_id):
     # Verify session is active
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if version_number is not None:
+        if not request.user.is_authenticated:
+            return Response(
+                {"error": "Version number requires authentication"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not session.experiment.team.members.filter(id=request.user.id).exists():
+            return Response(
+                {"error": "You do not have access to this chatbot"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        experiment_version = get_object_or_404(
+            Experiment, working_version_id=session.experiment.id, version_number=version_number
+        )
+    else:
+        experiment_version = session.experiment_version
 
     attachment_data = []
     if attachment_ids:
@@ -406,7 +429,6 @@ def chat_send_message(request, session_id):
             attachment_data.append(attachment.model_dump())
 
     # Queue the response generation as a background task
-    experiment_version = session.experiment_version
     task_id = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
