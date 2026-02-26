@@ -20,6 +20,7 @@ from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
+from apps.teams.models import Flag
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -441,3 +442,33 @@ def test_disallow_web_channel_session_resets(team_with_users, client):
     assert response.status_code == 302
     session.refresh_from_db()
     assert session.status == SessionStatus.ACTIVE  # Session should remain active
+
+
+@pytest.mark.django_db()
+def test_chatbot_table_view_embeds_trend_data_inline_when_flag_active(client, team_with_users):
+    """When flag_tracing is active, the chatbot table embeds trend JSON directly in the HTML
+    instead of generating per-experiment fetch URLs."""
+    team = team_with_users
+    user = team.members.first()
+    flag, _ = Flag.objects.get_or_create(name="flag_tracing")
+    flag.everyone = True
+    flag.save()
+    flag.flush()
+
+    Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
+    Experiment.objects.create(
+        name="Test Chatbot",
+        pipeline=Pipeline.objects.create(team=team, data={"nodes": [], "edges": []}),
+        owner=user,
+        team=team,
+    )
+
+    client.force_login(user)
+    url = reverse("chatbots:table", args=[team.slug])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    # Inline data attribute should be present, not a per-experiment fetch URL
+    assert "data-trends=" in content
+    assert "trends_data" not in content

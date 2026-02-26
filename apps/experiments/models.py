@@ -758,6 +758,69 @@ class Experiment(BaseTeamModel, VersionsMixin):
         errors = [error_trend.get(bucket, 0) for bucket in hour_buckets]
         return successes, errors
 
+    @classmethod
+    def get_bulk_trend_data(cls, experiment_ids: list[int]) -> dict[int, tuple[list, list]]:
+        """
+        Get error/success trends for multiple experiments in a single DB query.
+
+        Returns a dict mapping each experiment ID to (successes, errors) lists,
+        each containing the hourly counts for the last 48 hours.
+        """
+        if not experiment_ids:
+            return {}
+
+        to_date = timezone.now()
+        from_date = to_date - timezone.timedelta(days=2)
+
+        # Build ordered hour buckets for the 48-hour window (shared across all experiments)
+        hour_buckets = []
+        current = from_date.replace(minute=0, second=0, microsecond=0)
+        end = to_date.replace(minute=0, second=0, microsecond=0)
+        while current <= end:
+            hour_buckets.append(current)
+            current += timezone.timedelta(hours=1)
+
+        # Single query: annotate each trace with its root experiment ID, then group
+        trace_counts = (
+            Trace.objects.filter(
+                Q(experiment__working_version_id__in=experiment_ids) | Q(experiment_id__in=experiment_ids),
+                timestamp__gte=from_date,
+                timestamp__lte=to_date,
+            )
+            .annotate(
+                root_experiment_id=Case(
+                    When(experiment__working_version_id__isnull=False, then=F("experiment__working_version_id")),
+                    default=F("experiment_id"),
+                ),
+                hour_bucket=functions.TruncHour("timestamp", tzinfo=UTC),
+            )
+            .values("root_experiment_id", "hour_bucket")
+            .annotate(
+                error_count=Count(Case(When(status=TraceStatus.ERROR, then=1))),
+                success_count=Count(Case(When(status=TraceStatus.SUCCESS, then=1))),
+            )
+        )
+
+        # Organize results per experiment
+        per_experiment: dict[int, dict] = {}
+        for row in trace_counts:
+            eid = row["root_experiment_id"]
+            if eid not in per_experiment:
+                per_experiment[eid] = {"error": {}, "success": {}}
+            per_experiment[eid]["error"][row["hour_bucket"]] = row["error_count"]
+            per_experiment[eid]["success"][row["hour_bucket"]] = row["success_count"]
+
+        result = {}
+        for eid in experiment_ids:
+            exp_data = per_experiment.get(eid, {})
+            error_trend = exp_data.get("error", {})
+            success_trend = exp_data.get("success", {})
+            result[eid] = (
+                [success_trend.get(bucket, 0) for bucket in hour_buckets],
+                [error_trend.get(bucket, 0) for bucket in hour_buckets],
+            )
+        return result
+
     def traces_url(self) -> str:
         """
         Returns a URL to the traces page, filtered to show only traces for this experiment.

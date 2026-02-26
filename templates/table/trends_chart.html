@@ -1,7 +1,5 @@
-{% load static %}
-
 <a href="{{ record.traces_url }}">
-    <canvas id="{{ record.id }}-trends" class="m-2 max-w-20 max-h-20"></canvas>
+    <canvas id="{{ record.id }}-trends" class="m-2 max-w-20 max-h-20" data-trends="{{ trends_json }}"></canvas>
 </a>
 <script>
     (function() {
@@ -10,9 +8,9 @@
             // Destroy existing chart if it exists
             canvasElement.chart.destroy();
         }
-        
         const chartContext = canvasElement.getContext('2d');
+        const trendsData = JSON.parse(canvasElement.dataset.trends);
         // Store chart reference on canvas for future cleanup
-        canvasElement.chart = SiteJS.trends.trendsChart(chartContext, "{% url 'experiments:trends_data' record.team.slug record.id %}");
+        canvasElement.chart = SiteJS.trends.renderChart(chartContext, trendsData);
     })();
 </script>
