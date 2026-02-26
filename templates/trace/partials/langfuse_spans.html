@@ -1,0 +1,185 @@
+{% load json_tags %}
+{% if not langfuse_available and not langfuse_error %}
+  {# No Langfuse provider or no trace info — show a subtle note #}
+  <div id="langfuse-spans-section" class="langfuse_not_available mt-6">
+    <p class="text-xs text-base-content/40 text-center">No Langfuse trace available for this trace.</p>
+  </div>
+{% elif not langfuse_available and langfuse_error %}
+  {# API call failed — show error with optional fallback link #}
+  <div id="langfuse-spans-section" class="langfuse_error mt-6">
+    <div class="card bg-base-100 shadow-md">
+      <div class="card-body">
+        <div role="alert" class="alert alert-warning">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <div>
+            <p>Could not load Langfuse trace data.</p>
+            {% if langfuse_trace_url %}
+              <a href="{{ langfuse_trace_url }}"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 class="link">
+                View directly on Langfuse <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  {# Successful fetch — split-pane UI #}
+  <div id="langfuse-spans-section" class="mt-6">
+    <div class="card bg-base-100 shadow-md"
+         x-data="{ selectedSpanId: '{{ auto_selected_span_id|default:''|escapejs }}' }">
+
+      {# Card header #}
+      <div class="card-header border-b border-base-200 px-6 py-4">
+        <div class="flex justify-between items-center">
+          <h3 class="text-lg font-semibold text-base-content">Langfuse Trace</h3>
+          {% if langfuse_trace_url %}
+            <a href="{{ langfuse_trace_url }}"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="btn btn-sm btn-outline gap-1"
+               title="View full trace on Langfuse">
+              {% include "svg/langfuse.svg" %}
+              <span>View in Langfuse</span>
+            </a>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if flattened_observations %}
+        {# Split pane #}
+        <div class="flex min-h-96 max-h-[600px] overflow-hidden">
+
+          {# Left pane: tree navigator #}
+          <div class="w-1/3 border-r border-base-200 overflow-y-auto py-2 flex-shrink-0 min-h-0">
+            {% for item in flattened_observations %}
+              <button type="button"
+                      class="flex items-center gap-2 pr-3 py-1.5 cursor-pointer rounded-lg mx-1 text-sm hover:bg-base-200 transition-colors w-full text-left"
+                      style="padding-left: calc(0.75rem + {{ item.depth }} * 1rem)"
+                      :class="selectedSpanId === '{{ item.observation.id|escapejs }}' ? 'bg-primary/10 text-primary font-medium' : ''"
+                      @click="selectedSpanId = '{{ item.observation.id|escapejs }}'"
+                      @keydown.enter="selectedSpanId = '{{ item.observation.id|escapejs }}'">
+                {# Status dot #}
+                {% if item.observation.level == "ERROR" %}
+                  <span class="w-2 h-2 rounded-full bg-error flex-shrink-0"></span>
+                {% elif item.observation.level == "WARNING" %}
+                  <span class="w-2 h-2 rounded-full bg-warning flex-shrink-0"></span>
+                {% else %}
+                  <span class="w-2 h-2 rounded-full bg-success/60 flex-shrink-0"></span>
+                {% endif %}
+                <span class="truncate flex-1">{{ item.observation.name }}</span>
+                {% if item.observation.latency %}
+                  <span class="text-xs text-base-content/40 flex-shrink-0 tabular-nums">{{ item.observation.latency|floatformat:2 }}s</span>
+                {% endif %}
+              </button>
+            {% endfor %}
+          </div>
+
+          {# Right pane: span detail #}
+          <div class="flex-1 overflow-y-auto overflow-x-hidden min-h-0 min-w-0">
+
+            {# Empty state — briefly visible before auto-select kicks in #}
+            <div x-show="!selectedSpanId"
+                 class="flex items-center justify-center h-full text-base-content/40 text-sm">
+              Select a span to view details
+            </div>
+
+            {% for item in flattened_observations %}
+              <div x-show="selectedSpanId === '{{ item.observation.id|escapejs }}'"
+                   x-cloak
+                   class="p-4 space-y-4">
+
+                {# Detail header #}
+                <div class="flex items-center gap-2 flex-wrap">
+                  <h4 class="text-base font-semibold">{{ item.observation.name }}</h4>
+                  {% if item.observation.level == "ERROR" %}
+                    <span class="badge badge-error badge-sm">ERROR</span>
+                  {% elif item.observation.level == "WARNING" %}
+                    <span class="badge badge-warning badge-sm">WARN</span>
+                  {% else %}
+                    <span class="badge badge-success badge-sm">OK</span>
+                  {% endif %}
+                  {% if item.observation.latency %}
+                    <span class="text-xs text-base-content/50 tabular-nums">{{ item.observation.latency|floatformat:3 }}s</span>
+                  {% endif %}
+                  {% if item.observation.type %}
+                    <span class="badge badge-outline badge-xs">{{ item.observation.type }}</span>
+                  {% endif %}
+                </div>
+
+                {# Status message — only shown for ERROR #}
+                {% if item.observation.status_message %}
+                  <div class="text-sm text-error bg-error/10 rounded-lg p-3">{{ item.observation.status_message }}</div>
+                {% endif %}
+
+                {# Input #}
+                {% if item.observation.input %}
+                  {% with readable=item.observation.input|readable_value %}
+                    <div x-data="{ showRaw: false }">
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="text-xs font-medium text-base-content/60 uppercase tracking-wide">Input</span>
+                        {% if readable %}
+                          <button type="button"
+                                  class="btn btn-xs btn-ghost py-0 h-auto"
+                                  @click="showRaw = !showRaw"
+                                  x-text="showRaw ? 'Show readable' : 'Show raw JSON'"></button>
+                        {% endif %}
+                      </div>
+                      {% if readable %}
+                        <div x-show="!showRaw">
+                          <pre class="text-xs bg-base-200 rounded-lg p-3 whitespace-pre-wrap overflow-x-auto">{{ readable }}</pre>
+                        </div>
+                        <div x-show="showRaw" x-cloak>
+                          <pre class="highlight-json text-xs bg-base-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{{ item.observation.input|highlight_json }}</pre>
+                        </div>
+                      {% else %}
+                        <pre class="highlight-json text-xs bg-base-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{{ item.observation.input|highlight_json }}</pre>
+                      {% endif %}
+                    </div>
+                  {% endwith %}
+                {% endif %}
+
+                {# Output #}
+                {% if item.observation.output %}
+                  {% with readable=item.observation.output|readable_value %}
+                    <div x-data="{ showRaw: false }">
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="text-xs font-medium text-base-content/60 uppercase tracking-wide">Output</span>
+                        {% if readable %}
+                          <button type="button"
+                                  class="btn btn-xs btn-ghost py-0 h-auto"
+                                  @click="showRaw = !showRaw"
+                                  x-text="showRaw ? 'Show readable' : 'Show raw JSON'"></button>
+                        {% endif %}
+                      </div>
+                      {% if readable %}
+                        <div x-show="!showRaw">
+                          <pre class="text-xs bg-base-200 rounded-lg p-3 whitespace-pre-wrap overflow-x-auto">{{ readable }}</pre>
+                        </div>
+                        <div x-show="showRaw" x-cloak>
+                          <pre class="highlight-json text-xs bg-base-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{{ item.observation.output|highlight_json }}</pre>
+                        </div>
+                      {% else %}
+                        <pre class="highlight-json text-xs bg-base-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{{ item.observation.output|highlight_json }}</pre>
+                      {% endif %}
+                    </div>
+                  {% endwith %}
+                {% endif %}
+
+              </div>
+            {% endfor %}
+          </div>
+
+        </div>
+      {% else %}
+        <div class="card-body">
+          <p class="text-base-content/60 text-sm">No observations recorded for this trace.</p>
+        </div>
+      {% endif %}
+
+    </div>
+  </div>
+{% endif %}
