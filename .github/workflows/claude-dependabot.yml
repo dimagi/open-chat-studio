@@ -1,0 +1,158 @@
+# Claude Dependabot PR Review Workflow
+#
+# This workflow automatically runs Claude analysis on Dependabot PRs to:
+# - Identify dependency changes and their versions
+# - Look up changelogs for updated packages
+# - Assess breaking changes and security impacts
+# - Provide actionable recommendations for the development team
+#
+# Triggered on: Dependabot PRs (opened, synchronize)
+# Requirements: ANTHROPIC_API_KEY secret must be configured
+
+name: Claude Dependabot PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to analyze'
+        required: true
+        type: string
+
+jobs:
+  dependabot-review:
+    # Only run on Dependabot PRs, or manual dispatch for testing
+    if: github.actor == 'dependabot[bot]' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+
+    steps:
+      - name: Resolve PR ref
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ inputs.pr_number || github.event.pull_request.number }}"
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          REF=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefName --jq '.headRefName')
+          echo "ref=$REF" >> $GITHUB_OUTPUT
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install Python dependencies
+        run: |
+          uv venv
+          uv sync --locked --dev
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run Claude Dependabot Analysis
+        id: claude_review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          allowed_bots: "dependabot[bot]"
+          claude_args: |
+            --allowedTools "Bash(npm:*),Bash(uv:*),Bash(git:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Edit"
+          prompt: |
+            You are reviewing PR #${{ steps.pr.outputs.pr_number }}.
+
+            You are Claude, an AI assistant specialized in reviewing Dependabot dependency update PRs
+            for the Open Chat Studio project (a Django + React application using uv for Python
+            dependencies and npm for JavaScript dependencies).
+
+            Your primary tasks are:
+            1. **Analyze the dependency changes** in this Dependabot PR
+            2. **Look up changelogs** for all updated dependencies to understand what changed
+            3. **Identify breaking changes** and assess potential impact on the Open Chat Studio codebase
+            4. **Provide actionable recommendations** for the development team
+
+            ## Analysis Process:
+
+            1. **Identify Changed Dependencies**:
+               - Use `gh pr diff` to see what dependencies were updated
+               - Parse pyproject.toml / uv.lock for Python changes
+               - Parse package.json / package-lock.json for JS/TS changes
+               - List all package versions: old → new
+
+            2. **Changelog Research**:
+               - For each updated dependency, look up its changelog/release notes
+               - Use WebFetch to access GitHub releases, PyPI project pages, NPM package pages
+               - Focus on versions between the old and new versions
+               - Identify: breaking changes, deprecations, security fixes, new features
+
+            3. **Breaking Change Assessment**:
+               - Categorize changes: BREAKING, MAJOR, MINOR, PATCH, SECURITY
+               - Assess impact on Open Chat Studio's usage patterns
+               - Check if OCS uses affected APIs/features
+               - Look for migration guides or upgrade instructions
+
+            4. **Codebase Impact Analysis**:
+               - Search the codebase for usage of changed APIs
+               - Check `apps/` for Python usage of updated packages
+               - Check `assets/` for JS/TS usage of updated packages
+               - Check `templates/` for any relevant template changes
+               - Identify files that might be affected by breaking changes
+
+            ## Output Format:
+
+            Post a comprehensive review comment with:
+
+            ### 🔍 Dependency Analysis Summary
+            - List of updated packages with version changes
+            - Overall risk assessment (LOW/MEDIUM/HIGH)
+
+            ### 📋 Detailed Changelog Review
+            For each updated dependency:
+            - **Package**: name (old_version → new_version)
+            - **Changes**: Summary of key changes
+            - **Breaking Changes**: List any breaking changes
+            - **Security Fixes**: Note security improvements
+            - **Migration Notes**: Any upgrade steps needed
+
+            ### ⚠️ Impact Assessment
+            - **Breaking Changes Found**: Yes/No with details
+            - **Affected Files**: List OCS files that may need updates
+            - **Test Impact**: Any tests that may need updating
+            - **Configuration Changes**: Required config updates
+
+            ### 🛠️ Recommendations
+            - **Action Required**: What the team should do
+            - **Testing Focus**: Areas to test thoroughly
+            - **Follow-up Tasks**: Any additional work needed
+            - **Merge Recommendation**: APPROVE / REVIEW_NEEDED / HOLD
+
+            ### 📚 Useful Links
+            - Links to relevant changelogs, migration guides, documentation
+
+            Be thorough but concise. Focus on actionable insights that help the development
+            team make informed decisions about the dependency updates.

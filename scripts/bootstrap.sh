@@ -266,7 +266,7 @@ install_node_deps() {
     step "Installing Node.js dependencies..."
     if confirm "Install/update Node.js dependencies with 'npm install'?" "y"; then
         info "Running: npm install"
-        npm ci --omit=optional
+        npm ci
         info "Node.js dependencies installed successfully"
     else
         warn "Skipped Node.js dependencies installation"
