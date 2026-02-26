@@ -56,7 +56,7 @@ class ChatbotTable(tables.Table):
     session_count = ColumnWithHelp(verbose_name="Total Sessions", orderable=True)
     interaction_count = ColumnWithHelp(verbose_name="Total Interactions", orderable=True)
     trends = columns.TemplateColumn(
-        verbose_name="Trends (last 48h)",
+        verbose_name="Trends (last 24h)",
         template_name="table/trends_chart.html",
     )
     actions = columns.TemplateColumn(

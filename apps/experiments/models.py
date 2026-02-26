@@ -717,11 +717,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """
         Get the error/success trends across all versions in this experiment's version family.
         Returns two lists: successes and errors, each containing the count of successful and error traces
-        for each hour in the last 48 hours.
+        for each hour in the last 24 hours.
         """
-        days = 2
         to_date = timezone.now()
-        from_date = to_date - timezone.timedelta(days=days)
+        from_date = to_date - timezone.timedelta(hours=24)
 
         # Get error counts for each hour bucket
         error_trend = {}
@@ -764,15 +763,15 @@ class Experiment(BaseTeamModel, VersionsMixin):
         Get error/success trends for multiple experiments in a single DB query.
 
         Returns a dict mapping each experiment ID to (successes, errors) lists,
-        each containing the hourly counts for the last 48 hours.
+        each containing the hourly counts for the last 24 hours.
         """
         if not experiment_ids:
             return {}
 
         to_date = timezone.now()
-        from_date = to_date - timezone.timedelta(days=2)
+        from_date = to_date - timezone.timedelta(hours=24)
 
-        # Build ordered hour buckets for the 48-hour window (shared across all experiments)
+        # Build ordered hour buckets for the 24-hour window (shared across all experiments)
         hour_buckets = []
         current = from_date.replace(minute=0, second=0, microsecond=0)
         end = to_date.replace(minute=0, second=0, microsecond=0)

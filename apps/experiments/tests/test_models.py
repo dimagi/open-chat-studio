@@ -872,7 +872,7 @@ class TestExperimentTrends:
     def test_get_experiment_trend_data_with_no_errors(self, experiment):
         """Test that the function returns an array of zeros when there are no error traces"""
         success, errors = experiment.get_trend_data()
-        empty_data = [0] * 49
+        empty_data = [0] * 25
         assert errors == empty_data
         assert success == empty_data
 
