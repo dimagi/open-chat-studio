@@ -1,5 +1,7 @@
-<a href="{{ record.traces_url }}">
-    <canvas id="{{ record.id }}-trends" class="m-2 max-w-20 max-h-20" data-trends="{{ trends_json }}"></canvas>
+<a href="{{ record.traces_url }}" class="flex items-center justify-center">
+    <div class="w-24 h-10">
+        <canvas id="{{ record.id }}-trends" data-trends="{{ trends_json }}"></canvas>
+    </div>
 </a>
 <script>
     (function() {

@@ -4,23 +4,25 @@
 import Chart from 'chart.js/auto';
 
 const CHART_OPTIONS = {
+    maintainAspectRatio: false,
+    animation: false,
     plugins: {
         legend: {
             display: false,
-            labels: {
-                display: false
-            }
         },
     },
-    responsive: true,
     scales: {
         x: {
             stacked: true,
-            display: false,
+            display: true,
+            grid: { display: false },
+            border: { display: true, color: 'rgba(107, 114, 128, 0.35)' },
+            ticks: { display: false },
         },
         y: {
             stacked: true,
-            display: false
+            display: false,
+            min: 0,
         }
     }
 };
@@ -35,14 +37,14 @@ export const renderChart = (ctx, data) => {
         {
             label: "Success",
             data: data.successes,
-            backgroundColor: "green",
-            barThickness: 1,
+            backgroundColor: "#16a34a",
+            maxBarThickness: 4,
         },
         {
             label: "Errors",
             data: data.errors,
-            backgroundColor: "red",
-            barThickness: 1,
+            backgroundColor: "#dc2626",
+            maxBarThickness: 4,
         }
     ];
 
