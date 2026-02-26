@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from apps.evaluations.tasks import process_evaluation_results_csv_rows
+from apps.evaluations.tasks import _upload_evaluation_run_results, process_evaluation_results_csv_rows
 from apps.evaluations.views.evaluation_config_views import generate_evaluation_results_column_suggestions
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -96,14 +96,14 @@ def test_process_csv_with_valid_mapping(evaluation_setup):
     csv_data = [
         {
             "id": str(setup["message"].id),
-            "accuracy_score": "9.0",
-            "relevance_score": "8.5",
+            "existing_score": "9.0",
+            "new_score": "8.5",
         }
     ]
 
     column_mappings = {
-        "accuracy_score": setup["evaluator1"].id,
-        "relevance_score": setup["evaluator2"].id,
+        "existing_score": setup["evaluator1"].id,
+        "new_score": setup["evaluator2"].id,
     }
 
     progress_recorder = Mock()
@@ -119,13 +119,13 @@ def test_process_csv_with_valid_mapping(evaluation_setup):
     setup["result1"].refresh_from_db()
     setup["result2"].refresh_from_db()
 
-    assert setup["result1"].output["result"]["accuracy_score"] == "9.0"
-    assert setup["result2"].output["result"]["relevance_score"] == "8.5"
+    assert setup["result1"].output["result"]["existing_score"] == 9.0
+    assert setup["result2"].output["result"]["new_score"] == 8.5
 
 
 @pytest.mark.django_db()
 def test_process_csv_with_missing_id(evaluation_setup):
-    """Test CSV processing with missing ID column"""
+    """Test CSV processing with missing ID column results in error message"""
     setup = evaluation_setup
 
     csv_data = [
@@ -152,7 +152,7 @@ def test_process_csv_with_missing_id(evaluation_setup):
 
 @pytest.mark.django_db()
 def test_process_csv_with_invalid_evaluator_id(evaluation_setup):
-    """Test CSV processing with invalid evaluator ID"""
+    """Test CSV processing with invalid evaluator ID results in error message"""
     setup = evaluation_setup
 
     csv_data = [
@@ -179,7 +179,7 @@ def test_process_csv_with_invalid_evaluator_id(evaluation_setup):
 
 @pytest.mark.django_db()
 def test_process_csv_with_non_existent_message(evaluation_setup):
-    """Test CSV processing with non-existent message ID"""
+    """Test CSV processing with non-existent message ID results in error message"""
     setup = evaluation_setup
 
     csv_data = [
@@ -209,7 +209,8 @@ def test_process_csv_no_update_when_value_unchanged(evaluation_setup):
     """Test that no database update occurs when value hasn't changed"""
     setup = evaluation_setup
 
-    setup["result1"].output["result"]["accuracy_score"] = "8.5"
+    # Store as float (as it would be after CSV conversion)
+    setup["result1"].output["result"]["accuracy_score"] = 8.5
     setup["result1"].save()
 
     csv_data = [
@@ -231,3 +232,48 @@ def test_process_csv_no_update_when_value_unchanged(evaluation_setup):
     assert stats["updated_count"] == 0
     assert stats["created_count"] == 0
     assert len(stats["error_messages"]) == 0
+
+
+@pytest.mark.django_db()
+def test_upload_task_recomputes_aggregates(evaluation_setup):
+    """Test that uploading CSV results triggers aggregate recalculation"""
+    from apps.evaluations.aggregation import compute_aggregates_for_run
+    from apps.evaluations.models import EvaluationRunAggregate
+
+    # Compute initial aggregates
+    compute_aggregates_for_run(evaluation_setup["run"])
+
+    # Verify initial aggregates
+    agg1 = EvaluationRunAggregate.objects.get(run=evaluation_setup["run"], evaluator=evaluation_setup["evaluator1"])
+    assert agg1.aggregates["existing_score"]["mean"] == 8.5
+
+    agg2 = EvaluationRunAggregate.objects.get(run=evaluation_setup["run"], evaluator=evaluation_setup["evaluator2"])
+    assert agg2.aggregates["existing_score"]["mean"] == 7.0
+
+    # Update results via CSV upload
+    csv_data = [
+        {
+            "id": str(evaluation_setup["message"].id),
+            "existing_score (GPT-4 Evaluator)": "9.5",
+            "new_field (Claude Evaluator)": "8.0",
+        }
+    ]
+
+    column_mappings = {
+        "existing_score (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id,
+        "new_field (Claude Evaluator)": evaluation_setup["evaluator2"].id,
+    }
+
+    results = _upload_evaluation_run_results(
+        Mock(), evaluation_setup["run"].id, csv_data, evaluation_setup["team"].id, column_mappings
+    )
+    assert results["success"]
+    assert not results["errors"]
+
+    # Verify aggregates were updated with new values
+    agg1.refresh_from_db()
+    agg2.refresh_from_db()
+
+    assert agg1.aggregates["existing_score"]["mean"] == 9.5, "Value present in CSV should be updated"
+    assert agg2.aggregates["existing_score"]["mean"] == 7.0, "Value not present in CSV should not be changed"
+    assert agg2.aggregates["new_field"]["mean"] == 8.0, "New value from CSV get's saved and type converted"

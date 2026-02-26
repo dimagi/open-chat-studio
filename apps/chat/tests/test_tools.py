@@ -1,13 +1,16 @@
+import inspect
 import json
 import os
 from datetime import datetime
 from inspect import signature
+from typing import Annotated, get_args, get_origin
 from unittest import mock
 
 import pytest
 import pytz
 from django.utils import timezone
-from langchain_core.tools import StructuredTool
+from langchain.tools import InjectedState
+from langchain_core.tools import InjectedToolCallId, StructuredTool
 from time_machine import travel
 
 from apps.chat.agent import tools
@@ -30,6 +33,7 @@ from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
 from apps.files.models import FileChunkEmbedding
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.teams.utils import set_current_team
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -616,3 +620,71 @@ class TestAttachMediaTool(BaseTestAgentTool):
         assert chat_attachment.files.count() == 3
         assert all(str(file.id) in response for file in files)
         print(response)
+
+
+@pytest.mark.django_db()
+class TestNotificationOnToolError:
+    def test_tool_error_triggers_notification(self, team):
+        set_current_team(team)
+
+        class CustomBaseTool(tools.CustomBaseTool):
+            name: str = "Test Tool"
+            description: str = "A testing tool that raises an error when run"
+            requires_callbacks: bool = False
+
+            def action(self, *args, **kwargs):
+                raise Exception("Test error")
+
+        tool = CustomBaseTool()
+
+        with mock.patch("apps.ocs_notifications.notifications.create_notification") as mock_create_notification:
+            tool.run(tool_input="tool_input")
+            mock_create_notification.assert_called_once()
+
+
+def _get_tool_schema_cls(tool_cls):
+    """Get the args_schema class from a tool class.
+
+    Pydantic v2 stores field defaults in model_fields rather than as class attributes,
+    so getattr(tool_cls, 'args_schema') doesn't reliably return the schema class.
+    """
+    from pydantic_core import PydanticUndefined
+
+    field_info = tool_cls.model_fields.get("args_schema")
+    if field_info is None:
+        return None
+    default = field_info.default
+    return None if default is PydanticUndefined else default
+
+
+def _has_injected_annotation(schema_cls, field_name, annotation_cls):
+    """Return True if schema_cls has field_name annotated with annotation_cls via Annotated."""
+    ann = schema_cls.__annotations__.get(field_name)
+    if ann is None or get_origin(ann) is not Annotated:
+        return False
+    return any(meta is annotation_cls or isinstance(meta, annotation_cls) for meta in get_args(ann)[1:])
+
+
+@pytest.mark.parametrize(("tool_name", "tool_cls"), list(TOOL_CLASS_MAP.items()))
+def test_tool_schema_has_injected_annotations_for_action_params(tool_name, tool_cls):
+    """If action() accepts tool_call_id or graph_state, the args_schema must declare the field with the
+    corresponding InjectedToolCallId or InjectedState annotation so LangChain injects the value automatically."""
+    action_params = set(inspect.signature(tool_cls.action).parameters) - {"self"}
+    schema_cls = _get_tool_schema_cls(tool_cls)
+
+    checks = [
+        ("tool_call_id", InjectedToolCallId),
+        ("graph_state", InjectedState),
+    ]
+    for param_name, annotation_cls in checks:
+        if param_name not in action_params:
+            continue
+
+        assert schema_cls is not None, f"{tool_cls.__name__}.action() accepts '{param_name}' but has no args_schema"
+        assert param_name in schema_cls.model_fields, (
+            f"{tool_cls.__name__}.action() accepts '{param_name}' but {schema_cls.__name__} has no '{param_name}' field"
+        )
+        assert _has_injected_annotation(schema_cls, param_name, annotation_cls), (
+            f"{tool_cls.__name__}.action() accepts '{param_name}' but {schema_cls.__name__}.{param_name} "
+            f"is not annotated with {annotation_cls.__name__}"
+        )

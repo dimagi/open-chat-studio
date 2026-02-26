@@ -39,7 +39,7 @@ def test_download_evaluation_run_csv_with_different_context_columns(client, team
     )
 
     result1 = EvaluationResultFactory(output=evaluator_result1.model_dump(), team=team_with_users)
-    result1.run.team = team_with_users
+    result1.run.team = team_with_users  # ty: ignore[invalid-assignment]
     result1.run.save()
 
     EvaluationResultFactory(
@@ -64,6 +64,7 @@ def test_download_evaluation_run_csv_with_different_context_columns(client, team
     rows = list(csv_reader)
 
     headers = csv_reader.fieldnames
+    assert headers is not None
 
     # Check that all context columns are present even though messages have different keys
     expected_context_columns = ["difficulty", "topic", "user_age", "user_location"]

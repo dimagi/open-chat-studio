@@ -45,9 +45,9 @@ def test_end_conversation_runs_pipeline(session, pipeline):
             action_type=EventActionType.PIPELINE_START,
             params={"pipeline_id": pipeline.id, "input_type": PipelineEventInputs.LAST_MESSAGE},
         ),
-        type=StaticTriggerType.CONVERSATION_END,
+        type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT,
     )
-    session.end()
+    session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT)
     assert static_trigger.event_logs.count() == 1
     log = static_trigger.event_logs.first()
     assert log.status == "success"

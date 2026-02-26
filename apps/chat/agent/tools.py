@@ -8,6 +8,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any, ClassVar, Union
 
 from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.messages import ToolMessage
@@ -24,11 +25,12 @@ from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.files.models import FileChunkEmbedding
+from apps.ocs_notifications.notifications import tool_error_notification
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
-from apps.teams.utils import get_slug_for_team
+from apps.teams.utils import get_current_team, get_slug_for_team
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
@@ -201,8 +203,15 @@ class CustomBaseTool(BaseTool):
             return "I am unable to do this"
         try:
             return self.action(*args, **kwargs)
-        except Exception:
+        except Exception as e:
             logger.exception("Error executing tool: %s", self.name)
+            tool_error_notification(
+                team=get_current_team(),
+                tool_name=self.name,
+                error_message=str(e),
+                session=self.experiment_session,
+            )
+
             return "Something went wrong"
 
     async def _arun(self, *args, **kwargs) -> str:
@@ -534,7 +543,7 @@ class SetSessionStateTool(CustomBaseTool):
     args_schema: type[schemas.SetSessionStateSchema] = schemas.SetSessionStateSchema
 
     def action(self, key: str, value: Any, tool_call_id: str):
-        if key in {"user_input", "outputs", "attachments"}:
+        if key in settings.RESERVED_SESSION_STATE_KEYS:
             return f"Cannot set the '{key}' key in session state - this is read-only"
 
         try:
@@ -648,13 +657,6 @@ TOOL_CLASS_MAP = {
 }
 
 
-def get_tools(experiment_session, experiment) -> list[BaseTool]:
-    tool_holder = experiment.assistant if experiment.assistant else experiment
-    tools = get_tool_instances(tool_holder.tools, experiment_session)
-    tools.extend(get_custom_action_tools(tool_holder))
-    return tools
-
-
 def get_assistant_tools(assistant, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
     tools = get_tool_instances(assistant.tools, experiment_session)
     tools.extend(get_custom_action_tools(assistant))
@@ -721,7 +723,7 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     path = list(spec.paths)[0]
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
-    return function_def.build_tool(auth_service)
+    return function_def.build_tool(auth_service, custom_action)
 
 
 def _convert_to_sync_tool(tool: StructuredTool) -> StructuredTool:

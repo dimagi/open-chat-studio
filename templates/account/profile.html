@@ -1,9 +1,10 @@
 {% extends "web/app/app_base.html" %}
-{% load static %}
+{% load static waffle_tags %}
 {% block app %}
   <section class="app-card">
     {% include "account/components/profile_form.html" %}
   </section>
+  {% include "account/components/notification_preferences.html" %}
   {% include "account/components/2fa.html" %}
   <section class="app-card">
     {% include "account/components/social/social_accounts.html" %}

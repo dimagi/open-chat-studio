@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from apps.service_providers.llm_service import LlmService, OpenAIGenericService
 from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
-from apps.service_providers.llm_service.main import OpenAIAssistantRunnable
+from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
 from apps.service_providers.llm_service.token_counters import TokenCounter
 
 
@@ -43,7 +43,7 @@ class FakeLlm(FakeListChatModel):
         generation = ChatGeneration(message=message)
         return ChatResult(generations=[generation])
 
-    def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:
+    def _call(self, messages: list[BaseMessage], *args, **kwargs) -> str | BaseMessage:  # ty: ignore[invalid-method-override]
         self.calls.append(mock.call(messages, *args, **kwargs))
         return super()._call(messages, *args, **kwargs)
 
@@ -97,7 +97,7 @@ class FakeLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(self.token_counter)
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict | None = None) -> list:
         return []
 
 
@@ -116,7 +116,7 @@ class FakeOpenAILlmService(OpenAIGenericService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(self.token_counter)
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict | None = None) -> list:
         return []
 
     @property
@@ -136,7 +136,7 @@ class FakeAssistant(RunnableSerializable[dict, OutputType]):
     responses: list
     i: int = 0
 
-    def invoke(self, input: dict, config: RunnableConfig | None = None) -> OutputType:
+    def invoke(self, input: dict, config: RunnableConfig | None = None) -> OutputType:  # ty: ignore[invalid-method-override]
         response = self._get_next_response()
         if isinstance(response, BaseException):
             raise response
@@ -157,7 +157,7 @@ class FakeLlmSimpleTokenCount(FakeLlm):
     def get_num_tokens(self, text: str) -> int:
         return len(text.split())
 
-    def get_num_tokens_from_messages(self, messages: list) -> int:
+    def get_num_tokens_from_messages(self, messages: list) -> int:  # ty: ignore[invalid-method-override]
         return BaseLanguageModel.get_num_tokens_from_messages(self, messages)
 
 
@@ -181,7 +181,7 @@ class FakeLlmEcho(FakeLlmSimpleTokenCount):
 
 
 @contextmanager
-def mock_llm(responses: list[Any], token_counts: list[int] = None):
+def mock_llm(responses: list[Any], token_counts: list[int] | None = None):
     service = build_fake_llm_service(responses=responses, token_counts=token_counts)
 
     def fake_llm_service(self):
@@ -193,7 +193,6 @@ def mock_llm(responses: list[Any], token_counts: list[int] = None):
         return assistant
 
     with (
-        patch("apps.experiments.models.Experiment.get_llm_service", new=fake_llm_service),
         patch("apps.assistants.models.OpenAiAssistant.get_assistant", new=fake_get_assistant),
         patch("apps.service_providers.models.LlmProvider.get_llm_service", new=fake_llm_service),
     ):

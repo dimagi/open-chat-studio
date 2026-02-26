@@ -6,3 +6,7 @@ class ServiceProviderConfigError(Exception):
 
 class UnableToLinkFileException(Exception):
     pass
+
+
+class AudioConversionError(Exception):
+    pass

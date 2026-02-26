@@ -1,0 +1,29 @@
+{% load form_tags i18n %}
+<section class="app-card">
+    <h2 class="pg-subtitle">{% translate "Notification Preferences" %}</h2>
+    <form method="post" action="{% url 'users:save_notification_preferences' %}" class="flex flex-col">
+        {% csrf_token %}
+        {{ notification_preferences_form.non_field_errors }}
+        <div class="mb-6 flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+                <h3 class="font-semibold">{% translate "In-App Notifications" %}</h3>
+                {% render_form_fields notification_preferences_form "in_app_enabled" %}
+            </div>
+            {% render_form_fields notification_preferences_form "in_app_level" %}
+        </div>
+        
+        <div class="divider"></div>
+        
+        <div class="mb-6 flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+                <h3 class="font-semibold">{% translate "Email Notifications" %}</h3>
+                {% render_form_fields notification_preferences_form "email_enabled" %}
+            </div>
+            {% render_form_fields notification_preferences_form "email_level" %}
+        </div>
+        
+        <div class="modal-action mt-6">
+            <button type="submit" class="btn btn-primary">{% translate "Save Preferences" %}</button>
+        </div>
+    </form>
+</section>

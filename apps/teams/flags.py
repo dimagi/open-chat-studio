@@ -31,35 +31,34 @@ class FlagInfo:
 class Flags(FlagInfo, Enum):
     """All feature flags with their metadata."""
 
-    PIPELINES_V2 = (
-        "flag_pipelines-v2",
-        "Second version of pipeline functionality with enhanced features",
-        "pipelines",
-        [],
-        False,
-        True,
-    )
+    OPEN_AI_VOICE_ENGINE = ("flag_open_ai_voice_engine", "Enables OpenAI voice synthesis for audio responses")
 
-    CHATBOTS = (
-        "flag_chatbots",
-        "Enables simplified chatbot creation and management interface",
-        "chatbots",
-        ["flag_pipelines-v2"],
-        True,
-        True,
-    )
+    SESSION_ANALYSIS = ("flag_session-analysis", "Enables detailed session analysis and reporting")
 
-    OPEN_AI_VOICE_ENGINE = ("flag_open_ai_voice_engine", "Enables OpenAI voice synthesis for audio responses", "")
-
-    SESSION_ANALYSIS = ("flag_session-analysis", "Enables detailed session analysis and reporting", "")
-
-    EVENTS = ("flag_events", "Enables event-driven triggers and scheduled messages", "")
+    EVENTS = ("flag_events", "Enables event-driven triggers and scheduled messages", "events", [], True)
 
     SSO_LOGIN = ("flag_sso_login", "Enables Single Sign-On authentication integration", "")
 
     COMMCARE_CONNECT = ("flag_commcare_connect", "Enables integration with CommCare Connect platform", "")
 
-    TRACING = ("flag_tracing", "Enables users to see OCS traces", "")
+    TRACING = ("flag_tracing", "Enables users to see OCS traces", "", [], True)
+
+    EVALS = ("flag_evaluations", "Chatbot Evaluations (beta)", "evals", [], True)
+
+    MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
+
+    NOTIFICATIONS = ("flag_notifications", "User notifications", "", [], False, True)
+
+    CHAT_WIDGET = ("flag_chat_widget", "Use embedded chat widget instead of full-page chat UI (POC)")
+
+    TESTING_CUSTOM_ACTIONS = (
+        "flag_custom_actions_test_endpoints",
+        "Testing endpoints for custom actions (internal use only)",
+    )
+
+    HUMAN_ANNOTATIONS = ("flag_human_annotations", "Human annotation queues for labeling and review", "", [], True)
+
+    NL_FILTERS = ("flag_nl_filters", "Natural language filter input for filter panels", "", [], True)
 
     @property
     def docs_url(self):

@@ -1,3 +1,4 @@
+{% load waffle_tags %}
 <div x-data="filterComponent" @click.outside="filterData.showFilters = false" class="relative">
   <!-- Filter Button -->
   <div class="flex items-center">
@@ -38,6 +39,34 @@
 
   <!-- Filters Panel -->
   <div x-show="filterData.showFilters" class="absolute left-0 mt-2 p-4 bg-base-100 border border-base-200 rounded-lg shadow-lg z-10 min-w-max max-w-screen-lg" x-cloak>
+    {% flag "flag_nl_filters" %}
+    <!-- Natural Language Filter Input -->
+    <div class="mb-3" x-show="filterSlug" x-cloak>
+      <div class="flex gap-2">
+        <input
+          type="text"
+          x-model="nlQuery"
+          @keydown.enter.debounce.300ms="generateFiltersFromNL()"
+          placeholder="e.g. sessions from last week excluding WhatsApp"
+          class="input input-sm input-bordered flex-1"
+          :disabled="nlLoading"
+          aria-label="Natural language filter query"
+        >
+        <button
+          type="button"
+          @click="generateFiltersFromNL()"
+          :disabled="!nlQuery.trim() || nlLoading || !filterSlug"
+          class="btn btn-sm btn-primary"
+        >
+          <span x-show="!nlLoading">✨ Generate</span>
+          <span x-show="nlLoading" x-cloak>
+            <i class="fa-solid fa-spinner fa-spin"></i>
+          </span>
+        </button>
+      </div>
+      <div x-show="nlError" x-cloak class="mt-1 text-sm text-error" x-text="nlError" aria-live="polite"></div>
+    </div>
+    {% endflag %}
     <div class="space-y-2">
       <template x-for="(filter, index) in filterData.filters" :key="index">
         <div class="flex items-center gap-2">
@@ -194,7 +223,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Starred Filters as Small Tabs -->
     <div class="mt-4">
       <div class="flex flex-wrap gap-2">
@@ -207,7 +236,7 @@
           <div class="grid grid-cols-4 gap-1">
             <template x-for="filterSet in starredFilters" :key="filterSet.id">
               <div
-                  class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors" 
+                  class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors"
                   @click="applyStarredFilter(filterSet.id)">
                 <span class="text-base-content" x-text="filterSet.name"></span>
               </div>
@@ -238,6 +267,10 @@
         loading: false,
         columns: filterColumns,
       },
+      nlQuery: '',
+      nlLoading: false,
+      nlError: '',
+      filterSlug: "{{ df_filter_slug }}",
       starredFilters: [],
       savedFilters: null,
       selectedSavedFilterId: null,
@@ -250,7 +283,7 @@
             this.applySavedFilter(selectedSavedFilter);
           }
         })
-        
+
 
         const App = SiteJS.app;
         this.loadFiltersFromQueryString(window.location.search);
@@ -311,6 +344,7 @@
       toggleFilters() {
         this.filterData.showFilters = !this.filterData.showFilters;
         if (this.filterData.showFilters) {
+          this.nlError = '';
           if (!this.starredFilters.length) {
             this.loadStarredFilters();
           }
@@ -493,7 +527,7 @@
         if (this.filterData.filters.length === 0) {
           this.addFilter();
         }
-        
+
         // Fetch experiment versions for any experiment filters loaded from URL
         this.syncChatbotVersionsField(this.filterData.filters);
       },
@@ -631,7 +665,7 @@
             versions.forEach(version => allVersions.add(version));
           });
           this.updateVersionsColumn(
-            Array.from(allVersions).sort((a, b) => 
+            Array.from(allVersions).sort((a, b) =>
               parseInt(b.slice(1)) - parseInt(a.slice(1))
             )
           );
@@ -761,9 +795,9 @@
           if (this.getActiveFilters(this.filterData.filters).length > 0) return;
 
           const savedFilters = await this.fetchSavedFilters();
-          const defaultFilter = savedFilters.find(fs => fs.is_default_for_user) || 
+          const defaultFilter = savedFilters.find(fs => fs.is_default_for_user) ||
                                  savedFilters.find(fs => fs.is_default_for_team);
-          
+
           if (defaultFilter?.filter_query_string) {
             this.filterData.filters = [];
             await this.applySavedFilter(defaultFilter);
@@ -793,10 +827,10 @@
 
       async updateSavedFilterQueryString(id) {
         const filterSetName = this.getSavedFilterSetName(id);
-        
+
         try {
           await this.makeSavedFilterUpdateRequest(id, { filter_query_string: window.location.search.substring(1) });
-          await this.reloadSavedFilters(); 
+          await this.reloadSavedFilters();
           this.notifyUser(`"${filterSetName}" updated`, "success");
         } catch (error) {
           console.error('Error updating filter:', error);
@@ -807,16 +841,16 @@
       async toggleField(id, field) {
         const filterSetName = this.getSavedFilterSetName(id);
         const filterSet = this.savedFilters.find(f => f.id === id);
-        
+
         if (!filterSet) return;
-        
+
         const currentValue = filterSet[field];
         const newValue = !currentValue;
-        
+
         try {
           // Update UI immediately
           this.updateFilterProperty(id, field, newValue);
-          
+
           // Make API call
           const payload = { [field]: newValue };
           await this.makeSavedFilterUpdateRequest(id, payload);
@@ -831,7 +865,7 @@
 
       async deleteSavedFilter(id, name) {
         if(!confirm(`Delete "${name}"?`)) return;
-        
+
         try {
           await this.makeSavedFilterDeleteRequest(id);
           await this.reloadSavedFilters();
@@ -884,7 +918,7 @@
         const filter = this.savedFilters.find(f => f.id === filterId);
         if (filter) {
           filter[property] = value;
-          
+
           // Handle clearing other defaults when setting a new default
           if ((property === 'is_default_for_user' || property === 'is_default_for_team') && value) {
             this.savedFilters.forEach(f => {
@@ -896,7 +930,63 @@
         }
       },
 
-      
+      async generateFiltersFromNL() {
+        if (!this.nlQuery.trim()) return;
+        this.nlLoading = true;
+        this.nlError = '';
+        const agentUrl = "{% url 'help:run_agent' request.team.slug 'filter' %}";
+        const App = SiteJS.app;
+        try {
+          const res = await fetch(agentUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            signal: AbortSignal.timeout(30000),
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': App.Cookies.get('csrftoken'),
+            },
+            body: JSON.stringify({ query: this.nlQuery, filter_slug: this.filterSlug }),
+          });
+          const data = await res.json();
+          if (!res.ok || data.error) {
+            this.nlError = "Couldn't understand that query. Try rephrasing it.";
+            return;
+          }
+          const listOperators = new Set(['any of', 'all of', 'excludes']);
+          const newFilters = (data.response?.filters || [])
+            .filter(item => this.filterData.columns[item.column])
+            .map(item => {
+              const isList = listOperators.has(item.operator);
+              let selectedValues = [];
+              let value = item.value;
+              if (isList) {
+                try { selectedValues = JSON.parse(item.value); } catch { selectedValues = []; }
+                value = '';
+              }
+              return {
+                column: item.column,
+                operator: item.operator,
+                value,
+                selectedValues,
+                availableOperators: this.filterData.columns[item.column].operators || [],
+                showOptions: false,
+                searchQuery: '',
+                filteredOptions: [...(this.filterData.columns[item.column].options || [])],
+              };
+            });
+          if (!newFilters.length) {
+            this.nlError = "No matching filters found.";
+            return;
+          }
+          this.filterData.filters = newFilters;
+          this.triggerFilterChange();
+        } catch {
+          this.nlError = "Couldn't understand that query. Try rephrasing it.";
+        } finally {
+          this.nlLoading = false;
+        }
+      },
+
     }));
     });
   </script>

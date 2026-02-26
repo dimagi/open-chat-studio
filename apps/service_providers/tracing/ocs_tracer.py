@@ -9,13 +9,14 @@ from typing import TYPE_CHECKING, Any
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 
+from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.trace.models import Trace, TraceStatus
 
-from .base import TraceContext, Tracer
+from .base import SpanNotificationConfig, TraceContext, Tracer
 
 if TYPE_CHECKING:
-    from apps.experiments.models import ExperimentSession
+    from apps.experiments.models import Experiment, ExperimentSession
 
 logger = logging.getLogger("ocs.tracing")
 
@@ -25,13 +26,17 @@ class OCSTracer(Tracer):
     Internal OCS tracer that creates Trace objects in the database.
     """
 
-    def __init__(self, experiment_id: int, team_id: int):
+    def __init__(self, experiment: Experiment, team_id: int):
         super().__init__(OCS_TRACE_PROVIDER, {})
-        self.experiment_id = experiment_id
+        self.experiment = experiment
         self.team_id = team_id
         self.start_time: float = None
         self.trace_record = None
+        self.session: ExperimentSession | None = None
         self.error_detected = False
+        self.error_message: str = ""
+        self.error_span_name: str = ""
+        self.error_notification_config: SpanNotificationConfig | None = None
 
     @property
     def ready(self) -> bool:
@@ -51,27 +56,18 @@ class OCSTracer(Tracer):
         Creates a database Trace record on entry and updates it with
         duration and status on exit.
         """
-        from apps.experiments.models import Experiment
 
         # Set base class state from context
         self.trace_name = trace_context.name
         self.trace_id = trace_context.id
         self.session = session
 
-        # Determine experiment ID (handle versioning)
-        try:
-            experiment = Experiment.objects.get(id=self.experiment_id)
-        except Experiment.DoesNotExist:
-            logger.exception(f"Experiment with id {self.experiment_id} does not exist. Cannot start trace.")
-            yield trace_context
-            return
-
-        experiment_id = self.experiment_id
+        experiment_id = self.experiment.id
         experiment_version_number = None
-        if experiment.is_a_version:
+        if self.experiment.is_a_version:
             # Trace needs to be associated with the working version of the experiment
-            experiment_id = experiment.working_version_id
-            experiment_version_number = experiment.version_number
+            experiment_id = self.experiment.working_version_id
+            experiment_version_number = self.experiment.version_number
 
         # Create database trace record
         self.trace_record = Trace.objects.create(
@@ -90,12 +86,14 @@ class OCSTracer(Tracer):
 
         try:
             yield trace_context
-        except Exception:
+        except Exception as e:
             self.error_detected = True
+            self.error_message = str(e)
             raise
         finally:
             # Guaranteed cleanup - update trace duration and status
             if self.trace_record and self.start_time:
+                self.error_detected = self.error_detected or trace_context.has_error()
                 try:
                     end_time = time.time()
                     duration = end_time - self.start_time
@@ -104,6 +102,7 @@ class OCSTracer(Tracer):
                     self.trace_record.duration = duration_ms
                     if self.error_detected:
                         self.trace_record.status = TraceStatus.ERROR
+                        self.trace_record.error = self.error_message or trace_context.error or "Unknown error occurred"
                     else:
                         self.trace_record.status = TraceStatus.SUCCESS
 
@@ -114,24 +113,39 @@ class OCSTracer(Tracer):
 
                     logger.debug(
                         "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
-                        self.experiment_id,
+                        self.experiment.id,
                         session.id,
                         duration_ms,
                     )
                 except Exception:
                     logger.exception(
                         "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
-                        self.experiment_id,
+                        self.experiment.id,
                         session.id,
                         self.trace_record.output_message_id,
                     )
 
+            # Fire notification if a span declared one and the trace errored
+            try:
+                if (
+                    self.error_detected
+                    and self.error_span_name
+                    and self.error_notification_config is not None
+                    and not self.experiment.is_working_version
+                ):
+                    self._fire_trace_error_notification()
+            except Exception:
+                logger.exception("Error firing trace error notification for trace %s", self.trace_id)
+
             # Reset state
             self.trace_record = None
             self.error_detected = False
+            self.error_message = ""
             self.trace_name = None
             self.trace_id = None
             self.session = None
+            self.error_span_name = ""
+            self.error_notification_config = None
 
     @contextmanager
     def span(
@@ -157,8 +171,14 @@ class OCSTracer(Tracer):
         finally:
             if error_to_record:
                 self.error_detected = True
+                if not self.error_message:
+                    self.error_message = str(error_to_record)
+                # First erroring span wins — captures innermost span (it exits before outer spans)
+                if not self.error_span_name:
+                    self.error_span_name = span_context.name
+                    self.error_notification_config = span_context.notification_config
 
-    def get_langchain_callback(self) -> None:
+    def get_langchain_callback(self) -> BaseCallbackHandler:
         """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
         return OCSCallbackHandler(tracer=self)
 
@@ -177,7 +197,7 @@ class OCSTracer(Tracer):
 
     def get_trace_metadata(self) -> dict[str, Any]:
         if not self.ready:
-            return
+            return {}
 
         return {
             "trace_id": self.trace_record.id,
@@ -191,8 +211,19 @@ class OCSTracer(Tracer):
         """
         from apps.experiments.models import Experiment
 
-        cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment_id)
+        cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment.id)
         cache.delete(cache_key)
+
+    def _fire_trace_error_notification(self) -> None:
+        trace_url = self.trace_record.get_absolute_url() if self.trace_record else None
+        trace_error_notification(
+            experiment=self.experiment,
+            session=self.session,
+            span_name=self.error_span_name,
+            error_message=self.error_message,
+            permissions=self.error_notification_config.permissions if self.error_notification_config else None,
+            trace_url=trace_url,
+        )
 
 
 class OCSCallbackHandler(BaseCallbackHandler):
@@ -200,11 +231,25 @@ class OCSCallbackHandler(BaseCallbackHandler):
         super().__init__()
         self.tracer = tracer
 
-    def on_llm_error(self, *args, **kwargs) -> None:
+    def _capture_error(self, error_message: str, span_name: str) -> None:
         self.tracer.error_detected = True
+        if not self.tracer.error_message:
+            self.tracer.error_message = error_message
+
+        if not self.tracer.error_span_name:
+            self.tracer.error_span_name = span_name
+            self.tracer.error_notification_config = SpanNotificationConfig(
+                permissions=["experiments.change_experiment"]
+            )
+
+    def on_llm_error(self, *args, **kwargs) -> None:
+        error = kwargs.get("error") or (args[0] if args else None)
+        self._capture_error(str(error) if error else "LLM error occurred", "LLM Error")
 
     def on_chain_error(self, *args, **kwargs) -> None:
-        self.tracer.error_detected = True
+        error = kwargs.get("error") or (args[0] if args else None)
+        self._capture_error(str(error) if error else "Chain error occurred", "Chain Error")
 
     def on_tool_error(self, *args, **kwargs) -> None:
-        self.tracer.error_detected = True
+        error = kwargs.get("error") or (args[0] if args else None)
+        self._capture_error(str(error) if error else "Tool error occurred", "Tool Error")

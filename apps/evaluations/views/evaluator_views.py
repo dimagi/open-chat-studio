@@ -18,10 +18,11 @@ class EvaluatorHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredM
     permission_required = "evaluations.view_evaluator"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "evaluators",
             "title": "Evaluators",
+            "page_title": "Evaluators",
             "new_object_url": reverse("evaluations:evaluator_new", args=[team_slug]),
             "table_url": reverse("evaluations:evaluator_table", args=[team_slug]),
         }
@@ -49,6 +50,7 @@ class CreateEvaluator(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredM
     form_class = EvaluatorForm
     extra_context = {
         "title": "Create Evaluator",
+        "page_title": "Create Evaluator",
         "button_text": "Create",
         "active_tab": "evaluators",
     }
@@ -85,6 +87,7 @@ class EditEvaluator(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMix
     template_name = "evaluations/evaluator_form.html"
     extra_context = {
         "title": "Update Evaluator",
+        "page_title": "Update Evaluator",
         "button_text": "Update",
         "active_tab": "evaluators",
     }

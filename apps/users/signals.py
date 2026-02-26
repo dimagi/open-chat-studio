@@ -3,17 +3,12 @@ from django.conf import settings
 from django.core.mail import mail_admins
 from django.dispatch import receiver
 
-from apps.users.mailing_list import subscribe_to_mailing_list
-
 
 @receiver(user_signed_up)
 def handle_sign_up(request, user, **kwargs):
-    # customize this function to do custom logic on sign up, e.g. send a welcome email
-    # or subscribe them to your mailing list.
-    # This example notifies the admins, in case you want to keep track of sign ups
+    # customize this function to do custom logic on sign up, e.g. send a welcome email.
+    # This example notifies the admins, in case you want to keep track of sign ups.
     _notify_admins_of_signup(user)
-    # and subscribes them to a mailchimp mailing list
-    subscribe_to_mailing_list(user.email)
 
 
 @receiver(email_confirmed)

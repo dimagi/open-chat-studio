@@ -22,3 +22,7 @@ class ParticipantNotAllowedException(ChatException):
 
 class VersionedExperimentSessionsNotAllowedException(ChatException):
     pass
+
+
+class UserReportableError(ChatException):
+    """A class of errors that can be reported to the end user (participant)"""

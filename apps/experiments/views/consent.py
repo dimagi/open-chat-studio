@@ -15,7 +15,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 class ConsentFormHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "consent_forms",
             "title": "Consent Forms",
@@ -40,6 +40,7 @@ class CreateConsentForm(CreateView):
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Create Consent Form",
+        "page_title": "Create Consent Form",
         "button_text": "Create",
         "active_tab": "consent_forms",
     }
@@ -59,6 +60,7 @@ class EditConsentForm(UpdateView):
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Update Consent Form",
+        "page_title": "Update Consent Form",
         "button_text": "Update",
         "active_tab": "consent_forms",
     }

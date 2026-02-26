@@ -20,7 +20,9 @@ def project_meta(request):
         # put any settings you want made available to all templates here
         # then reference them as {{ project_settings.MY_VALUE }} in templates
         "project_settings": {
-            "ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE": settings.ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE,
+            "ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE": any(
+                "password2" in field for field in settings.ACCOUNT_SIGNUP_FIELDS
+            ),
         },
         "use_i18n": getattr(settings, "USE_I18N", False) and len(getattr(settings, "LANGUAGES", [])) > 1,
         "signup_enabled": settings.SIGNUP_ENABLED,
@@ -43,3 +45,16 @@ def google_analytics_id(request):
         }
     else:
         return {}
+
+
+def unread_notifications_count(request):
+    """
+    Adds unread notification count to context
+    """
+    count = 0
+    team = getattr(request, "team", None)
+    if hasattr(request, "user") and request.user.is_authenticated and team:
+        count = request.user.unread_notifications_count(team=team)
+    return {
+        "unread_notifications_count": count,
+    }

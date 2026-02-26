@@ -23,6 +23,12 @@ from apps.utils.models import BaseModel
 log = logging.getLogger("ocs.custom_actions")
 
 
+class HealthCheckStatus(models.TextChoices):
+    UNKNOWN = "unknown", "Unknown"
+    UP = "up", "Up"
+    DOWN = "down", "Down"
+
+
 @audit_fields("team", "name", "prompt", "api_schema", audit_special_queryset_writes=True)
 class CustomAction(BaseTeamModel):
     objects = AuditingManager()
@@ -40,6 +46,13 @@ class CustomAction(BaseTeamModel):
     )
     _operations = models.JSONField(default=list)
     allowed_operations = ArrayField(models.CharField(max_length=255), default=list)
+    healthcheck_path = models.CharField(blank=True, help_text="Optional health check endpoint", default="")
+    health_status = models.CharField(
+        max_length=20,
+        choices=HealthCheckStatus.choices,
+        default=HealthCheckStatus.UNKNOWN,
+    )
+    last_health_check = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("name",)
@@ -47,6 +60,13 @@ class CustomAction(BaseTeamModel):
     @property
     def operations(self) -> list[APIOperationDetails]:
         return [APIOperationDetails(**op) for op in self._operations]
+
+    @property
+    def health_endpoint(self) -> str | None:
+        if self.healthcheck_path:
+            path = self.healthcheck_path.lstrip("/")
+            root = self.server_url.rstrip("/")
+            return root + "/" + path
 
     @operations.setter
     def operations(self, value: list[APIOperationDetails]):
@@ -73,6 +93,36 @@ class CustomAction(BaseTeamModel):
     def get_operations_by_id(self):
         return {op.operation_id: op for op in self.operations}
 
+    def detect_health_endpoint_from_spec(self) -> str | None:
+        """
+        Attempt to detect a health endpoint from the API schema.
+
+        Searches for common health check endpoint patterns in the OpenAPI spec.
+        Patterns are checked in priority order (most common first):
+        - /health - Standard health check endpoint
+        - /healthz - Kubernetes-style health check
+        - /healthcheck - Alternative common pattern
+        - /api/health - Namespaced health endpoint
+        - /status - General status endpoint
+        - /_health - Internal health check (often used in microservices)
+
+        Returns:
+            The full URL to the health endpoint if found, None otherwise.
+        """
+        if not self.api_schema or not self.server_url:
+            return None
+
+        healthcheck_paths = ["/health", "/healthz", "/healthcheck", "/api/health", "/status", "/_health"]
+
+        paths = self.api_schema.get("paths", {})
+        for healthcheck_path in healthcheck_paths:
+            if healthcheck_path in paths:
+                # Check if it has a GET method
+                if "get" in paths[healthcheck_path]:
+                    return healthcheck_path
+
+        return None
+
 
 class CustomActionOperationManager(VersionsObjectManagerMixin, models.Manager):
     pass
@@ -85,13 +135,6 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         null=True,
         blank=True,
         related_name="versions",
-    )
-    experiment = models.ForeignKey(
-        "experiments.Experiment",
-        on_delete=models.CASCADE,
-        related_name="custom_action_operations",
-        null=True,
-        blank=True,
     )
     assistant = models.ForeignKey(
         "assistants.OpenAiAssistant",
@@ -117,13 +160,8 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         ordering = ("operation_id",)
         constraints = [
             models.CheckConstraint(
-                check=Q(experiment__isnull=False) | Q(assistant__isnull=False) | Q(node__isnull=False),
-                name="experiment_or_assistant_or_node_required",
-            ),
-            models.UniqueConstraint(
-                fields=["experiment", "custom_action", "operation_id"],
-                condition=Q(experiment__isnull=False),
-                name="unique_experiment_custom_action_operation",
+                check=Q(assistant__isnull=False) | Q(node__isnull=False),
+                name="assistant_or_node_required",
             ),
             models.UniqueConstraint(
                 fields=["assistant", "custom_action", "operation_id"],
@@ -151,19 +189,18 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         self._operation_schema = spec
 
     def get_model_id(self, with_holder=True):
-        holder_id = self.experiment_id if self.experiment_id else self.assistant_id
+        holder_id = self.assistant_id if self.assistant_id else self.node_id
         holder_id = holder_id if with_holder else ""
         return make_model_id(holder_id, self.custom_action_id, self.operation_id)
 
     @transaction.atomic()
-    def create_new_version(self, new_experiment=None, new_assistant=None, new_node=None, is_copy=False):
-        action_holders = [new_experiment, new_assistant, new_node]
-        if not action_holders:
-            raise ValueError("Either new_experiment or new_assistant must be provided")
+    def create_new_version(self, new_assistant=None, new_node=None, is_copy=False):  # ty: ignore[invalid-method-override]
+        action_holders = [new_assistant, new_node]
+        if not any(action_holders):
+            raise ValueError("Either new_assistant or new_node must be provided")
         if len([holder for holder in action_holders if holder is not None]) > 1:
-            raise ValueError("Only one of new_experiment or new_assistant can be provided")
+            raise ValueError("Only one of new_assistant or new_node can be provided")
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
-        new_instance.experiment = new_experiment
         new_instance.assistant = new_assistant
         new_instance.node = new_node
         if not is_copy:

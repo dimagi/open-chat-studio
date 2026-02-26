@@ -46,7 +46,7 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
     template_name = "generic/object_home.html"
     permission_required = "assistants.view_openaiassistant"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         has_providers = get_llm_providers_for_assistants(self.request.team).exists()
         if not has_providers:
             messages.warning(self.request, "You need to add an OpenAI LLM provider before you can create an assistant.")
@@ -122,7 +122,7 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
             return self.form_invalid(form)
 
     @transaction.atomic()
-    def form_valid(self, form, resource_formsets):
+    def form_valid(self, form, resource_formsets):  # ty: ignore[invalid-method-override]
         self.object = form.save()
         resource_formsets.save(self.request, self.object)
         try:
@@ -222,17 +222,6 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
                         ).values_list("id", flat=True),
                     )
                 )
-            experiments = [
-                Chip(
-                    label=(
-                        f"{experiment.name} [{experiment.get_version_name()}]"
-                        if experiment.is_working_version
-                        else f"{experiment.name} {experiment.get_version_name()} [published]"
-                    ),
-                    url=experiment.get_absolute_url(),
-                )
-                for experiment in assistant.get_related_experiments_queryset(assistant_ids=version_query)
-            ]
             pipeline_nodes = [
                 Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url())
                 for node in assistant.get_related_pipeline_node_queryset(assistant_ids=version_query).select_related(
@@ -250,7 +239,6 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
                 "generic/referenced_objects.html",
                 context={
                     "object_name": "assistant",
-                    "experiments": experiments,
                     "pipeline_nodes": pipeline_nodes,
                     "experiments_with_pipeline_nodes": experiments_with_pipeline_nodes,
                 },

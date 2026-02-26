@@ -1,4 +1,5 @@
 import factory
+import factory.django
 
 from apps.events.models import (
     EventAction,
@@ -15,7 +16,7 @@ class EventActionFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = EventAction
 
-    action_type = EventActionType.SUMMARIZE
+    action_type = EventActionType.LOG
 
 
 class StaticTriggerFactory(factory.django.DjangoModelFactory):

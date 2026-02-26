@@ -3,7 +3,7 @@ import { PipelineType } from "../types/pipeline";
 import { SimplePipelineMessageResponse, TestMessageTaskResponse } from "../types/testMessage";
 
 type AiHelpResponse = {
-  response?: string;
+  response?: { code: string };
   error?: string;
 }
 
@@ -68,7 +68,7 @@ class ApiClient {
   }
 
   public async generateCode(prompt: string, currentCode: string): Promise<AiHelpResponse> {
-    return this.makeRequest<AiHelpResponse>("post", `/help/generate_code/`, {query: prompt, context: currentCode});
+    return this.makeRequest<AiHelpResponse>("post", `/help/code_generate/`, {query: prompt, context: currentCode});
   }
 
   private createClient(): AxiosInstance {
@@ -91,7 +91,10 @@ class ApiClient {
           : await client.post<T>(url, data);
     } catch (error) {
       console.error(error);
-      return Promise.reject();
+      if (axios.isAxiosError(error) && error.response) {
+        return Promise.reject(error.response.data);
+      }
+      return Promise.reject({error: String(error)});
     }
     if (response.status !== 200) {
       console.error(response);

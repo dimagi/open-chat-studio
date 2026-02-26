@@ -482,16 +482,16 @@ function GenerateCodeSection({
     setGenerating(true);
     apiClient.generateCode(prompt, currentCode).then((generatedCode) => {
       setGenerating(false);
-      if (generatedCode.error || generatedCode.response === "") {
+      if (generatedCode.error || !generatedCode.response?.code) {
         setError(generatedCode.error || "No code generated. Please provide more information.");
         return;
-      } else if (generatedCode.response) {
-        setGenerated(generatedCode.response);
+      } else {
+        setGenerated(generatedCode.response.code);
         setShowGenerate(false);
       }
-    }).catch(() => {
+    }).catch((errorData) => {
       setGenerating(false);
-      setError("An error occurred while generating code. Please try again.");
+      setError(errorData?.error || "An error occurred while generating code. Please try again.");
     });
   }
 
@@ -654,6 +654,7 @@ export function KeywordsWidget(props: WidgetParams) {
   }
 
   const updateKeyword = (index: number, value: string) => {
+    value = value.toUpperCase();
     setNode(props.nodeId, (old) => {
         const updatedList = [...(old.data.params["keywords"] || [])];
         updatedList[index] = value;
@@ -782,32 +783,8 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
         next.data.params.llm_model_parameters = {...old.data.params.llm_model_parameters, [paramName]: paramValue};
-
-        // When reasoning effort changes away from "none", clear temperature and top_p
-        if (paramName === 'effort' && paramValue !== 'none') {
-          if ('temperature' in next.data.params.llm_model_parameters) {
-            delete next.data.params.llm_model_parameters.temperature;
-          }
-          if ('top_p' in next.data.params.llm_model_parameters) {
-            delete next.data.params.llm_model_parameters.top_p;
-          }
-        }
       })
     );
-  };
-
-  const hasReasoningEffort = 'effort' in props.schema.properties;
-  const reasoningEffort = hasReasoningEffort ? props.modelParameters['effort'] : null;
-
-  // Parameters that should be hidden when reasoning_effort != "none"
-  const conditionalParams = ['temperature', 'top_p'];
-
-  const shouldShowParameter = (paramName: string): boolean => {
-    // If this parameter is conditional and reasoning effort is not "none", hide it
-    if (conditionalParams.includes(paramName) && hasReasoningEffort && reasoningEffort !== 'none') {
-      return false;
-    }
-    return true;
   };
 
   return (
@@ -815,11 +792,32 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
       <div className="text-sm label font-bold">Model Parameters</div>
       <div className="p-4">
         {Object.getOwnPropertyNames(props.schema.properties).map((paramName) => {
-          if (!shouldShowParameter(paramName)) {
-            return null;
-          }
-
-          const currentParamValue = props.modelParameters[paramName];
+          const schemaDefault = props.schema.properties[paramName]?.default ?? null;
+          const onShowDefault = props.schema.properties[paramName]?.["ui:onShowDefault"] ?? null;
+          const onHide = () =>
+            setNode(props.nodeId, (old) =>
+              produce(old, (next) => {
+                next.data.params.llm_model_parameters = {
+                  ...next.data.params.llm_model_parameters,
+                  [paramName]: schemaDefault,
+                };
+              })
+            );
+          const onShow = onShowDefault !== null
+            ? () =>
+                setNode(props.nodeId, (old) => {
+                  const currentValue = old.data.params.llm_model_parameters?.[paramName];
+                  if (currentValue === null || currentValue === undefined) {
+                    return produce(old, (next) => {
+                      next.data.params.llm_model_parameters = {
+                        ...next.data.params.llm_model_parameters,
+                        [paramName]: onShowDefault,
+                      };
+                    });
+                  }
+                  return old;
+                })
+            : undefined;
           return (
             <div key={`${props.nodeId}_${paramName}`}>
               {getInputWidget(
@@ -827,13 +825,15 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
                   id: props.nodeId,
                   name: paramName,
                   schema: props.schema,
-                  params: {name: paramName, [paramName]: currentParamValue},
+                  params: {name: paramName, ...props.modelParameters},
                   updateParamValue: updateLLMParamValue,
                   nodeType: "",
                   required: true,
                 },
                 props.getNodeFieldError,
-                props.readOnly
+                props.readOnly,
+                onHide,
+                onShow,
               )}
             </div>
           );
@@ -850,7 +850,7 @@ export function LlmWidget(props: WidgetParams) {
   const readOnly = usePipelineStore((state) => state.readOnly);
 
   const getSelectedModelSchema = (selectedModelId: string) => {
-    const selectedModelName = parameterValues.LlmProviderModelId.find(model => 
+    const selectedModelName = parameterValues.LlmProviderModelId.find(model =>
       String(model.value) === String(selectedModelId)
     )?.label.split(": ")[1] || "";
 
@@ -872,7 +872,7 @@ export function LlmWidget(props: WidgetParams) {
         // Update the LLM parameters only when the model's parameter set changed
         const currModelParamSchema = getSelectedModelSchema(providerModelId);
         const prevModelParamSchema = getSelectedModelSchema(old.data.params.llm_provider_model_id);
-        
+
         if (currModelParamSchema && prevModelParamSchema != currModelParamSchema) {
           let defaultLlmParams = {};
           // Update the parameter set in the state with the new model's default parameters
@@ -882,6 +882,12 @@ export function LlmWidget(props: WidgetParams) {
           next.data.params.llm_model_parameters = defaultLlmParams;
         } else {
           next.data.params.llm_model_parameters = {};
+        }
+
+        // Clear built-in tools whenever switching providers
+        if (old.data.params.llm_provider_id !== providerId) {
+          next.data.params.built_in_tools = [];
+          next.data.params.tool_config = {};
         }
       })
     );
@@ -900,41 +906,46 @@ export function LlmWidget(props: WidgetParams) {
     return acc;
   }, {} as ProviderModelsByType);
 
-  
+
   const providerId = concatenate(props.nodeParams.llm_provider_id);
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
   const modelParameters = props.nodeParams.llm_model_parameters || {};
-  const value = makeValue(providerId, providerModelId)
-  
+  let value = "";
+  let error = props.inputError || props.getNodeFieldError(props.nodeId, "llm_provider_model_id");
+  if (providerId && providerModelId) {
+    value = makeValue(providerId, providerModelId)
+  } else {
+    error = "This field is required."
+  }
   const llmModelParamsSchema = getSelectedModelSchema(providerModelId);
-
   return (
-    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
-      <select
-        // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
-        // Should be resolved in future versions of browsers.
-        className="select appearance-none w-full"
-        name={props.name}
-        onChange={updateParamValue}
-        value={value}
-        disabled={props.readOnly}
-      >
-        <option value="" disabled>
-          Select a model
-        </option>
-        {parameterValues.LlmProviderId.map((provider) => {
-          const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
+    <>
+      <InputField label={props.label} help_text={props.helpText} inputError={error}>
+        <select
+          // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+          // Should be resolved in future versions of browsers.
+          className="select appearance-none w-full"
+          name={props.name}
+          onChange={updateParamValue}
+          value={value}
+          disabled={props.readOnly}
+        >
+          <option value="" disabled>
+            Select a model
+          </option>
+          {parameterValues.LlmProviderId.map((provider) => {
+            const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
 
-          return providerModelsByType[provider.type] &&
-            providerModelsByType[provider.type].map((providerModel) => (
-              <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
-                {providerModel.label}{providersWithSameType > 1 ? ` (${provider.label})` : ''}
-              </option>
-            ))
-        })}
-      </select>
-
-      {llmModelParamsSchema && (
+            return providerModelsByType[provider.type] &&
+              providerModelsByType[provider.type].map((providerModel) => (
+                <option key={provider.value + providerModel.value} value={makeValue(provider.value, providerModel.value)}>
+                  {providerModel.label}{providersWithSameType > 1 ? ` (${provider.label})` : ''}
+                </option>
+              ))
+          })}
+        </select>
+      </InputField>
+      {value && llmModelParamsSchema && (
         <ModelParametersWidget
           nodeId={props.nodeId}
           schema={llmModelParamsSchema}
@@ -943,7 +954,7 @@ export function LlmWidget(props: WidgetParams) {
           readOnly={readOnly}
         />
       )}
-    </InputField>
+    </>
   );
 }
 
@@ -1126,81 +1137,41 @@ export function HistoryTypeWidget(props: WidgetParams) {
 
 export function HistoryModeWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
-  const userMaxTokenLimit = concatenate(props.nodeParams["user_max_token_limit"]);
-  const maxHistoryLength = concatenate(props.nodeParams["max_history_length"]);
   const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
   const [historyMode, setHistoryMode] = useState(initialHistoryMode || "summarize");
-  const llmProviderId = concatenate(props.nodeParams["llm_provider_model_id"]);
-  const {parameterValues} = getCachedData();
-  const models = parameterValues.LlmProviderModelId as LlmProviderModel[];
-  const model = models.filter(m => String(m.value) === String(llmProviderId));
-  const defaultMaxTokens = model.length > 0 && model[0].max_token_limit !== undefined ? model[0].max_token_limit : 0;
   const historyModeHelpTexts: Record<string, string> = {
-    summarize:"If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
-    truncate_tokens:"If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
-    max_history_length:"The chat history will always be truncated to the last N messages.",
+    summarize: "If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
+    truncate_tokens: "If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
+    max_history_length: "The chat history will always be truncated to the last N messages.",
   };
 
   return (
-    <>
-      <div className="flex join">
-        <InputField label="History Mode" help_text = "">
-          <select
-            // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
-            // Should be resolved in future versions of browsers.
-            className="select appearance-none join-item w-full"
-            name="history_mode"
-            onChange={(e) => {
-              setHistoryMode(e.target.value);
-              props.updateParamValue(e);
-            }}
-            value={historyMode}
-            disabled={props.readOnly}
-          >
-            {options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <small className ="text-muted mt-2">{historyModeHelpTexts[historyMode]}</small>
-        </InputField>
-      </div>
-
-      {(historyMode === "summarize" || historyMode === "truncate_tokens") && (
-        <div className="flex join mb-4">
-          <InputField label="Token Limit" help_text = "">
-            <input
-              className="input join-item w-full"
-              name="user_max_token_limit"
-              type="number"
-              onChange={props.updateParamValue}
-              value={userMaxTokenLimit || defaultMaxTokens || ""}
-              readOnly={props.readOnly}
-            />
-            <small className ="text-muted mt-2">Maximum number of tokens before messages are summarized or truncated.</small>
-          </InputField>
-        </div>
-      )}
-
-      {historyMode === "max_history_length" && (
-        <div className="flex join mb-4">
-          <InputField label="Max History Length" help_text = "">
-            <input
-              className="input join-item w-full"
-              name="max_history_length"
-              type="number"
-              onChange={props.updateParamValue}
-              value={maxHistoryLength || ""}
-              readOnly={props.readOnly}
-            />
-            <small className ="text-muted mt-2">Chat history will only keep the most recent messages up to max history length.</small>
-          </InputField>
-        </div>
-      )}
-    </>
+    <div className="flex join">
+      <InputField label="History Mode" help_text="">
+        <select
+          // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+          // Should be resolved in future versions of browsers.
+          className="select appearance-none join-item w-full"
+          name="history_mode"
+          onChange={(e) => {
+            setHistoryMode(e.target.value);
+            props.updateParamValue(e);
+          }}
+          value={historyMode}
+          disabled={props.readOnly}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <small className="text-muted mt-2">{historyModeHelpTexts[historyMode]}</small>
+      </InputField>
+    </div>
   );
 }
+
 
 export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{
   label: string | ReactNode,
@@ -1238,6 +1209,11 @@ function BuiltInToolsWidget(props: WidgetParams) {
   const toolConfig = props.nodeParams.tool_config || {};
   const [selectedValues, setSelectedValue] = useState(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
   const setNode = usePipelineStore((state) => state.setNode);
+
+  // Sync local state with prop changes from the store
+  React.useEffect(() => {
+    setSelectedValue(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
+  }, [props.paramValue]);
 
   function getNewNodeData(old: Node, updatedList: string[]) {
     return produce(old, (next) => {

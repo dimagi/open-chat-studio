@@ -1,6 +1,7 @@
 import logging
 from io import BytesIO
 
+from bs4 import UnicodeDammit
 from markitdown import MarkItDown
 from markitdown._exceptions import UnsupportedFormatException
 from pydantic import BaseModel, Field
@@ -62,16 +63,27 @@ def markitdown_read(file_obj) -> Document:
         result = md.convert(BytesIO(file_obj.read()))
         return Document(parts=[DocumentPart(content=result.markdown)])
     except UnsupportedFormatException:
+        file_obj.seek(0)  # Reset file pointer to beginning before fallback
         return plaintext_reader(file_obj)
     except UnicodeDecodeError as e:
         raise FileReadException("Unable to decode file contents to text") from e
 
 
 def plaintext_reader(file_obj) -> Document:
+    content = file_obj.read()
     try:
-        return Document(parts=[DocumentPart(content=file_obj.read().decode())])
-    except UnicodeDecodeError as e:
-        raise FileReadException("Unable to decode file contents to text") from e
+        # UTF-8 decode
+        content = content.decode()
+    except UnicodeDecodeError:
+        # Try to detect encoding
+        try:
+            detected_content = UnicodeDammit(content).unicode_markup
+            if detected_content is None:
+                raise FileReadException("Unable to detect file encoding")
+            content = detected_content
+        except Exception as e:
+            raise FileReadException("Unable to decode file contents to text") from e
+    return Document(parts=[DocumentPart(content=content)])
 
 
 READERS = {None: markitdown_read, "text/markdown": plaintext_reader, "text/plain": plaintext_reader}

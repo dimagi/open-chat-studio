@@ -1,17 +1,21 @@
+from __future__ import annotations
+
 import operator
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
+from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
-from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
     format_multimodal_input,
@@ -19,26 +23,31 @@ from apps.service_providers.llm_service.utils import (
     remove_citations_from_text,
 )
 
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.context import NodeContext
+
 
 class StateSchema(AgentState):
     # allows tools to manipulate participant data and session state
     participant_data: Annotated[dict, operator.or_]
     session_state: Annotated[dict, operator.or_]
+    input_message_id: Annotated[int | None, operator.or_]
 
 
-def execute_sub_agent(node, state: PipelineState):
-    user_input = state["last_node_input"]
-    session: ExperimentSession | None = state.get("experiment_session")
+def execute_sub_agent(node: PipelineNode, context: NodeContext):
+    user_input = context.input
+    session = context.session
     tool_callbacks = ToolCallbacks()
-    agent = build_node_agent(node, state, session, tool_callbacks)
+    agent = build_node_agent(node, context, session, tool_callbacks)
 
-    attachments = [att for att in state.get("temp_state", {}).get("attachments", [])]
+    attachments = list(context.attachments)
     formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
 
     inputs = StateSchema(
         messages=[formatted_input],
-        participant_data=state.get("participant_data") or {},
-        session_state=state.get("session_state") or {},
+        participant_data=context.state.participant_data or {},
+        session_state=context.state.session_state or {},
+        input_message_id=context.input_message_id,
     )
     result = agent.invoke(inputs)
     final_message = result["messages"][-1]
@@ -66,9 +75,11 @@ def execute_sub_agent(node, state: PipelineState):
     )
 
 
-def _process_agent_output(node, session, message):
+def _process_agent_output(node: PipelineNode, session: ExperimentSession, message: AIMessage):
     output_parser = node.get_llm_service().get_output_parser()
-    parsed_output = output_parser(message.content, session=session, include_citations=node.generate_citations)
+    parsed_output: LlmChatResponse = output_parser(
+        output=message, session=session, include_citations=node.generate_citations
+    )
     ai_message_metadata = _process_files(
         session, cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
     )
@@ -82,8 +93,10 @@ def _process_agent_output(node, session, message):
     return ai_message, ai_message_metadata
 
 
-def build_node_agent(node, pipeline_state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
-    prompt_context = _get_prompt_context(node, session, pipeline_state)
+def build_node_agent(
+    node: PipelineNode, context: NodeContext, session: ExperimentSession, tool_callbacks: ToolCallbacks
+):
+    prompt_context = _get_prompt_context(node, session, context)
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
@@ -115,10 +128,10 @@ def _process_files(session: ExperimentSession, cited_files: set[File], generated
     }
 
 
-def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
+def _get_prompt_context(node: PipelineNode, session: ExperimentSession, context: NodeContext):
     extra_prompt_context = {
-        "temp_state": state.get("temp_state") or {},
-        "session_state": state.get("session_state") or {},
+        "temp_state": context.state.temp or {},
+        "session_state": context.state.session_state or {},
     }
     return PromptTemplateContext(
         session,
@@ -126,7 +139,7 @@ def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
         collection_id=node.collection_id,
         collection_index_ids=node.collection_index_ids,
         extra=extra_prompt_context,
-        participant_data=state.get("participant_data") or {},
+        participant_data=context.state.participant_data or {},
     )
 
 
@@ -140,7 +153,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     if node.disabled_tools:
         # Model builtin tools doesn't have a name attribute and are dicts
         return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
-    return tools
+    return tools  # ty: ignore[invalid-return-type]
 
 
 def _get_search_tool(node):

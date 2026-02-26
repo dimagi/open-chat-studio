@@ -3,6 +3,8 @@ const path = require('path');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 
+// Legacy config for traditional bundles (UMD with SiteJS global)
+// These will be migrated to ES modules over time
 const config = {
   entry: {
     'site-base': './assets/site-base.js',  // base styles shared between frameworks
@@ -18,6 +20,7 @@ const config = {
     'editors': './assets/javascript/editors.js',
     'evaluations': './assets/javascript/apps/evaluations/dataset-mode-selector.js',
     'evaluationTrends': './assets/javascript/apps/evaluations/trend-charts.js',
+    'human_annotations': './assets/javascript/apps/human_annotations/session-selector.js',
   },
 
   output: {
@@ -63,19 +66,61 @@ const config = {
   devtool: "source-map"
 };
 
+// ES modules config - all new JavaScript should be added here
+// Add new modules to assets/javascript/modules/ and register them in the entry below
+const modulesConfig = {
+  entry: {
+    'chat-widget-context': './assets/javascript/modules/chat-widget-context.js',
+  },
+
+  experiments: {
+    outputModule: true,
+  },
+
+  output: {
+    path: path.resolve(__dirname, './static/js/modules'),
+    filename: '[name].js',
+    library: {
+      type: 'module',
+    },
+  },
+
+  resolve: {
+    extensions: ['.js', '.ts'],
+  },
+
+  module: {
+    rules: [
+      {
+        test: /\.(js|ts)$/,
+        exclude: /node_modules/,
+        loader: "babel-loader",
+      },
+    ],
+  },
+
+  optimization: {
+    minimizer: [new TerserPlugin({
+      extractComments: false,
+    })],
+  },
+
+  devtool: "source-map"
+};
+
 module.exports = (env, argv) => {
   if (argv.mode === 'production' && process.env.GITHUB_REF === 'refs/heads/main') {
-    config.plugins = config.plugins.concat([
-      // Uploads source maps to Sentry
-      // These env variables must be set in the environment when running 'npm run build'
-      // for the source maps to be uploaded.
-      sentryWebpackPlugin({
-        authToken: process.env.SENTRY_AUTH_TOKEN,
-        org: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
-        telemetry: false,
-      })
-    ])
+    // Uploads source maps to Sentry
+    // These env variables must be set in the environment when running 'npm run build'
+    // for the source maps to be uploaded.
+    const sentryPlugin = sentryWebpackPlugin({
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      telemetry: false,
+    });
+    config.plugins = config.plugins.concat([sentryPlugin]);
+    modulesConfig.plugins = [sentryPlugin];
   }
-  return config;
+  return [config, modulesConfig];
 }

@@ -66,7 +66,7 @@ class ChannelPlatform(models.TextChoices):
         for platform in used_platforms:
             platform_availability.pop(platform)
 
-        return platform_availability
+        return platform_availability  # ty: ignore[invalid-return-type]
 
     def form(self, experiment: Experiment):
         from apps.channels.forms import ChannelForm
@@ -203,7 +203,7 @@ class ExperimentChannel(BaseTeamModel):
     def platform_enum(self):
         return ChannelPlatform(self.platform)
 
-    def extra_form(self, experiment, data: dict = None):
+    def extra_form(self, experiment, data: dict | None = None):
         if not experiment.id == self.experiment_id:
             raise ValueError("Experiment ID does not match channel experiment ID")
         return self.platform_enum.extra_form(experiment=experiment, channel=self, initial=self.extra_data, data=data)
@@ -234,7 +234,7 @@ class ExperimentChannel(BaseTeamModel):
         from apps.service_providers.models import MessagingProviderType
 
         if not self.messaging_provider:
-            return
+            return ""
         uri = ""
         provider_type = self.messaging_provider.type
         if provider_type == MessagingProviderType.twilio:

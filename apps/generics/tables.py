@@ -1,5 +1,6 @@
 import django_tables2 as tables
 from django.template.loader import get_template
+from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
 
 
@@ -39,11 +40,30 @@ class TimeAgoColumn(tables.TemplateColumn):
     A column that renders `datetime` instances using the `naturaltime` filter.
     """
 
+    TEMPLATE = """
+    {% load humanize %}
+    <time datetime="{{ value.isoformat }}" title="{{ value|date:"SHORT_DATETIME_FORMAT" }}">
+        {{ value|naturaltime|default:default}}
+    </time>
+    """
+
     def __init__(self, *args, **kwargs):
-        template = """
-        {% load humanize %}
-        <time datetime="{{ value.isoformat }}" title="{{ value|date:"SHORT_DATETIME_FORMAT" }}">
-            {{ value|naturaltime|default:default}}
-        </time>
-        """
-        super().__init__(template_code=template, *args, **kwargs)  # noqa B026
+        super().__init__(template_code=self.TEMPLATE, *args, **kwargs)  # noqa B026
+
+
+class ISOTimeAgoColumn(TimeAgoColumn):
+    """A TimeAgoColumn that parses ISO datetime strings before rendering."""
+
+    def render(self, value, **kwargs):  # ty: ignore[invalid-method-override]
+        if isinstance(value, str):
+            value = parse_datetime(value)
+        return super().render(value=value, **kwargs)
+
+
+class ArrayColumn(tables.Column):
+    """
+    A column that renders `array` fields.
+    """
+
+    def render(self, value):
+        return ", ".join([str(v) for v in value]) if value else ""

@@ -65,12 +65,10 @@ CONTENT_TYPES = {
     "experiments": [
         "consentform",
         "experiment",
-        "experimentroute",
         "experimentsession",
         "participant",
         "participantdata",
         "promptbuilderhistory",
-        "safetylayer",
         "sourcematerial",
         "survey",
         "syntheticvoice",
@@ -101,9 +99,16 @@ CONTENT_TYPES = {
         "evaluationresult",
         "evaluationrunaggregate",
     ],
-    "trace": ["trace", "span"],
+    "human_annotations": ["annotationqueue", "annotationitem", "annotation", "annotationqueueaggregate"],
+    "trace": ["trace"],
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],
+    "ocs_notifications": [
+        "usernotificationpreferences",
+        "eventtype",
+        "notificationevent",
+        "eventuser",
+    ],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
@@ -186,6 +191,7 @@ GROUPS = [
         [
             AppPermSetDef("experiments", ALL),
             AppPermSetDef("bot_channels", ALL),
+            AppPermSetDef("human_annotations", ALL),
             ModelPermSetDef("annotations", "tag", [VIEW]),
             ModelPermSetDef("annotations", "customtaggeditem", ALL),
             ModelPermSetDef("annotations", "usercomment", ALL),

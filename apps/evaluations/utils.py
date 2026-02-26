@@ -2,7 +2,7 @@ import inspect
 import json
 import re
 from collections import Counter, defaultdict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from django.db.models import F
 from pydantic import BaseModel, Field, create_model
@@ -43,7 +43,7 @@ def sanitize_json_data(data: Any) -> Any:
         return data
 
 
-def get_evaluator_type_info() -> dict[str, dict[str, str]]:
+def get_evaluator_type_info() -> dict[str, dict[str, str | None]]:
     """
     Get evaluator type information (label, icon) for all available evaluator classes.
 
@@ -100,7 +100,7 @@ def get_evaluators_with_schema(team) -> list[dict]:
     return evaluators_list
 
 
-def get_evaluator_type_display(evaluator_type: str) -> dict[str, str]:
+def get_evaluator_type_display(evaluator_type: str) -> dict[str, str | None]:
     """
     Get display information for a single evaluator type.
 
@@ -147,7 +147,7 @@ def parse_history_text(history_text: str) -> list:
             }
         elif current_message:
             # Continuation of current message content
-            current_message["content"] += "\n" + line_stripped
+            current_message["content"] = cast(str, current_message["content"]) + "\n" + line_stripped
 
     if current_message:
         history.append(current_message)

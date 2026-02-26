@@ -38,7 +38,7 @@ class LocalIndexManagerMock(LocalIndexManager):
     def chunk_file(self, file, chunk_size=None, chunk_overlap=None):
         return ["test", "content"]
 
-    def get_embedding_vector(self, text):
+    def get_embedding_vector(self, text):  # ty: ignore[invalid-method-override]
         """Mock method to return a fixed embedding vector"""
         return [0.1] * settings.EMBEDDING_VECTOR_SIZE
 
@@ -51,7 +51,8 @@ class RemoteIndexManagerMock(RemoteIndexManager):
     def delete_files_from_index(self, *args, **kwargs): ...
 
     def link_files_to_remote_index(self, *args, **kwargs): ...
-    def file_exists_at_remote(self, *args, **kwargs) -> bool: ...
+    def file_exists_at_remote(self, *args, **kwargs) -> bool:
+        return False
 
     def upload_file_to_remote(self, *args, **kwargs): ...
 

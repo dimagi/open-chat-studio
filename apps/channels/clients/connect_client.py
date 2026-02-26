@@ -4,7 +4,6 @@ from typing import TypedDict
 from uuid import UUID, uuid4
 
 import httpx
-import requests
 from Crypto.Cipher import AES
 from django.conf import settings
 from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -38,7 +37,7 @@ class CommCareConnectClient:
     @retry(
         wait=wait_exponential(multiplier=1, min=1, max=5),
         reraise=True,
-        retry=retry_if_exception_type(requests.ConnectionError),
+        retry=retry_if_exception_type((httpx.NetworkError, httpx.TimeoutException)),
         stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger, logging.INFO),
     )
@@ -67,7 +66,7 @@ class CommCareConnectClient:
     @retry(
         wait=wait_exponential(multiplier=1, min=1, max=5),
         reraise=True,
-        retry=retry_if_exception_type(requests.ConnectionError),
+        retry=retry_if_exception_type(httpx.ConnectError),
         stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger, logging.INFO),
     )
@@ -97,8 +96,8 @@ class CommCareConnectClient:
         return ciphertext, tag, nonce
 
     def _decrypt_message(self, key: bytes, ciphertext: str, tag: str, nonce: str) -> str:
-        ciphertext = base64.b64decode(ciphertext)
-        tag = base64.b64decode(tag)
-        nonce = base64.b64decode(nonce)
-        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-        return cipher.decrypt_and_verify(ciphertext, tag).decode()
+        ciphertext_bytes = base64.b64decode(ciphertext)
+        tag_bytes = base64.b64decode(tag)
+        nonce_bytes = base64.b64decode(nonce)
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce_bytes)
+        return cipher.decrypt_and_verify(ciphertext_bytes, tag_bytes).decode()

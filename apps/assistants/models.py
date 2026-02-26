@@ -1,7 +1,6 @@
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
-from django.db.models import Q
 from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
@@ -107,7 +106,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.custom_action_operations.exists()
 
     @transaction.atomic()
-    def create_new_version(self):
+    def create_new_version(self):  # ty: ignore[invalid-method-override]
         from .sync import push_assistant_to_openai
 
         version_number = self.version_number
@@ -158,18 +157,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         delete_openai_assistant_task.delay(self.id)
         return True
 
-    def get_related_experiments_queryset(self, assistant_ids: list = None):
-        """Returns working versions and published experiments containing the assistant ids"""
-        if assistant_ids:
-            return Experiment.objects.filter(
-                Q(working_version_id=None) | Q(is_default_version=True),
-                assistant_id__in=assistant_ids,
-                is_archived=False,
-            )
-
-        return self.experiment_set.filter(Q(working_version_id=None) | Q(is_default_version=True), is_archived=False)
-
-    def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
+    def get_related_pipeline_node_queryset(self, assistant_ids: list | None = None):
         """Returns working version pipelines with assistant nodes containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
         return Node.objects.assistant_nodes().filter(
@@ -179,7 +167,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             pipeline__is_archived=False,
         )
 
-    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list = None):
+    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list | None = None):
         """Returns published experiment versions referenced by versioned pipelines with assistant nodes
         containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
@@ -202,8 +190,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def _is_actively_used(self) -> bool:
         """Check if the assistant is actively used in any experiments or pipelines"""
         return (
-            self.get_related_experiments_queryset().exists()
-            or self.get_related_pipeline_node_queryset().exists()
+            self.get_related_pipeline_node_queryset().exists()
             or self.get_related_experiments_with_pipeline_queryset().exists()
         )
 

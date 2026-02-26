@@ -36,13 +36,13 @@ class CurrentThreadExecutor(Executor):
 
 
 @contextmanager
-def patch_executor(executor: type[Executor]) -> Generator[None, Any, None]:
+def patch_executor(executor: type[Executor]) -> Generator[None, Any]:
     """Monkeypatch the langchain executor to run tasks in the current thread.
     This is used for pipeline tests where the DB transaction is not committed."""
     from langchain_core.runnables import config
 
     original = config.ContextThreadPoolExecutor
-    config.ContextThreadPoolExecutor = executor
+    config.ContextThreadPoolExecutor = executor  # ty: ignore[invalid-assignment]
     try:
         yield
     finally:
@@ -103,7 +103,7 @@ class DjangoLangGraphRunner:
 class DjangoSafeContextThreadPoolExecutor(ContextThreadPoolExecutor):
     """Thread pool executor that wraps the target function with Django database connection handling."""
 
-    def submit(  # type: ignore[override]
+    def submit(
         self,
         func: Callable[P, T],
         *args: P.args,

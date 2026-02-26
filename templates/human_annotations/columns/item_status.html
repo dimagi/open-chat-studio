@@ -1,0 +1,28 @@
+{% load i18n %}
+
+{% if record.status == "flagged" %}
+  <div class="flex items-center gap-1">
+    {% with flags=record.flags %}
+      {% if flags %}
+        <span class="badge badge-soft badge-warning tooltip tooltip-bottom"
+              data-tip="{% for flag in flags %}{{ flag.user|default:'Unknown' }}{% if flag.reason %}: {{ flag.reason }}{% endif %}{% if not forloop.last %} / {% endif %}{% endfor %}">
+          {{ record.get_status_display }}
+        </span>
+      {% else %}
+        <span class="badge badge-soft badge-warning">{{ record.get_status_display }}</span>
+      {% endif %}
+    {% endwith %}
+    <form method="post"
+          action="{% url 'human_annotations:unflag_item' request.team.slug record.queue_id record.pk %}"
+          class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-ghost btn-xs">{% translate "unflag" %}</button>
+    </form>
+  </div>
+{% elif record.status == "completed" %}
+  <span class="badge badge-soft badge-success">{{ record.get_status_display }}</span>
+{% elif record.status == "in_progress" %}
+  <span class="badge badge-soft badge-info">{{ record.get_status_display }}</span>
+{% else %}
+  <span class="badge badge-soft badge-ghost">{{ record.get_status_display }}</span>
+{% endif %}

@@ -47,10 +47,11 @@ class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
     permission_required = "pipelines.view_pipeline"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "pipelines",
             "title": "Event Pipelines",
+            "page_title": "Event Pipelines",
             "new_object_url": reverse("pipelines:new", args=[team_slug]),
             "table_url": reverse("pipelines:table", args=[team_slug]),
             "title_help_content": render_help_with_link(

@@ -15,15 +15,15 @@ from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
-from apps.service_providers import auth_service, const, model_audit_fields, tracing
+from apps.service_providers import auth_service, const, model_audit_fields
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
 from ..teams.utils import get_slug_for_team
-from . import llm_service, messaging_service, speech_service
 from .exceptions import ServiceProviderConfigError
 
 if TYPE_CHECKING:
+    from apps.service_providers import llm_service, messaging_service, speech_service, tracing
     from apps.service_providers.forms import ProviderTypeConfigForm
 
 
@@ -52,9 +52,18 @@ class LlmProviderType:
     def __str__(self):
         return self.slug
 
+    @property
+    def max_vector_stores(self) -> int | None:
+        """Returns the maximum number of vector stores supported per request, or None if unlimited."""
+        return self.additional_config.get("max_vector_stores")
+
 
 class LlmProviderTypes(LlmProviderType, Enum):
-    openai = "openai", _("OpenAI"), {"supports_transcription": True, "supports_assistants": True}
+    openai = (
+        "openai",
+        _("OpenAI"),
+        {"supports_transcription": True, "supports_assistants": True, "max_vector_stores": 2},
+    )
     azure = "azure", _("Azure OpenAI")
     anthropic = "anthropic", _("Anthropic")
     groq = "groq", _("Groq"), {"openai_api_base": "https://api.groq.com/openai/v1/"}
@@ -80,6 +89,11 @@ class LlmProviderTypes(LlmProviderType, Enum):
         return self.additional_config.get("supports_assistants", False)
 
     @property
+    def max_vector_stores(self) -> int | None:
+        """Returns the maximum number of vector stores supported per request, or None if unlimited."""
+        return self.additional_config.get("max_vector_stores")
+
+    @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
         from apps.service_providers import forms
 
@@ -100,7 +114,9 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.GoogleVertexAIConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_llm_service(self, config: dict) -> llm_service.LlmService:
+    def get_llm_service(self, config: dict) -> "llm_service.LlmService":
+        from . import llm_service
+
         config = {**config, **self.additional_config, "_type": self.slug}
         try:
             match self:
@@ -141,7 +157,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     def type_enum(self):
         return LlmProviderTypes[str(self.type)]
 
-    def get_llm_service(self) -> llm_service.LlmService:
+    def get_llm_service(self) -> "llm_service.LlmService":
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_llm_service(config)
 
@@ -154,7 +170,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         """
         return self.get_llm_service().get_local_index_manager(embedding_model_name)
 
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         """
         Creates a remote index with the given name and returns its ID.
         If file_ids are provided, they will be linked to the index.
@@ -262,7 +278,9 @@ class VoiceProviderType(models.TextChoices):
                 return forms.OpenAIVoiceEngineConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_speech_service(self, config: dict):
+    def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
+        from . import speech_service
+
         try:
             match self:
                 case VoiceProviderType.aws:
@@ -295,7 +313,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
     def type_enum(self):
         return VoiceProviderType(self.type)
 
-    def get_speech_service(self) -> speech_service.SpeechService:
+    def get_speech_service(self) -> "speech_service.SpeechService":
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_speech_service(config)
 
@@ -352,7 +370,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         )
 
     @transaction.atomic()
-    def delete(self):
+    def delete(self):  # ty: ignore[invalid-method-override]
         if self.type == VoiceProviderType.openai_voice_engine:
             files_to_delete = self.get_files()
             [f.delete() for f in files_to_delete]
@@ -380,7 +398,9 @@ class MessagingProviderType(models.TextChoices):
                 return forms.SlackMessagingConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_messaging_service(self, config: dict) -> messaging_service.MessagingService:
+    def get_messaging_service(self, config: dict) -> "messaging_service.MessagingService":
+        from . import messaging_service
+
         match self:
             case MessagingProviderType.twilio:
                 return messaging_service.TwilioService(**config)
@@ -395,6 +415,8 @@ class MessagingProviderType(models.TextChoices):
     @staticmethod
     def platform_supported_provider_types(platform: ChannelPlatform) -> list["MessagingProviderType"]:
         """Finds all provider types supporting the platform specified by `platform`"""
+        from . import messaging_service
+
         provider_types = []
         for service in messaging_service.MessagingService.__subclasses__():
             if platform in service.supported_platforms:
@@ -419,7 +441,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
     def type_enum(self):
         return MessagingProviderType(self.type)
 
-    def get_messaging_service(self) -> messaging_service.MessagingService:
+    def get_messaging_service(self) -> "messaging_service.MessagingService":
         return self.type_enum.get_messaging_service(self.config)
 
 
@@ -494,7 +516,9 @@ class TraceProviderType(models.TextChoices):
                 return forms.LangfuseTraceProviderForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_service(self, config: dict) -> tracing.Tracer:
+    def get_service(self, config: dict) -> "tracing.Tracer":
+        from . import tracing
+
         match self:
             case TraceProviderType.langfuse:
                 return tracing.LangFuseTracer(self, config)
@@ -518,7 +542,7 @@ class TraceProvider(BaseTeamModel):
     def type_enum(self):
         return TraceProviderType(self.type)
 
-    def get_service(self) -> tracing.Tracer:
+    def get_service(self) -> "tracing.Tracer":
         return self.type_enum.get_service(self.config)
 
 

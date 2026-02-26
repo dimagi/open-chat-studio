@@ -6,15 +6,18 @@ from unittest.mock import Mock, patch
 import pytest
 from django.core import mail
 from django.test import override_settings
+from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolCall, ToolCallChunk
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from pydantic import Field, create_model
+from pydantic import ValidationError as PydanticValidationError
 
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import AgentTools
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.nodes.base import Intents, PipelineState, merge_dict_values_as_lists
+from apps.pipelines.nodes.context import NodeContext, PipelineAccessor
 from apps.pipelines.nodes.nodes import (
     EndNode,
     LLMResponseWithPrompt,
@@ -57,6 +60,26 @@ from apps.utils.langchain import (
     build_fake_llm_service,
 )
 from apps.utils.pytest import django_db_with_data
+
+
+# Helper class used by router node tests
+class RefusingFakeLlmEcho(FakeLlmEcho):
+    def invoke(self, *args, **kwargs):
+        raise OpenAIRefusalError("Refused by OpenAI")
+
+
+class PydanticValidationErrorLlmEcho(FakeLlmEcho):
+    def invoke(self, *args, **kwargs):
+        raise PydanticValidationError("Invalid data structure", [])
+
+
+class StructuredOutputValidationErrorLlmEcho(FakeLlmEcho):
+    def invoke(self, *args, **kwargs):
+        raise StructuredOutputValidationError(
+            tool_name="test_tool",
+            source=Exception("Unable to parse json"),
+            ai_message=AIMessage(content=""),
+        )
 
 
 @pytest.fixture()
@@ -328,16 +351,15 @@ class TestRouterNode:
             llm_provider_model_id=provider_model.id,
         )
         participant_data = {"participant_data": "b"}
-        node._process_conditional(
-            PipelineState(
-                outputs={"123": {"message": "a"}},
-                messages=["a"],
-                experiment_session=experiment_session,
-                node_inputs=["a"],
-                last_node_input="a",
-                participant_data=participant_data,
-            ),
+        state = PipelineState(
+            outputs={"123": {"message": "a"}},
+            messages=["a"],
+            experiment_session=experiment_session,
+            node_inputs=["a"],
+            last_node_input="a",
+            participant_data=participant_data,
         )
+        node._process_conditional(NodeContext(state))
 
         # Verify that create_agent was called with the correct system prompt containing participant data
         assert create_agent_mock.called
@@ -354,21 +376,22 @@ class TestRouterNode:
 
         service = build_fake_llm_service(
             responses=[
-                # "a" is not a valid keyword
-                _tool_call("a"),
+                # "A" is not a valid keyword on first attempt (invalid_keyword)
+                _tool_call("invalid_keyword"),
                 # This second response is the LLM fixing the fact that the first response did not match any keyword
+                _tool_call("invalid_keyword"),
                 _tool_call("A"),
                 _tool_call("A"),
-                _tool_call("b"),
-                _tool_call("c"),
-                _tool_call("d"),
+                _tool_call("B"),
+                _tool_call("C"),
+                _tool_call("D"),
                 _tool_call("z"),
             ],
             token_counts=[0],
         )
         get_llm_service.return_value = service
         start = start_node()
-        router = router_node(str(provider.id), str(provider_model.id), keywords=["A", "b", "c", "d"])
+        router = router_node(str(provider.id), str(provider_model.id), keywords=["a", "b", "c", "d"])
         template_a = render_template_node("Template A: {{ input }}")
         template_b = render_template_node("Template B: {{ input }}")
         template_c = render_template_node("Template C: {{ input }}")
@@ -447,7 +470,7 @@ class TestRouterNode:
                 django_node=None,
                 name="test_router",
                 prompt="PD: {participant_data}",
-                keywords=["A"],
+                keywords=["a"],
                 llm_provider_id=provider.id,
                 llm_provider_model_id=provider_model.id,
             )
@@ -466,19 +489,22 @@ class TestRouterNode:
 
                 output_state = command.update
 
-                assert node.name in output_state["outputs"]
-                assert "route" in output_state["outputs"][node.name]
-                assert "message" in output_state["outputs"][node.name]
-                assert output_state["outputs"][node.name]["route"] == "A"
-                assert output_state["outputs"][node.name]["message"] == "hello world"
+                assert node.name in output_state["outputs"]  # ty: ignore[not-subscriptable]
+                assert "route" in output_state["outputs"][node.name]  # ty: ignore[not-subscriptable]
+                assert "message" in output_state["outputs"][node.name]  # ty: ignore[not-subscriptable]
+                assert output_state["outputs"][node.name]["route"] == "A"  # ty: ignore[not-subscriptable]
+                assert output_state["outputs"][node.name]["message"] == "hello world"  # ty: ignore[not-subscriptable]
                 assert command.goto == ["next_node_a"]
 
     @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-    def test_router_node_openai_refusal_uses_default_keyword(
-        self, get_llm_service, provider, provider_model, experiment_session
+    @pytest.mark.parametrize(
+        "LLMClass", [RefusingFakeLlmEcho, PydanticValidationErrorLlmEcho, StructuredOutputValidationErrorLlmEcho]
+    )
+    def test_router_node_uses_default_keyword_on_error(
+        self, get_llm_service, LLMClass, provider, provider_model, experiment_session
     ):
-        refusing_llm = RefusingFakeLlmEcho(include_system_message=True)
+        refusing_llm = LLMClass(include_system_message=True)
         service = FakeLlmService(llm=refusing_llm, token_counter=FakeTokenCounter(token_counts=[0]))
         get_llm_service.return_value = service
         node = RouterNode(
@@ -486,7 +512,7 @@ class TestRouterNode:
             django_node=None,
             name="test router",
             prompt="PD: {participant_data}",
-            keywords=["DEFAULT", "A", "B"],
+            keywords=["default", "a", "b"],
             llm_provider_id=provider.id,
             llm_provider_model_id=provider_model.id,
         )
@@ -499,7 +525,7 @@ class TestRouterNode:
             last_node_input="a",
         )
 
-        keyword, is_default_keyword = node._process_conditional(state)
+        keyword, is_default_keyword = node._process_conditional(NodeContext(state))
         assert keyword == "DEFAULT"
         assert is_default_keyword
 
@@ -648,8 +674,8 @@ def main(input, **kwargs):
             )
             assert output["output_message_tags"] == [(f"static router:{expected_tag}", TagCategories.BOT_RESPONSE)]
 
-        _check_routing_and_tags("first", "first")
-        _check_routing_and_tags("second", "second")
+        _check_routing_and_tags("first", "FIRST")
+        _check_routing_and_tags("second", "SECOND")
 
     @django_db_with_data()
     @pytest.mark.parametrize(
@@ -829,7 +855,7 @@ class TestDataExtraction:
         assert extracted_data == '{"name": "james"}'
 
     @django_db_with_data()
-    def test_extract_participant_data(self, provider, pipeline):
+    def test_extract_participant_data(self, provider, provider_model, pipeline):
         """Test the pipeline to extract and update participant data. First we run it when no data is linked to the
         participant to make sure it creates data. Then we run it again a few times to test that it updates the data
         correctly.
@@ -840,6 +866,7 @@ class TestDataExtraction:
         data = self._run_data_extract_and_update_pipeline(
             session,
             provider=provider,
+            provider_model=provider_model,
             pipeline=pipeline,
             schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
             extracted_data={"name": "Johnny", "last_name": None},
@@ -853,6 +880,7 @@ class TestDataExtraction:
         data = self._run_data_extract_and_update_pipeline(
             session,
             provider=provider,
+            provider_model=provider_model,
             pipeline=pipeline,
             schema='{"name": "the name of the user", "last_name": "the last name of the user"}',
             extracted_data={"name": "John", "last_name": "Wick"},
@@ -865,6 +893,7 @@ class TestDataExtraction:
         data = self._run_data_extract_and_update_pipeline(
             session,
             provider=provider,
+            provider_model=provider_model,
             pipeline=pipeline,
             schema='{"has_pets": "whether or not the user has pets"}',
             extracted_data={"has_pets": "false"},
@@ -877,7 +906,15 @@ class TestDataExtraction:
         }
 
     def _run_data_extract_and_update_pipeline(
-        self, session, provider, pipeline, extracted_data: dict, schema: str, key_name: str, initial_data: dict
+        self,
+        session,
+        provider,
+        provider_model,
+        pipeline,
+        extracted_data: dict,
+        schema: str,
+        key_name: str,
+        initial_data: dict,
     ):
         tool_call = AIMessage(tool_calls=[ToolCall(name="CustomModel", args=extracted_data, id="123")], content="Hi")
         service = build_fake_llm_service(responses=[tool_call], token_counts=[0])
@@ -891,7 +928,7 @@ class TestDataExtraction:
                 start_node(),
                 extract_participant_data_node(
                     str(provider.id),
-                    str(session.experiment.llm_provider_model.id),
+                    str(provider_model.id),
                     schema,
                     key_name,
                 ),
@@ -911,7 +948,7 @@ class TestAssistantNode:
     """Tests for assistant nodes (OpenAI assistants integration)"""
 
     def assistant_node_runnable_mock(
-        self, output: str, input_message_metadata: dict = None, output_message_metadata: dict = None
+        self, output: str, input_message_metadata: dict | None = None, output_message_metadata: dict | None = None
     ):
         """A mock for an assistant node runnable that returns the given output and metadata."""
         runnable_mock = Mock()
@@ -1257,11 +1294,12 @@ class TestPipelineStateHelpers:
         }
 
         state = PipelineState(**pipeline_state_json)
+        accessor = PipelineAccessor(state)
 
-        assert state.get_selected_route("router_1") == "path_a"
-        assert state.get_selected_route("router_2") == "path_b"
-        assert state.get_selected_route("normal_node") is None
-        assert state.get_selected_route("non_existent_node") is None
+        assert accessor.get_selected_route("router_1") == "path_a"
+        assert accessor.get_selected_route("router_2") == "path_b"
+        assert accessor.get_selected_route("normal_node") is None
+        assert accessor.get_selected_route("non_existent_node") is None
 
     def test_get_all_routes(self):
         pipeline_state_json = {
@@ -1277,7 +1315,7 @@ class TestPipelineStateHelpers:
         }
         state = PipelineState(**pipeline_state_json)
         expected_routes = {"router_1": "path_a", "router_2": "path_b", "router_3": "path_c"}
-        assert state.get_all_routes() == expected_routes
+        assert PipelineAccessor(state).get_all_routes() == expected_routes
 
         # no router node case
         pipeline_state_json = {
@@ -1287,7 +1325,7 @@ class TestPipelineStateHelpers:
             "path": [],
         }
         state = PipelineState(**pipeline_state_json)
-        assert state.get_all_routes() == {}
+        assert PipelineAccessor(state).get_all_routes() == {}
 
     def test_get_node_path(self):
         pipeline_state_json = {
@@ -1308,15 +1346,10 @@ class TestPipelineStateHelpers:
             ],
         }
         state = PipelineState(**pipeline_state_json)
+        accessor = PipelineAccessor(state)
 
-        assert state.get_node_path("start") == ["start"]
-        assert state.get_node_path("branch_a") == ["start", "router", "branch_a"]
-        assert state.get_node_path("branch_b") == ["start", "router", "branch_b"]
-        assert state.get_node_path("end") == ["start", "router", "branch_a", "end"]
-        assert state.get_node_path("nonexistent_node") == ["nonexistent_node"]
-
-
-# Helper class used by router node tests
-class RefusingFakeLlmEcho(FakeLlmEcho):
-    def invoke(self, *args, **kwargs):
-        raise OpenAIRefusalError("Refused by OpenAI")
+        assert accessor.get_node_path("start") == ["start"]
+        assert accessor.get_node_path("branch_a") == ["start", "router", "branch_a"]
+        assert accessor.get_node_path("branch_b") == ["start", "router", "branch_b"]
+        assert accessor.get_node_path("end") == ["start", "router", "branch_a", "end"]
+        assert accessor.get_node_path("nonexistent_node") == ["nonexistent_node"]

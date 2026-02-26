@@ -7,16 +7,22 @@ from pydantic_core import ValidationError
 
 from apps.chat.conversation import COMPRESSION_MARKER
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
-from apps.pipelines.nodes.nodes import (
-    HistoryMixin,
-    MaxHistoryLengthHistoryMiddleware,
-    OptionalInt,
+from apps.pipelines.nodes.history_middleware import MaxHistoryLengthHistoryMiddleware
+from apps.pipelines.nodes.mixins import (
     PipelineChatHistory,
-    SendEmail,
-    StructuredDataSchemaValidatorMixin,
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
 )
+from apps.pipelines.nodes.nodes import (
+    HistoryMixin,
+    LLMResponseWithPrompt,
+    OptionalInt,
+    SendEmail,
+    StructuredDataSchemaValidatorMixin,
+)
+from apps.service_providers.models import LlmProviderTypes
+from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.service_provider_factories import EmbeddingProviderModelFactory, LlmProviderFactory
 
 
 class TestStructuredDataSchemaValidatorMixin:
@@ -83,7 +89,7 @@ class TestHistoryNode(HistoryMixin):
 @pytest.fixture(autouse=True)
 def mock_llm_provider_model():
     # Mock get_llm_provider_model for all tests
-    with patch("apps.pipelines.nodes.nodes.get_llm_provider_model") as get_llm_provider_model:
+    with patch("apps.pipelines.nodes.mixins.get_llm_provider_model") as get_llm_provider_model:
         get_llm_provider_model.return_value = Mock(name="non-existing-model", max_token_limit=1000, deprecated=False)
         yield get_llm_provider_model
 
@@ -121,7 +127,9 @@ class TestHistoryMixin:
         result = node.get_history(session)
 
         assert result == ["session-history"]
-        session.chat.get_langchain_messages_until_marker.assert_called_once_with(marker=node.get_history_mode())
+        session.chat.get_langchain_messages_until_marker.assert_called_once_with(
+            marker=node.get_history_mode(), exclude_message_id=None
+        )
         pipeline_history.get.assert_not_called()
 
     def test_get_history_uses_pipeline_history_when_configured(self, history_node_factory):
@@ -153,7 +161,7 @@ class TestHistoryMixin:
             history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
         )
 
-        with patch("apps.pipelines.nodes.nodes.ChatMessage") as mock_chat_message_class:
+        with patch("apps.pipelines.nodes.mixins.ChatMessage") as mock_chat_message_class:
             mock_message = Mock(metadata={}, save=Mock())
             mock_chat_message_class.objects.get.return_value = mock_message
 
@@ -168,7 +176,7 @@ class TestHistoryMixin:
             history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
         )
 
-        with patch("apps.pipelines.nodes.nodes.PipelineChatMessages") as mock_pipeline_chat_message_class:
+        with patch("apps.pipelines.nodes.mixins.PipelineChatMessages") as mock_pipeline_chat_message_class:
             queryset_mock = Mock()
             mock_pipeline_chat_message_class.objects.filter.return_value = queryset_mock
 
@@ -181,7 +189,7 @@ class TestHistoryMixin:
             history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
         )
 
-        with patch("apps.pipelines.nodes.nodes.ChatMessage") as mock_chat_message_class:
+        with patch("apps.pipelines.nodes.mixins.ChatMessage") as mock_chat_message_class:
             mock_message = Mock(metadata={}, save=Mock())
             mock_chat_message_class.objects.get.return_value = mock_message
 
@@ -195,7 +203,7 @@ class TestHistoryMixin:
             history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
         )
 
-        with patch("apps.pipelines.nodes.nodes.PipelineChatMessages") as mock_pipeline_chat_message_class:
+        with patch("apps.pipelines.nodes.mixins.PipelineChatMessages") as mock_pipeline_chat_message_class:
             queryset_mock = Mock()
             mock_pipeline_chat_message_class.objects.filter.return_value = queryset_mock
 
@@ -222,8 +230,8 @@ class TestHistoryMixin:
         middleware = node.build_history_middleware(session, SystemMessage(content="system"))
         assert isinstance(middleware, MaxHistoryLengthHistoryMiddleware)
 
-    @patch("apps.pipelines.nodes.nodes.LLMResponseMixin.get_chat_model")
-    @patch("apps.pipelines.nodes.nodes.count_tokens_approximately")
+    @patch("apps.pipelines.nodes.mixins.LLMResponseMixin.get_chat_model")
+    @patch("apps.pipelines.nodes.mixins.count_tokens_approximately")
     def test_build_history_middleware_uses_summarize_mode(
         self,
         count_tokens,
@@ -246,8 +254,8 @@ class TestHistoryMixin:
         assert isinstance(middleware, SummarizeHistoryMiddleware)
         count_tokens.assert_called_once_with([system_message])
 
-    @patch("apps.pipelines.nodes.nodes.LLMResponseMixin.get_chat_model")
-    @patch("apps.pipelines.nodes.nodes.count_tokens_approximately")
+    @patch("apps.pipelines.nodes.mixins.LLMResponseMixin.get_chat_model")
+    @patch("apps.pipelines.nodes.mixins.count_tokens_approximately")
     def test_build_history_middleware_uses_truncate_tokens_mode(
         self,
         count_tokens,
@@ -270,3 +278,169 @@ class TestHistoryMixin:
 
         assert isinstance(middleware, TruncateTokensHistoryMiddleware)
         count_tokens.assert_called_once_with([system_message])
+
+
+@pytest.mark.django_db()
+class TestLLMResponseWithPromptValidation:
+    """Tests for LLMResponseWithPrompt node validation."""
+
+    def test_openai_remote_vectorstore_limit_with_2_collections(self):
+        """Test that OpenAI provider accepts exactly 2 remote vectorstores."""
+        # Create OpenAI provider
+        openai_provider = LlmProviderFactory(type=LlmProviderTypes.openai.value.slug)
+
+        # Create 2 remote collections with the same provider
+        collection1 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+        collection2 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+
+        # Should not raise validation error with exactly 2 collections
+        node = LLMResponseWithPrompt(
+            node_id="test-node",
+            name="Test LLM",
+            django_node=None,
+            llm_provider_id=openai_provider.id,
+            llm_provider_model_id=1,
+            prompt="You are a helpful assistant. {collection_index_summaries}",
+            collection_index_ids=[collection1.id, collection2.id],
+        )
+        assert node.collection_index_ids == [collection1.id, collection2.id]
+
+    def test_openai_remote_vectorstore_limit_with_3_collections(self):
+        """Test that OpenAI provider rejects more than 2 remote vectorstores."""
+
+        # Create OpenAI provider
+        openai_provider = LlmProviderFactory(type=LlmProviderTypes.openai.value.slug)
+
+        # Create 3 remote collections with the same provider
+        collection1 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+        collection2 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+        collection3 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+
+        # Should raise validation error with 3 collections
+        with pytest.raises(ValidationError, match="OpenAI hosted vectorstores are limited to 2 per request"):
+            LLMResponseWithPrompt(
+                node_id="test-node",
+                name="Test LLM",
+                django_node=None,
+                llm_provider_id=openai_provider.id,
+                llm_provider_model_id=1,
+                prompt="You are a helpful assistant. {collection_index_summaries}",
+                collection_index_ids=[collection1.id, collection2.id, collection3.id],
+            )
+
+    def test_non_openai_provider_allows_more_than_2_remote_vectorstores(self):
+        """Test that non-OpenAI providers are not limited to 2 vectorstores."""
+        # Create Anthropic provider (non-OpenAI)
+        anthropic_provider = LlmProviderFactory(type=LlmProviderTypes.anthropic.value.slug)
+
+        # Create 3 remote collections with the same provider
+        collection1 = CollectionFactory(is_remote_index=True, llm_provider=anthropic_provider, is_index=True)
+        collection2 = CollectionFactory(is_remote_index=True, llm_provider=anthropic_provider, is_index=True)
+        collection3 = CollectionFactory(is_remote_index=True, llm_provider=anthropic_provider, is_index=True)
+
+        # Should not raise validation error for non-OpenAI provider
+        node = LLMResponseWithPrompt(
+            node_id="test-node",
+            name="Test LLM",
+            django_node=None,
+            llm_provider_id=anthropic_provider.id,
+            llm_provider_model_id=1,
+            prompt="You are a helpful assistant. {collection_index_summaries}",
+            collection_index_ids=[collection1.id, collection2.id, collection3.id],
+        )
+        assert node.collection_index_ids == [collection1.id, collection2.id, collection3.id]
+
+    def test_openai_local_vectorstores_not_limited(self):
+        """Test that local (non-remote) vectorstores are not subject to the limit."""
+        # Create OpenAI provider
+        openai_provider = LlmProviderFactory(type=LlmProviderTypes.openai.value.slug)
+        embedding_model = EmbeddingProviderModelFactory()
+
+        # Create 3 local collections (is_remote_index=False)
+        collection1 = CollectionFactory(
+            is_remote_index=False,
+            llm_provider=openai_provider,
+            is_index=True,
+            summary="Collection 1",
+            embedding_provider_model=embedding_model,
+        )
+        collection2 = CollectionFactory(
+            is_remote_index=False,
+            llm_provider=openai_provider,
+            is_index=True,
+            summary="Collection 2",
+            embedding_provider_model=embedding_model,
+        )
+        collection3 = CollectionFactory(
+            is_remote_index=False,
+            llm_provider=openai_provider,
+            is_index=True,
+            summary="Collection 3",
+            embedding_provider_model=embedding_model,
+        )
+
+        # Should not raise validation error for local indexes
+        node = LLMResponseWithPrompt(
+            node_id="test-node",
+            name="Test LLM",
+            django_node=None,
+            llm_provider_id=openai_provider.id,
+            llm_provider_model_id=1,
+            prompt="You are a helpful assistant. {collection_index_summaries}",
+            collection_index_ids=[collection1.id, collection2.id, collection3.id],
+        )
+        assert node.collection_index_ids == [collection1.id, collection2.id, collection3.id]
+
+    def test_remote_vectorstores_must_have_same_llm_provider(self):
+        openai_provider = LlmProviderFactory(type=LlmProviderTypes.openai)
+        anthropic_provider = LlmProviderFactory(type=LlmProviderTypes.anthropic)
+
+        collection1 = CollectionFactory(is_remote_index=True, llm_provider=openai_provider, is_index=True)
+
+        with pytest.raises(
+            ValidationError, match="All remote collection indexes must use the same LLM provider as the node"
+        ):
+            LLMResponseWithPrompt(
+                node_id="test-node",
+                name="Test LLM",
+                django_node=None,
+                llm_provider_id=anthropic_provider.id,
+                llm_provider_model_id=1,
+                prompt="You are a helpful assistant. {collection_index_summaries}",
+                collection_index_ids=[collection1.id],
+            )
+
+    def test_local_vectorstores_can_have_different_llm_provider(self):
+        openai_provider = LlmProviderFactory(type=LlmProviderTypes.openai)
+        anthropic_provider = LlmProviderFactory(type=LlmProviderTypes.anthropic)
+
+        collection1 = CollectionFactory(is_remote_index=False, llm_provider=openai_provider, is_index=True)
+
+        node = LLMResponseWithPrompt(
+            node_id="test-node",
+            name="Test LLM",
+            django_node=None,
+            llm_provider_id=anthropic_provider.id,
+            llm_provider_model_id=1,
+            prompt="You are a helpful assistant.",
+            collection_index_ids=[collection1.id],
+        )
+
+        assert node.collection_index_ids == [collection1.id]
+
+    def test_local_vectorstores_must_have_summary_when_more_than_one(self):
+        openai_provider = LlmProviderFactory(type=LlmProviderTypes.openai)
+
+        collection1 = CollectionFactory(is_remote_index=False, llm_provider=openai_provider, is_index=True)
+        collection2 = CollectionFactory(is_remote_index=False, llm_provider=openai_provider, is_index=True)
+
+        with pytest.raises(ValidationError, match="collections must have a summary"):
+            LLMResponseWithPrompt(
+                node_id="test-node",
+                name="Test LLM",
+                django_node=None,
+                llm_provider_id=openai_provider.id,
+                llm_provider_model_id=1,
+                prompt="You are a helpful assistant.",
+                collection_index_ids=[collection1.id, collection2.id],
+            )

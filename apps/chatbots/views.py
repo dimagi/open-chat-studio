@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery
+from django.db.models import Case, Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery, When
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -26,6 +26,8 @@ from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
+from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
+from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.filters import (
@@ -36,11 +38,11 @@ from apps.experiments.forms import ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
-from apps.experiments.views import ExperimentSessionsTableView, ExperimentVersionsTableView
+from apps.experiments.views import ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
-    base_single_experiment_view,
     start_session_public,
 )
+from apps.experiments.views.utils import get_channels_context
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
@@ -57,6 +59,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.trace.models import Trace
 from apps.utils.search import similarity_search
+from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
 
@@ -103,26 +106,32 @@ def chatbots_settings(request, team_slug, experiment_id):
         form = ChatbotSettingsForm(request=request, data=request.POST, instance=experiment)
         if form.is_valid():
             form.save()
-            context.update({
-                "edit_mode": False,
-                "form": form,
-                "updated": True,
-            })
+            context.update(
+                {
+                    "edit_mode": False,
+                    "form": form,
+                    "updated": True,
+                }
+            )
 
         else:
-            context.update({
-                "edit_mode": True,
-                "form": form,
-                "updated": False,
-                "team_participant_identifiers": team_participant_identifiers,
-            })
+            context.update(
+                {
+                    "edit_mode": True,
+                    "form": form,
+                    "updated": False,
+                    "team_participant_identifiers": team_participant_identifiers,
+                }
+            )
     else:
         form = ChatbotSettingsForm(request=request, instance=experiment)
-        context.update({
-            "edit_mode": True,
-            "form": form,
-            "team_participant_identifiers": team_participant_identifiers,
-        })
+        context.update(
+            {
+                "edit_mode": True,
+                "form": form,
+                "team_participant_identifiers": team_participant_identifiers,
+            }
+        )
 
     return HttpResponse(render_to_string("chatbots/settings_content.html", context, request=request))
 
@@ -175,8 +184,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
         queryset = (
-            self.model.objects
-            .get_all()
+            self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
             .select_related("team")
         )
@@ -195,8 +203,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
             )
 
         session_count_subquery = (
-            ExperimentSession.objects
-            .filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
@@ -204,8 +211,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         participant_count_subquery = (
-            ExperimentSession.objects
-            .filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
@@ -213,8 +219,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         interaction_count_subquery = (
-            Trace.objects
-            .filter(experiment=OuterRef("pk"))
+            Trace.objects.filter(experiment=OuterRef("pk"))
             .exclude(session__platform=ChannelPlatform.EVALUATIONS)
             .values("experiment_id")
             .annotate(count=Count("id"))
@@ -222,8 +227,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         )
 
         last_activity_subquery = (
-            ExperimentSession.objects
-            .filter(experiment_id=OuterRef("pk"))
+            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
             .order_by("-last_activity_at")
             .values("last_activity_at")[:1]
@@ -258,6 +262,7 @@ class CreateChatbot(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "chatbots"
+        context["page_title"] = self.title
         return context
 
     def form_valid(self, form):
@@ -289,9 +294,37 @@ class CreateChatbot(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_chatbot_home(request, team_slug: str, experiment_id: int):
-    return base_single_experiment_view(
-        request, team_slug, experiment_id, "chatbots/single_chatbot_home.html", "chatbots"
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
+
+    channels, available_platforms = get_channels_context(experiment)
+
+    deployed_version = None
+    if experiment != experiment.default_version:
+        deployed_version = experiment.default_version.version_number
+
+    context = {
+        "active_tab": "chatbots",
+        "page_title": f"{experiment.name} Details",
+        "experiment": experiment,
+        "platforms": available_platforms,
+        "channels": channels,
+        "deployed_version": deployed_version,
+        **_get_events_context(experiment, team_slug),
+    }
+    session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
+
+    columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
+    filter_context = get_filter_context_data(
+        request.team,
+        columns=columns,
+        filter_class=ExperimentSessionFilter,
+        table_url=session_table_url,
+        table_container_id="sessions-table",
+        table_type=FilterSet.TableType.SESSIONS,
     )
+    context.update(filter_context)
+
+    return TemplateResponse(request, "chatbots/single_chatbot_home.html", context)
 
 
 class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
@@ -318,6 +351,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
             "pipeline_id": experiment.pipeline_id,
             "node_schemas": _pipeline_node_schemas(),
             "experiment": experiment,
+            "page_title": f"Edit {experiment.name}",
             "parameter_values": _pipeline_node_parameter_values(
                 team=self.request.team,
                 llm_providers=llm_providers,
@@ -374,6 +408,7 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequir
         context["version_details"] = version
         context["has_versions"] = self.latest_version is not None
         context["experiment"] = working_experiment
+        context["page_title"] = f"Create Version - {working_experiment.name}"
         return context
 
     def form_valid(self, form):
@@ -388,7 +423,7 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequir
             messages.error(self.request, "Version creation is already in progress.")
             return HttpResponseRedirect(self.get_success_url())
 
-        error_msg = self._check_pipleline_and_assistant_for_errors()
+        error_msg = self._check_pipleline_for_errors()
 
         if error_msg:
             messages.error(self.request, error_msg)
@@ -403,37 +438,14 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequir
 
         return HttpResponseRedirect(self.get_success_url())
 
-    def _check_pipleline_and_assistant_for_errors(self) -> str:
-        """Checks if the pipeline or assistant has errors before creating a new version."""
-        from apps.assistants.sync import OpenAiSyncError
-
+    def _check_pipleline_for_errors(self) -> str | None:
+        """Checks if the pipeline has errors before creating a new version."""
         experiment = self.object
-
-        try:
-            if self._is_assistant_out_of_sync(experiment):
-                return "Assistant is out of sync with OpenAI. Please update the assistant first."
-        except OpenAiSyncError as e:
-            return str(e)
-
         if pipeline := experiment.pipeline:
             errors = pipeline.validate()
             if errors:
                 return "Unable to create a new version when the pipeline has errors"
-
-    def _is_assistant_out_of_sync(self, experiment: Experiment) -> bool:
-        from apps.assistants.sync import get_diff_with_openai_assistant, get_out_of_sync_files
-
-        if not experiment.assistant:
-            return False
-
-        if not experiment.assistant.assistant_id:
-            return True
-
-        if len(get_diff_with_openai_assistant(experiment.assistant)) > 0:
-            return True
-
-        files_missing_local, files_missing_remote = get_out_of_sync_files(experiment.assistant)
-        return bool(files_missing_local or files_missing_remote)
+        return None
 
     def get_success_url(self):
         url = reverse(
@@ -486,18 +498,27 @@ def chatbot_version_create_status(
     )
 
 
-class ChatbotSessionsTableView(ExperimentSessionsTableView):
-    table_class = ChatbotSessionsTable
+class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+    """View for rendering chatbot sessions table with filtering support."""
 
-    def get_table_data(self):
-        """Add message_count annotation to the paginated data."""
-        queryset = super().get_table_data()
-        return queryset.annotate_with_message_count()
+    model = ExperimentSession
+    table_class = ChatbotSessionsTable
+    template_name = "table/single_table.html"
+    permission_required = "experiments.view_experimentsession"
+
+    def get_queryset(self):
+        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
+        experiment_id = self.kwargs.get("experiment_id")
+        query_set = ExperimentSession.objects.get_table_queryset(self.request.team, experiment_id)
+        timezone = self.request.session.get("detected_tz", None)
+        session_filter = ExperimentSessionFilter()
+        query_set = session_filter.apply(
+            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
+        )
+        return query_set
 
     def get_table(self, **kwargs):
-        """
-        When viewing sessions for a specific chatbot, hide the chatbot column
-        """
+        """When viewing sessions for a specific chatbot, hide the chatbot column."""
         table = super().get_table(**kwargs)
         if self.kwargs.get("experiment_id"):
             table.exclude = ("chatbot",)
@@ -528,8 +549,7 @@ def end_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
         external_id=session_id,
         team=request.team,
     )
-    propagate_event = request.POST.get("fire_end_event") == "on"
-    experiment_session.end(propagate=propagate_event)
+    _end_session_from_request(experiment_session, request)
     messages.success(request, "Session ended")
     return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
 
@@ -544,28 +564,38 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
         external_id=session_id,
         team=request.team,
     )
-    propagate_event = request.POST.get("fire_end_event") == "on"
-    with transaction.atomic():
-        old_session.end(propagate=propagate_event)
+    experiment_channel = old_session.experiment_channel
+    if experiment_channel.platform == ChannelPlatform.WEB:
+        # It doesn't make sense to create new web sessions
+        messages.error(request, "Cannot create a new session from a web session.")
+        return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
 
-        experiment = old_session.experiment
-        participant = old_session.participant
-        experiment_channel = old_session.experiment_channel
+    _end_session_from_request(old_session, request)
 
-        # Create new session using the same channel as the old session
-        channel_cls = ChannelBase.get_channel_class_for_platform(experiment_channel.platform)
-        new_session = channel_cls.start_new_session(
-            working_experiment=experiment,
-            experiment_channel=experiment_channel,
-            participant_identifier=participant.identifier,
-            participant_user=participant.user,
-            session_status=SessionStatus.ACTIVE,
-        )
+    experiment = old_session.experiment
+    participant = old_session.participant
 
-        send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
+    # Create new session using the same channel as the old session
+    channel_cls = ChannelBase.get_channel_class_for_platform(experiment_channel.platform)
+    new_session = channel_cls.start_new_session(
+        working_experiment=experiment,
+        participant_identifier=participant.identifier,
+        participant_user=participant.user,
+        session_status=SessionStatus.ACTIVE,
+        experiment_channel=experiment_channel,
+    )
+
+    send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
 
     messages.success(request, "New session created")
     return redirect("chatbots:chatbot_session_view", team_slug, experiment.public_id, new_session.external_id)
+
+
+def _end_session_from_request(session: ExperimentSession, request) -> None:
+    end_kwargs = {}
+    if request.POST.get("fire_end_event") == "on":
+        end_kwargs["trigger_type"] = StaticTriggerType.CONVERSATION_END_MANUALLY
+    session.end(**end_kwargs)
 
 
 @login_and_team_required
@@ -755,10 +785,9 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
             )
             new_experiment.create_version_task_id = task_id
             new_experiment.save(update_fields=["create_version_task_id"])
-        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
-    else:
-        experiment_id = kwargs["pk"]
-        return single_chatbot_home(request, team_slug, experiment_id)
+            return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
+    experiment_id = kwargs["pk"]
+    return single_chatbot_home(request, team_slug, experiment_id)
 
 
 def home(
@@ -791,6 +820,7 @@ def home(
         {
             "active_tab": title.lower(),
             "title": title,
+            "page_title": title,
             "title_help_content": render_help_with_link("", help_key),
             "table_url": reverse(table_url_name, args=[team_slug]),
             "enable_search": True,
@@ -805,12 +835,12 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
     template_name = "generic/object_home.html"
     permission_required = "experiments.view_experimentsession"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         table_url = reverse("chatbots:all_sessions_list", kwargs={"team_slug": team_slug})
         filter_context = get_filter_context_data(
             team=self.request.team,
             columns=ExperimentSessionFilter.columns(self.request.team),
-            date_range_column="last_message",
+            filter_class=ExperimentSessionFilter,
             table_url=table_url,
             table_container_id="data-table",
             table_type=FilterSet.TableType.ALL_SESSIONS,
@@ -819,6 +849,7 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
         return {
             "active_tab": "all_sessions",
             "title": "All Sessions",
+            "page_title": "All Sessions",
             "allow_new": False,
             "table_url": table_url,
             "use_dynamic_filters": True,
@@ -837,3 +868,41 @@ def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session
         "chatbots/manage/invite_row.html",
         context={"request": request, "experiment": experiment, "session": session},
     )
+
+
+def _get_events_context(experiment: Experiment, team_slug: str):
+    combined_events = []
+    static_events = (
+        StaticTrigger.objects.filter(experiment=experiment)
+        .annotate(
+            failure_count=Count(
+                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
+            )
+        )
+        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count", "is_active")
+        .all()
+    )
+    timeout_events = (
+        TimeoutTrigger.objects.filter(experiment=experiment)
+        .annotate(
+            failure_count=Count(
+                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
+            )
+        )
+        .values(
+            "id",
+            "experiment_id",
+            "delay",
+            "action__action_type",
+            "action__params",
+            "total_num_triggers",
+            "failure_count",
+            "is_active",
+        )
+        .all()
+    )
+    for event in static_events:
+        combined_events.append({**event, "team_slug": team_slug})
+    for event in timeout_events:
+        combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
+    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}

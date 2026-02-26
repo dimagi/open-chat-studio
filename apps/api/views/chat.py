@@ -2,6 +2,7 @@ import logging
 import pathlib
 
 from django.conf import settings
+from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
@@ -27,11 +28,12 @@ from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached
 from apps.chat.channels import ApiChannel
-from apps.chat.models import Chat, ChatAttachment
+from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.models import File
+from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
 SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, LegacySessionAccessPermission]
@@ -52,7 +54,10 @@ def validate_file_upload(file):
     if file_size_mb > MAX_FILE_SIZE_MB:
         return False, f"File '{file.name}' exceeds maximum size of {MAX_FILE_SIZE_MB}MB"
     file_ext = pathlib.Path(file.name).suffix.lower()
-    if file_ext not in SUPPORTED_FILE_EXTENSIONS:
+    mime_type = file.content_type or ""
+    content_type = mime_type.split("/")[0]
+    # All text files are allowed
+    if content_type != "text" and file_ext not in SUPPORTED_FILE_EXTENSIONS:
         return False, f"File type '{file_ext}' is not supported. Allowed types: {', '.join(SUPPORTED_FILE_EXTENSIONS)}"
     return True, None
 
@@ -151,12 +156,14 @@ def chat_upload_file(request, session_id):
                 "participant_remote_id": participant_remote_id,
             },
         )
-        uploaded_files.append({
-            "id": file_obj.id,
-            "name": file_obj.name,
-            "size": file_obj.content_size,
-            "content_type": file_obj.content_type,
-        })
+        uploaded_files.append(
+            {
+                "id": file_obj.id,
+                "name": file_obj.name,
+                "size": file_obj.content_size,
+                "content_type": file_obj.content_type,
+            }
+        )
 
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
@@ -386,6 +393,7 @@ def chat_send_message(request, session_id):
     message_text = data["message"]
     attachment_ids = data.get("attachment_ids", [])
     version_number = data.get("version_number")
+    context = data.get("context", {})
 
     session = get_experiment_session_cached(session_id)
     if not session:
@@ -434,6 +442,7 @@ def chat_send_message(request, session_id):
         experiment_id=experiment_version.id,
         message_text=message_text,
         attachments=attachment_data if attachment_data else None,
+        context=context,
     ).task_id
 
     response_data = ChatSendMessageResponse({"task_id": task_id, "status": "processing"}).data
@@ -484,9 +493,17 @@ def chat_poll_task_response(request, session_id, task_id):
     if not session:
         return NotFound()
 
-    task_details = get_message_task_response(session.experiment, task_id)
+    experiment = session.experiment
+    task_details = get_message_task_response(experiment, task_id)
+    if not task_details:
+        return Response({"status": "processing"}, status=status.HTTP_200_OK)
+
     if not task_details["complete"]:
-        data = {"message": None, "status": "processing"}
+        message_text = get_progress_message(session_id, experiment.name, experiment.description, throttle_key=task_id)
+        message = None
+        if message_text:
+            message = MessageSerializer(ChatMessage(content=message_text, message_type=ChatMessageType.AI)).data
+        data = {"message": message, "status": "processing"}
         return Response(data, status=status.HTTP_200_OK)
 
     if error := task_details["error_msg"]:
@@ -564,3 +581,46 @@ def chat_poll_response(request, session_id):
     session_status = "ended" if session.is_complete else "active"
     response_data = {"messages": messages, "has_more": has_more, "session_status": session_status}
     return Response(ChatPollResponse(response_data).data, status=status.HTTP_200_OK)
+
+
+def get_progress_message(session_id, chatbot_name, chatbot_description, throttle_key=None) -> str | None:
+    """Get the next progress message. This will generate new messages if there are no more messages.
+
+    If throttle_key is provided, a new message is only returned once every 5 seconds.
+    Within the 5-second window the same message is returned.
+    """
+    last_key = f"progress_last:{throttle_key}" if throttle_key else None
+    if last_key:
+        last = cache.get(last_key)
+        if last:
+            return last
+
+    key = f"progress_messages:{session_id}"
+    messages = cache.get(key)
+    if not messages:
+        messages = get_progress_messages(chatbot_name, chatbot_description)
+
+    if not messages:
+        return None
+
+    message, *remainder = messages
+    if remainder:
+        cache.set(key, remainder, 24 * 3600)
+    else:
+        cache.delete(key)
+
+    if last_key:
+        cache.set(last_key, message, 5)
+
+    return message
+
+
+def get_progress_messages(chatbot_name, chatbot_description) -> list[str]:
+    try:
+        agent = ProgressMessagesAgent(
+            input=ProgressMessagesInput(chatbot_name=chatbot_name, chatbot_description=chatbot_description)
+        )
+        return agent.run().messages
+    except Exception:
+        logger.exception("Failed to generate progress messages for chatbot '%s'", chatbot_name)
+        return []

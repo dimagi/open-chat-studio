@@ -1,12 +1,11 @@
 import contextlib
-import logging
 import zipfile
 from datetime import timedelta
 from io import BytesIO
 from itertools import groupby
 
-import openai
 from celery.app import shared_task
+from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
@@ -29,7 +28,7 @@ from apps.files.models import File, FilePurpose
 from apps.service_providers.models import LlmProvider
 from apps.utils.celery import TaskbadgerTaskWrapper
 
-logger = logging.getLogger("ocs.documents.tasks.link_files_to_index")
+logger = get_task_logger("ocs.documents")
 
 
 @shared_task(ignore_result=True)
@@ -93,6 +92,8 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
 
 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):
+    import openai  # lazy import to avoid import on startup
+
     llm_provider = LlmProvider.objects.get(id=llm_provider_id)
     old_manager = llm_provider.get_remote_index_manager(vector_store_id)
     old_manager.delete_remote_index()

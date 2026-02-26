@@ -55,6 +55,11 @@ urlpatterns = [
         views.sync_document_source,
         name="sync_document_source",
     ),
+    path(
+        "collections/<int:collection_id>/source/<int:pk>/logs/",
+        views.document_source_sync_logs,
+        name="document_source_sync_logs",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(views, "Collection", "collection"))

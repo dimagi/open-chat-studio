@@ -5,7 +5,7 @@ import tempfile
 import uuid
 from collections import defaultdict
 from email.message import Message
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin
 
 import httpx
@@ -17,8 +17,15 @@ from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field, create_model
 
+from apps.ocs_notifications.notifications import (
+    custom_action_api_failure_notification,
+    custom_action_unexpected_error_notification,
+)
 from apps.service_providers.auth_service import AuthService
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
+
+if TYPE_CHECKING:
+    from apps.custom_actions.models import CustomAction
 
 logger = logging.getLogger("ocs.tools")
 
@@ -26,8 +33,8 @@ logger = logging.getLogger("ocs.tools")
 class ToolArtifact(BaseModel):
     name: str
     content_type: str
-    content: bytes = None
-    path: str = None
+    content: bytes | None = None
+    path: str | None = None
 
     def get_content(self):
         if self.content:
@@ -46,22 +53,25 @@ class FunctionDef(BaseModel):
     url: str
     args_schema: type[BaseModel]
 
-    def build_tool(self, auth_service) -> BaseTool:
-        executor = OpenAPIOperationExecutor(auth_service, self)
+    def build_tool(self, auth_service: AuthService, custom_action: "CustomAction") -> BaseTool:
+        executor = OpenAPIOperationExecutor(auth_service, self, custom_action)
         return StructuredTool(
             name=self.name,
             description=self.description,
             args_schema=self.args_schema,
             handle_tool_error=True,
-            func=executor.call_api,
+            func=executor.call_api_with_notifications,
             response_format="content_and_artifact",
         )
 
 
 class OpenAPIOperationExecutor:
-    def __init__(self, auth_service: AuthService, function_def: FunctionDef):
+    def __init__(
+        self, auth_service: AuthService, function_def: FunctionDef, custom_action: "CustomAction | None" = None
+    ):
         self.auth_service = auth_service
         self.function_def = function_def
+        self.custom_action = custom_action
 
     def call_api(self, **kwargs) -> Any:
         """Make an HTTP request to an external service. The exact inputs to this function are the
@@ -95,6 +105,22 @@ class OpenAPIOperationExecutor:
                 raise ToolException(f"Error making request: {str(e)}") from None
             except httpx.HTTPError as e:
                 raise ToolException(f"Error making request: {str(e)}") from None
+
+    def call_api_with_notifications(self, **kwargs) -> Any:
+        """Wrapper around call_api that creates notifications for monitoring custom action health.
+
+        This wrapper tracks:
+        - ERROR: API failures, timeouts, bad responses
+        """
+
+        try:
+            return self.call_api(**kwargs)
+        except ToolException as e:
+            custom_action_api_failure_notification(self.custom_action, self.function_def, e)
+            raise
+        except Exception as e:
+            custom_action_unexpected_error_notification(self.custom_action, self.function_def, e)
+            raise
 
     def _make_request(
         self, http_client: httpx.Client, url: str, method: str, **kwargs
@@ -242,7 +268,7 @@ def _openapi_params_to_pydantic_model(name, params: list[Parameter], spec: OpenA
         if p.param_schema:
             schema = spec.get_schema(p.param_schema)
         else:
-            media_type_schema = list(p.content.values())[0].media_type_schema  # type: ignore
+            media_type_schema = list(p.content.values())[0].media_type_schema
             schema = spec.get_schema(media_type_schema)
         if p.name and not schema.title:
             schema.title = p.name
@@ -301,12 +327,12 @@ def _schema_to_pydantic_field_type(spec: OpenAPISpec, schema: Schema) -> type:
         properties = {}
         for name, prop in schema.properties.items():
             if not prop.title:
-                prop.title = name
+                prop.title = name  # ty: ignore[invalid-assignment]
             properties[name] = _schema_to_pydantic(spec, prop)
         return _create_model(schema.title, properties)
     elif schema.type == DataType.ARRAY:
         if not schema.items.title:
-            schema.items.title = f"{schema.title}Items"
+            schema.items.title = f"{schema.title}Items"  # ty: ignore[invalid-assignment]
         return list[_schema_to_pydantic(spec, schema.items)]
     elif schema.enum:
         return _get_enum_type(schema)
@@ -318,7 +344,7 @@ def _get_enum_type(schema) -> type[enum.Enum]:
     if schema.type == DataType.STRING:
         type_ = enum.StrEnum(_make_model_name(schema.title, "Enum"), [(v, v) for v in schema.enum if v])
         type_.__doc__ = schema.description
-        return type_
+        return type_  # ty: ignore[invalid-return-type]
     else:
         raise ValueError(f"Unsupported enum type: {schema.type}")
 

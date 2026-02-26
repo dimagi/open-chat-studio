@@ -1,10 +1,8 @@
 import json
 import logging
-import unicodedata
-from functools import lru_cache
-from typing import Annotated, Any, Literal, Self
+import re
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
-import tiktoken
 from django.conf import settings
 from django.core import validators
 from django.core.exceptions import ValidationError
@@ -12,15 +10,13 @@ from django.core.validators import validate_email
 from django.db.models import TextChoices
 from jinja2.sandbox import SandboxedEnvironment
 from langchain.agents import create_agent
-from langchain_core.messages import BaseMessage, HumanMessage
-from langchain_core.messages.utils import count_tokens_approximately
+from langchain.agents.structured_output import StructuredOutputValidationError
+from langchain_core.messages import HumanMessage
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_openai.chat_models.base import OpenAIRefusalError
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.constants import END
 from langgraph.types import Command, interrupt
-from pydantic import BaseModel, BeforeValidator, Field, create_model, field_serializer, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, field_serializer, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
@@ -28,8 +24,6 @@ from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.chat.conversation import COMPRESSION_MARKER
-from apps.chat.models import ChatMessage
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
 from apps.pipelines.exceptions import (
@@ -40,10 +34,7 @@ from apps.pipelines.exceptions import (
     WaitForNextInput,
 )
 from apps.pipelines.models import (
-    PipelineChatHistory,
-    PipelineChatHistoryModes,
     PipelineChatHistoryTypes,
-    PipelineChatMessages,
 )
 from apps.pipelines.nodes.base import (
     NodeSchema,
@@ -52,57 +43,53 @@ from apps.pipelines.nodes.base import (
     PipelineRouterNode,
     PipelineState,
     UiSchema,
+    VisibleWhen,
     Widgets,
     deprecated_node,
 )
+from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_system_message
-from apps.pipelines.nodes.history_middleware import (
-    BaseNodeHistoryMiddleware,
-    MaxHistoryLengthHistoryMiddleware,
-    SummarizeHistoryMiddleware,
-    TruncateTokensHistoryMiddleware,
-)
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.tasks import send_email_from_pipeline
-from apps.service_providers.exceptions import ServiceProviderConfigError
-from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.adapters import AssistantAdapter
-from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
-from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
+from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
     AssistantChat,
     ChainOutput,
 )
-from apps.service_providers.models import LlmProviderModel
-from apps.utils.langchain import dict_to_json_schema
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
+from apps.utils.restricted_http import RestrictedHttpClient
+
+from .mixins import (
+    ExtractStructuredDataNodeMixin,
+    HistoryMixin,
+    LLMResponseMixin,
+    OutputMessageTagMixin,
+    RouterMixin,
+    StructuredDataSchemaValidatorMixin,
+    get_llm_provider,
+)
+
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.context import NodeContext
 
 logger = logging.getLogger("ocs.pipelines.nodes")
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
+CODE_NODE_DOCS = f"{settings.DOCUMENTATION_BASE_URL}{settings.DOCUMENTATION_LINKS['node_code']}"
+DEFAULT_FUNCTION = f"""# You must define a main function, which takes the node input as a string.
+# Return a string to pass to the next node.
 
-class OutputMessageTagMixin(BaseModel):
-    tag: str = Field(
-        default="",
-        title="Message Tag",
-        description="The tag that the output message should be tagged with",
-    )
+# Learn more about Python nodes at {CODE_NODE_DOCS}
 
-    @field_validator("tag", mode="after")
-    @classmethod
-    def normalize_tag(cls, value: str) -> str:
-        return unicodedata.normalize("NFC", value)
-
-    def get_output_tags(self) -> list[tuple[str, None]]:
-        tags: list[tuple[str, None]] = []
-        if self.tag:
-            tags.append((self.tag, None))
-        return tags
+def main(input: str, **kwargs) -> str:
+    return input
+"""
 
 
 class RenderTemplate(PipelineNode, OutputMessageTagMixin):
@@ -120,19 +107,21 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         env = SandboxedEnvironment()
         try:
             content = {
-                "input": state["last_node_input"],
-                "node_inputs": state["node_inputs"],
-                "temp_state": state.get("temp_state", {}),
-                "session_state": state.get("session_state", {}),
+                "input": context.input,
+                "node_inputs": context.inputs,
+                "temp_state": context.state.temp,
+                "session_state": context.state.session_state,
+                "input_message_id": context.input_message_id,
+                "input_message_url": context.input_message_url,
             }
 
-            if "experiment_session" in state and state["experiment_session"]:
-                exp_session = state["experiment_session"]
-                participant = getattr(exp_session, "participant", None)
+            session = context.session
+            if session:
+                participant = getattr(session, "participant", None)
                 if participant:
                     content.update(
                         {
@@ -141,14 +130,14 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                                 "platform": getattr(participant, "platform", None),
                             },
                             "participant_schedules": participant.get_schedules_for_experiment(
-                                exp_session.experiment,
+                                session.experiment,
                                 as_dict=True,
                                 include_inactive=True,
                             )
                             or [],
                         }
                     )
-                content["participant_data"] = ParticipantDataProxy.from_state(state).get() or {}
+                content["participant_data"] = context.state.participant_data
 
             template = env.from_string(self.template_string)
             output = template.render(content)
@@ -158,224 +147,15 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
 
-@lru_cache
-def get_llm_provider_model(llm_provider_model_id: int):
-    try:
-        return LlmProviderModel.objects.get(id=llm_provider_model_id)
-    except LlmProviderModel.DoesNotExist:
-        raise PipelineNodeBuildError(f"LLM provider model with id {llm_provider_model_id} does not exist") from None
-
-
-class LLMResponseMixin(BaseModel):
-    llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
-    llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
-    llm_model_parameters: dict[str, Any] = Field(default_factory=dict, json_schema_extra=UiSchema(widget=Widgets.none))
-
-    @model_validator(mode="before")
-    @classmethod
-    def ensure_default_parameters(cls, data) -> Self:
-        if llm_provider_model_id := data.get("llm_provider_model_id"):
-            model = get_llm_provider_model(llm_provider_model_id)
-            params_cls = LLM_MODEL_PARAMETERS.get(model.name, BasicParameters)
-            # Handle None explicitly by treating it as empty dict
-            param_value = data.get("llm_model_parameters") or {}
-            data["llm_model_parameters"] = params_cls.model_validate(param_value).model_dump()
-        else:
-            data["llm_model_parameters"] = {}
-        return data
-
-    @model_validator(mode="after")
-    def validate_llm_model(self):
-        # Ensure model is not deprecated
-        try:
-            model = get_llm_provider_model(self.llm_provider_model_id)
-        except PipelineNodeBuildError as e:
-            raise PydanticCustomError(
-                "invalid_model",
-                str(e),
-                {"field": "llm_provider_id"},
-            ) from None
-        if model.deprecated:
-            raise PydanticCustomError(
-                "deprecated_model",
-                f"LLM provider model '{model.name}' is deprecated.",
-                {"field": "llm_provider_id"},
-            )
-
-        # Validate model parameters
-        if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
-            params_cls.model_validate(self.llm_model_parameters)
-
-        return self
-
-    def get_llm_service(self) -> LlmService:
-        from apps.service_providers.models import LlmProvider
-
-        try:
-            provider = LlmProvider.objects.get(id=self.llm_provider_id)
-            return provider.get_llm_service()
-        except LlmProvider.DoesNotExist:
-            raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
-        except ServiceProviderConfigError as e:
-            raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
-
-    def get_chat_model(self):
-        model_name = get_llm_provider_model(self.llm_provider_model_id).name
-        logger.debug(f"Calling {model_name} with parameters: {self.llm_model_parameters}")
-        return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
-
-
-class HistoryMixin(LLMResponseMixin):
-    history_type: PipelineChatHistoryTypes = Field(
-        PipelineChatHistoryTypes.NONE,
-        json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
-    )
-    history_name: str | None = Field(
-        None,
-        json_schema_extra=UiSchema(
-            widget=Widgets.none,
-        ),
-    )
-    history_mode: PipelineChatHistoryModes = Field(
-        default=PipelineChatHistoryModes.SUMMARIZE,
-        json_schema_extra=UiSchema(widget=Widgets.history_mode, enum_labels=PipelineChatHistoryModes.labels),
-    )
-    user_max_token_limit: int | None = Field(
-        None,
-        json_schema_extra=UiSchema(
-            widget=Widgets.none,
-        ),
-    )
-    max_history_length: int = Field(
-        10,
-        json_schema_extra=UiSchema(
-            widget=Widgets.none,
-        ),
-    )
-
-    @field_validator("history_name")
-    def validate_history_name(cls, value, info: FieldValidationInfo):
-        if info.data.get("history_type") == PipelineChatHistoryTypes.NAMED and not value:
-            raise PydanticCustomError("invalid_history_name", "A history name is required for named history")
-        return value
-
-    def _get_history_name(self):
-        if self.history_type == PipelineChatHistoryTypes.NAMED:
-            return self.history_name
-        return self.node_id
-
-    @property
-    def history_is_disabled(self) -> bool:
-        return self.history_type == PipelineChatHistoryTypes.NONE
-
-    @property
-    def use_session_history(self) -> bool:
-        return self.history_type == PipelineChatHistoryTypes.GLOBAL
-
-    def get_history_mode(self) -> PipelineChatHistoryModes:
-        return self.history_mode or PipelineChatHistoryModes.SUMMARIZE
-
-    def get_history(self, session: ExperimentSession) -> list[BaseMessage]:
-        """
-        Returns the chat history messages for the node based on its history configuration.
-
-        Global - Returns the chat history of the session up to the summary marker.
-        Node/Named - Returns the chat history for this node from the pipeline chat history.
-        None/Else - Returns an empty list.
-        """
-        if self.history_is_disabled:
-            return []
-
-        if self.use_session_history:
-            return session.chat.get_langchain_messages_until_marker(marker=self.get_history_mode())
-        else:
-            try:
-                history: PipelineChatHistory = session.pipeline_chat_history.get(
-                    type=self.history_type, name=self._get_history_name()
-                )
-            except PipelineChatHistory.DoesNotExist:
-                return []
-
-            return history.get_langchain_messages_until_marker(self.get_history_mode())
-
-    def store_compression_checkpoint(self, compression_marker: str, checkpoint_message_id: int):
-        """Persist the correct compression marker for this node's history mode.
-
-        When `summary` is the literal `COMPRESSION_MARKER`, we record the node's current
-        `history_mode` so future fetches know where to stop replaying messages. Otherwise, the
-        provided `summary` captures the conversation state up to `checkpoint_message_id`.
-        """
-        history_mode = self.get_history_mode()
-        if self.use_session_history:
-            message = ChatMessage.objects.get(id=checkpoint_message_id)
-            if compression_marker == COMPRESSION_MARKER:
-                message.metadata.update({"compression_marker": history_mode})
-                message.save(update_fields=["metadata"])
-            else:
-                message.summary = compression_marker
-                message.save(update_fields=["summary"])
-
-        else:
-            # Use pipeline history
-            updates = {"compression_marker": history_mode}
-            if compression_marker != COMPRESSION_MARKER:
-                updates["summary"] = compression_marker
-            PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
-
-    def build_history_middleware(
-        self, session: ExperimentSession, system_message: BaseMessage
-    ) -> BaseNodeHistoryMiddleware | None:
-        """Construct the history compression middleware configured for this node."""
-        if self.history_is_disabled:
-            return None
-
-        history_mode = self.get_history_mode()
-
-        compressor_kwargs = {
-            "session": session,
-            "node": self,
-        }
-        if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
-            return MaxHistoryLengthHistoryMiddleware(max_history_length=self.max_history_length, **compressor_kwargs)
-
-        specified_token_limit = (
-            self.user_max_token_limit
-            if self.user_max_token_limit is not None
-            else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
-        )
-
-        # Reserve space for the system message so trigger/keep thresholds reflect usable context
-        system_message_tokens = count_tokens_approximately([system_message])
-        token_limit = max(specified_token_limit - system_message_tokens, 100)
-
-        if history_mode == PipelineChatHistoryModes.SUMMARIZE:
-            return SummarizeHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
-
-        if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
-            return TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
-
-    def save_history(self, session: ExperimentSession, human_message: str, ai_message: str):
-        if self.history_is_disabled:
-            return
-
-        if self.use_session_history:
-            # Global History is saved outside of the node
-            return
-
-        history, _ = session.pipeline_chat_history.get_or_create(type=self.history_type, name=self._get_history_name())
-        message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=self.node_id)
-        return message
-
-
 @deprecated_node(message="Use the 'LLM' node instead.")
 class LLMResponse(PipelineNode, LLMResponseMixin):
     """Calls an LLM with the given input"""
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="LLM response"))
 
-    def _process(self, state: PipelineState) -> PipelineState:
-        llm = self.get_chat_model()
-        output = llm.invoke(state["last_node_input"], config=self._config)
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
+        llm = with_llm_retry(self.get_chat_model())
+        output = llm.invoke(context.input, config=self._config)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output.content)
 
 
@@ -397,11 +177,11 @@ class ToolConfigModel(BaseModel):
     @classmethod
     def validate_domains(cls, value: list[str], info) -> list[str]:
         values = list(map(str.strip, filter(None, value)))
-        for value in values:
+        for domain in values:
             try:
-                validators.validate_domain_name(value)
+                validators.validate_domain_name(domain)
             except ValidationError:
-                raise ValueError(f"Invalid domain name '{value}' in field '{info.field_name}'") from None
+                raise ValueError(f"Invalid domain name '{domain}' in field '{info.field_name}'") from None
         return values
 
     @field_serializer("allowed_domains", "blocked_domains")
@@ -447,12 +227,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         ge=1,
         le=100,
         description="The maximum number of results to retrieve from the index",
-        json_schema_extra=UiSchema(widget=Widgets.range),
+        json_schema_extra=UiSchema(
+            widget=Widgets.range,
+            visible_when=VisibleWhen(field="collection_index_ids", operator="is_not_empty"),
+        ),
     )
     generate_citations: bool = Field(
         default=True,
         description="Allow files from this collection to be referenced in LLM responses and downloaded by users",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
+        json_schema_extra=UiSchema(
+            widget=Widgets.toggle,
+            visible_when=VisibleWhen(field="collection_index_ids", operator="is_not_empty"),
+        ),
     )
 
     tools: list[str] = Field(
@@ -509,7 +295,9 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             return self
         except ValidationError as e:
             raise PydanticCustomError(
-                "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
+                "invalid_prompt",
+                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable]
+                {"field": "prompt"},
             ) from None
 
     @field_validator("tools", "built_in_tools", "mcp_tools", mode="before")
@@ -565,49 +353,63 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
 
         # Validate that all collections are the same type (either all remote or all local)
         # Only applies when multiple collections are selected
-        if len(collections) > 1:
-            is_remote_flags = [collection.is_remote_index for collection in collections.values()]
-            if not all(is_remote_flags) and any(is_remote_flags):
-                remote_collections = [
-                    f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
-                ]
-                local_collections = [
-                    f"{collection.name}" for cid, collection in collections.items() if not collection.is_remote_index
-                ]
+        is_remote_flags = [collection.is_remote_index for collection in collections.values()]
+        all_are_remote = all(is_remote_flags)
+        if not all_are_remote and any(is_remote_flags):
+            remote_collections = [
+                f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
+            ]
+            local_collections = [
+                f"{collection.name}" for cid, collection in collections.items() if not collection.is_remote_index
+            ]
+            raise PydanticCustomError(
+                "mixed_collection_types",
+                "All collection indexes must be the same type (either all remote or all local). "
+                f"Remote collections: {', '.join(remote_collections)}. "
+                f"Local collections: {', '.join(local_collections)}.",
+            )
+
+        # From this point on, we either have all remote or all local
+
+        if all_are_remote:
+            # Validate that all remote collections use the same LLM provider as this node
+            incompatible_collections = [
+                collection.name for collection in collections.values() if collection.llm_provider_id != llm_provider_id
+            ]
+            if incompatible_collections:
                 raise PydanticCustomError(
-                    "mixed_collection_types",
-                    "All collection indexes must be the same type (either all remote or all local). "
-                    f"Remote collections: {', '.join(remote_collections)}. "
-                    f"Local collections: {', '.join(local_collections)}.",
+                    "invalid_collection_index",
+                    f"All remote collection indexes must use the same LLM provider as the node. "
+                    f"Incompatible collections: {', '.join(incompatible_collections)}",
                 )
 
-            if all(is_remote_flags):
-                # Validate that all remote collections use the same LLM provider as this node
-                incompatible_collections = [
-                    collection.name
-                    for collection in collections.values()
-                    if collection.llm_provider_id != llm_provider_id
-                ]
-                if incompatible_collections:
+            # Check if provider has a limit on number of vector stores
+            llm_provider = get_llm_provider(llm_provider_id)
+            if llm_provider:
+                max_vector_stores = llm_provider.type_enum.max_vector_stores
+                if max_vector_stores and len(collections) > max_vector_stores:
                     raise PydanticCustomError(
-                        "invalid_collection_index",
-                        f"All collection indexes must use the same LLM provider as the node. "
-                        f"Incompatible collections: {', '.join(incompatible_collections)}",
+                        "vectorstore_limit_exceeded",
+                        f"{llm_provider.type_enum.value.label} hosted vectorstores are limited to "
+                        f"{max_vector_stores} per request. "
+                        f"You have selected {len(collections)} collection indexes. "
+                        f"Please select at most {max_vector_stores} collection indexes.",
                     )
-            else:
-                # local indexes must have a summary
-                missing_summary = [collection.name for collection in collections.values() if not collection.summary]
-                if missing_summary:
-                    raise PydanticCustomError(
-                        "collections_missing_summary",
-                        "When using multiple collection indexes, the collections must have a summary. "
-                        f"Collections missing summary: {', '.join(missing_summary)}",
-                    )
+
+        if len(collections) > 1 and not all_are_remote:
+            # local indexes must have a summary
+            missing_summary = [collection.name for collection in collections.values() if not collection.summary]
+            if missing_summary:
+                raise PydanticCustomError(
+                    "collections_missing_summary",
+                    "When using multiple collection indexes, the collections must have a summary. "
+                    f"Collections missing summary: {', '.join(missing_summary)}",
+                )
 
         return value
 
-    def _process(self, state: PipelineState) -> PipelineState:
-        return execute_sub_agent(self, state)
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
+        return execute_sub_agent(self, context)
 
 
 class SendEmail(PipelineNode, OutputMessageTagMixin):
@@ -634,12 +436,11 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
                 raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses") from None
         return value
 
-    def _process(self, state: PipelineState) -> PipelineState:
-        user_input = state["last_node_input"]
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         send_email_from_pipeline.delay(
-            recipient_list=self.recipient_list.split(","), subject=self.subject, message=user_input
+            recipient_list=self.recipient_list.split(","), subject=self.subject, message=context.input
         )
-        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=user_input)
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=context.input)
 
 
 class Passthrough(PipelineNode):
@@ -647,10 +448,8 @@ class Passthrough(PipelineNode):
 
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Do Nothing", can_add=False))
 
-    def _process(self, state: PipelineState) -> PipelineState:
-        return PipelineState.from_node_output(
-            node_name=self.name, node_id=self.node_id, output=state["last_node_input"]
-        )
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=context.input)
 
 
 class StartNode(Passthrough):
@@ -680,8 +479,8 @@ class BooleanNode(PipelineRouterNode):
         json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
-    def _process_conditional(self, state: PipelineState) -> tuple[Literal["true", "false"], bool]:
-        if self.input_equals == state["last_node_input"]:
+    def _process_conditional(self, context: "NodeContext") -> tuple[Literal["true", "false"], bool]:
+        if self.input_equals == context.input:
             return "true", False
         return "false", False
 
@@ -689,46 +488,7 @@ class BooleanNode(PipelineRouterNode):
         """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         return {"output_0": "true", "output_1": "false"}
 
-    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
-        if self.tag_output_message:
-            tag_name = f"{self.name}:{selected_route}"
-            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
-            if is_default_keyword:
-                tag_name += ":default"
-            return [(tag_name, tag_category)]
-        return []
-
-
-class RouterMixin(BaseModel):
-    keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
-    default_keyword_index: int = Field(default=0, json_schema_extra=UiSchema(widget=Widgets.none))
-    tag_output_message: bool = Field(
-        default=False,
-        description="Tag the output message with the selected route",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
-    )
-
-    @field_validator("keywords")
-    def ensure_keywords_exist(cls, value, info: FieldValidationInfo):
-        if not all(entry for entry in value):
-            raise PydanticCustomError("invalid_keywords", "Keywords cannot be empty")
-        if len(set(value)) != len(value):
-            raise PydanticCustomError("invalid_keywords", "Keywords must be unique")
-        return value
-
-    def _create_router_schema(self):
-        """Create a Pydantic model for structured router output"""
-        return create_model(
-            "RouterOutput", route=(Literal[tuple(self.keywords)], Field(description="Selected routing destination"))
-        )
-
-    def get_output_map(self):
-        """Returns a mapping of the form:
-        {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
-        """
-        return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
-
-    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
+    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:  # ty: ignore[invalid-method-override]
         if self.tag_output_message:
             tag_name = f"{self.name}:{selected_route}"
             tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
@@ -779,18 +539,20 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             return self
         except ValidationError as e:
             raise PydanticCustomError(
-                "invalid_prompt", e.error_dict["prompt"][0].message, {"field": "prompt"}
+                "invalid_prompt",
+                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable]
+                {"field": "prompt"},
             ) from None
 
-    def _process_conditional(self, state: PipelineState):
+    def _process_conditional(self, context: "NodeContext"):
         default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
-        session: ExperimentSession = state["experiment_session"]
-        node_input = state["last_node_input"]
+        node_input = context.input
+        session = context.session
         extra_prompt_context = {
-            "temp_state": state.get("temp_state", {}),
-            "session_state": session.state or {},
+            "temp_state": context.state.temp,
+            "session_state": context.state.session_state,
         }
-        participant_data = state.get("participant_data") or {}
+        participant_data = context.state.participant_data or {}
         template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
         system_message = get_system_message(
             prompt_template=f"{self.prompt}\nThe default routing destination is: {default_keyword}",
@@ -811,15 +573,19 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         is_default_keyword = False
         try:
-            context = {"messages": [HumanMessage(content=node_input)]}
-            result = agent.invoke(context, config=self._config)
+            agent_input = {"messages": [HumanMessage(content=node_input)]}
+            result = agent.invoke(agent_input, config=self._config)
             structured_response = result["structured_response"]
-            keyword = structured_response.route
+            keyword = structured_response.route.upper()  # ensure case-insensitive matching
         except PydanticValidationError:
             keyword = None
         except OpenAIRefusalError:
             keyword = default_keyword
             is_default_keyword = True
+        except StructuredOutputValidationError:
+            logger.exception("Structured output validation error in RouterNode")
+            keyword = None
+
         if not keyword:
             keyword = default_keyword
             is_default_keyword = True
@@ -853,16 +619,16 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
     )
     route_key: str = Field(..., description="The key in the data to use for routing")
 
-    def _process_conditional(self, state: PipelineState):
+    def _process_conditional(self, context: "NodeContext"):
         from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 
         match self.data_source:
             case self.DataSource.participant_data:
-                data = ParticipantDataProxy.from_state(state).get()
+                data = context.state.participant_data
             case self.DataSource.temp_state:
-                data = state.get("temp_state") or {}
+                data = context.state.temp or {}
             case self.DataSource.session_state:
-                data = state.get("session_state") or {}
+                data = context.state.session_state or {}
 
         formatted_key = f"{{data.{self.route_key}}}"
         try:
@@ -870,120 +636,11 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
         except KeyError:
             result = ""
 
-        result_lower = result.lower()
+        result_upper = result.upper()
         for keyword in self.keywords:
-            if keyword.lower() == result_lower:
+            if keyword == result_upper:
                 return keyword, False
         return self.keywords[self.default_keyword_index], True
-
-
-class ExtractStructuredDataNodeMixin:
-    def _prompt_chain(self, reference_data):
-        template = (
-            "Extract user data using the current user data and conversation history as reference. Use JSON output."
-            "\nCurrent user data:"
-            "\n{reference_data}"
-            "\nConversation history:"
-            "\n{input}"
-            "The conversation history should carry more weight in the outcome. It can change the user's current data"
-        )
-        prompt = PromptTemplate.from_template(template=template)
-        return (
-            {"input": RunnablePassthrough()}
-            | RunnablePassthrough.assign(reference_data=RunnableLambda(lambda x: reference_data))
-            | prompt
-        )
-
-    def extraction_chain(self, tool_class, reference_data):
-        return self._prompt_chain(reference_data) | super().get_chat_model().with_structured_output(tool_class)
-
-    def _process(self, state: PipelineState) -> PipelineState:
-        ToolClass = self.get_tool_class(json.loads(self.data_schema))
-        reference_data = self.get_reference_data(state)
-        prompt_token_count = self._get_prompt_token_count(reference_data, ToolClass.model_json_schema())
-        message_chunks = self.chunk_messages(state["last_node_input"], prompt_token_count=prompt_token_count)
-
-        new_reference_data = reference_data
-        for message_chunk in message_chunks:
-            chain = self.extraction_chain(tool_class=ToolClass, reference_data=new_reference_data)
-            output = chain.invoke(message_chunk, config=self._config)
-            output = output.model_dump()
-            # TOOO: tracing
-            # self.logger.info(
-            #     f"Chunk {idx}",
-            #     input=f"\nReference data:\n{new_reference_data}\nChunk data:\n{message_chunk}\n\n",
-            #     output=f"\nExtracted data:\n{output}",
-            # )
-            new_reference_data = self.update_reference_data(output, reference_data)
-
-        return self.get_node_output(state, new_reference_data)
-
-    def get_node_output(self, state, output_data) -> PipelineState:
-        raise NotImplementedError()
-
-    def get_reference_data(self, state):
-        return ""
-
-    def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:
-        return new_data
-
-    def _get_prompt_token_count(self, reference_data: dict | str, json_schema: dict) -> int:
-        llm = super().get_chat_model()
-        prompt_chain = self._prompt_chain(reference_data)
-        # If we invoke the chain with an empty input, we get the prompt without the conversation history, which
-        # is what we want.
-        output = prompt_chain.invoke(input="")
-        json_schema_tokens = llm.get_num_tokens(json.dumps(json_schema))
-        return llm.get_num_tokens(output.text) + json_schema_tokens
-
-    def chunk_messages(self, input: str, prompt_token_count: int) -> list[str]:
-        """Chunk messages using a splitter that considers the token count.
-        Strategy:
-        - chunk_size (in tokens) = The LLM's token limit - prompt_token_count
-        - chunk_overlap is chosen to be 20%
-
-        Note:
-        Since we don't know the token limit of the LLM, we assume it to be 8192.
-        """
-        llm_provider_model = get_llm_provider_model(self.llm_provider_model_id)
-        model_token_limit = llm_provider_model.max_token_limit
-        overlap_percentage = 0.2
-        chunk_size_tokens = model_token_limit - prompt_token_count
-        overlap_tokens = int(chunk_size_tokens * overlap_percentage)
-        # TODO: tracing
-        # self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
-
-        try:
-            encoding = tiktoken.encoding_for_model(llm_provider_model.name)
-            encoding_name = encoding.name
-        except KeyError:
-            # The same encoder we use for llm.get_num_tokens_from_messages
-            encoding_name = "gpt2"
-
-        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-            encoding_name=encoding_name,
-            chunk_size=chunk_size_tokens,
-            chunk_overlap=overlap_tokens,
-        )
-
-        return text_splitter.split_text(input)
-
-    def get_tool_class(self, data: dict):
-        return dict_to_json_schema(data)
-
-
-class StructuredDataSchemaValidatorMixin:
-    @field_validator("data_schema")
-    def validate_data_schema(cls, value):
-        try:
-            parsed_value = json.loads(value)
-        except json.JSONDecodeError as e:
-            raise PydanticCustomError("invalid_schema", "Invalid schema") from e
-
-        if not isinstance(parsed_value, dict) or len(parsed_value) == 0:
-            raise PydanticCustomError("invalid_schema", "Invalid schema")
-
-        return value
 
 
 class ExtractStructuredData(
@@ -1005,7 +662,7 @@ class ExtractStructuredData(
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
 
-    def get_node_output(self, state, output_data) -> PipelineState:
+    def get_node_output(self, context, output_data) -> PipelineState:
         output = json.dumps(output_data)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
@@ -1030,11 +687,11 @@ class ExtractParticipantData(
     )
     key_name: str = ""
 
-    def get_reference_data(self, state) -> Any:
+    def get_reference_data(self, context) -> Any:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data
         corresponding to that key will be returned insteadg
         """
-        data = state.get("participant_data") or {}
+        data = context.state.participant_data or {}
         if self.key_name:
             return data.get(self.key_name, "")
         return data
@@ -1047,12 +704,12 @@ class ExtractParticipantData(
         # if reference data is a string or list, we cannot merge, so let's override
         return new_data
 
-    def get_node_output(self, state, output_data) -> PipelineState:
+    def get_node_output(self, context, output_data) -> PipelineState:
         if self.key_name:
             output_data = {self.key_name: output_data}
 
         return PipelineState.from_node_output(
-            node_name=self.name, node_id=self.node_id, output=state["last_node_input"], participant_data=output_data
+            node_name=self.name, node_id=self.node_id, output=context.input, participant_data=output_data
         )
 
 
@@ -1092,18 +749,16 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             if extra_vars:
                 raise PydanticCustomError("invalid_input_formatter", "Only {input} is allowed")
 
-    def _process(self, state: PipelineState) -> PipelineState:
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         try:
             assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
         except OpenAiAssistant.DoesNotExist:
             raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
 
-        session: ExperimentSession | None = state.get("experiment_session")
+        session = context.session
         runnable = self._get_assistant_runnable(assistant, session=session)
-        attachments = self._get_attachments(state)
-        chain_output: ChainOutput = runnable.invoke(
-            state["last_node_input"], config=self._config, attachments=attachments
-        )
+        attachments = [att for att in context.attachments if att.upload_to_assistant]
+        chain_output: ChainOutput = runnable.invoke(context.input, config=self._config, attachments=attachments)
         output = chain_output.output
 
         return PipelineState.from_node_output(
@@ -1113,9 +768,6 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             input_message_metadata=runnable.history_manager.input_message_metadata or {},
             output_message_metadata=runnable.history_manager.output_message_metadata or {},
         )
-
-    def _get_attachments(self, state) -> list:
-        return [att for att in state.get("temp_state", {}).get("attachments", []) if att.upload_to_assistant]
 
     def _get_assistant_runnable(self, assistant: OpenAiAssistant, session: ExperimentSession):
         history_manager = AssistantPipelineHistoryManager()
@@ -1127,17 +779,6 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             if assistant.tools_enabled:
                 logging.info("Tools have been disabled")
             return AssistantChat(adapter=adapter, history_manager=history_manager)
-
-
-CODE_NODE_DOCS = f"{settings.DOCUMENTATION_BASE_URL}{settings.DOCUMENTATION_LINKS['node_code']}"
-DEFAULT_FUNCTION = f"""# You must define a main function, which takes the node input as a string.
-# Return a string to pass to the next node.
-
-# Learn more about Python nodes at {CODE_NODE_DOCS}
-
-def main(input: str, **kwargs) -> str:
-    return input
-"""
 
 
 class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMixin):
@@ -1164,13 +805,24 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
     def _get_function_args(cls) -> list[str]:
         return ["input", "**kwargs"]
 
-    def _process(self, state: PipelineState) -> PipelineState | Command:
+    @field_validator("code", mode="before")
+    def check_reserved_session_state_keys(cls, value: str):
+        for key in settings.RESERVED_SESSION_STATE_KEYS:
+            pattern = re.compile(rf'set_session_state_key\([\s*"\']*{re.escape(key)}[\s*"\']')
+            if pattern.search(value):
+                raise PydanticCustomError(
+                    "reserved_key_used",
+                    f"The key '{key}' is a reserved session state key and is read-only.",
+                )
+        return value
+
+    def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState | Command:
         output_state = PipelineState()
         try:
             result = self.compile_and_execute_code(
-                additional_globals=self._get_custom_functions(state, output_state),
-                input=state["last_node_input"],
-                node_inputs=state["node_inputs"],
+                additional_globals=self._get_custom_functions(state, context, output_state),
+                input=context.input,
+                node_inputs=context.inputs,
             )
         except WaitForNextInput:
             return Command(goto=END)
@@ -1189,10 +841,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             ),
         )
 
-    def _get_custom_functions(self, state: PipelineState, output_state: PipelineState) -> dict:
+    def _get_custom_functions(self, state: PipelineState, context: "NodeContext", output_state: PipelineState) -> dict:
         """
         Args:
             state: The input state. Do not modify this state.
+            context: The NodeContext for read access.
             output_state: An empty state dict to which state modifications should be made.
         """
         pipeline_state = PipelineState.clone(state)
@@ -1203,11 +856,22 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         output_state["session_state"] = pipeline_state.get("session_state") or {}
 
         # use 'output_state' so that we capture any updates
-        participant_data_proxy = ParticipantDataProxy(output_state, state.get("experiment_session"))
+        participant_data_proxy = ParticipantDataProxy(output_state, context.session)
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
+        session = context.session
+        team = session.team if session else None
+
+        http_client = RestrictedHttpClient(team=team)
+
+        # We create a PipelineAccessor wrapping a *cloned* state with the current node
+        # injected into outputs (line above). The clone also isolates user code mutations
+        # from the real pipeline state. This is an intentional bypass of the NodeContext
+        # abstraction for CodeNode's sandboxed execution environment.
+        pipeline_accessor = PipelineAccessor(pipeline_state)
         return {
+            "http": http_client,
             "get_participant_data": participant_data_proxy.get,
             "set_participant_data": participant_data_proxy.set,
             "set_participant_data_key": participant_data_proxy.set_key,
@@ -1218,20 +882,58 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "set_temp_state_key": self._set_temp_state_key(output_state),
             "get_session_state_key": self._get_session_state_key(output_state),
             "set_session_state_key": self._set_session_state_key(output_state),
-            "get_selected_route": pipeline_state.get_selected_route,
-            "get_node_path": pipeline_state.get_node_path,
-            "get_all_routes": pipeline_state.get_all_routes,
+            "get_selected_route": pipeline_accessor.get_selected_route,
+            "get_node_path": pipeline_accessor.get_node_path,
+            "get_all_routes": pipeline_accessor.get_all_routes,
+            "add_file_attachment": self._add_file_attachment(context, output_state),
             "add_message_tag": output_state.add_message_tag,
             "add_session_tag": output_state.add_session_tag,
-            "get_node_output": pipeline_state.get_node_output_by_name,
+            "get_node_output": pipeline_accessor.get_node_output,
             # control flow
             "abort_with_message": self._abort_pipeline(),
-            "require_node_outputs": self._require_node_outputs(state),
+            "require_node_outputs": self._require_node_outputs(context),
             "wait_for_next_input": self.wait_for_next_input,
         }
 
+    def _add_file_attachment(self, context, output_state: PipelineState):
+        def add_file_attachment(filename: str, content: bytes, content_type: str | None = None):
+            """Attach a file to the AI response message.
+
+            Args:
+                filename: The name of the file (e.g. "report.pdf")
+                content: The file content as bytes
+                content_type: Optional MIME type. Auto-detected from filename if not provided.
+            """
+            from io import BytesIO
+
+            from apps.files.models import File, FilePurpose
+
+            if not isinstance(content, bytes):
+                raise CodeNodeRunError("'content' must be bytes")
+
+            session = context.session
+            if not session:
+                raise CodeNodeRunError("Cannot attach files without an active session")
+
+            file_obj = BytesIO(content)
+            file = File.create(
+                filename=filename,
+                file_obj=file_obj,
+                team_id=session.team_id,
+                content_type=content_type,
+                purpose=FilePurpose.MESSAGE_MEDIA,
+            )
+
+            session.chat.attach_files(attachment_type="code_interpreter", files=[file])
+
+            metadata = output_state.setdefault("output_message_metadata", {})
+            generated_files = metadata.setdefault("generated_files", [])
+            generated_files.append(file.id)
+
+        return add_file_attachment
+
     def _abort_pipeline(self):
-        def abort_pipeline(message, tag_name: str = None):
+        def abort_pipeline(message, tag_name: str | None = None):
             """Calling this will terminate the pipeline execution. No further nodes will get executed in
             any branch of the pipeline graph.
 
@@ -1241,7 +943,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         return abort_pipeline
 
-    def _require_node_outputs(self, state: PipelineState):
+    def _require_node_outputs(self, context):
         """A helper function to require inputs from a specific node"""
 
         def require_node_outputs(*node_names):
@@ -1255,7 +957,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             if not all(isinstance(name, str) for name in node_names):
                 raise CodeNodeRunError("Node names passed to 'require_node_outputs' must be a string")
             for node_name in node_names:
-                if node_name not in state["outputs"]:
+                if not context.pipeline.has_node_output(node_name):
                     raise WaitForNextInput(f"Node '{node_name}' has not produced any output yet")
 
         return require_node_outputs

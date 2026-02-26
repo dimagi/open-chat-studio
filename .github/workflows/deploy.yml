@@ -85,7 +85,7 @@ jobs:
         description: "Deploying ${{ github.head_ref || github.ref }} to AWS ${{ env.DEPLOY_ENV }}"
 
     - name: configure aws credentials
-      uses: aws-actions/configure-aws-credentials@v5.1.1
+      uses: aws-actions/configure-aws-credentials@v6.0.0
       with:
         role-to-assume: "arn:aws:iam::${{ fromJSON(vars.AWS_ACCOUNT)[env.DEPLOY_ENV] }}:role/github_deploy"
         role-session-name: GithubDeploy
@@ -123,7 +123,7 @@ jobs:
 
     - name: Update ECS task def for Django web container
       id: django-web-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.2
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.3
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-Django
         container-name: web
@@ -131,7 +131,7 @@ jobs:
 
     - name: Update ECS task def for Migration container
       id: migration-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.2
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.3
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-Migration
         container-name: migrate
@@ -139,7 +139,7 @@ jobs:
 
     - name: Update ECS task def for Celery worker container
       id: celery-worker-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.2
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.3
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryWorkerTask
         container-name: celery-worker
@@ -147,7 +147,7 @@ jobs:
 
     - name: Update ECS task def for Celery beat container
       id: celery-beat-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.2
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.3
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryBeatTask
         container-name: celery-beat

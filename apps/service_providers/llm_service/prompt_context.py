@@ -1,4 +1,4 @@
-from typing import Any, Self
+from typing import Any
 
 from django.utils import timezone
 
@@ -9,11 +9,11 @@ class PromptTemplateContext:
     def __init__(
         self,
         session,
-        source_material_id: int = None,
-        collection_id: int = None,
-        collection_index_ids: list[int] = None,
-        extra: dict = None,
-        participant_data: dict = None,
+        source_material_id: int | None = None,
+        collection_id: int | None = None,
+        collection_index_ids: list[int] | None = None,
+        extra: dict | None = None,
+        participant_data: dict | None = None,
     ):
         self.session = session
         self.source_material_id = source_material_id
@@ -190,17 +190,13 @@ class ParticipantDataProxy:
         self._participant_data = pipeline_state.setdefault("participant_data", {})
         self._scheduled_messages = None
 
-    @classmethod
-    def from_state(cls, pipeline_state) -> Self:
-        return cls(pipeline_state, pipeline_state.get("experiment_session"))
-
     def get(self):
         """Returns the current participant's data as a dictionary."""
         return self.session.participant.global_data | self._participant_data
 
     def set(self, data):
         """Updates the current participant's data with the provided dictionary.
-        This will overwrite any existing data."""
+        This will only overwrite any matching keys."""
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary")
         self._participant_data.update(data)

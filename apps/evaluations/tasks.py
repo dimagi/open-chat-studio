@@ -1,5 +1,5 @@
+import contextlib
 import csv
-import logging
 import math
 from collections import defaultdict
 from collections.abc import Iterable
@@ -8,6 +8,7 @@ from io import StringIO
 from typing import cast
 
 from celery import chord, shared_task
+from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.utils import timezone
 from taskbadger.celery import Task as TaskbadgerTask
@@ -35,7 +36,7 @@ from apps.teams.utils import current_team
 
 EVAL_SESSIONS_TTL_DAYS = 30
 
-logger = logging.getLogger("ocs.evaluations")
+logger = get_task_logger("ocs.evaluations")
 
 
 def _save_dataset_error(dataset: EvaluationDataset, error_message: str):
@@ -46,7 +47,7 @@ def _save_dataset_error(dataset: EvaluationDataset, error_message: str):
     dataset.save(update_fields=["status", "error_message", "job_id"])
 
 
-@shared_task(base=TaskbadgerTask, rate_limit="0.5/s")
+@shared_task(base=TaskbadgerTask)
 def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     """
     Run all evaluations over a single message.
@@ -125,13 +126,16 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
         # Extract the input message content
         input_content = message.input.get("content", "")
 
+        participant_data = message.participant_data | {}
+        participant_data = session.participant.global_data | participant_data
+
         # Call the bot with the evaluation message and session
         bot_response = handle_evaluation_message(
             experiment_version=experiment,
             experiment_channel=evaluation_channel,
             message_text=input_content,
             session=session,
-            participant_data=message.participant_data,
+            participant_data=participant_data,
         )
         response_content = bot_response.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
@@ -646,11 +650,15 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
     csv_data: List of dictionaries representing CSV rows
     column_mappings: Dictionary mapping column names to evaluator names
     """
+    progress_recorder = ProgressRecorder(self)
+    return _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings)
+
+
+def _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings=None):
+    from apps.evaluations.aggregation import compute_aggregates_for_run
 
     if not csv_data:
         return {"success": False, "error": "CSV file is empty"}
-
-    progress_recorder = ProgressRecorder(self)
 
     try:
         evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id, team_id=team_id)
@@ -659,6 +667,8 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
             stats = process_evaluation_results_csv_rows(
                 evaluation_run, csv_data, column_mappings or {}, progress_recorder, team
             )
+            # Re-compute aggregates after updating results
+            compute_aggregates_for_run(evaluation_run)
             progress_recorder.set_progress(100, 100, "Upload complete")
             return {
                 "success": True,
@@ -739,6 +749,23 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
                         updated_output["result"] = {}
 
                     current_value = updated_output["result"].get(result_key)
+
+                    if current_value is not None and value:
+                        # attempt to preserve types
+                        if isinstance(current_value, int):
+                            with contextlib.suppress(ValueError):
+                                value = int(value)
+                        elif isinstance(current_value, float):
+                            with contextlib.suppress(ValueError):
+                                value = float(value)
+                    elif value:
+                        # optimistically try to convert new values
+                        try:
+                            value = int(value)
+                        except ValueError:
+                            with contextlib.suppress(ValueError):
+                                value = float(value)
+
                     if current_value != value:
                         updated_output["result"][result_key] = value
                         evaluation_result.output = updated_output

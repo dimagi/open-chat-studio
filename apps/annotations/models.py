@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import FieldDoesNotExist
 from django.db import models, transaction
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -102,12 +103,12 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
     tags = TaggableManager(through=CustomTaggedItem)
     _skipped_category_tags: ClassVar[list] = [TagCategories.MEDIA_TYPE.value]  # Tag categories with special treatment
 
-    def add_tags(self, tags: list[str], team: Team, added_by: CustomUser = None):
+    def add_tags(self, tags: list[str], team: Team, added_by: CustomUser | None = None):
         tag_objs = Tag.objects.filter(team=team, name__in=tags)
         for tag in tag_objs:
             self.add_tag(tag, team, added_by)
 
-    def create_and_add_tag(self, tag: str, team: Team, tag_category: TagCategories, added_by: CustomUser = None):
+    def create_and_add_tag(self, tag: str, team: Team, tag_category: TagCategories, added_by: CustomUser | None = None):
         tag, _ = Tag.objects.get_or_create(
             name=tag,
             team=team,
@@ -116,7 +117,7 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
         )
         self.add_tag(tag, team=team, added_by=added_by)
 
-    def add_tag(self, tag: Tag, team: Team, added_by: CustomUser = None):
+    def add_tag(self, tag: Tag, team: Team, added_by: CustomUser | None = None):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
 
     def user_tag_names(self):
@@ -175,9 +176,12 @@ class UserComment(BaseTeamModel):
 
     @transaction.atomic()
     @staticmethod
-    def add_for_model(model, comment: str, added_by: CustomUser, team: Team) -> "UserComment":
-        if model._meta.get_field("comments"):
-            UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
+    def add_for_model(model, comment: str, added_by: CustomUser, team: Team) -> "UserComment | None":
+        try:
+            model._meta.get_field("comments")
+        except FieldDoesNotExist:
+            return None
+        return UserComment.objects.create(content_object=model, user=added_by, comment=comment, team=team)
 
     def __str__(self):
         return f'<{self.user.username}>: "{self.comment}"'

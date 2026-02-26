@@ -1,7 +1,6 @@
 from django.urls import include, path
 from django.views.generic import RedirectView
 
-from apps.experiments.views.experiment_routes import CreateExperimentRoute, DeleteExperimentRoute, EditExperimentRoute
 from apps.generics.urls import make_crud_urls
 
 from . import views
@@ -41,7 +40,6 @@ urlpatterns = [
     # experiments - redirect to chatbots
     path("new/", RedirectView.as_view(pattern_name="chatbots:new"), name="new"),
     path("e/<int:experiment_id>/trends/data", views.trends_data, name="trends_data"),
-    path("e/<int:experiment_id>/sessions-table/", views.ExperimentSessionsTableView.as_view(), name="sessions-list"),
     path("e/<int:experiment_id>/versions/", views.ExperimentVersionsTableView.as_view(), name="versions-list"),
     path(
         "e/<int:experiment_id>/versions/archive/<int:version_number>/",
@@ -131,22 +129,6 @@ urlpatterns = [
     # public link
     path("e/<uuid:experiment_id>/start/", views.start_session_public, name="start_session_public"),
     path("e/<uuid:experiment_id>/embed/start/", views.start_session_public_embed, name="start_session_public_embed"),
-    # Experiment Routes
-    path(
-        "e/<int:experiment_id>/experiment_routes/<str:type>/new",
-        CreateExperimentRoute.as_view(),
-        name="experiment_route_new",
-    ),
-    path(
-        "e/<int:experiment_id>/experiment_routes/<int:pk>/edit",
-        EditExperimentRoute.as_view(),
-        name="experiment_route_edit",
-    ),
-    path(
-        "e/<int:experiment_id>/experiment_routes/<int:pk>/delete",
-        DeleteExperimentRoute.as_view(),
-        name="experiment_route_delete",
-    ),
     path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
     path("<int:session_id>/image/<int:pk>/html/", views.get_image_html, name="get_image_html"),
     path(
@@ -176,7 +158,6 @@ urlpatterns = [
     ),
 ]
 
-urlpatterns.extend(make_crud_urls(views, "SafetyLayer", "safety"))
 urlpatterns.extend(make_crud_urls(views, "SourceMaterial", "source_material"))
 urlpatterns.extend(make_crud_urls(views, "Survey", "survey"))
 urlpatterns.extend(make_crud_urls(views, "ConsentForm", "consent"))

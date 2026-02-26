@@ -197,7 +197,7 @@ def get_code_error_message(filename: str, code: str) -> str:
             line_number = error_frame.lineno
 
             source_lines = code.splitlines()
-            if 1 <= line_number <= len(source_lines):
+            if line_number is not None and 1 <= line_number <= len(source_lines):
                 # Show context (lines around the error)
                 start = max(0, line_number - 3)
                 end = min(len(source_lines), line_number + 2)

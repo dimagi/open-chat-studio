@@ -1,11 +1,10 @@
-import logging
 import time
 
 from celery.app import shared_task
+from celery.utils.log import get_task_logger
 from django.core.files.base import ContentFile
 from django.utils import timezone
 from field_audit.models import AuditAction
-from langchain_core.messages import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.datamodels import Attachment, BaseMessage
@@ -14,12 +13,13 @@ from apps.chat.channels import WebChannel
 from apps.experiments.export import filtered_export_to_csv, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.files.models import File
+from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.taskbadger import update_taskbadger_data
 
-logger = logging.getLogger("ocs.experiments")
+logger = get_task_logger("ocs.experiments")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
@@ -42,7 +42,7 @@ def async_create_experiment_version(
     self, experiment_id: int, version_description: str | None = None, make_default: bool = False
 ):
     try:
-        experiment = Experiment.objects.prefetch_related("assistant", "pipeline").get(id=experiment_id)
+        experiment = Experiment.objects.prefetch_related("pipeline").get(id=experiment_id)
         with current_team(experiment.team):
             experiment.create_new_version(version_description, make_default)
     finally:
@@ -51,7 +51,12 @@ def async_create_experiment_version(
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def get_response_for_webchat_task(
-    self, experiment_session_id: int, experiment_id: int, message_text: str, attachments: list | None = None
+    self,
+    experiment_session_id: int,
+    experiment_id: int,
+    message_text: str,
+    attachments: list | None = None,
+    context: dict | None = None,
 ) -> dict:
     response = {"response": None, "message_id": None, "error": None}
     experiment_session = ExperimentSession.objects.select_related("experiment", "experiment__team").get(
@@ -59,6 +64,13 @@ def get_response_for_webchat_task(
     )
     try:
         experiment = Experiment.objects.get(id=experiment_id)
+
+        if context:
+            session_state = experiment_session.state or {}
+            session_state["remote_context"] = context
+            experiment_session.state = session_state
+            experiment_session.save(update_fields=["state"])
+
         web_channel = WebChannel(
             experiment,
             experiment_session.experiment_channel,
@@ -114,6 +126,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
     source_material_material = source_material.material if source_material else ""
 
     llm = llm_service.get_chat_model(llm_provider_model.name, temperature=float(data_dict["temperature"]))
+    llm = with_llm_retry(llm)
     conversation = create_conversation(data_dict["prompt"], source_material_material, llm)
     conversation.load_memory_from_messages(_convert_prompt_builder_history(messages_history))
     input_formatter = data_dict["inputFormatter"]
@@ -151,6 +164,9 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
 
 
 def _convert_prompt_builder_history(messages_history):
+    # lazy import to avoid import on startup
+    from langchain_core.messages import AIMessage, HumanMessage
+
     history = []
     for message in messages_history:
         if "message" not in message:

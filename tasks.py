@@ -1,9 +1,10 @@
 import platform
+import re
 import textwrap
 import time
 from pathlib import Path
 
-import requests
+import httpx
 from invoke import Context, Exit, call, task
 from packaging.version import Version
 from termcolor import cprint
@@ -101,7 +102,7 @@ def setup_dev_env(c: Context, step=False):
     if not step or _confirm("\tOK?", _exit=False):
         docker(c, command="up")
 
-    _run_with_confirm(c, "Install pre-commit hooks", "pre-commit install --install-hooks", step)
+    _run_with_confirm(c, "Install pre-commit hooks", "prek install -f", step)
 
     if not Path(".env").exists():
         cprint("\nCreating .env file", "green")
@@ -144,13 +145,15 @@ def ngrok_url(c: Context):
     """Start ngrok tunnel for local development and return public URL."""
     #  You need to have ngrok installed on your system
     c.run("ngrok http 8000", echo=True, asynchronous=True)
-    while True:
+    tries = 4
+    while tries > 0:
         try:
-            response = requests.get("http://localhost:4040/api/tunnels", timeout=10)
+            response = httpx.get("http://localhost:4040/api/tunnels", timeout=10)
             if response.status_code == 200:
                 public_url = response.json()["tunnels"][0]["public_url"].split("https://")[1]
                 break
         except Exception:
+            tries -= 1
             time.sleep(1)
             print("Trying to a public address from ngrok")
 
@@ -158,17 +161,39 @@ def ngrok_url(c: Context):
     return public_url
 
 
+def _get_portless_name(c: Context) -> str:
+    result = c.run("portless list", hide=True, warn=True)
+    used_names = set(re.findall(r"http://(\w+)\.localhost", result.stdout)) if result.ok else set()
+    name = "ocs"
+    counter = 1
+    while name in used_names:
+        name = f"ocs{counter}"
+        counter += 1
+    return name
+
+
 @task(aliases=["django"], help={"public": "Expose server publicly via ngrok tunnel"})
 def runserver(c: Context, public=False):
     """Start Django development server (alias: inv django)."""
-    runserver_command = "python manage.py runserver"
+    has_portless = c.run("which portless", hide=True, warn=True).ok
+    if has_portless:
+        portless_name = _get_portless_name(c)
+        runserver_command = f"portless {portless_name} uv run manage.py runserver"
+    else:
+        runserver_command = "python manage.py runserver"
     if public:
         public_url = ngrok_url(c)
+        env_vars = [
+            "CSRF_TRUSTED_ORIGINS='https://*.ngrok.io,https://*.ngrok-free.app'",
+            f"SITE_URL_ROOT='{public_url}'",
+        ]
         if platform.system() == "Windows":
-            runserver_command = f"powershell -Command \"$env:SITE_URL_ROOT='{public_url}'; {runserver_command}\""
+            env = "; ".join([f"$env:{var}" for var in env_vars])
+            runserver_command = f'powershell -Command "{env}; {runserver_command}"'
             pty = False
         else:
-            runserver_command = f"SITE_URL_ROOT={public_url} {runserver_command}"
+            env = " ".join(env_vars)
+            runserver_command = f"{env} {runserver_command}"
             pty = True
     else:
         pty = True

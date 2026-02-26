@@ -1,4 +1,5 @@
 import factory
+import factory.django
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.utils.factories import experiment as experiment_factory

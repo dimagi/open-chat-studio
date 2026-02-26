@@ -15,7 +15,7 @@ from apps.evaluations.utils import get_evaluator_type_display
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 from apps.generics.actions import chip_action
-from apps.generics.tables import TemplateColumnWithCustomHeader
+from apps.generics.tables import ArrayColumn, TemplateColumnWithCustomHeader
 from apps.teams.utils import get_slug_for_team
 
 
@@ -259,7 +259,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
     last_message = columns.Column(accessor="last_activity_at", verbose_name="Last Message", orderable=True)
-    versions = columns.Column(verbose_name="Versions", accessor="versions_list", orderable=False)
+    versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions", orderable=False)
     message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
     session = actions.ActionsColumn(
         actions=[
@@ -282,6 +282,17 @@ class EvaluationSessionsSelectionTable(tables.Table):
         attrs = {"class": "table w-full"}
         orderable = False
         empty_text = "No sessions available for selection."
+
+
+def _row_class_factory(table, record):
+    class_defaults = settings.DJANGO_TABLES2_ROW_ATTRS["class"]
+    if (
+        hasattr(table, "highlight_message_id")
+        and table.highlight_message_id
+        and record.id == table.highlight_message_id
+    ):
+        return f"{class_defaults} bg-yellow-100 dark:bg-yellow-900/20"
+    return class_defaults
 
 
 class DatasetMessagesTable(tables.Table):
@@ -323,6 +334,11 @@ class DatasetMessagesTable(tables.Table):
         verbose_name="Source",
         orderable=False,
     )
+    link = TemplateColumn(
+        template_name="evaluations/dataset_message_link_column.html",
+        verbose_name="",
+        orderable=False,
+    )
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(
@@ -339,9 +355,15 @@ class DatasetMessagesTable(tables.Table):
         ]
     )
 
+    def __init__(self, *args, highlight_message_id=None, dataset_id=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.highlight_message_id = highlight_message_id
+        self.dataset_id = dataset_id
+
     class Meta:
         model = EvaluationMessage
         fields = (
+            "link",
             "source",
             "human_message_content",
             "ai_message_content",
@@ -351,6 +373,9 @@ class DatasetMessagesTable(tables.Table):
             "session_state",
             "actions",
         )
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        row_attrs = {
+            **settings.DJANGO_TABLES2_ROW_ATTRS,
+            "class": _row_class_factory,
+        }
         orderable = False
         empty_text = "No messages in this dataset yet."

@@ -33,8 +33,10 @@ from apps.documents.models import (
     Collection,
     CollectionFile,
     DocumentSource,
+    DocumentSourceSyncLog,
     FileStatus,
     SourceType,
+    SyncStatus,
 )
 from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import sync_document_source_task
@@ -57,7 +59,7 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
     template_name = "generic/object_home.html"
     permission_required = "documents.view_collection"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "collections",
             "title": "Collections",
@@ -83,7 +85,9 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
 def single_collection_home(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
 
-    document_sources = DocumentSource.objects.working_versions_queryset().filter(collection=collection)
+    document_sources = (
+        DocumentSource.objects.working_versions_queryset().filter(collection=collection).prefetch_related("sync_logs")
+    )
     collection_files_count = CollectionFile.objects.filter(collection=collection).count()
     manually_uploaded_files_count = CollectionFile.objects.filter(collection=collection).is_manually_uploaded().count()
     context = {
@@ -104,7 +108,7 @@ def single_collection_home(request, team_slug: str, pk: int):
 
 
 @login_and_team_required
-def collection_files_view(request, team_slug: str, collection_id: int, document_source_id: int = None):
+def collection_files_view(request, team_slug: str, collection_id: int, document_source_id: int | None = None):
     collection = get_object_or_404(Collection, id=collection_id, team__slug=team_slug)
     document_source = None
     if document_source_id:
@@ -154,7 +158,7 @@ class QueryView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin
     template_name = "documents/collection_query_view.html"
     permission_required = "documents.view_collection"
 
-    def get_context_data(
+    def get_context_data(  # ty: ignore[invalid-method-override]
         self,
         team_slug: str,
         pk: str,
@@ -295,6 +299,41 @@ def sync_document_source(request, team_slug: str, collection_id: int, pk: int):
             "document_source": document_source,
         },
     )
+
+
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+@require_http_methods(["GET"])
+def document_source_sync_logs(request, team_slug: str, collection_id: int, pk: int):
+    """View sync logs for a document source"""
+    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
+
+    sync_logs = DocumentSourceSyncLog.objects.filter(document_source=document_source)
+
+    # Filter by errors only if requested
+    show_errors_only = request.GET.get("errors_only") == "true"
+    if show_errors_only:
+        sync_logs = sync_logs.filter(status=SyncStatus.FAILED)
+
+    # Paginate logs
+    page = request.GET.get("page", 1)
+    paginator = Paginator(sync_logs, 10)
+    try:
+        paginated_logs = paginator.page(page)
+    except PageNotAnInteger:
+        paginated_logs = paginator.page(1)
+    except EmptyPage:
+        paginated_logs = paginator.page(paginator.num_pages)
+
+    context = {
+        "document_source": document_source,
+        "sync_logs": paginated_logs,
+        "show_errors_only": show_errors_only,
+        "collection": document_source.collection,
+        "team": request.team,
+    }
+
+    return render(request, "documents/partials/sync_logs_list.html", context)
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)

@@ -30,20 +30,24 @@ def fake_llm_service():
 
 
 @pytest.fixture()
-def session(fake_llm_service):
-    local_assistant = OpenAiAssistantFactory(assistant_id="assistant_1", tools=["fake_tool"])
-    session = ExperimentSessionFactory(experiment__assistant=local_assistant)
-    session.experiment.assistant.get_llm_service = lambda *args, **kwargs: fake_llm_service
-    return session
+def session():
+    return ExperimentSessionFactory()
+
+
+@pytest.fixture()
+def assistant(fake_llm_service):
+    assistant = OpenAiAssistantFactory(assistant_id="assistant_1", tools=["fake_tool"])
+    assistant.get_llm_service = lambda *args, **kwargs: fake_llm_service
+    return assistant
 
 
 @patch("openai.resources.beta.threads.runs.runs.Runs.submit_tool_outputs")
 @pytest.mark.django_db()
-def test_assistant_tool_response(submit_tool_outputs, session):
-    with configure_common_mocks(session) as run:
+def test_assistant_tool_response(submit_tool_outputs, session, assistant):
+    with configure_common_mocks(assistant) as run:
         submit_tool_outputs.return_value = run
         tool = _make_tool_for_testing("test tool output")
-        runnable = get_runnable(session, tool)
+        runnable = get_runnable(session, assistant, tool)
         result = runnable.invoke("test")
 
     assert result.output == "ai response"
@@ -66,16 +70,16 @@ def test_assistant_tool_response(submit_tool_outputs, session):
 @pytest.mark.parametrize(
     "builtin_tools", [(["code_interpreter"]), (["file_search"]), (["code_interpreter", "file_search"])]
 )
-def test_assistant_tool_artifact_response(create_run, create_message, create_files, session, builtin_tools):
-    session.experiment.assistant.builtin_tools = builtin_tools
+def test_assistant_tool_artifact_response(create_run, create_message, create_files, session, assistant, builtin_tools):
+    assistant.builtin_tools = builtin_tools
 
-    with configure_common_mocks(session) as run:
+    with configure_common_mocks(assistant) as run:
         create_run.return_value = run
 
         # mock the tool so that it returns an artifact. This should trigger the file upload workflow
         artifact = ToolArtifact(content=b"test artifact", name="test_artifact.txt", content_type="text/plain")
         tool = _make_tool_for_testing(("test response", artifact), response_format="content_and_artifact")
-        runnable = get_runnable(session, tool)
+        runnable = get_runnable(session, assistant, tool)
         create_files.return_value = Mock(id="file-123abc")
 
         result = runnable.invoke("test")
@@ -105,7 +109,7 @@ def test_assistant_tool_artifact_response(create_run, create_message, create_fil
 
 
 @contextmanager
-def configure_common_mocks(session):
+def configure_common_mocks(assistant):
     with (
         patch(
             "apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations"
@@ -116,7 +120,7 @@ def configure_common_mocks(session):
     ):
         get_output_with_annotations.return_value = ("ai response", {})
         thread_id = "test_thread_id"
-        assistant_id = session.experiment.assistant.assistant_id
+        assistant_id = assistant.assistant_id
         run = _create_run(
             assistant_id,
             thread_id,
@@ -147,10 +151,10 @@ def configure_common_mocks(session):
         yield run
 
 
-def get_runnable(session, tool):
-    with patch("apps.service_providers.llm_service.adapters.get_assistant_tools") as get_tools:
+def get_runnable(session, assistant, tool):
+    with patch("apps.chat.agent.tools.get_assistant_tools") as get_tools:
         get_tools.return_value = [tool]
-        assistant_adapter = AssistantAdapter.for_experiment(session.experiment, session)
+        assistant_adapter = AssistantAdapter(session, assistant, citations_enabled=True)
         history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
         runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)
     return runnable

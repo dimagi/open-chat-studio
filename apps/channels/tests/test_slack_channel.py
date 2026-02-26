@@ -42,9 +42,9 @@ def make_mock_file(name, content_type, size, file_data=b"filedata"):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.ChannelBase._get_bot_response")
-def test_handle_user_message(_get_bot_response, slack_channel, slack_service):
-    _get_bot_response.return_value = ChatMessage(content="Hi", message_type=ChatMessageType.AI), None
+@patch("apps.chat.bots.PipelineBot.process_input")
+def test_handle_user_message(bot_process_input, slack_channel, slack_service):
+    bot_process_input.return_value = ChatMessage(content="Hi", message_type=ChatMessageType.AI)
     session = SlackChannel.start_new_session(
         slack_channel.experiment,
         slack_channel,
@@ -80,7 +80,7 @@ def test_ad_hoc_bot_message(messaging_service, get_user_message, slack_channel):
 
 @pytest.fixture()
 def slack_channel(slack_provider) -> ExperimentChannel:
-    return ExperimentChannelFactory(
+    return ExperimentChannelFactory(  # ty: ignore[invalid-return-type]
         platform=ChannelPlatform.SLACK,
         messaging_provider=slack_provider,
         experiment__team=slack_provider.team,

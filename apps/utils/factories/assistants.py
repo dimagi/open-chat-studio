@@ -1,4 +1,5 @@
 import factory
+import factory.django
 
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 

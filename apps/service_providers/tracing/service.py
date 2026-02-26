@@ -16,9 +16,10 @@ from .base import TraceContext, Tracer
 from .callback import wrap_callback
 
 if TYPE_CHECKING:
-    from langchain.callbacks.base import BaseCallbackHandler
+    from langchain_core.callbacks.base import BaseCallbackHandler
 
     from apps.experiments.models import ExperimentSession
+    from apps.service_providers.tracing.base import SpanNotificationConfig
 
 
 logger = logging.getLogger("ocs.tracing")
@@ -53,7 +54,7 @@ class TracingService:
 
         tracers = []
         if experiment and experiment.id and experiment.team_id:
-            ocs_tracer = OCSTracer(experiment.id, experiment.team_id)
+            ocs_tracer = OCSTracer(experiment, experiment.team_id)
             tracers.append(ocs_tracer)
 
         if experiment and experiment.trace_provider:
@@ -75,6 +76,7 @@ class TracingService:
         session: ExperimentSession,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        notification_config: SpanNotificationConfig | None = None,
     ) -> Iterator[TraceContext]:
         """Context manager for tracing or spanning.
 
@@ -85,7 +87,7 @@ class TracingService:
             with self.trace(name, session, inputs, metadata) as ctx:
                 yield ctx
         else:
-            with self.span(name, inputs, metadata) as ctx:
+            with self.span(name, inputs, metadata, notification_config=notification_config) as ctx:
                 yield ctx
 
     @contextmanager
@@ -134,11 +136,12 @@ class TracingService:
         span_name: str,
         inputs: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        notification_config: SpanNotificationConfig | None = None,
     ) -> Iterator[TraceContext]:
         """Context manager for spanning."""
         # Create context object that will be passed to tracers and yielded to user
         span_id = uuid.uuid4()
-        span_context = TraceContext(id=span_id, name=span_name)
+        span_context = TraceContext(id=span_id, name=span_name, notification_config=notification_config)
 
         if not self.activated:
             # Return a dummy context if not activated
@@ -167,7 +170,7 @@ class TracingService:
             self.span_stack.pop()
 
     def get_langchain_callbacks(
-        self, run_name_map: dict[str, str] = None, filter_patterns: list[str] = None
+        self, run_name_map: dict[str, str] | None = None, filter_patterns: list[str] | None = None
     ) -> list[BaseCallbackHandler]:
         if not self.activated:
             return []
@@ -183,10 +186,10 @@ class TracingService:
     def get_langchain_config(
         self,
         *,
-        callbacks: list = None,
-        configurable: dict = None,
-        run_name_map: dict[str, str] = None,
-        filter_patterns: list[str] = None,
+        callbacks: list | None = None,
+        configurable: dict | None = None,
+        run_name_map: dict[str, str] | None = None,
+        filter_patterns: list[str] | None = None,
     ) -> RunnableConfig:
         """
         Generates a RunnableConfig object with specific attributes and callbacks.

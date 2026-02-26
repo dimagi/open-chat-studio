@@ -2,29 +2,29 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 from urllib.parse import urljoin
 
 import backoff
-import boto3
+import httpx
 import pydantic
 import requests
-from botocore.client import Config
 from django.conf import settings
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
 from telebot.util import smart_split
-from turn import TurnClient
-from twilio.rest import Client
-from twilio.rest.api.v2010.account.message import MessageContext, MessageInstance
+
+if TYPE_CHECKING:
+    from slack_sdk import WebClient
+    from turn import TurnClient
+    from twilio.rest import Client
+    from twilio.rest.api.v2010.account.message import MessageInstance
 
 from apps.channels import audio
-from apps.channels.datamodels import TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import MediaCache, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 from apps.files.models import File
 from apps.service_providers import supported_mime_types
-from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.exceptions import AudioConversionError, ServiceProviderConfigError
 from apps.service_providers.speech_service import SynthesizedAudio
 
 logger = logging.getLogger("ocs.messaging")
@@ -77,11 +77,16 @@ class TwilioService(MessagingService):
         return bool(settings.WHATSAPP_S3_AUDIO_BUCKET)
 
     @property
-    def client(self) -> Client:
+    def client(self) -> "Client":
+        from twilio.rest import Client
+
         return Client(self.account_sid, self.auth_token)
 
     @property
     def s3_client(self):
+        import boto3
+        from botocore.client import Config
+
         return boto3.client(
             "s3",
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
@@ -120,20 +125,20 @@ class TwilioService(MessagingService):
 
     @backoff.on_predicate(
         backoff.constant,
-        lambda status: status not in [MessageInstance.Status.DELIVERED, MessageInstance.Status.READ],
+        lambda status: status not in ["delivered", "read"],
         max_time=10,
         interval=2,
         jitter=None,
     )
-    def block_until_delivered(self, current_chunk_sid: str) -> bool:
+    def block_until_delivered(self, current_chunk_sid: str) -> str:
         """
         Checks if the current message chunk has been delivered.
 
         See https://shorturl.at/EZocp for a list of possible statuses.
         """
-        message_context: MessageContext = self.client.messages.get(current_chunk_sid)
+        message_context = self.client.messages.get(current_chunk_sid)
         message = message_context.fetch()
-        return message.status
+        return cast(str, message.status)
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         """
@@ -169,16 +174,29 @@ class TwilioService(MessagingService):
         public_url = self._upload_audio_file(synthetic_voice)
         self.client.messages.create(from_=from_, to=to, media_url=[public_url])
 
-    def get_message_audio(self, message: TwilioMessage) -> BytesIO:
+    def get_message_audio(self, message: TwilioMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         auth = (self.account_sid, self.auth_token)
-        response = requests.get(message.media_url, auth=auth)
+        response = httpx.get(message.media_url, auth=auth, follow_redirects=True)
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise AudioConversionError("Unable to fetch message media") from e
+
+        data = BytesIO(response.content)
+        content_type = response.headers["Content-Type"]
+        message.cached_media_data = MediaCache(content_type=content_type, data=data)
+
         # Example header: {'Content-Type': 'audio/ogg'}
-        content_type = response.headers["Content-Type"].split("/")[1]
-        return audio.convert_audio(BytesIO(response.content), target_format="wav", source_format=content_type)
+        family, sub_type = content_type.split("/", 1)
+        if family != "audio":
+            raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
+        converted = audio.convert_audio(data, target_format="wav", source_format=sub_type)
+        data.seek(0)
+        return converted
 
     def _get_account_numbers(self) -> list[str]:
         """Returns all numbers associated with this client account"""
-        return [num.phone_number for num in self.client.incoming_phone_numbers.list()]
+        return [num.phone_number for num in self.client.incoming_phone_numbers.list()]  # ty: ignore[invalid-return-type]
 
     def is_valid_number(self, number: str) -> bool:
         if settings.DEBUG:
@@ -206,7 +224,9 @@ class TurnIOService(MessagingService):
     auth_token: str
 
     @property
-    def client(self) -> TurnClient:
+    def client(self) -> "TurnClient":
+        from turn import TurnClient
+
         return TurnClient(token=self.auth_token)
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
@@ -224,10 +244,24 @@ class TurnIOService(MessagingService):
             whatsapp_id=to, file=audio_file, content_type="audio/ogg", media_type="audio", caption=None
         )
 
-    def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
+    def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         response = self.client.media.get_media(message.media_id)
-        ogg_audio = BytesIO(response.content)
-        return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
+
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as e:
+            raise AudioConversionError("Unable to fetch message media") from e
+
+        data = BytesIO(response.content)
+        content_type = response.headers["Content-Type"]
+        message.cached_media_data = MediaCache(content_type=content_type, data=data)
+
+        # Example header: {'Content-Type': 'audio/ogg'}
+        family, sub_type = content_type.split("/", 1)
+        if family != "audio":
+            raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
+
+        return audio.convert_audio(data, target_format="wav", source_format=sub_type)
 
     def can_send_file(self, file: File) -> bool:
         mime = file.content_type
@@ -288,16 +322,16 @@ class SureAdhereService(MessagingService):
             "client_secret": self.client_secret,
             "scope": self.client_scope,
         }
-        response = requests.post(self.auth_url, data=auth_data)
+        response = httpx.post(self.auth_url, data=auth_data)
         response.raise_for_status()
         return response.json()["access_token"]
 
-    def send_text_message(self, message: str, to: str, platform: ChannelPlatform, from_: str = None):
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         access_token = self.get_access_token()
         send_msg_url = urljoin(self.base_url, "/treatment/external/send-msg")
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"}
         data = {"patient_Id": to, "message_Body": message}
-        response = requests.post(send_msg_url, headers=headers, json=data)
+        response = httpx.post(send_msg_url, headers=headers, json=data)
         response.raise_for_status()
 
 
@@ -309,10 +343,10 @@ class SlackService(MessagingService):
 
     slack_team_id: str
     slack_installation_id: int
-    _client: WebClient | None = pydantic.PrivateAttr(default=None)
+    _client: "WebClient | None" = pydantic.PrivateAttr(default=None)
 
     def send_text_message(
-        self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str = None, **kwargs
+        self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str | None = None, **kwargs
     ):
         self.client.chat_postMessage(
             channel=to,
@@ -321,7 +355,7 @@ class SlackService(MessagingService):
         )
 
     @property
-    def client(self) -> WebClient:
+    def client(self) -> "WebClient":
         if not self._client:
             from apps.slack.client import get_slack_client
 
@@ -329,7 +363,7 @@ class SlackService(MessagingService):
         return self._client
 
     @client.setter
-    def client(self, value: WebClient):
+    def client(self, value: "WebClient"):
         self._client = value
 
     def iter_channels(self):
@@ -342,6 +376,8 @@ class SlackService(MessagingService):
                 return channel
 
     def join_channel(self, channel_id: str):
+        from slack_sdk.errors import SlackApiError
+
         try:
             self.client.conversations_info(channel=channel_id)
         except SlackApiError as e:

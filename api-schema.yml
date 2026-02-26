@@ -925,6 +925,13 @@ components:
         message:
           type: string
           title: Message content
+        context:
+          type: object
+          additionalProperties: {}
+          description: Additional context data to include with the message such as
+            details about the page the user is on or the action they are trying to
+            perform. This is stored in the session state under the `remote_context`
+            key.
         attachment_ids:
           type: array
           items:
@@ -1161,9 +1168,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Message'
-        state:
-          type: object
-          additionalProperties: {}
+        state: {}
       required:
       - experiment
       - url
@@ -1262,8 +1267,6 @@ components:
         content:
           type: string
         metadata:
-          type: object
-          additionalProperties: {}
           readOnly: true
           description: |2
 
@@ -1410,9 +1413,7 @@ components:
     Patchedupdate_state_serializer:
       type: object
       properties:
-        state:
-          type: object
-          additionalProperties: {}
+        state: {}
     PlatformEnum:
       enum:
       - telegram
@@ -1533,9 +1534,7 @@ components:
       properties:
         success:
           type: boolean
-        state:
-          type: object
-          additionalProperties: {}
+        state: {}
       required:
       - state
       - success

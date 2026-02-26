@@ -36,7 +36,7 @@ create_chat_completion_response = inline_serializer(
             many=True,
         ),
         "created": serializers.IntegerField(),
-        "model": serializers.CharField(),
+        "model": serializers.CharField(allow_blank=True),
         "object": serializers.ChoiceField(choices=["chat.completion"]),
     },
 )
@@ -169,7 +169,7 @@ def _chat_completions(request, experiment_id: uuid.UUID, version=None):
             }
         ],
         "created": int(time.time()),
-        "model": session.experiment.get_llm_provider_model_name(),
+        "model": "",
         "object": "chat.completion",
     }
     return Response(data=completion)

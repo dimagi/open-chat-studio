@@ -55,7 +55,7 @@ class VersionField:
     raw_value: Any | None = None
     to_display: callable = None
     group_name: str = data_field(default="General")
-    previous_field_version: "VersionField" = data_field(default=None)
+    previous_field_version: "VersionField | None" = data_field(default=None)
     changed: bool = False
     label: str = data_field(default="")
     queryset: QuerySet | None = None
@@ -223,7 +223,7 @@ class VersionDetails:
         for version_field in self.fields:
             self._fields_dict[version_field.name] = version_field
 
-    def get_field(self, field_name: str) -> VersionField:
+    def get_field(self, field_name: str) -> VersionField | None:
         return self._fields_dict.get(field_name)
 
     @property

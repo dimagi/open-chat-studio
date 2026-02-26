@@ -25,8 +25,8 @@ class IndexManager(metaclass=ABCMeta):
     def add_files(
         self,
         collection_files: Iterator[CollectionFile],
-        chunk_size: int = None,
-        chunk_overlap: int = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ):
         pass
 
@@ -113,8 +113,8 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
     def add_files(
         self,
         collection_files: Iterator[CollectionFile],
-        chunk_size: int = None,
-        chunk_overlap: int = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ):
         uploaded_files: list[File] = []
         for collection_file in collection_files:
@@ -264,8 +264,8 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     def add_files(
         self,
         collection_files: Iterator[CollectionFile],
-        chunk_size: int = None,
-        chunk_overlap: int = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ):
         for collection_file in collection_files:
             file = collection_file.file
@@ -273,6 +273,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             try:
                 text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
+                    safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
                     embedding_vector = self.get_embedding_vector(chunk)
                     embeddings.append(
                         FileChunkEmbedding.objects.create(
@@ -280,7 +281,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                             file=file,
                             collection_id=collection_file.collection_id,
                             chunk_number=idx + 1,  # Start chunk numbering from 1
-                            text=chunk,
+                            text=safe_chunk,
                             embedding=embedding_vector,
                             # TODO: Get the page number if possible. Also, what file types are supported?
                             page_number=0,

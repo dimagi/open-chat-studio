@@ -55,12 +55,16 @@
                     </form>
                   </li>
                   <li>
-                    <form method="post"
-                          action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id 0 %}"
-                          class="inline">
-                      {% csrf_token %}
-                      <button type="submit">Published version</button>
-                    </form>
+                    {% flag "flag_chat_widget" %}
+                      <button type="button" onclick="document.getElementById('chatbot-widget').setAttribute('visible', 'true')">Published version</button>
+                    {% else %}
+                      <form method="post"
+                            action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id 0 %}"
+                            class="inline">
+                        {% csrf_token %}
+                        <button type="submit">Published version</button>
+                      </form>
+                    {% endflag %}
                   </li>
                 </ul>
               </div>
@@ -117,10 +121,10 @@
         </div>
         {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
         {% if experiment.is_public %}
-          {% include "experiments/share/dialog.html" with origin="chatbots" %}
+          {% include "experiments/share/dialog.html" %}
         {% endif %}
         <div id="dynamic-channels" class="inline">
-          {% include "chatbots/components/channel_buttons.html" with origin="chatbots" %}
+          {% include "chatbots/components/channel_buttons.html" %}
         </div>
         <div id="channel_create_edit_modal_placeholder"></div>
       </div>
@@ -215,4 +219,16 @@
       });
       window.addEventListener('hashchange', selectTabFromHash);
     </script>
+    {% flag "flag_chat_widget" %}
+      <open-chat-studio-widget
+        id="chatbot-widget"
+        visible="false"
+        chatbot-id="{{ experiment.public_id }}"
+        api-base-url="{{ request.scheme }}://{{ request.get_host }}"
+        user-id="{{ request.user.email }}"
+        user-name="{{ request.user.get_full_name }}"
+        position="right"
+        persistent-session="false"
+      ></open-chat-studio-widget>
+    {% endflag %}
 {% endblock app %}

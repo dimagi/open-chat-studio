@@ -1,0 +1,23 @@
+{% extends "account/email/email_template_base.html" %}
+{% load i18n %}
+
+{% block message_body %}
+  <p style="margin-bottom: 20px;">
+    <strong>{{ title }}</strong>
+  </p>
+  <p style="margin-bottom: 10px; color: #666; font-size: 14px;">
+    {% if level == 'Error' %}
+      <span style="background-color: #f8d7da; color: #842029; padding: 4px 8px; border-radius: 3px; font-weight: bold;">{{ level }}</span>
+    {% elif level == 'Warning' %}
+      <span style="background-color: #fff3cd; color: #664d03; padding: 4px 8px; border-radius: 3px; font-weight: bold;">{{ level }}</span>
+    {% else %}
+      <span style="background-color: #cfe2ff; color: #084298; padding: 4px 8px; border-radius: 3px; font-weight: bold;">{{ level }}</span>
+    {% endif %}
+  </p>
+  <p style="margin-bottom: 20px;">
+    {{ message|linebreaks }}
+  </p>
+  <p style="margin-top: 30px; color: #999; font-size: 12px; border-top: 1px solid #ddd; padding-top: 15px;">
+    {% blocktranslate %}You received this notification because it matches your <a href="{{ profile_url }}">notification preferences</a>.{% endblocktranslate %}
+  </p>
+{% endblock message_body %}

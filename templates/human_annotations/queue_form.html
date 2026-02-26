@@ -1,0 +1,279 @@
+{% extends "generic/object_form.html" %}
+{% load form_tags i18n %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'human_annotations:queue_home' request.team.slug %}">Annotation Queues</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{{ title }}</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block form %}
+  <div x-data="schemaFieldBuilder()">
+    {{ form.non_field_errors }}
+
+    {% render_form_fields form "name" "description" "num_reviews_required" %}
+
+    <div class="fieldset w-full mt-4">
+      <label class="label font-bold">
+        <div>{% translate "Schema Fields" %}</div>
+      </label>
+      <p class="text-sm text-gray-500 mb-3">
+        {% translate "Define the fields annotators will fill out when reviewing items." %}
+      </p>
+
+      <template x-if="locked">
+        <div class="alert alert-warning mb-3">
+          <i class="fa fa-lock"></i>
+          <span>{% translate "Schema structure is locked after annotations have started. You can still change whether fields are required." %}</span>
+        </div>
+      </template>
+
+      <div class="space-y-4">
+        <template x-for="(field, index) in fields" :key="field._id">
+          <div class="card bg-base-200 p-4">
+            <div class="mb-2">
+              <label class="label text-sm">
+                <span>{% translate "Field Name" %}</span>
+              </label>
+              <input type="text"
+                     x-model="field.name"
+                     placeholder="{% translate "e.g., 'accuracy', 'score'" %}"
+                     class="input input-bordered w-full input-sm"
+                     :disabled="locked"
+                     required>
+            </div>
+
+            <div class="mb-2">
+              <label class="label text-sm">
+                <span>{% translate "Type" %}</span>
+              </label>
+              <select x-model="field.type"
+                      @change="onTypeChange(field)"
+                      :disabled="locked"
+                      class="select select-bordered w-full select-sm">
+                <option value="string">{% translate "Text" %}</option>
+                <option value="int">{% translate "Integer" %}</option>
+                <option value="float">{% translate "Float" %}</option>
+                <option value="choice">{% translate "Choice" %}</option>
+              </select>
+            </div>
+
+            <div class="mb-2">
+              <label class="label text-sm">
+                <span>{% translate "Description" %}</span>
+              </label>
+              <input type="text"
+                     x-model="field.description"
+                     placeholder="{% translate "Description shown to annotators" %}"
+                     :disabled="locked"
+                     class="input input-bordered w-full input-sm">
+            </div>
+
+            <!-- Integer/Float Constraints -->
+            <template x-if="field.type === 'int' || field.type === 'float'">
+              <div class="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label class="label py-0">
+                    <span class="label-text text-xs">{% translate "Minimum" %}</span>
+                  </label>
+                  <input type="number"
+                         x-model="field.ge"
+                         :step="field.type === 'float' ? 'any' : '1'"
+                         placeholder="{% translate "Min (inclusive)" %}"
+                         :disabled="locked"
+                         class="input input-bordered w-full input-sm">
+                </div>
+                <div>
+                  <label class="label py-0">
+                    <span class="label-text text-xs">{% translate "Maximum" %}</span>
+                  </label>
+                  <input type="number"
+                         x-model="field.le"
+                         :step="field.type === 'float' ? 'any' : '1'"
+                         placeholder="{% translate "Max (inclusive)" %}"
+                         :disabled="locked"
+                         class="input input-bordered w-full input-sm">
+                </div>
+              </div>
+            </template>
+
+            <!-- String Constraints -->
+            <template x-if="field.type === 'string'">
+              <div class="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label class="label py-0">
+                    <span class="label-text text-xs">{% translate "Max length" %}</span>
+                  </label>
+                  <input type="number"
+                         x-model="field.max_length"
+                         min="1"
+                         placeholder="{% translate "Optional" %}"
+                         :disabled="locked"
+                         class="input input-bordered w-full input-sm">
+                </div>
+              </div>
+            </template>
+
+            <!-- Choice Options -->
+            <template x-if="field.type === 'choice'">
+              <div class="mb-2">
+                <label class="label text-sm">
+                  <span>{% translate "Choices" %}</span>
+                </label>
+                <div class="space-y-1">
+                  <template x-for="(choice, choiceIndex) in (field.choices || [])" :key="choiceIndex">
+                    <div class="flex gap-2 items-center">
+                      <input type="text"
+                             x-model="field.choices[choiceIndex]"
+                             placeholder="{% translate "Choice value" %}"
+                             :disabled="locked"
+                             class="input input-bordered w-full input-sm">
+                      <button type="button"
+                              @click="field.choices.splice(choiceIndex, 1)"
+                              x-show="!locked"
+                              class="btn btn-outline btn-xs btn-error">
+                        <i class="fa fa-trash"></i>
+                      </button>
+                    </div>
+                  </template>
+                  <button type="button"
+                          @click="if (!field.choices) field.choices = []; field.choices.push('')"
+                          x-show="!locked"
+                          class="btn btn-outline btn-primary btn-xs mt-1">
+                    <i class="fa fa-plus"></i> {% translate "Add Choice" %}
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <div class="form-control mt-2" :class="locked && 'bg-base-100 rounded-lg p-2 border border-primary/30'">
+              <label class="label cursor-pointer justify-start gap-2">
+                <input type="checkbox"
+                       x-model="field.required"
+                       class="checkbox checkbox-sm checkbox-primary">
+                <span class="label-text" :class="locked && 'font-semibold'">{% translate "Required" %}</span>
+              </label>
+            </div>
+
+            <button type="button"
+                    @click="removeField(index)"
+                    x-show="!locked"
+                    class="btn btn-outline btn-sm btn-error mt-2">
+              <i class="fa fa-trash"></i> {% translate "Remove Field" %}
+            </button>
+          </div>
+        </template>
+      </div>
+
+      <button type="button"
+              @click="addField()"
+              x-show="!locked"
+              class="btn btn-outline btn-primary btn-sm mt-3">
+        <i class="fa fa-plus"></i> {% translate "Add Field" %}
+      </button>
+    </div>
+
+    <!-- Hidden field for Django form -->
+    <input type="hidden" name="schema" :value="schemaJson">
+  </div>
+{% endblock form %}
+
+{% block page_js %}
+  {{ block.super }}
+  {% if existing_schema %}{{ existing_schema|json_script:"existing-schema" }}{% endif %}
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('schemaFieldBuilder', () => ({
+        locked: {{ schema_locked|yesno:"true,false" }},
+        fields: [],
+
+        init() {
+          const el = document.getElementById('existing-schema');
+          if (el) {
+            const existing = JSON.parse(el.textContent);
+            this.fields = Object.entries(existing).map(([name, def]) => ({
+              _id: Date.now() + Math.random(),
+              name: name,
+              type: def.type || 'string',
+              description: def.description || '',
+              ge: def.ge !== undefined ? def.ge : null,
+              le: def.le !== undefined ? def.le : null,
+              max_length: def.max_length !== undefined ? def.max_length : null,
+              choices: def.choices || [],
+              required: def.required !== undefined ? def.required : true,
+            }));
+          }
+          if (this.fields.length === 0) {
+            this.addField();
+          }
+        },
+
+        addField() {
+          this.fields.push({
+            _id: Date.now() + Math.random(),
+            name: '',
+            type: 'string',
+            description: '',
+            ge: null,
+            le: null,
+            max_length: null,
+            choices: [],
+            required: true,
+          });
+        },
+
+        removeField(index) {
+          this.fields.splice(index, 1);
+        },
+
+        onTypeChange(field) {
+          // Reset type-specific constraints when type changes
+          field.ge = null;
+          field.le = null;
+          field.max_length = null;
+          field.choices = [];
+          if (field.type === 'choice') {
+            field.choices = [''];
+          }
+        },
+
+        get schemaJson() {
+          const obj = {};
+          this.fields.forEach(field => {
+            if (field.name && field.name.trim()) {
+              const def = {
+                type: field.type,
+                description: field.description || '',
+              };
+              if (!field.required) {
+                def.required = false;
+              }
+              if (field.type === 'int' || field.type === 'float') {
+                if (field.ge !== null && field.ge !== '' && field.ge !== undefined) {
+                  def.ge = field.type === 'float' ? parseFloat(field.ge) : parseInt(field.ge);
+                }
+                if (field.le !== null && field.le !== '' && field.le !== undefined) {
+                  def.le = field.type === 'float' ? parseFloat(field.le) : parseInt(field.le);
+                }
+              } else if (field.type === 'string') {
+                if (field.max_length !== null && field.max_length !== '' && field.max_length !== undefined) {
+                  def.max_length = parseInt(field.max_length);
+                }
+              } else if (field.type === 'choice') {
+                const validChoices = (field.choices || []).filter(c => c && c.trim());
+                if (validChoices.length > 0) {
+                  def.choices = validChoices;
+                }
+              }
+              obj[field.name.trim()] = def;
+            }
+          });
+          return JSON.stringify(obj);
+        },
+      }));
+    });
+  </script>
+{% endblock page_js %}

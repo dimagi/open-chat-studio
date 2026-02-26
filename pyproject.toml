@@ -66,7 +66,6 @@ dependencies = [
     "phonenumberslite",
     "emoji",
     "python-magic",
-    "requests>=2.32.3",
     "urllib3>=2.3.0",
     "pycryptodome",
     "django-pydantic-field",
@@ -84,6 +83,8 @@ dependencies = [
     "django-oauth-toolkit>=3.1.0,<4.0.0",
     "langchain-classic>=1.0.0",
     "langchain-google-vertexai",
+    "python-json-logger>=3.2.1",
+    "chardet"
 ]
 
 [project.urls]
@@ -94,11 +95,12 @@ Issues = "https://github.com/dimagi/open-chat-studio/issues"
 Changelog = "https://docs.openchatstudio.com/changelog/"
 
 [tool.pytest.ini_options]
-addopts = "--ds=config.settings --reuse-db --strict-markers --tb=short -m \"not integration\""
+addopts = "--ds=config.settings --reuse-db --strict-markers --tb=short -m \"not integration and not eval\""
 python_files = "tests.py test_*.py *_tests.py"
 norecursedirs = ".* build dist venv node_modules compose assets static"
 markers = [
     "integration: marks tests as integration tests (deselected by default)",
+    "eval: marks tests as LLM evaluation tests (deselected by default, requires API keys)",
 ]
 
 [tool.ruff]
@@ -120,14 +122,12 @@ ignore = ["PT019", "SIM102", "SIM108", "SIM117"]
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-preview = true
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-preview = true
 
 [tool.ruff.lint.extend-per-file-ignores]
 "settings_production.py" = ["F405"]
@@ -138,7 +138,6 @@ fixture-parentheses = true
 
 [dependency-groups]
 dev = [
-    "pre-commit",
     "ruff",
     "mock",
     "invoke",
@@ -153,6 +152,9 @@ dev = [
     "pytest-xdist",
     "django-debug-toolbar>=5.2.0",
     "djlint>=1.36.4",
+    "prek>=0.3.2",
+    "django-types",
+    "ty",
 ]
 docs = [
     "mkdocs-material>=9.6.12",
@@ -172,3 +174,104 @@ format_attribute_template_tags=true
 use_gitignore=true
 indent=2
 ignore="H030,H031,H021,H006,H013,H014,T003"
+
+[tool.ty]
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
+exclude = ["migrations/"]
+
+[tool.ty.rules]
+all = "ignore"
+unresolved-import = "error"
+# Zero-violation rules enabled for regression prevention
+abstract-method-in-final-class = "error"
+byte-string-type-annotation = "error"
+call-non-callable = "error"
+call-top-callable = "error"
+conflicting-argument-forms = "error"
+conflicting-declarations = "error"
+conflicting-metaclass = "error"
+cyclic-class-definition = "error"
+cyclic-type-alias-definition = "error"
+dataclass-field-order = "error"
+division-by-zero = "error"
+duplicate-base = "error"
+duplicate-kw-only = "error"
+empty-body = "error"
+escape-character-in-forward-annotation = "error"
+final-without-value = "error"
+fstring-type-annotation = "error"
+implicit-concatenated-string-type-annotation = "error"
+inconsistent-mro = "error"
+instance-layout-conflict = "error"
+invalid-attribute-access = "error"
+invalid-await = "error"
+invalid-base = "error"
+invalid-context-manager = "error"
+invalid-dataclass = "error"
+invalid-dataclass-override = "error"
+invalid-declaration = "error"
+invalid-exception-caught = "error"
+invalid-explicit-override = "error"
+invalid-frozen-dataclass-subclass = "error"
+invalid-generic-class = "error"
+invalid-generic-enum = "error"
+invalid-ignore-comment = "error"
+invalid-key = "error"
+invalid-legacy-positional-parameter = "error"
+invalid-legacy-type-variable = "error"
+invalid-metaclass = "error"
+invalid-named-tuple = "error"
+invalid-newtype = "error"
+invalid-overload = "error"
+invalid-paramspec = "error"
+invalid-protocol = "error"
+invalid-raise = "error"
+invalid-super-argument = "error"
+invalid-syntax-in-forward-annotation = "error"
+invalid-total-ordering = "error"
+invalid-type-alias-type = "error"
+invalid-type-arguments = "error"
+invalid-type-checking-constant = "error"
+invalid-type-guard-call = "error"
+invalid-type-guard-definition = "error"
+invalid-type-variable-bound = "error"
+invalid-type-variable-constraints = "error"
+invalid-type-variable-default = "error"
+invalid-typed-dict-header = "error"
+invalid-typed-dict-statement = "error"
+isinstance-against-protocol = "error"
+isinstance-against-typed-dict = "error"
+override-of-final-method = "error"
+override-of-final-variable = "error"
+parameter-already-assigned = "error"
+positional-only-parameter-as-kwarg = "error"
+possibly-missing-attribute = "error"
+possibly-missing-implicit-call = "error"
+possibly-missing-import = "error"
+possibly-unresolved-reference = "error"
+raw-string-type-annotation = "error"
+redundant-cast = "error"
+static-assert-error = "error"
+subclass-of-final-class = "error"
+super-call-in-named-tuple-method = "error"
+type-assertion-failure = "error"
+unavailable-implicit-super-arguments = "error"
+undefined-reveal = "error"
+unresolved-global = "error"
+unresolved-reference = "error"
+unsupported-bool-conversion = "error"
+invalid-return-type = "error"
+unsupported-operator = "error"
+unsupported-dynamic-base = "error"
+unused-ignore-comment = "error"
+unused-type-ignore-comment = "error"
+useless-overload-body = "error"
+zero-stepsize-in-slice = "error"
+invalid-method-override = "error"
+invalid-parameter-default = "error"
+not-subscriptable = "error"
+invalid-assignment = "error"

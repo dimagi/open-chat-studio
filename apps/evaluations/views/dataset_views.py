@@ -8,7 +8,7 @@ from itertools import islice
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Count, Exists, OuterRef
+from django.db.models import Count
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -41,7 +41,6 @@ from apps.evaluations.utils import (
     parse_history_text,
 )
 from apps.experiments.filters import (
-    ChatMessageFilter,
     ExperimentSessionFilter,
     get_filter_context_data,
 )
@@ -50,7 +49,7 @@ from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.tables import render_table_row
+from apps.utils.tables import render_first_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
@@ -61,10 +60,11 @@ class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
     permission_required = "evaluations.view_evaluationdataset"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "evaluation_datasets",
             "title": "Datasets",
+            "page_title": "Datasets",
             "new_object_url": reverse("evaluations:dataset_new", args=[team_slug]),
             "table_url": reverse("evaluations:dataset_table", args=[team_slug]),
         }
@@ -91,6 +91,7 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
     template_name = "evaluations/dataset_edit.html"
     extra_context = {
         "title": "Update Dataset",
+        "page_title": "Update Dataset",
         "button_text": "Update",
         "active_tab": "evaluation_datasets",
     }
@@ -110,9 +111,9 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
         return get_filter_context_data(
             self.request.team,
             ExperimentSessionFilter.columns(self.request.team),
-            "last_message",
-            table_url,
-            "sessions-table",
+            filter_class=ExperimentSessionFilter,
+            table_url=table_url,
+            table_container_id="sessions-table",
             table_type=FilterSet.TableType.DATASETS,
         )
 
@@ -154,6 +155,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     form_class = EvaluationDatasetForm
     extra_context = {
         "title": "Create Dataset",
+        "page_title": "Create Dataset",
         "button_text": "Create Dataset",
         "active_tab": "evaluation_datasets",
         "form_attrs": {"id": "dataset-create-form"},
@@ -179,11 +181,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
 
         if has_explicit_filters:
             # Apply the same filters to get the filtered session IDs
-            queryset = (
-                ExperimentSession.objects.with_last_message_created_at()
-                .filter(team=self.request.team)
-                .select_related("participant__user")
-            )
+            queryset = ExperimentSession.objects.filter(team=self.request.team).select_related("participant__user")
             timezone = self.request.session.get("detected_tz", None)
             session_filter = ExperimentSessionFilter()
             filtered_queryset = session_filter.apply(
@@ -200,7 +198,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         context = get_filter_context_data(
             self.request.team,
             columns=ExperimentSessionFilter.columns(self.request.team),
-            date_range_column="last_message",
+            filter_class=ExperimentSessionFilter,
             table_url=table_url,
             table_container_id="sessions-table",
             table_type=FilterSet.TableType.DATASETS,
@@ -240,9 +238,7 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableVi
 
     def get_queryset(self):
         queryset = get_base_session_queryset(self.request)
-        queryset = queryset.annotate_with_versions_list().annotate(
-            message_count=Coalesce(Count("chat__messages", distinct=True), 0)
-        )
+        queryset = queryset.annotate(message_count=Coalesce(Count("chat__messages", distinct=True), 0))
         return queryset.select_related("team", "participant__user", "chat", "experiment").order_by("experiment__name")
 
 
@@ -250,23 +246,9 @@ def get_base_session_queryset(request):
     """Returns a queryset with filtering applied but without any annotations or related model selection."""
     timezone = request.session.get("detected_tz", None)
     filter_params = FilterParams.from_request(request)
-
-    # Get filtered message IDs more efficiently
-    message_filter = ChatMessageFilter()
-    base_messages = ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
-    filtered_messages = message_filter.apply(base_messages, filter_params, timezone)
-
-    # Use Exists for filtering instead of Count with IN subquery - avoids cartesian product
-    has_messages = Exists(filtered_messages)
-
-    # Build the query with basic filtering only
-    query_set = ExperimentSession.objects.filter(team=request.team).filter(has_messages)
-
-    # Apply session filter (this will add first_message_created_at)
+    query_set = ExperimentSession.objects.filter(team=request.team)
     session_filter = ExperimentSessionFilter()
-    query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
-
-    return query_set
+    return session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
 
 
 @login_and_team_required
@@ -283,7 +265,7 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     model = EvaluationMessage
     table_class = DatasetMessagesTable
     table_pagination = {"per_page": 10}
-    template_name = "table/single_table.html"
+    template_name = "evaluations/dataset_messages_table.html"
     permission_required = "evaluations.view_evaluationdataset"
 
     def get_queryset(self):
@@ -294,6 +276,41 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
         return EvaluationMessage.objects.filter(
             evaluationdataset__id=dataset_id, evaluationdataset__team=self.request.team
         ).order_by("id")
+
+    def get_highlight_message_id(self):
+        """Extract and validate the message_id query parameter for highlighting."""
+        try:
+            return int(self.request.GET.get("message_id"))
+        except (ValueError, TypeError):
+            return None
+
+    def get_table_pagination(self, table):
+        """Configure pagination and calculate page for highlighted message."""
+        highlight_message_id = self.get_highlight_message_id()
+        page_size = self.table_pagination.get("per_page", 10)
+        pagination_config = dict(self.table_pagination)
+
+        # On first load with highlight, calculate which page contains the message
+        if highlight_message_id and not self.request.GET.get("page"):
+            queryset = self.get_queryset()
+            messages_before = queryset.filter(id__lt=highlight_message_id).count()
+
+            # Calculate which page contains this message and add to pagination config
+            calculated_page = (messages_before // page_size) + 1
+            pagination_config["page"] = calculated_page
+
+        return pagination_config
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["highlight_message_id"] = self.get_highlight_message_id()
+        return context
+
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        kwargs["highlight_message_id"] = self.get_highlight_message_id()
+        kwargs["dataset_id"] = self.kwargs["dataset_id"]
+        return kwargs
 
 
 @login_and_team_required
@@ -324,7 +341,7 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
         table_view.kwargs = {"dataset_id": dataset_id}
 
         queryset = table_view.get_queryset()
-        table = table_view.table_class(queryset)
+        table = table_view.table_class(queryset, dataset_id=dataset_id, request=request)
 
         return render(request, "table/single_table.html", {"table": table})
 
@@ -385,8 +402,8 @@ def update_message(request, team_slug, message_id):
     # Update the message
     for attr, val in data.items():
         setattr(message, attr, val)
-    message.input_chat_message = None
-    message.expected_output_chat_message = None
+    message.input_chat_message = None  # ty: ignore[invalid-assignment]
+    message.expected_output_chat_message = None  # ty: ignore[invalid-assignment]
     message.metadata = message.metadata or {}
     message.metadata["session_id"] = None
     message.metadata["experiment_id"] = None
@@ -394,7 +411,8 @@ def update_message(request, team_slug, message_id):
 
     dataset = message.evaluationdataset_set.first()
     if dataset:
-        response = render_table_row(request, DatasetMessagesTable, message)
+        table = DatasetMessagesTable(data=[message], dataset_id=dataset.id, request=request)
+        response = render_first_table_row(request, table)
         # Change target to the table row for successful updates
         response = retarget(response, f"#record-{message_id}")
         response = reswap(response, "outerHTML")

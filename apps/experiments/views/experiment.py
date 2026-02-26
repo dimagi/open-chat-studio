@@ -15,7 +15,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Subquery, Value, When
+from django.db.models import CharField, Count, F, Prefetch, Subquery, Value
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import (
@@ -48,12 +48,7 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.channels import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
-    EventLogStatusChoices,
-    StaticTrigger,
-    TimeoutTrigger,
-)
-from apps.events.tables import (
-    EventsTable,
+    StaticTriggerType,
 )
 from apps.experiments.decorators import (
     experiment_session_view,
@@ -62,10 +57,6 @@ from apps.experiments.decorators import (
     verify_session_access_cookie,
 )
 from apps.experiments.email import send_chat_link_email
-from apps.experiments.filters import (
-    ExperimentSessionFilter,
-    get_filter_context_data,
-)
 from apps.experiments.forms import (
     ConsentForm,
     SurveyCompletedForm,
@@ -74,80 +65,25 @@ from apps.experiments.forms import (
 from apps.experiments.helpers import get_real_user_or_none
 from apps.experiments.models import (
     Experiment,
-    ExperimentRouteType,
     ExperimentSession,
     Participant,
     SessionStatus,
 )
 from apps.experiments.tables import (
-    ChildExperimentRoutesTable,
-    ExperimentSessionsTable,
     ExperimentVersionsTable,
-    ParentExperimentRoutesTable,
-    TerminalBotsTable,
 )
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
-from apps.experiments.views.utils import get_channels_context
 from apps.files.models import File
-from apps.filters.models import FilterSet
-from apps.generics.chips import Chip
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
-
-
-class ExperimentSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
-    """
-    This view is used to render experiment sessions. When called by a specific chatbot, it includes an "experiment_id"
-    parameter in the request, which narrows the sessions to only those belonging to that chatbot.
-    """
-
-    model = ExperimentSession
-    table_class = ExperimentSessionsTable
-    template_name = "table/single_table.html"
-    permission_required = "experiments.view_experimentsession"
-
-    def get_queryset(self):
-        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
-        experiment_filter = Q()
-        if experiment_id := self.kwargs.get("experiment_id"):
-            experiment_filter = Q(experiment__id=experiment_id)
-
-        query_set = ExperimentSession.objects.filter(experiment_filter, team=self.request.team)
-        timezone = self.request.session.get("detected_tz", None)
-
-        session_filter = ExperimentSessionFilter()
-        query_set = session_filter.apply(
-            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
-        )
-        return query_set
-
-    def get_table_data(self):
-        """Add expensive annotations only to the paginated data, not for counting."""
-        queryset = super().get_table_data()
-        # Add expensive annotations after filtering but before display
-        queryset = (
-            # Select related source
-            # experiment: participant.get_link_to_experiment_data
-            # participant__user: str(participant)
-            # chat: tags prefetch
-            queryset.select_related("experiment", "participant__user", "chat").prefetch_related(
-                Prefetch(
-                    "chat__tagged_items",
-                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                    to_attr="prefetched_tagged_items",
-                ),
-            )
-        )
-        return queryset.annotate_with_versions_list()
 
 
 class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
@@ -160,112 +96,6 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, Pe
         experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
         other_versions = Experiment.objects.get_all().filter(working_version=self.kwargs["experiment_id"]).all()
         return (experiment_row | other_versions).order_by("-version_number")
-
-
-def base_single_experiment_view(request, team_slug, experiment_id, template_name, active_tab) -> HttpResponse:
-    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
-
-    channels, available_platforms = get_channels_context(experiment)
-
-    deployed_version = None
-    if experiment != experiment.default_version:
-        deployed_version = experiment.default_version.version_number
-
-    bot_type_chip = None
-    if active_tab == "experiments":
-        if pipeline := experiment.pipeline:
-            bot_type_chip = Chip(label=f"Pipeline: {pipeline.name}", url=pipeline.get_absolute_url())
-        elif assistant := experiment.assistant:
-            bot_type_chip = Chip(label=f"Assistant: {assistant.name}", url=assistant.get_absolute_url())
-
-    context = {
-        "active_tab": active_tab,
-        "bot_type_chip": bot_type_chip,
-        "experiment": experiment,
-        "platforms": available_platforms,
-        "channels": channels,
-        "deployed_version": deployed_version,
-        "allow_copy": not experiment.child_links.exists(),
-        **_get_events_context(experiment, team_slug, request.origin),
-    }
-    if active_tab != "chatbots":
-        context.update(**_get_terminal_bots_context(experiment, team_slug))
-        context.update(**_get_routes_context(experiment, team_slug))
-        session_table_url = reverse("experiments:sessions-list", args=(team_slug, experiment_id))
-    else:
-        session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
-
-    columns = ExperimentSessionFilter.columns(request.team, single_experiment=experiment)
-    filter_context = get_filter_context_data(
-        request.team,
-        columns=columns,
-        date_range_column="last_message",
-        table_url=session_table_url,
-        table_container_id="sessions-table",
-        table_type=FilterSet.TableType.SESSIONS,
-    )
-    context.update(filter_context)
-
-    return TemplateResponse(request, template_name, context)
-
-
-def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
-    combined_events = []
-    static_events = (
-        StaticTrigger.objects
-        .filter(experiment=experiment)
-        .annotate(
-            failure_count=Count(
-                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
-            )
-        )
-        .values("id", "experiment_id", "type", "action__action_type", "action__params", "failure_count", "is_active")
-        .all()
-    )
-    timeout_events = (
-        TimeoutTrigger.objects
-        .filter(experiment=experiment)
-        .annotate(
-            failure_count=Count(
-                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
-            )
-        )
-        .values(
-            "id",
-            "experiment_id",
-            "delay",
-            "action__action_type",
-            "action__params",
-            "total_num_triggers",
-            "failure_count",
-            "is_active",
-        )
-        .all()
-    )
-    for event in static_events:
-        combined_events.append({**event, "team_slug": team_slug})
-    for event in timeout_events:
-        combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
-    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events, origin=origin)}
-
-
-def _get_routes_context(experiment: Experiment, team_slug: str):
-    route_type = ExperimentRouteType.PROCESSOR
-    parent_links = experiment.parent_links.filter(type=route_type).all()
-    return {
-        "child_routes_table": ChildExperimentRoutesTable(experiment.child_links.filter(type=route_type).all()),
-        "parent_routes_table": ParentExperimentRoutesTable(parent_links),
-        "first_parent_id": parent_links[0].parent_id if parent_links else None,
-        "can_make_child_routes": len(parent_links) == 0,
-    }
-
-
-def _get_terminal_bots_context(experiment: Experiment, team_slug: str):
-    return {
-        "terminal_bots_table": TerminalBotsTable(
-            experiment.child_links.filter(type=ExperimentRouteType.TERMINAL).all()
-        ),
-    }
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
@@ -408,8 +238,9 @@ def _poll_messages(request):
             logging.exception(f"Unexpected `since` parameter value. Error: {e}")
 
     messages = (
-        ChatMessage.objects
-        .filter(message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since)
+        ChatMessage.objects.filter(
+            message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since
+        )
         .order_by("created_at")
         .all()
     )
@@ -758,8 +589,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 
     chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
     all_tags = (
-        Tag.objects
-        .filter(
+        Tag.objects.filter(
             annotations_customtaggeditem_items__content_type=chat_message_content_type,
             annotations_customtaggeditem_items__object_id__in=Subquery(
                 ChatMessage.objects.filter(chat=session.chat).values("id")
@@ -780,8 +610,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     default_message = "(message generated after last translation)"
 
     messages_queryset = (
-        ChatMessage.objects
-        .filter(chat=session.chat)
+        ChatMessage.objects.filter(chat=session.chat)
         .order_by("created_at")
         .prefetch_related(
             Prefetch(
@@ -810,12 +639,15 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         total_pages = 1
         page_start_index = 1
     else:
+        paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
+
         # on the first load, scroll to the page to focus on a specific message id
         if highlight_message_id and not request.GET.get("page"):
             messages_before = messages_queryset.filter(id__lt=highlight_message_id).count()
             page = (messages_before // page_size) + 1
 
-        paginator = Paginator(messages_queryset, per_page=page_size, orphans=page_size // 3)
+        # Ensure page is valid
+        page = min(page, paginator.num_pages) if paginator.num_pages > 0 else 1
         current_page = paginator.page(page)
         current_page_messages = list(current_page.object_list)
         total_pages = paginator.num_pages
@@ -884,9 +716,9 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
             messages.error(request, "Selected provider or model not found.")
             return redirect_to_messages_view(request, session)
 
-        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(**{
-            f"translations__{language}__isnull": False
-        })
+        messages_to_translate = ChatMessage.objects.filter(chat=session.chat).exclude(
+            **{f"translations__{language}__isnull": False}
+        )
         if not messages_to_translate.exists():
             messages.info(request, "All messages already have translations for this language.")
             return redirect_to_messages_view(request, session)
@@ -933,7 +765,7 @@ def redirect_to_messages_view(request, session):
 def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     experiment_session = request.experiment_session
     experiment_session.update_status(SessionStatus.PENDING_REVIEW, commit=False)
-    experiment_session.end(commit=True)
+    experiment_session.end(commit=True, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
     return HttpResponseRedirect(reverse("experiments:experiment_review", args=[team_slug, experiment_id, session_id]))
 
 

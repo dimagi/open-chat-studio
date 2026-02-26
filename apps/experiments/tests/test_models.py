@@ -8,17 +8,13 @@ from django.db.utils import IntegrityError
 from django.utils import timezone
 from time_machine import travel
 
-from apps.assistants.models import ToolResources
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.actions import ScheduleTriggerAction
-from apps.events.models import EventActionType, ScheduledMessage, TimePeriod
+from apps.events.models import EventActionType, ScheduledMessage, StaticTriggerType, TimePeriod
 from apps.experiments.models import (
     ConsentForm,
     Experiment,
-    ExperimentRoute,
     ExperimentSession,
-    ParticipantData,
-    SafetyLayer,
     SyntheticVoice,
 )
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
@@ -39,7 +35,6 @@ from apps.utils.factories.experiment import (
     SurveyFactory,
     SyntheticVoiceFactory,
 )
-from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     VoiceProviderFactory,
@@ -298,21 +293,6 @@ class TestExperimentSession:
         next_trigger = "Next trigger is at Monday, 01 January 2024 00:00:00 UTC."
         assert schedule == expected.format(message=message, next_trigger=next_trigger)
 
-    def test_get_participant_scheduled_messages_includes_child_experiments(self):
-        session = ExperimentSessionFactory()
-        team = session.team
-        participant = session.participant
-        session2 = ExperimentSessionFactory(experiment__team=team, participant=participant)
-        event_action = event_action, params = self._construct_event_action(
-            time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
-        )
-        ScheduledMessageFactory(experiment=session.experiment, team=team, participant=participant, action=event_action)
-        ScheduledMessageFactory(experiment=session2.experiment, team=team, participant=participant, action=event_action)
-        ExperimentRoute.objects.create(team=team, parent=session.experiment, child=session2.experiment, keyword="test")
-
-        assert len(participant.get_schedules_for_experiment(session2.experiment_id)) == 1
-        assert len(participant.get_schedules_for_experiment(session.experiment_id)) == 2
-
     @pytest.mark.parametrize("use_custom_experiment", [False, True])
     @patch.object(ExperimentSession, "ad_hoc_bot_message")
     def test_scheduled_message_experiment(self, mock_ad_hoc, use_custom_experiment):
@@ -429,7 +409,7 @@ class TestExperimentSession:
 
         mock_channel.send_message_to_user = mock_send_with_db_change
 
-        # Call ad_hoc_bot_message with fail_silently=False so exception propagates
+        # Call ad_hoc_bot_message with fail_silently=False
         with pytest.raises(Exception, match="Send failed - should rollback"):
             experiment_session.ad_hoc_bot_message(
                 "Tell the user we're testing", TraceInfo(name="test"), fail_silently=False
@@ -459,47 +439,83 @@ class TestExperimentSession:
         # Case 5 - Pipeline Router Node
         _test_pipline("RouterNode", params={"prompt": prompt})
 
+    @pytest.mark.parametrize(
+        ("commit", "should_be_saved"),
+        [
+            pytest.param(True, True, id="commit_true"),
+            pytest.param(False, False, id="commit_false"),
+        ],
+    )
+    def test_end_with_commit_parameter(self, commit, should_be_saved):
+        """Test end() with different commit values."""
+        session = ExperimentSessionFactory()
+        assert session.ended_at is None
 
-class TestParticipant:
-    @pytest.mark.django_db()
-    def test_update_memory_updates_all_data(self):
-        participant = ParticipantFactory()
-        team = participant.team
-        sessions = ExperimentSessionFactory.create_batch(3, participant=participant, team=team, experiment__team=team)
-        # let the participant be linked to an experiment in another team as well. That experiment should be unaffected
-        ExperimentSessionFactory(participant=participant)
-        existing_data_obj = ParticipantData.objects.create(
-            team=team,
-            experiment=sessions[0].experiment,
-            data={"first_name": "Jack", "last_name": "Turner"},
-            participant=participant,
-        )
-        participant.update_memory({"first_name": "Elizabeth"}, experiment=sessions[1].experiment)
-        participant_data_query = ParticipantData.objects.filter(team=team, participant=participant)
+        session.end(commit=commit)
 
-        # expect 2 objects, 1 that was created before and 1 that was created in `update_memory`
-        assert participant_data_query.count() == 2
-        for p_data in participant_data_query.all():
-            if p_data == existing_data_obj:
-                assert p_data.data == {"first_name": "Elizabeth", "last_name": "Turner"}
+        assert session.ended_at is not None, "ended_at should be set in memory"
+        session.refresh_from_db()
+        if should_be_saved:
+            assert session.ended_at is not None, "ended_at should be saved to DB when commit=True"
+            assert session.status == "pending-review"
+        else:
+            assert session.ended_at is None, "ended_at should not be saved to DB when commit=False"
+
+    @pytest.mark.parametrize(
+        ("trigger_type", "should_enqueue"),
+        [
+            pytest.param(None, False, id="trigger_type_none"),
+            pytest.param(StaticTriggerType.CONVERSATION_ENDED_BY_USER, True, id="trigger_type_by_user"),
+            pytest.param(StaticTriggerType.CONVERSATION_ENDED_BY_BOT, True, id="trigger_type_by_bot"),
+            pytest.param(StaticTriggerType.CONVERSATION_ENDED_VIA_API, True, id="trigger_type_via_api"),
+            pytest.param(StaticTriggerType.CONVERSATION_END_MANUALLY, True, id="trigger_type_manually"),
+            pytest.param(StaticTriggerType.CONVERSATION_ENDED_BY_EVENT, True, id="trigger_type_by_event"),
+        ],
+    )
+    def test_end_with_valid_trigger_types(self, trigger_type, should_enqueue):
+        """Test end() with different valid trigger types."""
+        session = ExperimentSessionFactory()
+
+        with patch("apps.events.tasks.enqueue_static_triggers.delay") as mock_delay:
+            session.end(commit=True, trigger_type=trigger_type)
+
+            if should_enqueue:
+                mock_delay.assert_called_once_with(session.id, trigger_type)
             else:
-                assert p_data.data == {"first_name": "Elizabeth"}
+                mock_delay.assert_not_called()
 
+        session.refresh_from_db()
+        assert session.ended_at is not None
+        assert session.status == "pending-review"
 
-@pytest.mark.django_db()
-class TestSafetyLayerVersioning:
-    def test_create_new_safety_layer_version(self):
-        original = SafetyLayer.objects.create(
-            prompt_text="Is this message safe?", team=TeamFactory(), prompt_to_bot="Unsafe reply"
-        )
-        new_version = original.create_new_version()
-        original.refresh_from_db()
-        assert original.working_version is None
-        assert new_version != original
-        assert new_version.working_version == original
-        assert new_version.prompt_text == original.prompt_text
-        assert new_version.prompt_to_bot == original.prompt_to_bot
-        assert new_version.team == original.team
+    @pytest.mark.parametrize(
+        ("trigger_type", "error_message"),
+        [
+            pytest.param(
+                StaticTriggerType.CONVERSATION_START,
+                "Only a conversation end trigger type can be used",
+                id="non_end_trigger_type",
+            ),
+            pytest.param(
+                StaticTriggerType.CONVERSATION_END,
+                "Cannot trigger the generic CONVERSATION_END trigger type",
+                id="generic_conversation_end",
+            ),
+        ],
+    )
+    def test_end_with_invalid_trigger_types_raises_error(self, trigger_type, error_message):
+        """Test end() raises ValueError for invalid trigger types."""
+        session = ExperimentSessionFactory()
+
+        with pytest.raises(ValueError, match=error_message):
+            session.end(commit=True, trigger_type=trigger_type)
+
+    def test_end_with_commit_false_and_trigger_type_raises_error(self):
+        """Test end() raises ValueError when trigger_type is specified but commit is False."""
+        session = ExperimentSessionFactory()
+
+        with pytest.raises(ValueError, match="Commit must be True when trigger_type is specified"):
+            session.end(commit=False, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT)
 
 
 @pytest.mark.django_db()
@@ -510,125 +526,6 @@ class TestSourceMaterialVersioning:
         original.refresh_from_db()
         assert original.working_version is None
         _compare_models(original, new_version, expected_changed_fields=["id", "working_version_id"])
-
-
-@pytest.mark.django_db()
-class TestExperimentRouteVersioning:
-    def _setup_route(self):
-        parent_exp = ExperimentFactory(pipeline=None, prompt_text="You are a helpful assistant")
-        team = parent_exp.team
-        child_exp = ExperimentFactory(team=team, pipeline=None, prompt_text="You are a helpful assistant")
-        exp_route = ExperimentRoute.objects.create(team=team, parent=parent_exp, child=child_exp, keyword="testing")
-        return child_exp, exp_route
-
-    def test_child_without_versions(self):
-        """
-        When the child doesn't have a version then we expect a new version to be created for the new route version.
-        """
-        child_exp, exp_route = self._setup_route()
-        new_parent = ExperimentFactory(team=exp_route.team, pipeline=None, prompt_text="You are a helpful assistant")
-        route_version = exp_route.create_new_version(new_parent=new_parent)
-
-        assert route_version.child == child_exp.latest_version
-
-    def test_child_with_changes_since_latest_version(self):
-        """
-        When the child have a version, but also changed since the latest version, then we expect a new version to be
-        created for the new route version.
-        """
-        child_exp, exp_route = self._setup_route()
-
-        # Create a version of the child
-        first_child_version = child_exp.create_new_version()
-        # Changes since the last version
-        child_exp.prompt_text = "New prompt"
-
-        # This should create a new version of the child as well
-        new_parent = ExperimentFactory(team=exp_route.team, pipeline=None, prompt_text="You are a helpful assistant")
-        route_version = exp_route.create_new_version(new_parent=new_parent)
-        assert child_exp.latest_version != first_child_version
-        assert route_version.child == child_exp.latest_version
-
-    def test_child_with_no_changes_since_latest_version(self):
-        """When the child has a version and there are no changes between that version and the working version, then the
-        latest version should be used for the new route version.
-        """
-        child_exp, exp_route = self._setup_route()
-        # First create a version of the child
-        child_version = child_exp.create_new_version()
-        new_parent = ExperimentFactory(team=exp_route.team, pipeline=None, prompt_text="You are a helpful assistant")
-        route_version = exp_route.create_new_version(new_parent=new_parent)
-        assert route_version.child == child_version
-
-
-@pytest.mark.django_db()
-class TestExperimentRoute:
-    def test_eligible_children(self):
-        parent = ExperimentFactory()
-        experiment_version = parent.create_new_version()
-        experiment1 = ExperimentFactory(team=parent.team)
-        experiment2 = ExperimentFactory(team=parent.team)
-
-        queryset = ExperimentRoute.eligible_children(team=parent.team, parent=parent)
-        assert parent not in queryset
-        assert experiment_version not in queryset
-        assert experiment1 in queryset
-        assert experiment2 in queryset
-        assert len(queryset) == 2
-
-        queryset = ExperimentRoute.eligible_children(team=parent.team)
-        assert len(queryset) == 3
-
-    def test_compare_with_model_testcase_4(self):
-        """
-        The children are experiments of different families.
-        """
-        parent = ExperimentFactory()
-        versioned_parent = parent.create_new_version()
-        child1 = ExperimentFactory(team=parent.team)
-        child2 = ExperimentFactory(team=parent.team)
-        route = ExperimentRoute.objects.create(parent=parent, child=child1, keyword="test", team=parent.team)
-        route2 = ExperimentRoute.objects.create(
-            parent=versioned_parent, child=child2, keyword="test", team=parent.team, working_version=route
-        )
-        route1_version = route.version_details
-        route1_version.compare(route2.version_details)
-        changed_fields = [field.name for field in route1_version.fields if field.changed]
-        assert changed_fields == ["child"]
-
-    def _setup_route(self, keyword: str):
-        parent = ExperimentFactory()
-        team = parent.team
-        child = ExperimentFactory(team=team)
-        return ExperimentRoute.objects.create(parent=parent, child=child, keyword=keyword, team=team)
-
-    def test_unique_parent_child_constraint_enforced(self):
-        route = self._setup_route(keyword="test")
-        with pytest.raises(IntegrityError, match=r'.*violates unique constraint "unique_parent_child".*'):
-            ExperimentRoute.objects.create(parent=route.parent, child=route.child, keyword="testing", team=route.team)
-
-    def test_unique_parent_child_constraint_not_enforced(self):
-        """Tests the conditional unique constraint is not enforced when the previous instance is archived"""
-        route = self._setup_route(keyword="test")
-        parent = route.parent
-        route.archive()
-        ExperimentRoute.objects.create(parent=route.parent, child=route.child, keyword="testing", team=route.team)
-        assert parent.child_links.count() == 1
-
-    def test_unique_parent_keyword_condition_enforced(self):
-        route = self._setup_route(keyword="test")
-        other_child = ExperimentFactory(team=route.team)
-        with pytest.raises(IntegrityError, match=r'.*violates unique constraint "unique_parent_keyword_condition".*'):
-            ExperimentRoute.objects.create(parent=route.parent, child=other_child, keyword="test", team=route.team)
-
-    def test_unique_parent_keyword_condition_not_enforced(self):
-        """Tests the conditional unique constraint is not enforced when the previous instance is archived"""
-        route = self._setup_route(keyword="test")
-        parent = route.parent
-        other_child = ExperimentFactory(team=route.team)
-        route.archive()
-        ExperimentRoute.objects.create(parent=route.parent, child=other_child, keyword="test", team=route.team)
-        assert parent.child_links.count() == 1
 
 
 @pytest.mark.django_db()
@@ -652,11 +549,6 @@ class TestExperimentModel:
         with pytest.raises(IntegrityError, match=r'.*"unique_version_number_per_experiment".*'):
             ExperimentFactory(working_version=working_exp, team=team, version_number=2)
 
-    def test_get_assistant_with_assistant_directly_linked(self):
-        assistant = OpenAiAssistantFactory()
-        experiment = ExperimentFactory(assistant=assistant)
-        assert experiment.get_assistant() == assistant
-
     @pytest.mark.parametrize("assistant_id_populated", [True, False])
     def test_get_assistant_from_pipeline(self, assistant_id_populated):
         assistant = OpenAiAssistantFactory()
@@ -673,23 +565,9 @@ class TestExperimentModel:
         experiment.consent_form = ConsentForm.get_default(team)
 
         # Setup Safety Layers
-        layer1 = SafetyLayer.objects.create(
-            prompt_text="Is this message safe?", team=team, prompt_to_bot="Unsafe reply"
-        )
-        layer2 = SafetyLayer.objects.create(prompt_text="What about this one?", team=team, prompt_to_bot="Unsafe reply")
-        experiment.safety_layers.set([layer1, layer2])
-
         # Setup Source material
         experiment.source_material = SourceMaterialFactory(team=team, material="material science is interesting")
         experiment.save()
-
-        # Setup Routes - There will be versioned and working children
-        versioned_child = ExperimentFactory(
-            team=team, version_number=1, working_version=ExperimentFactory(version_number=2)
-        )
-        ExperimentRoute(team=team, parent=experiment, child=versioned_child, keyword="versioned")
-        working_child = ExperimentFactory(team=team)
-        ExperimentRoute(team=team, parent=experiment, child=working_child, keyword="working")
 
         # Setup Static Trigger
         StaticTriggerFactory(experiment=experiment)
@@ -704,16 +582,6 @@ class TestExperimentModel:
         experiment.post_survey = post_survey
 
         experiment.pipeline = PipelineFactory(team=experiment.team)
-        experiment.assistant = OpenAiAssistantFactory(
-            assistant_id="a-123", builtin_tools=["code_interpreter", "file_search"]
-        )
-        code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=experiment.assistant)
-        code_resource.files.set([FileFactory(external_id="ci-123")])
-
-        search_resource = ToolResources.objects.create(
-            tool_type="file_search", assistant=experiment.assistant, extra={"vector_store_id": "123"}
-        )
-        search_resource.files.set([FileFactory(external_id="fs-123")])
         experiment.save()
         return experiment
 
@@ -727,8 +595,7 @@ class TestExperimentModel:
         assert another_version.version_number == 2
         assert not another_version.is_default_version
 
-    @patch("apps.assistants.sync.push_assistant_to_openai", return_value=None)
-    def test_create_experiment_version(self, mock_push):
+    def test_create_experiment_version(self):
         original_experiment = self._setup_original_experiment()
 
         assert original_experiment.version_number == 1
@@ -757,14 +624,10 @@ class TestExperimentModel:
                 "pre_survey",
                 "post_survey",
                 "version_description",
-                "safety_layers",
                 "pipeline",
-                "assistant",
             ],
         )
-        self._assert_safety_layers_are_duplicated(original_experiment, new_version)
         self._assert_source_material_is_duplicated(original_experiment, new_version)
-        self._assert_routes_are_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
         self._assert_attribute_duplicated("source_material", original_experiment, new_version)
@@ -776,7 +639,6 @@ class TestExperimentModel:
         self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
         self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
         self._assert_pipeline_is_duplicated(original_experiment, new_version)
-        self._assert_assistant_is_duplicated(original_experiment, new_version)
 
         another_new_version = original_experiment.create_new_version()
         original_experiment.refresh_from_db()
@@ -790,23 +652,6 @@ class TestExperimentModel:
         assert original_experiment.pipeline.version_number == 2
         for node in original_experiment.pipeline.node_set.all():
             assert new_version.pipeline.node_set.filter(working_version_id=node.id).exists()
-
-    def _assert_assistant_is_duplicated(self, original_experiment, new_version):
-        assert new_version.assistant.working_version == original_experiment.assistant
-        assert new_version.assistant.version_number == 1
-        assert original_experiment.assistant.version_number == 2
-        assert new_version.assistant.tool_resources.filter(tool_type="file_search").first().files.count() == 1
-        assert new_version.assistant.tool_resources.filter(tool_type="code_interpreter").first().files.count() == 1
-
-        # Check that the assistant_id is cleared
-        assert original_experiment.assistant.assistant_id != new_version.assistant.assistant_id
-        assert new_version.assistant.assistant_id == ""
-
-        # Check that the vector_store_id is cleared
-        original_fs_resource = original_experiment.assistant.tool_resources.get(tool_type="file_search")
-        assert original_fs_resource.extra["vector_store_id"] is not None
-        new_fs_resource = new_version.assistant.tool_resources.get(tool_type="file_search")
-        assert new_fs_resource.extra["vector_store_id"] is None
 
     def test_copy_attr_to_new_version(self):
         """
@@ -842,30 +687,20 @@ class TestExperimentModel:
         assert experiment_version3.source_material != experiment_version2.source_material
         assert experiment_version3.source_material.working_version == original_experiment.source_material
 
-    def _assert_safety_layers_are_duplicated(self, original_experiment, new_version):
-        for layer in original_experiment.safety_layers.all():
-            assert layer.working_version is None
-            assert new_version.safety_layers.filter(working_version=layer).exists()
-
     def _assert_source_material_is_duplicated(self, original_experiment, new_version):
         assert new_version.source_material != original_experiment.source_material
         assert new_version.source_material.working_version == original_experiment.source_material
         assert new_version.source_material.material == original_experiment.source_material.material
 
-    def _assert_routes_are_duplicated(self, original_experiment, new_version):
-        for route in new_version.child_links.all():
-            assert route.parent.working_version == original_experiment
-            assert route.working_version.parent == original_experiment
-            assert route.child.is_a_version is True
-
     def _assert_triggers_are_duplicated(self, trigger_type, original_experiment, new_version):
-        assert trigger_type in ["static", "timeout"], "Unknown trigger type"
         if trigger_type == "static":
             original_triggers = original_experiment.static_triggers.all()
             copied_triggers = new_version.static_triggers.all()
         elif trigger_type == "timeout":
             original_triggers = original_experiment.timeout_triggers.all()
             copied_triggers = new_version.timeout_triggers.all()
+        else:
+            raise ValueError(f"Unknown trigger type: {trigger_type}")
 
         assert len(copied_triggers) == len(original_triggers)
 
@@ -942,36 +777,6 @@ class TestExperimentModel:
 
     @patch("apps.assistants.tasks.delete_openai_assistant_task.delay")
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_archive_with_assistant(self, delete_openai_assistant_task):
-        """
-        Archiving an assistant experiment should only archive the assistant when it is not still being referenced by
-        another experiment or pipeline or when referenced by the working version
-        """
-
-        assistant = OpenAiAssistantFactory()
-        experiment1 = ExperimentFactory(assistant=assistant)
-        experiment2 = ExperimentFactory(assistant=assistant)
-
-        # Version assistant should be archived and removed from OpenAI. Only the version points to it
-        new_version = experiment1.create_new_version()
-        assistant_version = new_version.assistant
-        new_version.archive()
-        delete_openai_assistant_task.assert_called_with(assistant_version.id)
-        delete_openai_assistant_task.reset_mock()
-        self._assert_archived(assistant_version, True)
-
-        experiment1.archive()
-        self._assert_archived(experiment1, True)
-        self._assert_archived(assistant, False)
-
-        experiment2.archive()
-        self._assert_archived(experiment2, True)
-        self._assert_archived(assistant, False)
-
-        delete_openai_assistant_task.assert_not_called()
-
-    @patch("apps.assistants.tasks.delete_openai_assistant_task.delay")
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_with_pipeline(self, delete_openai_assistant_task):
         assistant = OpenAiAssistantFactory()
         pipeline = PipelineFactory()
@@ -1013,28 +818,28 @@ class TestExperimentObjectManager:
         assert Experiment.objects.get_default_or_working(family_member=exp_v1) == exp_v2
         assert Experiment.objects.get_default_or_working(family_member=exp_v2) == exp_v2
 
-    def test_working_versions_queryset(self):
-        experiments = ExperimentFactory.create_batch(3)
+    def test_working_versions_queryset(self, team):
+        experiments = ExperimentFactory.create_batch(3, team=team)
         for working_exp in experiments:
             working_exp.create_new_version()
 
-        working_versions_queryset = Experiment.objects.working_versions_queryset()
+        working_versions_queryset = Experiment.objects.working_versions_queryset().filter(team=team)
         assert working_versions_queryset.count() == 3
         for working_version in working_versions_queryset.all():
             # All experiments in this queryset should have versions
             assert working_version.has_versions is True
 
-    def test_archived_experiments_are_filtered_out(self):
+    def test_archived_experiments_are_filtered_out(self, team):
         """Default queries should exclude archived experiments"""
-        experiment = ExperimentFactory()
+        experiment = ExperimentFactory(team=team)
         new_version = experiment.create_new_version()
-        assert Experiment.objects.count() == 2
+        assert Experiment.objects.filter(team=team).count() == 2
         new_version.is_archived = True
         new_version.save()
-        assert Experiment.objects.count() == 1
+        assert Experiment.objects.filter(team=team).count() == 1
 
         # To get all experiment,s use the dedicated object method
-        assert Experiment.objects.get_all().count() == 2
+        assert Experiment.objects.get_all().filter(team=team).count() == 2
 
 
 @pytest.mark.django_db()
@@ -1122,7 +927,7 @@ class TestExperimentTrends:
             assert sum(success) == 0
 
 
-def _compare_models(original, new, expected_changed_fields: list) -> set:
+def _compare_models(original, new, expected_changed_fields: list) -> None:
     field_difference = original.compare_with_model(new, original.get_fields_to_exclude()).difference(
         set(expected_changed_fields)
     )

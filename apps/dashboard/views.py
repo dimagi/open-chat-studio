@@ -36,6 +36,7 @@ class DashboardView(LoginAndTeamRequiredMixin, TemplateView):
                 "saved_filters": saved_filters,
                 "saved_filter_form": SavedFilterForm(),
                 "active_tab": "dashboard",
+                "page_title": "Dashboard",
             }
         )
 
@@ -194,7 +195,7 @@ class SaveFilterView(LoginAndTeamRequiredMixin, TemplateView):
 class LoadFilterView(LoginAndTeamRequiredMixin, TemplateView):
     """Load saved filter preset"""
 
-    def get(self, request, filter_id, *args, **kwargs):
+    def get(self, request, filter_id, *args, **kwargs):  # ty: ignore[invalid-method-override]
         try:
             filter_obj = DashboardFilter.objects.get(id=filter_id, team=request.team, user=request.user)
 

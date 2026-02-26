@@ -19,5 +19,5 @@ class MakeInterval(models.Func):
 class UnquotedValue(models.Value):
     """Raw value with no formatting (not even quotes)"""
 
-    def as_sql(self, compiler, connection):
+    def as_sql(self, compiler, connection):  # ty: ignore[invalid-method-override]
         return self.value, []

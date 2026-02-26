@@ -1,4 +1,5 @@
 import factory
+import factory.django
 
 from apps.pipelines.models import Node, Pipeline, PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.nodes import EndNode, StartNode

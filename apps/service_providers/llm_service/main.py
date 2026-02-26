@@ -1,22 +1,16 @@
 from __future__ import annotations
 
-import contextlib
 import logging
 import re
 from functools import cached_property
 from io import BytesIO
-from time import sleep
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 import pydantic
 from django.db.models import Q
-from google.oauth2 import service_account
-from langchain_classic.agents.openai_assistant import OpenAIAssistantRunnable as BrokenOpenAIAssistantRunnable
-from langchain_core.callbacks import BaseCallbackHandler, CallbackManager, dispatch_custom_event
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
-from langchain_core.load import dumpd
-from langchain_core.messages import HumanMessage
-from langchain_core.runnables import RunnableConfig, ensure_config
+from langchain_core.messages import AIMessage, HumanMessage
 from openai import NOT_GIVEN, OpenAI
 from openai._base_client import SyncAPIClient
 from pydantic import BaseModel
@@ -57,87 +51,6 @@ class AnthropicBuiltinTool(dict):
     pass
 
 
-class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
-    # This is a temporary solution to fix langchain's compatability with the assistants v2 API. This code is
-    # copied from:
-    # `https://github.com/langchain-ai/langchain/blob/54adcd9e828e24bb24b2055f410137aca6a12834/libs/langchain/
-    # langchain/agents/openai_assistant/base.py#L256`.
-    # and updated so that the thread API gets an `attachments` key instead of the previous `file_ids` key.
-    # TODO: Here's a PR that tries to fix it in LangChain: https://github.com/langchain-ai/langchain/pull/21484
-
-    def invoke(self, input: dict, config: RunnableConfig | None = None):
-        config = ensure_config(config)
-        callback_manager = CallbackManager.configure(
-            inheritable_callbacks=config.get("callbacks"),
-            inheritable_tags=config.get("tags"),
-            inheritable_metadata=config.get("metadata"),
-        )
-        run_manager = callback_manager.on_chain_start(dumpd(self), input, name=config.get("run_name"))
-        try:
-            # Being run within AgentExecutor and there are tool outputs to submit.
-            if self.as_agent and input.get("intermediate_steps"):
-                tool_outputs = self._parse_intermediate_steps(input["intermediate_steps"])
-                run = self.client.beta.threads.runs.submit_tool_outputs(**tool_outputs)
-            # Starting a new thread and a new run.
-            elif "thread_id" not in input:
-                thread = {
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": input["content"],
-                            "attachments": input.get("attachments", {}),
-                            "metadata": input.get("message_metadata"),
-                        }
-                    ],
-                    "metadata": input.get("thread_metadata"),
-                }
-                run = self._create_thread_and_run(input, thread)
-            # Starting a new run in an existing thread.
-            elif "run_id" not in input:
-                _ = self.client.beta.threads.messages.create(
-                    input["thread_id"],
-                    content=input["content"],
-                    role="user",
-                    attachments=input.get("attachments", {}),
-                    metadata=input.get("message_metadata"),
-                )
-                run = self._create_run(input)
-            # Submitting tool outputs to an existing run, outside the AgentExecutor
-            # framework.
-            else:
-                run = self.client.beta.threads.runs.submit_tool_outputs(**input)
-            with contextlib.suppress(RuntimeError):
-                dispatch_custom_event(
-                    "OpenAI Assistant Run Created",
-                    {
-                        "assistant_id": run.assistant_id,
-                        "thread_id": run.thread_id,
-                        "run_id": run.id,
-                    },
-                )
-            run = self._wait_for_run(run.id, run.thread_id)
-        except BaseException as e:
-            run_manager.on_chain_error(e)
-            raise e
-        try:
-            response = self._get_response(run)
-        except BaseException as e:
-            run_manager.on_chain_error(e, metadata=run.dict())
-            raise e
-        else:
-            run_manager.on_chain_end(response)
-            return response
-
-    def _wait_for_run(self, run_id: str, thread_id: str, progress_states=("in_progress", "queued")) -> Any:
-        in_progress = True
-        while in_progress:
-            run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
-            in_progress = run.status in progress_states
-            if in_progress:
-                sleep(self.check_every_ms / 1000)
-        return run
-
-
 class LlmService(pydantic.BaseModel):
     _type: str
     supports_transcription: bool = False
@@ -158,53 +71,43 @@ class LlmService(pydantic.BaseModel):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         raise NotImplementedError
 
     def get_output_parser(self):
         return self._default_parser
 
     def _default_parser(
-        self, llm_output, session: ExperimentSession, include_citations: bool = True
+        self, output: AIMessage, session: ExperimentSession, include_citations: bool = True
     ) -> LlmChatResponse:
-        if isinstance(llm_output, dict):
-            output_content = llm_output.get("output", "")
-        elif isinstance(llm_output, str):
-            output_content = llm_output
-        elif isinstance(llm_output, list):
-            # Normalize list outputs: support list[dict] and list[str]
-            if all(isinstance(o, dict) for o in llm_output):
-                output_content = llm_output
-            elif all(isinstance(o, str) for o in llm_output):
-                output_content = "\n".join(llm_output)
-            else:
-                raise TypeError("Unexpected mixed or unsupported list element types in llm_output")
-        else:
-            raise TypeError(f"Unexpected llm_output type: {type(llm_output).__name__}")
-
-        final_text = ""
+        """
+        Default parser for LLM outputs. Supports various formats including strings, dicts, and lists. This parser
+        also extracts cited and generated files from annotations if present and handles deduplication of text entries
+        (in rare cases).
+        """
+        final_text = output.text
         cited_file_ids_remote = []
         cited_file_ids = []
         generated_files: list[File] = []
-        if isinstance(output_content, str):
-            final_text = output_content
-        elif isinstance(output_content, list):
-            for output in output_content:
-                # Populate text
-                final_text = "\n".join([final_text, output.get("text", "")]).strip()
 
-                annotation_entries = output.get("annotations", [])
-                if include_citations:
-                    external_ids = self.get_cited_file_ids(annotation_entries)
-                    cited_file_ids_remote.extend(external_ids)
+        # Annotations etc are stored in content blocks:
+        # https://docs.langchain.com/oss/python/langchain/messages#content-block-reference
+        for content_block in output.content_blocks:
+            # Uploaded files
+            annotation_entries = content_block.get("annotations", [])
+            if include_citations:
+                # Cited files
+                external_ids = self.get_cited_file_ids(annotation_entries)
+                cited_file_ids_remote.extend(external_ids)
 
-                generated_files.extend(self.get_generated_files(annotation_entries, session.team_id))
+            # Generated files
+            generated_files.extend(
+                self.retrieve_generated_files_from_service_provider(annotation_entries, session.team_id)
+            )
 
-                # Replace generated file links with actual file download links
-                for generated_file in generated_files:
-                    final_text = self.replace_file_links(text=final_text, file=generated_file, session=session)
-        else:
-            raise TypeError(f"Unexpected llm_output type: {type(llm_output).__name__}")
+            # Replace generated file links with actual file download links
+            for generated_file in generated_files:
+                final_text = self.replace_file_links(text=final_text, file=generated_file, session=session)
 
         cited_file_ids.extend(extract_file_ids_from_ocs_citations(final_text))
 
@@ -219,13 +122,13 @@ class LlmService(pydantic.BaseModel):
         )
         return parsed_output
 
-    def get_remote_index_manager(self, index_id: str = None) -> IndexManager:
+    def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
         raise NotImplementedError
 
     def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
         raise NotImplementedError
 
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         """
         Create a new vector store at the remote index service.
 
@@ -241,7 +144,9 @@ class LlmService(pydantic.BaseModel):
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
         return []
 
-    def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
+    def retrieve_generated_files_from_service_provider(
+        self, annotation_entries: list[dict], team_id: int
+    ) -> list[File]:
         return []
 
     def replace_file_links(self, text: str, file: File, session: ExperimentSession) -> str:
@@ -286,22 +191,52 @@ class OpenAIGenericService(LlmService):
 
         return {"openai_api_key": self.openai_api_key, "openai_api_base": self.openai_api_base, **kwargs}
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
 
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
+        """Returns the file ids from the annotation entries of type file_citation
+
+        Expected format for annotation_entries:
+        [{"type: "citation", "extras": {"file_id": "file-xxx"}}, ...]
+        """
         external_ids = [
-            entry["file_id"] for entry in annotation_entries if "file_id" in entry and entry["type"] == "file_citation"
+            entry.get("extras", {}).get("file_id") for entry in annotation_entries if entry["type"] == "citation"
         ]
+        # Filter out None values (e.g., when citations contain URLs instead of file_ids)
+        external_ids = [file_id for file_id in external_ids if file_id is not None]
         return detangle_file_ids(external_ids)
 
-    def get_generated_files(self, annotation_entries: list[dict], team_id: int) -> list[File]:
+    def retrieve_generated_files_from_service_provider(
+        self, annotation_entries: list[dict], team_id: int
+    ) -> list[File]:
         """
         Create file records for all generated files in the output.
+
+        Annotation entries for OpenAI generated files look like:
+        [
+            {"type": "container_file_citation", "file_id": "file-xxx", "container_id": "cont-xxx", ...}
+        ]
+
+        but Langchain transforms unknown annotation types into dicts with a "value" key and the type as
+        `non_standard_annotation`. See
+        https://github.com/langchain-ai/langchain/blob/master/libs/core/langchain_core/messages/block_translators/openai.py#L602-L607
+        so we expect to find entries like this:
+        [
+            {
+                "type": "non_standard_annotation",
+                "value": {"type": "container_file_citation", "file_id": "file-xxx", "container_id": "cont-xxx", ...}
+            }
+        ]
         """
         generated_files = []
 
         for entry in annotation_entries:
+            # We know to look for container_file_citation entries in entries for type = non_standard_annotation
+            if entry.get("type", "") != "non_standard_annotation":
+                continue
+
+            entry = entry.get("value", entry)
             if entry.get("type") != "container_file_citation":
                 continue
 
@@ -345,8 +280,8 @@ class OpenAIGenericService(LlmService):
 
 
 class OpenAILlmService(OpenAIGenericService):
-    openai_api_base: str = None
-    openai_organization: str = None
+    openai_api_base: str | None = None
+    openai_organization: str | None = None
 
     def _get_model_kwargs(self, **kwargs) -> dict:
         return {
@@ -358,6 +293,8 @@ class OpenAILlmService(OpenAIGenericService):
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
     def get_assistant(self, assistant_id: str, as_agent=False):
+        from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
+
         return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
 
     def transcribe_audio(self, audio: BytesIO) -> str:
@@ -367,7 +304,7 @@ class OpenAILlmService(OpenAIGenericService):
         )
         return transcript.text
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         tools = []
         for tool_name in built_in_tools:
             if tool_name == "web-search":
@@ -378,7 +315,7 @@ class OpenAILlmService(OpenAIGenericService):
                 raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
         return tools
 
-    def get_remote_index_manager(self, index_id: str = None) -> IndexManager:
+    def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
         from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 
         return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
@@ -388,9 +325,9 @@ class OpenAILlmService(OpenAIGenericService):
 
         return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
 
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
-        file_ids = file_ids or NOT_GIVEN
-        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids)
+    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
+        file_ids_param = NOT_GIVEN if file_ids is None else file_ids
+        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids_param)
         return vector_store.id
 
 
@@ -413,7 +350,7 @@ class AzureLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
 
 
@@ -438,13 +375,19 @@ class AnthropicLlmService(LlmService):
                 "type": "enabled",
                 "budget_tokens": budget_tokens,
             }
+        elif kwargs.pop("adaptive_thinking", False):
+            kwargs["thinking"] = {
+                "type": "adaptive",
+            }
+        if effort := kwargs.pop("effort", None):
+            kwargs["model_kwargs"] = {"output_config": {"effort": effort}}
 
         return kwargs
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         config = config or {}
         tools = []
         for tool_name in built_in_tools:
@@ -479,7 +422,7 @@ class DeepSeekLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
 
 
@@ -494,7 +437,7 @@ class GoogleLlmService(LlmService):
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
 
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] = None) -> list:
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
         # Commenting it for now until we fix it
         # otherwise gemini would not work if code execution or web search is selected in the node
@@ -540,6 +483,8 @@ class GoogleVertexAILlmService(LlmService):
 
     @cached_property
     def credentials(self):
+        from google.oauth2 import service_account
+
         try:
             return service_account.Credentials.from_service_account_info(self.credentials_json)
         except (KeyError, ValueError) as e:

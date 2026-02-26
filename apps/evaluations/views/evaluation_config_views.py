@@ -34,10 +34,11 @@ class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
     permission_required = "evaluations.view_evaluationconfig"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "evaluations",
             "title": "Evaluations",
+            "page_title": "Evaluations",
             "new_object_url": reverse("evaluations:new", args=[team_slug]),
             "table_url": reverse("evaluations:table", args=[team_slug]),
             # "title_help_content": render_help_with_link(
@@ -61,7 +62,12 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
     template_name = "evaluations/evaluation_config_form.html"
     model = EvaluationConfig
     form_class = EvaluationConfigForm
-    extra_context = {"title": "Create Evaluation", "button_text": "Create", "active_tab": "evaluations"}
+    extra_context = {
+        "title": "Create Evaluation",
+        "page_title": "Create Evaluation",
+        "button_text": "Create",
+        "active_tab": "evaluations",
+    }
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -87,6 +93,7 @@ class EditEvaluation(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMi
     template_name = "evaluations/evaluation_config_form.html"
     extra_context = {
         "title": "Update Evaluation",
+        "page_title": "Update Evaluation",
         "button_text": "Update",
         "active_tab": "evaluations",
     }
@@ -112,10 +119,11 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequi
     extra_context = {
         "active_tab": "evaluations",
         "title": "Evaluation Runs",
+        "page_title": "Evaluation Runs",
         "allow_new": False,
     }
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
 
         return {
@@ -137,7 +145,7 @@ class EvaluationTrendsView(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         ("all", "All time"),
     ]
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
 
         date_range = self.request.GET.get("range", "30")
@@ -185,18 +193,18 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_result_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         evaluation_run = get_object_or_404(
             EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team__slug=team_slug
         )
 
+        title = (
+            "Evaluation Run Preview" if evaluation_run.type == EvaluationRunType.PREVIEW else "Evaluation Run Results"
+        )
         context = {
             "active_tab": "evaluations",
-            "title": (
-                "Evaluation Run Preview"
-                if evaluation_run.type == EvaluationRunType.PREVIEW
-                else "Evaluation Run Results"
-            ),
+            "title": title,
+            "page_title": title,
             "evaluation_run": evaluation_run,
             "allow_new": False,
         }
@@ -210,10 +218,14 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         if evaluation_run.status in [EvaluationRunStatus.PROCESSING]:
             context["group_job_id"] = evaluation_run.job_id
         else:
-            context["table_url"] = reverse(
+            table_url = reverse(
                 "evaluations:evaluation_results_table",
                 args=[team_slug, kwargs["evaluation_pk"], kwargs["evaluation_run_pk"]],
             )
+            result_id = self.request.GET.get("result_id")
+            if result_id:
+                table_url = f"{table_url}?result_id={result_id}"
+            context["table_url"] = table_url
             # Add total results count
             context["total_results"] = evaluation_run.results.count()
             if evaluation_run.status == EvaluationRunStatus.COMPLETED:
@@ -225,7 +237,8 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
 
 class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
     permission_required = "evaluations.view_evaluationrun"
-    template_name = "table/single_table.html"
+    template_name = "evaluations/evaluation_results_table.html"
+    table_pagination = {"per_page": 10}
 
     def get_queryset(self):
         return self.evaluation_run
@@ -238,23 +251,84 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
         )
 
     def get_table_data(self):
-        return self.evaluation_run.get_table_data()
+        """Return all table data for pagination."""
+        return self.evaluation_run.get_table_data(include_ids=True)
+
+    def get_table_pagination(self, table):
+        """Configure pagination and calculate page for highlighted result."""
+        highlight_result_id = self.get_highlight_result_id()
+        page_size = self.table_pagination.get("per_page", 10)
+        pagination_config = dict(self.table_pagination)
+
+        # On first load with highlight, calculate which page contains the result
+        if highlight_result_id and not self.request.GET.get("page"):
+            all_data = self.get_table_data()
+            result_index = None
+            for idx, row in enumerate(all_data):
+                if row.get("id") == highlight_result_id:
+                    result_index = idx
+                    break
+
+            if result_index is not None:
+                # Calculate which page contains this result and add to pagination config
+                calculated_page = (result_index // page_size) + 1
+                pagination_config["page"] = calculated_page
+
+        return pagination_config
+
+    def get_highlight_result_id(self):
+        """Extract and validate the result_id query parameter for highlighting."""
+        try:
+            return int(self.request.GET.get("result_id"))
+        except (ValueError, TypeError):
+            return None
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["highlight_result_id"] = self.get_highlight_result_id()
+        return context
 
     def get_table_class(self):
         """
-        Inspect the first row’s keys and build a Table subclass
+        Inspect the first row's keys and build a Table subclass
         with one Column per field.
         """
+        from django.conf import settings
+
         data = self.get_table_data()
         if not data:
             return type("EmptyTable", (tables.Table,), {})
 
+        highlight_result_id = self.get_highlight_result_id()
+
+        # Build column attributes
         attrs = {}
         for row in data:
             for key in row:
                 if key in attrs:
                     continue
                 attrs[key] = self.get_column(key)
+
+        # Define row class factory to add highlighting
+        def _row_class_factory(record):
+            class_defaults = settings.DJANGO_TABLES2_ROW_ATTRS["class"]
+            if highlight_result_id and highlight_result_id == record.get("id"):
+                return f"{class_defaults} bg-yellow-100 dark:bg-yellow-900/20"
+            return class_defaults
+
+        # Create Meta class with row_attrs for highlighting and data-result-id
+        Meta = type(
+            "Meta",
+            (),
+            {
+                "row_attrs": {
+                    **settings.DJANGO_TABLES2_ROW_ATTRS,
+                    "class": _row_class_factory,
+                    "data-result-id": lambda record: record.get("id", ""),
+                },
+            },
+        )
+        attrs["Meta"] = Meta
 
         return type("EvaluationResultTableTable", (tables.Table,), attrs)
 
@@ -271,20 +345,56 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
             # Check if session value exists (not empty string)
             return bool(record.get("session"))
 
+        def dataset_url_factory(_, __, record, value):
+            if not value:
+                return "#"
+            dataset_id = self.evaluation_run.config.dataset_id
+            message_id = record.get("message_id")
+
+            url = reverse("evaluations:dataset_edit", args=[self.kwargs["team_slug"], dataset_id])
+            return f"{url}?message_id={message_id}"
+
+        def dataset_enabled_condition(_, record):
+            return bool(record.get("message_id"))
+
         header = key.replace("_", " ").title()
         match key:
+            case "#":
+                return columns.TemplateColumn(
+                    template_name="evaluations/evaluation_result_id_column.html",
+                    verbose_name=header,
+                    orderable=False,
+                    extra_context={
+                        "team_slug": self.kwargs["team_slug"],
+                        "evaluation_pk": self.kwargs["evaluation_pk"],
+                        "evaluation_run_pk": self.kwargs["evaluation_run_pk"],
+                    },
+                )
+            case "id":
+                # Hide the id column but keep it in the data
+                return columns.Column(verbose_name=header, visible=False)
             case "session":
                 return actions.ActionsColumn(
-                    verbose_name=header,
+                    verbose_name="Links",
                     actions=[
                         actions.chip_action(
                             label="Session",
                             url_factory=session_url_factory,
                             enabled_condition=session_enabled_condition,
                         ),
+                        actions.chip_action(
+                            label="Message",
+                            url_factory=dataset_url_factory,
+                            enabled_condition=dataset_enabled_condition,
+                            open_url_in_new_tab=True,
+                        ),
                     ],
                     align="right",
+                    extra_context={"join_class": "join join-vertical"},
                 )
+            case "message_id":
+                # Skip rendering message_id as a separate column since it's now in session column
+                return None
         return columns.Column(verbose_name=header)
 
 
@@ -379,6 +489,7 @@ def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, e
         context = {
             "active_tab": "evaluations",
             "title": "Upload Results",
+            "page_title": "Upload Results",
             "evaluation_run": evaluation_run,
         }
         return render(request, "evaluations/evaluation_run_update.html", context)

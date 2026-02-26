@@ -16,7 +16,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 class SurveyHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "survey",
             "title": "Survey",
@@ -41,6 +41,7 @@ class CreateSurvey(CreateView):
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Create Survey",
+        "page_title": "Create Survey",
         "button_text": "Create",
         "active_tab": "survey",
     }
@@ -60,6 +61,7 @@ class EditSurvey(UpdateView):
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Update Survey",
+        "page_title": "Update Survey",
         "button_text": "Update",
         "active_tab": "survey",
     }

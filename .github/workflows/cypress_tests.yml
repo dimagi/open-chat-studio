@@ -76,7 +76,7 @@ jobs:
       - name: Set up test database and user
         run: |
           uv run python manage.py migrate
-          uv run python cypress/create_test_user.py
+          uv run python manage.py bootstrap_data
         env:
           DEBUG: 'true'
           USE_DEBUG_TOOLBAR: 'false'
@@ -100,7 +100,7 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
       
       - name: Run Cypress tests
-        uses: cypress-io/github-action@v6
+        uses: cypress-io/github-action@v7
         with:
           start: ''
           wait-on: 'http://127.0.0.1:8000'

@@ -1,25 +1,11 @@
 from django import forms
-from django.db.models import Q, Subquery
-from langchain_classic.memory.prompt import SUMMARY_PROMPT
 
 from apps.events.models import TimePeriod
-from apps.experiments.models import Experiment, ExperimentRoute
+from apps.experiments.models import Experiment
 from apps.generics.type_select_form import TypeSelectForm
 from apps.pipelines.models import Pipeline, PipelineEventInputs
 
 from .models import EventAction, StaticTrigger, TimeoutTrigger
-
-
-class SummarizeConversationForm(forms.Form):
-    prompt = forms.CharField(
-        widget=forms.Textarea, label="With the following prompt:", required=False, initial=SUMMARY_PROMPT.template
-    )
-
-    def clean_prompt(self):
-        data = self.cleaned_data["prompt"]
-        if not data:
-            return SUMMARY_PROMPT.template
-        return data
 
 
 class SendMessageToBotForm(forms.Form):
@@ -86,12 +72,7 @@ class ScheduledMessageConfigForm(forms.Form):
         super().__init__(*args, **kwargs)
 
         field = self.fields["experiment_id"]
-        children_subquery = Subquery(
-            ExperimentRoute.objects.filter(parent__id=experiment_id).values_list("child", flat=True)
-        )
-        experiments = Experiment.objects.filter(Q(id=experiment_id) | Q(id__in=children_subquery)).values_list(
-            "id", "name"
-        )
+        experiments = Experiment.objects.filter(id=experiment_id).values_list("id", "name")
         field.choices = experiments
         if not kwargs.get("initial") and len(experiments) == 1:
             field.initial = experiment_id
@@ -147,7 +128,6 @@ def get_action_params_form(data=None, instance=None, team_id=None, experiment_id
             "log": EmptyForm(**form_kwargs),
             "send_message_to_bot": SendMessageToBotForm(**form_kwargs),
             "end_conversation": EmptyForm(**form_kwargs),
-            "summarize": SummarizeConversationForm(**form_kwargs),
             "schedule_trigger": ScheduledMessageConfigForm(experiment_id=experiment_id, **form_kwargs),
             "pipeline_start": PipelineStartForm(team_id=team_id, **form_kwargs),
         },
@@ -174,5 +154,9 @@ class StaticTriggerForm(BaseTriggerForm):
 class TimeoutTriggerForm(BaseTriggerForm):
     class Meta:
         model = TimeoutTrigger
-        fields = ["delay", "total_num_triggers"]
-        labels = {"total_num_triggers": "Trigger count", "delay": "Wait time"}
+        fields = ["delay", "total_num_triggers", "trigger_from_first_message"]
+        labels = {
+            "total_num_triggers": "Trigger count",
+            "delay": "Wait time",
+            "trigger_from_first_message": "Trigger from first message",
+        }

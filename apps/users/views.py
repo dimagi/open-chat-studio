@@ -1,4 +1,4 @@
-from allauth.account.utils import send_email_confirmation
+from allauth.account.models import EmailAddress
 from allauth.mfa.models import Authenticator
 from allauth.mfa.utils import is_mfa_enabled
 from allauth.socialaccount.models import SocialAccount
@@ -14,6 +14,9 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django_htmx.http import HttpResponseLocation
 
 from apps.oauth.models import OAuth2AccessToken
+from apps.ocs_notifications.forms import NotificationPreferencesForm
+from apps.ocs_notifications.models import UserNotificationPreferences
+from apps.ocs_notifications.utils import bust_unread_notification_cache
 from apps.web.waf import WafRule, waf_allow
 
 from .forms import ApiKeyForm, CustomUserChangeForm, UploadAvatarForm
@@ -39,7 +42,7 @@ def profile(request):
                 # don't change it but instead send a confirmation email
                 # email will be changed by signal when confirmed
                 new_email = user.email
-                send_email_confirmation(request, user, signup=False, email=new_email)
+                EmailAddress.objects.add_email(request, user, new_email, confirm=True)
                 user.email = user_before_update.email
                 # recreate the form to avoid populating the previous email in the returned page
                 form = CustomUserChangeForm(instance=user)
@@ -53,6 +56,10 @@ def profile(request):
         form = CustomUserChangeForm(instance=request.user)
 
     new_api_key = request.session.pop(SESSION_API_KEY, None)
+
+    # Get or create notification preferences
+    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user, team=request.team)[0]
+    notification_preferences_form = NotificationPreferencesForm(instance=preferences)
 
     oauth_tokens = (
         OAuth2AccessToken.objects.filter(user=request.user).select_related("application").order_by("-created")
@@ -70,6 +77,7 @@ def profile(request):
         "account/profile.html",
         {
             "form": form,
+            "notification_preferences_form": notification_preferences_form,
             "active_tab": "profile",
             "page_title": _("Profile"),
             "api_keys": request.user.api_keys.filter(revoked=False).select_related("team"),
@@ -140,4 +148,19 @@ def revoke_oauth_token(request):
             app=token.application.name,
         ),
     )
+    return HttpResponseRedirect(reverse("users:user_profile"))
+
+
+@login_required
+@require_POST
+def save_notification_preferences(request):
+    """Save notification preferences from the profile page"""
+    preferences = UserNotificationPreferences.objects.get_or_create(user=request.user, team=request.team)[0]
+    form = NotificationPreferencesForm(request.POST, instance=preferences)
+    if form.is_valid():
+        form.save()
+        bust_unread_notification_cache(request.user.id, team_slug=request.team.slug)
+        messages.success(request, _("Notification preferences saved successfully."))
+    else:
+        messages.error(request, _("Failed to save notification preferences."))
     return HttpResponseRedirect(reverse("users:user_profile"))

@@ -313,6 +313,8 @@ def _get_tool_file_ids_from_openai(client, assistant_data, tool_type: str) -> li
             return []
         return [file.id for file in client.vector_stores.files.list(vector_store_id=vector_store_ids[0])]
 
+    return []
+
 
 @wrap_openai_errors
 def get_diff_with_openai_assistant(assistant: OpenAiAssistant) -> list[str]:

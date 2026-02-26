@@ -1,10 +1,12 @@
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
+from langchain_core.messages import HumanMessage
 
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
     extract_file_ids_from_ocs_citations,
+    format_multimodal_input,
     populate_reference_section_from_citations,
     remove_citations_from_text,
 )
@@ -131,3 +133,139 @@ def test_populate_reference_section_with_custom_citation():
 )
 def test_remove_citations_from_text(input_text, expected_output):
     assert remove_citations_from_text(input_text) == expected_output
+
+
+class TestFormatMultimodalInput:
+    def test_text_only_message(self):
+        result = format_multimodal_input("Hello world", [])
+
+        assert isinstance(result, HumanMessage)
+        assert result.content == [{"type": "text", "text": "Hello world"}]
+
+    def test_image_attachment(self):
+        attachment = Mock()
+        attachment.size = 1024  # 1KB
+        attachment.content_type = "image/jpeg"
+        attachment.download_link = "http://example.com/image.jpg"
+        attachment.name = "image.jpg"
+
+        result = format_multimodal_input("Check this image", [attachment])
+
+        assert isinstance(result, HumanMessage)
+        assert len(result.content) == 2
+        assert result.content[0] == {"type": "text", "text": "Check this image"}
+        assert result.content[1] == {
+            "type": "image",
+            "source_type": "url",
+            "url": "http://example.com/image.jpg",
+            "mime_type": "image/jpeg",
+        }
+
+    def test_docx_attachment_converted_to_text(self):
+        attachment = Mock()
+        attachment.size = 1024  # 1KB
+        attachment.content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        attachment.name = "document.docx"
+        attachment.read_text.return_value = "# Document Title\n\nThis is the document content."
+
+        result = format_multimodal_input("Review this document", [attachment])
+
+        assert isinstance(result, HumanMessage)
+        assert len(result.content) == 2
+        assert result.content[0] == {"type": "text", "text": "Review this document"}
+        expected_text = (
+            '<document filename="document.docx">\n# Document Title\n\nThis is the document content.\n</document>'
+        )
+        assert result.content[1] == {"type": "text", "text": expected_text}
+        attachment.read_text.assert_called_once()
+
+    def test_xlsx_attachment_converted_to_text(self):
+        attachment = Mock()
+        attachment.size = 2048  # 2KB
+        attachment.content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        attachment.name = "spreadsheet.xlsx"
+        attachment.read_text.return_value = "| Col A | Col B |\n|-------|-------|\n| 1 | 2 |"
+
+        result = format_multimodal_input("Analyze this spreadsheet", [attachment])
+
+        assert isinstance(result, HumanMessage)
+        assert len(result.content) == 2
+        assert result.content[0] == {"type": "text", "text": "Analyze this spreadsheet"}
+        expected_text = (
+            '<document filename="spreadsheet.xlsx">\n| Col A | Col B |\n|-------|-------|\n| 1 | 2 |\n</document>'
+        )
+        assert result.content[1] == {"type": "text", "text": expected_text}
+
+    def test_pdf_attachment_sent_as_file(self):
+        attachment = Mock()
+        attachment.size = 1024
+        attachment.content_type = "application/pdf"
+        attachment.name = "document.pdf"
+        attachment.read_base64.return_value = "base64encodedcontent"
+
+        result = format_multimodal_input("Review this PDF", [attachment])
+
+        assert isinstance(result, HumanMessage)
+        assert len(result.content) == 2
+        assert result.content[0] == {"type": "text", "text": "Review this PDF"}
+        assert result.content[1] == {
+            "type": "file",
+            "source_type": "base64",
+            "data": "base64encodedcontent",
+            "mime_type": "application/pdf",
+            "filename": "document.pdf",
+        }
+        attachment.read_base64.assert_called_once()
+
+    def test_docx_conversion_failure_skips_attachment(self):
+        attachment = Mock()
+        attachment.size = 1024
+        attachment.content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        attachment.name = "broken.docx"
+        attachment.read_text.side_effect = Exception("Failed to read file")
+
+        result = format_multimodal_input("Check this doc", [attachment])
+
+        # When conversion fails, the attachment should be skipped (only text message)
+        assert len(result.content) == 2
+        assert result.content[0] == {"type": "text", "text": "Check this doc"}
+        assert "Error" in result.content[1]["text"]
+
+    def test_mixed_attachments(self):
+        image_attachment = Mock()
+        image_attachment.size = 1024
+        image_attachment.content_type = "image/png"
+        image_attachment.download_link = "http://example.com/image.png"
+        image_attachment.name = "image.png"
+
+        docx_attachment = Mock()
+        docx_attachment.size = 2048
+        docx_attachment.content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        docx_attachment.name = "document.docx"
+        docx_attachment.read_text.return_value = "Document content"
+
+        pdf_attachment = Mock()
+        pdf_attachment.size = 3072
+        pdf_attachment.content_type = "application/pdf"
+        pdf_attachment.name = "report.pdf"
+        pdf_attachment.read_base64.return_value = "pdfbase64"
+
+        result = format_multimodal_input("Review all files", [image_attachment, docx_attachment, pdf_attachment])
+
+        assert len(result.content) == 4
+        assert result.content[0]["type"] == "text"
+        assert result.content[1]["type"] == "image"  # PNG image
+        assert result.content[2]["type"] == "text"  # DOCX converted to text
+        assert "Document content" in result.content[2]["text"]
+        assert result.content[3]["type"] == "file"  # PDF as file
+
+    @patch("apps.service_providers.llm_service.utils.settings")
+    def test_file_size_exceeds_max(self, mock_settings):
+        mock_settings.MAX_FILE_SIZE_MB = 10
+
+        attachment = Mock()
+        attachment.size = 20 * 1024 * 1024  # 20MB
+        attachment.name = "large_file.docx"
+
+        with pytest.raises(ValueError, match="exceeds maximum size"):
+            format_multimodal_input("Process this", [attachment])

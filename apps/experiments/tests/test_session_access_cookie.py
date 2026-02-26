@@ -35,12 +35,14 @@ def test_access_denied_with_no_cookie(client, session):
 def test_access_denied_with_bad_cookie(client, session):
     next_url = _start_session(client, session)
 
-    value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).sign_object({
-        "experiment_id": "abc",
-        "session_id": "def",
-        "participant_id": 1,
-        "user_id": 2,
-    })
+    value = signing.get_cookie_signer(salt=CHAT_SESSION_ACCESS_SALT).sign_object(
+        {
+            "experiment_id": "abc",
+            "session_id": "def",
+            "participant_id": 1,
+            "user_id": 2,
+        }
+    )
     client.cookies[CHAT_SESSION_ACCESS_COOKIE] = value
     response = client.get(next_url)
     assert response.status_code == 404

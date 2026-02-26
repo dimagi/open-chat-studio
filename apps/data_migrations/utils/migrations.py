@@ -1,13 +1,15 @@
 from contextlib import ContextDecorator, ExitStack
 
 from django.core.management import call_command
-from django.db import migrations, transaction
+from django.db import transaction
+from django.db.migrations.operations import base as migration_ops_base
 from django.db.migrations.operations.base import OperationCategory
+from django.utils import timezone
 
 from apps.data_migrations.models import CustomMigration
 
 
-class RunDataMigration(migrations.operations.base.Operation):
+class RunDataMigration(migration_ops_base.Operation):
     """
     Custom migration operation to run a data migration management command.
 
@@ -16,7 +18,14 @@ class RunDataMigration(migrations.operations.base.Operation):
 
         class Migration(migrations.Migration):
             operations = [
+                # Basic usage
                 RunDataMigration("my_migration"),
+
+                # With command options
+                RunDataMigration("my_migration", command_options={"force": True}),
+
+                # With verbosity
+                RunDataMigration("my_migration", command_options={"verbosity": 2}),
             ]
     """
 
@@ -24,21 +33,27 @@ class RunDataMigration(migrations.operations.base.Operation):
     reduces_to_sql = False
     category = OperationCategory.PYTHON
 
-    def __init__(self, command_name, elidable=False):
+    def __init__(self, command_name, command_options=None, elidable=False):
         self.command_name = command_name
+        self.command_options = command_options or {}
         self.elidable = elidable
 
     def state_forwards(self, app_label, state):
         pass
 
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
-        call_command(self.command_name)
+        call_command(self.command_name, **self.command_options)
 
     def describe(self):
+        if self.command_options:
+            opts_str = ", ".join(f"{k}={v}" for k, v in self.command_options.items())
+            return f"Run data migration: {self.command_name} ({opts_str})"
         return f"Run data migration: {self.command_name}"
 
     def deconstruct(self):
         kwargs = {}
+        if self.command_options:
+            kwargs["command_options"] = self.command_options
         if self.elidable:
             kwargs["elidable"] = self.elidable
         return (
@@ -77,6 +92,19 @@ def mark_migration_applied(name: str) -> CustomMigration:
     """
     migration, _created = CustomMigration.objects.get_or_create(name=name)
     return migration
+
+
+@transaction.atomic()
+def update_migration_timestamp(name: str) -> None:
+    """
+    Update the applied_at timestamp for an existing migration to the current time.
+
+    Used when re-running a migration with --force flag to track when it was last executed.
+
+    Args:
+        name: Unique migration identifier
+    """
+    CustomMigration.objects.filter(name=name).update(applied_at=timezone.now())
 
 
 class run_once(ContextDecorator):

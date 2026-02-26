@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
 from apps.custom_actions.schema_utils import resolve_references
-from apps.pipelines.nodes.base import UiSchema, Widgets
+from apps.pipelines.nodes.base import UiSchema, VisibleWhen, Widgets
 
 
 class OpenAIReasoningEffortParameter(TextChoices):
@@ -32,6 +32,13 @@ class GPT52ReasoningEffortParameter(TextChoices):
     MEDIUM = "medium", "Medium"
     HIGH = "high", "High"
     XHIGH = "xhigh", "XHigh"
+
+
+class Claude46EffortParameter(TextChoices):
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    MAX = "max", "Max"
 
 
 class OpenAIVerbosityParameter(TextChoices):
@@ -106,8 +113,9 @@ class GPT52Parameters(LLMModelParamBase):
         ge=0.0,
         le=2.0,
         title="Temperature",
-        description="Only supported when reasoning effort is set to 'none'",
-        json_schema_extra=UiSchema(widget=Widgets.range),
+        json_schema_extra=UiSchema(
+            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), default_on_show=0.7
+        ),
     )
 
     top_p: float | None = Field(
@@ -115,8 +123,9 @@ class GPT52Parameters(LLMModelParamBase):
         ge=0.0,
         le=1.0,
         title="Top P",
-        description="Only supported when reasoning effort is set to 'none'",
-        json_schema_extra=UiSchema(widget=Widgets.range),
+        json_schema_extra=UiSchema(
+            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), default_on_show=1.0
+        ),
     )
 
     @field_validator("temperature", mode="before")
@@ -127,10 +136,7 @@ class GPT52Parameters(LLMModelParamBase):
                 "Temperature can only be set when reasoning effort is 'none'",
             )
         elif value is None and info.data.get("effort") == "none":
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "Temperature must be set when reasoning effort is 'none'",
-            )
+            return 0.7
         return value
 
     @field_validator("top_p", mode="before")
@@ -141,10 +147,7 @@ class GPT52Parameters(LLMModelParamBase):
                 "Top P can only be set when reasoning effort is 'none'",
             )
         elif value is None and info.data.get("effort") == "none":
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "Top P must be set when reasoning effort is 'none'",
-            )
+            return 1.0
         return value
 
 
@@ -180,7 +183,6 @@ class ClaudeHaikuLatestParameters(AnthropicBaseParameters):
 class ClaudeOpus4_20250514Parameters(AnthropicBaseParameters):
     max_tokens: int = Field(
         title="Max Output Tokens",
-        required=True,
         default=32000,
         description="The maximum number of tokens to generate in the completion.",
         ge=1,
@@ -209,6 +211,7 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
         description="Determines how many tokens Claude can use for its internal reasoning process.",
         default=1024,
         ge=1024,
+        json_schema_extra=UiSchema(visible_when=VisibleWhen(field="thinking", value=True)),
     )
 
     @field_validator("budget_tokens", mode="before")
@@ -234,6 +237,59 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
                 "Thinking can only be used with a temperature of 1.0",
             )
         return value
+
+
+class ClaudeOpus46Parameters(BasicParameters):
+    temperature: float | None = Field(
+        default=1.0,
+        ge=0.0,
+        le=2.0,
+        title="Temperature",
+        json_schema_extra=UiSchema(
+            widget=Widgets.range, visible_when=VisibleWhen(field="adaptive_thinking", value=False)
+        ),
+    )
+    max_tokens: int = Field(
+        title="Max Output Tokens",
+        default=32000,
+        description="The maximum number of tokens to generate in the completion.",
+        ge=1,
+        le=128000,
+    )
+    effort: Claude46EffortParameter = Field(
+        title="Reasoning Effort",
+        default=Claude46EffortParameter.HIGH,
+        description="Control intelligence, speed, and cost tradeoffs with adaptive thinking.",
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=Claude46EffortParameter.labels),
+    )
+    adaptive_thinking: bool = Field(
+        title="Enable Adaptive Thinking",
+        default=False,
+        description="Let Claude dynamically decide when and how much to think with adaptive thinking mode. "
+        "At the default effort level (high), Claude will almost always think. "
+        "At lower effort levels, Claude may skip thinking for simpler problems.",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
+
+    @field_validator("adaptive_thinking", mode="before")
+    def check_temperature(cls, value: bool, info):
+        # Only when adaptive thinking is disabled can the model's temperature be adjusted
+        if value and info.data.get("temperature") != 1.0:
+            raise PydanticCustomError(
+                "invalid_model_parameters",
+                "Adaptive thinking can only be used with a temperature of 1.0",
+            )
+        return value
+
+
+class ClaudeSonnet46Parameters(ClaudeOpus46Parameters):
+    max_tokens: int = Field(
+        title="Max Output Tokens",
+        default=32000,
+        description="The maximum number of tokens to generate in the completion.",
+        ge=1,
+        le=64000,
+    )
 
 
 def get_schema(model):

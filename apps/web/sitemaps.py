@@ -19,5 +19,5 @@ class StaticViewSitemap(sitemaps.Sitemap):
             "web:home",
         ]
 
-    def location(self, item):
+    def location(self, item):  # ty: ignore[invalid-method-override]
         return reverse(item)

@@ -3,6 +3,7 @@ from unittest import mock
 import pytest
 
 from apps.chat.bots import PipelineBot
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistory
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
@@ -11,7 +12,7 @@ from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
 )
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.langchain import (
     FakeLlmEcho,
     build_fake_llm_service,
@@ -30,24 +31,29 @@ def pipeline():
 
 
 @pytest.fixture()
+def provider_model():
+    return LlmProviderModelFactory()
+
+
+@pytest.fixture()
 def experiment_session():
     return ExperimentSessionFactory()
 
 
 @django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_session):
+def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 1:",
         history_type="node",
     )
     llm_2 = llm_response_with_prompt_node(
-        str(provider.id), str(experiment_session.experiment.llm_provider_model.id), prompt="Node 2:", history_type=None
+        str(provider.id), str(provider_model.id), prompt="Node 2:", history_type=None
     )  # No history_type
     nodes = [
         start_node(),
@@ -107,19 +113,19 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
 
 @django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, experiment_session):
+def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 1:",
         history_type="node",
     )
     llm_2 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 2:",
         history_type="node",
     )
@@ -183,20 +189,20 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
 
 @django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_global_history(get_llm_service, provider, pipeline, experiment_session):
+def test_global_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
 
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 1:",
         history_type="global",
     )
     llm_2 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 2:",
         history_type="node",
     )
@@ -214,13 +220,19 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
         trace_service=TracingService.empty(),
     )
 
+    def send_message(text):
+        human_message = ChatMessage.objects.create(
+            chat=experiment_session.chat, message_type=ChatMessageType.HUMAN, content=text
+        )
+        return bot.process_input(text, human_message=human_message)
+
     user_input = "The User Input"
-    output_1, _ = bot.process_input(user_input)
+    output_1 = send_message(user_input)
     user_input_2 = "Saying more stuff"
-    output_2, _ = bot.process_input(user_input_2)
+    output_2 = send_message(user_input_2)
 
     user_input_3 = "Tell me something interesting"
-    bot.process_input(user_input_3)
+    send_message(user_input_3)
 
     expected_call_messages = [
         # First interaction with Node 1, no history yet
@@ -267,14 +279,14 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
 
 @django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_session):
+def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
 
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 1:",
         history_type="named",
         history_name="history1",
@@ -282,15 +294,13 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
     )
     llm_2 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 2:",
         history_type="named",
         history_name="history1",
         name="llm2",
     )
-    llm_3 = llm_response_with_prompt_node(
-        str(provider.id), str(experiment_session.experiment.llm_provider_model.id), prompt="Node 3:", history_type=None
-    )
+    llm_3 = llm_response_with_prompt_node(str(provider.id), str(provider_model.id), prompt="Node 3:", history_type=None)
     nodes = [start_node(), llm_1, llm_2, llm_3, end_node()]
     runnable = create_runnable(pipeline, nodes)
 
@@ -344,14 +354,14 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
 
 @django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_session):
+def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
 
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 1:",
         history_type="none",
     )

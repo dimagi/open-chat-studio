@@ -18,13 +18,26 @@ from .base import ServiceNotInitializedException, ServiceReentryException, Trace
 from .const import SpanLevel
 
 if TYPE_CHECKING:
-    from langchain.callbacks.base import BaseCallbackHandler
+    from langchain_core.callbacks.base import BaseCallbackHandler
     from langfuse import Langfuse
+    from langfuse.api.client import FernLangfuse
 
     from apps.experiments.models import ExperimentSession
 
 
 logger = logging.getLogger("ocs.tracing.langfuse")
+
+
+def get_langfuse_api_client(config: dict) -> FernLangfuse:
+    """Create a Langfuse management API client for reading trace data."""
+    from langfuse.api.client import FernLangfuse
+
+    return FernLangfuse(
+        base_url=config["host"],
+        username=config["public_key"],
+        password=config["secret_key"],
+        timeout=10,
+    )
 
 
 class LangFuseTracer(Tracer):
@@ -78,10 +91,7 @@ class LangFuseTracer(Tracer):
                 )
 
                 yield trace_context
-
-                # Update trace with outputs if any
-                if outputs := trace_context.outputs:
-                    trace.update(output=outputs.copy())
+                self._update_span_from_context(trace, trace_context)
         finally:
             if self.trace_record:
                 self.client.flush()
@@ -114,10 +124,19 @@ class LangFuseTracer(Tracer):
             level=level,
         ) as span:
             yield span_context
-            if output := span_context.outputs:
-                span.update(output=output.copy())
+            self._update_span_from_context(span, span_context)
 
-    def get_langchain_callback(self) -> BaseCallbackHandler | None:
+    def _update_span_from_context(self, span, context: TraceContext):
+        if output := context.outputs:
+            span.update(output=output.copy())
+
+        if exc := context.exception:
+            span.update(level="ERROR", status_message=str(exc))
+
+        if error := context.error:
+            span.update(level="ERROR", status_message=error)
+
+    def get_langchain_callback(self) -> BaseCallbackHandler | None:  # ty: ignore[invalid-method-override]
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
@@ -130,7 +149,7 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
-        return {
+        return {  # ty: ignore[invalid-return-type]
             "trace_id": self.trace_record.trace_id,
             "trace_url": self.client.get_trace_url(trace_id=self.trace_record.trace_id),
             "trace_provider": self.type,
@@ -154,7 +173,7 @@ class ClientManager:
     certain amount of time."""
 
     def __init__(self, stale_timeout=300, prune_interval=60, max_clients=20) -> None:
-        self.key_timestamps: dict[str, float] = {}
+        self.key_timestamps: dict[str | None, float] = {}
         self.stale_timeout = stale_timeout
         self.max_clients = max_clients
         self.prune_interval = prune_interval

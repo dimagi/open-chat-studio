@@ -37,7 +37,7 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
                 # history to the user's message. We need to replace the full message history in the state.
                 # See https://github.com/langchain-ai/langchain/blob/c63f23d2339b2604edc9ae1d9f7faf7d6cc7dc78/libs/langchain_v1/langchain/agents/middleware/summarization.py#L286-L292
                 RemoveMessage(id=REMOVE_ALL_MESSAGES),
-                *self.node.get_history(self.session),
+                *self.node.get_history(self.session, exclude_message_id=state.get("input_message_id")),
                 *state["messages"],
             ]
         }
@@ -76,7 +76,7 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
                 return messages[i].additional_kwargs["id"]
 
     def _get_compression_marker(self, messages: list[BaseMessage]) -> str:
-        return messages[1].content
+        return messages[1].content  # ty: ignore[invalid-return-type]
 
 
 class SummarizeHistoryMiddleware(BaseNodeHistoryMiddleware):

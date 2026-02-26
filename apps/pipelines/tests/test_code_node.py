@@ -5,9 +5,11 @@ from django.core.files.base import ContentFile
 from pydantic import ValidationError
 
 from apps.channels.datamodels import Attachment
+from apps.chat.models import ChatAttachment
 from apps.files.models import File
 from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
 from apps.pipelines.tests.utils import (
     code_node,
@@ -55,10 +57,9 @@ def main(input, **kwargs):
 )
 def test_code_node(code, user_input, output):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node_output = node._process(
-        PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
-    )
-    assert node_output.update["messages"][-1] == output
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
+    node_output = node._process(state, NodeContext(state))
+    assert node_output.update["messages"][-1] == output  # ty: ignore[not-subscriptable]
 
 
 EXTRA_FUNCTION = """
@@ -111,10 +112,9 @@ def test_code_node_build_errors(code, error):
 )
 def test_code_node_runtime_errors(code, user_input, error):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
     with pytest.raises(CodeNodeRunError, match=error):
-        node._process(
-            PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
-        )
+        node._process(state, NodeContext(state))
 
 
 @pytest.mark.django_db()
@@ -124,16 +124,15 @@ def main(input, **kwargs):
     return get_participant_data()["fun_facts"]["body_type"]
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node_output = node._process(
-        PipelineState(
-            last_node_input="hi",
-            node_inputs=["hi"],
-            outputs={},
-            experiment_session=experiment_session,
-            participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
-        ),
+    state = PipelineState(
+        last_node_input="hi",
+        node_inputs=["hi"],
+        outputs={},
+        experiment_session=experiment_session,
+        participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
     )
-    assert node_output.update["messages"][-1] == "robot"
+    node_output = node._process(state, NodeContext(state))
+    assert node_output.update["messages"][-1] == "robot"  # ty: ignore[not-subscriptable]
 
 
 @pytest.mark.django_db()
@@ -148,17 +147,16 @@ def main(input, **kwargs):
     return get_participant_data()["fun_facts"]["personality"]
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node_output = node._process(
-        PipelineState(
-            last_node_input="hi",
-            node_inputs=["hi"],
-            outputs={},
-            experiment_session=experiment_session,
-            participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
-        ),
+    state = PipelineState(
+        last_node_input="hi",
+        node_inputs=["hi"],
+        outputs={},
+        experiment_session=experiment_session,
+        participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
     )
-    assert node_output.update["messages"][-1] == output
-    assert node_output.update["participant_data"]["fun_facts"]["personality"] == output
+    node_output = node._process(state, NodeContext(state))
+    assert node_output.update["messages"][-1] == output  # ty: ignore[not-subscriptable]
+    assert node_output.update["participant_data"]["fun_facts"]["personality"] == output  # ty: ignore[not-subscriptable]
 
 
 @django_db_with_data()
@@ -243,8 +241,9 @@ def main(input, **kwargs):
     return input
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
     with pytest.raises(CodeNodeRunError, match="Cannot set the 'outputs' key of the temporary state"):
-        node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
+        node._process(state, NodeContext(state))
 
 
 def test_temp_state_user_input():
@@ -258,7 +257,7 @@ def main(input, **kwargs):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_get)
     state = PipelineState(messages=[user_input], outputs={}, experiment_session=None, temp_state={})
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output.update["messages"][-1] == user_input
+    assert node_output.update["messages"][-1] == user_input  # ty: ignore[not-subscriptable]
 
 
 @pytest.mark.django_db()
@@ -279,7 +278,7 @@ def main(input, **kwargs):
         temp_state={},
     )
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output.update["messages"][-1] == "content from file"
+    assert node_output.update["messages"][-1] == "content from file"  # ty: ignore[not-subscriptable]
 
 
 @pytest.mark.django_db()
@@ -320,7 +319,7 @@ def main(input, **kwargs):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output.update["messages"][-1] == "Number of schedules: 1"
+    assert node_output.update["messages"][-1] == "Number of schedules: 1"  # ty: ignore[not-subscriptable]
 
 
 @pytest.mark.django_db()
@@ -337,7 +336,7 @@ def main(input, **kwargs):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert node_output.update["messages"][-1] == "Number of schedules: 0, Empty list: True"
+    assert node_output.update["messages"][-1] == "Number of schedules: 0, Empty list: True"  # ty: ignore[not-subscriptable]
 
 
 @pytest.mark.django_db()
@@ -353,7 +352,7 @@ def main(input, **kwargs):
         messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={}, session_state={}
     )
     output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
-    assert output.update["session_state"] == {"message_count": 2}
+    assert output.update["session_state"] == {"message_count": 2}  # ty: ignore[not-subscriptable]
 
 
 def test_tags_mocked():
@@ -364,9 +363,10 @@ def main(input, **kwargs):
     return input
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
-    output = node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
-    assert output.update["output_message_tags"] == [("message-tag", "")]
-    assert output.update["session_tags"] == [("session-tag", "")]
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
+    output = node._process(state, NodeContext(state))
+    assert output.update["output_message_tags"] == [("message-tag", "")]  # ty: ignore[not-subscriptable]
+    assert output.update["session_tags"] == [("session-tag", "")]  # ty: ignore[not-subscriptable]
 
 
 def test_set_list():
@@ -389,10 +389,9 @@ def main(input, **kwargs):
     """
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
-    node_output = node._process(
-        PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
-    )
-    assert node_output.update["messages"][-1] == "3,4 - {1, 2}"
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
+    node_output = node._process(state, NodeContext(state))
+    assert node_output.update["messages"][-1] == "3,4 - {1, 2}"  # ty: ignore[not-subscriptable]
 
 
 def test_traceback():
@@ -407,8 +406,9 @@ def main(input, **kwargs):
     """
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
     with pytest.raises(CodeNodeRunError) as exc_info:
-        node._process(PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"]))
+        node._process(state, NodeContext(state))
     assert (
         str(exc_info.value)
         == """Error: NameError("name 'fail' is not defined")
@@ -419,3 +419,81 @@ Context:
       8:     return input
       9:     """
     )
+
+
+@pytest.mark.parametrize(
+    ("key_name", "should_raise"),
+    [
+        # Valid cases - should not raise
+        ("custom_key", False),
+        ("other_key", False),
+        # Reserved key - should raise
+        ("remote_context", True),
+        ("attachments", True),
+        (" remote_context ", True),
+        (" remote_context", True),
+        ("remote_context ", True),
+    ],
+)
+def test_code_node_reserved_session_state_keys(key_name, should_raise):
+    """Test that CodeNode validates and prevents setting reserved session state keys"""
+    code = f"""def main(input, **kwargs):
+    set_session_state_key("{key_name}", "value")
+    return input"""
+
+    if should_raise:
+        with pytest.raises(ValidationError, match="reserved_key_used"):
+            CodeNode(name="test", node_id="123", django_node=None, code=code)
+    else:
+        node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+        assert node is not None
+
+
+@pytest.mark.django_db()
+def test_add_file_attachment(experiment_session):
+    code = """
+def main(input, **kwargs):
+    add_file_attachment("test.txt", b"hello world", "text/plain")
+    return input
+"""
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(
+        messages=["hi"],
+        outputs={},
+        experiment_session=experiment_session,
+        temp_state={},
+    )
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+
+    # Verify file was created
+    file = File.objects.latest("id")
+    assert file.name == "test.txt"
+    assert file.content_type == "text/plain"
+    assert file.file.read() == b"hello world"
+
+    # Verify file ID tracked in output metadata
+    generated_files = node_output.update["output_message_metadata"]["generated_files"]  # ty: ignore[not-subscriptable]
+    assert file.id in generated_files
+
+    # Verify ChatAttachment was created
+    attachment = ChatAttachment.objects.get(chat=experiment_session.chat)
+    assert attachment.tool_type == "code_interpreter"
+    assert file in attachment.files.all()
+
+
+@pytest.mark.django_db()
+def test_add_file_attachment_requires_bytes(experiment_session):
+    code = """
+def main(input, **kwargs):
+    add_file_attachment("test.txt", "not bytes", "text/plain")
+    return input
+"""
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(
+        outputs={},
+        experiment_session=experiment_session,
+        last_node_input="hi",
+        node_inputs=["hi"],
+    )
+    with pytest.raises(CodeNodeRunError, match="'content' must be bytes"):
+        node._process(state, NodeContext(state))

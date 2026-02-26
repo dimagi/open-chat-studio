@@ -146,4 +146,15 @@
       </ul>
     </li>
   {% endflag %}
+  {% flag "flag_human_annotations" %}
+    {% if perms.human_annotations.view_annotationqueue %}
+      <li>
+        <a href="{% url 'human_annotations:queue_home' request.team.slug %}"
+           {% if active_tab == 'annotation_queues' %}class="menu-active"{% endif %}>
+          <i class="fa-solid fa-pen-to-square"></i>
+          {% translate "Annotations" %}
+        </a>
+      </li>
+    {% endif %}
+  {% endflag %}
 {% endif %}

@@ -61,14 +61,15 @@ def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict | st
 
 
 def create_pipeline_model(
-    nodes: list[dict], edges: list[dict | str] | None = None, pipeline: Pipeline = None
+    nodes: list[dict], edges: list[dict | str] | None = None, pipeline: Pipeline | None = None
 ) -> Pipeline:
     if not pipeline:
-        pipeline = PipelineFactory()
+        pipeline = PipelineFactory()  # ty: ignore[invalid-assignment]
+    assert pipeline is not None
     if edges is None:
-        edges = _make_edges(nodes)
+        edges = _make_edges(nodes)  # ty: ignore[invalid-assignment]
     if edges and isinstance(edges[0], str):
-        edges = _edges_from_strings(edges, nodes)
+        edges = _edges_from_strings(edges, nodes)  # ty: ignore[invalid-assignment]
     flow_nodes = []
     for node in nodes:
         flow_nodes.append({"id": node["id"], "data": node})
@@ -291,6 +292,6 @@ def _with_node_id_and_name(name: str, default_name: str, params: dict):
     return params
 
 
-def _node_id(name: str, default_name: str = None):
+def _node_id(name: str, default_name: str | None = None):
     name = name or default_name or str(uuid4())
     return f"{name}-{str(uuid4())[-4:]}"

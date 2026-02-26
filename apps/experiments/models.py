@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import json
 import logging
@@ -17,18 +19,15 @@ from django.db import models, transaction
 from django.db.models import (
     BooleanField,
     Case,
-    CharField,
     Count,
+    F,
     OuterRef,
+    Prefetch,
     Q,
     Subquery,
-    UniqueConstraint,
-    Value,
     When,
     functions,
 )
-from django.db.models.expressions import RawSQL
-from django.db.models.functions import Coalesce
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -38,11 +37,11 @@ from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
 from apps.service_providers.tracing import TraceInfo, TracingService
+from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team, get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
@@ -92,55 +91,6 @@ class VersionFieldDisplayFormatters:
         return "; ".join(result_strings) if result_strings else "No triggers found"
 
     @staticmethod
-    def format_route(route) -> str:
-        if isinstance(route, VersionField):
-            route = route.raw_value
-        if isinstance(route, list):
-            formatted_routes = []
-            for r in route:
-                if isinstance(r, VersionField):
-                    r = r.raw_value
-                if isinstance(r, ExperimentRoute):
-                    formatted_routes.append(VersionFieldDisplayFormatters._format_single_route(r))
-            return "\n".join(formatted_routes) if formatted_routes else "Invalid route data"
-        if isinstance(route, ExperimentRoute):
-            return VersionFieldDisplayFormatters._format_single_route(route)
-        return "Invalid route data"
-
-    @staticmethod
-    def _format_single_route(route) -> str:
-        """Formats a single ExperimentRoute"""
-        if route.type == ExperimentRouteType.PROCESSOR:
-            string = f'Route to "{route.child}" using the "{route.keyword}" keyword.'
-            if route.is_default:
-                string = f"{string} (default)"
-            return string
-        elif route.type == ExperimentRouteType.TERMINAL:
-            string = f"Use {route.child} as the terminal bot"
-        else:
-            string = "Unknown route type"
-        return string
-
-    @staticmethod
-    def format_custom_action_operation(op) -> str:
-        action = op.custom_action
-        op_details = action.get_operations_by_id().get(op.operation_id)
-        return f"{action.name}: {op_details}"
-
-    @staticmethod
-    def format_assistant(assistant) -> str:
-        if not assistant:
-            return ""
-        name = assistant.name.split(f" v{assistant.version_number}")[0]
-        template = get_template("generic/chip.html")
-        url = (
-            assistant.get_absolute_url()
-            if assistant.is_working_version
-            else assistant.working_version.get_absolute_url()
-        )
-        return template.render({"chip": Chip(label=name, url=url)})
-
-    @staticmethod
     def format_pipeline(pipeline) -> str:
         if not pipeline:
             return ""
@@ -159,12 +109,8 @@ class PromptObjectManager(AuditingManager):
     pass
 
 
-class ExperimentRouteObjectManager(VersionsObjectManagerMixin, models.Manager):
-    pass
-
-
 class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_default_or_working(self, family_member: "Experiment"):
+    def get_default_or_working(self, family_member: Experiment):
         """
         Returns the default version of the family of experiments relating to `family_member` or if there is no default,
         the working experiment.
@@ -190,10 +136,6 @@ class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
 
 
 class SourceMaterialObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    pass
-
-
-class SafetyLayerObjectManager(VersionsObjectManagerMixin, AuditingManager):
     pass
 
 
@@ -258,55 +200,6 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
                 VersionField(name="topic", raw_value=self.topic),
                 VersionField(name="description", raw_value=self.description),
                 VersionField(name="material", raw_value=self.material),
-            ],
-        )
-
-
-@audit_fields(*model_audit_fields.SAFETY_LAYER_FIELDS, audit_special_queryset_writes=True)
-class SafetyLayer(BaseTeamModel, VersionsMixin):
-    name = models.CharField(max_length=128)
-    prompt_text = models.TextField()
-    messages_to_review = models.CharField(
-        choices=ChatMessageType.safety_layer_choices,
-        default=ChatMessageType.HUMAN,
-        help_text="Whether the prompt should be applied to human or AI messages",
-        max_length=10,
-    )
-    default_response_to_user = models.TextField(
-        blank=True,
-        default="",
-        help_text="If specified, the message that will be sent to the user instead of the filtered message.",
-    )
-    prompt_to_bot = models.TextField(
-        blank=True,
-        default="",
-        help_text="If specified, the message that will be sent to the bot instead of the filtered message.",
-    )
-    working_version = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="versions",
-    )
-    is_archived = models.BooleanField(default=False)
-    objects = SafetyLayerObjectManager()
-
-    def __str__(self):
-        return self.name
-
-    def get_absolute_url(self):
-        return reverse("experiments:safety_edit", args=[get_slug_for_team(self.team_id), self.id])
-
-    def _get_version_details(self) -> VersionDetails:
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(name="name", raw_value=self.name),
-                VersionField(name="prompt_text", raw_value=self.prompt_text),
-                VersionField(name="messages_to_review", raw_value=self.messages_to_review),
-                VersionField(name="default_response_to_user", raw_value=self.default_response_to_user),
-                VersionField(name="prompt_to_bot", raw_value=self.prompt_to_bot),
             ],
         )
 
@@ -441,7 +334,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         consent_form_id = ConsentForm.objects.filter(team=self.team, is_default=True).values("id")[:1]
         self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
 
-    def create_new_version(self, save=True):
+    def create_new_version(self, save=True):  # ty: ignore[invalid-method-override]
         new_version = super().create_new_version(save=False)
         new_version.is_default = False
         new_version.save()
@@ -532,7 +425,7 @@ class SyntheticVoice(BaseModel):
         return display_str
 
     @staticmethod
-    def get_for_team(team: Team, exclude_services=None) -> list["SyntheticVoice"]:
+    def get_for_team(team: Team, exclude_services=None) -> list[SyntheticVoice]:
         """Returns a queryset for this team comprising of all general synthetic voice records and those exclusive
         to this team. Any services specified by `exclude_services` will be excluded from the final result"""
         exclude_services = exclude_services or []
@@ -607,7 +500,7 @@ class AgentTools(models.TextChoices):
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
-        return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
+        return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]  # ty: ignore[invalid-return-type]
 
     @staticmethod
     def user_tool_choices(include_end_session: bool = True) -> list[tuple]:
@@ -619,7 +512,7 @@ class AgentTools(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
-class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
+class Experiment(BaseTeamModel, VersionsMixin):
     """
     An experiment combines a chatbot prompt, a safety prompt, and source material.
     Each experiment can be run as a chatbot.
@@ -632,24 +525,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
-    llm_provider = models.ForeignKey(
-        "service_providers.LlmProvider", on_delete=models.SET_NULL, null=True, blank=True, verbose_name="LLM Provider"
-    )
-    llm_provider_model = models.ForeignKey(
-        "service_providers.LlmProviderModel",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="The LLM model to use",
-        verbose_name="LLM Model",
-    )
-    assistant = models.ForeignKey(
-        "assistants.OpenAiAssistant",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name="OpenAI Assistant",
-    )
     pipeline = models.ForeignKey(
         "pipelines.Pipeline",
         on_delete=models.SET_NULL,
@@ -666,7 +541,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot. "
         "E.g. 'Safe or unsafe? {input}'",
     )
-    safety_layers = models.ManyToManyField(SafetyLayer, related_name="experiments", blank=True)
 
     source_material = models.ForeignKey(
         SourceMaterial,
@@ -713,22 +587,11 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             "This requires the experiment to have a seed message."
         ),
     )
-    safety_violation_notification_emails = ArrayField(
-        models.CharField(max_length=512),
-        default=list,
-        verbose_name="Safety violation notification emails",
-        help_text="Email addresses to notify when the safety bot detects a violation. Separate addresses with a comma.",
-        null=True,
-        blank=True,
-    )
     voice_response_behaviour = models.CharField(
         max_length=10,
         choices=VoiceResponseBehaviours.choices,
         default=VoiceResponseBehaviours.RECIPROCAL,
         help_text="This tells the bot when to reply with voice messages",
-    )
-    children = models.ManyToManyField(
-        "Experiment", blank=True, through="ExperimentRoute", symmetrical=False, related_name="parents"
     )
     tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
     echo_transcript = models.BooleanField(
@@ -801,7 +664,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def get_absolute_url(self):
         return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
 
-    def get_version(self, version: int) -> "Experiment":
+    def get_version(self, version: int) -> Experiment:
         """
         Returns the version of this experiment family matching `version`. If `version` is 0, the default version is
         returned.
@@ -812,10 +675,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         elif working_version.version_number == version:
             return working_version
         return working_version.versions.get(version_number=version)
-
-    @property
-    def tools_enabled(self):
-        return len(self.tools) > 0 or self.custom_action_operations.exists()
 
     @property
     def event_triggers(self):
@@ -831,15 +690,8 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
     def trends_cache_key(self) -> str:
         return self.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.id)
 
-    @property
-    def max_token_limit(self) -> int:
-        if self.assistant:
-            return self.assistant.llm_provider_model.max_token_limit
-        elif self.llm_provider:
-            return self.llm_provider_model.max_token_limit
-
     @cached_property
-    def default_version(self) -> "Experiment":
+    def default_version(self) -> Experiment:
         """Returns the default experiment, or if there is none, the working experiment"""
         return Experiment.objects.get_default_or_working(self)
 
@@ -861,34 +713,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         url = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
         return Chip(label=label, url=url)
 
-    def get_chat_model(self):
-        from apps.service_providers.llm_service.default_models import get_model_parameters
-
-        service = self.get_llm_service()
-        provider_model_name = self.get_llm_provider_model_name()
-        params = get_model_parameters(provider_model_name, temperature=self.temperature)
-        return service.get_chat_model(provider_model_name, **params)
-
-    def get_llm_service(self):
-        if self.assistant:
-            return self.assistant.get_llm_service()
-        elif self.llm_provider:
-            return self.llm_provider.get_llm_service()
-
-    def get_llm_provider_model_name(self, raises=True):
-        if self.assistant:
-            if not self.assistant.llm_provider_model:
-                if raises:
-                    raise ValueError("llm_provider_model is not set for this Assistant")
-                return None
-            return self.assistant.llm_provider_model.name
-        elif self.llm_provider:
-            if not self.llm_provider_model:
-                if raises:
-                    raise ValueError("llm_provider_model is not set for this Experiment")
-                return None
-            return self.llm_provider_model.name
-
     def get_trend_data(self) -> tuple[list, list]:
         """
         Get the error/success trends across all versions in this experiment's version family.
@@ -904,8 +728,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         success_trend = {}
 
         trace_counts = (
-            Trace.objects
-            .filter(
+            Trace.objects.filter(
                 Q(experiment__working_version_id=self.id) | Q(experiment_id=self.id),
                 timestamp__gte=from_date,
                 timestamp__lte=to_date,
@@ -970,12 +793,12 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.get_api_url()
 
     @transaction.atomic()
-    def create_new_version(
+    def create_new_version(  # ty: ignore[invalid-method-override]
         self,
         version_description: str | None = None,
         make_default: bool = False,
         is_copy: bool = False,
-        name: str = None,
+        name: str | None = None,
     ):
         """
         Creates a copy of an experiment as a new version of the original experiment.
@@ -987,8 +810,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         if not is_copy:
             self.version_number = version_number + 1
             self.save(update_fields=["version_number"])
-        elif self.child_links.exists():
-            raise ValueError("Failed to create copy of chatbot")
 
         # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
         # why simply chaing the pk, id and _state.adding wasn't enough.
@@ -1015,12 +836,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             self._copy_attr_to_new_version("consent_form", new_version)
             self._copy_attr_to_new_version("pre_survey", new_version)
             self._copy_attr_to_new_version("post_survey", new_version)
-            self._copy_assistant_to_new_version(new_version)
 
-            # not supported for copying
-            self._copy_routes_to_new_version(new_version)
-
-        self._copy_safety_layers_to_new_version(new_version, is_copy)
         self._copy_trigger_to_new_version(
             trigger_queryset=self.static_triggers, new_version=new_version, is_copy=is_copy
         )
@@ -1028,7 +844,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             trigger_queryset=self.timeout_triggers, new_version=new_version, is_copy=is_copy
         )
         self._copy_pipeline_to_new_version(new_version, is_copy)
-        self._copy_custom_action_operations_to_new_version(new_experiment=new_version, is_copy=is_copy)
 
         return new_version
 
@@ -1049,9 +864,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
             self.scheduled_messages.all().delete()
         else:
-            if self.assistant:
-                self.assistant.archive()
-            elif self.pipeline:
+            if self.pipeline:
                 self.pipeline.archive()
 
     def delete_experiment_channels(self):
@@ -1070,13 +883,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         new_version.pipeline = new_pipeline
         new_version.save(update_fields=["pipeline"])
 
-    def _copy_assistant_to_new_version(self, new_version):
-        if not self.assistant:
-            return
-        new_version.assistant = self.assistant.create_new_version()
-        new_version.save(update_fields=["assistant"])
-
-    def _copy_attr_to_new_version(self, attr_name, new_version: "Experiment"):
+    def _copy_attr_to_new_version(self, attr_name, new_version: Experiment):
         """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
         linking that to `new_version`
 
@@ -1100,23 +907,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             setattr(new_version, attr_name, latest_attr_version)
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
-
-    def _copy_safety_layers_to_new_version(self, new_version: "Experiment", is_copy: bool = False):
-        if is_copy:
-            new_version.safety_layers.set(self.safety_layers.all())
-        else:
-            duplicated_layers = []
-            for layer in self.safety_layers.all():
-                duplicated_layers.append(layer.create_new_version())
-            new_version.safety_layers.set(duplicated_layers)
-
-    def _copy_routes_to_new_version(self, new_version: "Experiment"):
-        """
-        This copies the experiment routes where this experiment is the parent and sets the new parent to the new
-        version.
-        """
-        for route in self.child_links.all():
-            route.create_new_version(new_version)
 
     def _copy_trigger_to_new_version(self, trigger_queryset, new_version, is_copy: bool = False):
         for trigger in trigger_queryset.all():
@@ -1192,16 +982,7 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                 to_display=VersionFieldDisplayFormatters.format_trigger,
             ),
         ]
-        if self.assistant_id:
-            fields.append(
-                VersionField(
-                    group_name="Assistant",
-                    name="assistant",
-                    raw_value=self.assistant,
-                    to_display=VersionFieldDisplayFormatters.format_assistant,
-                ),
-            )
-        elif self.pipeline_id:
+        if self.pipeline_id:
             fields.append(
                 VersionField(
                     group_name="Pipeline",
@@ -1210,60 +991,6 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
                     to_display=VersionFieldDisplayFormatters.format_pipeline,
                 ),
             )
-        else:
-            fields.extend([
-                VersionField(group_name="Language Model", name="prompt_text", raw_value=self.prompt_text),
-                VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
-                VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
-                VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
-                VersionField(
-                    group_name="Safety",
-                    name="safety_layers",
-                    queryset=self.safety_layers,
-                ),
-                VersionField(
-                    group_name="Safety",
-                    name="safety_violation_emails",
-                    raw_value=", ".join(self.safety_violation_notification_emails),
-                ),
-                VersionField(
-                    group_name="Safety",
-                    name="input_formatter",
-                    raw_value=self.input_formatter,
-                ),
-                # Source material
-                VersionField(
-                    group_name="Source Material",
-                    name="source_material",
-                    raw_value=self.source_material,
-                ),
-                # Tools
-                VersionField(
-                    group_name="Tools",
-                    name="tools",
-                    raw_value=set(self.tools),
-                    to_display=VersionFieldDisplayFormatters.format_tools,
-                ),
-                VersionField(
-                    group_name="Tools",
-                    name="custom_actions",
-                    queryset=self.get_custom_action_operations(),
-                    to_display=VersionFieldDisplayFormatters.format_custom_action_operation,
-                ),
-                # Routing
-                VersionField(
-                    group_name="Routing",
-                    name="routes",
-                    queryset=self.child_links.filter(type=ExperimentRouteType.PROCESSOR),
-                    to_display=VersionFieldDisplayFormatters.format_route,
-                ),
-                VersionField(
-                    group_name="Routing",
-                    name="terminal_bot",
-                    queryset=self.child_links.filter(type=ExperimentRouteType.TERMINAL),
-                    to_display=VersionFieldDisplayFormatters.format_route,
-                ),
-            ])
         return VersionDetails(
             instance=self,
             fields=fields,
@@ -1287,126 +1014,13 @@ class Experiment(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             node_name = AssistantNode.__name__
             # TODO: What about multiple assistant nodes?
             assistant_id = (
-                Node.objects
-                .filter(type=node_name, pipeline=self.pipeline, params__assistant_id__isnull=False)
+                Node.objects.filter(type=node_name, pipeline=self.pipeline, params__assistant_id__isnull=False)
                 .values_list("params__assistant_id", flat=True)
                 .first()
             )
             if assistant_id:
                 return OpenAiAssistant.objects.get(id=assistant_id)
-        return self.assistant
-
-
-class ExperimentRouteType(models.TextChoices):
-    PROCESSOR = "processor"
-    TERMINAL = "terminal"
-
-
-class ExperimentRoute(BaseTeamModel, VersionsMixin):
-    """
-    Through model for Experiment.children routes.
-    """
-
-    parent = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="child_links")
-    child = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="parent_links")
-    keyword = models.SlugField(max_length=128)
-    is_default = models.BooleanField(default=False)
-    type = models.CharField(choices=ExperimentRouteType.choices, max_length=64, default=ExperimentRouteType.PROCESSOR)
-    condition = models.CharField(max_length=64, blank=True)
-    working_version = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="versions",
-    )
-    is_archived = models.BooleanField(default=False)
-    objects = ExperimentRouteObjectManager()
-
-    @classmethod
-    def eligible_children(cls, team: Team, parent: Experiment | None = None):
-        """
-        Returns a list of experiments that fit the following criteria:
-        - They are not the same as the parent
-        - they are not parents
-        - they are not not children of the current experiment
-        - they are not part of the current experiment's version family
-        """
-        parent_ids = cls.objects.filter(team=team).values_list("parent_id", flat=True).distinct()
-
-        if parent:
-            child_ids = cls.objects.filter(parent=parent).values_list("child_id", flat=True)
-            eligible_experiments = (
-                Experiment.objects
-                .filter(team=team)
-                .exclude(id__in=child_ids)
-                .exclude(id__in=parent_ids)
-                .exclude(id=parent.id)
-                .exclude(working_version_id=parent.id)
-            )
-        else:
-            eligible_experiments = Experiment.objects.filter(team=team).exclude(id__in=parent_ids)
-
-        return eligible_experiments.filter(working_version_id=None)
-
-    @transaction.atomic()
-    def create_new_version(self, new_parent: Experiment) -> "ExperimentRoute":
-        """
-        Strategy:
-        - If the current child doesn't have any versions, create a new child version for the new route version
-        - If the current child have versions and there are changes between the current child and its latest version,
-            a new child version should be created for the new route version
-        - Alternatively, if there are were changes made since the last child version were made, use the latest version
-            for the new route version
-        """
-
-        new_route = super().create_new_version(save=False)
-        new_route.parent = new_parent
-        new_route.child = None
-        working_child = self.child
-
-        if latest_child_version := working_child.latest_version:
-            # Compare experimens using their `version` instances for a comprehensive comparison
-            current_version_details: VersionDetails = working_child.version_details
-            current_version_details.compare(latest_child_version.version_details)
-
-            if current_version_details.fields_changed:
-                fields_changed = [f.name for f in current_version_details.fields if f.changed]
-                description = self._generate_version_description(fields_changed)
-                new_route.child = working_child.create_new_version(version_description=description)
-            else:
-                new_route.child = latest_child_version
-        else:
-            new_route.child = working_child.create_new_version()
-
-        new_route.save()
-        return new_route
-
-    def _generate_version_description(self, changed_fields: set | None = None) -> str:
-        description = "Auto created when the parent experiment was versioned"
-        if changed_fields:
-            changed_fields = ",".join(changed_fields)
-            description = f"{description} since {changed_fields} changed."
-        return description
-
-    def _get_version_details(self) -> VersionDetails:
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(group_name=self.keyword, name="keyword", raw_value=self.keyword),
-                VersionField(group_name=self.keyword, name="child", raw_value=self.child),
-            ],
-        )
-
-    class Meta:
-        constraints = [
-            UniqueConstraint(fields=["parent", "child"], condition=Q(is_archived=False), name="unique_parent_child"),
-            UniqueConstraint(
-                fields=["parent", "keyword", "condition"],
-                condition=Q(is_archived=False),
-                name="unique_parent_keyword_condition",
-            ),
-        ]
+        return None
 
 
 class Participant(BaseTeamModel):
@@ -1422,7 +1036,7 @@ class Participant(BaseTeamModel):
         unique_together = [("team", "platform", "identifier")]
 
     @classmethod
-    def create_anonymous(cls, team: Team, platform: str, remote_id: str = "") -> "Participant":
+    def create_anonymous(cls, team: Team, platform: str, remote_id: str = "") -> Participant:
         public_id = str(uuid.uuid4())
         return cls.objects.create(
             team=team,
@@ -1452,7 +1066,7 @@ class Participant(BaseTeamModel):
         """
         Updates participant name field from a data dictionary.
         """
-        if "name" in data:
+        if "name" in data and data["name"] is not None:
             self.name = data["name"]
             self.save(update_fields=["name"])
 
@@ -1474,21 +1088,19 @@ class Participant(BaseTeamModel):
         except ValueError:
             return self.platform
 
-    def get_latest_session(self, experiment: Experiment) -> "ExperimentSession":
+    def get_latest_session(self, experiment: Experiment) -> ExperimentSession:
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
     def last_seen(self) -> datetime:
         """Gets the "last seen" date for this participant based on their last message"""
         latest_session = (
-            self.experimentsession_set
-            .annotate(message_count=Count("chat__messages"))
+            self.experimentsession_set.annotate(message_count=Count("chat__messages"))
             .exclude(message_count=0)
             .order_by("-created_at")
             .values("id")[:1]
         )
         return (
-            ChatMessage.objects
-            .filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
+            ChatMessage.objects.filter(chat__experiment_session=models.Subquery(latest_session), message_type="human")
             .order_by("-created_at")
             .values_list("created_at", flat=True)
             .first()
@@ -1514,8 +1126,7 @@ class Participant(BaseTeamModel):
         last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
         joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
         return (
-            self
-            .get_experiments_queryset(include_archived=True)
+            self.get_experiments_queryset(include_archived=True)
             .annotate(
                 joined_on=Subquery(joined_on),
                 last_message=Subquery(last_message),
@@ -1538,8 +1149,7 @@ class Participant(BaseTeamModel):
         self, experiment_id, as_dict=False, as_timezone: str | None = None, include_inactive=False
     ):
         """
-        Returns all scheduled messages for the associated participant for this session's experiment as well as
-        any child experiments in the case where the experiment is a parent
+        Returns all scheduled messages for the associated participant for this session's experiment
 
         Parameters:
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
@@ -1547,17 +1157,15 @@ class Participant(BaseTeamModel):
         """
         from apps.events.models import ScheduledMessage
 
-        child_experiments = ExperimentRoute.objects.filter(team=self.team, parent_id=experiment_id).values("child")
         messages = (
-            ScheduledMessage.objects
-            .filter(
-                Q(experiment_id=experiment_id) | Q(experiment__in=models.Subquery(child_experiments)),
+            ScheduledMessage.objects.filter(
+                experiment_id=experiment_id,
                 participant=self,
                 team=self.team,
             )
             .select_related("action")
             .prefetch_related("attempts")
-            .order_by("created_at")
+            .order_by("created_at", "id")
         )
         if not include_inactive:
             messages = messages.filter(is_complete=False, cancelled_at=None)
@@ -1663,46 +1271,35 @@ class SessionStatus(models.TextChoices):
 
 
 class ExperimentSessionQuerySet(models.QuerySet):
-    def annotate_with_first_message_created_at(self):
-        """Annotate queryset with the created_at timestamp of the first message in each session."""
-        first_message_subquery = Subquery(
-            ChatMessage.objects.filter(chat_id=OuterRef("chat_id")).order_by("created_at").values("created_at")[:1]
-        )
-        return self.annotate(first_message_created_at=first_message_subquery)
-
     def annotate_with_message_count(self):
         message_count_subquery = Subquery(
-            ChatMessage.objects
-            .filter(chat_id=OuterRef("chat_id"))
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))
             .values("chat")
             .annotate(count=Count("id"))
             .values("count")[:1]
         )
         return self.annotate(message_count=message_count_subquery)
 
-    def annotate_with_versions_list(self):
-        """Annotate queryset with a comma-separated list of experiment versions (e.g., 'v1, v2, v3')."""
-        # Transform [1, 2, 3] -> ['v1', 'v2', 'v3']
-        return self.annotate(
-            versions_list=Coalesce(
-                RawSQL(
-                    "array_to_string(ARRAY(SELECT 'v' || n FROM unnest(experiment_versions) AS n ORDER BY n), ', ')",
-                    [],
-                    output_field=CharField(),
-                ),
-                Value(""),
-                output_field=CharField(),
-            )
-        )
-
 
 class ExperimentSessionObjectManager(models.Manager):
     def get_queryset(self):
         return ExperimentSessionQuerySet(self.model, using=self._db)
 
-    def with_last_message_created_at(self):
-        """Convenience method for backwards compatibility."""
-        return self.get_queryset()
+    def get_table_queryset(self, team, experiment_id=None):
+        from apps.annotations.models import CustomTaggedItem
+
+        queryset = self.get_queryset().filter(team=team)
+        if experiment_id:
+            queryset = queryset.filter(experiment__id=experiment_id)
+
+        queryset = queryset.select_related("experiment", "participant__user", "chat").prefetch_related(
+            Prefetch(
+                "chat__tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            ),
+        )
+        return queryset.annotate_with_message_count().order_by(F("last_activity_at").desc(nulls_last=True))
 
 
 class ExperimentSession(BaseTeamModel):
@@ -1712,7 +1309,7 @@ class ExperimentSession(BaseTeamModel):
 
     objects = ExperimentSessionObjectManager()
     external_id = models.CharField(max_length=255, default=uuid.uuid4, unique=True)
-    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, null=True, blank=True)
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True, help_text="When the experiment (chat) ended.")
@@ -1739,6 +1336,7 @@ class ExperimentSession(BaseTeamModel):
         help_text="Array of unique experiment version numbers seen by this session",
     )
     last_activity_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the last user interaction")
+    first_activity_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp of the first user interaction")
 
     class Meta:
         ordering = ["-created_at"]
@@ -1823,27 +1421,37 @@ class ExperimentSession(BaseTeamModel):
             args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
         )
 
-    def end(self, commit: bool = True, propagate: bool = True):
+    def end(self, commit: bool = True, trigger_type=None):
         """
         Ends this experiment session
 
         Args:
             commit: Whether to save the model after setting the ended_at value
-            propagate: Whether to enqueue any static event triggers defined for this experiment_session
+            trigger_type: The type of conversation end event to trigger. Leaving this as None will not trigger events.
         Raises:
-            ValueError: If propagate is True but commit is not.
+            ValueError: If trigger_type is specified but commit is not.
         """
+        from apps.events.models import StaticTriggerType
+        from apps.events.tasks import enqueue_static_triggers
+
+        if trigger_type and not commit:
+            raise ValueError("Commit must be True when trigger_type is specified")
+
+        if trigger_type is not None and trigger_type not in StaticTriggerType.end_conversation_types():
+            raise ValueError("Only a conversation end trigger type can be used when ending an experiment session.")
+
+        if trigger_type == StaticTriggerType.CONVERSATION_END:
+            raise ValueError(
+                "Cannot trigger the generic CONVERSATION_END trigger type. Please specify a more specific type."
+            )
+
         self.update_status(SessionStatus.PENDING_REVIEW)
-        if propagate and not commit:
-            raise ValueError("Commit must be True when propagate is True")
+
         self.ended_at = timezone.now()
         if commit:
             self.save()
-        if commit and propagate:
-            from apps.events.models import StaticTriggerType
-            from apps.events.tasks import enqueue_static_triggers
-
-            enqueue_static_triggers.delay(self.id, StaticTriggerType.CONVERSATION_END)
+        if commit and trigger_type:
+            enqueue_static_triggers.delay(self.id, trigger_type)
 
     @transaction.atomic()
     def ad_hoc_bot_message(
@@ -1864,6 +1472,7 @@ class ExperimentSession(BaseTeamModel):
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
         """
+        trace_service = None
         try:
             with current_team(self.team):
                 experiment = use_experiment or self.experiment
@@ -1873,14 +1482,15 @@ class ExperimentSession(BaseTeamModel):
                     session=self,
                     inputs={"input": instruction_prompt},
                     metadata=trace_info.metadata,
+                    notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
                 ) as span:
                     bot_message = self._bot_prompt_for_user(
                         instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
                     )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
-                    trace_info = trace_service.get_trace_metadata()
-                return trace_info
+                    trace_metadata = trace_service.get_trace_metadata()
+                return trace_metadata
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:
@@ -1947,9 +1557,7 @@ class ExperimentSession(BaseTeamModel):
         from apps.assistants.models import OpenAiAssistant
         from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt, RouterNode
 
-        if self.experiment.assistant:
-            return "{participant_data}" in self.experiment.assistant.instructions
-        elif self.experiment.pipeline:
+        if self.experiment.pipeline:
             assistant_ids = self.experiment.pipeline.get_node_param_values(AssistantNode, param_name="assistant_id")
             results = OpenAiAssistant.objects.filter(
                 id__in=assistant_ids, instructions__contains="{participant_data}"

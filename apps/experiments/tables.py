@@ -1,38 +1,13 @@
 from django.conf import settings
-from django.template.loader import get_template
-from django.urls import reverse
 from django_tables2 import columns, tables
 
 from apps.experiments.models import (
     ConsentForm,
     Experiment,
-    ExperimentRoute,
-    ExperimentSession,
-    SafetyLayer,
     SourceMaterial,
     Survey,
 )
-from apps.generics import actions, chips
-
-
-class SafetyLayerTable(tables.Table):
-    actions = actions.ActionsColumn(
-        actions=[
-            actions.edit_action(url_name="experiments:safety_edit"),
-            actions.delete_action(url_name="experiments:safety_delete"),
-        ]
-    )
-
-    class Meta:
-        model = SafetyLayer
-        fields = (
-            "name",
-            "messages_to_review",
-            "actions",
-        )
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        orderable = False
-        empty_text = "No safety layers found."
+from apps.generics import actions
 
 
 class SourceMaterialTable(tables.Table):
@@ -102,61 +77,7 @@ class ConsentFormTable(tables.Table):
         empty_text = "No consent forms found."
 
 
-def session_chat_url(url_name, request, record, value):
-    return reverse(
-        url_name, args=[request.team.slug, record.experiment_id, record.get_experiment_version_number(), record.id]
-    )
-
-
-def _show_chat_button(request, record):
-    return record.participant.user == request.user and not record.is_complete and record.experiment.is_editable
-
-
-class ExperimentSessionsTable(tables.Table):
-    participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
-    last_message = columns.Column(accessor="last_activity_at", verbose_name="Last Message", orderable=True)
-    tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html", orderable=False)
-    versions = columns.Column(verbose_name="Versions", accessor="versions_list", orderable=False)
-    state = columns.Column(verbose_name="State", accessor="status", orderable=True)
-    remote_id = columns.Column(verbose_name="Remote Id", accessor="participant__remote_id")
-    actions = actions.ActionsColumn(
-        actions=[
-            actions.Action(
-                url_name="chatbots:chatbot_chat_session",
-                url_factory=session_chat_url,
-                icon_class="fa-solid fa-comment",
-                title="Continue Chat",
-                display_condition=_show_chat_button,
-            ),
-            actions.chip_action(
-                label="Session Details",
-            ),
-        ],
-        align="right",
-    )
-
-    def render_tags(self, record, bound_column):
-        template = get_template(bound_column.column.template_name)
-        return template.render({"object": record.chat})
-
-    def render_participant(self, record):
-        template = get_template("generic/chip.html")
-        participant = record.participant
-        chip = chips.Chip(
-            label=str(participant), url=participant.get_link_to_experiment_data(experiment=record.experiment)
-        )
-        return template.render({"chip": chip})
-
-    class Meta:
-        model = ExperimentSession
-        fields = []
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        orderable = False
-        empty_text = "No sessions yet!"
-
-
 class ExperimentVersionsTable(tables.Table):
-    origin = "experiments"
     version_number = columns.TemplateColumn(
         template_name="experiments/components/experiment_version_cell.html", verbose_name="Version Number"
     )
@@ -180,52 +101,3 @@ class ExperimentVersionsTable(tables.Table):
 
     def render_created_at(self, record):
         return record.created_at if record.working_version_id else ""
-
-
-def _get_route_url(url_name, request, record, value):
-    return reverse(url_name, args=[request.team.slug, record.parent_id, record.pk])
-
-
-class ChildExperimentRoutesTable(tables.Table):
-    child = actions.chip_column(orderable=True)
-    actions = actions.ActionsColumn(
-        actions=[
-            actions.edit_action(
-                url_name="experiments:experiment_route_edit",
-                url_factory=_get_route_url,
-            ),
-            actions.delete_action(
-                url_name="experiments:experiment_route_delete",
-                url_factory=_get_route_url,
-            ),
-        ]
-    )
-
-    class Meta:
-        model = ExperimentRoute
-        fields = ["child", "keyword", "is_default", "actions"]
-        orderable = False
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        empty_text = "No routes yet!"
-
-
-class TerminalBotsTable(ChildExperimentRoutesTable):
-    child = actions.chip_column(orderable=True)
-
-    class Meta:
-        model = ExperimentRoute
-        fields = ["child", "is_default", "actions"]
-        orderable = False
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        empty_text = "No terminal bots yet!"
-
-
-class ParentExperimentRoutesTable(tables.Table):
-    parent = actions.chip_column(orderable=True)
-
-    class Meta:
-        model = ExperimentRoute
-        fields = ["parent", "keyword", "is_default"]
-        orderable = False
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        empty_text = "No routes yet!"

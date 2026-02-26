@@ -1,0 +1,149 @@
+- id: sessions_last_week
+  input:
+    query: "sessions within the last week"
+    filter_slug: "session"
+  checks:
+    - type: exact_filters
+      expected:
+        - column: last_message
+          operator: range
+          value: "7d"
+
+- id: messages_tagged_funny
+  input:
+    query: "messages tagged with 'funny'"
+    filter_slug: "session"
+  checks:
+    - type: exact_filters
+      expected:
+        - column: tags
+          operator: any of
+          value: ["funny"]
+
+- id: conversations_whatsapp_or_telegram
+  input:
+    query: "conversations from WhatsApp or Telegram"
+    filter_slug: "session"
+  checks:
+    - type: exact_filters
+      expected:
+        - column: channels
+          operator: any of
+          value: ["WhatsApp", "Telegram"]
+
+- id: active_sessions_version_v6
+  input:
+    query: "active sessions using version v6"
+    filter_slug: "session"
+  checks:
+    - type: exact_filters
+      expected:
+        - column: state
+          operator: any of
+          value: ["active"]
+        - column: versions
+          operator: any of
+          value: ["v6"]
+
+- id: participant_starts_with_john
+  input:
+    query: "participants whose name starts with 'john'"
+    filter_slug: "session"
+  checks:
+    - type: exact_filters
+      expected:
+        - column: participant
+          operator: starts with
+          value: john
+
+- id: completed_last_30_days_exclude_api
+  input:
+    query: "completed sessions from the last 30 days excluding the API channel"
+    filter_slug: "session"
+  checks:
+    - type: exact_filters
+      expected:
+        - column: state
+          operator: any of
+          value: ["complete"]
+        - column: last_message
+          operator: range
+          value: "30d"
+        - column: channels
+          operator: excludes
+          value: ["API"]
+
+- id: tags_all_of_blue_funny
+  input:
+    query: "messages with both 'blue' and 'funny' tags"
+    filter_slug: "session"
+  checks:
+    - type: exact_filters
+      expected:
+        - column: tags
+          operator: all of
+          value: ["blue", "funny"]
+
+- id: chatbot_basic_bot_last_3_months
+  input:
+    query: "sessions for the 'basic bot' chatbot started in the last 3 months"
+    filter_slug: "session"
+  checks:
+    - type: exact_filters
+      expected:
+        - column: experiment
+          operator: any of
+          value: ["basic bot"]
+        - column: first_message
+          operator: range
+          value: "90d"
+
+- id: web_participant_demo_no_go_tag
+  input:
+    query: "Web conversations from participant containing 'demo' without the 'go' tag"
+    filter_slug: "session"
+  checks:
+    - type: exact_filters
+      expected:
+        - column: channels
+          operator: any of
+          value: ["Web"]
+        - column: participant
+          operator: contains
+          value: demo
+        - column: tags
+          operator: excludes
+          value: ["go"]
+
+- id: complex_multi_filter
+  input:
+    query: "active v5 or v6 sessions from Facebook in the last hour tagged with 👍"
+    filter_slug: "session"
+  checks:
+    - type: exact_filters
+      expected:
+        - column: state
+          operator: any of
+          value: ["active"]
+        - column: versions
+          operator: any of
+          value: ["v5", "v6"]
+        - column: channels
+          operator: any of
+          value: ["Facebook"]
+        - column: last_message
+          operator: range
+          value: "1h"
+        - column: tags
+          operator: any of
+          value: ["👍"]
+
+- id: message_tagged_recent
+  input:
+    query: "messages tagged 'important' from the last day"
+    filter_slug: "message"
+  checks:
+    - type: count
+      expected: 2
+    - type: filter_params
+      expected: ["last_message", "tags"]

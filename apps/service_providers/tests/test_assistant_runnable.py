@@ -1,5 +1,5 @@
 from contextlib import nullcontext as does_not_raise
-from typing import Any, Literal
+from typing import Literal
 from unittest import mock
 from unittest.mock import Mock, patch
 
@@ -35,31 +35,36 @@ ASSISTANT_ID = "test_assistant_id"
 LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTICIPANT_DATA]
 
 
-@pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
+@pytest.fixture()
 def session(request):
     chat = Chat()
-    chat.save = lambda: None
+    chat.save = lambda: None  # ty: ignore[invalid-assignment]
     session = ExperimentSessionFactory.build(chat=chat)
     session.participant_data_from_experiment = {}
+    return session
+
+
+@pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
+def assistant(request):
     local_assistant = OpenAiAssistantFactory.build(id=1, assistant_id=ASSISTANT_ID, include_file_info=False)
     if request.param:
         local_assistant.tools = LEGACY_EXPERIMENT_TOOLS
-
     local_assistant.has_custom_actions = lambda *args, **kwargs: False
+    return local_assistant
 
-    session.experiment.assistant = local_assistant
+
+@pytest.fixture()
+def db_session(request):
+    session = ExperimentSessionFactory()
     return session
 
 
 @pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
-def db_session(request):
+def db_assistant(request):
     local_assistant = OpenAiAssistantFactory(
         assistant_id=ASSISTANT_ID, tools=LEGACY_EXPERIMENT_TOOLS if request.param else []
     )
-    session = ExperimentSessionFactory()
-    session.experiment.assistant = local_assistant
-    session.experiment.save()
-    return session
+    return local_assistant
 
 
 @patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
@@ -74,7 +79,7 @@ def db_session(request):
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 def test_assistant_conversation_new_chat(
-    create_and_run, retrieve_run, list_messages, save_response_annotations, session
+    create_and_run, retrieve_run, list_messages, save_response_annotations, session, assistant
 ):
     save_response_annotations.return_value = ("ai response", {})
     chat = session.chat
@@ -89,7 +94,7 @@ def test_assistant_conversation_new_chat(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
-    assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
+    assistant_runnable = create_experiment_runnable(session.experiment, session, assistant)
 
     result = assistant_runnable.invoke("test")
     assert result.output == "ai response"
@@ -109,7 +114,7 @@ def test_assistant_conversation_new_chat(
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.threads.runs.Runs.create")
 def test_assistant_conversation_existing_chat(
-    create_run, retrieve_run, create_message, list_messages, save_response_annotations, session
+    create_run, retrieve_run, create_message, list_messages, save_response_annotations, session, assistant
 ):
     ai_response = "ai response"
     save_response_annotations.return_value = (ai_response, {})
@@ -124,48 +129,12 @@ def test_assistant_conversation_existing_chat(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}]
     )
 
-    assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
+    assistant_runnable = create_experiment_runnable(session.experiment, session, assistant)
     result = assistant_runnable.invoke("test")
 
     assert create_message.call_args.args == (thread_id,)
     assert create_run.call_args.args == (thread_id,)
     assert result.output == "ai response"
-
-
-@patch("apps.chat.agent.tools.get_custom_action_tools", Mock(return_value=[]))
-@patch(
-    "apps.service_providers.llm_service.adapters.AssistantAdapter.get_messages_to_sync_to_thread",
-    Mock(return_value=[]),
-)
-@patch("apps.service_providers.llm_service.history_managers.ExperimentHistoryManager.save_message_to_history", Mock())
-@patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
-@patch("apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations")
-@patch("openai.resources.beta.threads.messages.Messages.list")
-@patch("openai.resources.beta.threads.runs.Runs.retrieve")
-@patch("openai.resources.beta.Threads.create_and_run")
-def test_assistant_conversation_input_formatting(
-    create_and_run, retrieve_run, list_messages, save_response_annotations, session
-):
-    ai_response = "ai response"
-    save_response_annotations.return_value = (ai_response, {})
-
-    session.experiment.input_formatter = "foo {input} bar"
-
-    chat = session.chat
-    assert chat.get_metadata(Chat.MetadataKeys.OPENAI_THREAD_ID) is None
-
-    thread_id = "test_thread_id"
-    run = _create_run(ASSISTANT_ID, thread_id)
-    create_and_run.return_value = run
-    retrieve_run.return_value = run
-    list_messages.return_value.data = _create_thread_messages(
-        ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
-    )
-
-    assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
-    result = assistant_runnable.invoke("test")
-    assert result.output == "ai response"
-    assert create_and_run.call_args.kwargs["thread"]["messages"][0]["content"] == "foo test bar"
 
 
 @pytest.mark.django_db()
@@ -179,7 +148,7 @@ def test_assistant_conversation_input_formatting(
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 def test_assistant_includes_file_type_information(
-    create_and_run, retrieve_run, list_messages, save_response_annotations, get_file_type_info, session
+    create_and_run, retrieve_run, list_messages, save_response_annotations, get_file_type_info, session, assistant
 ):
     ai_response = "ai response"
     save_response_annotations.return_value = (ai_response, {})
@@ -192,12 +161,13 @@ def test_assistant_includes_file_type_information(
     list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_response}]
     )
-    assistant = session.experiment.assistant
     assistant.instructions = "Help the user"
     assistant.include_file_info = True
 
     assistant = _get_assistant_mocked_history_recording(
-        session, get_attachments_return_value=[ChatAttachment(chat=session.chat, tool_type="code_interpreter")]
+        session,
+        assistant,
+        get_attachments_return_value=[ChatAttachment(chat=session.chat, tool_type="code_interpreter")],
     )
     result = assistant.invoke("test")
     assert result.output == ai_response
@@ -215,10 +185,10 @@ def test_assistant_includes_file_type_information(
 )
 @patch("apps.service_providers.llm_service.history_managers.ExperimentHistoryManager.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
-def test_assistant_runnable_raises_error(session):
+def test_assistant_runnable_raises_error(session, assistant):
     error = openai.BadRequestError("test", response=mock.Mock(), body={})
     with mock_llm([error]):
-        assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
+        assistant_runnable = create_experiment_runnable(session.experiment, session, assistant)
         with pytest.raises(openai.BadRequestError):
             assistant_runnable.invoke("test")
 
@@ -230,10 +200,10 @@ def test_assistant_runnable_raises_error(session):
 )
 @patch("apps.service_providers.llm_service.history_managers.ExperimentHistoryManager.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
-def test_assistant_runnable_handles_cancellation_status(session):
+def test_assistant_runnable_handles_cancellation_status(session, assistant):
     error = ValueError("unexpected status: cancelled")
     with mock_llm([error]):
-        assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
+        assistant_runnable = create_experiment_runnable(session.experiment, session, assistant)
         with pytest.raises(GenerationCancelled):
             assistant_runnable.invoke("test")
 
@@ -280,12 +250,14 @@ def test_assistant_runnable_handles_cancellation_status(session):
 @patch("apps.service_providers.llm_service.history_managers.ExperimentHistoryManager.save_message_to_history", Mock())
 @patch("apps.service_providers.llm_service.adapters.AssistantAdapter.get_attachments", Mock())
 @patch("apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations")
-def test_assistant_runnable_cancels_existing_run(save_response_annotations, responses, exception, output, session):
+def test_assistant_runnable_cancels_existing_run(
+    save_response_annotations, responses, exception, output, session, assistant
+):
     save_response_annotations.return_value = ("normal response", {})
     thread_id = "thread_abc"
     session.chat.set_metadata(session.chat.MetadataKeys.OPENAI_THREAD_ID, thread_id)
 
-    assistant_runnable = create_experiment_runnable(session.experiment, session, TracingService.empty())
+    assistant_runnable = create_experiment_runnable(session.experiment, session, assistant)
     cancel_run = mock.Mock()
     assistant_runnable.__dict__["_cancel_run"] = cancel_run
     with mock_llm(responses):
@@ -306,7 +278,9 @@ def test_assistant_runnable_cancels_existing_run(save_response_annotations, resp
     "apps.service_providers.llm_service.runnables.AssistantChat._get_output_with_annotations",
     new=Mock(return_value=("ai response", {})),
 )
-def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages, create_files_remote, db_session):
+def test_assistant_uploads_new_file(
+    create_and_run, retrieve_run, list_messages, create_files_remote, db_session, db_assistant
+):
     """Test that attachments are uploaded to OpenAI and that its remote file ids are stored on the chat message"""
     session = db_session
     create_files_remote.return_value = ["openai-file-1", "openai-file-2"]
@@ -322,7 +296,7 @@ def test_assistant_uploads_new_file(create_and_run, retrieve_run, list_messages,
         ASSISTANT_ID, run.id, thread_id, [{"assistant": "ai response"}]
     )
 
-    assistant = create_experiment_runnable(session.experiment, session, TracingService.empty())
+    assistant = create_experiment_runnable(session.experiment, session, db_assistant)
     attachments = [
         Attachment.from_file(files[0], "code_interpreter", session.id),
         Attachment.from_file(files[1], "file_search", session.id),
@@ -351,6 +325,7 @@ def test_assistant_response_with_annotations(
     retrieve_openai_file,
     cited_file_missing,
     db_session,
+    db_assistant,
 ):
     """Test that attachments on AI messages are being saved (only those of type `file_path`)
     OpenAI doesn't allow you to fetch the content of the file that you uploaded, but this isn't an issue, since we
@@ -413,7 +388,7 @@ def test_assistant_response_with_annotations(
         " Another link to nothing [file3.pdf](https://example.com/download/file-3)"
     )
 
-    assistant = create_experiment_runnable(session.experiment, session, TracingService.empty())
+    assistant = create_experiment_runnable(session.experiment, session, db_assistant)
     list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations
     )
@@ -464,7 +439,7 @@ def test_assistant_response_with_annotations_and_assistant_file(
     """Test that cited files are rendered correctly in AI messsages"""
 
     local_assistant = OpenAiAssistantFactory(assistant_id=ASSISTANT_ID, allow_file_downloads=allow_file_downloads)
-    session = ExperimentSessionFactory(experiment__assistant=local_assistant)
+    session = ExperimentSessionFactory()
     chat = session.chat
     external_file_id = "openai-file-1"
     assistant_file = FileFactory(team=session.team, external_id=external_file_id, name="test.png")
@@ -488,7 +463,7 @@ def test_assistant_response_with_annotations_and_assistant_file(
     ]
 
     ai_message = "Is this the file you're looking for:【6:0†source】."
-    assistant = create_experiment_runnable(session.experiment, session, TracingService.empty())
+    assistant = create_experiment_runnable(session.experiment, session, local_assistant)
     list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations, include_image_file=False
     )
@@ -526,6 +501,7 @@ def test_assistant_response_with_image_file_content_block(
     get_and_store_openai_file,
     retrieve_openai_file,
     db_session,
+    db_assistant,
 ):
     """
     Test that ImageFileContentBlock entries in the content array in an OpenAI message response saves the file to a new
@@ -549,7 +525,7 @@ def test_assistant_response_with_image_file_content_block(
     list_messages.return_value.data = _create_thread_messages(ASSISTANT_ID, run.id, thread_id, [{"assistant": "Ola"}])
     create_and_run.return_value = run
     retrieve_run.return_value = run
-    assistant = create_experiment_runnable(db_session.experiment, db_session, TracingService.empty())
+    assistant = create_experiment_runnable(db_session.experiment, db_session, db_assistant)
 
     # Run assistant
     result = assistant.invoke("test", attachments=[])
@@ -586,7 +562,8 @@ def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_c
 
 @pytest.mark.django_db()
 def test_get_messages_to_sync_to_thread():
-    session = ExperimentSessionFactory(experiment__assistant=OpenAiAssistantFactory())
+    assistant = OpenAiAssistantFactory()
+    session = ExperimentSessionFactory()
     chat = session.chat
     ChatMessage.objects.bulk_create(
         [
@@ -596,7 +573,7 @@ def test_get_messages_to_sync_to_thread():
             ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
         ]
     )
-    adapter = AssistantAdapter.for_experiment(session.experiment, session)
+    adapter = AssistantAdapter(session, assistant, citations_enabled=False)
     to_sync = adapter.get_messages_to_sync_to_thread()
     assert to_sync == [
         {"role": "user", "content": "hello2"},
@@ -604,12 +581,12 @@ def test_get_messages_to_sync_to_thread():
     ]
 
 
-def _get_assistant_mocked_history_recording(session, get_attachments_return_value=None):
-    adapter = AssistantAdapter.for_experiment(session.experiment, session)
+def _get_assistant_mocked_history_recording(session, assistant, get_attachments_return_value=None):
+    adapter = AssistantAdapter(session, assistant, citations_enabled=True)
     history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
     assistant = AssistantChat(adapter=adapter, history_manager=history_manager)
-    history_manager.save_message_to_history = Mock()
-    adapter.get_attachments = lambda _type: get_attachments_return_value or []
+    history_manager.save_message_to_history = Mock()  # ty: ignore[invalid-assignment]
+    adapter.get_attachments = lambda _type: get_attachments_return_value or []  # ty: ignore[invalid-assignment]
     return assistant
 
 
@@ -697,9 +674,9 @@ def _create_run(
 
 @pytest.mark.django_db()
 @patch("apps.service_providers.llm_service.runnables.AssistantChat._sync_messages_to_thread")
-def test_input_message_is_saved_on_chain_error(sync_messages_to_thread, db_session):
+def test_input_message_is_saved_on_chain_error(sync_messages_to_thread, db_session, db_assistant):
     sync_messages_to_thread.side_effect = Exception("Error")
-    assistant = create_experiment_runnable(db_session.experiment, db_session, TracingService.empty())
+    assistant = create_experiment_runnable(db_session.experiment, db_session, db_assistant)
 
     with pytest.raises(Exception, match="Error"):
         assistant.invoke("test", attachments=[])
@@ -713,12 +690,7 @@ def test_input_message_is_saved_on_chain_error(sync_messages_to_thread, db_sessi
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")
-def test_assistant_empty_messages_list(
-    list_messages,
-    create_and_run,
-    retrieve_run,
-    db_session,
-):
+def test_assistant_empty_messages_list(list_messages, create_and_run, retrieve_run, db_session, db_assistant):
     """
     Test that _get_output_with_annotations handles the case where no messages are returned.
     """
@@ -735,7 +707,7 @@ def test_assistant_empty_messages_list(
     list_messages.return_value.data = []
 
     # Create the assistant runnable
-    assistant = create_experiment_runnable(session.experiment, session, TracingService.empty())
+    assistant = create_experiment_runnable(session.experiment, session, db_assistant)
 
     # Run the assistant - it should return an empty string for output
     result = assistant.invoke("test")
@@ -744,22 +716,17 @@ def test_assistant_empty_messages_list(
     assert result.output == ""
 
 
-def create_experiment_runnable(
-    experiment: Experiment, session: ExperimentSession, trace_service: Any, disable_tools: bool = False
-):
+def create_experiment_runnable(experiment: Experiment, session: ExperimentSession, assistant):
     """Create an experiment runnable based on the experiment configuration."""
 
-    if assistant := experiment.assistant:
-        history_manager = ExperimentHistoryManager.for_assistant(
-            session=session, experiment=experiment, trace_service=trace_service
-        )
-        assistant_adapter = AssistantAdapter.for_experiment(experiment, session)
-        if assistant.tools_enabled and not disable_tools:
-            runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)
-        else:
-            runnable = AssistantChat(adapter=assistant_adapter, history_manager=history_manager)
-        # This is a temporary hack until we return an object with metadata about the run
-        runnable.experiment = experiment
-        return runnable
-
-    raise NotImplementedError("Only assistant runnables are supported")
+    history_manager = ExperimentHistoryManager.for_assistant(
+        session=session, experiment=experiment, trace_service=TracingService.empty()
+    )
+    assistant_adapter = AssistantAdapter(session, assistant, citations_enabled=True)
+    if assistant.tools_enabled:
+        runnable = AgentAssistantChat(adapter=assistant_adapter, history_manager=history_manager)
+    else:
+        runnable = AssistantChat(adapter=assistant_adapter, history_manager=history_manager)
+    # This is a temporary hack until we return an object with metadata about the run
+    runnable.experiment = experiment
+    return runnable

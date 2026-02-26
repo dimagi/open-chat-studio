@@ -1,28 +1,28 @@
-import logging
-
-import openai
 from celery import shared_task
+from celery.utils.log import get_task_logger
 
 from apps.assistants.sync import OpenAiSyncError, delete_openai_assistant
 
-logger = logging.getLogger("ocs.openai_sync")
+logger = get_task_logger("ocs.openai_sync")
 
 
 @shared_task(
-    autoretry_for=(openai.APIError,),
-    dont_autoretry_for=(
-        openai.APIResponseValidationError,
-        openai.BadRequestError,
-        openai.NotFoundError,
-        openai.PermissionDeniedError,
-        openai.UnprocessableEntityError,
-    ),
     max_retries=5,
     retry_backoff=True,
     acks_late=True,
     bind=True,
 )
 def delete_openai_assistant_task(self, assistant_id: int):
+    # lazy import to avoid import on startup
+    from openai import (
+        APIError,
+        APIResponseValidationError,
+        BadRequestError,
+        NotFoundError,
+        PermissionDeniedError,
+        UnprocessableEntityError,
+    )
+
     from apps.assistants.models import OpenAiAssistant
 
     try:
@@ -34,8 +34,25 @@ def delete_openai_assistant_task(self, assistant_id: int):
         logger.warning("Assistant with id %s not found or not archived, skipping deletion", assistant_id)
         return
 
+    no_retry_errors = (
+        APIResponseValidationError,
+        BadRequestError,
+        NotFoundError,
+        PermissionDeniedError,
+        UnprocessableEntityError,
+    )
     try:
         delete_openai_assistant(assistant)
+    except no_retry_errors:
+        raise
+    except APIError as e:
+        raise self.retry(exc=e) from None
     except OpenAiSyncError as e:
-        # re-raise the original error for retry purposes
-        raise e.__context__ from None
+        cause = e.__context__
+        if isinstance(cause, no_retry_errors):
+            raise cause from None
+        if isinstance(cause, APIError):
+            raise self.retry(exc=cause) from None
+        if cause is not None:
+            raise cause from None
+        raise

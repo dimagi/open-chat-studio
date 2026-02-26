@@ -5,7 +5,8 @@ intended.
 
 import re
 import uuid
-from unittest.mock import Mock, patch
+from io import BytesIO
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from django.test import override_settings
@@ -19,7 +20,7 @@ from apps.chat.channels import (
     ChannelBase,
     strip_urls_and_emojis,
 )
-from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
+from apps.chat.exceptions import AudioSynthesizeException, VersionedExperimentSessionsNotAllowedException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import (
     ExperimentSession,
@@ -36,6 +37,7 @@ from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.langchain import mock_llm
 
+from ...service_providers.speech_service import SynthesizedAudio
 from ...utils.factories.service_provider_factories import LlmProviderFactory
 from ..datamodels import BaseMessage
 from .message_examples import base_messages
@@ -268,7 +270,7 @@ def test_reset_conversation_does_not_create_new_session(test_channel):
 
 
 def _send_user_message_on_channel(channel_instance, user_message: BaseMessage):
-    with patch("apps.chat.channels.ChannelBase._get_bot_response", return_value=[ChatMessage(content="OK"), None]):
+    with patch("apps.chat.bots.PipelineBot.process_input", return_value=ChatMessage(content="OK")):
         channel_instance.new_user_message(user_message)
 
 
@@ -286,7 +288,7 @@ def test_pre_conversation_flow(_send_seed_message):
     assert pre_survey
 
     def _user_message(message: str):
-        message = base_messages.text_message(message_text=message)
+        message = base_messages.text_message(message_text=message)  # ty: ignore[invalid-assignment]
         return channel.new_user_message(message)
 
     experiment = channel.experiment
@@ -376,9 +378,9 @@ def test_unsupported_message_type_triggers_bot_response(_unsupported_message_typ
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._reply_voice_message")
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_voice_response_behaviour(
-    get_llm_response,
+    bot_process_input,
     _reply_voice_message,
     send_text_to_user,
     get_voice_transcript,
@@ -388,7 +390,7 @@ def test_voice_response_behaviour(
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = ChatMessage(content="Hello user. No"), None
+    bot_process_input.return_value = ChatMessage(content="Hello user. No")
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = voice_behaviour
     experiment.save()
@@ -440,16 +442,16 @@ def test_failed_transcription_informs_the_user(
 @pytest.mark.django_db()
 @patch("apps.chat.bots.EventBot.get_user_message")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_message_to_user")
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel.is_message_type_supported")
+@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._handle_supported_message")
 def test_any_failure_informs_users(
-    is_message_type_supported, send_message_to_user, _get_user_message, test_channel, caplog
+    _handle_supported_message, send_message_to_user, _get_user_message, test_channel, caplog
 ):
     """
     Any failure should try and inform the user that something went wrong. The method that does the informing should
     not fail.
     """
 
-    is_message_type_supported.side_effect = Exception("Random error")
+    _handle_supported_message.side_effect = Exception("Random error")
     # The generate response should fail, causing the default error message to be sent
     _get_user_message.side_effect = Exception("Generation error")
 
@@ -467,16 +469,16 @@ def test_any_failure_informs_users(
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._reply_voice_message")
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_reply_with_text_when_synthetic_voice_not_specified(
-    get_llm_response,
+    bot_process_input,
     _reply_voice_message,
     send_text_to_user,
     get_voice_transcript,
     test_channel,
 ):
     get_voice_transcript.return_value = "Hello bot. Please assist me"
-    get_llm_response.return_value = ChatMessage(content="Hello user. No"), None
+    bot_process_input.return_value = ChatMessage(content="Hello user. No")
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     # Let's remove the synthetic voice and see what happens
@@ -505,7 +507,7 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
     experiment_session = ExperimentSessionFactory(experiment=experiment)
 
     channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
-    channel.experiment_session = experiment_session
+    channel.experiment_session = experiment_session  # ty: ignore[invalid-assignment]
     pre_survey = experiment.pre_survey
     assert pre_survey
 
@@ -554,7 +556,7 @@ def test_missing_channel_raises_error(twilio_provider):
         messaging_provider=twilio_provider, experiment=experiment, platform="whatsapp"
     )
     session = ExperimentSessionFactory(experiment_channel=experiment_channel)
-    session.experiment_channel.platform = "snail_mail"
+    session.experiment_channel.platform = "snail_mail"  # ty: ignore[invalid-assignment]
     with pytest.raises(Exception, match="Unsupported platform type snail_mail"):
         ChannelBase.from_experiment_session(session)
 
@@ -666,25 +668,25 @@ def test_url_regex():
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_voice_transcript")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_voice_to_user")
-@patch("apps.channels.tests.test_base_channel_behavior.TestChannel._get_bot_response")
+@patch("apps.chat.bots.PipelineBot.process_input")
 def test_voice_response_with_urls(
-    get_llm_response,
+    bot_process_input,
     send_voice_to_user,
     send_text_to_user,
     get_voice_transcript,
     get_speech_service,
     test_channel,
 ):
+    get_speech_service.return_value = MagicMock(
+        synthesize_voice=MagicMock(return_value=SynthesizedAudio(audio=BytesIO(), duration=1, format="mp3"))
+    )
     get_voice_transcript.return_value = "Hello bot. Give me a URL"
-    get_llm_response.return_value = [
-        ChatMessage.objects.create(
-            content=(
-                "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
-            ),
-            chat=Chat.objects.create(team=test_channel.experiment.team),
+    bot_process_input.return_value = ChatMessage.objects.create(
+        content=(
+            "Here are two urls for you: [this](http://example.co.za?key1=1&key2=2) and [https://some.com](https://some.com)"
         ),
-        None,
-    ]
+        chat=Chat.objects.create(team=test_channel.experiment.team),
+    )
     experiment = test_channel.experiment
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     experiment.save()
@@ -706,6 +708,9 @@ def test_voice_response_with_urls(
 def test_voice_tag_created_on_message(
     send_voice_to_user, send_text_to_user, get_speech_service, get_voice_transcript, test_channel
 ):
+    get_speech_service.return_value = MagicMock(
+        synthesize_voice=MagicMock(return_value=SynthesizedAudio(audio=BytesIO(), duration=1, format="mp3"))
+    )
     get_voice_transcript.return_value = "I'm groot"
 
     experiment = test_channel.experiment
@@ -807,7 +812,7 @@ def test_participant_identifier_determination():
     # Reset cached value
     channel_base._participant_identifier = None
     # Set the session and check that the identifier is fetched from the session
-    channel_base.experiment_session = session
+    channel_base.experiment_session = session  # ty: ignore[invalid-assignment]
     assert channel_base.participant_identifier == "Alpha"
 
 
@@ -872,8 +877,8 @@ def test_supported_and_unsupported_attachments(experiment):
 
     session = ExperimentSessionFactory(experiment=experiment)
     channel = CustomChannel(experiment, experiment_channel=Mock(), experiment_session=session)
-    channel.send_text_to_user = Mock()
-    channel.send_file_to_user = Mock()
+    channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+    channel.send_file_to_user = Mock()  # ty: ignore[invalid-assignment]
 
     file1 = FileFactory(name="f1", content_type="image/jpeg")
     file2 = FileFactory(name="f2", content_type="image/jpeg")
@@ -893,10 +898,98 @@ def test_supported_and_unsupported_attachments(experiment):
 def test_chat_message_returned_for_cancelled_generate():
     session = ExperimentSessionFactory()
     channel = TestChannel(session.experiment, None, session)
-    channel._add_message = Mock()
-    channel._new_user_message = Mock()
+    channel._add_message = Mock()  # ty: ignore[invalid-assignment]
+    channel._new_user_message = Mock()  # ty: ignore[invalid-assignment]
     channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")
     channel.message = base_messages.text_message("123", "hi")
     response = channel.new_user_message(channel.message)
 
     assert type(response) is ChatMessage
+
+
+class TestNotifications:
+    @patch("apps.chat.channels.audio_synthesis_failure_notification")
+    def test_audio_synthesis_failure_creates_notification(self, mock_create_notification):
+        """Test that AudioSynthesizeException triggers a notification."""
+        session = ExperimentSessionFactory.build(experiment__voice_response_behaviour=VoiceResponseBehaviours.ALWAYS)
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+        channel._send_text_to_user_with_notification = Mock()
+
+        # Mock voice synthesis to raise AudioSynthesizeException
+        with patch.object(channel, "_reply_voice_message", side_effect=AudioSynthesizeException("Synthesis failed")):
+            channel.send_message_to_user("Hello")
+
+        # Verify notification was created with correct parameters
+        mock_create_notification.assert_called_once_with(session.experiment, session=session)
+
+    @patch("apps.chat.channels.file_delivery_failure_notification")
+    def test_file_delivery_failure_creates_notification(self, mock_create_notification):
+        """Test that file delivery exception triggers a notification."""
+        session = ExperimentSessionFactory.build()
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+        channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+
+        # Create a test file
+        test_file = FileFactory.build(name="test.jpg", content_type="image/jpeg")
+        test_file.download_link = lambda *args, **kwargs: "https://example.com/test.jpg"
+
+        # Mock send_file_to_user to raise an exception
+        with patch.object(channel, "send_file_to_user", side_effect=Exception("File delivery failed")):
+            channel._send_files_to_user([test_file])
+
+        # Verify notification was created with correct parameters
+        platform_title = channel.experiment_channel.platform_enum.title()
+        mock_create_notification.assert_called_once_with(
+            session.experiment,
+            platform_title=platform_title,
+            content_type="image/jpeg",
+            session=session,
+        )
+
+    @patch("apps.chat.channels.audio_transcription_failure_notification")
+    def test_audio_transcription_failure_creates_notification(self, mock_create_notification):
+        """Test that audio transcription exception triggers a notification."""
+        session = ExperimentSessionFactory.build()
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+
+        # Mock transcription_started and get_message_audio
+        channel.transcription_started = Mock()  # ty: ignore[invalid-assignment]
+        channel.get_message_audio = Mock(return_value=BytesIO(b"fake audio data"))  # ty: ignore[invalid-assignment]
+
+        # Mock _transcribe_audio to raise an exception
+        with patch.object(channel, "_transcribe_audio", side_effect=Exception("Transcription failed")):
+            with pytest.raises(Exception, match="Transcription failed"):
+                channel._get_voice_transcript()
+
+        # Verify notification was created with correct parameters
+        mock_create_notification.assert_called_once_with(
+            session.experiment, platform=channel.experiment_channel.platform
+        )
+
+    @patch("apps.chat.channels.file_delivery_failure_notification")
+    def test_multiple_file_delivery_failures_create_separate_notifications(self, mock_create_notification):
+        """Test that multiple file delivery failures create separate notifications."""
+        session = ExperimentSessionFactory.build()
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+        channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+
+        # Create test files
+        file1 = FileFactory.build(name="test1.jpg", content_type="image/jpeg")
+        file2 = FileFactory.build(name="test2.pdf", content_type="application/pdf")
+        file1.download_link = lambda *args, **kwargs: "https://example.com/test1.jpg"
+        file2.download_link = lambda *args, **kwargs: "https://example.com/test2.jpg"
+
+        # Mock send_file_to_user to raise exceptions for both files
+        with patch.object(channel, "send_file_to_user", side_effect=Exception("File delivery failed")):
+            channel._send_files_to_user([file1, file2])
+
+        # Verify two separate notifications were created
+        assert mock_create_notification.call_count == 2
+
+        # Check first notification (for file1)
+        first_call = mock_create_notification.call_args_list[0][1]
+        assert first_call["content_type"] == "image/jpeg"
+
+        # Check second notification (for file2)
+        second_call = mock_create_notification.call_args_list[1][1]
+        assert second_call["content_type"] == "application/pdf"
