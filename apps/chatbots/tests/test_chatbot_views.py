@@ -7,6 +7,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.template.response import TemplateResponse
 from django.test import Client, RequestFactory
 from django.urls import reverse
+from waffle.testutils import override_flag
 
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
@@ -20,7 +21,6 @@ from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
-from apps.teams.models import Flag
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -450,11 +450,6 @@ def test_chatbot_table_view_embeds_trend_data_inline_when_flag_active(client, te
     instead of generating per-experiment fetch URLs."""
     team = team_with_users
     user = team.members.first()
-    flag, _ = Flag.objects.get_or_create(name="flag_tracing")
-    flag.everyone = True
-    flag.save()
-    flag.flush()
-
     Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
     Experiment.objects.create(
         name="Test Chatbot",
@@ -465,7 +460,8 @@ def test_chatbot_table_view_embeds_trend_data_inline_when_flag_active(client, te
 
     client.force_login(user)
     url = reverse("chatbots:table", args=[team.slug])
-    response = client.get(url)
+    with override_flag("flag_tracing", active=True):
+        response = client.get(url)
 
     assert response.status_code == 200
     content = response.content.decode()

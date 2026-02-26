@@ -182,12 +182,15 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return table
 
     def get_table_data(self):
-        qs = list(super().get_table_data())
-        if flag_is_active(self.request, "flag_tracing"):
-            ids = [obj.id for obj in qs]
-            trend_data = Experiment.get_bulk_trend_data(ids)
-            for obj in qs:
-                obj.trend_data = trend_data.get(obj.id, ([], []))
+        data = super().get_table_data()
+        if not flag_is_active(self.request, "flag_tracing"):
+            return data
+
+        qs = list(data)
+        ids = [obj.id for obj in qs]
+        trend_data = Experiment.get_bulk_trend_data(ids)
+        for obj in qs:
+            obj.trend_data = trend_data.get(obj.id, ([], []))
         return qs
 
     def get_queryset(self):
