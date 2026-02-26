@@ -661,6 +661,7 @@ def human_annotations_flag():
     flag, _ = Flag.objects.get_or_create(name="flag_human_annotations")
     flag.everyone = True
     flag.save()
+    flag.flush()  # Clear waffle cache immediately; save() uses on_commit which doesn't run in tests
     return flag
 
 
