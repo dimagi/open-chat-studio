@@ -4,7 +4,7 @@ from abc import ABC
 from collections.abc import Callable, Sequence
 from copy import deepcopy
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Self, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, cast
 
 import sentry_sdk
 from langchain_core.runnables import RunnableConfig
@@ -19,6 +19,9 @@ from apps.experiments.models import ExperimentSession
 from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.context import NodeContext
+
+if TYPE_CHECKING:
+    from apps.pipelines.repository import PipelineRepository
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -233,6 +236,7 @@ class BasePipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     _config: RunnableConfig | None = None
+    _repo: "PipelineRepository | None" = None
     _incoming_nodes: list[str] | None = None
     _outgoing_nodes: list[str] | None = None
 
@@ -284,6 +288,13 @@ class BasePipelineNode(BaseModel, ABC):
         return state
 
     @property
+    def repo(self) -> "PipelineRepository":
+        """Access the pipeline repository. Always available during _process()."""
+        if self._repo is None:
+            raise PipelineNodeRunError("PipelineRepository not set")
+        return self._repo
+
+    @property
     def disabled_tools(self) -> set[str] | None:
         if disabled := self._config.get("configurable", {}).get("disabled_tools"):
             return set(disabled)
@@ -316,6 +327,7 @@ class PipelineNode(BasePipelineNode, ABC):
         self, incoming_nodes: list, outgoing_nodes: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState | Command:
         self._config = config
+        self._repo = config.get("configurable", {}).get("repo")
         self._incoming_nodes = incoming_nodes
         self._outgoing_nodes = outgoing_nodes
         state = PipelineState(state)
@@ -362,6 +374,7 @@ class PipelineRouterNode(BasePipelineNode):
 
         def router(state: PipelineState, config: RunnableConfig) -> ReturnType:
             self._config = config
+            self._repo = config.get("configurable", {}).get("repo")
 
             state = PipelineState(state)
             state = self._prepare_state(self.node_id, incoming_edges, state)

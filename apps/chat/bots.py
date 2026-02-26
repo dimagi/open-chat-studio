@@ -15,6 +15,7 @@ from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
+from apps.pipelines.repository import ORMRepository
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.tracing import TraceInfo, TracingService
@@ -137,6 +138,7 @@ class PipelineBot:
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
         config = self.trace_service.get_langchain_config(
             configurable={
+                "repo": ORMRepository(),
                 "disabled_tools": AgentTools.reminder_tools() if self.disable_reminder_tools else [],
             },
             run_name_map=graph.node_id_to_name_mapping,
@@ -277,8 +279,9 @@ class PipelineTestBot:
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
             state = PipelineState(messages=[input], experiment_session=session)
+            config = {"configurable": {"repo": ORMRepository()}}
             runner = DjangoLangGraphRunner(CurrentThreadExecutor)
-            output = runner.invoke(runnable, state)
+            output = runner.invoke(runnable, state, config)
             output = PipelineState(**output).json_safe()
         return output
 

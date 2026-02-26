@@ -1,7 +1,7 @@
 import factory
 import factory.django
 
-from apps.pipelines.models import Node, Pipeline, PipelineChatHistory, PipelineChatHistoryTypes
+from apps.pipelines.models import Node, Pipeline, PipelineChatHistory, PipelineChatHistoryTypes, PipelineChatMessages
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.utils.factories.team import TeamFactory
 
@@ -62,5 +62,17 @@ class PipelineChatHistoryFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = PipelineChatHistory
 
+    id = factory.Sequence(lambda n: n + 1)
     type = PipelineChatHistoryTypes.NAMED
     name = "name"
+
+
+class PipelineChatMessagesFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = PipelineChatMessages
+
+    id = factory.Sequence(lambda n: n + 1)
+    chat_history = factory.SubFactory(PipelineChatHistoryFactory)
+    node_id = "test-node"
+    human_message = "Hello"
+    ai_message = "Hi there"
