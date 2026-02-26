@@ -937,6 +937,10 @@ components:
           items:
             type: integer
           description: List of file IDs from prior upload
+        version_number:
+          type: integer
+          nullable: true
+          description: Optional version number of the chatbot to use. Requires authentication.
       required:
       - message
     ChatSendMessageResponse:
