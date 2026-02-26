@@ -58,20 +58,4 @@ export const renderChart = (ctx, data) => {
     });
 };
 
-/**
- * Creates a minimal sparkline chart by fetching data from a URL.
- * @deprecated Use renderChart with inline data instead to avoid per-row HTTP requests.
- * @param {CanvasRenderingContext2D} ctx - Canvas 2D context to render the chart
- * @param {string} dataUrl - URL endpoint that returns JSON data with a trends object
- */
-export const trendsChart = (ctx, dataUrl) => {
-    return fetch(dataUrl)
-        .then(response => response.json())
-        .then(data => renderChart(ctx, data.trends))
-        .catch(error => {
-            console.error('Error loading chart data:', error);
-            return null;
-        });
-};
-
-export default { renderChart, trendsChart };
+export default { renderChart };
